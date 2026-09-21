@@ -146,3 +146,17 @@ export function currentSessionMetricsEnv(workDir: string = process.cwd()): strin
     summary: m.summary,
   });
 }
+
+/**
+ * Test-only reset: wipe the snapshot file and env so the next test starts clean.
+ * Safe no-op in production (tests import it explicitly).
+ */
+export function resetSessionMetricsForTests(workDir: string = process.cwd()): void {
+  const p = metricsPath(workDir);
+  try {
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {
+    /* best-effort */
+  }
+  delete process.env.SESSION_METRICS;
+}
