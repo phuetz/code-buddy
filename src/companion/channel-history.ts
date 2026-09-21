@@ -62,6 +62,24 @@ export function personKeyFromSession(sessionKey: string): string {
   return stripped.toLowerCase();
 }
 
+/** Best available person key when the handler session id is not passed through. */
+export function companionHistorySessionKey(input: {
+  sessionKey?: string;
+  userId?: string;
+  chatId?: string;
+  env?: NodeJS.ProcessEnv;
+}): string {
+  const env = input.env ?? process.env;
+  return (
+    input.sessionKey?.trim() ||
+    input.userId?.trim() ||
+    input.chatId?.trim() ||
+    env.CODEBUDDY_CHANNEL_HISTORY_KEY?.trim() ||
+    env.CODEBUDDY_USER_NAME?.trim() ||
+    'default-global'
+  );
+}
+
 export function resolveChannelHistoryFile(
   sessionKey: string,
   env: NodeJS.ProcessEnv = process.env,
