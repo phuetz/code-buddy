@@ -201,3 +201,48 @@ retirer — est donc **abandonnée**, et la PR #189 garde son objet.
 4. Brancher le choix à trois niveaux dans `workspace-indexer`, `graph-embeddings` et
    `hybrid-search` : `usearch` → sidecar Rust → brute-force JS (ce dernier ne servant
    plus que si le binaire Rust est absent lui aussi).
+
+---
+
+# Étape 4 : la fabrique, et un défaut trouvé en la branchant
+
+## Le `try/catch` de `workspace-indexer` n'attrapait rien
+
+```ts
+try {
+  const { USearchVectorIndex } = await import('../search/usearch-index.js');
+  this.vectorIndex = new USearchVectorIndex({ dimensions: dim });
+} catch {
+  this.vectorIndex = new BruteForceIndex(dim);   // jamais atteint
+}
+```
+
+L'import porte sur un **fichier TypeScript du dépôt**, qui se charge toujours ; et le
+constructeur ne charge pas le paquet natif, `initialize()` étant paresseux. Le `catch`
+ne peut donc pas se déclencher. Ce qui sert réellement sur Windows, c'est le repli
+**interne** de `USearchVectorIndex` — `FallbackVectorIndex` — qui s'active plus tard,
+silencieusement, à la première opération.
+
+**Conséquence pour ma propre mesure :** j'ai chronométré `BruteForceIndex`, alors que
+le repli réellement atteint est `FallbackVectorIndex`. Les deux sont des boucles O(n)
+en JavaScript et la conclusion tient — mais le chiffre exact aurait dû être pris sur
+l'autre. C'est dit ici plutôt que masqué.
+
+## `vector-index-factory.ts`
+
+Une fabrique qui **charge réellement** le paquet (`await import('usearch')`) au lieu
+de supposer sa présence, puis choisit : `usearch` → sidecar Rust → JavaScript.
+`prefer` force un moteur, pour les bancs et pour contourner un incident.
+
+**Vérifié : les trois moteurs sont interchangeables sans changer un résultat.**
+
+```
+usearch reellement chargeable ici : true
+choix automatique                 : usearch
+auto  (usearch   ) -> a:0.997 b:0.555  ok  taille=2
+rust  (rust      ) -> a:0.997 b:0.555  ok  taille=2
+js    (javascript) -> a:0.997 b:0.555  ok  taille=2
+```
+
+Scores identiques au millième : la conversion distance→similarité est cohérente sur
+les trois chemins, et un appelant peut changer de moteur sans réviser ses seuils.
