@@ -131,7 +131,7 @@ export function setSessionSummary(summary: string, workDir: string = process.cwd
  */
 export function endSession(workDir: string = process.cwd()): SessionMetrics {
   const m = loadSessionMetrics(workDir);
-  logger.info('Session metrics finalized', m);
+  logger.info('Session metrics finalized', { ...m });
   return m;
 }
 

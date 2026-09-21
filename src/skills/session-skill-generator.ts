@@ -121,7 +121,7 @@ export interface GenerateOptions {
 export function generateSessionSkill(options: GenerateOptions): GeneratedSkill | null {
   const { metrics } = options;
   if (!isComplexSession(metrics)) {
-    logger.debug('Session not complex enough for skill generation', metrics);
+    logger.debug('Session not complex enough for skill generation', { ...metrics });
     return null;
   }
 
@@ -181,7 +181,7 @@ export function generateSessionSkill(options: GenerateOptions): GeneratedSkill |
   }
 
   const result: GeneratedSkill = { name, slug, filePath, triggers, description };
-  logger.info('Session skill generated', result);
+  logger.info('Session skill generated', { ...result });
   return result;
 }
 

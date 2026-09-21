@@ -305,6 +305,10 @@ describe('HeartbeatEngine', () => {
     });
 
     it('should skip tick when heartbeat file is missing', async () => {
+      // Meme raison que dans heartbeat-sources.test.ts : le semis recree le
+      // fichier manquant, et le tick ne serait plus saute.
+      const semisAvant = process.env.CODEBUDDY_HEARTBEAT_SEED;
+      process.env.CODEBUDDY_HEARTBEAT_SEED = 'false';
       const missingFileEngine = new HeartbeatEngine({
         heartbeatFilePath: path.join(tmpDir, 'nonexistent.md'),
         activeHoursStart: 0,
@@ -316,6 +320,8 @@ describe('HeartbeatEngine', () => {
       expect(result.skipped).toBe(true);
       expect(result.skipReason).toBe('file_not_found');
       missingFileEngine.stop();
+      if (semisAvant === undefined) delete process.env.CODEBUDDY_HEARTBEAT_SEED;
+      else process.env.CODEBUDDY_HEARTBEAT_SEED = semisAvant;
     });
 
     it('should emit heartbeat:wake event on successful tick', async () => {

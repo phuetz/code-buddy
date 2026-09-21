@@ -87,7 +87,7 @@ export async function readHeartbeatSources(options: {
 
 export function mergeHeartbeatChecklists(sources: HeartbeatSource[]): string {
   if (sources.length === 0) return '';
-  if (sources.length === 1) return sources[0].content;
+  if (sources.length === 1) return sources[0]?.content ?? '';
   return sources
     .map((source) => `# Source: ${source.label} (${source.path})\n\n${source.content.trim()}`)
     .join('\n\n---\n\n');

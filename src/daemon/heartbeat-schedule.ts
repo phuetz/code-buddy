@@ -49,6 +49,8 @@ function cronDue(line: string, clock: HeartbeatClock): boolean | null {
   if (!match) return null;
   const hourField = match[2];
   const dowField = match[5];
+  // noUncheckedIndexedAccess : un groupe de capture peut manquer.
+  if (hourField === undefined || dowField === undefined) return null;
   const hourOk = hourField === '*' || hourField.split(',').some((part) => Number(part) === clock.hour);
   const dowOk =
     dowField === '*' ||

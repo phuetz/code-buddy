@@ -128,6 +128,12 @@ export async function maybeContinueGoalAfterTurn(
     judge: async params => {
       const base = await judgeGoal(options.client, {
         ...params,
+        // Quand un Verifier independant est branche, c'est LUI qui apporte la preuve.
+        // Laisser en plus la porte a preuves du juge retrograder le « done » en
+        // « continue » empecherait le Verifier d'etre consulte : les deux garde-fous
+        // s'annuleraient, et le Verifier ne serait JAMAIS appele. Un seul garde-fou
+        // agit a la fois, et c'est le plus fort : la verification independante.
+        ...(verifyGate ? { verifyGated: false } : {}),
         ...(config.judgeModel ? { model: config.judgeModel } : {}),
         maxTokens: config.judgeMaxTokens,
         timeoutMs: config.judgeTimeoutMs,

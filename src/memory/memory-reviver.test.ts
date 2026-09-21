@@ -45,8 +45,8 @@ describe('memory-reviver', () => {
     );
     const real = extractRealEntries(content);
     expect(real).toHaveLength(2);
-    expect(real[0].text).toContain('français');
-    expect(real[1].text).toContain('pnpm');
+    expect(real[0]?.text).toContain('français');
+    expect(real[1]?.text).toContain('pnpm');
   });
 
   it('revives memory: drops placeholders, promotes facts, writes summary', () => {

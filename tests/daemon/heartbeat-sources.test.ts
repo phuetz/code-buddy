@@ -39,10 +39,13 @@ describe('heartbeat sources', () => {
       env: {
         CODEBUDDY_OPENCLAW_WORKSPACE_IMPORT: 'true',
         OPENCLAW_WORKSPACE: clawDir,
+        // Le semis cree le fichier local absent, qui cesse donc d'etre absent :
+        // sans le couper, ce cas ne teste plus ce qu'il annonce.
+        CODEBUDDY_HEARTBEAT_SEED: 'false',
       },
     });
 
     expect(sources).toHaveLength(1);
-    expect(sources[0].label).toBe('openclaw');
+    expect(sources[0]?.label).toBe('openclaw');
   });
 });

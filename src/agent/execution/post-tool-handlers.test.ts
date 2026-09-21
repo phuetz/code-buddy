@@ -23,14 +23,18 @@ afterEach(() => {
 
 describe('handlePostTool', () => {
   it('records a tool call', () => {
-    handlePostTool({ toolName: 'bash', success: true, durationMs: 10 });
+    handlePostTool({
+      workDir: tmp,
+      toolName: 'bash', success: true, durationMs: 10 });
     const m = loadSessionMetrics(tmp);
     expect(m.toolCalls).toBe(1);
     expect(m.errorsRecovered).toBe(0);
   });
 
   it('records a recovered error on failure', () => {
-    handlePostTool({ toolName: 'bash', success: false, durationMs: 5 });
+    handlePostTool({
+      workDir: tmp,
+      toolName: 'bash', success: false, durationMs: 5 });
     const m = loadSessionMetrics(tmp);
     expect(m.toolCalls).toBe(1);
     expect(m.errorsRecovered).toBe(1);
@@ -38,12 +42,14 @@ describe('handlePostTool', () => {
 
   it('records touched files for file-mutating tools', () => {
     handlePostTool({
+      workDir: tmp,
       toolName: 'str_replace_editor',
       success: true,
       durationMs: 3,
       args: { path: 'src/foo.ts' },
     });
     handlePostTool({
+      workDir: tmp,
       toolName: 'write_file',
       success: true,
       durationMs: 3,
@@ -57,12 +63,14 @@ describe('handlePostTool', () => {
 
   it('dedupes repeated file touches', () => {
     handlePostTool({
+      workDir: tmp,
       toolName: 'str_replace_editor',
       success: true,
       durationMs: 3,
       args: { path: 'src/foo.ts' },
     });
     handlePostTool({
+      workDir: tmp,
       toolName: 'str_replace_editor',
       success: true,
       durationMs: 3,

@@ -56,7 +56,9 @@ export function extractRealEntries(content: string): Array<{ date: string; text:
     const m = part.match(/^##\s*(\S+)\s*\n([\s\S]*)$/);
     if (!m) continue;
     const date = m[1];
-    const text = m[2].trim();
+    const rawText = m[2];
+    if (date === undefined || rawText === undefined) continue;
+    const text = rawText.trim();
     if (!text || /^done\s*$/i.test(text)) continue;
     out.push({ date, text });
   }
@@ -117,13 +119,22 @@ export function reviveMemory(options: ReviverOptions = {}): ReviveResult {
   if (!global.includes('## Custom')) {
     global += '\n## Custom\n';
   }
+  // Les entrees sont ECRITES sous la forme « - [agent · date] texte ». Comparer
+  // la ligne brute au seul `text` ne pouvait donc jamais correspondre, et chaque
+  // passage repromouvait l'integralite des entrees. On compare desormais les deux
+  // cotes sous la meme forme : le texte, prefixe retire, premiere ligne seulement.
+  const cleParEntree = (texte: string): string =>
+    (texte.split('\n')[0] ?? '').trim().toLowerCase();
+  const cleParLigne = (ligne: string): string =>
+    cleParEntree(ligne.replace(/^-\s*\[[^\]]*\]\s*/, ''));
+
   const existingCustom = new Set(
     (global.split('## Custom')[1] ?? '')
       .split('\n')
-      .map((l) => l.trim().toLowerCase())
+      .map(cleParLigne)
       .filter(Boolean),
   );
-  const toPromote = allReal.filter((r) => !existingCustom.has(r.text.toLowerCase()));
+  const toPromote = allReal.filter((r) => !existingCustom.has(cleParEntree(r.text)));
   if (toPromote.length > 0) {
     const block = toPromote.map((r) => `- [${r.agent} · ${r.date}] ${r.text}`).join('\n');
     global = global.replace(/## Custom\s*\n/, `## Custom\n${block}\n`);
@@ -139,7 +150,7 @@ export function reviveMemory(options: ReviverOptions = {}): ReviveResult {
   writeFileAtomicSync(summaryPath(cwd), summary.substring(0, maxSummary), { mode: 0o600 });
   result.summaryWritten = true;
 
-  logger.info('Memory revived', result);
+  logger.info('Memory revived', { ...result });
   return result;
 }
 

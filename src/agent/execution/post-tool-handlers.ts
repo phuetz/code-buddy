@@ -9,6 +9,7 @@
  */
 
 import { logger } from '../../utils/logger.js';
+import { getObservationVariator } from '../../context/observation-variator.js';
 import {
   recordToolCall,
   recordRecoveredError,
@@ -32,6 +33,13 @@ export interface PostToolContext {
   durationMs: number;
   /** Raw tool arguments, used to extract touched file paths. */
   args?: Record<string, unknown>;
+  /**
+   * Repertoire du projet ou les metriques sont ecrites. Sans lui, les
+   * enregistreurs retombent sur process.cwd() : les metriques d'une session
+   * lancee depuis un autre repertoire partaient ailleurs que la session
+   * elle-meme, ouverte par beginSession(sessionId, workDir).
+   */
+  workDir?: string;
 }
 
 /**
@@ -39,9 +47,11 @@ export interface PostToolContext {
  * the agent loop.
  */
 export function handlePostTool(ctx: PostToolContext): void {
+  const workDir = ctx.workDir ?? process.cwd();
+
   try {
-    recordToolCall();
-    if (!ctx.success) recordRecoveredError();
+    recordToolCall(workDir);
+    if (!ctx.success) recordRecoveredError(workDir);
   } catch {
     /* metrics are optional */
   }
@@ -50,7 +60,7 @@ export function handlePostTool(ctx: PostToolContext): void {
     const files = extractTouchedFiles(ctx.toolName, ctx.args);
     for (const f of files) {
       try {
-        recordFileTouched(f);
+        recordFileTouched(f, workDir);
       } catch {
         /* best-effort */
       }
@@ -96,4 +106,39 @@ function extractTouchedFiles(
 /** Test helper. */
 export function _resetForTests(): void {
   /* no-op: tracker is file-backed */
+}
+
+/**
+ * Wrap raw tool output through the observation variator (Manus AI #17),
+ * which rotates the presentation wrapper to prevent repetition drift.
+ * Advances the variator's turn counter as a side-effect.
+ */
+export function applyObservationVariator(toolName: string, rawContent: string): string {
+  const variator = getObservationVariator();
+  variator.nextTurn();
+  return variator.wrapToolResult(toolName, rawContent);
+}
+
+/**
+ * Minimal config shape this helper needs — keeps the module decoupled
+ * from the full ExecutorConfig.
+ */
+export interface YoloCostConfig {
+  getSessionCost: () => number;
+  getSessionCostLimit: () => number;
+}
+
+/**
+ * If YOLO mode is on, log the running session cost. Errors are
+ * swallowed (non-critical observability).
+ */
+export async function logYoloCostIfEnabled(config: YoloCostConfig): Promise<void> {
+  try {
+    const { getAutonomyManager } = await import('../../utils/autonomy-manager.js');
+    if (getAutonomyManager().isYOLOEnabled()) {
+      const sessionCost = config.getSessionCost();
+      const sessionCostLimit = config.getSessionCostLimit();
+      logger.info(`[YOLO] Cost: $${sessionCost.toFixed(4)} / $${sessionCostLimit}`);
+    }
+  } catch { /* non-critical */ }
 }

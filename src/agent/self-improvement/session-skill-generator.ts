@@ -87,11 +87,11 @@ export function buildSkillDraft(session: SessionTranscript): GeneratedSkill {
   const keySteps = session.messages
     .filter((m) => m.role === 'assistant' && m.content.trim().length > 20)
     .slice(0, 6)
-    .map((m) => `- ${m.content.trim().split('\n')[0].slice(0, 160)}`);
+    .map((m) => `- ${(m.content.trim().split('\n')[0] ?? '').slice(0, 160)}`);
   const recovered = session.messages
     .filter((m) => m.role === 'tool' && /error|failed|exception/i.test(m.content))
     .slice(0, 4)
-    .map((m) => `- ${m.content.trim().split('\n')[0].slice(0, 160)}`);
+    .map((m) => `- ${(m.content.trim().split('\n')[0] ?? '').slice(0, 160)}`);
   const files =
     session.filesTouched.length > 0
       ? session.filesTouched.slice(0, 8).map((f) => `- \`${f}\``).join('\n')
