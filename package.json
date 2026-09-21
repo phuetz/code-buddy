@@ -108,6 +108,7 @@
     "typecheck:gpuNode-identity": "tsc --project tsconfig.gpuNode-identity.json",
     "typecheck:watch": "tsc --noEmit --watch",
     "check:circular": "npx tsx scripts/check-circular-deps.ts",
+    "check:optional-deps": "node scripts/check-optional-deps.mjs",
     "check:pack": "vitest run tests/security/npm-pack-contents.test.ts",
     "build:captured": "cd src-captured && cargo build --release",
     "autonomy:lab": "tsx scripts/autonomy-lab/run.ts",

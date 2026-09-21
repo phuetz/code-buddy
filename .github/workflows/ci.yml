@@ -65,6 +65,15 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: npm ci
 
+    - name: Ensure optional dependencies needed to compile are present
+      # `optionalDependencies` can be skipped silently — npm logs no error line.
+      # On run 35615398145 the Windows/Node 22 leg installed 1831 packages where
+      # the Windows/Node 20 leg of the SAME run installed 1842; only the former
+      # went red, with a TS2307 blaming src/embeddings/embedding-provider.ts for
+      # a package npm had quietly dropped. This names the package and repairs it
+      # once, instead of letting the type check accuse the source code.
+      run: node scripts/check-optional-deps.mjs --install
+
     - name: Install Chromium for blocking Ubuntu browser tests
       if: matrix.os == 'ubuntu-latest'
       run: npx playwright install --with-deps chromium
@@ -177,6 +186,15 @@ jobs:
         # rate-limit 403s during postinstall on CI runners.
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: npm ci
+
+    - name: Ensure optional dependencies needed to compile are present
+      # `optionalDependencies` can be skipped silently — npm logs no error line.
+      # On run 35615398145 the Windows/Node 22 leg installed 1831 packages where
+      # the Windows/Node 20 leg of the SAME run installed 1842; only the former
+      # went red, with a TS2307 blaming src/embeddings/embedding-provider.ts for
+      # a package npm had quietly dropped. This names the package and repairs it
+      # once, instead of letting the type check accuse the source code.
+      run: node scripts/check-optional-deps.mjs --install
 
     - name: Build
       run: npm run build
