@@ -6,4 +6,5 @@ pub mod ann;
 pub mod embed;
 pub mod model;
 pub mod store;
+pub mod vindex;
 pub mod synth;
