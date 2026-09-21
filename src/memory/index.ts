@@ -150,3 +150,26 @@ export {
   type CrossModalResult,
   type CrossModalSearchOptions,
 } from "./cross-modal-search.js";
+
+// Session Metrics Tracker (fills SESSION_METRICS for the cron hook)
+export {
+  beginSession,
+  recordToolCall,
+  recordRecoveredError,
+  recordFileTouched,
+  setSessionSummary,
+  endSession,
+  loadSessionMetrics,
+  currentSessionMetricsEnv,
+  type SessionMetrics,
+} from "./session-metrics-tracker.js";
+
+// Memory Reviver (clean + promote agent memories)
+export {
+  reviveMemory,
+  loadRevivedSummary,
+  extractRealEntries,
+  isPlaceholderEntry,
+  type ReviverOptions,
+  type ReviveResult,
+} from "./memory-reviver.js";

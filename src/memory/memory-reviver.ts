@@ -104,7 +104,6 @@ export function reviveMemory(options: ReviverOptions = {}): ReviveResult {
 
       if (drop) {
         const cleaned = ['# Agent Memory — ' + entry.name, '', ...real.map((r) => `## ${r.date}\n\n${r.text}`)].join('\n');
-        // count dropped placeholders
         const originalBlocks = content.split(/(?=^##\s+)/m).filter((b) => b.trim());
         result.placeholdersDropped += originalBlocks.length - real.length;
         writeFileAtomicSync(memFile, cleaned + '\n', { mode: 0o600 });

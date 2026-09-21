@@ -11,14 +11,14 @@
     },
     {
       "id": "generate-session-skill",
-      "command": "node -e \"import('./dist/skills/session-skill-generator.js').then(m => m.maybeGenerateFromSessionEnd(process.env.SESSION_METRICS ? JSON.parse(process.env.SESSION_METRICS) : { toolCalls: 0, errorsRecovered: 0, filesTouched: [] }))\"",
+      "command": "node -e \"import('./dist/memory/session-metrics-tracker.js').then(m => { const env = m.currentSessionMetricsEnv(); process.env.SESSION_METRICS = env; return import('./dist/skills/session-skill-generator.js'); }).then(sg => sg.maybeGenerateFromSessionEnd(JSON.parse(process.env.SESSION_METRICS || '{}')))\"",
       "continueOnError": true,
-      "description": "If the session was complex, distill it into an authored- skill",
+      "description": "Load real SESSION_METRICS from the tracker, then distill a complex session into an authored- skill",
       "env": {
         "SESSION_METRICS": "{\"toolCalls\":0,\"errorsRecovered\":0,\"filesTouched\":[]}"
       }
     }
   ],
   "notify": ["telegram", "discord"],
-  "notes": "Wire SESSION_METRICS from your session tracker before invoking. Both steps are safe to re-run."
+  "notes": "SESSION_METRICS is now filled by session-metrics-tracker at session end. Both steps are safe to re-run."
 }
