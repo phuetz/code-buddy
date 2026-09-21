@@ -45,7 +45,7 @@ Le modèle décrit par Anthropic en septembre 2026. **Les cinq existent ici.**
 | **Travail étendue** — compaction réversible | Un segment compacté se redéplie (`context_expand`) au lieu d'être perdu | ❓ activé le 21/09 |
 | **Épisodique** — ce qui s'est passé | Journal des épisodes, chronologie par tour, rejouable | ❓ actif sur Lisa |
 | **Sémantique** — ce qu'il sait | Graphe de connaissances collectif : nœuds typés, supersede bi-temporel, corroboration entre agents, moteur Rust + index HNSW | ✅ **4 119 entrées, rappel pertinent mesuré** |
-| **Procédurale** — comment faire | L'agent écrit ses propres outils et savoir-faire, sous garde empirique | ❓ activé le 21/09 en `propose-only` |
+| **Procédurale** — comment faire | L'agent écrit ses propres outils et savoir-faire, sous garde empirique | ✅ **189 améliorations validées, Δ=138, couverture 15/15, mode `propose-only`** |
 | **Oubli** | Courbe d'Ebbinghaus, le rappel renforce, archivage avant suppression, restaurable | 🧪 actif sur Lisa |
 
 ## 3. Vérification — ne pas se croire sur parole
@@ -54,10 +54,10 @@ Le modèle décrit par Anthropic en septembre 2026. **Les cinq existent ici.**
 |---|---|---|
 | Verifier indépendant | Un agent à contexte neuf juge le travail : CONFIRMÉ / À REVOIR | 🧪 |
 | Porte de preuves sur les buts | Un « c'est fait » sans preuve est rétrogradé en « continue » | ✅ **réparé le 21/09** |
-| `buddy loop` | plan → exécute → **vérifie** → juge, jusqu'à preuve ou budget épuisé | ❓ |
+| `buddy loop` | plan → exécute → **vérifie** → juge, jusqu'à preuve ou budget épuisé | ✅ **prouvé le 21/09 sur un cas réel, $0,0000.** Le juge a refusé DEUX fois un travail que le Verifier confirmait, faute de preuve d'exécution. Et l'agent a refusé de fabriquer une réparation inutile en constatant que le test passait déjà — honnêteté acceptée comme aboutissement |
 | Porte de revue de diff | Toute écriture passe par une revue ; un diff non revu est **refusé**, jamais appliqué en silence | 🧪 💤 |
-| Espace de travail fantôme | Les écritures sont validées dans un clone avant de toucher les fichiers | ❓ 💤 |
-| Registre d'intentions | Des spécifications falsifiables, avec détection de dérive | ❓ 💤 |
+| Espace de travail fantôme | Les écritures sont validées dans un clone avant de toucher les fichiers | ✅ **falsifié dans les deux sens le 21/09 : erreur de type refusée en 16 s avec le message exact, changement sain accepté** |
+| Registre d'intentions | Des spécifications falsifiables, avec détection de dérive | ✅ **vérification et génération prouvées le 21/09.** Le critère est réellement exécuté (`exit 4 ≠ 0` → FAIL motivé, code de sortie 1). La génération partait dans le décor — un `pytest` sur un fichier inexistant — jusqu'à ce que le contexte du dépôt lui soit injecté : même demande, elle produit désormais `npx vitest run` sur un fichier réel |
 
 ## 4. Plusieurs cerveaux
 
@@ -129,13 +129,21 @@ Par ordre de valeur pour la communication :
 
 1. **Les quatre couches de mémoire activées le 21/09** — la sémantique est prouvée ;
    il reste l'épisodique, la procédurale et la compaction réversible.
-2. **`buddy loop`** — la boucle qui ne s'arrête que sur preuve. C'est l'argument le
-   plus fort face à la concurrence, et il n'a jamais été mesuré de bout en bout.
+2. ~~`buddy loop`~~ — **prouvé le 21/09**. Le garde-fou fonctionne : deux « done »
+   du Verifier rétrogradés par le juge pour absence de preuve d'exécution.
 3. **La porte de revue de diff** — « un diff non revu est refusé » est une promesse
    forte ; elle mérite une démonstration.
-4. **L'espace de travail fantôme et le registre d'intentions** — jamais éprouvés.
-5. **Les quatre surfaces d'auto-amélioration** — testées unitairement, jamais vues
-   à l'œuvre sur une vraie session.
+4. ~~L'espace de travail fantôme~~ — **prouvé le 21/09**, dans les deux sens.
+5. ~~Les surfaces d'auto-amélioration~~ — **prouvées le 21/09** : 189 améliorations
+   validées empiriquement, archive et store git à l'appui.
+6. ~~Le registre d'intentions~~ — **prouvé le 21/09**, après correction du
+   générateur qui ignorait le contexte du projet.
+
+### Découvert en chemin
+
+Les **23 échecs** de la suite complète ne sont pas des bugs : les tests passent
+isolément et n'échouent qu'ensemble. Ce sont des **interactions entre tests**,
+un tout autre chantier — et un bon candidat pour la prochaine lane.
 
 ## Règle pour la suite
 
