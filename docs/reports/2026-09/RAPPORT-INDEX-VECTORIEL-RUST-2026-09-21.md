@@ -246,3 +246,53 @@ js    (javascript) -> a:0.997 b:0.555  ok  taille=2
 
 Scores identiques au millième : la conversion distance→similarité est cohérente sur
 les trois chemins, et un appelant peut changer de moteur sans réviser ses seuils.
+
+---
+
+# Étape 5 : la demi-précision (f16)
+
+`hnsw_rs` est générique sur le type stocké : il accepte `f16` avec une métrique
+adaptée, **sans usearch**. L'approche vient du banc `bench_storage.rs` de ragvec, qui
+avait déjà éprouvé `Hnsw<'static, f16, …>` — plutôt que de la reconstituer.
+
+## Ce qui est ajouté
+
+- `buddy-memory/src/ann_f16.rs` — le même HNSW en demi-précision. La métrique
+  **normalise**, comme `DistCosine` côté `f32` : deux index de précision différente
+  doivent classer pareil, sinon changer de stockage deviendrait changer de résultats.
+  Décodage par `convert_to_f32_slice` (instruction F16C quand le processeur la porte).
+- `vindex.rs` — `Precision::{F32, F16}`, choisie à la création. **Les vecteurs
+  conservés pour la persistance suivent la précision de l'index** : les garder en
+  `f32` aurait annulé la moitié de l'économie.
+- RPC — `vindex.create` accepte `precision`, `vindex.size` rend `precision` et
+  `vectorBytes`.
+
+## Preuve, mesurée et non supposée
+
+Bancs prouvés par sabotage, comme les précédents : neutraliser la normalisation de la
+métrique fait tomber le seul test de classement ; faire mentir `vector_bytes` fait
+tomber le seul test de mémoire ; aucun autre ne bouge.
+
+**26 tests au vert.** De bout en bout, sur le binaire release, même vecteur de 128
+dimensions dans deux index :
+
+```
+5  {"dim":128,"precision":"f32","size":1,"vectorBytes":512}
+6  {"dim":128,"precision":"f16","size":1,"vectorBytes":256}
+8  ERREUR: précision inconnue « f8 » (f32, f16)
+```
+
+**512 → 256 octets : exactement la moitié.** Sur un index de 768 dimensions et un
+million de points, cela fait passer les vecteurs conservés d'environ 3 Go à 1,5 Go.
+
+## Un défaut trouvé au passage, dans l'outillage
+
+`cargo test --lib` rendait « error: test failed » avec une sortie **tronquée à
+« running 26 tests »**, alors qu'`exit=0` et que chaque test passait isolément. La
+cause est `silence_stdout` (`ann.rs`), qui redirige le descripteur 1 **globalement**
+par `dup2` pour empêcher `hnsw_rs` d'injecter une ligne non-JSON sur le flux du
+sidecar. En test **parallèle**, il avale aussi la sortie du harnais.
+
+`cargo test --lib -- --test-threads=1` rend le verdict lisible : **26 passed, 0
+failed**. À savoir avant de croire un rouge sur ce paquet — l'outil de mesure était
+en cause, pas le produit.

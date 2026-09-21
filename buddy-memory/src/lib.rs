@@ -2,6 +2,7 @@
 //! The JSON-RPC sidecar lives in `src/main.rs`; the Phase-4 bench is `src/bin/ckg-bench.rs`.
 
 pub mod ann;
+pub mod ann_f16;
 #[cfg(feature = "embeddings")]
 pub mod embed;
 pub mod model;

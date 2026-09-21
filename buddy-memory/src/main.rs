@@ -4,7 +4,7 @@
 //! (or `{"id":N,"error":"..."}`). Code Buddy spawns this as a sidecar; the TS CKG is a client.
 
 use buddy_memory::store::{RememberInput, RememberRel, Store};
-use buddy_memory::vindex::VIndexRegistry;
+use buddy_memory::vindex::{Precision, VIndexRegistry};
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
@@ -172,8 +172,11 @@ fn dispatch_vindex(
                 .ok_or_else(|| "paramètre « dim » manquant".to_string())? as usize;
             let capacity = params.get("capacity").and_then(|v| v.as_u64()).unwrap_or(1024) as usize;
             let replace = params.get("replace").and_then(|v| v.as_bool()).unwrap_or(false);
-            reg.create(&n, dim, capacity, replace)?;
-            Ok(json!({ "ok": true, "name": n, "dim": dim }))
+            let precision = Precision::from_str(
+                params.get("precision").and_then(|v| v.as_str()).unwrap_or("f32"),
+            )?;
+            reg.create_avec(&n, dim, capacity, replace, precision)?;
+            Ok(json!({ "ok": true, "name": n, "dim": dim, "precision": precision.as_str() }))
         }
         "vindex.insert" => {
             let n = name()?;
@@ -242,7 +245,12 @@ fn dispatch_vindex(
             let idx = reg
                 .get(&n)
                 .ok_or_else(|| format!("index « {} » inconnu", n))?;
-            Ok(json!({ "size": idx.len(), "dim": idx.dim() }))
+            Ok(json!({
+                "size": idx.len(),
+                "dim": idx.dim(),
+                "precision": idx.precision().as_str(),
+                "vectorBytes": idx.vector_bytes(),
+            }))
         }
         "vindex.clear" => {
             let n = name()?;

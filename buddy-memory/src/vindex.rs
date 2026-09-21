@@ -16,27 +16,173 @@
 //! sur-demande en conséquence pour rendre tout de même `k` résultats.
 
 use crate::ann::AnnIndex;
+use crate::ann_f16::AnnIndexF16;
+use half::f16;
 use std::collections::{HashMap, HashSet};
 
+/// Précision de stockage des vecteurs. `F16` divise la mémoire par deux pour une
+/// perte de précision qui se mesure (voir `ann_f16`), au lieu d'être supposée.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Precision {
+    F32,
+    F16,
+}
+
+impl Precision {
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "f32" | "" => Ok(Self::F32),
+            "f16" | "half" => Ok(Self::F16),
+            other => Err(format!("précision inconnue « {other} » (f32, f16)")),
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::F32 => "f32",
+            Self::F16 => "f16",
+        }
+    }
+}
+
+enum Moteur {
+    F32(AnnIndex),
+    F16(AnnIndexF16),
+}
+
+impl Moteur {
+    fn insert(&mut self, id: &str, vec: &[f32]) {
+        match self {
+            Self::F32(a) => a.insert(id, vec),
+            Self::F16(a) => a.insert(id, vec),
+        }
+    }
+    fn search(&self, q: &[f32], k: usize) -> Vec<(String, f32)> {
+        match self {
+            Self::F32(a) => a.search(q, k),
+            Self::F16(a) => a.search(q, k),
+        }
+    }
+    fn live_points(&self) -> usize {
+        match self {
+            Self::F32(a) => a.live_points(),
+            Self::F16(a) => a.live_points(),
+        }
+    }
+}
+
+/// Vecteurs conservés pour la persistance, dans la précision de l'index : les garder
+/// en `f32` quand l'index est en `f16` annulerait la moitié de l'économie.
+enum Copie {
+    F32(HashMap<String, Vec<f32>>),
+    F16(HashMap<String, Vec<f16>>),
+}
+
+impl Copie {
+    fn neuve(p: Precision) -> Self {
+        match p {
+            Precision::F32 => Self::F32(HashMap::new()),
+            Precision::F16 => Self::F16(HashMap::new()),
+        }
+    }
+    fn inserer(&mut self, id: &str, v: &[f32]) {
+        match self {
+            Self::F32(m) => {
+                m.insert(id.to_string(), v.to_vec());
+            }
+            Self::F16(m) => {
+                m.insert(id.to_string(), v.iter().map(|x| f16::from_f32(*x)).collect());
+            }
+        }
+    }
+    fn retirer(&mut self, id: &str) -> bool {
+        match self {
+            Self::F32(m) => m.remove(id).is_some(),
+            Self::F16(m) => m.remove(id).is_some(),
+        }
+    }
+    fn contient(&self, id: &str) -> bool {
+        match self {
+            Self::F32(m) => m.contains_key(id),
+            Self::F16(m) => m.contains_key(id),
+        }
+    }
+    fn len(&self) -> usize {
+        match self {
+            Self::F32(m) => m.len(),
+            Self::F16(m) => m.len(),
+        }
+    }
+    fn vider(&mut self) {
+        match self {
+            Self::F32(m) => m.clear(),
+            Self::F16(m) => m.clear(),
+        }
+    }
+    /// Octets occupés par les vecteurs conservés — la grandeur que `f16` divise.
+    fn octets(&self) -> usize {
+        match self {
+            Self::F32(m) => m.values().map(|v| v.len() * 4).sum(),
+            Self::F16(m) => m.values().map(|v| v.len() * 2).sum(),
+        }
+    }
+    fn paires(&self) -> Vec<(String, Vec<f32>)> {
+        let mut out: Vec<(String, Vec<f32>)> = match self {
+            Self::F32(m) => m.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            Self::F16(m) => m
+                .iter()
+                .map(|(k, v)| (k.clone(), v.iter().map(|x| x.to_f32()).collect()))
+                .collect(),
+        };
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+}
+
 pub struct VIndex {
-    ann: AnnIndex,
+    ann: Moteur,
     removed: HashSet<String>,
     /// Conservés pour la persistance et pour reconstruire après compactage.
-    vectors: HashMap<String, Vec<f32>>,
+    vectors: Copie,
     dim: usize,
+    precision: Precision,
 }
 
 impl VIndex {
     pub fn new(dim: usize, capacity: usize) -> Self {
+        Self::avec_precision(dim, capacity, Precision::F32)
+    }
+
+    pub fn avec_precision(dim: usize, capacity: usize, precision: Precision) -> Self {
         Self {
-            ann: AnnIndex::with_capacity(dim, capacity),
+            ann: match precision {
+                Precision::F32 => Moteur::F32(AnnIndex::with_capacity(dim, capacity)),
+                Precision::F16 => Moteur::F16(AnnIndexF16::with_capacity(dim, capacity)),
+            },
             removed: HashSet::new(),
-            vectors: HashMap::new(),
+            vectors: Copie::neuve(precision),
             dim,
+            precision,
         }
     }
 
+    pub fn precision(&self) -> Precision {
+        self.precision
+    }
+
+    /// Octets des vecteurs conservés. Sert à constater l'économie, pas à l'estimer.
+    pub fn vector_bytes(&self) -> usize {
+        self.vectors.octets()
+    }
+
     pub fn from_pairs(dim: usize, pairs: Vec<(String, Vec<f32>)>) -> Result<Self, String> {
+        Self::from_pairs_avec(dim, pairs, Precision::F32)
+    }
+
+    pub fn from_pairs_avec(
+        dim: usize,
+        pairs: Vec<(String, Vec<f32>)>,
+        precision: Precision,
+    ) -> Result<Self, String> {
         for (id, v) in &pairs {
             if v.len() != dim {
                 return Err(format!(
@@ -48,13 +194,15 @@ impl VIndex {
             }
         }
         let capacity = pairs.len().max(32);
-        let vectors: HashMap<String, Vec<f32>> = pairs.iter().cloned().collect();
-        Ok(Self {
-            ann: AnnIndex::from_pairs(dim, capacity, pairs),
-            removed: HashSet::new(),
-            vectors,
-            dim,
-        })
+        let mut idx = Self::avec_precision(dim, capacity, precision);
+        for (id, v) in &pairs {
+            idx.vectors.inserer(id, v);
+        }
+        idx.ann = match precision {
+            Precision::F32 => Moteur::F32(AnnIndex::from_pairs(dim, capacity, pairs)),
+            Precision::F16 => Moteur::F16(AnnIndexF16::from_pairs(dim, capacity, pairs)),
+        };
+        Ok(idx)
     }
 
     pub fn dim(&self) -> usize {
@@ -72,13 +220,13 @@ impl VIndex {
             ));
         }
         self.removed.remove(id);
-        self.vectors.insert(id.to_string(), vec.to_vec());
+        self.vectors.inserer(id, vec);
         self.ann.insert(id, vec);
         Ok(())
     }
 
     pub fn remove(&mut self, id: &str) -> bool {
-        if self.vectors.remove(id).is_some() {
+        if self.vectors.retirer(id) {
             self.removed.insert(id.to_string());
             true
         } else {
@@ -105,7 +253,7 @@ impl VIndex {
         let mut vus: HashSet<&str> = HashSet::new();
         let mut out = Vec::with_capacity(k);
         for (id, score) in &raw {
-            if self.removed.contains(id) || !self.vectors.contains_key(id) {
+            if self.removed.contains(id) || !self.vectors.contient(id) {
                 continue;
             }
             if !vus.insert(id.as_str()) {
@@ -124,22 +272,22 @@ impl VIndex {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.vectors.is_empty()
+        self.vectors.len() == 0
     }
 
     pub fn clear(&mut self) {
-        self.ann = AnnIndex::with_capacity(self.dim, 32);
+        self.ann = match self.precision {
+            Precision::F32 => Moteur::F32(AnnIndex::with_capacity(self.dim, 32)),
+            Precision::F16 => Moteur::F16(AnnIndexF16::with_capacity(self.dim, 32)),
+        };
         self.removed.clear();
-        self.vectors.clear();
+        self.vectors.vider();
     }
 
     /// Paires vivantes, pour la persistance. L'ordre est stable (tri par
     /// identifiant) afin qu'une sauvegarde soit reproductible d'une fois sur l'autre.
     pub fn to_pairs(&self) -> Vec<(String, Vec<f32>)> {
-        let mut pairs: Vec<(String, Vec<f32>)> =
-            self.vectors.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-        pairs.sort_by(|a, b| a.0.cmp(&b.0));
-        pairs
+        self.vectors.paires()
     }
 }
 
@@ -162,6 +310,17 @@ impl VIndexRegistry {
         capacity: usize,
         replace: bool,
     ) -> Result<(), String> {
+        self.create_avec(name, dim, capacity, replace, Precision::F32)
+    }
+
+    pub fn create_avec(
+        &mut self,
+        name: &str,
+        dim: usize,
+        capacity: usize,
+        replace: bool,
+        precision: Precision,
+    ) -> Result<(), String> {
         if dim == 0 {
             return Err("dimension nulle".to_string());
         }
@@ -178,7 +337,8 @@ impl VIndexRegistry {
                 return Ok(());
             }
         }
-        self.indexes.insert(name.to_string(), VIndex::new(dim, capacity));
+        self.indexes
+            .insert(name.to_string(), VIndex::avec_precision(dim, capacity, precision));
         Ok(())
     }
 
@@ -275,6 +435,61 @@ mod tests {
         let relu = VIndex::from_pairs(2, pairs).unwrap();
         assert_eq!(relu.len(), 1);
         assert_eq!(relu.search(&v(0.0, 1.0), 1).unwrap()[0].0, "b");
+    }
+
+    #[test]
+    fn en_demi_precision_la_memoire_est_divisee_par_deux() {
+        let dim = 128;
+        let mut a = VIndex::avec_precision(dim, 64, Precision::F32);
+        let mut b = VIndex::avec_precision(dim, 64, Precision::F16);
+        for i in 0..50 {
+            let vec: Vec<f32> = (0..dim).map(|d| ((i + d) % 13) as f32 / 13.0).collect();
+            a.insert(&format!("v{i}"), &vec).unwrap();
+            b.insert(&format!("v{i}"), &vec).unwrap();
+        }
+        assert_eq!(a.vector_bytes(), b.vector_bytes() * 2, "f16 doit peser la moitié de f32");
+        assert_eq!(a.len(), b.len());
+        assert_eq!(b.precision(), Precision::F16);
+    }
+
+    #[test]
+    fn la_demi_precision_ne_change_pas_le_classement() {
+        let dim = 64;
+        let mut a = VIndex::avec_precision(dim, 256, Precision::F32);
+        let mut b = VIndex::avec_precision(dim, 256, Precision::F16);
+        for i in 0..150usize {
+            let centre = i % 10;
+            let vec: Vec<f32> = (0..dim)
+                .map(|d| if d % 10 == centre { 1.0 } else { 0.02 * ((i + d) % 7) as f32 })
+                .collect();
+            a.insert(&format!("v{i}"), &vec).unwrap();
+            b.insert(&format!("v{i}"), &vec).unwrap();
+        }
+        let q: Vec<f32> = (0..dim).map(|d| if d % 10 == 3 { 1.0 } else { 0.01 }).collect();
+        let ra: Vec<String> = a.search(&q, 5).unwrap().into_iter().map(|(id, _)| id).collect();
+        let rb: Vec<String> = b.search(&q, 5).unwrap().into_iter().map(|(id, _)| id).collect();
+        let commun = ra.iter().filter(|id| rb.contains(id)).count();
+        assert!(commun >= 4, "f32={ra:?} f16={rb:?} — seulement {commun}/5 en commun");
+    }
+
+    #[test]
+    fn la_persistance_traverse_la_demi_precision() {
+        let mut b = VIndex::avec_precision(4, 32, Precision::F16);
+        b.insert("a", &vec![1.0, 0.0, 0.0, 0.0]).unwrap();
+        let pairs = b.to_pairs();
+        assert_eq!(pairs.len(), 1);
+        assert!((pairs[0].1[0] - 1.0).abs() < 0.01, "la valeur doit survivre a l'aller-retour f16");
+        let relu = VIndex::from_pairs_avec(4, pairs, Precision::F16).unwrap();
+        assert_eq!(relu.len(), 1);
+        assert_eq!(relu.precision(), Precision::F16);
+    }
+
+    #[test]
+    fn une_precision_inconnue_est_refusee() {
+        assert!(Precision::from_str("f8").is_err());
+        assert_eq!(Precision::from_str("f16").unwrap(), Precision::F16);
+        assert_eq!(Precision::from_str("half").unwrap(), Precision::F16);
+        assert_eq!(Precision::from_str("").unwrap(), Precision::F32);
     }
 
     #[test]
