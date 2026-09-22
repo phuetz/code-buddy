@@ -26,12 +26,34 @@ import type { IndexableVector, VectorSearchResult } from './usearch-index.js';
 
 export type VectorEngine = 'usearch' | 'rust' | 'javascript';
 
+/**
+ * Le contrat commun aux trois moteurs. Il n'est pas « ce que usearch sait
+ * faire » mais **ce que les appelants emploient réellement** : `hybrid-search`
+ * appelle `initialize`, `addBatch` et `getStats`, donc ils en font partie, et
+ * chaque moteur doit les servir. Une méthode optionnelle ici redeviendrait un
+ * repli silencieux — exactement le défaut que cette fabrique corrige.
+ */
 export interface VectorIndexLike {
+  /** Ouvre l'index tout de suite plutôt qu'à la première insertion. */
+  initialize(): Promise<void>;
   add(vector: IndexableVector): Promise<void>;
+  addBatch(vectors: IndexableVector[]): Promise<void>;
   search(query: number[] | Float32Array, k?: number): Promise<VectorSearchResult[]>;
   remove(id: string): boolean;
   size(): number;
   clear(): void;
+  getStats(): VectorIndexStats;
+  /** Libère l'index et ses ressources. Appelé par `HybridSearchEngine.dispose()`. */
+  dispose(): void;
+}
+
+export interface VectorIndexStats {
+  size: number;
+  capacity: number;
+  dimensions: number;
+  connectivity: number;
+  memoryUsage: number;
+  memoryMapped: boolean;
 }
 
 export interface VectorIndexChoice {
@@ -46,7 +68,19 @@ export interface CreateVectorIndexOptions {
   capacity?: number;
   /** Force un moteur. Sert aux bancs d'essai, et à contourner un incident. */
   prefer?: VectorEngine;
+  /**
+   * Réglages HNSW. Honorés par `usearch` et par le repli JavaScript ; **fixes**
+   * côté sidecar Rust, où `ann.rs` les tient en constantes (M = 16,
+   * ef_construction = 80, ef_search = 64). Un appelant qui s'en écarte franchement
+   * doit le savoir : c'est journalisé plutôt que d'être avalé.
+   */
+  connectivity?: number;
+  expansionAdd?: number;
+  expansionSearch?: number;
 }
+
+/** Les constantes de `buddy-memory/src/ann.rs`, pour comparer ce qui est demandé. */
+const HNSW_RUST = { connectivity: 16, expansionAdd: 80, expansionSearch: 64 } as const;
 
 let usearchUtilisable: boolean | null = null;
 
@@ -80,7 +114,7 @@ export async function createVectorIndex(
 
   if (prefer !== 'rust' && prefer !== 'javascript' && (await usearchDisponible())) {
     return {
-      index: new USearchVectorIndex({ dimensions, metric: 'cos' }) as unknown as VectorIndexLike,
+      index: new USearchVectorIndex(optionsUSearch(options)) as unknown as VectorIndexLike,
       engine: 'usearch',
     };
   }
@@ -100,6 +134,7 @@ export async function createVectorIndex(
         if (client.available() && (await parleVindex(client))) {
           const opts = { name, dimensions, client } as ConstructorParameters<typeof RustVectorIndex>[0];
           if (capacity !== undefined) opts.capacity = capacity;
+          signalerReglagesPerdus(name, options);
           return { index: new RustVectorIndex(opts) as unknown as VectorIndexLike, engine: 'rust' };
         }
       }
@@ -112,9 +147,43 @@ export async function createVectorIndex(
   // `USearchVectorIndex` (qui s'active tout seul quand le paquet natif manque).
   logger.debug('[vector-index] ni usearch ni le sidecar Rust — repli JavaScript O(n)');
   return {
-    index: new USearchVectorIndex({ dimensions, metric: 'cos' }) as unknown as VectorIndexLike,
+    index: new USearchVectorIndex(optionsUSearch(options)) as unknown as VectorIndexLike,
     engine: 'javascript',
   };
+}
+
+function optionsUSearch(o: CreateVectorIndexOptions): {
+  dimensions: number;
+  metric: 'cos';
+  connectivity?: number;
+  expansionAdd?: number;
+  expansionSearch?: number;
+} {
+  const cfg: ReturnType<typeof optionsUSearch> = { dimensions: o.dimensions, metric: 'cos' };
+  if (o.connectivity !== undefined) cfg.connectivity = o.connectivity;
+  if (o.expansionAdd !== undefined) cfg.expansionAdd = o.expansionAdd;
+  if (o.expansionSearch !== undefined) cfg.expansionSearch = o.expansionSearch;
+  return cfg;
+}
+
+/**
+ * Le sidecar ne prend pas de réglages HNSW par index. Taire l'écart ferait croire
+ * à un réglage appliqué ; on le dit, une ligne, sans empêcher le choix.
+ */
+function signalerReglagesPerdus(name: string, o: CreateVectorIndexOptions): void {
+  const ecarts: string[] = [];
+  if (o.connectivity !== undefined && o.connectivity !== HNSW_RUST.connectivity) {
+    ecarts.push(`connectivity ${o.connectivity} → ${HNSW_RUST.connectivity}`);
+  }
+  if (o.expansionAdd !== undefined && o.expansionAdd !== HNSW_RUST.expansionAdd) {
+    ecarts.push(`expansionAdd ${o.expansionAdd} → ${HNSW_RUST.expansionAdd}`);
+  }
+  if (o.expansionSearch !== undefined && o.expansionSearch !== HNSW_RUST.expansionSearch) {
+    ecarts.push(`expansionSearch ${o.expansionSearch} → ${HNSW_RUST.expansionSearch}`);
+  }
+  if (ecarts.length > 0) {
+    logger.debug(`[vector-index] « ${name} » sur le sidecar Rust : réglages fixes (${ecarts.join(', ')})`);
+  }
 }
 
 /** Le sidecar connaît-il les méthodes `vindex.*` ? Un `unknown method` ici coûte

@@ -296,3 +296,88 @@ sidecar. En test **parallèle**, il avale aussi la sortie du harnais.
 `cargo test --lib -- --test-threads=1` rend le verdict lisible : **26 passed, 0
 failed**. À savoir avant de croire un rouge sur ce paquet — l'outil de mesure était
 en cause, pas le produit.
+
+---
+
+# Étape 6 : les deux appelants restants — 22/09/2026
+
+`workspace-indexer` passait par la fabrique depuis le 21. Les deux autres
+consommateurs, eux, instanciaient encore `usearch` en direct : **`hybrid-search`**
+(les quatre index `memories`/`code`/`messages`/`cache`) et **`graph-embeddings`**.
+Sur Windows, ils retombaient donc toujours sur la boucle O(n).
+
+## Ce que le branchement a obligé à écrire
+
+Le contrat de la fabrique était plus étroit que l'usage réel. `hybrid-search`
+appelle `initialize`, `addBatch`, `getStats` et `dispose` : ces quatre méthodes
+manquaient à `VectorIndexLike` et les deux dernières manquaient à
+`RustVectorIndex`. Elles sont ajoutées, **obligatoires** — une méthode optionnelle
+dans ce contrat recréerait le repli silencieux que la fabrique corrige.
+
+`getStats()` côté Rust est synchrone alors que `vindex.size` répond de façon
+asynchrone : la mémoire annoncée est donc une **estimation locale**, et la mesure
+réelle — celle qui tient compte de la demi-précision — est rendue à part par
+`vectorBytesReels()`. C'est dit dans le code plutôt que laissé à deviner.
+
+Les réglages HNSW (`connectivity`, `expansionAdd`, `expansionSearch`) traversent
+maintenant la fabrique. Le sidecar ne les prend pas par index : l'écart entre ce
+qui est demandé et les constantes d'`ann.rs` est **journalisé** au lieu d'être
+avalé.
+
+## Deux mensonges corrigés au passage
+
+- `getStats().usearchEnabled` valait `this.vectorIndexes.size > 0` : il répondait
+  « oui » pour un index Rust comme pour la boucle JavaScript. Il ne vaut désormais
+  vrai que si le moteur **est** usearch, et `vectorEngine` nomme celui qui sert.
+  Le journal d'initialisation, qui annonçait « with USearch vector indexes » quel
+  que soit le moteur, le nomme aussi.
+- La branche `legacy-usearch` de `graph-embeddings` testait `add.length >= 2` pour
+  retomber sur une signature `add(id, vec)` qu'**aucun index du dépôt n'expose** —
+  seul le mock du test l'exposait. Du code de production plié à un faux. La branche
+  disparaît, et le mock est remis sur l'interface réelle.
+
+## Un défaut latent révélé par le typage
+
+Retirer le `any` de `vectorIndex` a fait tomber `tsc` sur le `.filter(Boolean)` de
+`search()` : il ne rétrécit pas le type, donc un identifiant absent traversait en
+`undefined` sous couvert d'un tableau de `string`. Corrigé par un prédicat de type.
+
+## Preuves
+
+**Le câblage, pas seulement la logique.** Sabotage de la fabrique (un index qui ne
+trouve jamais rien) : **5 tests de `graph-embeddings` tombent**, aucun autre. Le
+branchement est donc réellement emprunté.
+
+Les tests de `hybrid-search`, eux, **passent même saboté** — ils ne touchent pas le
+chemin vectoriel. Ils ne prouvaient rien ici, et il fallait le dire plutôt que de
+compter leur vert. Le câblage y est prouvé par exécution réelle :
+
+```
+moteur retenu      : usearch
+usearchEnabled     : true
+index vectoriels   : memories, code, messages, cache   (dim=384)
+```
+
+Chemin Rust exercé de bout en bout contre le **vrai sidecar** (`prefer: 'rust'`) :
+
+```
+moteur          : rust
+recherche       : a:1.000 b:0.538        ← classement correct
+getStats()      : {"size":3,"dimensions":8,"connectivity":16,...}
+vectorBytes réel: 96                     ← exactement 3 × 8 × 4
+après remove(b) : 2      dispose() → 0
+```
+
+`connectivity: 32` avait été demandé : `getStats()` rend 16, la valeur réelle du
+sidecar, et l'écart est journalisé. Un réglage ignoré qu'on annoncerait appliqué
+serait pire qu'un réglage refusé.
+
+**Vérifications** : `tsc --noEmit` vert ; ESLint 0 erreur ; 72 tests
+(`tests/search/` + `graph-embeddings`) et 103 tests en aval (hybrid sémantique,
+unicode, outils mémoire, régression) au vert.
+
+## Ce qui reste
+
+`getUSearchIndex()` (`usearch-index.ts`) est encore exporté par `src/search/index.ts`
+et instancie usearch en direct. **Aucun appelant dans le dépôt** : c'est une API
+publique du module, laissée en place volontairement, pas un oubli.
