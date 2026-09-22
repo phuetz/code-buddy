@@ -19,6 +19,9 @@ import { logger } from '../utils/logger.js';
 import { BuddyMemoryClient } from '../memory/buddy-memory-client.js';
 import type { IndexableVector, VectorSearchResult } from './usearch-index.js';
 
+/** `M` de `buddy-memory/src/ann.rs` — le nombre de voisins par niveau HNSW. */
+const CONNECTIVITE_HNSW = 16;
+
 export interface RustVectorIndexOptions {
   /** Nom de l'index dans le registre du sidecar. */
   name: string;
@@ -76,6 +79,16 @@ export class RustVectorIndex {
       capacity: this.capacity,
     });
     this.created = true;
+  }
+
+  /**
+   * Crée l'index côté sidecar tout de suite, au lieu d'attendre la première
+   * insertion. `USearchVectorIndex` expose la même méthode ; l'appelant qui
+   * l'invoque veut savoir maintenant si le moteur répond, pas à la première
+   * indexation.
+   */
+  async initialize(): Promise<void> {
+    await this.ensureCreated();
   }
 
   async add(vector: IndexableVector): Promise<void> {
@@ -153,6 +166,62 @@ export class RustVectorIndex {
     void this.client
       .call('vindex.clear', { name: this.name })
       .catch((err) => logger.warn(`[rust-vector-index] vidage : ${String(err)}`));
+  }
+
+  /**
+   * Même forme que `USearchVectorIndex.getStats()`, pour que les appelants qui
+   * l'affichent n'aient pas à savoir quel moteur les sert.
+   *
+   * La mémoire est une **estimation locale**, pas une mesure du sidecar : la
+   * méthode est synchrone alors que `vindex.size` répond de façon asynchrone. Le
+   * chiffre exact — `vectorBytes`, qui tient compte de la demi-précision — est
+   * rendu par {@link vectorBytesReels}. Les constantes reprennent celles de
+   * `buddy-memory/src/ann.rs` (M = 16).
+   */
+  getStats(): {
+    size: number;
+    capacity: number;
+    dimensions: number;
+    connectivity: number;
+    memoryUsage: number;
+    memoryMapped: boolean;
+  } {
+    const taille = this.size();
+    const octetsVecteurs = taille * this.dimensions * 4; // f32
+    const octetsGraphe = taille * CONNECTIVITE_HNSW * 8;
+    const surcout = taille * 64;
+    return {
+      size: taille,
+      capacity: Math.max(this.capacity, taille),
+      dimensions: this.dimensions,
+      connectivity: CONNECTIVITE_HNSW,
+      memoryUsage: octetsVecteurs + octetsGraphe + surcout,
+      memoryMapped: false,
+    };
+  }
+
+  /** La mesure du sidecar, elle : tient compte de la précision réellement stockée. */
+  async vectorBytesReels(): Promise<number> {
+    await this.ensureCreated();
+    const rep = (await this.client.call('vindex.size', { name: this.name })) as {
+      vectorBytes?: number;
+    };
+    return rep.vectorBytes ?? 0;
+  }
+
+  /**
+   * Libère l'index. Synchrone comme celui de `USearchVectorIndex`, alors que le
+   * registre distant répond de façon asynchrone : le retrait part sans être
+   * attendu, une erreur est journalisée. Pour attendre la confirmation, voir
+   * {@link drop}.
+   */
+  dispose(): void {
+    this.liveIds.clear();
+    this.metadata.clear();
+    this.created = false;
+    void this.client
+      .call('vindex.drop', { name: this.name })
+      .catch((err) => logger.warn(`[rust-vector-index] libération : ${String(err)}`));
   }
 
   /** Vide le registre distant ET le miroir local, en attendant la confirmation. */
