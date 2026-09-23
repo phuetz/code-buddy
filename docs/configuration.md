@@ -249,8 +249,9 @@ rtk_enabled = false
 # Messaging sessions (Telegram, webchat, and the other channel adapters).
 # mode none is the default and keeps the current transcript.
 # both resets on the first of idle_minutes or the local at_hour boundary.
-# Memory is archived and read back before the transcript is cleared.
-# A failed archive cancels the reset.
+# Each store the reset clears (agent cache, disk session, companion file,
+# in-memory companion map) is archived and read back on its own.
+# A failed archive of any one of them cancels the whole reset.
 [session_reset]
 mode = "none"
 idle_minutes = 1440

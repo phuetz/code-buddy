@@ -26,6 +26,19 @@ Barrière Docker `--network none`, racine en lecture seule, faux profil. Canaris
 
 ESLint `--quiet` : code 0. `git diff --check` : code 0. Aucun terme privé dans les lignes ajoutées.
 
+## Reprise — carte locale
+
+La remise à zéro efface quatre magasins, chacun archivé dans son propre fichier avant tout effacement (`proveMessagingMemoryParts`). L'échec de l'un d'eux n'appelle pas `resetSession`.
+
+| Effacé | Où | Archivé |
+| --- | --- | --- |
+| Messages du magasin disque | `channel-handlers.ts` `saveSession` messages vides | partie `session-store` |
+| Historique compagnon persistant | `clearCompanionChannelHistory` | partie `companion-history` |
+| Carte locale `companionChannelHistories` | `delete` | partie `local-map` |
+| Agent en cache | `evictChannelAgent` | partie `agent-cache` |
+
+Correctif `852d3eec4`, tests `2c60a8965`. Le détail et les journaux sont hors dépôt.
+
 ## Déployé
 
 Aucun. Pas de push, pas de fusion, pas de service, profil réel non lu.
