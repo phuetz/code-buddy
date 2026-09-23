@@ -26,6 +26,10 @@ afterEach(() => {
 
 const sandboxReady = { recommended: 'bwrap' as const, reason: 'injected' };
 
+// Les contrôles de modes POSIX sont volontairement sautés sous Windows
+// (consolidated-audit.ts, platform === 'win32') : ces cas n'y ont pas de sens.
+const itPosix = it.skipIf(process.platform === 'win32');
+
 describe('buddy security audit', () => {
   it('passes a profile that has no loose modes, secrets, or skills', () => {
     const { profile, project } = workspace();
@@ -40,7 +44,7 @@ describe('buddy security audit', () => {
     expect(report.summary.total).toBe(0);
   });
 
-  it('reports stable check ids and does not repeat a plaintext token', () => {
+  itPosix('reports stable check ids and does not repeat a plaintext token', () => {
     const { profile, project } = workspace();
     const token = `ghp_${'a'.repeat(36)}`;
     writeFileSync(path.join(profile, 'config.toml'), `token = "${token}"\napi_key = "\${env:EXAMPLE_TOKEN}"\n`, { mode: 0o600 });
@@ -88,7 +92,7 @@ describe('buddy security audit', () => {
     expect(report.findings.map((item) => item.checkId)).toEqual(['mcp.stdio.inherits_environment']);
   });
 
-  it('hides an accepted suppression, keeps it visible, and ignores a suppression without a reason', () => {
+  itPosix('hides an accepted suppression, keeps it visible, and ignores a suppression without a reason', () => {
     const { profile, project } = workspace();
     chmodSync(profile, 0o707);
     writeFileSync(path.join(profile, 'config.toml'), 'note = "plain"\n', { mode: 0o600 });
@@ -117,7 +121,7 @@ describe('buddy security audit', () => {
     expect(report.passed).toBe(true);
   });
 
-  it('tightens only loose modes, after a backup, and leaves file contents unchanged', () => {
+  itPosix('tightens only loose modes, after a backup, and leaves file contents unchanged', () => {
     const { profile, project } = workspace();
     const body = 'model = "demo"\n';
     writeFileSync(path.join(profile, 'config.toml'), body, { mode: 0o600 });
@@ -155,7 +159,7 @@ describe('buddy security audit', () => {
     expect(manifest).not.toContain(body.trim());
   });
 
-  it('prints JSON from the command and returns a failing status without probing the network', () => {
+  itPosix('prints JSON from the command and returns a failing status without probing the network', () => {
     const { profile, project } = workspace();
     chmodSync(profile, 0o707);
     const lines: string[] = [];
