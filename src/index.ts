@@ -610,7 +610,10 @@ async function loadModel(): Promise<string | undefined> {
   await ensureEnvLoaded();
   const { isModelCompatibleWithProvider } = await import('./providers/model-provider-compat.js');
 
-  // 1. Explicit env var takes highest priority
+  // 1. Explicit env var takes highest priority.
+  // CODEBUDDY_MODEL is the catalogue-wide switch; GROK_MODEL remains the
+  // historical provider variable and still wins over the files below.
+  if (process.env.CODEBUDDY_MODEL) return process.env.CODEBUDDY_MODEL;
   if (process.env.GROK_MODEL) return process.env.GROK_MODEL;
 
   const detected = await getDetectedProvider();
@@ -623,6 +626,21 @@ async function loadModel(): Promise<string | undefined> {
     settingsModel = getSettingsManager().getCurrentModel() || undefined;
   } catch (_err) {
     logger.debug('Failed to load model from settings manager', { error: _err });
+  }
+
+  // Catalogue TOML (profil, puis configuration utilisateur). Une configuration
+  // illisible s'arrête ici : on ne continue pas avec un autre modèle.
+  try {
+    const catalogue = await import('./config/model-catalogue.js');
+    const configured = catalogue.selectConfiguredModel({ argv: process.argv, allowUserHome: true });
+    if (configured) return configured;
+  } catch (error) {
+    const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+    if (error instanceof CatalogueConfigError) {
+      cli.error(error.message);
+      process.exit(1);
+    }
+    throw error;
   }
 
   // 2. Local runtime (Ollama): resolve to a model that is ACTUALLY installed,
@@ -644,10 +662,17 @@ async function loadModel(): Promise<string | undefined> {
         ? settingsModel
         : undefined) ||
       detected.defaultModel;
+    const explicitOllamaModel = process.env.OLLAMA_MODEL?.trim();
     const resolution = await resolveInstalledOllamaModel({
       baseURL: detected.baseURL,
       requested,
+      strict: Boolean(explicitOllamaModel),
     });
+    if (explicitOllamaModel && resolution.substitutionRefused) {
+      const { strictModelRefusalMessage } = await import('./providers/local-model-resolver.js');
+      cli.error(strictModelRefusalMessage(explicitOllamaModel));
+      process.exit(1);
+    }
     if (resolution.model) return resolution.model;
     const hint = buildOllamaPullHint({
       baseURL: detected.baseURL,
@@ -1986,6 +2011,17 @@ program
         : null;
       let apiKey = options.apiKey || explicitProvider?.apiKey || await loadApiKey();
       let baseURL = options.baseUrl || explicitProvider?.baseURL || await loadBaseURL();
+      try {
+        const catalogue = await import('./config/model-catalogue.js');
+        catalogue.loadAndActivateUserCatalogue(process.env, true);
+      } catch (error) {
+        const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+        if (error instanceof CatalogueConfigError) {
+          cli.error(error.message);
+          process.exit(1);
+        }
+        throw error;
+      }
       let model = options.model || explicitProvider?.model || await loadModel();  // let: can be overridden by --agent
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
@@ -2705,6 +2741,16 @@ function addLazyCommand(
     await parent.parseAsync(process.argv);
   });
 }
+
+addLazyCommand(
+  program,
+  'models',
+  'Lister, afficher ou rafraîchir le catalogue de modèles',
+  async () => {
+    const { createModelsCommand } = await import('./commands/models-command.js');
+    return createModelsCommand();
+  },
+);
 
 addLazyCommand(
   program,

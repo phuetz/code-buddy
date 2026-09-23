@@ -59,7 +59,7 @@ export function loadBaseURL(): string {
  * Load model from settings or environment
  */
 export function loadModel(): string | undefined {
-  const envModel = process.env.GROK_MODEL;
+  const envModel = process.env.CODEBUDDY_MODEL || process.env.GROK_MODEL;
   if (envModel) return envModel;
 
   try {
