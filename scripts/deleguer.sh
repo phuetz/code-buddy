@@ -69,6 +69,16 @@ if [ -z "${DELEGUER_SELF_COPY:-}" ] && [ -z "${DELEGUER_NO_SELF_COPY:-}" ]; then
   DELEGUER_COPIE=$(mktemp "${TMPDIR:-/tmp}/deleguer-self-XXXXXX.sh")
   cp "$0" "$DELEGUER_COPIE" && chmod +x "$DELEGUER_COPIE"
   export DELEGUER_SELF_COPY="$DELEGUER_COPIE" DELEGUER_ORIGINE="$0"
+  # Borne mémoire (11/09/2026) : NexusFile.App.Tests a été tué par le noyau à 65 Go (10/09
+  # 14 h 55) puis 54 Go (11/09 08 h 21), swap à zéro, machine injoignable. Chaque lane tourne
+  # donc dans un scope systemd utilisateur : un dépassement tue la lane, pas la machine.
+  # DELEGUER_MEMMAX=64G ajuste la borne ; DELEGUER_MEMMAX=0 désactive. Repli sans scope si
+  # systemd-run est indisponible (session sans gestionnaire utilisateur).
+  if [ "${DELEGUER_MEMMAX:-40G}" != "0" ] && command -v systemd-run >/dev/null 2>&1 \
+     && systemd-run --user --scope -q -p MemoryMax=1M true >/dev/null 2>&1; then
+    exec systemd-run --user --scope -q -p "MemoryMax=${DELEGUER_MEMMAX:-40G}" -p MemorySwapMax=0 \
+      bash "$DELEGUER_COPIE" "$@"
+  fi
   exec bash "$DELEGUER_COPIE" "$@"
 fi
 DELEGUER_ORIGINE="${DELEGUER_ORIGINE:-$0}"
@@ -108,8 +118,8 @@ trap 'rm -f "$CONSIGNE" ${DELEGUER_SELF_COPY:+"$DELEGUER_SELF_COPY"}' EXIT  # + 
   # bruyantes, compte rendu chiffré) — demandé par Patrice le 07/09/2026 ; ignoré si absent.
   PREAMBULE_OUTILLAGE="${PREAMBULE_OUTILLAGE:-$HOME/DEV/missions-livres/PREAMBULE-OUTILLAGE.md}"
   # Moteurs EXTERNES (API tierces qui voient les prompts : OpenRouter et consorts) : préambule sans
-  # référence aux documents personnels de ~/DEV/claude-et-patrice (Patrice, 09/09/2026 : « on n'envoie
-  # pas de documents privés sur moi »). Le préambule normal renvoyait au guide de méthodologie.
+  # référence aux documents personnels (décision du 09/09/2026 : aucun document privé vers une API
+  # tierce). Le préambule normal renvoyait au guide de méthodologie.
   case "$MOTEUR" in openrouter|qwenflash|omniroute|nvidia|groq|cerebras|minimax|gmi)
     PREAMBULE_OUTILLAGE="${PREAMBULE_OUTILLAGE_EXTERNE:-$HOME/DEV/missions-livres/PREAMBULE-OUTILLAGE-EXTERNE.md}";; esac
   # Pas de second préambule quand un moteur ré-exécute deleguer.sh sur une consigne déjà assemblée
