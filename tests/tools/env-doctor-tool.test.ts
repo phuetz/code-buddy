@@ -1,10 +1,30 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { EnvDoctorTool } from '../../src/tools/env-doctor-tool.js';
 
 describe('EnvDoctorTool', () => {
+  let homeDir: string;
+  let originalHome: string | undefined;
+  let originalCodebuddyHome: string | undefined;
+
+  beforeEach(async () => {
+    homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'home-'));
+    originalHome = process.env.HOME;
+    originalCodebuddyHome = process.env.CODEBUDDY_HOME;
+    process.env.HOME = homeDir;
+    process.env.CODEBUDDY_HOME = path.join(homeDir, '.codebuddy');
+  });
+
+  afterEach(async () => {
+    if (originalHome !== undefined) process.env.HOME = originalHome;
+    else delete process.env.HOME;
+    if (originalCodebuddyHome !== undefined) process.env.CODEBUDDY_HOME = originalCodebuddyHome;
+    else delete process.env.CODEBUDDY_HOME;
+    await fs.rm(homeDir, { recursive: true, force: true });
+  });
+
   it('reports node environment, scripts, tools, and config files', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'env-doctor-tool-'));
     await fs.mkdir(path.join(root, 'node_modules'));
@@ -17,7 +37,7 @@ describe('EnvDoctorTool', () => {
     expect(data.nodeVersion).toBe(process.version);
     expect(data.nodeModulesPresent).toBe(true);
     expect(data.npmScripts).toEqual(['build', 'test']);
-    expect(typeof data.tools.git).toBe('boolean');
+    expect(data.tools.git).toBe(true);
     expect(data.configFiles).toContain('tsconfig.json');
     expect(data.configFiles).toContain('.env.example');
   });
