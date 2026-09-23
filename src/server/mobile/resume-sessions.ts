@@ -92,6 +92,17 @@ export function resetSessionTurnQueueForTests(): void {
   sessionTurnTails.clear();
 }
 
+/**
+ * Resolve once every queued session turn has settled. A WebSocket turn sends
+ * `chat_response` BEFORE it persists the turn (latency), so a test that stops at
+ * the response still has a session write, and its `.lock` file, in flight.
+ * Awaiting this before deleting the sessions directory removes that race
+ * (ENOTEMPTY on Windows, 2026-09-23).
+ */
+export async function drainSessionTurnQueueForTests(): Promise<void> {
+  await Promise.all([...sessionTurnTails.values()]);
+}
+
 export function isResumeSessionId(value: string): boolean {
   return SESSION_ID_RE.test(value);
 }
