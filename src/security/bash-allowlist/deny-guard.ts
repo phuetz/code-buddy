@@ -15,8 +15,8 @@
  * changes so `/allowlist deny` edits apply without a restart.
  */
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
+import { getCodeBuddyHome } from '../../utils/codebuddy-home.js';
 
 import { matchApprovalPattern } from './pattern-matcher.js';
 import type { ApprovalPattern } from './types.js';
@@ -32,7 +32,7 @@ export interface DenyRuleVerdict {
 let cache: { mtimeMs: number; patterns: ApprovalPattern[] } | null = null;
 
 function storePath(): string {
-  return path.join(process.env.CODEBUDDY_HOME ?? path.join(os.homedir(), '.codebuddy'), 'exec-approvals.json');
+  return path.join(getCodeBuddyHome(), 'exec-approvals.json');
 }
 
 function loadDenyPatterns(): ApprovalPattern[] {
