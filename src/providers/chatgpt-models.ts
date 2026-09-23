@@ -15,8 +15,12 @@ export const CHATGPT_OAUTH_DEFAULT_MODEL = 'gpt-5.6-sol';
 export const CHATGPT_OAUTH_API_ALIAS = 'gpt-5.6';
 export const CHATGPT_OAUTH_SAFE_FALLBACK_MODEL = 'gpt-5.5';
 
+// The backend filters `/models` by this version. Measured on 2026-09-23: the
+// same account got no GPT-6 model with `0.144.1`, and gpt-6-astra, gpt-6-sol and
+// gpt-6-luna with `0.155.1` (Codex CLI of the day). Keep it close to the
+// current Codex CLI, or the newest models stay invisible to Code Buddy.
 export const CHATGPT_CODEX_CLIENT_VERSION =
-  process.env.CODEBUDDY_CODEX_CLIENT_VERSION?.trim() || '0.144.1';
+  process.env.CODEBUDDY_CODEX_CLIENT_VERSION?.trim() || '0.155.1';
 
 const MODELS_URL = 'https://chatgpt.com/backend-api/codex/models';
 const ORIGINATOR = 'codex_cli_rs';
@@ -94,7 +98,7 @@ export function normalizeChatGptOAuthModel(model: string): string {
 export function isChatGptSubscriptionModel(model: string): boolean {
   const normalized = normalizeChatGptOAuthModel(model).toLowerCase();
   return (
-    /^gpt-5(?:[.-]|$)/.test(normalized) ||
+    /^gpt-[56](?:[.-]|$)/.test(normalized) ||
     /^o[1-9](?:[.-]|$)/.test(normalized) ||
     normalized.includes('codex')
   );
