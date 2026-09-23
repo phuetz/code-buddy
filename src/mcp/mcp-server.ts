@@ -5,19 +5,21 @@
  * without that audited read-only contract are only registered after an
  * explicit `--allow-write` / `CODEBUDDY_MCP_ALLOW_WRITE=1` opt-in.
  *
- * `--allow-write` is not a silent yes. File tools still go through ToolHandler
- * (workspace, protected paths, confirmation). `bash` runs in the workspace
- * sandbox when one exists. If none does, this server refuses the unconfined
- * escalation — even when `CODEBUDDY_AUTO_CONFIRM=true` — because an unconfined
- * shell can write anywhere. Agent tools (`agent_task`, `agent_chat`,
- * `agent_plan`, session tools) construct the real agent with that same write
- * context: its tool handler refuses the unconfined escalation and keeps file
- * writes inside the server workspace, including write destinations named
- * `output_dir` or `outputDir`. `desktop_screenshot` confines `output_path` to
- * that same workspace. `memory_save` and `ckg_ingest` do not: they write the
- * profile memory file and the collective ledger, and the caller cannot choose
- * another path. The interactive agent and headless mode do not enter that
- * frame, so their escalation path is unchanged.
+ * `--allow-write` is not a silent yes. In the MCP write context a tool that is
+ * not read-only runs only when it is on `MCP_WRITE_ALLOWLIST`
+ * (`src/mcp/mcp-write-allowlist.ts`). That list names each tool and the
+ * argument keys that are its write destinations. Those keys, and any other
+ * string argument that is an absolute path or a path with a separator
+ * resolving outside the workspace, stay inside the server workspace. Every
+ * other write tool (`computer_control`, including notepad and Excel saves)
+ * is refused with a reason. `bash` is on the list and still runs in the
+ * workspace sandbox; if none exists, this server refuses the unconfined
+ * escalation even when `CODEBUDDY_AUTO_CONFIRM=true`. Agent tools construct
+ * the real agent with that same write context. `desktop_screenshot` confines
+ * `output_path` on its own path. `memory_save` and `ckg_ingest` are not on
+ * the allowlist: they do not take a destination path and still write the
+ * profile memory file and the collective ledger. The interactive agent and
+ * headless mode do not enter that frame, so their escalation path is unchanged.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -545,6 +547,7 @@ export class CodeBuddyMCPServer {
       });
       handler.setWorkingDirectory(this.workingDirectory);
       handler.refuseUnconfinedShellEscalation();
+      handler.confineWritesToWorkspace(this.workingDirectory);
       this.guardedHandler = handler;
       return handler;
     })();

@@ -74,7 +74,16 @@ import {
 } from '../tools/code-exec-tool.js';
 import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { isConfinedTarget } from './workspace-confine.js';
+import {
+  catalogFleetSafe,
+  confineAllowlistedWrite,
+  isMcpReadOnlyTool,
+  lookupMcpWriteAllowlist,
+  mcpWriteAllowlistRefusal,
+  toLegacyName,
+  type McpToolWriteFacts,
+} from '../mcp/mcp-write-allowlist.js';
+import { resolveToolEffect } from '../tools/tool-effect.js';
 
 /**
  * Dependencies required to initialize the ToolHandler
@@ -960,9 +969,33 @@ export class ToolHandler {
   }
 
   /**
-   * Paths named by a write, resolved against the MCP workspace when one was
-   * supplied at construction. No root means no extra check.
+   * MCP write context only. Read-only tools are unchanged. Any other tool
+   * runs only when it is on the explicit allowlist; its destination keys and
+   * any path-shaped string argument must stay inside the workspace. No root
+   * means the interactive and headless loops are unchanged.
    */
+  private mcpWriteFacts(toolName: string): McpToolWriteFacts {
+    const legacy = toLegacyName(toolName);
+    const registered = this.registry.get(toolName) ?? this.registry.get(legacy);
+    let adapter: { effect?: 'read' | 'reversible' | 'emission'; modifiesFiles?: boolean; fleetSafe?: boolean } | undefined;
+    try {
+      adapter = registered?.tool.getMetadata?.() ?? registered?.metadata;
+    } catch {
+      adapter = registered?.metadata;
+    }
+    const effect = resolveToolEffect(
+      legacy,
+      adapter?.effect ? { effect: adapter.effect } : undefined,
+    );
+    return {
+      effect,
+      modifiesFiles: adapter?.modifiesFiles === true || registered?.metadata?.modifiesFiles === true,
+      fleetSafe: adapter?.fleetSafe === true
+        || registered?.metadata?.fleetSafe === true
+        || catalogFleetSafe(toolName),
+    };
+  }
+
   private async workspaceConfinementError(
     toolName: string,
     args: Record<string, unknown>,
@@ -970,60 +1003,13 @@ export class ToolHandler {
     const root = this.workspaceWriteRoot;
     if (!root) return null;
 
-    const rawPaths: string[] = [];
-    // Names that carry a write destination in src/tools. `output` is also a
-    // short format token for some tools ("yaml"); a relative token stays
-    // inside the workspace. `root` is not listed: read-only scanners share it.
-    for (const key of [
-      'path',
-      'file_path',
-      'target_file',
-      'file',
-      'outputPath',
-      'output_path',
-      'output_prefix',
-      'output_dir',
-      'outputDir',
-      'outDir',
-      'out',
-      'targetDir',
-      'annotated_output_path',
-      'output',
-      'approved_asset_root',
-      'approvedAssetRoot',
-    ]) {
-      const value = args[key];
-      if (typeof value === 'string' && value.trim() !== '') rawPaths.push(value);
+    const entry = lookupMcpWriteAllowlist(toolName);
+    if (entry) {
+      const error = await confineAllowlistedWrite(root, args, entry);
+      return error ? { success: false, error } : null;
     }
-    if (Array.isArray(args.files)) {
-      for (const file of args.files) {
-        if (typeof file === 'string' && file.trim() !== '') rawPaths.push(file);
-        else if (file && typeof file === 'object' && typeof (file as { path?: unknown }).path === 'string') {
-          rawPaths.push((file as { path: string }).path);
-        }
-      }
-    }
-    if (toolName === 'apply_patch' && typeof args.patch === 'string') {
-      try {
-        const { parsePatch } = await import('../tools/apply-patch.js');
-        for (const op of parsePatch(args.patch)) {
-          if (typeof op.path === 'string' && op.path.trim() !== '') rawPaths.push(op.path);
-          if (typeof op.moveTo === 'string' && op.moveTo.trim() !== '') rawPaths.push(op.moveTo);
-        }
-      } catch {
-        return {
-          success: false,
-          error: 'Path outside workspace not allowed: patch could not be read',
-        };
-      }
-    }
-
-    for (const raw of rawPaths) {
-      if (!isConfinedTarget(root, raw)) {
-        return { success: false, error: `Path outside workspace not allowed: ${raw}` };
-      }
-    }
-    return null;
+    if (isMcpReadOnlyTool(this.mcpWriteFacts(toolName))) return null;
+    return { success: false, error: mcpWriteAllowlistRefusal(toolName) };
   }
 
   /**
