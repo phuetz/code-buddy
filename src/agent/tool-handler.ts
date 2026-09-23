@@ -971,7 +971,27 @@ export class ToolHandler {
     if (!root) return null;
 
     const rawPaths: string[] = [];
-    for (const key of ['path', 'file_path', 'target_file', 'outputPath', 'output_path', 'output_prefix']) {
+    // Names that carry a write destination in src/tools. `output` is also a
+    // short format token for some tools ("yaml"); a relative token stays
+    // inside the workspace. `root` is not listed: read-only scanners share it.
+    for (const key of [
+      'path',
+      'file_path',
+      'target_file',
+      'file',
+      'outputPath',
+      'output_path',
+      'output_prefix',
+      'output_dir',
+      'outputDir',
+      'outDir',
+      'out',
+      'targetDir',
+      'annotated_output_path',
+      'output',
+      'approved_asset_root',
+      'approvedAssetRoot',
+    ]) {
       const value = args[key];
       if (typeof value === 'string' && value.trim() !== '') rawPaths.push(value);
     }
