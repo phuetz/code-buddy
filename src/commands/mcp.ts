@@ -95,6 +95,11 @@ export interface MCPServeOptions {
 
 /** Start the distribution-facing stdio server. Logs stay on stderr via logger. */
 export async function serveMCP(options: MCPServeOptions = {}): Promise<void> {
+  // This process is the MCP server. BashTool reads the variable when an
+  // unconfined escalation would otherwise run. The interactive agent and
+  // `buddy -p` do not call serveMCP, so they do not set it.
+  const { MCP_UNCONFINED_SHELL_ENV } = await import('../tools/bash/unconfined-escalation.js');
+  process.env[MCP_UNCONFINED_SHELL_ENV] = '1';
   const { CodeBuddyMCPServer } = await import('../mcp/mcp-server.js');
   const server = new CodeBuddyMCPServer({
     ...(options.allowWrite ? { allowWrite: true } : {}),
@@ -121,7 +126,7 @@ export function createMCPCommand(): Command {
     .description('Expose Code Buddy tools as an MCP server over stdio')
     .option(
       '--allow-write',
-      'Expose write, shell, execution, and other non-read-only tools (also CODEBUDDY_MCP_ALLOW_WRITE=1)',
+      'Expose write, shell, and execution tools (also CODEBUDDY_MCP_ALLOW_WRITE=1). File tools stay inside the workspace and on non-protected paths. Shell runs in the workspace sandbox; if no sandbox is available, MCP refuses the unconfined escalation even when CODEBUDDY_AUTO_CONFIRM=true, because that shell could write anywhere. The interactive agent and headless mode are unchanged.',
     )
     .option(
       '--tools <glob>',

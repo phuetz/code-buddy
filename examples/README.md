@@ -8,6 +8,13 @@ This directory contains example configuration files and usage examples for Code 
 
 Copy [`claude_desktop_config.json`](claude_desktop_config.json) into the MCP configuration used by your client. It starts `buddy mcp serve` in read-only mode; add `--allow-write` to its `args` only when the client should be allowed to modify files or run commands.
 
+`--allow-write` (or `CODEBUDDY_MCP_ALLOW_WRITE=1`) exposes write and shell tools. It does not approve them in silence.
+
+- File tools (`apply_patch`, `create_file`, `write_file`, and the other tools that name a file) still go through the agent tool handler. A non-interactive client is refused unless an explicit policy such as `CODEBUDDY_AUTO_CONFIRM=true` already allows the call. A path outside the workspace, or a protected path, stays refused.
+- `bash` runs inside the workspace sandbox when a backend is available (bubblewrap, Landlock with bubblewrap, seatbelt, or Docker). The sandbox, not the command text, is what keeps writes inside the workspace.
+- If no sandbox backend is available, the MCP server refuses the unconfined escalation instead of running the command on the host. `CODEBUDDY_AUTO_CONFIRM=true` does not override that refusal. The command is refused even when it only names a path inside the workspace: without a sandbox the process is not confined and could write anywhere. The error says the workspace sandbox is unavailable and that the unconfined escalation is refused in MCP mode.
+- The interactive agent and `buddy -p` do not use this frame. There, the same missing sandbox still asks for an unconfined escalation, and an explicit policy can still grant it.
+
 ### User Settings
 
 Copy `user-settings.json` to `~/.grok/user-settings.json`:

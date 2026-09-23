@@ -272,6 +272,11 @@ export class ToolHandler {
   private currentRecoverySessionId: string | undefined;
   /** Keeps code_exec stores and executors isolated between agent instances. */
   private readonly codeExecAgentScopeId: string;
+  /**
+   * Set only on the handler the MCP server owns. The agent loop uses another
+   * instance and leaves this false, so its shell escalation is unchanged.
+   */
+  private unconfinedShellEscalationRefused = false;
 
   constructor(private deps: ToolHandlerDependencies) {
     this.codeExecAgentScopeId = deps.agentId?.trim() || `agent_${createCodeExecToolCallId()}`;
@@ -335,6 +340,14 @@ export class ToolHandler {
   /** Restore a session-owned cwd without re-registering workspace-authored tools. */
   restoreWorkingDirectory(dir: string): void {
     this.currentWorkingDirectory = dir;
+  }
+
+  /**
+   * MCP server only. An unconfined shell escalation is refused for every tool
+   * call on this handler, including when auto-confirm would otherwise grant it.
+   */
+  refuseUnconfinedShellEscalation(): void {
+    this.unconfinedShellEscalationRefused = true;
   }
 
   /** Workspace currently used by tool execution and recovery storage. */
@@ -1254,12 +1267,17 @@ export class ToolHandler {
           : {}
       ),
     };
+    const refuseUnconfinedShell = this.unconfinedShellEscalationRefused
+      || executionExtra?.refuseUnconfinedShellEscalation === true;
+    const contextExtraWithBoundary = refuseUnconfinedShell
+      ? { ...contextExtra, refuseUnconfinedShellEscalation: true }
+      : contextExtra;
     let context: IToolExecutionContext = {
       cwd: this.currentWorkingDirectory ?? process.cwd(),
       botId: this.currentBotId,
       ...(sessionId ? { sessionId } : {}),
       ...(abortSignal ? { abortSignal } : {}),
-      ...(Object.keys(contextExtra).length > 0 ? { extra: contextExtra } : {}),
+      ...(Object.keys(contextExtraWithBoundary).length > 0 ? { extra: contextExtraWithBoundary } : {}),
     };
 
     const toolCatalog = toolName === 'code_exec' || toolName === 'tool_search' ? [
@@ -1603,6 +1621,9 @@ export class ToolHandler {
             timeout,
             this.currentWorkingDirectory,
             abortSignalFromExecutionExtra(executionExtra),
+            this.unconfinedShellEscalationRefused
+              ? { refuseUnconfinedEscalation: true }
+              : undefined,
           );
           let streamed = await gen.next();
           while (!streamed.done) {

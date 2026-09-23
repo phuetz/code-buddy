@@ -117,9 +117,29 @@ const DEFAULT_CONFIG: OSSandboxConfig = {
 let cachedCapabilities: SandboxCapabilities | null = null;
 
 /**
+ * Test seam. Production leaves this unset, so detection is unchanged.
+ * A probe replaces the host scan for the current process only; it is not a
+ * mutable flag read by the agent loop.
+ */
+type SandboxCapabilityProbe = () => Promise<SandboxCapabilities> | SandboxCapabilities;
+let capabilityProbe: SandboxCapabilityProbe | null = null;
+
+export function setSandboxCapabilityProbe(probe: SandboxCapabilityProbe | null): void {
+  capabilityProbe = probe;
+  cachedCapabilities = null;
+}
+
+export function sandboxCapabilityProbeInstalled(): boolean {
+  return capabilityProbe !== null;
+}
+
+/**
  * Detect available sandbox backends
  */
 export async function detectCapabilities(): Promise<SandboxCapabilities> {
+  if (capabilityProbe) {
+    return capabilityProbe();
+  }
   if (cachedCapabilities) {
     return cachedCapabilities;
   }

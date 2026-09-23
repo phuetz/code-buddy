@@ -52,11 +52,16 @@ export class BashExecuteTool implements ITool {
     const cwd = context?.cwd;
     const signal = context?.abortSignal;
 
+    const refuseUnconfinedEscalation = context?.extra?.refuseUnconfinedShellEscalation === true;
+    const shellOptions = refuseUnconfinedEscalation
+      ? { refuseUnconfinedEscalation: true as const }
+      : undefined;
+
     if (typeof timeout === 'number') {
-      return await getBash().execute(command, timeout, cwd, signal);
+      return await getBash().execute(command, timeout, cwd, signal, shellOptions);
     }
 
-    return await getBash().execute(command, undefined, cwd, signal);
+    return await getBash().execute(command, undefined, cwd, signal, shellOptions);
   }
 
   getSchema(): ToolSchema {

@@ -4,6 +4,13 @@
  * The registry's `fleetSafe: true` metadata is the default allowlist. Tools
  * without that audited read-only contract are only registered after an
  * explicit `--allow-write` / `CODEBUDDY_MCP_ALLOW_WRITE=1` opt-in.
+ *
+ * `--allow-write` is not a silent yes. File tools still go through ToolHandler
+ * (workspace, protected paths, confirmation). `bash` runs in the workspace
+ * sandbox when one exists. If none does, this server refuses the unconfined
+ * escalation — even when `CODEBUDDY_AUTO_CONFIRM=true` — because an unconfined
+ * shell can write anywhere. The interactive agent and headless mode do not
+ * enter that frame, so their escalation path is unchanged.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -36,6 +43,7 @@ import { registerMemoryTools } from './mcp-memory-tools.js';
 import { registerPrompts } from './mcp-prompts.js';
 import { registerResources } from './mcp-resources.js';
 import { registerSessionTools } from './mcp-session-tools.js';
+import { runWithRefusedUnconfinedEscalation } from '../tools/bash/unconfined-escalation.js';
 
 const PACKAGE_VERSION_FALLBACK = '0.1.0';
 const WRITE_ENV = 'CODEBUDDY_MCP_ALLOW_WRITE';
@@ -519,6 +527,7 @@ export class CodeBuddyMCPServer {
         repairCoordinator: new RepairCoordinator({ enabled: false }),
       });
       handler.setWorkingDirectory(this.workingDirectory);
+      handler.refuseUnconfinedShellEscalation();
       this.guardedHandler = handler;
       return handler;
     })();
@@ -531,14 +540,14 @@ export class CodeBuddyMCPServer {
     args: Record<string, unknown>,
   ): Promise<ToolResult> {
     const handler = await this.ensureGuardedHandler();
-    return handler.executeTool({
+    return runWithRefusedUnconfinedEscalation(() => handler.executeTool({
       id: `mcp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: 'function',
       function: {
         name,
         arguments: JSON.stringify(args),
       },
-    });
+    }, { refuseUnconfinedShellEscalation: true }));
   }
 
   private async ensureAgent(): Promise<import('../agent/codebuddy-agent.js').CodeBuddyAgent> {

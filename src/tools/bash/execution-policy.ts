@@ -7,7 +7,12 @@
  */
 
 import { initializeExecPolicy, type ShellPolicyEvaluation } from '../../sandbox/execpolicy.js';
-import { createSandboxForMode, type OSSandboxResult } from '../../sandbox/os-sandbox.js';
+import {
+  createSandboxForMode,
+  detectCapabilities,
+  sandboxCapabilityProbeInstalled,
+  type OSSandboxResult,
+} from '../../sandbox/os-sandbox.js';
 import { DockerSandbox } from '../../sandbox/docker-sandbox.js';
 import {
   createSshSandbox,
@@ -252,6 +257,18 @@ export async function executeInWorkspaceSandbox(
   timeout: number,
   signal?: AbortSignal,
 ): Promise<SandboxedExecution> {
+  // An installed probe that reports no backend must not fall through to the
+  // host Docker daemon. With no probe, this block is skipped.
+  if (sandboxCapabilityProbeInstalled()) {
+    const forced = await detectCapabilities();
+    if (forced.recommended === 'none') {
+      return {
+        available: false,
+        reason: 'No native or Docker workspace sandbox is available',
+      };
+    }
+  }
+
   const sshRequest = resolveExplicitSshSandboxRequest();
   if (sshRequest) {
     const ssh = createSshSandbox({
