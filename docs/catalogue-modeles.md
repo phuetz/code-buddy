@@ -10,7 +10,7 @@ Le lecteur du catalogue, le préchargement de `--profile` et l'écriture de `/co
 - sinon `$CODEBUDDY_HOME/.codebuddy/config.toml` si `CODEBUDDY_HOME` est posée
 - sinon `~/.codebuddy/config.toml`
 
-Au démarrage d'une session, `.codebuddy/config.toml` du répertoire courant est analysé à part, puis fusionné par-dessus le fichier précédent. Les valeurs du projet gagnent, champ par champ. `buddy models --config <fichier>` lit exactement ce fichier.
+Au démarrage d'une session, `.codebuddy/config.toml` du répertoire courant est analysé à part, puis fusionné par-dessus le fichier précédent. Les valeurs du projet gagnent, champ par champ, pour la session en cours. Elles ne sont pas recopiées dans le fichier utilisateur. `buddy models list --config <fichier>` et `buddy models show <modèle> --config <fichier>` lisent exactement ce fichier.
 
 Un profil nommé s'active avec `buddy --profile <nom>`. `core` et `all` sont intégrés : ils n'ont pas besoin d'être recopiés dans le fichier, et ils ne choisissent pas de modèle. Un profil du fichier peut n'avoir aucun `active_model` : la session démarre quand même.
 
@@ -37,14 +37,15 @@ Une valeur vide est ignorée. Un nom fixé dans la configuration et inconnu du c
 
 `[catalogue] mode = "merge"` est le seul mode. Il est aussi le défaut. Une entrée `[models.<nom>]` ne remplace que les champs qu'elle écrit, et seulement chez les consommateurs suivants :
 
-- `max_context_tokens` (ou `context_window`), `max_tokens` (ou `max_output_tokens`), `reasoning`, `vision`, `tools`, `input` : lus par `getModelToolConfig` au démarrage de la session
+- `max_context_tokens` (ou `context_window`), `max_tokens` (ou `max_output_tokens`), `reasoning`, `vision`, `tools` : lus par `getModelToolConfig` au démarrage de la session
+- `input` ne contient que `text` et `image`. Sans clé `vision`, la présence de `image` pose la vision à vrai. Si `vision` est écrit, c'est lui qui est lu : `input` ne change plus la vision
 - `price_per_m_input` et `price_per_m_output`, écrits ensemble : lus par `getModelPricing`
 
 `provider` reste une colonne historique de la table. Cette version ne s'en sert pas pour choisir le fournisseur de la session. `model_id` écrit dans une entrée `[models.*]` est refusé, sauf s'il répète exactement l'identifiant déjà intégré pour ce nom (les fichiers générés le font, et cela ne change pas le nom envoyé). Pour choisir un modèle, utilisez le nom de la table, un alias ou `primary`. `buddy models show` n'affiche ni `provider` ni `model_id`.
 
 `[model_roles]` ne lit que `primary`. `[model_aliases]` résout ce nom au moment du choix ci-dessus et dans `buddy models show`. La cible doit être un modèle connu, sinon la configuration est refusée. Ces alias ne s'ajoutent pas à `/switch`.
 
-`/config set` réécrit le fichier résolu ci-dessus, sans effacer `[catalogue]`, `[model_roles]`, `[model_aliases]`, les capacités des `[models.*]`, ni les `[profiles.*]`. Cette réécriture n'ajoute aucune clé absente du fichier, sauf la clé que la commande modifie.
+`/config set` relit uniquement le fichier utilisateur résolu ci-dessus, y applique la clé demandée, puis réécrit ce document. La configuration du projet n'entre pas dans cette écriture. Les clés déjà présentes sont conservées, y compris `surface`, `llm`, `model_pairs`, `agent.architect_model`, `agent.editor_model` et `tool_config.*.settings`. Cette réécriture n'ajoute aucune clé absente du fichier, sauf la clé que la commande modifie. `[catalogue]`, `[model_roles]`, `[model_aliases]` et `[profiles.*]` suivent la même règle.
 
 ## Ce que cette version ne fait pas
 

@@ -1062,13 +1062,18 @@ function sourceTable(source: Record<string, unknown> | undefined, key: string): 
   return isPlainObject(value) ? value : undefined;
 }
 
-function emitTomlTable(lines: string[], header: string, table: Record<string, unknown>): void {
+function emitTomlTable(
+  lines: string[],
+  header: string,
+  table: Record<string, unknown>,
+  render: (value: unknown) => string | null = emitTomlValue,
+): void {
   const scalars: string[] = [];
   const nested: Array<[string, Record<string, unknown>]> = [];
   for (const [key, value] of Object.entries(table)) {
     if (isPlainObject(value)) nested.push([key, value]);
     else {
-      const rendered = emitTomlValue(value);
+      const rendered = render(value);
       if (rendered !== null) scalars.push(`${key} = ${rendered}`);
     }
   }
@@ -1078,7 +1083,7 @@ function emitTomlTable(lines: string[], header: string, table: Record<string, un
     lines.push('');
   }
   for (const [key, value] of nested) {
-    emitTomlTable(lines, `${header}.${key}`, value);
+    emitTomlTable(lines, `${header}.${key}`, value, render);
   }
 }
 
@@ -1306,6 +1311,60 @@ export function serializeTOML(config: CodeBuddyConfig, preserved?: PreservedUser
   return lines.join('\n');
 }
 
+/**
+ * Réécrit un document utilisateur déjà parsé, sans y ajouter les défauts
+ * ni une autre couche. Le parseur de ce fichier ne déséchappe pas les
+ * chaînes : le rendu reprend donc le quoting historique.
+ */
+export function serializeUserDocument(document: Record<string, unknown>): string {
+  const lines: string[] = [
+    '# Code Buddy Configuration',
+    '# See https://github.com/phuetz/code-buddy for documentation',
+    '',
+  ];
+  let wroteScalar = false;
+  for (const [key, value] of Object.entries(document)) {
+    if (isPlainObject(value)) continue;
+    const rendered = formatConfigValue(value);
+    if (rendered === null) continue;
+    lines.push(`${key} = ${rendered}`);
+    wroteScalar = true;
+  }
+  if (wroteScalar) lines.push('');
+  for (const [key, value] of Object.entries(document)) {
+    if (!isPlainObject(value)) continue;
+    emitTomlTable(lines, key, value, formatConfigValue);
+  }
+  const text = lines.join('\n');
+  return text.endsWith('\n') ? text : `${text}\n`;
+}
+
+function assignKeyPath(root: Record<string, unknown>, keyPath: string, value: unknown): void {
+  const parts = keyPath.split('.');
+  if (parts.length === 0 || parts.some((part) => part.length === 0)) {
+    throw new Error(`chemin de configuration vide: ${keyPath}`);
+  }
+  let current = root;
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const segment = parts[index] ?? '';
+    const next = current[segment];
+    if (!isPlainObject(next)) {
+      const created: Record<string, unknown> = {};
+      current[segment] = created;
+      current = created;
+    } else {
+      current = next;
+    }
+  }
+  const leaf = parts[parts.length - 1] ?? '';
+  current[leaf] = value;
+}
+
+function readUserDocument(file: string): Record<string, unknown> {
+  if (!existsSync(file)) return {};
+  return parseTOML(readFileSync(file, 'utf-8'));
+}
+
 // ============================================================================
 // Configuration Manager
 // ============================================================================
@@ -1525,15 +1584,24 @@ class ConfigManager {
   }
 
   /**
-   * Save user config
+   * Réécrit le fichier utilisateur résolu. Le document est relu sur ce
+   * fichier, puis la clé demandée y est appliquée. `this.config` reste
+   * l'objet fusionné (projet compris) et n'est pas sérialisé ici.
    */
-  saveUserConfig(): void {
+  saveUserConfig(keyPath?: string, value?: unknown): void {
     const file = configFile();
     const dir = dirname(file);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(file, serializeTOML(this.config, this.preservedUser));
+    const document = readUserDocument(file);
+    if (keyPath !== undefined && keyPath.length > 0) {
+      assignKeyPath(document, keyPath, value);
+    }
+    // Couche utilisateur relue. serializeTOML(this.config) réécrirait l'objet fusionné.
+    const serialized = serializeUserDocument(document);
+    writeFileSync(file, serialized);
+    this.preservedUser = extractPreservedUserConfig(document);
   }
 
   /**
@@ -1587,7 +1655,8 @@ class ConfigManager {
   }
 
   /**
-   * Initialize config file with defaults
+   * Crée le fichier utilisateur avec les défauts, seulement s'il est absent.
+   * N'écrit pas l'objet fusionné avec le projet.
    */
   initConfig(): void {
     const file = configFile();

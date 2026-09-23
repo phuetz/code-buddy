@@ -8,13 +8,11 @@
  * base config (`ConfigManager.applyProfile`).
  *
  * Persistence notes (why this file hand-rolls toml writes):
- *  - `ConfigManager.saveUserConfig()` routes through `serializeTOML`, which
- *    only emits a *subset* of sections (providers, models, tool_config,
- *    middleware, ui, agent, integrations). It silently drops `profiles`,
- *    `model_pairs`, `agent_defaults`, `advisor`, etc. Calling it from here
- *    would destroy large parts of a real user config. So `create` appends a
- *    raw `[profiles.<name>]` block to the user toml, preserving the rest
- *    verbatim.
+ *  - `ConfigManager.saveUserConfig()` rewrites the resolved user file from
+ *    disk, so a project overlay is not copied in. That rewrite still drops
+ *    comments and normalizes layout. `create` appends a raw
+ *    `[profiles.<name>]` block to the bytes already in the user file, so the
+ *    rest stays verbatim.
  *  - The toml has no concept of an "active profile" (the CLI only takes
  *    `--profile` at launch). Cowork persists the selected profile in a
  *    dedicated light file (`~/.codebuddy/cowork-active-profile.json`).
