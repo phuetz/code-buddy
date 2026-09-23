@@ -255,7 +255,12 @@ warnings_enabled = true
 hard_stop_enabled = true
 
 [tool_loop_guardrails.warn_after]
-# 0 keeps the extra counters off. Identical results still warn at 5.
+# 0 turns exact_failure and same_tool_failure off. It does not turn the
+# historical guard off: idempotent_no_progress of 0 keeps the default (warn at
+# 5, stop at 8) and cannot go below 2. same_tool_failure counts every failure
+# of that tool during the turn, even when the arguments change — keep it high
+# if a search is allowed to retry. exact_failure can also stop a legitimate
+# retry of the same arguments after a changing external error.
 exact_failure = 0
 same_tool_failure = 0
 idempotent_no_progress = 5
@@ -264,6 +269,12 @@ idempotent_no_progress = 5
 exact_failure = 0
 same_tool_failure = 0
 idempotent_no_progress = 8
+
+# warnings_enabled and hard_stop_enabled default to true. Setting both to
+# false disables warn and stop. That is an operator choice. repeatSafe tools
+# (process, gpu_media_job) are never counted. A result that changes does not
+# trip the historical identical-result mode. The section is read from the
+# profile config.toml, not from a named [profiles.<name>] overlay.
 
 [[security.audit.suppressions]]
 checkId = "skills.firewall.review"

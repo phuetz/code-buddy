@@ -134,6 +134,20 @@ describe('tool loop guardrails', () => {
     }
   });
 
+  it('keeps the historical warn at 5 when idempotent_no_progress is explicitly 0', () => {
+    const resolved = resolveToolLoopGuardrails({
+      warn_after: { idempotent_no_progress: 0 },
+      hard_stop_after: { idempotent_no_progress: 0 },
+    });
+    expect(resolved.warnAfter.idempotent_no_progress).toBe(5);
+    expect(resolved.hardStopAfter.idempotent_no_progress).toBeGreaterThan(resolved.warnAfter.idempotent_no_progress);
+    const guard = new ToolLoopGuard({ isRepeatSafe: () => false, guardrails: resolved });
+    const actions = Array.from({ length: 8 }, () =>
+      guard.observe({ name: 'view_file', argumentsJson: '{"path":"a"}', result: same }).action,
+    );
+    expect(actions).toEqual(['none', 'none', 'none', 'none', 'warn', 'none', 'none', 'stop']);
+  });
+
   it('rejects non-integers and keeps idempotent_no_progress at least 2', () => {
     const resolved = resolveToolLoopGuardrails({
       warn_after: { exact_failure: 1.5, same_tool_failure: -1, idempotent_no_progress: 0 },

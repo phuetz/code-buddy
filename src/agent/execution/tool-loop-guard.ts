@@ -25,6 +25,14 @@
  * Defaults reproduce the contract above. `exact_failure` and
  * `same_tool_failure` stay off (0) until set, because the historical guard
  * does not count a different error or different arguments as the same loop.
+ * `0` does not disable `idempotent_no_progress`: an explicit 0 keeps the
+ * default, and the value cannot fall below 2. `same_tool_failure` adds every
+ * failure of that tool in the turn, even when the arguments change, so a low
+ * threshold can stop a legitimate search. Setting both `warnings_enabled` and
+ * `hard_stop_enabled` to false turns the decisions off; that is an operator
+ * choice, not a guarantee that every loop is blocked. Tools marked
+ * `repeatSafe` are never counted. A result whose text changes does not trip
+ * the historical identical-result mode.
  */
 
 import { createHash } from 'node:crypto';
@@ -55,9 +63,9 @@ export type ToolLoopDecision =
 export interface ToolLoopFailureThresholds {
   /** Same tool and same canonical arguments, failed, whatever the error text. 0 = off. */
   exact_failure: number;
-  /** Same tool name failed, arguments may differ. 0 = off. */
+  /** Same tool name failed, arguments may differ. 0 = off. A low value stops a search that changes arguments. */
   same_tool_failure: number;
-  /** Historical identical-result guard (success or identical error). Minimum 2. */
+  /** Historical identical-result guard. 0 keeps the default. Minimum 2. It cannot be turned off by writing 0. */
   idempotent_no_progress: number;
 }
 

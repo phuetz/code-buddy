@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- **security:** `buddy security audit` takes `--profile-dir` so it no longer collides with the global `--profile` name. A missing or unreadable profile or project fails the audit instead of being reported as passed. `--fix` only removes permission bits, refuses symlinks, and writes its mode backup inside the profile. A critical finding cannot be suppressed into a passed result. Incomplete config and skill scans fail the audit.
 - **skills:** File watcher resilience against kernel inotify table exhaustion (`ENOSPC` / `EMFILE` / `ENFILE`). Falls back to synchronous on-demand reads and degrades health reporting gracefully without crashing.
 - **sessions:** Strict prefix disambiguation in `materializeUnifiedSession` refuses ambiguous abbreviated IDs to prevent resuming incorrect sessions.
 - **deploy:** Filesystem sandboxing prevents `outputDir` from escaping the project root in `buddy deploy run`.

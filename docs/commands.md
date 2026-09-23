@@ -489,7 +489,7 @@ buddy config show | validate | get
 ### Security
 
 ```bash
-buddy security audit [--fix] [--json]
+buddy security audit [--fix] [--json] [--profile-dir <dir>] [--project <dir>]
 buddy security-audit [--deep] [--fix] [--json]
 buddy secrets list | set | get | remove | rotate | audit | import-env
 buddy approvals list | approve | deny | policy
