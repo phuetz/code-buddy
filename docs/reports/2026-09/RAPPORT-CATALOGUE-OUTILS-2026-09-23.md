@@ -2,7 +2,7 @@
 
 Branche locale `integration/catalogue-outils-2026-09-23`, base `acbfc69f891dbffb505103d3bcd5d25131da08be`.
 Aucun push, aucune fusion. Livraison et preuves :
-`/home/patrice/Videos/Partage/20260923-reprise-pilotage-opus/lot13-catalogue-jules-suite/corrections`.
+`Partage/20260923-reprise-pilotage-opus/lot13-catalogue-jules-suite/corrections`.
 
 ## Commits
 
