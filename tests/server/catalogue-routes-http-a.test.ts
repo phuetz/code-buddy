@@ -39,7 +39,7 @@ describe('catalogue HTTP partie A', () => {
     const heartbeat = asObject(body.apiHeartbeat, 'health.apiHeartbeat');
     expect(body.status).toBe('degraded');
     expect(body.version).toBe('2.2.0');
-    expect(checks.database).toBe('error');
+    expect(checks.database).toBe('ok');
     expect(checks.api).toBe('unknown');
     expect(checks.memory).toBe('ok');
     expect(heartbeat.status).toBe('unknown');
@@ -67,8 +67,7 @@ describe('catalogue HTTP partie A', () => {
     expect(body.status).toBe('not_ready');
     expect(provider.ready).toBe(false);
     expect(provider.message).toBe('No LLM provider configured');
-    expect(database.ready).toBe(false);
-    expect(database.message).toBe('Database connection failed');
+    expect(database.ready).toBe(true);
     expect(memory.ready).toBe(true);
     expect(checks.providerApi).toBeUndefined();
   });

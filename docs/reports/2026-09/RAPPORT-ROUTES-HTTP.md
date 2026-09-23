@@ -12,7 +12,7 @@ Serveur réel en processus, `127.0.0.1`, port 0, `HOME`, `CODEBUDDY_HOME`, `CODE
 
 | Route | Enregistrement | Classe | Preuve |
 |---|---|---|---|
-| GET /api/health | `src/server/routes/health.ts:233` | TESTÉ_FONCTIONNEL | 200, `status` `degraded`, `version` `2.2.0`, `checks.database` `error`, `checks.api` `unknown`, `checks.memory` `ok` |
+| GET /api/health | `src/server/routes/health.ts:233` | TESTÉ_FONCTIONNEL | 200, `status` `degraded`, `version` `2.2.0`, `checks.database` `ok`, `checks.api` `unknown`, `checks.memory` `ok` |
 | GET /api/health/live | `src/server/routes/health.ts:366` | TESTÉ_FONCTIONNEL | 200, `alive` true, `status` `ok`, `pid` du processus |
 | GET /api/health/ready | `src/server/routes/health.ts:298` | TESTÉ_FONCTIONNEL | 503, `ready` false, `status` `not_ready`, fournisseur absent, base non prête, mémoire prête |
 | GET /api/health/metrics | `src/server/routes/health.ts:423` | TESTÉ_FONCTIONNEL | 200, texte Prometheus (`codebuddy_uptime_seconds`, `codebuddy_memory_rss_bytes`) |
@@ -57,7 +57,7 @@ Le refus anonyme asserté a le corps exact `{ code: "UNAUTHORIZED", message: "No
 
 1. **OpenAPI annonce le port 0.** `GET /api/docs` construit `servers[0].url` avec `config.port` (`src/server/index.ts:890`), qui reste 0 quand on écoute sur un port éphémère. Le test assert `http://127.0.0.1:0` et un port lié > 0. Classe PARTIEL. Pas de correctif : il faudrait relire l'adresse liée après `listen`, ce qui n'a pas été prouvé par un mutant.
 2. **WebChat mémorise le port demandé, pas le port lié.** `connect()` écrit `status.info.port` avec l'argument (`src/channels/webchat/index.ts:164-170`). Pour le port 0, ce champ reste 0 ; le test joint le port réel via `server.address()`. Les routes HTTP, elles, répondent. Pas de correctif.
-3. **Santé base de données en erreur sous Vitest.** `GET /api/health` renvoie `checks.database` `error` et `/ready` `Database connection failed`. Cause observée : `import('better-sqlite3')` dans le runner Vitest ne trouve pas le binaire natif du `node_modules` lié. Le même import sous `node` nu répond OK. Les sessions passent par le repli JSON et ont été relues. Ce n'est pas un correctif de route ; rien n'a été réinstallé.
+3. **Santé base de données.** Une première version attendait `checks.database` `error` et `/ready` `Database connection failed` : le binaire natif `better-sqlite3` manquait dans le `node_modules` local, installé sans scripts. Avec un `node_modules` complet, comme en CI, la base répond `ok` ; les attentes suivent désormais cet environnement.
 
 ## Exécutions
 
@@ -103,7 +103,7 @@ Inventaire Express : 150 sites `app.|router.METHOD(` sous `src/server` et le web
 
 ## Ce que je n'ai pas pu vérifier
 
-- Une base SQLite saine pendant ces tests : le binaire natif n'est pas résolu sous Vitest. L'import direct par `node` réussit. Aucun `npm rebuild` (installation interdite).
+- Une base SQLite en panne : le cas `database` en erreur n'est plus couvert par ces tests.
 - Le succès de `POST /api/a2a/tasks/send` avec un message : cela lancerait l'exécuteur et un modèle.
 - Les routes JSON-RPC A2A, le chat (`/api/chat`, `/v1`), la recherche du hub, les démons, le cron, les battements qui sortent du processus, l'authentification d'appareil.
 - Un client navigateur sur le HTML du webchat. Seuls HTTP et un client WebSocket de test ont été exercés.
