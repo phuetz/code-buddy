@@ -3665,6 +3665,11 @@ addLazyCommandGroup(program, 'widgets', 'Inline conversation widgets: list, prev
   registerWidgetsCommand(program);
 });
 
+addLazyCommandGroup(program, 'security', 'Consolidated security audit of the local profile and project', async () => {
+  const { registerSecurityCommand } = await import('./commands/cli/security-command.js');
+  registerSecurityCommand(program);
+});
+
 // Utility commands (doctor, security-audit, onboard, webhook) are all registered
 // by a single registerUtilityCommands() call, so we must remove all stubs before
 // re-registering to avoid Commander duplicate command errors.
