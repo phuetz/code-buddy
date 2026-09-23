@@ -962,10 +962,123 @@ export function parseTOML(content: string): Record<string, unknown> {
   return result;
 }
 
+const MODEL_STANDARD_KEYS = new Set([
+  'provider',
+  'model_id',
+  'price_per_m_input',
+  'price_per_m_output',
+  'max_context_tokens',
+  'description',
+]);
+
+export interface PreservedUserConfig {
+  catalogue?: Record<string, unknown>;
+  modelRoles?: Record<string, unknown>;
+  modelAliases?: Record<string, unknown>;
+  profiles?: Record<string, unknown>;
+  modelExtras: Record<string, Record<string, unknown>>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Sections que le sérialiseur historique ne sait pas réécrire, lues sur le fichier utilisateur. */
+export function extractPreservedUserConfig(parsed: Record<string, unknown>): PreservedUserConfig {
+  const preserved: PreservedUserConfig = { modelExtras: {} };
+  if (isPlainObject(parsed.catalogue)) preserved.catalogue = parsed.catalogue;
+  if (isPlainObject(parsed.model_roles)) preserved.modelRoles = parsed.model_roles;
+  if (isPlainObject(parsed.model_aliases)) preserved.modelAliases = parsed.model_aliases;
+  if (isPlainObject(parsed.profiles)) preserved.profiles = parsed.profiles;
+  if (isPlainObject(parsed.models)) {
+    for (const [name, raw] of Object.entries(parsed.models)) {
+      if (!isPlainObject(raw)) continue;
+      const extras: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(raw)) {
+        if (!MODEL_STANDARD_KEYS.has(key)) extras[key] = value;
+      }
+      if (Object.keys(extras).length > 0) preserved.modelExtras[name] = extras;
+    }
+  }
+  return preserved;
+}
+
+function escapeTomlString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function emitTomlValue(value: unknown): string | null {
+  if (typeof value === 'string') return `"${escapeTomlString(value)}"`;
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+    return `[${value.map((item) => `"${escapeTomlString(item)}"`).join(', ')}]`;
+  }
+  return null;
+}
+
+function emitTomlTable(lines: string[], header: string, table: Record<string, unknown>): void {
+  const scalars: string[] = [];
+  const nested: Array<[string, Record<string, unknown>]> = [];
+  for (const [key, value] of Object.entries(table)) {
+    if (isPlainObject(value)) nested.push([key, value]);
+    else {
+      const rendered = emitTomlValue(value);
+      if (rendered !== null) scalars.push(`${key} = ${rendered}`);
+    }
+  }
+  if (scalars.length > 0 || nested.length === 0) {
+    lines.push(`[${header}]`);
+    lines.push(...scalars);
+    lines.push('');
+  }
+  for (const [key, value] of nested) {
+    emitTomlTable(lines, `${header}.${key}`, value);
+  }
+}
+
+function emitModelExtras(
+  lines: string[],
+  name: string,
+  model: ModelConfig,
+  preserved?: PreservedUserConfig | null,
+): void {
+  const extras: Record<string, unknown> = { ...(preserved?.modelExtras[name] ?? {}) };
+  for (const [key, value] of Object.entries(model as unknown as Record<string, unknown>)) {
+    if (MODEL_STANDARD_KEYS.has(key) || key in extras) continue;
+    extras[key] = value;
+  }
+  for (const [key, value] of Object.entries(extras)) {
+    const rendered = emitTomlValue(value);
+    if (rendered !== null) lines.push(`${key} = ${rendered}`);
+  }
+}
+
+function emitPreservedSections(lines: string[], preserved?: PreservedUserConfig | null): void {
+  if (!preserved) return;
+  if (preserved.catalogue && Object.keys(preserved.catalogue).length > 0) {
+    emitTomlTable(lines, 'catalogue', preserved.catalogue);
+  }
+  if (preserved.modelRoles && Object.keys(preserved.modelRoles).length > 0) {
+    emitTomlTable(lines, 'model_roles', preserved.modelRoles);
+  }
+  if (preserved.modelAliases && Object.keys(preserved.modelAliases).length > 0) {
+    emitTomlTable(lines, 'model_aliases', preserved.modelAliases);
+  }
+  if (preserved.profiles) {
+    for (const [name, raw] of Object.entries(preserved.profiles)) {
+      if (!isPlainObject(raw)) continue;
+      emitTomlTable(lines, `profiles.${name}`, raw);
+    }
+  }
+}
+
 /**
- * Serialize config to TOML format
+ * Serialize config to TOML format.
+ * `preserved` réécrit les sections de catalogue et les profils du fichier
+ * utilisateur, que l'objet typé ne porte pas.
  */
-export function serializeTOML(config: CodeBuddyConfig): string {
+export function serializeTOML(config: CodeBuddyConfig, preserved?: PreservedUserConfig | null): string {
   const lines: string[] = [
     '# Code Buddy Configuration',
     '# See https://github.com/phuetz/code-buddy for documentation',
@@ -995,6 +1108,7 @@ export function serializeTOML(config: CodeBuddyConfig): string {
     lines.push(`price_per_m_output = ${model.price_per_m_output}`);
     lines.push(`max_context_tokens = ${model.max_context_tokens}`);
     if (model.description) lines.push(`description = "${model.description}"`);
+    emitModelExtras(lines, name, model, preserved);
     lines.push('');
   }
 
@@ -1050,6 +1164,7 @@ export function serializeTOML(config: CodeBuddyConfig): string {
     lines.push('');
   }
 
+  emitPreservedSections(lines, preserved);
   return lines.join('\n');
 }
 
@@ -1057,8 +1172,14 @@ export function serializeTOML(config: CodeBuddyConfig): string {
 // Configuration Manager
 // ============================================================================
 
-const CONFIG_DIR = join(homedir(), '.codebuddy');
-const CONFIG_FILE = join(CONFIG_DIR, 'config.toml');
+function configDir(): string {
+  return join(homedir(), '.codebuddy');
+}
+
+function configFile(): string {
+  return join(configDir(), 'config.toml');
+}
+
 const PROJECT_CONFIG_FILE = '.codebuddy/config.toml';
 
 /**
@@ -1067,6 +1188,7 @@ const PROJECT_CONFIG_FILE = '.codebuddy/config.toml';
 class ConfigManager {
   private config: CodeBuddyConfig;
   private loaded = false;
+  private preservedUser: PreservedUserConfig | null = null;
 
   constructor() {
     this.config = { ...DEFAULT_CONFIG };
@@ -1081,12 +1203,15 @@ class ConfigManager {
 
     // Start with defaults
     this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+    this.preservedUser = null;
 
     // Load user config
-    if (existsSync(CONFIG_FILE)) {
+    const userFile = configFile();
+    if (existsSync(userFile)) {
       try {
-        const content = readFileSync(CONFIG_FILE, 'utf-8');
+        const content = readFileSync(userFile, 'utf-8');
         const userConfig = parseTOML(content) as Partial<CodeBuddyConfig>;
+        this.preservedUser = extractPreservedUserConfig(userConfig as Record<string, unknown>);
         this.mergeConfig(userConfig);
       } catch (error) {
         logger.warn(`Warning: Failed to parse user config: ${error}`, { source: 'ConfigManager' });
@@ -1241,11 +1366,12 @@ class ConfigManager {
    * Save user config
    */
   saveUserConfig(): void {
-    const dir = dirname(CONFIG_FILE);
+    const file = configFile();
+    const dir = dirname(file);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(CONFIG_FILE, serializeTOML(this.config));
+    writeFileSync(file, serializeTOML(this.config, this.preservedUser));
   }
 
   /**
@@ -1288,25 +1414,27 @@ class ConfigManager {
    * Get config file path
    */
   getConfigPath(): string {
-    return CONFIG_FILE;
+    return configFile();
   }
 
   /**
    * Check if config file exists
    */
   configExists(): boolean {
-    return existsSync(CONFIG_FILE);
+    return existsSync(configFile());
   }
 
   /**
    * Initialize config file with defaults
    */
   initConfig(): void {
-    if (!existsSync(CONFIG_DIR)) {
-      mkdirSync(CONFIG_DIR, { recursive: true });
+    const dir = configDir();
+    const file = configFile();
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
     }
-    if (!existsSync(CONFIG_FILE)) {
-      writeFileSync(CONFIG_FILE, serializeTOML(DEFAULT_CONFIG));
+    if (!existsSync(file)) {
+      writeFileSync(file, serializeTOML(DEFAULT_CONFIG));
     }
   }
 

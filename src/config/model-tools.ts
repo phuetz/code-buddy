@@ -8,6 +8,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { installCataloguePriceOverlays } from './model-pricing.js';
 import type { ModelStrength } from './model-strengths.js';
 
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -1390,6 +1391,7 @@ export function installModelCatalogueOverlays(
 
 export function resetModelCatalogueOverlays(): void {
   installModelCatalogueOverlays(null);
+  installCataloguePriceOverlays(null);
 }
 
 /**

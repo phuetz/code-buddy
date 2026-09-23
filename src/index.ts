@@ -605,16 +605,13 @@ async function saveCommandLineSettings(
 
 /** Providers served by a local OpenAI-compatible runtime (no cloud model catalog). */
 
-// Load model from detected provider or user settings
-async function loadModel(): Promise<string | undefined> {
+// Load model from detected provider or user settings.
+// Une seule chaîne : resolveStartupModel. Le `--model` de l'appelant y entre
+// en premier. Sans choix explicite, le active_model du fichier généré ne
+// masque pas le fournisseur détecté. Ollama garde sa sonde ensuite.
+async function loadModel(cliModel?: string): Promise<string | undefined> {
   await ensureEnvLoaded();
   const { isModelCompatibleWithProvider } = await import('./providers/model-provider-compat.js');
-
-  // 1. Explicit env var takes highest priority.
-  // CODEBUDDY_MODEL is the catalogue-wide switch; GROK_MODEL remains the
-  // historical provider variable and still wins over the files below.
-  if (process.env.CODEBUDDY_MODEL) return process.env.CODEBUDDY_MODEL;
-  if (process.env.GROK_MODEL) return process.env.GROK_MODEL;
 
   const detected = await getDetectedProvider();
 
@@ -628,12 +625,22 @@ async function loadModel(): Promise<string | undefined> {
     logger.debug('Failed to load model from settings manager', { error: _err });
   }
 
-  // Catalogue TOML (profil, puis configuration utilisateur). Une configuration
-  // illisible s'arrête ici : on ne continue pas avec un autre modèle.
+  // Catalogue TOML. Une configuration illisible s'arrête ici : on ne continue
+  // pas avec un autre modèle.
   try {
     const catalogue = await import('./config/model-catalogue.js');
-    const configured = catalogue.selectConfiguredModel({ argv: process.argv, allowUserHome: true });
-    if (configured) return configured;
+    const decision = catalogue.resolveStartupModel({
+      argv: process.argv,
+      cli: cliModel,
+      env: process.env,
+      allowUserHome: true,
+      settingsModel: settingsModel ?? null,
+      detected: detected
+        ? { provider: detected.provider, defaultModel: detected.defaultModel }
+        : null,
+      isCompatible: (model, provider) => isModelCompatibleWithProvider(model, provider),
+    });
+    if (decision.model) return decision.model;
   } catch (error) {
     const { CatalogueConfigError } = await import('./config/model-catalogue.js');
     if (error instanceof CatalogueConfigError) {
@@ -2022,7 +2029,7 @@ program
         }
         throw error;
       }
-      let model = options.model || explicitProvider?.model || await loadModel();  // let: can be overridden by --agent
+      let model = await loadModel(options.model || explicitProvider?.model);  // let: can be overridden by --agent
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2063,7 +2070,7 @@ program
             return {
               apiKey: nextApiKey,
               baseURL: options.baseUrl || await loadBaseURL(),
-              model: options.model || await loadModel(),
+              model: await loadModel(options.model),
             };
           },
           onLoginError: (err) => {
@@ -2672,7 +2679,7 @@ gitCommand
       // Get API key from options, environment, or user settings
       const apiKey = options.apiKey || await loadApiKey();
       const baseURL = options.baseUrl || await loadBaseURL();
-      const model = options.model || await loadModel();
+      const model = await loadModel(options.model);
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;

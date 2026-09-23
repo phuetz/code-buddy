@@ -5,16 +5,20 @@
  * Le catalogue intégré reste la base. Une surcharge n'écrit que les champs
  * présents : le reste est conservé. Rien ici ne lit ni n'écrit le profil
  * réel si l'appelant fournit le texte ou un chemin explicite.
+ *
+ * Cette version ne découvre pas les modèles et n'écrit pas de cache.
+ * `provider` et `model_id` restent les champs historiques de la table
+ * `[models.*]` : ils ne choisissent ni la clé ni l'adresse de la session.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
+import { installCataloguePriceOverlays, type ModelPricing } from './model-pricing.js';
 import { findModelToolConfig, installModelCatalogueOverlays } from './model-tools.js';
 import { getModelRegistry } from './model-registry.js';
 import { DEFAULT_CONFIG, parseTOML } from './toml-config.js';
-import { writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export class CatalogueConfigError extends Error {
   constructor(detail: string) {
@@ -23,9 +27,7 @@ export class CatalogueConfigError extends Error {
   }
 }
 
-export type CatalogueMode = 'merge' | 'replace';
-export type CatalogueSource = 'cli' | 'env' | 'profile' | 'user' | 'discovered' | 'builtin';
-export type DiscoveryKind = 'ollama' | 'openai';
+export type CatalogueSource = 'cli' | 'env' | 'profile' | 'user' | 'settings' | 'detected';
 
 export interface CatalogueEntry {
   id: string;
@@ -50,19 +52,15 @@ export interface CataloguePatch {
 
 export interface CatalogueRoles {
   primary?: string;
-  fast?: string;
-  compact?: string;
-  vision?: string;
 }
 
 export interface CatalogueDocument {
-  mode: CatalogueMode;
-  ttlSeconds: number;
+  mode: 'merge';
   activeModel?: string;
   roles: CatalogueRoles;
   aliases: Record<string, string>;
   models: Record<string, CataloguePatch>;
-  profiles: Record<string, { activeModel?: string; fast?: string; vision?: string }>;
+  profiles: Record<string, { activeModel?: string }>;
 }
 
 export interface PriorityInput {
@@ -70,8 +68,8 @@ export interface PriorityInput {
   env?: string | null;
   profile?: string | null;
   user?: string | null;
-  discovered?: string | null;
-  builtin?: string | null;
+  settings?: string | null;
+  detected?: string | null;
 }
 
 export interface ResolvedChoice {
@@ -81,15 +79,28 @@ export interface ResolvedChoice {
   requested: string;
 }
 
-export interface ContextCacheEntry {
-  contextWindow: number;
-  fetchedAt: number;
-  source: DiscoveryKind;
+export interface StartupDetectedProvider {
+  provider: string;
+  defaultModel: string;
 }
 
-export interface ContextCacheFile {
-  version: 1;
-  entries: Record<string, ContextCacheEntry>;
+export interface StartupModelRequest {
+  argv?: readonly string[];
+  /** Modèle déjà lu par l'appelant (`--model`). Gagne sur `argv`. */
+  cli?: string | null;
+  env?: NodeJS.ProcessEnv;
+  configText?: string;
+  configPath?: string | null;
+  allowUserHome?: boolean;
+  readDefaultPath?: boolean;
+  settingsModel?: string | null;
+  detected?: StartupDetectedProvider | null;
+  isCompatible?: (model: string, provider: string | undefined) => boolean;
+}
+
+export interface StartupModelDecision {
+  model: string | null;
+  source: CatalogueSource | 'none';
 }
 
 const ENTRY_KEYS = [
@@ -106,25 +117,14 @@ const ENTRY_KEYS = [
   'description',
 ] as const;
 
-const DEFAULT_TTL_SECONDS = 3600;
+/** Valeur écrite par le fichier généré. Ce n'est pas un choix explicite. */
+export const GENERATED_ACTIVE_MODEL = DEFAULT_CONFIG.active_model;
 
-export function emptyContextCache(): ContextCacheFile {
-  return { version: 1, entries: {} };
-}
-
-export function contextCacheKey(source: DiscoveryKind, baseURL: string, model: string): string {
-  return `${source}|${stripTrailingSlash(baseURL)}|${model.trim().toLowerCase()}`;
-}
-
-/** Fusion champ à champ. `replace` ignore la base. Les champs absents du patch restent. */
+/** Fusion champ à champ. Les champs absents du patch restent. */
 export function mergeCatalogueEntry(
   base: CatalogueEntry | null,
   patch: CataloguePatch,
-  mode: CatalogueMode,
 ): CatalogueEntry {
-  if (mode === 'replace') {
-    return { id: patch.id, ...patch.values };
-  }
   const merged: CatalogueEntry = { ...(base ?? { id: patch.id }), id: patch.id };
   for (const key of patch.present) {
     if (key === 'id') continue;
@@ -138,24 +138,57 @@ export function mergeCatalogue(
   builtin: Readonly<Record<string, CatalogueEntry>>,
   document: CatalogueDocument,
 ): Record<string, CatalogueEntry> {
-  if (document.mode === 'replace') {
-    const replaced: Record<string, CatalogueEntry> = {};
-    for (const [id, patch] of Object.entries(document.models)) {
-      replaced[id] = mergeCatalogueEntry(null, patch, 'replace');
-    }
-    return replaced;
-  }
   const merged: Record<string, CatalogueEntry> = { ...builtin };
   for (const [id, patch] of Object.entries(document.models)) {
     const base = builtin[id] ?? findBuiltinByModelId(builtin, id);
-    merged[id] = mergeCatalogueEntry(base, patch, 'merge');
+    merged[id] = mergeCatalogueEntry(base, patch);
   }
   return merged;
 }
 
 /**
+ * Fusionne deux documents déjà analysés. `over` (le projet) gagne champ par champ.
+ * On n'assemble pas les textes : une clé racine du second fichier ne tombe pas
+ * dans la dernière section du premier.
+ */
+export function mergeCatalogueDocuments(
+  base: CatalogueDocument,
+  over: CatalogueDocument,
+): CatalogueDocument {
+  const models: Record<string, CataloguePatch> = { ...base.models };
+  for (const [id, patch] of Object.entries(over.models)) {
+    const previous = models[id];
+    if (!previous) {
+      models[id] = patch;
+      continue;
+    }
+    models[id] = {
+      id,
+      present: new Set<string>([...previous.present, ...patch.present]),
+      values: { ...previous.values, ...patch.values },
+    };
+  }
+  const profiles = { ...base.profiles };
+  for (const [name, profile] of Object.entries(over.profiles)) {
+    profiles[name] = { ...profiles[name], ...profile };
+  }
+  const roles: CatalogueRoles = { ...base.roles };
+  if (over.roles.primary) roles.primary = over.roles.primary;
+  return {
+    mode: 'merge',
+    ...(over.activeModel ?? base.activeModel ? { activeModel: over.activeModel ?? base.activeModel } : {}),
+    roles,
+    aliases: { ...base.aliases, ...over.aliases },
+    models,
+    profiles,
+  };
+}
+
+/**
  * Premier jeton non vide. Le résultat est ce jeton (ou sa cible d'alias),
  * jamais un autre modèle « de secours ».
+ * Ordre réel du démarrage : voir `resolveStartupModel`, qui est le seul appelant
+ * de production. Il ne remplit pas de niveau au-delà de `detected`.
  */
 export function resolveModelByPriority(
   input: PriorityInput,
@@ -166,23 +199,26 @@ export function resolveModelByPriority(
     ['env', input.env],
     ['profile', input.profile],
     ['user', input.user],
-    ['discovered', input.discovered],
-    ['builtin', input.builtin],
+    ['settings', input.settings],
+    ['detected', input.detected],
   ];
   for (const [source, raw] of ordered) {
     const requested = raw?.trim();
     if (!requested) continue;
     const alias = aliases.get(requested.toLowerCase());
     if (alias !== undefined && !alias.trim()) {
-      throw new CatalogueConfigError(`l'alias « ${requested} » est vide`);
+      throw new CatalogueConfigError(`l'alias « ${requested} » est vide. Donnez-lui un modèle, ou retirez la ligne.`);
     }
     const model = alias?.trim() || requested;
     return { model, source, requested };
   }
-  throw new CatalogueConfigError('aucun modèle n\'est défini (CLI, environnement, profil, configuration, découverte ou catalogue intégré)');
+  throw new CatalogueConfigError(
+    'aucun modèle n\'est défini (ligne de commande, environnement, profil, configuration, réglage sauvé ou fournisseur détecté)',
+  );
 }
 
-export function parseCatalogueConfig(content: string): CatalogueDocument {
+export function parseCatalogueConfig(content: string, source = 'texte fourni'): CatalogueDocument {
+  assertClosedSections(content, source);
   const meaningful = content
     .split('\n')
     .map((line) => line.trim())
@@ -192,10 +228,20 @@ export function parseCatalogueConfig(content: string): CatalogueDocument {
   }
   const recognized = meaningful.filter((line) => /^\[[^\]]+\]$/.test(line) || /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(line));
   if (recognized.length === 0) {
-    throw new CatalogueConfigError('le fichier ne contient aucune clé TOML reconnaissable');
+    throw new CatalogueConfigError(
+      `le fichier ne contient aucune clé TOML reconnaissable (${source}). Écrivez des clés du type active_model = "nom" ou des sections [models.nom].`,
+    );
   }
-  const parsed = parseTOML(content);
-  return documentFromParsed(parsed);
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parseTOML(content);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new CatalogueConfigError(
+      `analyse TOML impossible (${source}) : ${detail}. Corrigez la ligne signalée et relancez.`,
+    );
+  }
+  return documentFromParsed(parsed, source);
 }
 
 export function selectionFromDocument(
@@ -204,48 +250,34 @@ export function selectionFromDocument(
     cli?: string | null;
     env?: string | null;
     profileName?: string | null;
-    discovered?: string | null;
-    builtin?: string | null;
+    settings?: string | null;
+    detected?: string | null;
     aliases?: ReadonlyMap<string, string>;
   } = {},
 ): ResolvedChoice {
-  const profile = options.profileName ? document.profiles[options.profileName] : undefined;
-  if (options.profileName && !profile) {
-    throw new CatalogueConfigError(
-      `le profil « ${options.profileName} » n'existe pas dans la configuration`,
-    );
-  }
+  const profileName = options.profileName ?? null;
+  assertProfileSelectable(document, profileName);
+  const profile = lookupProfile(document, profileName);
   const aliases = options.aliases ?? aliasMap(document);
   const choice = resolveModelByPriority(
     {
       cli: options.cli,
       env: options.env,
-      profile: profile?.activeModel ?? null,
-      user: document.roles.primary ?? document.activeModel ?? null,
-      discovered: options.discovered,
-      builtin: options.builtin,
+      profile: profileName ? profile.activeModel : null,
+      user: explicitUserModel(document),
+      settings: options.settings,
+      detected: options.detected,
     },
     aliases,
   );
   if (choice.source === 'profile' || choice.source === 'user') {
-    assertKnownModel(choice.model, document, aliases);
+    assertKnownModel(choice.model, document, aliases, choice.source, choice.requested);
   }
   return choice;
 }
 
-export function resolveRole(
-  document: CatalogueDocument,
-  role: 'primary' | 'fast' | 'vision',
-  profileName?: string | null,
-): string | null {
-  const profile = profileName ? document.profiles[profileName] : undefined;
-  if (role === 'primary') {
-    return profile?.activeModel ?? document.roles.primary ?? document.activeModel ?? null;
-  }
-  if (role === 'fast') {
-    return profile?.fast ?? document.roles.fast ?? document.roles.compact ?? null;
-  }
-  return profile?.vision ?? document.roles.vision ?? null;
+export function resolveRole(document: CatalogueDocument): string | null {
+  return explicitUserModel(document);
 }
 
 export function builtinCatalogueEntries(): Record<string, CatalogueEntry> {
@@ -282,7 +314,9 @@ export function defaultCatalogueConfigPath(env: NodeJS.ProcessEnv = process.env)
   const explicit = env.CODEBUDDY_CONFIG?.trim();
   if (explicit) {
     if (!existsSync(explicit)) {
-      throw new CatalogueConfigError(`fichier introuvable : ${explicit}`);
+      throw new CatalogueConfigError(
+        `fichier introuvable : ${explicit}. Créez-le, ou retirez CODEBUDDY_CONFIG pour revenir au fichier par défaut.`,
+      );
     }
     return explicit;
   }
@@ -300,23 +334,14 @@ export function assertUserCatalogue(
   env: NodeJS.ProcessEnv = process.env,
   allowUserHome = false,
 ): CatalogueDocument | null {
-  const path = allowUserHome ? defaultCatalogueConfigPath(env) : explicitConfigPath(env);
-  const own = path ? readFileSync(path, 'utf8') : '';
-  if (!allowUserHome) {
-    if (!path) return null;
-    return parseCatalogueConfig(own);
-  }
-  const project = join(process.cwd(), '.codebuddy', 'config.toml');
-  const projectText = existsSync(project) && project !== path ? readFileSync(project, 'utf8') : '';
-  const text = `${own}\n${projectText}`.trim();
-  if (!text) return null;
-  return parseCatalogueConfig(text);
+  return readCatalogueDocument({ allowUserHome, readDefaultPath: allowUserHome }, env);
 }
 
 /**
- * Modèle explicitement choisi dans le TOML (profil puis configuration utilisateur).
- * `null` si ce niveau ne fixe rien — l'appelant garde alors la variable d'environnement
- * ou le réglage déjà en place. Une configuration illisible lève toujours.
+ * Modèle explicitement choisi dans le TOML (profil, puis configuration).
+ * `null` si ce niveau ne fixe rien — l'appelant garde alors l'environnement,
+ * le réglage sauvé ou le fournisseur détecté.
+ * Le `active_model` du fichier généré (`grok-code-fast`) ne compte pas.
  */
 export function selectConfiguredModel(options: {
   argv?: readonly string[];
@@ -327,26 +352,73 @@ export function selectConfiguredModel(options: {
   allowUserHome?: boolean;
 } = {}): string | null {
   const env = options.env ?? process.env;
-  const text = readCatalogueText(options, env);
-  if (text === null) return null;
-  const document = parseCatalogueConfig(text);
+  const document = readCatalogueDocument(options, env);
+  if (!document) return null;
   const profileName = profileNameFromArgv(options.argv ?? []);
-  const profile = profileName ? document.profiles[profileName] : undefined;
-  if (profileName && !profile) {
-    throw new CatalogueConfigError(`le profil « ${profileName} » n'existe pas dans la configuration`);
-  }
-  const profileModel = profile?.activeModel ?? null;
-  const userModel = document.roles.primary ?? document.activeModel ?? null;
+  assertProfileSelectable(document, profileName);
+  const profile = lookupProfile(document, profileName);
+  const profileModel = profileName ? profile.activeModel : null;
+  const userModel = explicitUserModel(document);
   if (!profileModel && !userModel) return null;
   const aliases = aliasMap(document);
   const choice = resolveModelByPriority(
     { profile: profileModel, user: userModel },
     aliases,
   );
-  assertKnownModel(choice.model, document, aliases);
+  assertKnownModel(choice.model, document, aliases, choice.source, choice.requested);
   const merged = mergeCatalogue(builtinCatalogueEntries(), document);
   const entry = findEntry(merged, choice.model) ?? findEntry(merged, choice.requested);
   return entry ? canonicalModelId(entry) : choice.model;
+}
+
+/**
+ * Chaîne unique du démarrage. `loadModel` dans `src/index.ts` appelle cette
+ * fonction et s'arrête dès qu'elle rend un modèle. Le fournisseur Ollama
+ * n'est pas tranché ici : sans choix explicite, l'appelant garde sa sonde
+ * des modèles installés.
+ */
+export function resolveStartupModel(request: StartupModelRequest = {}): StartupModelDecision {
+  const env = request.env ?? process.env;
+  const document = readCatalogueDocument(request, env);
+  const profileName = profileNameFromArgv(request.argv ?? []);
+  assertProfileSelectable(document, profileName);
+  const profile = lookupProfile(document, profileName);
+  const aliases = document ? aliasMap(document) : aliasMap(emptyDocument());
+  const cli = firstText(request.cli) ?? modelFromArgv(request.argv ?? []);
+  const envModel = firstText(env.CODEBUDDY_MODEL) ?? firstText(env.GROK_MODEL);
+  const profileModel = profileName ? profile.activeModel : null;
+  const userModel = document ? explicitUserModel(document) : null;
+  if (cli || envModel || profileModel || userModel) {
+    const choice = resolveModelByPriority(
+      { cli, env: envModel, profile: profileModel, user: userModel },
+      aliases,
+    );
+    if (document && (choice.source === 'profile' || choice.source === 'user')) {
+      assertKnownModel(choice.model, document, aliases, choice.source, choice.requested);
+      const merged = mergeCatalogue(builtinCatalogueEntries(), document);
+      const entry = findEntry(merged, choice.model) ?? findEntry(merged, choice.requested);
+      return { model: entry ? canonicalModelId(entry) : choice.model, source: choice.source };
+    }
+    return { model: choice.model, source: choice.source };
+  }
+
+  if (request.detected?.provider === 'ollama') {
+    return { model: null, source: 'none' };
+  }
+
+  const compatible = request.isCompatible ?? (() => true);
+  const settings = firstText(request.settingsModel);
+  const detectedModel = firstText(request.detected?.defaultModel);
+  const settingsOk = Boolean(settings) && compatible(settings ?? '', request.detected?.provider);
+  if (!settingsOk && !detectedModel) return { model: null, source: 'none' };
+  const choice = resolveModelByPriority(
+    {
+      settings: settingsOk ? settings : null,
+      detected: detectedModel,
+    },
+    aliases,
+  );
+  return { model: choice.model, source: choice.source };
 }
 
 export function capabilityOverlays(document: CatalogueDocument): Record<string, {
@@ -386,9 +458,26 @@ export function capabilityOverlays(document: CatalogueDocument): Record<string, 
   return overlays;
 }
 
-/** Applique les surcharges de capacités au résolveur synchrone. `null` les retire. */
+export function priceOverlays(document: CatalogueDocument): Record<string, ModelPricing> {
+  const merged = mergeCatalogue(builtinCatalogueEntries(), document);
+  const overlays: Record<string, ModelPricing> = {};
+  for (const [id, patch] of Object.entries(document.models)) {
+    if (!patch.present.has('costInputPerMillion') || !patch.present.has('costOutputPerMillion')) continue;
+    const price: ModelPricing = {
+      inputPerMillion: patch.values.costInputPerMillion ?? 0,
+      outputPerMillion: patch.values.costOutputPerMillion ?? 0,
+    };
+    overlays[id.toLowerCase()] = price;
+    const entry = merged[id];
+    if (entry?.modelId) overlays[entry.modelId.toLowerCase()] = price;
+  }
+  return overlays;
+}
+
+/** Applique les surcharges de capacités et de prix. `null` les retire. */
 export function activateCatalogue(document: CatalogueDocument | null): void {
   installModelCatalogueOverlays(document ? capabilityOverlays(document) : null);
+  installCataloguePriceOverlays(document ? priceOverlays(document) : null);
 }
 
 /** Relit le TOML, applique les surcharges, et échoue clairement s'il est invalide. */
@@ -405,7 +494,9 @@ function explicitConfigPath(env: NodeJS.ProcessEnv): string | null {
   const explicit = env.CODEBUDDY_CONFIG?.trim();
   if (explicit) {
     if (!existsSync(explicit)) {
-      throw new CatalogueConfigError(`fichier introuvable : ${explicit}`);
+      throw new CatalogueConfigError(
+        `fichier introuvable : ${explicit}. Créez-le, ou retirez CODEBUDDY_CONFIG pour revenir au fichier par défaut.`,
+      );
     }
     return explicit;
   }
@@ -415,7 +506,7 @@ function explicitConfigPath(env: NodeJS.ProcessEnv): string | null {
   return existsSync(candidate) ? candidate : null;
 }
 
-function readCatalogueText(
+function readCatalogueDocument(
   options: {
     configText?: string;
     configPath?: string | null;
@@ -423,96 +514,55 @@ function readCatalogueText(
     allowUserHome?: boolean;
   },
   env: NodeJS.ProcessEnv,
-): string | null {
-  if (options.configText !== undefined) return options.configText;
+): CatalogueDocument | null {
+  if (options.configText !== undefined) {
+    return parseCatalogueConfig(options.configText, 'texte fourni');
+  }
   if (options.configPath) {
-    if (!existsSync(options.configPath)) {
-      throw new CatalogueConfigError(`fichier introuvable : ${options.configPath}`);
-    }
-    return readFileSync(options.configPath, 'utf8');
+    return parseCatalogueConfig(readCatalogueFile(options.configPath), options.configPath);
   }
   if (options.readDefaultPath === false && !options.allowUserHome) return null;
-  const path = options.allowUserHome ? defaultCatalogueConfigPath(env) : explicitConfigPath(env);
-  const own = path ? readFileSync(path, 'utf8') : null;
-  if (!options.allowUserHome) return own;
-  const project = join(process.cwd(), '.codebuddy', 'config.toml');
-  if (!existsSync(project) || project === path) return own;
-  const projectText = readFileSync(project, 'utf8');
-  return own ? `${own}\n${projectText}` : projectText;
+  const userPath = options.allowUserHome ? defaultCatalogueConfigPath(env) : explicitConfigPath(env);
+  let document = userPath ? parseCatalogueConfig(readCatalogueFile(userPath), userPath) : null;
+  if (!options.allowUserHome) return document;
+  const projectPath = join(process.cwd(), '.codebuddy', 'config.toml');
+  if (!existsSync(projectPath) || projectPath === userPath) return document;
+  const project = parseCatalogueConfig(readCatalogueFile(projectPath), projectPath);
+  return document ? mergeCatalogueDocuments(document, project) : project;
 }
 
-export function readContextCache(text: string): ContextCacheFile {
-  let parsed: unknown;
+function readCatalogueFile(filePath: string): string {
   try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new CatalogueConfigError('le cache de contexte n\'est pas un JSON valide');
+    return readFileSync(filePath, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new CatalogueConfigError(
+        `fichier introuvable : ${filePath}. Créez-le, ou retirez le chemin de la configuration.`,
+      );
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new CatalogueConfigError(
+      `lecture impossible de ${filePath} (${detail}). Vérifiez les droits du fichier et relancez.`,
+    );
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new CatalogueConfigError('le cache de contexte n\'est pas un objet JSON');
-  }
-  const entries = (parsed as { entries?: unknown }).entries;
-  if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
-    throw new CatalogueConfigError('le cache de contexte n\'a pas d\'entrées');
-  }
-  return { version: 1, entries: entries as ContextCacheFile['entries'] };
 }
 
-export function freshContextWindow(
-  cache: ContextCacheFile,
-  key: string,
-  now: number,
-  ttlMs: number,
-): number | null {
-  if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-    throw new CatalogueConfigError('la durée de vie du cache de contexte est invalide');
+function assertClosedSections(content: string, source: string): void {
+  const lines = content.split('\n');
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index]?.trim() ?? '';
+    if (!trimmed.startsWith('[')) continue;
+    if (/^\[[^\]]+\]$/.test(trimmed)) continue;
+    throw new CatalogueConfigError(
+      `section non fermée « ${trimmed} » (${source}, ligne ${index + 1}). Fermez le crochet, par exemple [catalogue].`,
+    );
   }
-  const entry = cache.entries[key];
-  if (!entry) return null;
-  if (!Number.isSafeInteger(entry.fetchedAt) || !Number.isSafeInteger(entry.contextWindow) || entry.contextWindow <= 0) {
-    throw new CatalogueConfigError('le cache de contexte contient une entrée illisible');
-  }
-  if (now - entry.fetchedAt >= ttlMs) return null;
-  return entry.contextWindow;
-}
-
-export async function discoverContextWindow(options: {
-  source: DiscoveryKind;
-  baseURL: string;
-  model: string;
-  cache: ContextCacheFile;
-  now: number;
-  ttlMs: number;
-  fetchImpl: typeof fetch;
-}): Promise<{ contextWindow: number; fromCache: boolean; cache: ContextCacheFile }> {
-  const key = contextCacheKey(options.source, options.baseURL, options.model);
-  const fresh = freshContextWindow(options.cache, key, options.now, options.ttlMs);
-  if (fresh !== null) {
-    return { contextWindow: fresh, fromCache: true, cache: options.cache };
-  }
-  const contextWindow = await probeProvider(options.source, options.baseURL, options.model, options.fetchImpl);
-  const next: ContextCacheFile = {
-    version: 1,
-    entries: {
-      ...options.cache.entries,
-      [key]: { contextWindow, fetchedAt: options.now, source: options.source },
-    },
-  };
-  return { contextWindow, fromCache: false, cache: next };
-}
-
-export function writeContextCache(filePath: string, cache: ContextCacheFile): void {
-  writeJsonAtomicSync(filePath, cache, { mode: 0o600 });
-}
-
-export function defaultContextCachePath(configPath: string): string {
-  return join(dirname(configPath), 'context-length-cache.json');
 }
 
 function emptyDocument(): CatalogueDocument {
   return {
     mode: 'merge',
-    ttlSeconds: DEFAULT_TTL_SECONDS,
     roles: {},
     aliases: {},
     models: {},
@@ -520,122 +570,133 @@ function emptyDocument(): CatalogueDocument {
   };
 }
 
-function documentFromParsed(parsed: Record<string, unknown>): CatalogueDocument {
+function documentFromParsed(parsed: Record<string, unknown>, source: string): CatalogueDocument {
   const document = emptyDocument();
   const catalogue = asRecord(parsed.catalogue);
   if (parsed.catalogue !== undefined && !catalogue) {
-    throw new CatalogueConfigError('la section [catalogue] doit être une table');
+    throw new CatalogueConfigError(`la section [catalogue] doit être une table (${source}).`);
   }
   if (catalogue) {
+    for (const key of Object.keys(catalogue)) {
+      if (key === 'mode') continue;
+      throw new CatalogueConfigError(
+        `clé « ${key} » inconnue dans [catalogue] (${source}). Cette version ne lit que mode = "merge". Retirez la clé.`,
+      );
+    }
     if (catalogue.mode !== undefined) {
       const mode = String(catalogue.mode).trim().toLowerCase();
-      if (mode !== 'merge' && mode !== 'replace') {
-        throw new CatalogueConfigError(`mode « ${String(catalogue.mode)} » inconnu (attendu : merge ou replace)`);
+      if (mode === 'replace') {
+        throw new CatalogueConfigError(
+          `mode « replace » n'est pas pris en charge dans cette version (${source}). Écrivez mode = "merge" : une entrée ne remplace que les champs qu'elle écrit.`,
+        );
       }
-      document.mode = mode;
-    }
-    if (catalogue.context_cache_ttl_seconds !== undefined) {
-      document.ttlSeconds = positiveInteger(
-        catalogue.context_cache_ttl_seconds,
-        'context_cache_ttl_seconds',
-        true,
-      );
+      if (mode !== 'merge') {
+        throw new CatalogueConfigError(`mode « ${String(catalogue.mode)} » inconnu (attendu : merge) (${source}).`);
+      }
     }
   }
   if (typeof parsed.active_model === 'string' && parsed.active_model.trim()) {
     document.activeModel = parsed.active_model.trim();
   } else if (parsed.active_model !== undefined && parsed.active_model !== '') {
-    throw new CatalogueConfigError('active_model doit être une chaîne non vide');
+    throw new CatalogueConfigError(`active_model doit être une chaîne non vide (${source}).`);
   }
-  document.roles = parseRoles(parsed.model_roles);
-  document.aliases = parseAliases(parsed.model_aliases);
-  document.models = parseModels(parsed.models);
-  document.profiles = parseProfiles(parsed.profiles);
+  document.roles = parseRoles(parsed.model_roles, source);
+  document.aliases = parseAliases(parsed.model_aliases, source);
+  document.models = parseModels(parsed.models, source);
+  document.profiles = parseProfiles(parsed.profiles, source);
+  for (const [id, patch] of Object.entries(document.models)) {
+    const hasIn = patch.present.has('costInputPerMillion');
+    const hasOut = patch.present.has('costOutputPerMillion');
+    if (hasIn !== hasOut) {
+      throw new CatalogueConfigError(
+        `« ${id} » : price_per_m_input et price_per_m_output doivent être écrits ensemble (${source}). Complétez les deux, ou retirez le prix.`,
+      );
+    }
+  }
   if (document.roles.primary) document.activeModel = document.roles.primary;
   return document;
 }
 
-function parseRoles(value: unknown): CatalogueRoles {
+function parseRoles(value: unknown, source: string): CatalogueRoles {
   if (value === undefined) return {};
   const record = asRecord(value);
-  if (!record) throw new CatalogueConfigError('la section [model_roles] doit être une table');
+  if (!record) throw new CatalogueConfigError(`la section [model_roles] doit être une table (${source}).`);
   const roles: CatalogueRoles = {};
-  for (const key of ['primary', 'fast', 'compact', 'vision'] as const) {
-    if (record[key] === undefined) continue;
-    if (typeof record[key] !== 'string' || !String(record[key]).trim()) {
-      throw new CatalogueConfigError(`le rôle ${key} doit être un nom de modèle non vide`);
+  for (const [key, raw] of Object.entries(record)) {
+    if (key !== 'primary') {
+      throw new CatalogueConfigError(
+        `le rôle « ${key} » n'est pas pris en charge dans cette version (${source}). Seul primary choisit le modèle de la session. Retirez cette clé.`,
+      );
     }
-    roles[key] = String(record[key]).trim();
+    if (typeof raw !== 'string' || !raw.trim()) {
+      throw new CatalogueConfigError(`le rôle primary doit être un nom de modèle non vide (${source}).`);
+    }
+    roles.primary = raw.trim();
   }
   return roles;
 }
 
-function parseAliases(value: unknown): Record<string, string> {
+function parseAliases(value: unknown, source: string): Record<string, string> {
   if (value === undefined) return {};
   const record = asRecord(value);
-  if (!record) throw new CatalogueConfigError('la section [model_aliases] doit être une table');
+  if (!record) throw new CatalogueConfigError(`la section [model_aliases] doit être une table (${source}).`);
   const aliases: Record<string, string> = {};
   for (const [alias, target] of Object.entries(record)) {
     if (typeof target !== 'string' || !target.trim()) {
-      throw new CatalogueConfigError(`l'alias « ${alias} » doit désigner un modèle non vide`);
+      throw new CatalogueConfigError(
+        `l'alias « ${alias} » doit désigner un modèle non vide (${source}). Corrigez la cible, ou retirez l'alias.`,
+      );
     }
     aliases[alias] = target.trim();
   }
   return aliases;
 }
 
-function parseModels(value: unknown): Record<string, CataloguePatch> {
+function parseModels(value: unknown, source: string): Record<string, CataloguePatch> {
   if (value === undefined) return {};
   const record = asRecord(value);
-  if (!record) throw new CatalogueConfigError('la section [models] doit être une table');
+  if (!record) throw new CatalogueConfigError(`la section [models] doit être une table (${source}).`);
   const models: Record<string, CataloguePatch> = {};
   for (const [id, raw] of Object.entries(record)) {
     const table = asRecord(raw);
-    if (!table) throw new CatalogueConfigError(`le modèle « ${id} » doit être une table`);
-    models[id] = patchFromTable(id, table);
+    if (!table) throw new CatalogueConfigError(`le modèle « ${id} » doit être une table (${source}).`);
+    models[id] = patchFromTable(id, table, source);
   }
   return models;
 }
 
-function parseProfiles(value: unknown): CatalogueDocument['profiles'] {
+function parseProfiles(value: unknown, source: string): CatalogueDocument['profiles'] {
   if (value === undefined) return {};
   const record = asRecord(value);
-  if (!record) throw new CatalogueConfigError('la section [profiles] doit être une table');
+  if (!record) throw new CatalogueConfigError(`la section [profiles] doit être une table (${source}).`);
   const profiles: CatalogueDocument['profiles'] = {};
   for (const [name, raw] of Object.entries(record)) {
     const table = asRecord(raw);
     if (!table) continue;
-    const profile: { activeModel?: string; fast?: string; vision?: string } = {};
+    const profile: { activeModel?: string } = {};
+    if (table.fast_model !== undefined || table.vision_model !== undefined) {
+      throw new CatalogueConfigError(
+        `le profil « ${name} » utilise fast_model ou vision_model, qui ne sont pas pris en charge dans cette version (${source}). Seul active_model choisit un modèle. Retirez ces clés.`,
+      );
+    }
     if (table.active_model !== undefined) {
       if (typeof table.active_model !== 'string' || !table.active_model.trim()) {
-        throw new CatalogueConfigError(`le profil « ${name} » a un active_model vide`);
+        throw new CatalogueConfigError(`le profil « ${name} » a un active_model vide (${source}). Donnez un nom, ou retirez la clé.`);
       }
       profile.activeModel = table.active_model.trim();
-    }
-    if (table.fast_model !== undefined) {
-      if (typeof table.fast_model !== 'string' || !table.fast_model.trim()) {
-        throw new CatalogueConfigError(`le profil « ${name} » a un fast_model vide`);
-      }
-      profile.fast = table.fast_model.trim();
-    }
-    if (table.vision_model !== undefined) {
-      if (typeof table.vision_model !== 'string' || !table.vision_model.trim()) {
-        throw new CatalogueConfigError(`le profil « ${name} » a un vision_model vide`);
-      }
-      profile.vision = table.vision_model.trim();
     }
     profiles[name] = profile;
   }
   return profiles;
 }
 
-function patchFromTable(id: string, table: Record<string, unknown>): CataloguePatch {
+function patchFromTable(id: string, table: Record<string, unknown>, source: string): CataloguePatch {
   const present = new Set<string>();
   const values: Partial<CatalogueEntry> = {};
   const takeString = (tomlKey: string, field: keyof CatalogueEntry) => {
     if (table[tomlKey] === undefined) return;
     if (typeof table[tomlKey] !== 'string' || !String(table[tomlKey]).trim()) {
-      throw new CatalogueConfigError(`« ${id} ».${tomlKey} doit être une chaîne non vide`);
+      throw new CatalogueConfigError(`« ${id} ».${tomlKey} doit être une chaîne non vide (${source}).`);
     }
     present.add(field);
     (values as Record<string, unknown>)[field] = String(table[tomlKey]).trim();
@@ -643,7 +704,7 @@ function patchFromTable(id: string, table: Record<string, unknown>): CataloguePa
   const takeBool = (tomlKey: string, field: 'reasoning' | 'vision' | 'tools') => {
     if (table[tomlKey] === undefined) return;
     if (typeof table[tomlKey] !== 'boolean') {
-      throw new CatalogueConfigError(`« ${id} ».${tomlKey} doit être true ou false`);
+      throw new CatalogueConfigError(`« ${id} ».${tomlKey} doit être true ou false (${source}).`);
     }
     present.add(field);
     values[field] = table[tomlKey];
@@ -672,7 +733,7 @@ function patchFromTable(id: string, table: Record<string, unknown>): CataloguePa
   takeBool('tools', 'tools');
   if (table.input !== undefined) {
     if (!Array.isArray(table.input) || table.input.some((item) => item !== 'text' && item !== 'image')) {
-      throw new CatalogueConfigError(`« ${id} ».input ne peut contenir que "text" et "image"`);
+      throw new CatalogueConfigError(`« ${id} ».input ne peut contenir que "text" et "image" (${source}).`);
     }
     present.add('input');
     values.input = [...table.input];
@@ -687,7 +748,9 @@ function patchFromTable(id: string, table: Record<string, unknown>): CataloguePa
       'max_tokens', 'max_output_tokens', 'price_per_m_input', 'price_per_m_output',
       'reasoning', 'vision', 'tools', 'input',
     ].includes(key)) {
-      throw new CatalogueConfigError(`champ inconnu « ${key} » sur le modèle « ${id} »`);
+      throw new CatalogueConfigError(
+        `champ inconnu « ${key} » sur le modèle « ${id} » (${source}). Retirez-le : il n'est pas appliqué.`,
+      );
     }
   }
   return { id, present, values };
@@ -697,26 +760,23 @@ function assertKnownModel(
   model: string,
   document: CatalogueDocument,
   aliases: ReadonlyMap<string, string>,
+  source: CatalogueSource,
+  requested: string,
 ): void {
-  if (isKnownModel(model, document, aliases)) return;
+  if (isConcreteModel(model, document)) return;
+  const via = requested.trim().toLowerCase() !== model.trim().toLowerCase()
+    ? ` (alias « ${requested} »)`
+    : '';
+  const where = source === 'profile' ? 'profil' : 'configuration';
   throw new CatalogueConfigError(
-    `« ${model} » est inconnu du catalogue. Aucun autre modèle n'est utilisé à sa place`,
+    `« ${model} »${via} est inconnu du catalogue. Source : ${where}. Déclarez-le dans [models.<nom>], ou corrigez le nom. Aucun autre modèle n'est utilisé à sa place`,
   );
 }
 
-function isKnownModel(
-  model: string,
-  document: CatalogueDocument,
-  aliases: ReadonlyMap<string, string>,
-): boolean {
+function isConcreteModel(model: string, document: CatalogueDocument): boolean {
   const needle = model.trim().toLowerCase();
   if (!needle) return false;
-  if (aliases.has(needle)) return true;
-  for (const target of aliases.values()) {
-    if (target.toLowerCase() === needle) return true;
-  }
-  const builtin = builtinCatalogueEntries();
-  if (findEntry(builtin, model)) return true;
+  if (findEntry(builtinCatalogueEntries(), model)) return true;
   if (document.models[model] || Object.keys(document.models).some((id) => id.toLowerCase() === needle)) {
     return true;
   }
@@ -724,6 +784,36 @@ function isKnownModel(
     if (patch.values.modelId?.toLowerCase() === needle) return true;
   }
   return findModelToolConfig(model) !== null;
+}
+
+function explicitUserModel(document: CatalogueDocument): string | null {
+  const primary = document.roles.primary?.trim();
+  if (primary) return primary;
+  const active = document.activeModel?.trim();
+  if (!active || active === GENERATED_ACTIVE_MODEL) return null;
+  return active;
+}
+
+function lookupProfile(
+  document: CatalogueDocument | null,
+  name: string | null,
+): { activeModel: string | null } {
+  if (!name) return { activeModel: null };
+  const fromDoc = document?.profiles[name];
+  if (fromDoc) return { activeModel: fromDoc.activeModel ?? null };
+  const builtin = DEFAULT_CONFIG.profiles?.[name] as { active_model?: string } | undefined;
+  if (builtin) return { activeModel: builtin.active_model?.trim() || null };
+  return { activeModel: null };
+}
+
+function assertProfileSelectable(document: CatalogueDocument | null, profileName: string | null): void {
+  if (!profileName) return;
+  if (document?.profiles[profileName]) return;
+  if (DEFAULT_CONFIG.profiles?.[profileName]) return;
+  const builtins = Object.keys(DEFAULT_CONFIG.profiles ?? {}).join(', ') || 'aucun';
+  throw new CatalogueConfigError(
+    `le profil « ${profileName} » n'existe pas. Profils intégrés : ${builtins}. Les autres se déclarent dans [profiles.${profileName}].`,
+  );
 }
 
 function findEntry(entries: Record<string, CatalogueEntry>, model: string): CatalogueEntry | null {
@@ -744,7 +834,7 @@ function findBuiltinByModelId(
 }
 
 function profileNameFromArgv(argv: readonly string[]): string | null {
-  for (let index = 0; index < argv.length; index++) {
+  for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--') break;
     if (arg === '--profile') {
@@ -757,6 +847,27 @@ function profileNameFromArgv(argv: readonly string[]): string | null {
     }
   }
   return null;
+}
+
+function modelFromArgv(argv: readonly string[]): string | null {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--') break;
+    if (arg === '--model' || arg === '-m') {
+      const next = argv[index + 1];
+      return next && !next.startsWith('-') ? next : null;
+    }
+    if (arg?.startsWith('--model=')) {
+      const name = arg.slice('--model='.length);
+      return name || null;
+    }
+  }
+  return null;
+}
+
+function firstText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -776,75 +887,6 @@ function nonNegativeNumber(value: unknown, label: string): number {
     throw new CatalogueConfigError(`${label} doit être un nombre positif ou nul`);
   }
   return value;
-}
-
-function stripTrailingSlash(url: string): string {
-  return url.trim().replace(/\/+$/, '');
-}
-
-async function probeProvider(
-  source: DiscoveryKind,
-  baseURL: string,
-  model: string,
-  fetchImpl: typeof fetch,
-): Promise<number> {
-  const root = stripTrailingSlash(baseURL).replace(/\/v1$/i, '');
-  try {
-    if (source === 'ollama') {
-      const response = await fetchImpl(`${root}/api/show`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: model }),
-      });
-      if (!response.ok) {
-        throw new Error(`Découverte de contexte impossible : ${source} a répondu ${response.status}`);
-      }
-      const body = await response.json() as unknown;
-      const window = ollamaContext(body);
-      if (window === null) {
-        throw new Error(`Découverte de contexte impossible : ${source} ne publie pas de fenêtre pour « ${model} »`);
-      }
-      return window;
-    }
-    const response = await fetchImpl(`${root}/v1/models`);
-    if (!response.ok) {
-      throw new Error(`Découverte de contexte impossible : ${source} a répondu ${response.status}`);
-    }
-    const body = await response.json() as unknown;
-    const window = openaiContext(body, model);
-    if (window === null) {
-      throw new Error(`Découverte de contexte impossible : ${source} ne publie pas de fenêtre pour « ${model} »`);
-    }
-    return window;
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Découverte de contexte impossible')) throw error;
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Découverte de contexte impossible auprès du fournisseur (${detail})`);
-  }
-}
-
-function ollamaContext(body: unknown): number | null {
-  const info = asRecord(asRecord(body)?.model_info);
-  if (!info) return null;
-  const values = Object.entries(info)
-    .filter(([key]) => key.endsWith('.context_length'))
-    .map(([, value]) => (typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null))
-    .filter((value): value is number => value !== null);
-  if (values.length === 0) return null;
-  return Math.min(...values);
-}
-
-function openaiContext(body: unknown, model: string): number | null {
-  const data = asRecord(body)?.data;
-  if (!Array.isArray(data)) return null;
-  const needle = model.trim().toLowerCase();
-  const record = data
-    .map((entry) => asRecord(entry))
-    .find((entry) => entry && String(entry.id ?? '').trim().toLowerCase() === needle);
-  if (!record) return null;
-  const candidate = record.context_length ?? record.max_model_len;
-  if (typeof candidate !== 'number' || !Number.isInteger(candidate) || candidate <= 0) return null;
-  return candidate;
 }
 
 export const CATALOGUE_ENTRY_FIELDS = ENTRY_KEYS;
