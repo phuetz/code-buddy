@@ -2,6 +2,9 @@
  * `buddy security audit` — one report over the checks inventoried in
  * src/security/consolidated-audit.ts. The older `security-audit` command
  * stays registered separately.
+ *
+ * The directory option is `--profile-dir`, not `--profile`. The global
+ * pre-parser already owns `--profile <name>` for configuration profiles.
  */
 
 import type { Command } from 'commander';
@@ -15,7 +18,7 @@ import { getCodeBuddyHome } from '../../utils/codebuddy-home.js';
 export interface SecurityAuditCommandOptions {
   fix?: boolean;
   json?: boolean;
-  profile?: string;
+  profileDir?: string;
   project?: string;
 }
 
@@ -27,15 +30,30 @@ export interface SecurityAuditIo {
 }
 
 export function formatSecurityAuditText(report: ConsolidatedAuditReport): string {
-  const lines = [report.passed ? 'Security audit: passed' : 'Security audit: failed'];
+  const headline = report.status === 'passed'
+    ? 'Security audit: passed'
+    : report.status === 'passed_with_suppressions'
+      ? 'Security audit: passed with suppressions'
+      : 'Security audit: failed';
+  const lines = [
+    headline,
+    `Profile: ${report.effectiveProfileDir ?? '(inaccessible)'} (requested ${report.profileDir})`,
+    `Project: ${report.effectiveProjectDir ?? '(inaccessible)'} (requested ${report.projectDir})`,
+  ];
   for (const item of report.findings) {
     lines.push(`  ${item.severity} ${item.checkId} — ${item.title}. ${item.detail}`);
   }
   if (report.suppressedFindings.length > 0) {
     lines.push(`Suppressed: ${report.suppressedFindings.length}`);
+    for (const item of report.suppressedFindings) {
+      lines.push(`  ${item.severity} ${item.checkId} — ${item.reason}`);
+    }
   }
   for (const fix of report.fixes) {
     lines.push(`  ${fix.ok ? 'fixed' : 'not fixed'} ${fix.checkId} ${fix.subject}: ${fix.message}`);
+  }
+  for (const limitation of report.limitations) {
+    lines.push(`Limitation: ${limitation}`);
   }
   return `${lines.join('\n')}\n`;
 }
@@ -45,7 +63,7 @@ export function runSecurityAuditCommand(
   io: SecurityAuditIo,
 ): number {
   const report = runConsolidatedSecurityAudit({
-    profileDir: options.profile ?? io.home(),
+    profileDir: options.profileDir ?? io.home(),
     projectDir: options.project ?? io.cwd(),
     fix: options.fix === true,
     sandbox: io.probe(),
@@ -64,7 +82,7 @@ export function registerSecurityCommand(program: Command): void {
     .description('Run the consolidated security audit')
     .option('--fix', 'Tighten loose file modes after writing a mode backup')
     .option('--json', 'Print the report as JSON')
-    .option('--profile <dir>', 'Profile directory')
+    .option('--profile-dir <dir>', 'Profile directory to audit')
     .option('--project <dir>', 'Project directory')
     .action((options: SecurityAuditCommandOptions) => {
       const code = runSecurityAuditCommand(options, {

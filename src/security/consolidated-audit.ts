@@ -3,6 +3,8 @@
  *
  * Aggregates checks that already exist elsewhere. It does not start a second
  * scanner, does not resolve DNS, and does not rewrite secret values.
+ * `--fix` only clears permission bits. It never adds any, never follows a
+ * symlink, and never writes a backup outside the profile root.
  *
  * Inventory (the check that already existed, then the stable id used here):
  * - scanSkillFirewall — src/security/skill-scanner.ts:367 → skills.firewall.*
@@ -12,9 +14,24 @@
  * - SSRFGuard.isSafeUrlSync — src/security/ssrf-guard.ts:347 → mcp.remote.unsafe_url
  * - stdio inheritEnv — src/mcp/transports.ts:46 → mcp.stdio.inherits_environment
  * - ignored "servers" key — src/mcp/config.ts:171 → mcp.config.servers_key_ignored
+ * - loadMCPConfig sources — src/mcp/config.ts:68 → project mcp.json, project
+ *   settings.json mcpServers, profile mcp.json. Profile settings.json and
+ *   project settings.local.json are not runtime MCP server sources.
  */
 
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  fchmodSync,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  writeSync,
+} from 'node:fs';
 import path from 'node:path';
 import TOML from '@iarna/toml';
 import { isNativeSandboxEnabled, type NativeSandboxCapabilities } from './native-sandbox.js';
@@ -23,6 +40,8 @@ import { scanSkillFirewall } from './skill-scanner.js';
 import { SSRFGuard } from './ssrf-guard.js';
 
 export type SecurityAuditSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+export type SecurityAuditStatus = 'passed' | 'passed_with_suppressions' | 'failed';
+export type SecurityAuditRoot = 'profile' | 'project';
 
 export interface SecurityAuditFinding {
   checkId: string;
@@ -30,6 +49,13 @@ export interface SecurityAuditFinding {
   title: string;
   detail: string;
   fixable: boolean;
+  /** Relative path used by --fix. Never recovered by splitting detail. */
+  subject?: string;
+  subjectRoot?: SecurityAuditRoot;
+}
+
+export interface SecurityAuditSuppressedFinding extends SecurityAuditFinding {
+  reason: string;
 }
 
 export interface SecurityAuditSuppression {
@@ -59,15 +85,26 @@ export interface ConsolidatedAuditRequest {
 
 export interface ConsolidatedAuditReport {
   passed: boolean;
+  status: SecurityAuditStatus;
+  /** Path asked for. May be missing or relative. */
+  profileDir: string;
+  projectDir: string;
+  /** Canonical directory actually audited, or null when it cannot be read. */
+  effectiveProfileDir: string | null;
+  effectiveProjectDir: string | null;
   findings: SecurityAuditFinding[];
-  suppressedFindings: SecurityAuditFinding[];
+  suppressedFindings: SecurityAuditSuppressedFinding[];
   summary: Record<SecurityAuditSeverity | 'total', number>;
   fixes: SecurityAuditFix[];
+  /** What a passed result does not prove. Always present. */
+  limitations: string[];
 }
 
 const UNSUPPRESSIBLE = new Set([
   'security.audit.suppressions.active',
   'security.audit.suppression.missing_reason',
+  'security.audit.suppression.critical_refused',
+  'audit.scope.inaccessible',
 ]);
 
 const PROFILE_FILES = [
@@ -87,8 +124,32 @@ const PROJECT_FILES = [
 ];
 
 const SECRET_REF = /\$\{(?:env|file|exec|op):[^}\n]+\}|op:\/\/[A-Za-z0-9][A-Za-z0-9_./-]*/;
+const SKILL_CHILD_CAP = 40;
+const SKILL_FILE_CAP = 200;
+const SKILL_BYTE_CAP = 1024 * 1024;
+const CREDENTIAL_DIR_CAP = 500;
+const O_NOFOLLOW = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0;
+
+const LIMITATIONS = [
+  'Remote MCP hostnames are not resolved. A passed URL is not a guarantee that DNS stays off private networks.',
+  'MCP server checks follow the runtime loader: project mcp.json (mcpServers or servers), project settings.json mcpServers, and profile mcp.json. Project settings.local.json and profile settings.json are not runtime MCP server sources.',
+  'Skill directories are capped at 40 entries and a bounded file walk. A larger tree fails the audit instead of being reported as clean.',
+  'exact_failure and same_tool_failure accept 0 as off. idempotent_no_progress does not: 0 keeps the historical default and the minimum is 2. same_tool_failure counts every failure of that tool in the turn, even when the arguments differ. warnings_enabled and hard_stop_enabled can both be turned off by the operator.',
+];
 
 const urlGuard = new SSRFGuard({ resolveDns: false });
+
+interface LoadedText {
+  text: string | null;
+}
+
+interface OpenedFix {
+  fd: number;
+  mode: number;
+  next: number;
+  checkId: string;
+  subject: string;
+}
 
 function finding(
   checkId: string,
@@ -96,8 +157,31 @@ function finding(
   title: string,
   detail: string,
   fixable = false,
+  subject?: { path: string; root: SecurityAuditRoot },
 ): SecurityAuditFinding {
-  return { checkId, severity, title, detail, fixable };
+  const item: SecurityAuditFinding = {
+    checkId,
+    severity,
+    title,
+    detail: redactSecrets(detail),
+    fixable,
+  };
+  if (subject) {
+    item.subject = subject.path;
+    item.subjectRoot = subject.root;
+  }
+  return item;
+}
+
+export function redactSecrets(value: string): string {
+  let text = value;
+  for (const pattern of SECRET_PATTERNS) {
+    const flags = pattern.pattern.flags.includes('g')
+      ? pattern.pattern.flags
+      : `${pattern.pattern.flags}g`;
+    text = text.replace(new RegExp(pattern.pattern.source, flags), '[redacted]');
+  }
+  return text;
 }
 
 function relativeTo(abs: string, roots: string[]): string {
@@ -111,27 +195,141 @@ function relativeTo(abs: string, roots: string[]): string {
   return path.basename(resolved);
 }
 
-function insideRoot(abs: string, roots: string[]): boolean {
-  const resolved = path.resolve(abs);
-  return roots.some((root) => {
-    const base = path.resolve(root);
-    return resolved === base || resolved.startsWith(base + path.sep);
-  });
+function errno(error: unknown): string {
+  return error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: string }).code ?? '')
+    : '';
 }
 
-function readText(abs: string): { text: string | null; skip: string | null } {
+function classifyPath(root: string, abs: string): 'ok' | 'missing' | 'symlink' | 'escape' {
+  const rel = path.relative(root, abs);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return 'escape';
+  const parts = rel === '' ? [] : rel.split(path.sep);
+  let cursor = root;
+  for (const part of parts) {
+    if (!part || part === '.' || part === '..') return 'escape';
+    cursor = path.join(cursor, part);
+    try {
+      if (lstatSync(cursor).isSymbolicLink()) return 'symlink';
+    } catch (error) {
+      return errno(error) === 'ENOENT' ? 'missing' : 'escape';
+    }
+  }
+  return 'ok';
+}
+
+function insideRoot(abs: string, roots: string[]): boolean {
+  const resolved = path.resolve(abs);
+  return roots.some((root) => resolved === root || resolved.startsWith(root + path.sep));
+}
+
+export function inspectAuditRoot(input: string): { ok: true; effective: string } | { ok: false; reason: string } {
+  if (!input || input.includes('\0')) return { ok: false, reason: 'empty or invalid path' };
+  let stated;
+  try {
+    stated = lstatSync(input);
+  } catch (error) {
+    return { ok: false, reason: errno(error) === 'ENOENT' ? 'not found' : 'not accessible' };
+  }
+  if (!stated.isDirectory() && !stated.isSymbolicLink()) return { ok: false, reason: 'not a directory' };
+  let effective: string;
+  try {
+    effective = realpathSync(input);
+  } catch {
+    return { ok: false, reason: 'not resolvable' };
+  }
+  let info;
+  try {
+    info = lstatSync(effective);
+  } catch {
+    return { ok: false, reason: 'not accessible' };
+  }
+  if (!info.isDirectory() || info.isSymbolicLink()) return { ok: false, reason: 'not a directory' };
+  try {
+    readdirSync(effective);
+  } catch {
+    return { ok: false, reason: 'not readable' };
+  }
+  return { ok: true, effective };
+}
+
+function readText(abs: string): { text: string | null; skip: string | null; error: string | null } {
   let info;
   try {
     info = lstatSync(abs);
-  } catch {
-    return { text: null, skip: null };
+  } catch (error) {
+    if (errno(error) === 'ENOENT') return { text: null, skip: null, error: null };
+    return { text: null, skip: null, error: 'unreadable' };
   }
-  if (info.isSymbolicLink()) return { text: null, skip: 'symlink' };
-  if (!info.isFile()) return { text: null, skip: null };
-  if (info.size > 512 * 1024) return { text: null, skip: 'too-large' };
-  const text = readFileSync(abs, 'utf8');
-  if (text.includes('\u0000')) return { text: null, skip: 'binary' };
-  return { text, skip: null };
+  if (info.isSymbolicLink()) return { text: null, skip: 'symlink', error: null };
+  if (!info.isFile()) return { text: null, skip: null, error: null };
+  if (info.size > 512 * 1024) return { text: null, skip: 'too-large', error: null };
+  try {
+    const text = readFileSync(abs, 'utf8');
+    if (text.includes('\u0000')) return { text: null, skip: 'binary', error: null };
+    return { text, skip: null, error: null };
+  } catch {
+    return { text: null, skip: null, error: 'unreadable' };
+  }
+}
+
+function loadConfigText(
+  abs: string,
+  roots: string[],
+  out: SecurityAuditFinding[],
+  announced: Set<string>,
+): LoadedText {
+  const kinds = roots.map((root) => classifyPath(root, abs));
+  const kind = kinds.includes('ok')
+    ? 'ok'
+    : kinds.includes('missing')
+      ? 'missing'
+      : kinds.includes('symlink')
+        ? 'symlink'
+        : 'escape';
+  if (kind === 'symlink') {
+    const key = `symlink:${path.resolve(abs)}`;
+    if (!announced.has(key)) {
+      announced.add(key);
+      out.push(finding(
+        'config.file.skipped',
+        'high',
+        'Configuration file not scanned',
+        `${redactSecrets(relativeTo(abs, roots))} was skipped (symlink). The audit did not treat it as clean.`,
+      ));
+    }
+    return { text: null };
+  }
+  if (kind === 'missing' || kind === 'escape') return { text: null };
+  const loaded = readText(abs);
+  const label = redactSecrets(relativeTo(abs, roots));
+  if (loaded.error) {
+    const key = `error:${path.resolve(abs)}`;
+    if (!announced.has(key)) {
+      announced.add(key);
+      out.push(finding(
+        'config.file.unreadable',
+        'high',
+        'Configuration file could not be read',
+        `${label} could not be read. The audit did not treat it as empty.`,
+      ));
+    }
+    return { text: null };
+  }
+  if (loaded.skip) {
+    const key = `skip:${path.resolve(abs)}:${loaded.skip}`;
+    if (!announced.has(key)) {
+      announced.add(key);
+      out.push(finding(
+        'config.file.skipped',
+        'high',
+        'Configuration file not scanned',
+        `${label} was skipped (${loaded.skip}). The audit did not treat it as clean.`,
+      ));
+    }
+    return { text: null };
+  }
+  return { text: loaded.text };
 }
 
 function modeBits(abs: string): number | null {
@@ -141,14 +339,6 @@ function modeBits(abs: string): number | null {
     return info.mode & 0o777;
   } catch {
     return null;
-  }
-}
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
   }
 }
 
@@ -187,7 +377,7 @@ export function parseSecurityAuditSuppressions(value: unknown): {
       return;
     }
     if (UNSUPPRESSIBLE.has(checkId)) return;
-    const suppression: SecurityAuditSuppression = { checkId, reason };
+    const suppression: SecurityAuditSuppression = { checkId, reason: redactSecrets(reason) };
     const titleIncludes = typeof record?.titleIncludes === 'string' ? record.titleIncludes.trim() : '';
     const detailIncludes = typeof record?.detailIncludes === 'string' ? record.detailIncludes.trim() : '';
     if (titleIncludes) suppression.titleIncludes = titleIncludes;
@@ -197,25 +387,14 @@ export function parseSecurityAuditSuppressions(value: unknown): {
   return { accepted, rejected };
 }
 
-function suppressionMatches(entry: SecurityAuditSuppression, item: SecurityAuditFinding): boolean {
-  if (UNSUPPRESSIBLE.has(item.checkId) || entry.checkId !== item.checkId) return false;
-  if (entry.titleIncludes && !item.title.toLowerCase().includes(entry.titleIncludes.toLowerCase())) return false;
-  if (entry.detailIncludes && !item.detail.toLowerCase().includes(entry.detailIncludes.toLowerCase())) return false;
-  return true;
-}
-
-function scanPlaintext(abs: string, roots: string[], out: SecurityAuditFinding[]): void {
-  const loaded = readText(abs);
-  const label = relativeTo(abs, roots);
-  if (loaded.skip) {
-    out.push(finding(
-      'config.file.skipped',
-      'info',
-      'Configuration file not scanned',
-      `${label} was skipped (${loaded.skip}).`,
-    ));
-    return;
-  }
+function scanPlaintext(
+  abs: string,
+  roots: string[],
+  out: SecurityAuditFinding[],
+  announced: Set<string>,
+): void {
+  const loaded = loadConfigText(abs, roots, out, announced);
+  const label = redactSecrets(relativeTo(abs, roots));
   if (loaded.text === null) return;
   const seen = new Set<string>();
   const lines = loaded.text.split(/\r?\n/);
@@ -289,22 +468,49 @@ function stdioInherits(body: Record<string, unknown>): boolean {
   return type === 'stdio' || (command.length > 0 && !remoteUrl(body));
 }
 
-function scanMcp(abs: string, roots: string[], out: SecurityAuditFinding[], projectSettings: boolean): void {
-  const loaded = readText(abs);
-  if (!loaded.text) return;
-  const parsed = abs.endsWith('.toml') ? safeToml(loaded.text) : parseJson(loaded.text);
-  const root = asRecord(parsed);
+function readStructured(text: string, kind: 'json' | 'toml'): { value: unknown; ok: boolean } {
+  try {
+    return { value: kind === 'json' ? JSON.parse(text) as unknown : TOML.parse(text), ok: true };
+  } catch {
+    return { value: undefined, ok: false };
+  }
+}
+
+function scanMcp(
+  abs: string,
+  roots: string[],
+  out: SecurityAuditFinding[],
+  announced: Set<string>,
+  projectSettings: boolean,
+): void {
+  const loaded = loadConfigText(abs, roots, out, announced);
+  if (loaded.text === null) return;
+  const parsed = readStructured(loaded.text, abs.endsWith('.toml') ? 'toml' : 'json');
+  if (!parsed.ok) {
+    const key = `parse:${path.resolve(abs)}`;
+    if (!announced.has(key)) {
+      announced.add(key);
+      out.push(finding(
+        'config.file.unparseable',
+        'high',
+        'Configuration file could not be parsed',
+        `${redactSecrets(relativeTo(abs, roots))} is not valid ${abs.endsWith('.toml') ? 'TOML' : 'JSON'}. It was not treated as having no servers.`,
+      ));
+    }
+    return;
+  }
+  const root = asRecord(parsed.value);
   if (projectSettings && root && asRecord(root.servers) && !asRecord(root.mcpServers)) {
     out.push(finding(
       'mcp.config.servers_key_ignored',
       'medium',
       'MCP servers key is not read',
-      `${relativeTo(abs, roots)} defines servers but runtime reads mcpServers only.`,
+      `${redactSecrets(relativeTo(abs, roots))} defines servers but runtime reads mcpServers only.`,
     ));
   }
-  for (const server of serverRecords(parsed)) {
+  for (const server of serverRecords(parsed.value)) {
     if (server.body.enabled === false) continue;
-    const label = `${relativeTo(abs, roots)}:${server.name}`;
+    const label = redactSecrets(`${relativeTo(abs, roots)}:${server.name}`);
     const url = remoteUrl(server.body);
     if (url) {
       let unsafe = '';
@@ -339,62 +545,107 @@ function scanMcp(abs: string, roots: string[], out: SecurityAuditFinding[], proj
   }
 }
 
-function safeToml(text: string): unknown {
-  try {
-    return TOML.parse(text);
-  } catch {
-    return undefined;
-  }
-}
-
-function collectSuppressions(profileDir: string, projectDir: string): {
-  accepted: SecurityAuditSuppression[];
-  rejected: SecurityAuditFinding[];
-} {
+function collectSuppressions(
+  profileDir: string,
+  projectDir: string,
+  out: SecurityAuditFinding[],
+  announced: Set<string>,
+): { accepted: SecurityAuditSuppression[]; rejected: SecurityAuditFinding[] } {
   const accepted: SecurityAuditSuppression[] = [];
   const rejected: SecurityAuditFinding[] = [];
+  const roots = [profileDir, projectDir];
   const take = (value: unknown) => {
     const parsed = parseSecurityAuditSuppressions(value);
     accepted.push(...parsed.accepted);
     rejected.push(...parsed.rejected);
   };
+  const readParsed = (abs: string, kind: 'json' | 'toml'): unknown => {
+    const loaded = loadConfigText(abs, roots, out, announced);
+    if (loaded.text === null) return undefined;
+    const parsed = readStructured(loaded.text, kind);
+    if (!parsed.ok) {
+      const key = `parse:${path.resolve(abs)}`;
+      if (!announced.has(key)) {
+        announced.add(key);
+        out.push(finding(
+          'config.file.unparseable',
+          'high',
+          'Configuration file could not be parsed',
+          `${redactSecrets(relativeTo(abs, roots))} is not valid ${kind === 'toml' ? 'TOML' : 'JSON'}. Suppressions in it were not applied.`,
+        ));
+      }
+      return undefined;
+    }
+    return parsed.value;
+  };
   const configPath = path.join(profileDir, 'config.toml');
-  const configText = readText(configPath).text;
-  if (configText) {
-    const parsed = asRecord(safeToml(configText));
-    const security = asRecord(parsed?.security);
-    const audit = asRecord(security?.audit);
-    if (audit && 'suppressions' in audit) take(audit.suppressions);
+  const parsedConfig = asRecord(readParsed(configPath, 'toml'));
+  const security = asRecord(parsedConfig?.security);
+  const audit = asRecord(security?.audit);
+  if (audit && 'suppressions' in audit) take(audit.suppressions);
+  const guard = asRecord(parsedConfig?.tool_loop_guardrails);
+  if (guard && guard.warnings_enabled === false && guard.hard_stop_enabled === false) {
+    out.push(finding(
+      'agent.loop_guard.disabled',
+      'high',
+      'Tool loop guard is switched off',
+      'warnings_enabled and hard_stop_enabled are both false. Identical calls and failure counters will not warn or stop. This is an operator choice, not a clean profile.',
+    ));
   }
   for (const rel of ['settings.json', 'user-settings.json', '.codebuddy/settings.json', '.codebuddy/settings.local.json']) {
     const root = rel.startsWith('.codebuddy/') ? projectDir : profileDir;
-    const text = readText(path.join(root, rel)).text;
-    if (!text) continue;
-    const security = asRecord(asRecord(parseJson(text))?.security);
-    const audit = asRecord(security?.audit);
-    if (audit && 'suppressions' in audit) take(audit.suppressions);
+    const parsed = asRecord(readParsed(path.join(root, rel), 'json'));
+    const fileSecurity = asRecord(parsed?.security);
+    const fileAudit = asRecord(fileSecurity?.audit);
+    if (fileAudit && 'suppressions' in fileAudit) take(fileAudit.suppressions);
   }
   return { accepted, rejected };
 }
 
 function permissionFindings(request: ConsolidatedAuditRequest): SecurityAuditFinding[] {
   if ((request.platform ?? process.platform) === 'win32') return [];
-  const roots = [request.profileDir, request.projectDir];
   const out: SecurityAuditFinding[] = [];
   const seen = new Set<string>();
-  const consider = (abs: string, kind: 'dir' | 'file') => {
-    if (!existsSync(abs) || seen.has(path.resolve(abs))) return;
+  const symlinkSeen = new Set<string>();
+  const consider = (abs: string, kind: 'dir' | 'file', rootName: SecurityAuditRoot, base: string) => {
+    const gate = classifyPath(base, abs);
+    const label = redactSecrets(path.relative(base, abs) || '.');
+    if (gate === 'symlink') {
+      const key = path.resolve(abs);
+      if (!symlinkSeen.has(key)) {
+        symlinkSeen.add(key);
+        out.push(finding(
+          'audit.path.symlink',
+          'high',
+          'Path contains a symlink',
+          `${label} was not followed, so a target outside this root was not changed or treated as clean.`,
+        ));
+      }
+      return;
+    }
+    if (gate !== 'ok' || seen.has(path.resolve(abs))) return;
     seen.add(path.resolve(abs));
     const mode = modeBits(abs);
     if (mode === null) return;
-    const label = relativeTo(abs, roots);
+    const subject = { path: label, root: rootName };
+    if ((mode & 0o700) === 0) {
+      out.push(finding(
+        'profile.owner.no_access',
+        'info',
+        'Owner has no permission bits',
+        `${label} mode ${mode.toString(8)} gives the owner no access. A fix will not add owner bits.`,
+        false,
+        subject,
+      ));
+    }
     if (kind === 'dir' && (mode & 0o002) !== 0) {
       out.push(finding(
         'profile.directory.world_writable',
         'high',
         'Directory is world-writable',
-        `${label} mode ${mode.toString(8)} allows every local account to write. Restrict it to 0700.`,
+        `${label} mode ${mode.toString(8)} allows every local account to write. The fix removes other-write only.`,
         true,
+        subject,
       ));
     }
     if (kind === 'file' && (mode & 0o077) !== 0) {
@@ -402,44 +653,125 @@ function permissionFindings(request: ConsolidatedAuditRequest): SecurityAuditFin
         'profile.file.loose_permissions',
         'high',
         'Configuration file is group or world accessible',
-        `${label} mode ${mode.toString(8)} is broader than 0600.`,
+        `${label} mode ${mode.toString(8)} is broader than owner-only. The fix removes group and world bits and does not add owner bits.`,
         true,
+        subject,
       ));
     }
   };
-  consider(request.profileDir, 'dir');
-  consider(path.join(request.profileDir, 'sessions'), 'dir');
-  consider(path.join(request.projectDir, '.codebuddy'), 'dir');
-  for (const rel of PROFILE_FILES) consider(path.join(request.profileDir, rel), 'file');
-  for (const rel of PROJECT_FILES) consider(path.join(request.projectDir, rel), 'file');
+  consider(request.profileDir, 'dir', 'profile', request.profileDir);
+  consider(path.join(request.profileDir, 'sessions'), 'dir', 'profile', request.profileDir);
+  consider(path.join(request.projectDir, '.codebuddy'), 'dir', 'project', request.projectDir);
+  for (const rel of PROFILE_FILES) consider(path.join(request.profileDir, rel), 'file', 'profile', request.profileDir);
+  for (const rel of PROJECT_FILES) consider(path.join(request.projectDir, rel), 'file', 'project', request.projectDir);
+  let childNames: string[] = [];
+  try {
+    childNames = readdirSync(request.profileDir);
+  } catch {
+    childNames = [];
+  }
+  const childDirs = childNames.filter((name) => {
+    if (!name || name.includes('\0') || name === '.' || name === '..') return false;
+    return classifyPath(request.profileDir, path.join(request.profileDir, name)) === 'ok'
+      && (() => {
+        try {
+          return lstatSync(path.join(request.profileDir, name)).isDirectory();
+        } catch {
+          return false;
+        }
+      })();
+  });
+  if (childDirs.length > CREDENTIAL_DIR_CAP) {
+    out.push(finding(
+      'profile.credentials.truncated',
+      'high',
+      'Profile credential walk stopped',
+      `${childDirs.length} child directories; credentials.json past the first ${CREDENTIAL_DIR_CAP} was not checked.`,
+    ));
+  }
+  for (const name of childDirs.slice(0, CREDENTIAL_DIR_CAP)) {
+    consider(path.join(request.profileDir, name, 'credentials.json'), 'file', 'profile', request.profileDir);
+  }
   return out;
 }
 
-function skillFindings(request: ConsolidatedAuditRequest): SecurityAuditFinding[] {
-  const roots = [request.profileDir, request.projectDir];
-  const out: SecurityAuditFinding[] = [];
-  const parents = [
-    path.join(request.profileDir, 'skills'),
-    path.join(request.projectDir, '.codebuddy', 'skills'),
-  ];
-  for (const parent of parents) {
-    if (!existsSync(parent)) continue;
-    let entries: string[] = [];
+function measureSkill(root: string): { overflow: boolean } {
+  let files = 0;
+  let bytes = 0;
+  const stack = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    if (!dir) break;
+    let entries;
     try {
-      entries = readdirSync(parent);
+      entries = readdirSync(dir, { withFileTypes: true });
     } catch {
-      continue;
+      return { overflow: true };
     }
-    for (const name of entries.slice(0, 40)) {
-      const abs = path.join(parent, name);
+    for (const entry of entries) {
+      const abs = path.join(dir, entry.name);
       let info;
       try {
         info = lstatSync(abs);
       } catch {
+        return { overflow: true };
+      }
+      if (info.isSymbolicLink()) continue;
+      if (info.isDirectory()) {
+        stack.push(abs);
         continue;
       }
-      const label = relativeTo(abs, roots);
-      if (info.isSymbolicLink()) {
+      if (!info.isFile()) continue;
+      files += 1;
+      bytes += info.size;
+      if (files > SKILL_FILE_CAP || bytes > SKILL_BYTE_CAP) return { overflow: true };
+    }
+  }
+  return { overflow: false };
+}
+
+function skillFindings(request: ConsolidatedAuditRequest): SecurityAuditFinding[] {
+  const out: SecurityAuditFinding[] = [];
+  const parents = [
+    { abs: path.join(request.profileDir, 'skills'), base: request.profileDir },
+    { abs: path.join(request.projectDir, '.codebuddy', 'skills'), base: request.projectDir },
+  ];
+  for (const parent of parents) {
+    if (classifyPath(parent.base, parent.abs) === 'symlink') {
+      out.push(finding(
+        'audit.path.symlink',
+        'high',
+        'Path contains a symlink',
+        `${redactSecrets(path.relative(parent.base, parent.abs))} was not followed.`,
+      ));
+      continue;
+    }
+    if (classifyPath(parent.base, parent.abs) !== 'ok') continue;
+    let entries: string[] = [];
+    try {
+      entries = readdirSync(parent.abs);
+    } catch {
+      out.push(finding(
+        'skills.scan.unreadable',
+        'high',
+        'Skill directory could not be listed',
+        `${redactSecrets(path.relative(parent.base, parent.abs))} could not be listed. It was not treated as empty.`,
+      ));
+      continue;
+    }
+    if (entries.length > SKILL_CHILD_CAP) {
+      out.push(finding(
+        'skills.scan.truncated',
+        'high',
+        'Skill directory was not fully listed',
+        `${redactSecrets(path.relative(parent.base, parent.abs))} has ${entries.length} entries; ${entries.length - SKILL_CHILD_CAP} were not scanned.`,
+      ));
+    }
+    for (const name of entries.slice(0, SKILL_CHILD_CAP)) {
+      const abs = path.join(parent.abs, name);
+      const gate = classifyPath(parent.base, abs);
+      const label = redactSecrets(path.relative(parent.base, abs));
+      if (gate === 'symlink') {
         out.push(finding(
           'skills.path.symlink',
           'medium',
@@ -448,8 +780,36 @@ function skillFindings(request: ConsolidatedAuditRequest): SecurityAuditFinding[
         ));
         continue;
       }
+      if (gate !== 'ok') continue;
+      let info;
+      try {
+        info = lstatSync(abs);
+      } catch {
+        continue;
+      }
       if (!info.isDirectory() && name.toLowerCase() !== 'skill.md') continue;
-      const report = scanSkillFirewall(abs);
+      const measured = measureSkill(abs);
+      if (measured.overflow) {
+        out.push(finding(
+          'skills.scan.bounded',
+          'high',
+          'Skill tree exceeds the scan bound',
+          `${label} has more than ${SKILL_FILE_CAP} files or ${SKILL_BYTE_CAP} bytes. It was not reported as clean.`,
+        ));
+        continue;
+      }
+      let report;
+      try {
+        report = scanSkillFirewall(abs);
+      } catch {
+        out.push(finding(
+          'skills.scan.unreadable',
+          'high',
+          'Skill could not be scanned',
+          `${label} could not be scanned. It was not treated as allowed.`,
+        ));
+        continue;
+      }
       if (report.verdict === 'quarantine') {
         out.push(finding(
           'skills.firewall.quarantine',
@@ -470,14 +830,14 @@ function skillFindings(request: ConsolidatedAuditRequest): SecurityAuditFinding[
   return out;
 }
 
-function otherFindings(request: ConsolidatedAuditRequest): SecurityAuditFinding[] {
+function otherFindings(request: ConsolidatedAuditRequest, announced: Set<string>): SecurityAuditFinding[] {
   const roots = [request.profileDir, request.projectDir];
   const out: SecurityAuditFinding[] = [];
-  for (const rel of PROFILE_FILES) scanPlaintext(path.join(request.profileDir, rel), roots, out);
-  for (const rel of PROJECT_FILES) scanPlaintext(path.join(request.projectDir, rel), roots, out);
-  scanMcp(path.join(request.profileDir, 'mcp.json'), roots, out, false);
-  scanMcp(path.join(request.projectDir, '.codebuddy', 'mcp.json'), roots, out, false);
-  scanMcp(path.join(request.projectDir, '.codebuddy', 'settings.json'), roots, out, true);
+  for (const rel of PROFILE_FILES) scanPlaintext(path.join(request.profileDir, rel), roots, out, announced);
+  for (const rel of PROJECT_FILES) scanPlaintext(path.join(request.projectDir, rel), roots, out, announced);
+  scanMcp(path.join(request.profileDir, 'mcp.json'), roots, out, announced, false);
+  scanMcp(path.join(request.projectDir, '.codebuddy', 'mcp.json'), roots, out, announced, false);
+  scanMcp(path.join(request.projectDir, '.codebuddy', 'settings.json'), roots, out, announced, true);
   const env = request.env ?? process.env;
   if (isNativeSandboxEnabled(env)) {
     const recommended = request.sandbox?.recommended ?? 'none';
@@ -499,128 +859,324 @@ function summarize(items: SecurityAuditFinding[]): ConsolidatedAuditReport['summ
   return summary;
 }
 
-function applyFixes(
-  request: ConsolidatedAuditRequest,
-  items: SecurityAuditFinding[],
-): SecurityAuditFix[] {
-  const targets = items.filter((item) => item.fixable && (
+function restrictMode(mode: number, checkId: string): number | null {
+  const next = checkId === 'profile.directory.world_writable' ? (mode & ~0o002) : (mode & ~0o077);
+  if ((next & ~mode) !== 0 || next === mode) return null;
+  return next;
+}
+
+function fdInside(fd: number, roots: string[]): boolean {
+  try {
+    const via = realpathSync(`/proc/self/fd/${fd}`);
+    return insideRoot(via, roots) || roots.some((root) => via === root);
+  } catch {
+    return false;
+  }
+}
+
+function backupReady(roots: string[], stamp: string, body: string): { ok: true; relative: string } | { ok: false; message: string } {
+  if (!/^[0-9TZt-]+$/.test(stamp)) return { ok: false, message: 'backup name was refused' };
+  let skipped = 'backup directory is not writable';
+  for (const profile of roots) {
+    const attempt = backupInRoot(profile, stamp, body);
+    if (attempt.ok) {
+      return { ok: true, relative: path.relative(profile, attempt.manifestPath) };
+    }
+    if (attempt.kind === 'refuse') return { ok: false, message: attempt.message };
+    skipped = attempt.message;
+  }
+  return { ok: false, message: skipped };
+}
+
+function backupInRoot(
+  profile: string,
+  stamp: string,
+  body: string,
+): { ok: true; manifestPath: string } | { ok: false; kind: 'skip' | 'refuse'; message: string } {
+  const backups = path.join(profile, 'security-audit-backups');
+  try {
+    const existing = lstatSync(backups);
+    if (existing.isSymbolicLink() || !existing.isDirectory()) {
+      return { ok: false, kind: 'refuse', message: 'backup directory is not a real directory' };
+    }
+  } catch (error) {
+    if (errno(error) !== 'ENOENT') return { ok: false, kind: 'refuse', message: 'backup directory is not accessible' };
+    try {
+      mkdirSync(backups, { mode: 0o700 });
+    } catch (mkdirError) {
+      const code = errno(mkdirError);
+      const message = mkdirError instanceof Error ? mkdirError.message : String(mkdirError);
+      if (code === 'EACCES' || code === 'EPERM') return { ok: false, kind: 'skip', message };
+      return { ok: false, kind: 'refuse', message };
+    }
+  }
+  if (classifyPath(profile, backups) !== 'ok') {
+    return { ok: false, kind: 'refuse', message: 'backup directory is not inside the profile' };
+  }
+  let backupsReal: string;
+  try {
+    backupsReal = realpathSync(backups);
+  } catch {
+    return { ok: false, kind: 'refuse', message: 'backup directory is not resolvable' };
+  }
+  if (!insideRoot(backupsReal, [profile]) && backupsReal !== profile) {
+    return { ok: false, kind: 'refuse', message: 'backup directory escapes the profile' };
+  }
+  const dir = path.join(backupsReal, stamp);
+  try {
+    mkdirSync(dir, { mode: 0o700 });
+  } catch (error) {
+    return {
+      ok: false,
+      kind: 'refuse',
+      message: `backup directory already exists or could not be created: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  if (classifyPath(profile, dir) !== 'ok') {
+    return { ok: false, kind: 'refuse', message: 'backup directory is not a real directory inside the profile' };
+  }
+  const manifestPath = path.join(dir, 'manifest.json');
+  let fd: number;
+  try {
+    fd = openSync(manifestPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | O_NOFOLLOW, 0o600);
+  } catch (error) {
+    return {
+      ok: false,
+      kind: 'refuse',
+      message: `manifest was not created exclusively: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  try {
+    if (!fdInside(fd, [profile])) {
+      return { ok: false, kind: 'refuse', message: 'manifest would have been written outside the profile' };
+    }
+    writeSync(fd, body);
+  } catch (error) {
+    return { ok: false, kind: 'refuse', message: error instanceof Error ? error.message : String(error) };
+  } finally {
+    closeSync(fd);
+  }
+  return { ok: true, manifestPath };
+}
+
+function applyFixes(request: ConsolidatedAuditRequest, items: SecurityAuditFinding[]): SecurityAuditFix[] {
+  const targets = items.filter((item) => item.fixable && item.subject && item.subjectRoot && (
     item.checkId === 'profile.directory.world_writable' || item.checkId === 'profile.file.loose_permissions'
   ));
   if (targets.length === 0) return [];
-  const roots = [request.profileDir, request.projectDir];
-  const planned: Array<{ abs: string; mode: number; checkId: string; subject: string; next: number }> = [];
+  const roots = { profile: request.profileDir, project: request.projectDir };
+  const opened: OpenedFix[] = [];
+  const refused: SecurityAuditFix[] = [];
   for (const item of targets) {
-    const subject = item.detail.split(' ')[0] ?? '';
-    const abs = resolveSubject(subject, roots);
-    if (!abs || !insideRoot(abs, roots)) continue;
-    try {
-      if (lstatSync(abs).isSymbolicLink()) continue;
-    } catch {
+    const subject = item.subject ?? '';
+    const base = roots[item.subjectRoot ?? 'profile'];
+    if (!subject || subject.includes('\0') || path.isAbsolute(subject)) {
+      refused.push({ checkId: item.checkId, subject, ok: false, message: 'path was refused' });
+      continue;
+    }
+    const abs = subject === '.' ? base : path.resolve(base, subject);
+    if (classifyPath(base, abs) !== 'ok' || !insideRoot(abs, [base])) {
+      refused.push({ checkId: item.checkId, subject, ok: false, message: 'path is outside the audited root or is a symlink' });
       continue;
     }
     const mode = modeBits(abs);
-    if (mode === null) continue;
-    const next = item.checkId === 'profile.directory.world_writable' ? 0o700 : 0o600;
-    if (mode === next) continue;
-    planned.push({ abs, mode, checkId: item.checkId, subject, next });
+    const next = mode === null ? null : restrictMode(mode, item.checkId);
+    if (mode === null || next === null) continue;
+    let fd: number;
+    try {
+      const info = lstatSync(abs);
+      if (info.isSymbolicLink()) {
+        refused.push({ checkId: item.checkId, subject, ok: false, message: 'symlink was not followed' });
+        continue;
+      }
+      const flags = constants.O_RDONLY | O_NOFOLLOW | (info.isDirectory() ? constants.O_DIRECTORY : 0);
+      fd = openSync(abs, flags);
+    } catch (error) {
+      refused.push({
+        checkId: item.checkId,
+        subject,
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+    if (!fdInside(fd, [request.profileDir, request.projectDir])) {
+      closeSync(fd);
+      refused.push({ checkId: item.checkId, subject, ok: false, message: 'open file is outside the audited roots' });
+      continue;
+    }
+    opened.push({ fd, mode, next, checkId: item.checkId, subject });
   }
-  if (planned.length === 0) return [];
+  if (opened.length === 0) return refused;
   const stamp = (request.now ?? new Date()).toISOString().replace(/[:.]/g, '-');
-  const backupDir = path.join(request.profileDir, 'security-audit-backups', stamp);
-  try {
-    mkdirSync(backupDir, { recursive: true, mode: 0o700 });
-    const manifest = {
-      version: 1,
-      entries: planned.map((entry) => ({
-        path: relativeTo(entry.abs, roots),
-        modeBefore: entry.mode.toString(8),
+  const manifest = {
+    version: 1,
+    entries: opened.map((entry) => ({ path: entry.subject, modeBefore: entry.mode.toString(8) })),
+  };
+  const backup = backupReady(
+    [request.profileDir, request.projectDir],
+    stamp,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+  if (!backup.ok) {
+    for (const entry of opened) closeSync(entry.fd);
+    return [
+      ...refused,
+      ...opened.map((entry) => ({
+        checkId: entry.checkId,
+        subject: entry.subject,
+        ok: false,
+        message: `backup not written, permissions left unchanged: ${backup.message}`,
       })),
-    };
-    const manifestPath = path.join(backupDir, 'manifest.json');
-    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-    const fixes: SecurityAuditFix[] = [];
-    for (const entry of planned) {
-      try {
-        chmodSync(entry.abs, entry.next);
-        fixes.push({
-          checkId: entry.checkId,
-          subject: entry.subject,
-          ok: true,
-          message: `mode ${entry.mode.toString(8)} -> ${entry.next.toString(8)}`,
-          backup: relativeTo(manifestPath, roots),
-        });
-      } catch (error) {
+    ];
+  }
+  const fixes: SecurityAuditFix[] = [...refused];
+  for (const entry of opened) {
+    try {
+      const current = modeBitsFromFd(entry.fd);
+      const narrowed = current === null ? null : restrictMode(current, entry.checkId);
+      if (narrowed === null || (narrowed & ~entry.mode) !== 0) {
         fixes.push({
           checkId: entry.checkId,
           subject: entry.subject,
           ok: false,
-          message: error instanceof Error ? error.message : String(error),
-          backup: relativeTo(manifestPath, roots),
+          message: 'mode changed before the fix; permissions left unchanged',
+          backup: backup.relative,
         });
+        continue;
       }
+      fchmodSync(entry.fd, narrowed);
+      fixes.push({
+        checkId: entry.checkId,
+        subject: entry.subject,
+        ok: true,
+        message: `mode ${entry.mode.toString(8)} -> ${narrowed.toString(8)}`,
+        backup: backup.relative,
+      });
+    } catch (error) {
+      fixes.push({
+        checkId: entry.checkId,
+        subject: entry.subject,
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        backup: backup.relative,
+      });
+    } finally {
+      closeSync(entry.fd);
     }
-    return fixes;
-  } catch (error) {
-    return planned.map((entry) => ({
-      checkId: entry.checkId,
-      subject: entry.subject,
-      ok: false,
-      message: `backup not written, permissions left unchanged: ${error instanceof Error ? error.message : String(error)}`,
-    }));
+  }
+  return fixes;
+}
+
+function modeBitsFromFd(fd: number): number | null {
+  try {
+    return fstatSync(fd).mode & 0o777;
+  } catch {
+    return null;
   }
 }
 
-function resolveSubject(subject: string, roots: string[]): string | null {
-  if (!subject || subject.includes('\0') || path.isAbsolute(subject)) return null;
-  if (subject === '.') {
-    const abs = path.resolve(roots[0] ?? '');
-    return existsSync(abs) ? abs : null;
-  }
-  for (const root of roots) {
-    const abs = path.resolve(root, subject);
-    if (!insideRoot(abs, [root]) || !existsSync(abs)) continue;
-    try {
-      if (lstatSync(abs).isSymbolicLink()) return null;
-    } catch {
-      return null;
-    }
-    return abs;
-  }
-  return null;
+function scopeFinding(which: 'profile' | 'project', requested: string, reason: string): SecurityAuditFinding {
+  return finding(
+    'audit.scope.inaccessible',
+    'critical',
+    'Audit scope is not accessible',
+    `${which} (${redactSecrets(requested)}) is ${reason}. The audit did not treat that root as empty.`,
+  );
 }
 
 export function runConsolidatedSecurityAudit(request: ConsolidatedAuditRequest): ConsolidatedAuditReport {
+  const profile = inspectAuditRoot(request.profileDir);
+  const project = inspectAuditRoot(request.projectDir);
+  const base: Pick<
+    ConsolidatedAuditReport,
+    'profileDir' | 'projectDir' | 'effectiveProfileDir' | 'effectiveProjectDir' | 'limitations'
+  > = {
+    profileDir: request.profileDir,
+    projectDir: request.projectDir,
+    effectiveProfileDir: profile.ok ? profile.effective : null,
+    effectiveProjectDir: project.ok ? project.effective : null,
+    limitations: [...LIMITATIONS],
+  };
+  const scope: SecurityAuditFinding[] = [];
+  if (!profile.ok) scope.push(scopeFinding('profile', request.profileDir, profile.reason));
+  if (!project.ok) scope.push(scopeFinding('project', request.projectDir, project.reason));
+  if (!profile.ok || !project.ok) {
+    const summary = summarize(scope);
+    return {
+      ...base,
+      passed: false,
+      status: 'failed',
+      findings: scope,
+      suppressedFindings: [],
+      summary,
+      fixes: [],
+    };
+  }
+  const scoped: ConsolidatedAuditRequest = {
+    ...request,
+    profileDir: profile.effective,
+    projectDir: project.effective,
+  };
+  const announced = new Set<string>();
   const collected = [
-    ...permissionFindings(request),
-    ...skillFindings(request),
-    ...otherFindings(request),
+    ...permissionFindings(scoped),
+    ...skillFindings(scoped),
+    ...otherFindings(scoped, announced),
   ];
-  const suppressions = collectSuppressions(request.profileDir, request.projectDir);
+  const suppressions = collectSuppressions(profile.effective, project.effective, collected, announced);
   collected.push(...suppressions.rejected);
   const active: SecurityAuditFinding[] = [];
-  const suppressedFindings: SecurityAuditFinding[] = [];
+  const suppressedFindings: SecurityAuditSuppressedFinding[] = [];
   for (const item of collected) {
-    if (suppressions.accepted.some((entry) => suppressionMatches(entry, item))) suppressedFindings.push(item);
-    else active.push(item);
+    const match = suppressions.accepted.find((entry) => entry.checkId === item.checkId
+      && (entry.titleIncludes || entry.detailIncludes || entry.reason)
+      && (UNSUPPRESSIBLE.has(item.checkId) ? false : entry.checkId === item.checkId)
+      && (!entry.titleIncludes || item.title.toLowerCase().includes(entry.titleIncludes.toLowerCase()))
+      && (!entry.detailIncludes || item.detail.toLowerCase().includes(entry.detailIncludes.toLowerCase())));
+    if (!match || UNSUPPRESSIBLE.has(item.checkId)) {
+      active.push(item);
+      continue;
+    }
+    if (item.severity === 'critical') {
+      active.push(item);
+      active.push(finding(
+        'security.audit.suppression.critical_refused',
+        'high',
+        'Critical finding cannot be suppressed',
+        `${item.checkId} stays visible (${item.severity}). Reason offered: ${match.reason}`,
+      ));
+      continue;
+    }
+    suppressedFindings.push({ ...item, reason: match.reason });
   }
   if (suppressions.accepted.length > 0) {
     active.push(finding(
       'security.audit.suppressions.active',
       'info',
       'Audit suppressions are active',
-      `${suppressions.accepted.length} accepted suppression(s). Hidden findings stay in suppressedFindings.`,
+      `${suppressions.accepted.length} accepted suppression(s). Hidden non-critical findings stay in suppressedFindings with their reason. Critical findings stay visible.`,
     ));
   }
-  const fixes = request.fix ? applyFixes(request, active) : [];
+  const fixes = request.fix ? applyFixes(scoped, active) : [];
   const fixedSubjects = new Set(fixes.filter((item) => item.ok).map((item) => item.subject));
   const findings = active.filter((item) => {
-    if (!item.fixable || !fixedSubjects.size) return true;
-    const subject = item.detail.split(' ')[0] ?? '';
-    return !fixedSubjects.has(subject);
+    if (!item.fixable || !item.subject || !fixedSubjects.size) return true;
+    return !fixedSubjects.has(item.subject);
   });
   const summary = summarize(findings);
+  const passed = summary.critical === 0 && summary.high === 0 && fixes.every((item) => item.ok);
+  const status: SecurityAuditStatus = !passed
+    ? 'failed'
+    : suppressedFindings.length > 0
+      ? 'passed_with_suppressions'
+      : 'passed';
   return {
-    passed: summary.critical === 0 && summary.high === 0 && fixes.every((item) => item.ok),
+    ...base,
+    effectiveProfileDir: profile.effective,
+    effectiveProjectDir: project.effective,
+    passed,
+    status,
     findings,
     suppressedFindings,
     summary,

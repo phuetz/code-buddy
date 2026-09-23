@@ -160,7 +160,7 @@ describe('buddy security audit', () => {
     chmodSync(profile, 0o707);
     const lines: string[] = [];
     let probes = 0;
-    const code = runSecurityAuditCommand({ json: true, profile, project }, {
+    const code = runSecurityAuditCommand({ json: true, profileDir: profile, project }, {
       log: (line) => lines.push(line),
       cwd: () => project,
       home: () => profile,
