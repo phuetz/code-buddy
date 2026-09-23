@@ -1,6 +1,6 @@
 import * as path from 'node:path';
-import * as os from 'node:os';
 import { AgenticCodingTaskContract } from './agentic-coding-contract.js';
+import { getCodeBuddyHome } from '../../utils/codebuddy-home.js';
 // Type-only import: breaks the agentic-coding-runner ↔ checkpoint-manager cycle
 // (madge runs with skipTypeImports, so `import type` edges are not counted).
 import type { AgenticCodingRunOptions, AgenticCodingRunReport, AgenticCodingVerificationResult } from './agentic-coding-runner.js';
@@ -23,8 +23,7 @@ export interface AgenticCodingCheckpoint {
 }
 
 export function getCheckpointPath(runId: string): string {
-  const base = process.env.CODEBUDDY_HOME || path.join(os.homedir(), '.codebuddy');
-  return path.join(base, 'runs', runId, 'state.json');
+  return path.join(getCodeBuddyHome(), 'runs', runId, 'state.json');
 }
 
 export async function saveCheckpoint(checkpoint: AgenticCodingCheckpoint): Promise<void> {

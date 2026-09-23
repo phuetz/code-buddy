@@ -1969,8 +1969,9 @@ function startAgenticCodingObservability(
   const activeStore = getActiveRunStore();
   const activeRunId = activeStore?.getCurrentRunId() ?? null;
   const ownsRun = !activeStore || !activeRunId;
+  const configuredHome = process.env.CODEBUDDY_HOME?.trim();
   const runsDir = process.env.CODEBUDDY_RUNS_DIR
-    ?? (process.env.CODEBUDDY_HOME ? path.join(process.env.CODEBUDDY_HOME, 'runs') : undefined);
+    ?? (configuredHome ? path.join(configuredHome, 'runs') : undefined);
   const store = ownsRun ? new RunStore(runsDir) : activeStore!;
   const runId = ownsRun
     ? store.startRun(contract?.task ?? `Agentic coding cell${taskFile ? `: ${taskFile}` : ''}`, {

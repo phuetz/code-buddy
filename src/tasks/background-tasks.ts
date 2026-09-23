@@ -55,8 +55,10 @@ export class BackgroundTaskManager extends EventEmitter {
   constructor(maxConcurrent: number = 3) {
     super();
     this.maxConcurrent = maxConcurrent;
+    // CODEBUDDY_HOME here is the parent of `.codebuddy`, not the profile root.
+    // A blank value is absent and must not become a relative directory.
     const homeDir =
-      process.env.CODEBUDDY_HOME ||
+      process.env.CODEBUDDY_HOME?.trim() ||
       process.env.HOME ||
       process.env.USERPROFILE ||
       os.homedir();

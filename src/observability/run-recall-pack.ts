@@ -522,7 +522,7 @@ function defaultMemoryFiles(cwd: string | undefined): string[] {
   const homeMemory = path.join(os.homedir(), '.codebuddy', 'memory.md');
   files.push(homeMemory);
 
-  const configuredHome = process.env.CODEBUDDY_HOME || process.env.GROK_HOME;
+  const configuredHome = process.env.CODEBUDDY_HOME?.trim() || process.env.GROK_HOME?.trim();
   if (configuredHome) {
     files.push(path.join(configuredHome, 'memory.md'));
   }
@@ -603,7 +603,7 @@ function inferMemoryScope(
     if (relative === '.codebuddy/CODEBUDDY_MEMORY.md') return 'project';
     if (relative.startsWith('.codebuddy/memory/')) return 'project-memory';
   }
-  const configuredHome = process.env.CODEBUDDY_HOME || process.env.GROK_HOME;
+  const configuredHome = process.env.CODEBUDDY_HOME?.trim() || process.env.GROK_HOME?.trim();
   if (
     resolved === path.resolve(path.join(os.homedir(), '.codebuddy', 'memory.md')) ||
     (configuredHome && resolved === path.resolve(path.join(configuredHome, 'memory.md')))

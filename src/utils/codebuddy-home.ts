@@ -43,7 +43,9 @@ import fs from 'fs';
  * 3. ~/.codebuddy/ (default)
  */
 export function getCodeBuddyHome(): string {
-  return process.env.CODEBUDDY_HOME || process.env.GROK_HOME || path.join(os.homedir(), '.codebuddy');
+  // A blank value (e.g. `CODEBUDDY_HOME=" "`) counts as unset: it must never become a relative path.
+  const explicit = process.env.CODEBUDDY_HOME?.trim() || process.env.GROK_HOME?.trim();
+  return explicit || path.join(os.homedir(), '.codebuddy');
 }
 
 /**
@@ -184,7 +186,7 @@ export function ensureGrokDir(...relativePath: string[]): string {
  * Check if a custom Code Buddy home is set
  */
 export function isCustomCodeBuddyHome(): boolean {
-  return !!(process.env.CODEBUDDY_HOME || process.env.GROK_HOME);
+  return !!(process.env.CODEBUDDY_HOME?.trim() || process.env.GROK_HOME?.trim());
 }
 
 /**
@@ -193,9 +195,9 @@ export function isCustomCodeBuddyHome(): boolean {
 export function formatCodeBuddyHomeInfo(): string {
   const codebuddyHome = getCodeBuddyHome();
   const isCustom = isCustomCodeBuddyHome();
-  const source = process.env.CODEBUDDY_HOME
+  const source = process.env.CODEBUDDY_HOME?.trim()
     ? 'CODEBUDDY_HOME'
-    : process.env.GROK_HOME
+    : process.env.GROK_HOME?.trim()
       ? 'GROK_HOME'
       : 'default';
 
