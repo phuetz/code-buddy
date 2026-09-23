@@ -44,6 +44,15 @@ describe('checkUserDenyRules', () => {
     expect(checkUserDenyRules('git push origin main').denied).toBe(false);
   });
 
+  it('reads the store when CODEBUDDY_HOME is only padded with spaces', () => {
+    writeStore([
+      { id: '1', pattern: 'git push --force', type: 'prefix', decision: 'deny', enabled: true },
+    ]);
+    process.env.CODEBUDDY_HOME = `  ${home}  `;
+    resetDenyGuardCache();
+    expect(checkUserDenyRules('git push --force origin main').denied).toBe(true);
+  });
+
   it('ignores disabled patterns, allow patterns and a missing store', () => {
     writeStore([
       { id: '1', pattern: 'rm -rf', type: 'prefix', decision: 'deny', enabled: false },

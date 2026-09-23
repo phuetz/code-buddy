@@ -44,7 +44,9 @@ export function isTlsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 function tlsDir(): string {
-  const home = process.env.CODEBUDDY_HOME || os.homedir();
+  // Blank CODEBUDDY_HOME is absent (same rule as getCodeBuddyHome). This value is
+  // the parent of `.codebuddy`, not the profile root — do not switch it to getCodeBuddyHome().
+  const home = process.env.CODEBUDDY_HOME?.trim() || os.homedir();
   return path.join(home, '.codebuddy', 'tls');
 }
 
