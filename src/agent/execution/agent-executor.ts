@@ -68,7 +68,7 @@ import {
 } from "../../context/restorable-compression.js";
 import { recordCompactionFork } from "../../context/compaction-fork.js";
 import { getActiveRunStore } from "../../observability/run-store.js";
-import { ToolLoopGuard, type ToolLoopDecision } from "./tool-loop-guard.js";
+import { loadToolLoopGuardOptions, ToolLoopGuard, type ToolLoopDecision } from "./tool-loop-guard.js";
 import { getGlobalEventBus } from "../../events/event-bus.js";
 import { takeFirstUseHint } from "../../utils/first-use-hints.js";
 import { getTurnMetricsRecorder } from '../../observability/turn-metrics.js';
@@ -1343,7 +1343,7 @@ export class AgentExecutor {
     const maxToolRounds = this.config.maxToolRounds;
     let toolRounds = 0;
     // One guard per task: warnings/stops never leak into the next user turn.
-    const loopGuard = new ToolLoopGuard();
+    const loopGuard = new ToolLoopGuard(loadToolLoopGuardOptions());
     let pendingLoopDecision: Exclude<ToolLoopDecision, { action: 'none' }> | null = null;
     let loopGuardStopped = false;
     let observationShortened = false;
