@@ -66,6 +66,10 @@ afterEach(() => {
   }
 });
 
+// chmod 000 ne rend pas un fichier illisible sous Windows, et les liens symboliques
+// y exigent des droits particuliers ; l'audit y saute les contrôles de modes.
+const itPosix = it.skipIf(process.platform === 'win32');
+
 describe('security audit scope and profile option', () => {
   it('fails when the requested project directory does not exist', () => {
     const { root, profile } = workspace();
@@ -79,7 +83,7 @@ describe('security audit scope and profile option', () => {
     expect(formatSecurityAuditText(report).startsWith('Security audit: passed')).toBe(false);
   });
 
-  it('fails when the profile directory cannot be read', () => {
+  itPosix('fails when the profile directory cannot be read', () => {
     const { profile, project } = workspace();
     chmodSync(profile, 0o000);
     try {
@@ -117,7 +121,7 @@ describe('security audit scope and profile option', () => {
 });
 
 describe('security audit --fix stays inside the scope and only removes bits', () => {
-  it('does not add owner write when a 0440 file is tightened', () => {
+  itPosix('does not add owner write when a 0440 file is tightened', () => {
     const { profile, project } = workspace();
     const file = path.join(profile, 'config.toml');
     writeFileSync(file, 'note = "plain"\n', { mode: 0o600 });
@@ -130,7 +134,7 @@ describe('security audit --fix stays inside the scope and only removes bits', ()
     expect(report.passed).toBe(true);
   });
 
-  it('does not add owner write when a 0502 directory is tightened', () => {
+  itPosix('does not add owner write when a 0502 directory is tightened', () => {
     const { profile, project } = workspace();
     chmodSync(profile, 0o502);
     const report = audit(profile, project, { fix: true, now: new Date('2026-09-23T12:00:00.000Z') });
@@ -139,7 +143,7 @@ describe('security audit --fix stays inside the scope and only removes bits', ()
     expect(report.findings.map((item) => item.checkId)).not.toContain('profile.directory.world_writable');
   });
 
-  it('tightens a credentials file whose relative path contains a space', () => {
+  itPosix('tightens a credentials file whose relative path contains a space', () => {
     const { profile, project } = workspace();
     const nested = path.join(profile, 'group share');
     mkdirSync(nested, { mode: 0o700 });
@@ -157,7 +161,7 @@ describe('security audit --fix stays inside the scope and only removes bits', ()
     expect(report.fixes.some((item) => item.subject === 'group share/credentials.json' && item.ok)).toBe(true);
   });
 
-  it('does not chmod a file reached through a symlinked project directory', () => {
+  itPosix('does not chmod a file reached through a symlinked project directory', () => {
     const { root, profile, project } = workspace();
     const outside = path.join(root, 'outside');
     mkdirSync(outside, { mode: 0o700 });
@@ -171,7 +175,7 @@ describe('security audit --fix stays inside the scope and only removes bits', ()
     expect(report.passed).toBe(false);
   });
 
-  it('does not write a backup through a symlinked backup directory', () => {
+  itPosix('does not write a backup through a symlinked backup directory', () => {
     const { root, profile, project } = workspace();
     const outside = path.join(root, 'outside');
     mkdirSync(outside, { mode: 0o700 });
@@ -191,7 +195,7 @@ describe('security audit --fix stays inside the scope and only removes bits', ()
     expect(report.passed).toBe(false);
   });
 
-  it('does not follow a manifest path or a symlinked manifest', () => {
+  itPosix('does not follow a manifest path or a symlinked manifest', () => {
     const { root, profile, project } = workspace();
     const victim = path.join(root, 'victim.txt');
     writeFileSync(victim, 'KEEP\n', { mode: 0o644 });
@@ -238,7 +242,7 @@ describe('security audit critical suppressions and incomplete checks', () => {
     expect(text).toContain('operator waived this critical skill');
   });
 
-  it('prints the reason of a non-critical suppression and does not call that a clean pass', () => {
+  itPosix('prints the reason of a non-critical suppression and does not call that a clean pass', () => {
     const { profile, project } = workspace();
     chmodSync(profile, 0o707);
     writeFileSync(path.join(profile, 'settings.json'), `${JSON.stringify({
@@ -259,7 +263,7 @@ describe('security audit critical suppressions and incomplete checks', () => {
     expect(text).toContain('high profile.directory.world_writable — shared workstation');
   });
 
-  it('fails when a configuration file cannot be read or parsed', () => {
+  itPosix('fails when a configuration file cannot be read', () => {
     const { profile, project } = workspace();
     const hidden = path.join(profile, 'config.toml');
     writeFileSync(hidden, 'note = "plain"\n', { mode: 0o600 });
@@ -271,6 +275,10 @@ describe('security audit critical suppressions and incomplete checks', () => {
     } finally {
       chmodSync(hidden, 0o600);
     }
+  });
+
+  it('fails when a configuration file cannot be parsed', () => {
+    const { profile, project } = workspace();
     writeFileSync(path.join(profile, 'mcp.json'), '{', { mode: 0o600 });
     const unparsed = audit(profile, project);
     expect(unparsed.passed).toBe(false);
@@ -382,7 +390,7 @@ describe('security audit through the real CLI entry point', () => {
     expect(report.effectiveProfileDir).toBeNull();
   }, 180000);
 
-  it('does not turn the global --profile name into an empty passed audit', () => {
+  itPosix('does not turn the global --profile name into an empty passed audit', () => {
     const { root, profile, project } = workspace();
     chmodSync(profile, 0o707);
     const collided = runCli(
