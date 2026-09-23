@@ -29,7 +29,7 @@ import {
   installPermissionModeActionHook,
   parseCliPermissionMode,
 } from './cli/permission-mode-option.js';
-import { getRequestedProfile } from './cli/requested-profile.js';
+import { preloadRequestedProfile } from './cli/preload-profile.js';
 import { registerBackupCommand } from './commands/cli/backup-command.js';
 import { registerSensoryCommand } from './commands/cli/sensory-command.js';
 import { getConfigManager } from './config/toml-config.js';
@@ -4376,33 +4376,7 @@ installPermissionModeActionHook(program, async (mode) => {
 // Apply the profile before parsing so it governs root chat, lazy subcommands,
 // slash-command menus, tool selection, and `buddy --help` consistently.
 process.argv = hoistPermissionModeOption(process.argv);
-const requestedProfile = getRequestedProfile(process.argv);
-if (requestedProfile.kind === 'missing') {
-  try {
-    getConfigManager().load();
-  } catch (_error) {
-    // Listing available names is best-effort; the missing-value error still stands.
-  }
-  let available = '(none defined)';
-  try {
-    const names = Object.keys(getConfigManager().getConfig().profiles ?? {});
-    if (names.length) available = names.join(', ');
-  } catch (_error) {
-    available = 'core, all';
-  }
-  process.stderr.write(
-    `error: option '--profile <name>' argument missing. Available profiles: ${available}\n`,
-  );
-  process.exitCode = 1;
-} else if (requestedProfile.kind === 'value') {
-  try {
-    getConfigManager().load();
-    getConfigManager().applyProfile(requestedProfile.name);
-  } catch (err) {
-    process.stderr.write(`Profile error: ${err instanceof Error ? err.message : String(err)}\n`);
-    process.exitCode = 1;
-  }
-}
+preloadRequestedProfile(process.argv);
 
 function isRootHelpRequest(argv: readonly string[]): boolean {
   const args = argv.slice(2);

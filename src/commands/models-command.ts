@@ -1,8 +1,9 @@
 /**
  * `buddy models list|show`
  *
- * Lit le TOML existant. N'écrit rien. Les tests passent toujours un chemin
- * ou un texte explicite. `refresh` et le cache JSON ne font pas partie de
+ * Lit le TOML existant. N'écrit rien. Sans `--config`, la fusion est celle
+ * de la session : fichier utilisateur, puis `.codebuddy/config.toml` du
+ * répertoire courant. `refresh` et le cache JSON ne font pas partie de
  * cette version.
  */
 
@@ -14,9 +15,9 @@ import {
   type CatalogueDocument,
   type CatalogueEntry,
   aliasMap,
+  assertUserCatalogue,
   builtinCatalogueEntries,
   capabilityOverlays,
-  defaultCatalogueConfigPath,
   mergeCatalogue,
   parseCatalogueConfig,
   resolveRole,
@@ -33,19 +34,16 @@ export interface ModelsCommandIO {
 
 function loadDocument(options: ModelsCommandIO): CatalogueDocument {
   if (options.configText !== undefined) return parseCatalogueConfig(options.configText, 'texte fourni');
+  if (options.configPath) {
+    if (!existsSync(options.configPath)) {
+      throw new CatalogueConfigError(
+        `fichier introuvable : ${options.configPath}. Créez-le, ou retirez --config.`,
+      );
+    }
+    return parseCatalogueConfig(readFileSync(options.configPath, 'utf8'), options.configPath);
+  }
   const env = options.env ?? process.env;
-  const path = options.configPath ?? (env.CODEBUDDY_CONFIG?.trim() || null);
-  if (!path) {
-    const discovered = defaultCatalogueConfigPath({ ...env, CODEBUDDY_CONFIG: undefined });
-    if (!discovered) return parseCatalogueConfig('', 'texte fourni');
-    return parseCatalogueConfig(readFileSync(discovered, 'utf8'), discovered);
-  }
-  if (!existsSync(path)) {
-    throw new CatalogueConfigError(
-      `fichier introuvable : ${path}. Créez-le, ou retirez --config.`,
-    );
-  }
-  return parseCatalogueConfig(readFileSync(path, 'utf8'), path);
+  return assertUserCatalogue(env, true) ?? parseCatalogueConfig('', 'texte fourni');
 }
 
 function mergedEntries(document: CatalogueDocument): Record<string, CatalogueEntry> {

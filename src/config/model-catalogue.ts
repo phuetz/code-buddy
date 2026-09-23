@@ -7,18 +7,17 @@
  * réel si l'appelant fournit le texte ou un chemin explicite.
  *
  * Cette version ne découvre pas les modèles et n'écrit pas de cache.
- * `provider` et `model_id` restent les champs historiques de la table
- * `[models.*]` : ils ne choisissent ni la clé ni l'adresse de la session.
+ * `provider` reste une colonne historique : il ne choisit pas le fournisseur.
+ * `model_id` utilisateur est refusé, sauf s'il répète l'identifiant intégré.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { installCataloguePriceOverlays, type ModelPricing } from './model-pricing.js';
 import { findModelToolConfig, installModelCatalogueOverlays } from './model-tools.js';
 import { getModelRegistry } from './model-registry.js';
-import { DEFAULT_CONFIG, parseTOML } from './toml-config.js';
+import { DEFAULT_CONFIG, parseTOML, resolveUserConfigFile } from './toml-config.js';
 
 export class CatalogueConfigError extends Error {
   constructor(detail: string) {
@@ -312,16 +311,15 @@ export function canonicalModelId(entry: CatalogueEntry): string {
 
 export function defaultCatalogueConfigPath(env: NodeJS.ProcessEnv = process.env): string | null {
   const explicit = env.CODEBUDDY_CONFIG?.trim();
+  const candidate = resolveUserConfigFile(env);
   if (explicit) {
-    if (!existsSync(explicit)) {
+    if (!existsSync(candidate)) {
       throw new CatalogueConfigError(
         `fichier introuvable : ${explicit}. Créez-le, ou retirez CODEBUDDY_CONFIG pour revenir au fichier par défaut.`,
       );
     }
-    return explicit;
+    return candidate;
   }
-  const home = env.CODEBUDDY_HOME?.trim() || homedir();
-  const candidate = join(home, '.codebuddy', 'config.toml');
   return existsSync(candidate) ? candidate : null;
 }
 
@@ -492,17 +490,14 @@ export function loadAndActivateUserCatalogue(
 
 function explicitConfigPath(env: NodeJS.ProcessEnv): string | null {
   const explicit = env.CODEBUDDY_CONFIG?.trim();
-  if (explicit) {
-    if (!existsSync(explicit)) {
-      throw new CatalogueConfigError(
-        `fichier introuvable : ${explicit}. Créez-le, ou retirez CODEBUDDY_CONFIG pour revenir au fichier par défaut.`,
-      );
-    }
-    return explicit;
-  }
   const home = env.CODEBUDDY_HOME?.trim();
-  if (!home) return null;
-  const candidate = join(home, '.codebuddy', 'config.toml');
+  if (!explicit && !home) return null;
+  const candidate = resolveUserConfigFile(env);
+  if (explicit && !existsSync(candidate)) {
+    throw new CatalogueConfigError(
+      `fichier introuvable : ${explicit}. Créez-le, ou retirez CODEBUDDY_CONFIG pour revenir au fichier par défaut.`,
+    );
+  }
   return existsSync(candidate) ? candidate : null;
 }
 
@@ -720,7 +715,15 @@ function patchFromTable(id: string, table: Record<string, unknown>, source: stri
   };
 
   takeString('provider', 'provider');
-  takeString('model_id', 'modelId');
+  if ('model_id' in table) {
+    const historical = DEFAULT_CONFIG.models[id]?.model_id?.trim();
+    const raw = table.model_id;
+    if (!(typeof raw === 'string' && historical && raw.trim() === historical)) {
+      throw new CatalogueConfigError(
+        `« ${id} ».model_id n'est pas pris en charge dans cette version (${source}). Le nom envoyé reste l'identifiant intégré. Retirez model_id.`,
+      );
+    }
+  }
   takeString('description', 'description');
   takeNumber('max_context_tokens', 'contextWindow');
   takeNumber('context_window', 'contextWindow');

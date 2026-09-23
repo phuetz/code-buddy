@@ -75,7 +75,6 @@ max_context_tokens = 4096
     const document = parseCatalogueConfig(`
 [models.exemple-principal]
 provider = "openai"
-model_id = "exemple-principal"
 max_context_tokens = 131072
 `);
     activateCatalogue(document);
@@ -103,7 +102,6 @@ describe('modèle par défaut configurable', () => {
 primary = "exemple-principal"
 [models.exemple-principal]
 provider = "openai"
-model_id = "exemple-principal"
 max_context_tokens = 128000
 vision = true
 input = ["text", "image"]

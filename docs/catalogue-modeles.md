@@ -4,6 +4,8 @@ On règle une partie des modèles dans le TOML déjà utilisé par Code Buddy. C
 
 ## Fichier lu
 
+Le lecteur du catalogue, le préchargement de `--profile` et l'écriture de `/config set` passent par la même fonction, `resolveUserConfigFile` :
+
 - `CODEBUDDY_CONFIG` s'il est posé (chemin complet du fichier)
 - sinon `$CODEBUDDY_HOME/.codebuddy/config.toml` si `CODEBUDDY_HOME` est posée
 - sinon `~/.codebuddy/config.toml`
@@ -38,18 +40,18 @@ Une valeur vide est ignorée. Un nom fixé dans la configuration et inconnu du c
 - `max_context_tokens` (ou `context_window`), `max_tokens` (ou `max_output_tokens`), `reasoning`, `vision`, `tools`, `input` : lus par `getModelToolConfig` au démarrage de la session
 - `price_per_m_input` et `price_per_m_output`, écrits ensemble : lus par `getModelPricing`
 
-`provider` et `model_id` restent les colonnes historiques de la table. Cette version ne s'en sert pas pour choisir la clé, l'adresse ou le fournisseur de la session. `buddy models show` ne les affiche pas.
+`provider` reste une colonne historique de la table. Cette version ne s'en sert pas pour choisir le fournisseur de la session. `model_id` écrit dans une entrée `[models.*]` est refusé, sauf s'il répète exactement l'identifiant déjà intégré pour ce nom (les fichiers générés le font, et cela ne change pas le nom envoyé). Pour choisir un modèle, utilisez le nom de la table, un alias ou `primary`. `buddy models show` n'affiche ni `provider` ni `model_id`.
 
 `[model_roles]` ne lit que `primary`. `[model_aliases]` résout ce nom au moment du choix ci-dessus et dans `buddy models show`. La cible doit être un modèle connu, sinon la configuration est refusée. Ces alias ne s'ajoutent pas à `/switch`.
 
-`/config set` réécrit `config.toml` sans effacer `[catalogue]`, `[model_roles]`, `[model_aliases]`, les capacités des `[models.*]`, ni les `[profiles.*]`.
+`/config set` réécrit le fichier résolu ci-dessus, sans effacer `[catalogue]`, `[model_roles]`, `[model_aliases]`, les capacités des `[models.*]`, ni les `[profiles.*]`.
 
 ## Ce que cette version ne fait pas
 
 - pas de `mode = "replace"`
 - pas de rôles `fast`, `compact` ou `vision`
 - pas de `buddy models refresh`, pas de cache JSON de fenêtre de contexte
-- pas de découverte réseau au démarrage pour choisir un identifiant ou une fenêtre
+- pas de nouvelle découverte réseau ajoutée par ce catalogue pour choisir un identifiant ou une fenêtre. La sonde Ollama déjà en place reste : si ce fournisseur est détecté et qu'aucun des niveaux 1 à 4 n'est rempli, elle peut encore choisir un modèle installé
 
 ```bash
 buddy models list --config ./config.toml

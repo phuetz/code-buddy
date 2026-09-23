@@ -29,6 +29,8 @@ import {
 } from '../../src/config/toml-config.js';
 
 const previousHome = process.env.HOME;
+const previousCodebuddyHome = process.env.CODEBUDDY_HOME;
+const previousConfig = process.env.CODEBUDDY_CONFIG;
 const previousCwd = process.cwd();
 
 afterEach(() => {
@@ -36,6 +38,10 @@ afterEach(() => {
   resetConfigManager();
   if (previousHome === undefined) delete process.env.HOME;
   else process.env.HOME = previousHome;
+  if (previousCodebuddyHome === undefined) delete process.env.CODEBUDDY_HOME;
+  else process.env.CODEBUDDY_HOME = previousCodebuddyHome;
+  if (previousConfig === undefined) delete process.env.CODEBUDDY_CONFIG;
+  else process.env.CODEBUDDY_CONFIG = previousConfig;
   process.chdir(previousCwd);
 });
 
@@ -88,6 +94,8 @@ describe('écriture sans perte', () => {
   it('un /config set hors modèles garde le catalogue, les rôles, les alias, les capacités et les profils', async () => {
     const { home, project, file } = isolatedDirs();
     process.env.HOME = home;
+    process.env.CODEBUDDY_HOME = home;
+    delete process.env.CODEBUDDY_CONFIG;
     process.chdir(project);
     const fixture = [
       'active_model = "grok-4"',

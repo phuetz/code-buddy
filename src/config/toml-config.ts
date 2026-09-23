@@ -1172,12 +1172,24 @@ export function serializeTOML(config: CodeBuddyConfig, preserved?: PreservedUser
 // Configuration Manager
 // ============================================================================
 
-function configDir(): string {
-  return join(homedir(), '.codebuddy');
+/**
+ * Fichier de configuration utilisateur. Une seule règle, documentée dans
+ * docs/catalogue-modeles.md : `CODEBUDDY_CONFIG`, sinon
+ * `$CODEBUDDY_HOME/.codebuddy/config.toml`, sinon `~/.codebuddy/config.toml`.
+ * Une valeur vide compte comme absente. L'existence n'est pas vérifiée.
+ */
+export function resolveUserConfigFile(
+  env: NodeJS.ProcessEnv = process.env,
+  homeDirectory: string = homedir(),
+): string {
+  const explicit = env.CODEBUDDY_CONFIG?.trim();
+  if (explicit) return explicit;
+  const home = env.CODEBUDDY_HOME?.trim() || homeDirectory;
+  return join(home, '.codebuddy', 'config.toml');
 }
 
 function configFile(): string {
-  return join(configDir(), 'config.toml');
+  return resolveUserConfigFile();
 }
 
 const PROJECT_CONFIG_FILE = '.codebuddy/config.toml';
@@ -1428,8 +1440,8 @@ class ConfigManager {
    * Initialize config file with defaults
    */
   initConfig(): void {
-    const dir = configDir();
     const file = configFile();
+    const dir = dirname(file);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
