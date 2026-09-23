@@ -995,7 +995,7 @@ describe('SagaRunner — primary fails, fallback fires', () => {
 });
 
 describe('SagaRunner — provider-aware chain failover', () => {
-  it('retries HTTP 503 on another provider of the same peer and persists redacted provenance', async () => {
+  it('retries an explicit HTTP 429 refusal on another provider of the same peer and persists redacted provenance', async () => {
     state.sagas.set('saga_same_peer_provider', {
       id: 'saga_same_peer_provider',
       goal: 'keep the robot autonomous',
@@ -1044,7 +1044,7 @@ describe('SagaRunner — provider-aware chain failover', () => {
               status: 'failed',
               providerRequested: 'openrouter',
               providerResolved: 'openrouter',
-              error: 'HTTP 503 upstream unavailable: Bearer super-secret-token-value',
+              error: 'HTTP 429 too many requests: Bearer super-secret-token-value',
             };
           }
           return {
@@ -1097,6 +1097,65 @@ describe('SagaRunner — provider-aware chain failover', () => {
       providerResolved: 'lemonade',
       status: 'completed',
     });
+  });
+
+  it('un HTTP 503 après ACK est ambigu — pas de second fournisseur, issue unknown', async () => {
+    state.sagas.set('saga_503_after_ack', {
+      id: 'saga_503_after_ack',
+      goal: 'keep the robot autonomous',
+      plan: {
+        primary: { peerId: 'robot', model: 'cloud-a', provider: 'openrouter' },
+        chain: [{ peerId: 'robot', model: 'cloud-a', provider: 'openrouter', role: 'code' }],
+      },
+      steps: [
+        { peerId: 'robot', model: 'cloud-a', provider: 'openrouter', lane: 'chain', role: 'code', status: 'pending' },
+      ],
+      status: 'pending',
+    });
+    const dispatchedProviders: string[] = [];
+    const fleetBridge = makeFleetBridgeMock(
+      {
+        'peer.dispatch': async (params) => {
+          dispatchedProviders.push(String(params.provider ?? ''));
+          return { runId: 'ambigu-1', providerRequested: 'openrouter', providerResolved: 'openrouter' };
+        },
+        'peer.dispatchStatus': async () => ({
+          found: true,
+          status: 'failed',
+          providerRequested: 'openrouter',
+          providerResolved: 'openrouter',
+          error: 'HTTP 503 upstream timed out after generation: Bearer super-secret-token-value',
+        }),
+      },
+      {
+        peers: [
+          {
+            id: 'robot',
+            capability: {
+              roles: ['code'],
+              models: [
+                { id: 'cloud-a', provider: 'openrouter' },
+                { id: 'local-b', provider: 'lemonade' },
+              ],
+            },
+          },
+        ],
+      },
+    );
+
+    new SagaRunner(fleetBridge as never, vi.fn()).start('saga_503_after_ack');
+    await waitFor(() => state.sagas.get('saga_503_after_ack')?.steps[0]?.status === 'failed', 5_000);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const step = state.sagas.get('saga_503_after_ack')!.steps[0];
+    expect(dispatchedProviders).toEqual(['openrouter']);
+    expect(step.retried).toBeFalsy();
+    expect(step.error).toBe('dispatch_unknown');
+    expect((step as { outcome?: string }).outcome).toBe('unknown');
+    expect(step.attempts).toHaveLength(1);
+    expect(step.attempts?.[0]?.error).toContain('503');
+    expect(step.attempts?.[0]?.error).not.toContain('super-secret-token-value');
+    expect(step.attempts?.[0]?.failureDomain).toBeUndefined();
   });
 
   it('caps provider failover at one retry even when the alternate hits HTTP 429 quota', async () => {

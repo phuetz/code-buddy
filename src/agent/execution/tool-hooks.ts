@@ -156,6 +156,9 @@ export async function runPostToolUseHook(
 /**
  * Record a per-tool metric (success + duration). Errors are swallowed
  * (metrics are optional).
+ *
+ * Also feeds the session-metrics tracker so the session-end cron can
+ * decide whether to distill an authored skill from a complex session.
  */
 export async function recordToolMetric(
   toolName: string,
@@ -166,4 +169,15 @@ export async function recordToolMetric(
     const { getToolMetricsTracker } = await import('../../observability/tool-metrics.js');
     getToolMetricsTracker().record(toolName, success, durationMs);
   } catch { /* metrics are optional */ }
+
+  // Session-level counters for the skill generator (best-effort, never throws).
+  try {
+    const { recordToolCall, recordRecoveredError } = await import(
+      '../../memory/session-metrics-tracker.js'
+    );
+    recordToolCall();
+    if (!success) recordRecoveredError();
+  } catch {
+    /* tracker is optional; keep tool execution fast */
+  }
 }

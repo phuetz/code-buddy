@@ -1,44 +1,27 @@
 /**
  * Heartbeat Engine
  *
- * Enterprise-grade periodic wake system that reads a HEARTBEAT.md checklist
- * and surfaces important items via agent review. Integrates with the existing
- * CronAgentBridge pattern to create agent instances for checklist evaluation.
- *
- * Features:
- * - Configurable interval (default 30 minutes)
- * - Active hours filtering (only fires during configured hours)
- * - Smart suppression (HEARTBEAT_OK skips with counter)
- * - Event-driven (heartbeat:wake, heartbeat:result, heartbeat:suppressed)
+ * Periodic wake that reads HEARTBEAT.md and surfaces items via agent review.
+ * Local `.codebuddy/HEARTBEAT.md` is merged with an OpenClaw workspace file
+ * when `CODEBUDDY_OPENCLAW_WORKSPACE_IMPORT=true`. Scheduled headings that
+ * are not due yet are dropped before the agent runs.
  */
 
 import { EventEmitter } from 'events';
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
-
-// ============================================================================
-// Types
-// ============================================================================
+import { filterDueHeartbeatChecklist } from './heartbeat-schedule.js';
+import { mergeHeartbeatChecklists, readHeartbeatSources } from './heartbeat-sources.js';
 
 export interface HeartbeatConfig {
-  /** Interval between heartbeat checks (ms). Default: 30 minutes */
   intervalMs: number;
-  /** Start of active hours (0-23). Default: 8 */
   activeHoursStart: number;
-  /** End of active hours (0-23). Default: 22 */
   activeHoursEnd: number;
-  /** IANA timezone string. Default: system timezone */
   timezone: string;
-  /** Path to HEARTBEAT.md checklist. Default: .codebuddy/HEARTBEAT.md */
   heartbeatFilePath: string;
-  /** Keyword in agent response that suppresses action. Default: HEARTBEAT_OK */
   suppressionKeyword: string;
-  /** Max consecutive suppressions before forcing a full review. Default: 5 */
   maxConsecutiveSuppressions: number;
-  /** Whether the heartbeat engine is enabled. Default: true */
   enabled: boolean;
-  /** Optional override for agent review (used in tests). */
   agentReviewFn?: (checklistContent: string) => Promise<string>;
 }
 
@@ -56,7 +39,7 @@ export interface HeartbeatStatus {
 export interface HeartbeatTickResult {
   timestamp: Date;
   skipped: boolean;
-  skipReason?: 'outside_active_hours' | 'disabled' | 'file_not_found';
+  skipReason?: 'outside_active_hours' | 'disabled' | 'file_not_found' | 'nothing_due';
   suppressed: boolean;
   agentResponse?: string;
   checklistContent?: string;
@@ -64,7 +47,7 @@ export interface HeartbeatTickResult {
 }
 
 const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
-  intervalMs: 30 * 60 * 1000, // 30 minutes
+  intervalMs: 30 * 60 * 1000,
   activeHoursStart: 8,
   activeHoursEnd: 22,
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -74,19 +57,33 @@ const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
   enabled: true,
 };
 
-// ============================================================================
-// Heartbeat Engine
-// ============================================================================
+function armCompanionLoops(): void {
+  void import('../companion/companion-loops.js')
+    .then(({ startCompanionAlwaysOnLoops }) => {
+      startCompanionAlwaysOnLoops();
+    })
+    .catch((error) => {
+      logger.debug('Companion loops not armed', { error: String(error) });
+    });
+}
+
+function disarmCompanionLoops(): void {
+  void import('../companion/companion-loops.js')
+    .then(({ stopCompanionAlwaysOnLoops }) => {
+      stopCompanionAlwaysOnLoops();
+    })
+    .catch(() => undefined);
+}
 
 export class HeartbeatEngine extends EventEmitter {
   private config: HeartbeatConfig;
   private timer: NodeJS.Timeout | null = null;
-  private running: boolean = false;
+  private running = false;
   private lastRunTime: Date | null = null;
   private nextRunTime: Date | null = null;
-  private consecutiveSuppressions: number = 0;
-  private totalTicks: number = 0;
-  private totalSuppressions: number = 0;
+  private consecutiveSuppressions = 0;
+  private totalTicks = 0;
+  private totalSuppressions = 0;
   private lastResult: string | null = null;
 
   constructor(config: Partial<HeartbeatConfig> = {}) {
@@ -94,22 +91,19 @@ export class HeartbeatEngine extends EventEmitter {
     this.config = { ...DEFAULT_HEARTBEAT_CONFIG, ...config };
   }
 
-  /**
-   * Start the heartbeat engine
-   */
   start(): void {
     if (this.running) {
       logger.warn('Heartbeat engine already running');
+      armCompanionLoops();
       return;
     }
-
     if (!this.config.enabled) {
       logger.info('Heartbeat engine is disabled');
       return;
     }
-
     this.running = true;
     this.scheduleNext();
+    armCompanionLoops();
     logger.info('Heartbeat engine started', {
       intervalMs: this.config.intervalMs,
       activeHours: `${this.config.activeHoursStart}-${this.config.activeHoursEnd}`,
@@ -118,9 +112,6 @@ export class HeartbeatEngine extends EventEmitter {
     this.emit('started');
   }
 
-  /**
-   * Stop the heartbeat engine
-   */
   stop(): void {
     if (this.timer) {
       clearTimeout(this.timer);
@@ -128,21 +119,14 @@ export class HeartbeatEngine extends EventEmitter {
     }
     this.running = false;
     this.nextRunTime = null;
+    disarmCompanionLoops();
     logger.info('Heartbeat engine stopped');
     this.emit('stopped');
   }
 
-  /**
-   * Schedule the next tick
-   */
   private scheduleNext(): void {
     if (!this.running) return;
-
-    // Clear any existing timer to prevent orphaned timers
-    if (this.timer) {
-      clearTimeout(this.timer);
-    }
-
+    if (this.timer) clearTimeout(this.timer);
     this.nextRunTime = new Date(Date.now() + this.config.intervalMs);
     this.timer = setTimeout(async () => {
       try {
@@ -151,35 +135,24 @@ export class HeartbeatEngine extends EventEmitter {
         logger.error('Heartbeat tick error', { error: String(error) });
         this.emit('heartbeat:error', { error });
       }
-      // Schedule next tick after completion
       this.scheduleNext();
     }, this.config.intervalMs);
   }
 
-  /**
-   * Execute a single heartbeat tick
-   *
-   * Reads HEARTBEAT.md, creates an agent to review the checklist,
-   * and emits appropriate events based on the result.
-   */
   async tick(): Promise<HeartbeatTickResult> {
     const startTime = Date.now();
     this.totalTicks++;
 
-    // Check if enabled
     if (!this.config.enabled) {
-      const result: HeartbeatTickResult = {
+      return {
         timestamp: new Date(),
         skipped: true,
         skipReason: 'disabled',
         suppressed: false,
         duration: Date.now() - startTime,
       };
-      logger.debug('Heartbeat tick skipped: disabled');
-      return result;
     }
 
-    // Check active hours
     if (!this.isWithinActiveHours()) {
       const result: HeartbeatTickResult = {
         timestamp: new Date(),
@@ -188,16 +161,16 @@ export class HeartbeatEngine extends EventEmitter {
         suppressed: false,
         duration: Date.now() - startTime,
       };
-      logger.debug('Heartbeat tick skipped: outside active hours');
       this.emit('heartbeat:skipped', result);
       return result;
     }
 
-    // Read the heartbeat checklist
-    let checklistContent: string;
-    try {
-      checklistContent = await fs.readFile(this.config.heartbeatFilePath, 'utf-8');
-    } catch {
+    const sources = await readHeartbeatSources({
+      localPath: this.config.heartbeatFilePath,
+    });
+    const merged = mergeHeartbeatChecklists(sources);
+    const checklistContent = filterDueHeartbeatChecklist(merged);
+    if (!merged.trim()) {
       const result: HeartbeatTickResult = {
         timestamp: new Date(),
         skipped: true,
@@ -209,17 +182,27 @@ export class HeartbeatEngine extends EventEmitter {
       this.emit('heartbeat:skipped', result);
       return result;
     }
+    if (!checklistContent.trim()) {
+      const result: HeartbeatTickResult = {
+        timestamp: new Date(),
+        skipped: true,
+        skipReason: 'nothing_due',
+        suppressed: false,
+        duration: Date.now() - startTime,
+      };
+      this.emit('heartbeat:skipped', result);
+      return result;
+    }
 
     this.lastRunTime = new Date();
     this.emit('heartbeat:wake', { timestamp: this.lastRunTime, checklistContent });
 
-    // Create agent instance to review checklist (same pattern as CronAgentBridge)
     let agentResponse: string;
     try {
       agentResponse = await this.executeAgentReview(checklistContent);
     } catch (error) {
       logger.error('Heartbeat agent review failed', { error: String(error) });
-      const result: HeartbeatTickResult = {
+      return {
         timestamp: new Date(),
         skipped: false,
         suppressed: false,
@@ -227,30 +210,20 @@ export class HeartbeatEngine extends EventEmitter {
         agentResponse: `Error: ${String(error)}`,
         duration: Date.now() - startTime,
       };
-      this.emit('heartbeat:error', { error });
-      return result;
     }
 
     this.lastResult = agentResponse;
-
-    // Check for suppression keyword
     const isSuppressed = agentResponse.includes(this.config.suppressionKeyword);
 
     if (isSuppressed) {
       this.consecutiveSuppressions++;
       this.totalSuppressions++;
-
-      // If max consecutive suppressions reached, force a full review next time
       if (this.consecutiveSuppressions >= this.config.maxConsecutiveSuppressions) {
-        logger.info('Max consecutive suppressions reached, resetting counter', {
-          count: this.consecutiveSuppressions,
-        });
         this.consecutiveSuppressions = 0;
         this.emit('heartbeat:suppression-limit', {
           totalSuppressions: this.totalSuppressions,
         });
       }
-
       const result: HeartbeatTickResult = {
         timestamp: new Date(),
         skipped: false,
@@ -259,9 +232,6 @@ export class HeartbeatEngine extends EventEmitter {
         checklistContent,
         duration: Date.now() - startTime,
       };
-      logger.debug('Heartbeat suppressed by agent', {
-        consecutiveSuppressions: this.consecutiveSuppressions,
-      });
       this.emit('heartbeat:suppressed', {
         consecutiveSuppressions: this.consecutiveSuppressions,
         agentResponse,
@@ -269,9 +239,7 @@ export class HeartbeatEngine extends EventEmitter {
       return result;
     }
 
-    // Agent found something noteworthy - reset suppression counter
     this.consecutiveSuppressions = 0;
-
     const result: HeartbeatTickResult = {
       timestamp: new Date(),
       skipped: false,
@@ -280,23 +248,26 @@ export class HeartbeatEngine extends EventEmitter {
       checklistContent,
       duration: Date.now() - startTime,
     };
-
     this.emit('heartbeat:result', {
       agentResponse,
       checklistContent,
       duration: result.duration,
     });
-
+    void this.deliverCompanionImpulse();
     return result;
   }
 
-  /**
-   * Check if the current time is within configured active hours
-   */
+  private async deliverCompanionImpulse(): Promise<void> {
+    try {
+      const { runImpulseDeliveryTick } = await import('../companion/impulse-delivery.js');
+      await runImpulseDeliveryTick();
+    } catch {
+      /* companion delivery is optional on a code-heartbeat tick */
+    }
+  }
+
   isWithinActiveHours(now?: Date): boolean {
     const date = now || new Date();
-
-    // Get the hour in the configured timezone
     let hour: number;
     try {
       const formatter = new Intl.DateTimeFormat('en-US', {
@@ -306,27 +277,16 @@ export class HeartbeatEngine extends EventEmitter {
       });
       hour = parseInt(formatter.format(date), 10);
     } catch {
-      // Fallback to local time if timezone is invalid
       hour = date.getHours();
     }
-
     const { activeHoursStart, activeHoursEnd } = this.config;
-
-    // Handle wrap-around (e.g., activeHoursStart=22, activeHoursEnd=6)
     if (activeHoursStart <= activeHoursEnd) {
       return hour >= activeHoursStart && hour < activeHoursEnd;
-    } else {
-      return hour >= activeHoursStart || hour < activeHoursEnd;
     }
+    return hour >= activeHoursStart || hour < activeHoursEnd;
   }
 
-  /**
-   * Execute agent review of the heartbeat checklist
-   *
-   * Uses the same lazy-load agent pattern as CronAgentBridge.
-   */
   private async executeAgentReview(checklistContent: string): Promise<string> {
-    // Allow override for testing
     if (this.config.agentReviewFn) {
       return this.config.agentReviewFn(checklistContent);
     }
@@ -334,8 +294,8 @@ export class HeartbeatEngine extends EventEmitter {
     const apiKey = process.env.GROK_API_KEY || '';
     const baseURL = process.env.GROK_BASE_URL;
     const model = process.env.GROK_MODEL;
-
-    const forceReview = this.consecutiveSuppressions >= this.config.maxConsecutiveSuppressions - 1;
+    const forceReview =
+      this.consecutiveSuppressions >= this.config.maxConsecutiveSuppressions - 1;
     const suppressionContext = forceReview
       ? `\n\nIMPORTANT: There have been ${this.consecutiveSuppressions} consecutive suppressions. Please do a thorough review even if everything looks fine.`
       : '';
@@ -352,24 +312,13 @@ export class HeartbeatEngine extends EventEmitter {
       checklistContent,
     ].join('\n');
 
-    // Lazy load agent to avoid circular deps
     const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
-    const agent = new CodeBuddyAgent(
-      apiKey,
-      baseURL,
-      model,
-      10, // limited tool rounds for heartbeat review
-      false // no RAG for heartbeat
-    );
-
+    const agent = new CodeBuddyAgent(apiKey, baseURL, model, 10, false);
     const entries = await agent.processUserMessage(prompt);
-    const assistantEntries = entries.filter(e => e.type === 'assistant');
-    return assistantEntries.map(e => e.content).join('\n') || 'No response';
+    const assistantEntries = entries.filter((e) => e.type === 'assistant');
+    return assistantEntries.map((e) => e.content).join('\n') || 'No response';
   }
 
-  /**
-   * Get current heartbeat engine status
-   */
   getStatus(): HeartbeatStatus {
     return {
       running: this.running,
@@ -383,32 +332,18 @@ export class HeartbeatEngine extends EventEmitter {
     };
   }
 
-  /**
-   * Get the current configuration (copy)
-   */
   getConfig(): HeartbeatConfig {
     return { ...this.config };
   }
 
-  /**
-   * Update configuration (requires restart to take effect for interval changes)
-   */
   updateConfig(updates: Partial<HeartbeatConfig>): void {
     this.config = { ...this.config, ...updates };
-    logger.info('Heartbeat config updated', { updates: Object.keys(updates) });
   }
 
-  /**
-   * Check if the engine is currently running
-   */
   isRunning(): boolean {
     return this.running;
   }
 }
-
-// ============================================================================
-// Singleton
-// ============================================================================
 
 let heartbeatInstance: HeartbeatEngine | null = null;
 
@@ -420,8 +355,6 @@ export function getHeartbeatEngine(config?: Partial<HeartbeatConfig>): Heartbeat
 }
 
 export function resetHeartbeatEngine(): void {
-  if (heartbeatInstance) {
-    heartbeatInstance.stop();
-  }
+  if (heartbeatInstance) heartbeatInstance.stop();
   heartbeatInstance = null;
 }

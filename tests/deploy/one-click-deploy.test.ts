@@ -41,7 +41,10 @@ async function fixture(opts: {
   if (opts.withLocalWrangler) {
     const bin = path.join(root, 'node_modules', '.bin');
     await mkdir(bin, { recursive: true });
-    await writeFile(path.join(bin, 'wrangler'), '#!/bin/sh\n', { mode: 0o755 });
+    // Sous Windows, npm pose un `.cmd` : c'est ce que le moteur cherche
+    // (one-click-engine.ts, `platform === 'win32' ? `${name}.cmd` : name`).
+    const binName = process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler';
+    await writeFile(path.join(bin, binName), '#!/bin/sh\n', { mode: 0o755 });
   }
   return root;
 }
@@ -289,12 +292,15 @@ describe('parseDeployOutput', () => {
 
 describe('in-memory fs isolation', () => {
   it('does not touch the real filesystem when fs is injected', async () => {
+    // Le moteur fait `path.resolve(request.projectRoot)` : sous Windows
+    // '/proj' devient 'C:\\proj' et ne correspondrait plus aux clés.
+    const projRoot = path.resolve('/proj');
     const files = new Map<string, string>([
       [
-        path.join('/proj', '.codebuddy', 'deploy.json'),
+        path.join(projRoot, '.codebuddy', 'deploy.json'),
         JSON.stringify({ target: 'cloudflare-pages', skipBuild: true, outputDir: 'dist' }),
       ],
-      [path.join('/proj', 'package.json'), JSON.stringify({ name: 'x' })],
+      [path.join(projRoot, 'package.json'), JSON.stringify({ name: 'x' })],
     ]);
     const fsImpl: OneClickFs = {
       async readFile(filePath) {
@@ -313,7 +319,7 @@ describe('in-memory fs isolation', () => {
       async appendFile() {},
     };
     const report = await runOneClickDeploy(
-      { projectRoot: '/proj', dryRun: true },
+      { projectRoot: projRoot, dryRun: true },
       {
         fs: fsImpl,
         which: memWhich({ wrangler: '/bin/wrangler' }),

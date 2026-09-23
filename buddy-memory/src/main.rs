@@ -4,6 +4,7 @@
 //! (or `{"id":N,"error":"..."}`). Code Buddy spawns this as a sidecar; the TS CKG is a client.
 
 use buddy_memory::store::{RememberInput, RememberRel, Store};
+use buddy_memory::vindex::{Precision, VIndexRegistry};
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
@@ -37,6 +38,8 @@ fn main() {
     }));
 
     let mut store = Store::new(ledger_path, agent);
+    // Index vectoriels génériques, indépendants du graphe (voir vindex.rs).
+    let mut vindexes = VIndexRegistry::new();
 
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -66,7 +69,8 @@ fn main() {
         let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
         let params = req.get("params").cloned().unwrap_or(Value::Null);
 
-        let result: Result<Value, String> = dispatch(&mut store, method, &params);
+        let result: Result<Value, String> =
+            dispatch(&mut store, &mut vindexes, method, &params);
         let resp = match result {
             Ok(r) => json!({ "id": id, "result": r }),
             Err(e) => json!({ "id": id, "error": e }),
@@ -76,7 +80,12 @@ fn main() {
     }
 }
 
-fn dispatch(store: &mut Store, method: &str, params: &Value) -> Result<Value, String> {
+fn dispatch(
+    store: &mut Store,
+    vindexes: &mut VIndexRegistry,
+    method: &str,
+    params: &Value,
+) -> Result<Value, String> {
     match method {
         "ping" => Ok(json!("pong")),
         "remember" => {
@@ -120,7 +129,189 @@ fn dispatch(store: &mut Store, method: &str, params: &Value) -> Result<Value, St
         }
         "getSuperseded" => Ok(serde_json::to_value(store.get_superseded()).unwrap_or(Value::Null)),
         "getStats" => Ok(serde_json::to_value(store.stats()).unwrap_or(Value::Null)),
+        m if m.starts_with("vindex.") => dispatch_vindex(vindexes, m, params),
         other => Err(format!("unknown method: {}", other)),
+    }
+}
+
+/// Index vectoriels génériques. Volontairement séparé de `dispatch` : rien ici ne
+/// touche au graphe de connaissances, et l'ajout d'une méthode ne doit pas obliger
+/// à relire le dispatch du graphe.
+fn dispatch_vindex(
+    reg: &mut VIndexRegistry,
+    method: &str,
+    params: &Value,
+) -> Result<Value, String> {
+    let name = || -> Result<String, String> {
+        params
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "paramètre « name » manquant".to_string())
+    };
+    let vector = |key: &str| -> Result<Vec<f32>, String> {
+        let arr = params
+            .get(key)
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| format!("paramètre « {} » manquant ou non tableau", key))?;
+        arr.iter()
+            .map(|v| {
+                v.as_f64()
+                    .map(|f| f as f32)
+                    .ok_or_else(|| format!("« {} » contient une valeur non numérique", key))
+            })
+            .collect()
+    };
+
+    match method {
+        "vindex.create" => {
+            let n = name()?;
+            let dim = params
+                .get("dim")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| "paramètre « dim » manquant".to_string())? as usize;
+            let capacity = params.get("capacity").and_then(|v| v.as_u64()).unwrap_or(1024) as usize;
+            let replace = params.get("replace").and_then(|v| v.as_bool()).unwrap_or(false);
+            let precision = Precision::from_str(
+                params.get("precision").and_then(|v| v.as_str()).unwrap_or("f32"),
+            )?;
+            reg.create_avec(&n, dim, capacity, replace, precision)?;
+            Ok(json!({ "ok": true, "name": n, "dim": dim, "precision": precision.as_str() }))
+        }
+        "vindex.insert" => {
+            let n = name()?;
+            let idx = reg
+                .get_mut(&n)
+                .ok_or_else(|| format!("index « {} » inconnu", n))?;
+            // Un lot ou un point unique : un lot évite un aller-retour par vecteur,
+            // ce qui domine le coût quand on indexe un dépôt entier.
+            if let Some(items) = params.get("items").and_then(|v| v.as_array()) {
+                let mut inserted = 0usize;
+                for it in items {
+                    let id = it
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| "un élément sans « id »".to_string())?;
+                    let vec: Vec<f32> = it
+                        .get("vector")
+                        .and_then(|v| v.as_array())
+                        .ok_or_else(|| format!("élément « {} » sans « vector »", id))?
+                        .iter()
+                        .map(|v| v.as_f64().unwrap_or(f64::NAN) as f32)
+                        .collect();
+                    if vec.iter().any(|f| f.is_nan()) {
+                        return Err(format!("élément « {} » : vecteur non numérique", id));
+                    }
+                    idx.insert(id, &vec)?;
+                    inserted += 1;
+                }
+                return Ok(json!({ "inserted": inserted, "size": idx.len() }));
+            }
+            let id = params
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "paramètre « id » manquant".to_string())?;
+            let vec = vector("vector")?;
+            idx.insert(id, &vec)?;
+            Ok(json!({ "inserted": 1, "size": idx.len() }))
+        }
+        "vindex.search" => {
+            let n = name()?;
+            let idx = reg
+                .get(&n)
+                .ok_or_else(|| format!("index « {} » inconnu", n))?;
+            let q = vector("vector")?;
+            let k = params.get("k").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
+            let hits = idx.search(&q, k)?;
+            let out: Vec<Value> = hits
+                .into_iter()
+                .map(|(id, score)| json!({ "id": id, "score": score }))
+                .collect();
+            Ok(json!(out))
+        }
+        "vindex.remove" => {
+            let n = name()?;
+            let idx = reg
+                .get_mut(&n)
+                .ok_or_else(|| format!("index « {} » inconnu", n))?;
+            let id = params
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "paramètre « id » manquant".to_string())?;
+            Ok(json!({ "removed": idx.remove(id), "size": idx.len() }))
+        }
+        "vindex.size" => {
+            let n = name()?;
+            let idx = reg
+                .get(&n)
+                .ok_or_else(|| format!("index « {} » inconnu", n))?;
+            Ok(json!({
+                "size": idx.len(),
+                "dim": idx.dim(),
+                "precision": idx.precision().as_str(),
+                "vectorBytes": idx.vector_bytes(),
+            }))
+        }
+        "vindex.clear" => {
+            let n = name()?;
+            let idx = reg
+                .get_mut(&n)
+                .ok_or_else(|| format!("index « {} » inconnu", n))?;
+            idx.clear();
+            Ok(json!({ "ok": true, "size": 0 }))
+        }
+        "vindex.drop" => {
+            let n = name()?;
+            Ok(json!({ "dropped": reg.drop_index(&n) }))
+        }
+        "vindex.list" => Ok(json!(reg.names())),
+        // `dump`/`load` laissent la persistance au client : c'est lui qui sait où
+        // écrire et sous quel format, et le sidecar reste sans état sur disque.
+        "vindex.dump" => {
+            let n = name()?;
+            let idx = reg
+                .get(&n)
+                .ok_or_else(|| format!("index « {} » inconnu", n))?;
+            let pairs: Vec<Value> = idx
+                .to_pairs()
+                .into_iter()
+                .map(|(id, v)| json!({ "id": id, "vector": v }))
+                .collect();
+            Ok(json!({ "dim": idx.dim(), "items": pairs }))
+        }
+        "vindex.load" => {
+            let n = name()?;
+            let dim = params
+                .get("dim")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| "paramètre « dim » manquant".to_string())? as usize;
+            let items = params
+                .get("items")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| "paramètre « items » manquant".to_string())?;
+            let mut pairs: Vec<(String, Vec<f32>)> = Vec::with_capacity(items.len());
+            for it in items {
+                let id = it
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| "un élément sans « id »".to_string())?;
+                let vec: Vec<f32> = it
+                    .get("vector")
+                    .and_then(|v| v.as_array())
+                    .ok_or_else(|| format!("élément « {} » sans « vector »", id))?
+                    .iter()
+                    .map(|v| v.as_f64().unwrap_or(f64::NAN) as f32)
+                    .collect();
+                if vec.iter().any(|f| f.is_nan()) {
+                    return Err(format!("élément « {} » : vecteur non numérique", id));
+                }
+                pairs.push((id.to_string(), vec));
+            }
+            let n_items = pairs.len();
+            reg.load(&n, dim, pairs)?;
+            Ok(json!({ "ok": true, "loaded": n_items }))
+        }
+        other => Err(format!("unknown vindex method: {}", other)),
     }
 }
 

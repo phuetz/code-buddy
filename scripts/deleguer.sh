@@ -69,6 +69,16 @@ if [ -z "${DELEGUER_SELF_COPY:-}" ] && [ -z "${DELEGUER_NO_SELF_COPY:-}" ]; then
   DELEGUER_COPIE=$(mktemp "${TMPDIR:-/tmp}/deleguer-self-XXXXXX.sh")
   cp "$0" "$DELEGUER_COPIE" && chmod +x "$DELEGUER_COPIE"
   export DELEGUER_SELF_COPY="$DELEGUER_COPIE" DELEGUER_ORIGINE="$0"
+  # Borne mémoire (11/09/2026) : NexusFile.App.Tests a été tué par le noyau à 65 Go (10/09
+  # 14 h 55) puis 54 Go (11/09 08 h 21), swap à zéro, machine injoignable. Chaque lane tourne
+  # donc dans un scope systemd utilisateur : un dépassement tue la lane, pas la machine.
+  # DELEGUER_MEMMAX=64G ajuste la borne ; DELEGUER_MEMMAX=0 désactive. Repli sans scope si
+  # systemd-run est indisponible (session sans gestionnaire utilisateur).
+  if [ "${DELEGUER_MEMMAX:-40G}" != "0" ] && command -v systemd-run >/dev/null 2>&1 \
+     && systemd-run --user --scope -q -p MemoryMax=1M true >/dev/null 2>&1; then
+    exec systemd-run --user --scope -q -p "MemoryMax=${DELEGUER_MEMMAX:-40G}" -p MemorySwapMax=0 \
+      bash "$DELEGUER_COPIE" "$@"
+  fi
   exec bash "$DELEGUER_COPIE" "$@"
 fi
 DELEGUER_ORIGINE="${DELEGUER_ORIGINE:-$0}"
@@ -107,6 +117,11 @@ trap 'rm -f "$CONSIGNE" ${DELEGUER_SELF_COPY:+"$DELEGUER_SELF_COPY"}' EXIT  # + 
   # Préambule d'outillage commun (Code Explorer d'abord, lm-resizer sur les commandes
   # bruyantes, compte rendu chiffré) — demandé par Patrice le 07/09/2026 ; ignoré si absent.
   PREAMBULE_OUTILLAGE="${PREAMBULE_OUTILLAGE:-$HOME/DEV/missions-livres/PREAMBULE-OUTILLAGE.md}"
+  # Moteurs EXTERNES (API tierces qui voient les prompts : OpenRouter et consorts) : préambule sans
+  # référence aux documents personnels (décision du 09/09/2026 : aucun document privé vers une API
+  # tierce). Le préambule normal renvoyait au guide de méthodologie.
+  case "$MOTEUR" in openrouter|qwenflash|omniroute|nvidia|groq|cerebras|minimax|gmi)
+    PREAMBULE_OUTILLAGE="${PREAMBULE_OUTILLAGE_EXTERNE:-$HOME/DEV/missions-livres/PREAMBULE-OUTILLAGE-EXTERNE.md}";; esac
   # Pas de second préambule quand un moteur ré-exécute deleguer.sh sur une consigne déjà assemblée
   # (qwenflash → openrouter : le préambule et les garde-fous étaient injectés deux fois, 08/09).
   if [ -f "$PREAMBULE_OUTILLAGE" ] && ! grep -q "Outillage obligatoire (préambule commun" "$MISSION"; then printf '\n---\n'; cat "$PREAMBULE_OUTILLAGE"; fi
@@ -272,7 +287,7 @@ case "$MOTEUR" in
     # Entrée fermée + --trust, sinon le prompt de confiance du dossier bloque en headless (04/09/2026).
     command -v vibe >/dev/null || export PATH="$HOME/.local/bin:$PATH"
     (cd "$DEPOT" && vibe --trust --workdir "$DEPOT" --auto-approve --output "${VIBE_OUTPUT:-text}" \
-       --max-turns "${CB_MAX_ROUNDS:-300}" --max-price "${CB_MAX_COST:-5}" -p "$(cat "$CONSIGNE")" < /dev/null) 2>&1 | tee "$LOG"
+       --max-turns "${CB_MAX_ROUNDS:-600}" --max-price "${CB_MAX_COST:-40}" -p "$(cat "$CONSIGNE")" < /dev/null) 2>&1 | tee "$LOG"
     ;;
   qwenflash)
     # Qwen 3.8 Flash via OpenRouter (06/09/2026 : 1 M de contexte, 0,15 $/M entrée, 0,47 $/M sortie,
@@ -389,7 +404,7 @@ case "$MOTEUR" in
     # l'illusion d'un problème de facturation. `opencode models` liste les
     # identifiants réels avec leur préfixe : s'y fier plutôt qu'au catalogue
     # HTTP, qui ne le montre pas.
-    MODELE=${OC_MODELE:-kimi-k3}  # deepseek-v4-pro exige un opt-in « hébergé en Chine » depuis le 22/08 → Kimi K3 par défaut
+    MODELE=${OC_MODELE:-qwen3.8-flash}  # 09/09 (Patrice) : Qwen 3.8 Flash = compromis puissance/prix, maximise l'abonnement Go ; Kimi K3 explicitement pour les audits/lectures, Muse pour les lots courts
     (cd "$DEPOT" && opencode run --dir "$DEPOT" -m "opencode-go/$MODELE" \
        "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;

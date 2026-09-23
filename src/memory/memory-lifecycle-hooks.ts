@@ -16,6 +16,14 @@ import { logger } from '../utils/logger.js';
 import { EnhancedMemory, MemoryEntry, ConversationSummary } from './enhanced-memory.js';
 import { AutoCaptureManager, getAutoCaptureManager, MemoryRecallResult } from './auto-capture.js';
 import { injectPresenceBlock } from './presence-injector.js';
+import {
+  beginSession,
+  endSession,
+  setSessionSummary,
+  loadSessionMetrics,
+} from './session-metrics-tracker.js';
+import { reviveMemory } from './memory-reviver.js';
+import { maybeGenerateFromSessionEnd } from '../skills/session-skill-generator.js';
 
 // ============================================================================
 // Types
@@ -98,6 +106,14 @@ export class MemoryLifecycleHooks extends EventEmitter {
    * Injects relevant memories into the context
    */
   async beforeExecute(context: MemoryHookContext): Promise<BeforeExecuteResult> {
+    // Start (or reset) the session-metrics tracker so the cron hook sees
+    // real numbers instead of the hardcoded zero placeholder.
+    try {
+      beginSession(context.sessionId);
+    } catch {
+      /* tracker optional */
+    }
+
     if (!this.config.enableRecall) {
       return { injectedContext: '', recalledMemories: [], tokenCount: 0 };
     }
@@ -204,10 +220,46 @@ export class MemoryLifecycleHooks extends EventEmitter {
 
   /**
    * Hook called when session ends
-   * Summarizes conversation and stores key information
+   * Summarize conversation, store key information, revive memory and
+   * maybe distill a reusable authored skill from a complex session.
    */
   async sessionEnd(sessionId: string, projectId?: string): Promise<SessionEndResult> {
     const messages = this.sessionMessages.get(sessionId);
+
+    // Finalize the session-metrics tracker and attach a summary so the
+    // cron hook / skill generator can read real numbers.
+    let metrics = { toolCalls: 0, errorsRecovered: 0, filesTouched: [] as string[] };
+    try {
+      metrics = endSession();
+      if (messages && messages.length > 0) {
+        const summary = this.generateSimpleSummary(
+          messages.filter(m => m.role === 'user').map(m => m.content),
+          [],
+        );
+        if (summary) setSessionSummary(summary);
+        metrics = loadSessionMetrics();
+      }
+    } catch {
+      /* tracker optional */
+    }
+
+    // Revive living memory (clean "done" placeholders, promote facts).
+    try {
+      reviveMemory();
+    } catch (err) {
+      logger.warn('Memory revive on session end failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Distill a reusable skill when the session was complex enough.
+    try {
+      maybeGenerateFromSessionEnd(metrics, undefined, process.cwd());
+    } catch (err) {
+      logger.warn('Session skill generation on session end failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     if (!messages || messages.length < this.config.minMessagesForSummary) {
       this.sessionMessages.delete(sessionId);
@@ -331,7 +383,7 @@ export class MemoryLifecycleHooks extends EventEmitter {
 
     // Extract topics (simple keyword extraction)
     const topicPatterns = [
-      /(?:working on|travaille sur|implementing|implémente|fixing|corrige)\s+(.+?)(?:\.|,|$)/gi,
+      /(?:working on|travaille sur|implementing|implémente|fixing|corrige)\s+(.+?)(?:\.|$|,|$)/gi,
       /(?:le|the|un|a)\s+(\w+(?:\s+\w+)?)\s+(?:module|component|file|fichier|function|fonction)/gi,
     ];
 

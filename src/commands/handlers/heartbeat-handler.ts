@@ -1,19 +1,5 @@
 /**
  * Heartbeat slash command handler
- *
- * Wires user-facing activation of the HeartbeatEngine
- * (`src/daemon/heartbeat.ts`). The engine has existed since the
- * enterprise-features sprint but had no slash command nor TOML hook,
- * so it was effectively unreachable in production.
- *
- * Sub-actions:
- *   /heartbeat enable   — start the engine (uses TOML config + env overrides)
- *   /heartbeat disable  — stop the engine, clear timers
- *   /heartbeat status   — show running/enabled, tick counters, suppression count
- *
- * Per task `task-2026-05-02-wire-heartbeat-activation` from
- * the handover repo's `.codebuddy/colab-tasks.json`. Unblocks Phase 2 of
- * AUTONOMOUS-FLEET-PROTOCOL v0.1 on the always-on Linux hub.
  */
 
 import { CommandHandlerResult } from './branch-handlers.js';
@@ -68,7 +54,8 @@ const HELP_TEXT = `Usage: /heartbeat <action>
 Actions:
   enable   Start the heartbeat engine. Reads HEARTBEAT.md every interval
            and surfaces important items via agent review.
-  disable  Stop the engine and clear timers.
+           Also arms companion impulse delivery when the env flags allow it.
+  disable  Stop the engine and companion always-on loops.
   status   Show running state, tick counters, suppression count, file path.
 
 Configure defaults in TOML under [heartbeat]:
@@ -80,9 +67,6 @@ Configure defaults in TOML under [heartbeat]:
   suppression_keyword = "HEARTBEAT_OK"
   max_consecutive_suppressions = 5`;
 
-/**
- * /heartbeat <enable|disable|status>
- */
 export async function handleHeartbeat(args: string[]): Promise<CommandHandlerResult> {
   const action = (args[0] || 'status').trim().toLowerCase();
 
@@ -106,11 +90,10 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
 
   const { getHeartbeatEngine } = await import('../../daemon/heartbeat.js');
   const { getConfigManager } = await import('../../config/toml-config.js');
+  const { startCompanionAlwaysOnLoops, stopCompanionAlwaysOnLoops } = await import(
+    '../../companion/companion-loops.js'
+  );
 
-  // Build config from TOML; only pass defined keys so the engine's
-  // DEFAULT_HEARTBEAT_CONFIG fills the rest. (Passing undefined explicitly
-  // would overwrite defaults via spread merge — reason: `new Date(NaN)`
-  // crashes on toISOString in the status output.)
   const cfg = getConfigManager().getConfig().heartbeat ?? {};
   type HeartbeatConfigPartial = Parameters<typeof getHeartbeatEngine>[0];
   const partial: HeartbeatConfigPartial = { enabled: cfg.enabled ?? true };
@@ -124,24 +107,25 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
 
   if (action === 'enable') {
     if (engine.isRunning()) {
+      startCompanionAlwaysOnLoops();
       return {
         handled: true,
         entry: {
           type: 'assistant',
-          content: 'Heartbeat engine already running. Use /heartbeat status to see counters.',
+          content: 'Heartbeat engine already running. Companion loops re-armed. Use /heartbeat status.',
           timestamp: new Date(),
         },
       };
     }
-    // Forcer enabled=true même si la config TOML disait false (le user demande explicitement).
     engine.updateConfig({ enabled: true });
     engine.start();
+    startCompanionAlwaysOnLoops();
     logger.info('Heartbeat engine enabled via slash command');
     return {
       handled: true,
       entry: {
         type: 'assistant',
-        content: 'Heartbeat engine started. Use /heartbeat status to monitor.',
+        content: 'Heartbeat engine started. Companion impulse loops armed if their env flags are on.',
         timestamp: new Date(),
       },
     };
@@ -149,6 +133,7 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
 
   if (action === 'disable') {
     if (!engine.isRunning()) {
+      stopCompanionAlwaysOnLoops();
       return {
         handled: true,
         entry: {
@@ -159,18 +144,18 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
       };
     }
     engine.stop();
+    stopCompanionAlwaysOnLoops();
     logger.info('Heartbeat engine disabled via slash command');
     return {
       handled: true,
       entry: {
         type: 'assistant',
-        content: 'Heartbeat engine stopped.',
+        content: 'Heartbeat engine and companion always-on loops stopped.',
         timestamp: new Date(),
       },
     };
   }
 
-  // action === 'status'
   const status = engine.getStatus();
   const ec = engine.getConfig();
   const text = formatStatusLines(status, ec.intervalMs, ec.heartbeatFilePath);

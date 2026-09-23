@@ -16,6 +16,11 @@ import { getCostTracker } from '../utils/cost-tracker.js';
 import { parseJsonResponse } from '../utils/llm-retry.js';
 import { logger } from '../utils/logger.js';
 import {
+  applyEvidenceGate,
+  extractGoalEvidence,
+  type GoalEvidenceFields,
+} from './goal-evidence-gate.js';
+import {
   DEFAULT_JUDGE_TIMEOUT_MS,
   GoalVerdict,
   JUDGE_GOAL_SNIPPET_CHARS,
@@ -28,7 +33,7 @@ import {
   truncateText,
 } from './goal-state.js';
 
-export interface GoalJudgeResult {
+export interface GoalJudgeResult extends GoalEvidenceFields {
   verdict: GoalVerdict;
   reason: string;
   parseFailed: boolean;
@@ -43,6 +48,7 @@ export interface GoalJudgeParams {
   /** Optional per-call cap for judge output. */
   maxTokens?: number;
   timeoutMs?: number;
+  verifyGated?: boolean;
 }
 
 /** Signature used by GoalManager so tests can inject a fake judge. */
@@ -56,7 +62,6 @@ export async function judgeGoal(
     return { verdict: 'skipped', reason: 'empty goal', parseFailed: false };
   }
   if (!params.lastResponse.trim()) {
-    // No substantive reply this turn — almost certainly not done yet.
     return { verdict: 'continue', reason: 'empty response (nothing to evaluate)', parseFailed: false };
   }
   if (!client) {
@@ -93,7 +98,7 @@ export async function judgeGoal(
     return { verdict: 'continue', reason: `judge error: ${name}`, parseFailed: false };
   }
 
-  const result = parseJudgeResponse(raw);
+  const result = parseJudgeResponse(raw, { verifyGated: params.verifyGated });
   logger.info('goal judge: verdict', {
     verdict: result.verdict,
     reason: truncateText(result.reason, 120),
@@ -121,7 +126,10 @@ export function buildJudgeUserPrompt(params: GoalJudgeParams): string {
  * Parse the judge's reply. Fail-open: anything unusable reads as "continue"
  * with `parseFailed: true` so callers can auto-pause after N strikes.
  */
-export function parseJudgeResponse(raw: string): GoalJudgeResult {
+export function parseJudgeResponse(
+  raw: string,
+  options: { verifyGated?: boolean; env?: NodeJS.ProcessEnv } = {},
+): GoalJudgeResult {
   if (!raw || !raw.trim()) {
     return { verdict: 'continue', reason: 'judge returned empty response', parseFailed: true };
   }
@@ -155,7 +163,16 @@ export function parseJudgeResponse(raw: string): GoalJudgeResult {
     };
   }
   const reason = String(record.reason ?? '').trim() || 'no reason provided';
-  return { verdict: parsedDone.done ? 'done' : 'continue', reason, parseFailed: false };
+  const fields = extractGoalEvidence(record);
+  return applyEvidenceGate(
+    {
+      verdict: parsedDone.done ? 'done' : 'continue',
+      reason,
+      parseFailed: false,
+      ...fields,
+    },
+    options,
+  );
 }
 
 function parseDoneField(value: unknown): { ok: true; done: boolean } | { ok: false } {
@@ -176,7 +193,6 @@ function parseDoneField(value: unknown): { ok: true; done: boolean } | { ok: fal
   return { ok: false };
 }
 
-/** Judge calls consume real tokens — record them in the session cost ledger. */
 function recordJudgeCost(
   client: CodeBuddyClient,
   modelOverride: string | undefined,

@@ -108,6 +108,7 @@
     "typecheck:gpuNode-identity": "tsc --project tsconfig.gpuNode-identity.json",
     "typecheck:watch": "tsc --noEmit --watch",
     "check:circular": "npx tsx scripts/check-circular-deps.ts",
+    "check:optional-deps": "node scripts/check-optional-deps.mjs",
     "check:pack": "vitest run tests/security/npm-pack-contents.test.ts",
     "build:captured": "cd src-captured && cargo build --release",
     "autonomy:lab": "tsx scripts/autonomy-lab/run.ts",
@@ -221,6 +222,8 @@
     "tiktoken": "^1.0.22",
     "typescript": "^5.9.3",
     "undici": "^6.28.0",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12",
     "yaml": "^2.9.0",
     "youtube-caption-extractor": "^1.10.2",
     "zod": "^3.25.0"
@@ -280,9 +283,7 @@
     "semantic-release": "^25.0.3",
     "tsx": "^4.21.0",
     "typedoc": "^0.28.15",
-    "vitest": "^4.0.18",
-    "vscode-languageserver": "^9.0.1",
-    "vscode-languageserver-textdocument": "^1.0.12"
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=20.0.0"

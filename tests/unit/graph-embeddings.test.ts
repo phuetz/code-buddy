@@ -25,26 +25,50 @@ vi.mock('@/embeddings/embedding-provider.js', () => ({
   },
 }));
 
-// Mock USearch (may not be available)
+// Faux index vectoriel. Il respecte l'interface RÉELLE (`add({id, embedding})`,
+// identifiants en chaîne, `initialize`, `getStats`) : le mock précédent imitait
+// une signature `add(id, vector)` qu'aucun index du dépôt n'expose, et c'est
+// cette fiction qui justifiait une branche « legacy-usearch » en production.
 vi.mock('@/search/usearch-index.js', () => ({
   USearchVectorIndex: class MockUSearch {
-    private vectors = new Map<number, number[]>();
-    constructor(private dim: number) {}
-    add(id: number, vector: number[]) { this.vectors.set(id, vector); }
-    search(query: number[], k: number) {
-      const scores: Array<{ id: number; score: number }> = [];
+    private vectors = new Map<string, number[]>();
+    private dim: number;
+    constructor(config: { dimensions: number } | number) {
+      this.dim = typeof config === 'number' ? config : config.dimensions;
+    }
+    async initialize() {}
+    async add(v: { id: string; embedding: number[] }) { this.vectors.set(v.id, v.embedding); }
+    async addBatch(vs: Array<{ id: string; embedding: number[] }>) {
+      for (const v of vs) await this.add(v);
+    }
+    async search(query: number[], k: number) {
+      const scores: Array<{ id: string; score: number }> = [];
       for (const [id, vec] of this.vectors) {
         let dot = 0, normA = 0, normB = 0;
         for (let i = 0; i < this.dim; i++) {
-          dot += query[i] * vec[i];
-          normA += query[i] ** 2;
-          normB += vec[i] ** 2;
+          dot += (query[i] ?? 0) * (vec[i] ?? 0);
+          normA += (query[i] ?? 0) ** 2;
+          normB += (vec[i] ?? 0) ** 2;
         }
         const denom = Math.sqrt(normA) * Math.sqrt(normB);
         scores.push({ id, score: denom > 0 ? dot / denom : 0 });
       }
       scores.sort((a, b) => b.score - a.score);
       return scores.slice(0, k);
+    }
+    remove(id: string) { return this.vectors.delete(id); }
+    size() { return this.vectors.size; }
+    clear() { this.vectors.clear(); }
+    dispose() { this.vectors.clear(); }
+    getStats() {
+      return {
+        size: this.vectors.size,
+        capacity: this.vectors.size,
+        dimensions: this.dim,
+        connectivity: 16,
+        memoryUsage: 0,
+        memoryMapped: false,
+      };
     }
   },
 }));

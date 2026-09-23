@@ -120,6 +120,8 @@ function buildCurrentStrengths(evaluation: CompanionSelfEvaluation): string[] {
     'Typed companion cards can represent approvals, missions, camera frames, checklists, and tool output for Cowork.',
     'Companion percept summaries and payloads can be encrypted at rest with a local memory key.',
     'Fleet, slash commands, CLI commands, MCP/plugin surface, and safety/permission plumbing already exist in the host system.',
+    'Companion channel history persists across restarts and messaging surfaces.',
+    'Companion impulses can be delivered on a heartbeat to Telegram when proactive mode is on.',
   ];
 
   if (evaluation.score >= 60) {
@@ -141,7 +143,7 @@ function buildGaps(evaluation: CompanionSelfEvaluation): CompanionCompetitiveGap
       summary:
         'Buddy now has a companion gateway profile and local ingestion path for external chat messages.',
       recommendation:
-        'Wire live Telegram/Discord/Signal/WhatsApp transports into the companion gateway profile.',
+        'Keep Telegram/Discord transports healthy; do not fake OpenClaw channel count.',
       competitorRefs: ['hermes-agent', 'openclaw', 'uni'],
       command: 'buddy companion gateway profile',
       tags: ['channels', 'gateway', 'always-on'],
@@ -204,11 +206,11 @@ function buildGaps(evaluation: CompanionSelfEvaluation): CompanionCompetitiveGap
     {
       id: 'companion-proactive-briefings',
       dimension: 'automation',
-      severity: 'parity',
+      severity: 'lead',
       summary:
-        'Buddy can now generate opt-in companion impulses, but they are not yet scheduled or delivered across channels.',
+        'Companion impulses can now be delivered on a heartbeat (Telegram + persisted history), with quiet hours and a 6h cooldown.',
       recommendation:
-        'Connect companion impulses to heartbeat/automation so daily readiness briefs and stale-sense reminders can arrive proactively.',
+        'Set CODEBUDDY_COMPANION_PROACTIVE=true or CODEBUDDY_COMPANION_IMPULSE_DELIVER=true on buddy server.',
       competitorRefs: ['openclaw', 'uni', 'hermes-agent'],
       command: 'buddy companion impulses',
       tags: ['automation', 'briefing', 'impulses'],

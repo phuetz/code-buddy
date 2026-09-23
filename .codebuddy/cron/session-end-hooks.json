@@ -1,0 +1,21 @@
+{
+  "description": "Branch session-end maintenance: revive memory + maybe generate an authored skill from real metrics.",
+  "enabled": true,
+  "triggers": ["session:end", "cron:daily"],
+  "steps": [
+    {
+      "id": "revive-memory",
+      "command": "node -e \"import('./dist/memory/memory-reviver.js').then(m => m.reviveMemory())\"",
+      "continueOnError": true,
+      "description": "Clean agent MEMORY.md files, promote real facts, write memory_summary.md"
+    },
+    {
+      "id": "generate-session-skill",
+      "command": "node -e \"import('./dist/memory/session-metrics-tracker.js').then(m => { const env = m.currentSessionMetricsEnv(); process.env.SESSION_METRICS = env; return import('./dist/skills/session-skill-generator.js'); }).then(sg => { const metrics = JSON.parse(process.env.SESSION_METRICS || '{}'); if ((!metrics.toolCalls && !metrics.errorsRecovered && (!metrics.filesTouched || metrics.filesTouched.length === 0)) && m.loadSessionMetricsFromDisk) { Object.assign(metrics, m.loadSessionMetricsFromDisk()); } return sg.maybeGenerateFromSessionEnd(metrics); })\"",
+      "continueOnError": true,
+      "description": "Load real SESSION_METRICS from the tracker (env first, disk fallback for the separate cron process), then distill a complex session into an authored- skill"
+    }
+  ],
+  "notify": ["telegram", "discord"],
+  "notes": "SESSION_METRICS is filled live by session-metrics-tracker via tool-hooks and memory-lifecycle-hooks. The cron step now falls back to reading .codebuddy/session-metrics.json from disk when the env is empty, because it runs in a separate Node process. Both steps are safe to re-run."
+}

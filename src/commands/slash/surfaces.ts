@@ -42,6 +42,8 @@ export const COWORK_TOKEN_SURFACES: Readonly<Record<string, CoworkTokenMode>> = 
   __EXPORT_FORMATS__: 'headless',
   __EXPORT_LIST__: 'headless',
   __GOAL__: 'headless',
+  __HEARTBEAT__: 'headless',
+  __COMPANION_LOOPS__: 'headless',
   __SUBGOAL__: 'headless',
   __RESOURCES__: 'headless',
   // Native Cowork effects (panels, settings tabs, orchestrator, engine actions)

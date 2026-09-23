@@ -12,17 +12,16 @@ import type { ConversationTurn } from '../conversation/types.js';
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
 import { resolveCompanionPersona } from '../companion/personas/index.js';
 import { limitsContractGuidance } from '../companion/reply-augment.js';
+import {
+  companionHistorySessionKey,
+  readCompanionChannelHistory,
+} from '../companion/channel-history.js';
+import { formatOpenClawWorkspaceContext } from '../openclaw/workspace-files.js';
 
 export const COMPANION_CHANNEL_HISTORY_LIMIT = 10;
 export const COMPANION_CHANNEL_TURN_CHAR_CAP = 400;
 export const DEFAULT_CHANNEL_WAIT_NOTICE_MS = 20_000;
-/** Fallback robot name when `CODEBUDDY_ROBOT_NAME` is unset. */
 export const DEFAULT_COMPANION_ROBOT_NAME = 'Lisa';
-/**
- * How the companion refers to her human when no `CODEBUDDY_USER_NAME` is set.
- * Neutral on purpose: the code must stay correct without a configured name,
- * and must never let the model invent or guess one.
- */
 export const NEUTRAL_COMPANION_ADDRESSEE = 'la personne que tu aimes';
 
 export const DEFAULT_COMPANION_SPOKEN_PROMPT =
@@ -45,7 +44,6 @@ export function isChannelAgentIntent(text: string, isCommand = false): boolean {
   return AGENT_INTENT_RE.test(trimmed);
 }
 
-/** Same gate as the companion channel turn: profile=companion or a persona. */
 export function isCompanionSurfaceEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const profile = (env.CODEBUDDY_CHANNEL_PROFILE ?? '').trim().toLowerCase();
   if (profile === 'agent' || profile === 'full') return false;
@@ -70,14 +68,6 @@ export function companionWaitNoticeText(): string {
   return 'Je réfléchis, quelques secondes…';
 }
 
-/**
- * Say who is who, in the system message.
- *
- * Without it a model reads « Lisa » in the persona prompt and greets the human
- * with it — observed on the phone on 2026-09-06: « Coucou 💕 » was answered
- * « Ah, Lisa! Comment ça va? ». The history roles are structured (`user` /
- * `assistant`), and this block states what those roles mean.
- */
 export function buildCompanionIdentityBlock(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
@@ -118,11 +108,6 @@ export function buildCompanionChannelPrompt(options: {
   history?: ConversationTurn[];
   userText: string;
   env?: NodeJS.ProcessEnv;
-  /**
-   * Turn-scoped system block appended after the relational context — today the
-   * shared-photo reaction contract. Absent (the default) the system prompt is
-   * byte-identical to what it was before photos existed.
-   */
   extraSystem?: string;
 }): CompanionChannelPrompt {
   const spoken = options.spokenPrompt.trim() || DEFAULT_COMPANION_SPOKEN_PROMPT;
@@ -154,8 +139,8 @@ export async function assembleCompanionChannelPrompt(options: {
   history?: ConversationTurn[];
   env?: NodeJS.ProcessEnv;
   relationalContext?: string;
-  /** See `buildCompanionChannelPrompt`. Omitted by every non-photo caller. */
   extraSystem?: string;
+  sessionKey?: string;
 }): Promise<CompanionChannelPrompt> {
   const env = options.env ?? process.env;
   const persona = resolveCompanionPersona(env);
@@ -178,12 +163,18 @@ export async function assembleCompanionChannelPrompt(options: {
       relational = '';
     }
   }
+  const liveHistory = options.history?.filter((turn) => turn.content.trim()) ?? [];
+  const history = liveHistory.length
+    ? liveHistory
+    : readCompanionChannelHistory(companionHistorySessionKey({ sessionKey: options.sessionKey, env }), env);
+  const openclaw = formatOpenClawWorkspaceContext(env);
+  const extraSystem = [options.extraSystem, openclaw].filter(Boolean).join('\n\n');
   return buildCompanionChannelPrompt({
     spokenPrompt,
     relationalContext: relational,
-    history: options.history,
+    history,
     userText: options.userText,
     env,
-    ...(options.extraSystem ? { extraSystem: options.extraSystem } : {}),
+    ...(extraSystem ? { extraSystem } : {}),
   });
 }

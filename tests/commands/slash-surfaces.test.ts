@@ -4,6 +4,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
+// Les commandes « extra » vivent dans un catalogue separe, fusionne par
+// SlashCommandManager. Un token declare la est tout aussi reel que dans le
+// catalogue principal : ne regarder que builtinCommands le dirait « inconnu ».
+import { extraBuiltinCommands } from '../../src/commands/slash/extra-builtins.js';
 import {
   builtinCommands,
   CHANNEL_SLASH_SURFACES,
@@ -40,12 +44,15 @@ describe('slash surfaces (P4, core)', () => {
   });
 
   it('declares only real engine tokens and a minimal headless allowlist', () => {
-    const catalogTokens = new Set(builtinCommands.map((c) => c.prompt).filter(isEngineToken));
+    const catalogTokens = new Set([...builtinCommands, ...extraBuiltinCommands].map((c) => c.prompt).filter(isEngineToken));
     const unknown = Object.keys(COWORK_TOKEN_SURFACES).filter((t) => !catalogTokens.has(t));
     // __BATCH_REVIEW__ is a Cowork-side effect kept for compatibility (no catalog entry today).
     expect(unknown).toEqual(['__BATCH_REVIEW__']);
     expect([...coworkHeadlessAllowlist()].sort()).toEqual([
-      '__COST__', '__DIFF__', '__EXPORT_FORMATS__', '__EXPORT_LIST__', '__FEATURES__', '__GOAL__', '__HELP__',
+      // __COMPANION_LOOPS__ et __HEARTBEAT__ ajoutes le 21/09/2026 : les boucles
+      // compagnon et le pacemaker sont pilotables depuis Cowork sans terminal.
+      '__COMPANION_LOOPS__', '__COST__', '__DIFF__', '__EXPORT_FORMATS__', '__EXPORT_LIST__', '__FEATURES__', '__GOAL__',
+      '__HEARTBEAT__', '__HELP__',
       '__HISTORY__', '__LOG__', '__QUOTA__', '__RESOURCES__', '__STATS__', '__STATUS__', '__SUBGOAL__', '__TOOLS__', '__WHOAMI__', '__WORKSPACE__',
     ]);
   });
