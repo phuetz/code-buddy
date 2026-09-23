@@ -7,7 +7,11 @@ import { MeetingNotesTool } from '../../../src/tools/meeting-notes-tool';
 let tmpDir: string;
 
 beforeEach(async () => {
-  tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cb-test-meeting-notes-'));
+  // Windows : os.tmpdir() peut rendre un nom court 8.3 (RUNNER~1) que realpath développe ;
+  // l'outil compare au realpath de cwd. Le défaut produit est suivi à part.
+  tmpDir = await fs.promises.realpath(
+    await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cb-test-meeting-notes-')),
+  );
   vi.stubEnv('HOME', tmpDir);
   vi.stubEnv('CODEBUDDY_HOME', tmpDir);
 });
