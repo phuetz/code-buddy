@@ -249,6 +249,25 @@ rtk_enabled = false
 [profiles.fast]
 model = "grok-code-fast-1"
 temperature = 0.3
+
+[tool_loop_guardrails]
+warnings_enabled = true
+hard_stop_enabled = true
+
+[tool_loop_guardrails.warn_after]
+# 0 keeps the extra counters off. Identical results still warn at 5.
+exact_failure = 0
+same_tool_failure = 0
+idempotent_no_progress = 5
+
+[tool_loop_guardrails.hard_stop_after]
+exact_failure = 0
+same_tool_failure = 0
+idempotent_no_progress = 8
+
+[[security.audit.suppressions]]
+checkId = "skills.firewall.review"
+reason = "reviewed before this profile was shared"
 ```
 
 ### Config Profiles

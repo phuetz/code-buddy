@@ -4,6 +4,8 @@
 
 ### Added
 
+- **agent:** `[tool_loop_guardrails]` in `config.toml` sets `warn_after` and `hard_stop_after` for `exact_failure`, `same_tool_failure`, and `idempotent_no_progress` on the existing tool-loop guard. Unset keys keep the historical 5-then-3 behaviour; the two failure counters stay off until set.
+- **security:** `buddy security audit [--fix] [--json]` reports stable `checkId`s for the skill firewall, profile modes, plaintext configuration secrets, the native sandbox, and MCP guards. Accepted suppressions live in configuration (`checkId` plus a reason). `--fix` only tightens file modes, and only after a mode backup.
 - **deploy:** `buddy deploy run` provides one-click web publishing for static and build projects targeting Cloudflare Pages (`wrangler`) and Netlify (`netlify-cli`). Simulation is active by default; `--apply` uploads with credentials strictly confined to the child environment. `buddy deploy platforms` lists upload targets versus config generators.
 - **provision:** `buddy provision db-auth` overlays versioned SQL migrations, a typed TypeScript client, and authentication views (`SignIn`, `SignUp`, `SignOut`) for local Docker Postgres (`--target local`) or hosted Supabase (`--target supabase`). Simulation by default; requires `--apply` to write files.
 - **sessions:** Unified recents index (`recents-index.json`) bridging CLI sessions, Cowork SQLite threads, and mobile conversations. Supported commands: `buddy session list` (with origin markers), `buddy session resume <id>`, `buddy session search`, and `buddy session last`. Cowork sessions can be resumed from CLI via automatic lazy bridge files.
