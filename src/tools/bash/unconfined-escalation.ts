@@ -35,15 +35,8 @@ export function refusedUnconfinedEscalationError(reason: string | undefined): st
 /**
  * Returns a refusal when this call would run on the host.
  * Both the sandbox fallback and a policy `ask` are host executions.
- * Outside the MCP server process the result is null and the old confirmation path stays.
+ * Outside the MCP call frame the result is null and the old confirmation path stays.
  */
-/** Set by the MCP server process only. The agent and headless processes never set it. */
-export const MCP_UNCONFINED_SHELL_ENV = 'CODEBUDDY_MCP_REFUSE_UNCONFINED_SHELL';
-
-export function mcpProcessRefusesUnconfinedShell(): boolean {
-  return process.env[MCP_UNCONFINED_SHELL_ENV] === '1';
-}
-
 export function refusedUnconfinedEscalationResult(
   policyAction: string,
   requiresDirectApproval: boolean,
@@ -54,12 +47,6 @@ export function refusedUnconfinedEscalationResult(
   // `ask` skips the sandbox and would run on the host after approval.
   if (!requiresDirectApproval) return null;
   if (policyAction !== 'sandbox' && policyAction !== 'ask') return null;
-  if (
-    !explicitRefusal
-    && !unconfinedEscalationRefusedHere()
-    && !mcpProcessRefusesUnconfinedShell()
-  ) {
-    return null;
-  }
+  if (!explicitRefusal && !unconfinedEscalationRefusedHere()) return null;
   return { success: false, error: refusedUnconfinedEscalationError(reason) };
 }

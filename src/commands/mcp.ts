@@ -95,11 +95,6 @@ export interface MCPServeOptions {
 
 /** Start the distribution-facing stdio server. Logs stay on stderr via logger. */
 export async function serveMCP(options: MCPServeOptions = {}): Promise<void> {
-  // This process is the MCP server. BashTool reads the variable when an
-  // unconfined escalation would otherwise run. The interactive agent and
-  // `buddy -p` do not call serveMCP, so they do not set it.
-  const { MCP_UNCONFINED_SHELL_ENV } = await import('../tools/bash/unconfined-escalation.js');
-  process.env[MCP_UNCONFINED_SHELL_ENV] = '1';
   const { CodeBuddyMCPServer } = await import('../mcp/mcp-server.js');
   const server = new CodeBuddyMCPServer({
     ...(options.allowWrite ? { allowWrite: true } : {}),
