@@ -71,6 +71,11 @@ interface SagaStepShape {
   toolset?: DispatchHermesToolsetShape;
   result?: string;
   error?: string;
+  /**
+   * Posé seulement quand l'issue n'est pas prouvée après l'ACK.
+   * Le JSON du store conserve le champ même s'il n'est pas au schéma cœur.
+   */
+  outcome?: 'unknown';
 }
 
 interface SagaStepAttemptShape {
@@ -224,6 +229,14 @@ const POLL_INTERVAL_MS = 2_000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1_000;
 const DISPATCH_TIMEOUT_MS = 30_000;
 
+/**
+ * Les tests validés appellent ce point. Le verrou inter-runners de la
+ * reprise héritée (non validée) n'est pas importé.
+ */
+export function _resetSagaRunnerLockForTests(): void {
+  // pas de verrou de processus sur cette branche
+}
+
 type FailureDomain = 'peer' | 'provider';
 
 const PROVIDER_FAILURE_PATTERN = new RegExp(
@@ -269,6 +282,70 @@ function readDispatchProfile(value: unknown): FleetDispatchProfile {
 }
 
 /**
+ * Principe, après l'ACK : tout échec de transport ou de réseau est une
+ * issue inconnue. On ne liste plus les errno un par un.
+ *
+ * Ce qu'un `peer.dispatchStatus` peut porter dans `error` (chaîne :
+ * `err.message` du chat, souvent préfixée par `mapProviderError`, ou
+ * texte de `FleetListener.request`) :
+ * - famille libuv / c-ares : ECONN* (REFUSED, RESET, ABORTED), ENET*
+ *   (UNREACH, DOWN), EHOST* (UNREACH, DOWN), EAI_* (AGAIN, FAIL,
+ *   NONAME), EPIPE, EPROTO, ETIMEDOUT, ENOTFOUND, EADDRNOTAVAIL ;
+ * - undici / fetch : « fetch failed », « other side closed »,
+ *   « socket hang up », « Connect|Headers|Body Timeout Error »,
+ *   « Request aborted », « The operation was aborted »,
+ *   « The client is destroyed|closed », UND_ERR_* ;
+ * - SDK : « Connection error. », « Request timed out » ;
+ * - socket du pont : « WebSocket was closed », NOT_OPEN, « peer
+ *   unreachable », « no active listener », « peer not found », délai
+ *   d'auth ou de connexion du listener. « peer disconnected » reste
+ *   la classe in-flight DISCONNECTED (unknown, sans repli).
+ * Un jeton de la famille ou une de ces phrases suffit. Une sonde qui
+ * jette poursuit le sondage. `poll_timeout` (chaîne exacte) reste un
+ * repli pair : ce classement vient de la branche principale, pas du
+ * delta validé (la reprise héritée, non importée, le traitait unknown).
+ *
+ * Seul un refus sémantique prouvé — le pair a répondu que la tâche a
+ * été rejetée avant exécution — autorise encore un repli. La preuve est
+ * la réponse applicative (429, quota, 401, disjoncteur ouvert,
+ * PROVIDER_UNAVAILABLE, ou la formule explicite), et elle ne compte pas
+ * si le message est d'abord un échec de transport. Un 5xx n'est pas
+ * cette preuve : la génération a pu commencer. Avant l'ACK, le même
+ * échec de transport reste un repli permis.
+ */
+const TRANSPORT_ERRNO_FAMILY =
+  /\b(?:ECONN[A-Z0-9_]*|ENET[A-Z0-9_]*|EHOST[A-Z0-9_]*|EAI_[A-Z0-9_]+|EPIPE|EPROTO|ETIMEDOUT|ENOTFOUND|EADDRNOTAVAIL|UND_ERR_[A-Z0-9_]+)\b/i;
+
+const TRANSPORT_PHRASE =
+  /\b(?:fetch failed|socket hang up|other side closed|socket(?: was)? (?:closed|terminated)|headers timeout|body timeout|connect timeout|request timed out|request aborted|the operation was aborted|the client is (?:destroyed|closed)|connection (?:error|refused|reset|timed out|closed|aborted)|network (?:error|unreachable)|premature close|reset before headers|websocket (?:was )?closed|websocket not connected|not_open|peer unreachable|no active listener|peer not found|connection closed before authentication|fleet listener (?:connect|auth) timeout|timed out|timeout)\b/i;
+
+const GENERATION_MAY_HAVE_STARTED =
+  /\b(?:HTTP(?: status)?\s*)?(?:500|502|503|504)\b/i;
+
+const REJECTED_BEFORE_EXECUTION_PROOF =
+  /\b(?:(?:HTTP\s*)?429|rate[ _-]?limit(?:ed|ing)?|too many requests|quota|insufficient[ _-]?(?:credits?|balance|quota)|billing(?: hard)? limit|(?:HTTP\s*)?401|circuit breaker[^\n]*\bopen\b|PROVIDER_UNAVAILABLE|rejected before execution|tâche rejetée avant ex[ée]cution|tache rejetee avant execution)\b/i;
+
+function isTransportOrNetworkFailure(error: string | undefined): boolean {
+  if (!error) return false;
+  return TRANSPORT_ERRNO_FAMILY.test(error) || TRANSPORT_PHRASE.test(error);
+}
+
+/** Preuve sémantique : le pair a répondu, et le message n'est pas un transport. */
+function isRejectedBeforeExecution(error: string | undefined): boolean {
+  if (!error) return false;
+  if (isTransportOrNetworkFailure(error)) return false;
+  if (GENERATION_MAY_HAVE_STARTED.test(error)) return false;
+  return REJECTED_BEFORE_EXECUTION_PROOF.test(error);
+}
+
+function isAmbiguousAfterAcceptance(error: string | undefined): boolean {
+  if (!error) return false;
+  if (isRejectedBeforeExecution(error)) return false;
+  if (isTransportOrNetworkFailure(error)) return true;
+  return GENERATION_MAY_HAVE_STARTED.test(error);
+}
+
+/**
  * Fail over only for explicit infrastructure signals. Deliberate model/task
  * outcomes such as `review_rejected` remain terminal and are never replayed on
  * a different provider.
@@ -278,7 +355,17 @@ function classifyExplicitFailure(
   phase: 'dispatch' | 'provider',
 ): FailureDomain | null {
   if (!error) return null;
+  // Stall du sondage : comportement de la branche principale conservé
+  // (repli pair). Le classement « poll_timeout déjà unknown » appartient
+  // à la reprise héritée, qui n'est pas dans le delta validé.
   if (error === 'poll_timeout') return 'peer';
+  // Refus sémantique prouvé : le pair a répondu que rien n'a tourné.
+  if (isRejectedBeforeExecution(error)) return 'provider';
+  // Avant l'ACK le travail n'est pas accepté : un transport autorise le
+  // repli. Après l'ACK, le chemin ambigu est déjà sorti en « unknown ».
+  if (isTransportOrNetworkFailure(error)) {
+    return phase === 'dispatch' ? 'peer' : 'provider';
+  }
   if (phase === 'dispatch' && PEER_TRANSPORT_FAILURE_PATTERN.test(error)) {
     return 'peer';
   }
@@ -647,6 +734,13 @@ export class SagaRunner {
         return s;
       });
     }
+    if (result.status === 'failed' && isAmbiguousAfterAcceptance(result.error)) {
+      // Le pair a accepté. L'échec ne prouve pas l'absence d'exécution :
+      // diagnostic conservé, sans domaine de repli, sans second fournisseur.
+      await this.finishStepAttempt(store, sagaId, laneIndex, 'failed', result.error);
+      await this.markDispatchUnknown(store, sagaId, laneIndex);
+      return;
+    }
     if (result.status === 'completed') {
       await this.finishStepAttempt(store, sagaId, laneIndex, 'completed');
       await store.completeStep(sagaId, laneIndex, result.result ?? '');
@@ -706,6 +800,28 @@ export class SagaRunner {
       target.attempts = [...(target.attempts ?? []), attempt];
       return saga;
     });
+  }
+
+  /** Issue non prouvée : échec explicite, jamais un succès, jamais un renvoi. */
+  private async markDispatchUnknown(
+    store: SagaStoreShape,
+    sagaId: string,
+    laneIndex: number,
+  ): Promise<void> {
+    await store.update(sagaId, (saga) => {
+      const target = saga.steps[laneIndex];
+      if (!target) return saga;
+      target.outcome = 'unknown';
+      const attempt = findRunningAttempt(target);
+      if (attempt) {
+        attempt.status = 'failed';
+        attempt.completedAt = Date.now();
+        attempt.error = 'dispatch_unknown';
+      }
+      return saga;
+    });
+    await store.failStep(sagaId, laneIndex, 'dispatch_unknown');
+    this.emitSagaUpdate(sagaId);
   }
 
   private async finishStepAttempt(
