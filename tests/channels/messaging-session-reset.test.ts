@@ -2,7 +2,7 @@
  * Messaging session reset. The clock is a number of milliseconds.
  * Nothing in this file waits on a real timer.
  */
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -11,6 +11,7 @@ import {
   decideMessagingSessionReset,
   DEFAULT_MESSAGING_SESSION_RESET_POLICY,
   enforceMessagingSessionReset,
+  messagingMemoryArchivePath,
   proveMessagingMemorySave,
   resolveSessionResetPolicy,
   type MessagingSessionResetPolicy,
@@ -327,6 +328,79 @@ at_hour = 7
       atHour: 5,
     });
     expect(serializeTOML(DEFAULT_CONFIG)).not.toContain('[session_reset]');
+  });
+
+  it('chaque partie effacée est archivée dans son propre fichier avant la remise à zéro', async () => {
+    const dir = tempDir();
+    const sessionKey = 'webchat:cartes';
+    const now = localMs(2026, 9, 23, 12, 0);
+    const last = now - 11 * 60_000;
+    const parts = [
+      { source: 'agent-cache' as const, transcript: 'user: memoire agent' },
+      { source: 'session-store' as const, transcript: 'user: memoire disque' },
+      { source: 'companion-history' as const, transcript: 'user: memoire fichier' },
+      { source: 'local-map' as const, transcript: 'assistant: CAPTION-SELFIE-UNIQUE' },
+    ];
+    let reset = false;
+    const saved = await applyChannelMessagingSessionReset({
+      sessionKey,
+      now,
+      policy: policy({ mode: 'idle', idleMinutes: 10 }),
+      snapshot: snapshot(last, 'ignore'),
+      parts,
+      archiveDir: dir,
+      resetSession: async () => {
+        for (const part of parts) {
+          const raw = readFileSync(messagingMemoryArchivePath(dir, sessionKey, part.source), 'utf8');
+          expect(raw).toContain(part.transcript);
+        }
+        reset = true;
+      },
+    });
+    expect(reset).toBe(true);
+    expect(saved.action).toBe('reset');
+    if (saved.action === 'reset') expect(saved.receipt).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('un échec de sauvegarde de la carte annule la remise à zéro', async () => {
+    const dir = tempDir();
+    const sessionKey = 'webchat:carte-bloquee';
+    const now = localMs(2026, 9, 23, 12, 0);
+    const last = now - 11 * 60_000;
+    const parts = [
+      { source: 'agent-cache' as const, transcript: 'user: memoire agent' },
+      { source: 'session-store' as const, transcript: 'user: memoire disque' },
+      { source: 'companion-history' as const, transcript: 'user: memoire fichier' },
+      { source: 'local-map' as const, transcript: 'assistant: CAPTION-SELFIE-UNIQUE' },
+    ];
+    const blockedPath = messagingMemoryArchivePath(dir, sessionKey, 'local-map');
+    mkdirSync(blockedPath, { recursive: true });
+    expect(statSync(blockedPath).isDirectory()).toBe(true);
+    let blockedReset = false;
+    const cancelled = await applyChannelMessagingSessionReset({
+      sessionKey,
+      now,
+      policy: policy({ mode: 'idle', idleMinutes: 10 }),
+      snapshot: snapshot(last, 'ignore'),
+      parts,
+      archiveDir: dir,
+      resetSession: async () => {
+        blockedReset = true;
+      },
+    });
+    expect(blockedReset, 'carte').toBe(false);
+    expect(cancelled).toMatchObject({ action: 'cancelled', reason: 'idle' });
+    expect(readFileSync(messagingMemoryArchivePath(dir, sessionKey, 'session-store'), 'utf8')).toContain(
+      'user: memoire disque',
+    );
+    expect(readFileSync(messagingMemoryArchivePath(dir, sessionKey, 'agent-cache'), 'utf8')).toContain(
+      'user: memoire agent',
+    );
+    expect(readFileSync(messagingMemoryArchivePath(dir, sessionKey, 'companion-history'), 'utf8')).toContain(
+      'user: memoire fichier',
+    );
+    expect(statSync(messagingMemoryArchivePath(dir, sessionKey, 'local-map')).isDirectory()).toBe(true);
+    expect(existsSync(messagingMemoryArchivePath(dir, sessionKey, 'local-map'))).toBe(true);
   });
 
   it('un historique de canal déjà périmé pour le prompt reste lisible pour la sauvegarde, puis s efface', () => {
