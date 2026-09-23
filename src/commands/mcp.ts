@@ -121,7 +121,7 @@ export function createMCPCommand(): Command {
     .description('Expose Code Buddy tools as an MCP server over stdio')
     .option(
       '--allow-write',
-      'Expose write, shell, and execution tools (also CODEBUDDY_MCP_ALLOW_WRITE=1). File tools stay inside the workspace and on non-protected paths. Shell runs in the workspace sandbox; if no sandbox is available, MCP refuses the unconfined escalation even when CODEBUDDY_AUTO_CONFIRM=true, because that shell could write anywhere. Agent tools (agent_task, agent_chat, agent_plan, session tools) receive that same write context. The interactive agent and headless mode are unchanged.',
+      'Expose write, shell, and execution tools (also CODEBUDDY_MCP_ALLOW_WRITE=1). File tools stay inside the workspace and on non-protected paths, including output_dir and outputDir. Shell runs in the workspace sandbox; if no sandbox is available, MCP refuses the unconfined escalation even when CODEBUDDY_AUTO_CONFIRM=true, because that shell could write anywhere. Agent tools (agent_task, agent_chat, agent_plan, session tools) receive that same write context. desktop_screenshot confines output_path to the workspace. memory_save and ckg_ingest write the profile memory and the collective ledger; they do not take a destination path and are not workspace-confined. The interactive agent and headless mode are unchanged.',
     )
     .option(
       '--tools <glob>',

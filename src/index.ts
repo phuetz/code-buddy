@@ -3601,7 +3601,7 @@ program
   .command("mcp-server")
   .description("Legacy alias for `buddy mcp serve`")
   .option("--list", "List available MCP tools and exit")
-  .option("--allow-write", "Expose write, shell, and execution tools. File tools stay inside the workspace. Shell runs in the workspace sandbox; if no sandbox is available, MCP refuses the unconfined escalation even when CODEBUDDY_AUTO_CONFIRM=true. Agent tools receive that same write context. The interactive agent and headless mode are unchanged.")
+  .option("--allow-write", "Expose write, shell, and execution tools. File tools stay inside the workspace, including output_dir and outputDir. Shell runs in the workspace sandbox; if no sandbox is available, MCP refuses the unconfined escalation even when CODEBUDDY_AUTO_CONFIRM=true. Agent tools receive that same write context. desktop_screenshot confines output_path. memory_save and ckg_ingest write the profile memory and the collective ledger and are not workspace-confined. The interactive agent and headless mode are unchanged.")
   .option("--tools <glob>", "Restrict exposed tool names with glob patterns")
   .action(async (options) => {
     if (options.list) {
