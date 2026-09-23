@@ -35,15 +35,9 @@ export class DiagramTool {
    */
   async generateFromMermaid(mermaidCode: string, options: Partial<DiagramOptions> = {}): Promise<ToolResult> {
     try {
-      await this.vfs.ensureDir(this.outputDir);
-
       const outputFormat = options.outputFormat || 'svg';
-      const timestamp = Date.now();
-      const filename = `diagram_${timestamp}.${outputFormat}`;
-      const outputPath = options.outputPath || path.join(this.outputDir, filename);
 
       if (outputFormat === 'ascii') {
-        // Generate ASCII representation
         const asciiDiagram = this.mermaidToAscii(mermaidCode);
         return {
           success: true,
@@ -55,6 +49,12 @@ export class DiagramTool {
           }
         };
       }
+
+      await this.vfs.ensureDir(this.outputDir);
+
+      const timestamp = Date.now();
+      const filename = `diagram_${timestamp}.${outputFormat}`;
+      const outputPath = options.outputPath || path.join(this.outputDir, filename);
 
       // Check for mermaid-cli
       const hasMermaidCli = await this.checkMermaidCli();
@@ -402,8 +402,8 @@ export class DiagramTool {
         continue;
       }
 
-      // Match connection: id1 --> id2
-      const connMatch = trimmed.match(/^(\w+)\s*[-=.]+[>)}\]]+\s*(\w+)/);
+      // Unlabeled (A --> B) and labeled (A -- Go --> B, A -. Go .-> B, A == Go ==> B).
+      const connMatch = trimmed.match(/^(\w+)\s+[-=.]+(?:\s+\S+\s+[-=.]+)?\s*[>)}\]]+\s*(\w+)\s*$/);
       if (connMatch && connMatch[1] !== undefined && connMatch[2] !== undefined) {
         connections.push({ from: connMatch[1], to: connMatch[2] });
       }
