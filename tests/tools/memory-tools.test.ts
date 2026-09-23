@@ -17,10 +17,10 @@ describe('Memory Tools', () => {
   let tmpHome: string;
   let tmpCodeBuddyHome: string;
   let tmpCwd: string;
-  
+
   let realHomedirCodebuddy: string;
   let homedirBeforeMtime: number | null = null;
-  
+
   beforeEach(async () => {
     // Record homedir state to enforce isolation
     realHomedirCodebuddy = join(homedir(), '.codebuddy');
@@ -29,7 +29,7 @@ describe('Memory Tools', () => {
     tmpHome = mkdtempSync(join(tmpdir(), 'codebuddy-test-home-'));
     tmpCodeBuddyHome = join(tmpHome, '.codebuddy');
     mkdirSync(tmpCodeBuddyHome, { recursive: true });
-    
+
     tmpCwd = mkdtempSync(join(tmpdir(), 'codebuddy-test-cwd-'));
     mkdirSync(join(tmpCwd, '.codebuddy'), { recursive: true });
 
@@ -75,21 +75,21 @@ describe('Memory Tools', () => {
 
   it('verifies remember then recall round-trip', async () => {
     const { remember, recall } = getTools();
-    
+
     const rememberResult = await remember.execute({
       key: 'test-key',
       value: 'this is a test memory',
       scope: 'project'
     });
-    
+
     console.log('[REMEMBER RAW OUTPUT]', rememberResult);
     expect(rememberResult.success).toBe(true);
-    
+
     const recallResult = await recall.execute({
       key: 'test-key',
       scope: 'project'
     });
-    
+
     console.log('[RECALL RAW OUTPUT]', recallResult);
     expect(recallResult.success).toBe(true);
     expect(recallResult.output).toContain('this is a test memory');
@@ -97,38 +97,38 @@ describe('Memory Tools', () => {
 
   it('verifies forget then recall absent', async () => {
     const { remember, recall, forget } = getTools();
-    
+
     await remember.execute({
       key: 'delete-key',
       value: 'to be deleted',
       scope: 'project'
     });
-    
+
     const forgetResult = await forget.execute({
       key: 'delete-key',
       scope: 'project'
     });
     console.log('[FORGET RAW OUTPUT]', forgetResult);
     expect(forgetResult.success).toBe(true);
-    
+
     const recallResult = await recall.execute({
       key: 'delete-key',
       scope: 'project'
     });
     console.log('[RECALL ABSENT RAW OUTPUT]', recallResult);
-    expect(recallResult.success).toBe(true); 
+    expect(recallResult.success).toBe(true);
     expect(recallResult.output).toContain('No memory found');
   });
 
   it('verifies replace_memory then recall new value', async () => {
     const { remember, replaceMemory, recall } = getTools();
-    
+
     await remember.execute({
       key: 'replace-key',
       value: 'old value',
       scope: 'project'
     });
-    
+
     const replaceResult = await replaceMemory.execute({
       key: 'replace-key',
       value: 'new value',
@@ -136,7 +136,7 @@ describe('Memory Tools', () => {
     });
     console.log('[REPLACE RAW OUTPUT]', replaceResult);
     expect(replaceResult.success).toBe(true);
-    
+
     const recallResult = await recall.execute({
       key: 'replace-key',
       scope: 'project'
@@ -145,7 +145,7 @@ describe('Memory Tools', () => {
     expect(recallResult.success).toBe(true);
     expect(recallResult.output).toContain('new value');
   });
-  
+
   it('verifies memory_propose', async () => {
     const { memoryPropose } = getTools();
     const proposeResult = await memoryPropose.execute({
@@ -153,14 +153,14 @@ describe('Memory Tools', () => {
       value: 'proposed value',
       scope: 'project'
     });
-    
+
     console.log('[MEMORY_PROPOSE RAW OUTPUT]', proposeResult);
     expect(proposeResult.success).toBe(true);
   });
 
   it('verifies lessons_add', async () => {
     const { lessonsAdd } = getTools();
-    
+
     const lessonsResult = await lessonsAdd.execute(
       {
         category: 'PATTERN',
@@ -170,11 +170,11 @@ describe('Memory Tools', () => {
       },
       { cwd: tmpCwd } // mock exec context
     );
-    
+
     console.log('[LESSONS_ADD RAW OUTPUT]', lessonsResult);
     expect(lessonsResult.success).toBe(true);
   });
-  
+
   it('verifies relationship_context', async () => {
     const { relationshipContext } = getTools();
     const relationshipResult = await relationshipContext.execute({
@@ -183,7 +183,7 @@ describe('Memory Tools', () => {
       mode: 'robot_conversation',
       publicFacts: ['Developer']
     });
-    
+
     console.log('[RELATIONSHIP_CONTEXT RAW OUTPUT]', relationshipResult);
     expect(relationshipResult.success).toBe(true);
   });

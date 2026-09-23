@@ -20,7 +20,7 @@ describe('Tools Verification', () => {
 
   beforeAll(async () => {
     originalEnv = { ...process.env };
-    
+
     // Create safe home directory
     homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-home-'));
     process.env.HOME = homeDir;
@@ -29,12 +29,12 @@ describe('Tools Verification', () => {
     await fs.mkdir(process.env.CODEBUDDY_HOME, { recursive: true });
 
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-test-'));
-    
+
     // Initialize git repo to ensure codebase_map restricts itself to the fixture
     execSync('git init', { cwd: tmpDir });
     execSync('git config user.name "Test User"', { cwd: tmpDir });
     execSync('git config user.email "test@example.com"', { cwd: tmpDir });
-    
+
     // Create synthetic project
     await fs.writeFile(path.join(tmpDir, 'package.json'), JSON.stringify({
       name: 'synthetic-project',
@@ -50,7 +50,7 @@ describe('Tools Verification', () => {
 
     const nodeModulesDir = path.join(tmpDir, 'node_modules');
     await fs.mkdir(nodeModulesDir);
-    
+
     await fs.mkdir(path.join(nodeModulesDir, 'foo-lib'));
     await fs.writeFile(path.join(nodeModulesDir, 'foo-lib', 'package.json'), JSON.stringify({
       name: 'foo-lib',
@@ -77,7 +77,7 @@ describe('Tools Verification', () => {
     const distDir = path.join(tmpDir, 'dist');
     await fs.mkdir(distDir);
     await fs.writeFile(path.join(distDir, 'bundle.js'), 'console.log("hello world");');
-    
+
     // Create a larger dummy file to make bundle analyze interesting
     const largeBuffer = Buffer.alloc(1024 * 1024, 'a'); // 1MB file
     await fs.writeFile(path.join(distDir, 'vendor.js'), largeBuffer);

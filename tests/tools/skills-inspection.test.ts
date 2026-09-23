@@ -15,17 +15,17 @@ describe('Skill Tools', () => {
   beforeEach(() => {
     tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-skill-home-'));
     tempWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-skill-workspace-'));
-    
+
     vi.stubEnv('HOME', tempHome);
     vi.stubEnv('USERPROFILE', tempHome);
     vi.stubEnv('CODEBUDDY_HOME', path.join(tempHome, '.codebuddy'));
-    
+
     originalCwd = process.cwd;
     process.cwd = () => tempWorkspace;
 
     fs.mkdirSync(path.join(tempWorkspace, '.codebuddy', 'skills', 'dummy-skill'), { recursive: true });
     fs.writeFileSync(path.join(tempWorkspace, '.codebuddy', 'skills', 'dummy-skill', 'SKILL.md'), '---\nname: dummy-skill\ndescription: Just a dummy skill\n---\n# Dummy\nIt does nothing.');
-    
+
     fs.mkdirSync(path.join(tempHome, '.codebuddy', 'skills', 'global-dummy'), { recursive: true });
     fs.writeFileSync(path.join(tempHome, '.codebuddy', 'skills', 'global-dummy', 'SKILL.md'), '---\nname: global-dummy\ndescription: Global skill\n---\n# Global\nIt does nothing globally.');
   });
@@ -49,7 +49,7 @@ describe('Skill Tools', () => {
     expect(result.output).toContain('Just a dummy skill');
     expect(result.output).toContain('It does nothing.');
   });
-  
+
   it('create_skill should create a new skill', async () => {
     const tool = new CreateSkillExecuteTool();
     const result = await tool.execute({
@@ -58,11 +58,11 @@ describe('Skill Tools', () => {
       body: '# Test\nThis is a test skill.',
     }, { cwd: tempWorkspace, tools: [], options: {} } as never);
     expect(result.success).toBe(true);
-    
+
     const listResult = await executeSkillsListTool({});
     expect(listResult.output).toContain('new-test-skill');
   });
-  
+
   it('skill_manage should manage skills (list)', async () => {
     const tool = new SkillManageExecuteTool();
     const result = await tool.execute({
@@ -93,7 +93,7 @@ describe('Skill Tools', () => {
     expect(listed.success).toBe(true);
     expect(listed.output).not.toContain('dummy-skill');
   });
-  
+
   it('skill_discover should discover skills', async () => {
     const tool = new SkillDiscoveryExecuteTool();
     const result = await tool.execute({
