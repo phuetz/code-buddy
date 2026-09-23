@@ -414,6 +414,8 @@ export class CodeBuddyMCPServer {
 
   private agent: import('../agent/codebuddy-agent.js').CodeBuddyAgent | null = null;
   private agentInitPromise: Promise<import('../agent/codebuddy-agent.js').CodeBuddyAgent> | null = null;
+  private guardedHandler: import('../agent/tool-handler.js').ToolHandler | null = null;
+  private guardedHandlerPromise: Promise<import('../agent/tool-handler.js').ToolHandler> | null = null;
 
   constructor(options: CodeBuddyMCPServerOptions = {}) {
     this.allowWrite = resolveAllowWrite(options.allowWrite);
@@ -486,6 +488,57 @@ export class CodeBuddyMCPServer {
 
     this.setupApprovalBridge();
     this.writeAccessInitialized = true;
+  }
+
+  /**
+   * Write tools must use the same authorization as the agent loop.
+   * A full model client is not required: file guards do not call an LLM.
+   */
+  private async ensureGuardedHandler(): Promise<import('../agent/tool-handler.js').ToolHandler> {
+    if (this.guardedHandler) return this.guardedHandler;
+    if (this.guardedHandlerPromise) return this.guardedHandlerPromise;
+
+    this.guardedHandlerPromise = (async () => {
+      const [
+        { ToolHandler },
+        { CheckpointManager },
+        { HooksManager },
+        { PluginMarketplace },
+        { RepairCoordinator },
+      ] = await Promise.all([
+        import('../agent/tool-handler.js'),
+        import('../checkpoints/checkpoint-manager.js'),
+        import('../hooks/lifecycle-hooks.js'),
+        import('../plugins/marketplace.js'),
+        import('../agent/execution/repair-coordinator.js'),
+      ]);
+      const handler = new ToolHandler({
+        checkpointManager: new CheckpointManager(),
+        hooksManager: new HooksManager(this.workingDirectory),
+        marketplace: new PluginMarketplace({ autoUpdate: false }),
+        repairCoordinator: new RepairCoordinator({ enabled: false }),
+      });
+      handler.setWorkingDirectory(this.workingDirectory);
+      this.guardedHandler = handler;
+      return handler;
+    })();
+
+    return this.guardedHandlerPromise;
+  }
+
+  private async executeGuardedTool(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolResult> {
+    const handler = await this.ensureGuardedHandler();
+    return handler.executeTool({
+      id: `mcp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type: 'function',
+      function: {
+        name,
+        arguments: JSON.stringify(args),
+      },
+    });
   }
 
   private async ensureAgent(): Promise<import('../agent/codebuddy-agent.js').CodeBuddyAgent> {
@@ -585,7 +638,6 @@ export class CodeBuddyMCPServer {
         },
         async (rawArgs) => {
           try {
-            if (!definition.readOnly) await this.ensureWriteAccess();
             const args = rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)
               ? rawArgs as Record<string, unknown>
               : {};
@@ -595,6 +647,15 @@ export class CodeBuddyMCPServer {
                 success: false,
                 error: `Validation failed: ${validation.errors?.join(', ') || 'invalid arguments'}`,
               });
+            }
+
+            // Read-only tools stay on the direct adapter path. Write tools keep
+            // the explicit --allow-write check, then the agent ToolHandler
+            // (workspace trust, protected paths, confirmation). A non-interactive
+            // MCP client is refused unless an explicit policy already allows it.
+            if (!definition.readOnly) {
+              await this.ensureWriteAccess();
+              return this.formatResult(await this.executeGuardedTool(definition.name, args));
             }
 
             const context: IToolExecutionContext = { cwd: this.workingDirectory };
@@ -632,6 +693,8 @@ export class CodeBuddyMCPServer {
       this.agent = null;
       this.agentInitPromise = null;
     }
+    this.guardedHandler = null;
+    this.guardedHandlerPromise = null;
 
     await this.mcpServer.close();
     this.transport = null;

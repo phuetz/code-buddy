@@ -1054,6 +1054,7 @@ export class ToolHandler {
       !PRECISE_RUNTIME_APPROVAL_TOOLS.has(toolName)
     ) {
       let confirmed: boolean;
+      let refusalFeedback: string | undefined;
       if (this.confirmationCallback) {
         confirmed = await this.confirmationCallback(toolName, args, policyDecision);
       } else {
@@ -1080,6 +1081,7 @@ export class ToolHandler {
           'tool',
         );
         confirmed = result.confirmed;
+        if (!confirmed && result.feedback) refusalFeedback = result.feedback;
       }
 
       if (!confirmed) {
@@ -1088,9 +1090,10 @@ export class ToolHandler {
           hookContext,
           new Error('User cancelled execution'),
         );
+        const detail = refusalFeedback ? `: ${refusalFeedback}` : '';
         return {
           success: false,
-          error: `User cancelled execution of "${toolName}"`,
+          error: `User cancelled execution of "${toolName}"${detail}`,
         };
       }
       // Never promote one approval to PolicyManager's process-global
