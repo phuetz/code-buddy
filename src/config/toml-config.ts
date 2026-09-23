@@ -298,6 +298,33 @@ export interface LSPConfig {
   aiCompletion?: LSPAICompletionConfig;
 }
 
+/** Copy a parsed [session_reset] table onto a config object. Invalid shapes are ignored. */
+export function assignSessionReset(
+  config: { session_reset?: SessionResetTomlConfig },
+  partial: { session_reset?: unknown },
+): void {
+  if (!partial.session_reset || typeof partial.session_reset !== 'object' || Array.isArray(partial.session_reset)) {
+    return;
+  }
+  config.session_reset = {
+    ...(config.session_reset ?? {}),
+    ...(partial.session_reset as SessionResetTomlConfig),
+  };
+}
+
+/**
+ * Automatic reset of messaging sessions (Telegram, webchat, and the other
+ * channel adapters). Absent or mode none keeps the current transcript.
+ */
+export interface SessionResetTomlConfig {
+  /** both | idle | daily | none. Default when omitted: none. */
+  mode?: string;
+  /** Inactivity before an idle reset, in minutes. Default 1440 when the mode needs it. */
+  idle_minutes?: number;
+  /** Local hour 0-23 of the daily boundary. Default 4 when the mode needs it. */
+  at_hour?: number;
+}
+
 /**
  * Daily reset scheduler configuration — clear conversation history at a
  * configurable time each day. Wired by `/daily-reset enable` slash command
@@ -620,6 +647,11 @@ export interface CodeBuddyConfig {
   autonomous_fleet?: AutonomousFleetConfig;
   /** Daily reset scheduler settings — daily context boundary */
   daily_reset?: DailyResetConfig;
+  /**
+   * Messaging-channel session reset (both | idle | daily | none).
+   * Absent means none: channel transcripts stay until something else clears them.
+   */
+  session_reset?: SessionResetTomlConfig;
   /** Team session manager settings — TeamSessionManager wake (audit OpenClaw heritage) */
   team_session?: TeamSessionTomlConfig;
   /** Multi-agent system settings — MultiAgentSystem wake (audit OpenClaw heritage) */
@@ -1041,6 +1073,20 @@ export function serializeTOML(config: CodeBuddyConfig): string {
   if (config.agent.default_prompt) lines.push(`default_prompt = "${config.agent.default_prompt}"`);
   lines.push('');
 
+  if (config.session_reset) {
+    const mode = config.session_reset.mode;
+    const safeMode = mode === 'both' || mode === 'idle' || mode === 'daily' || mode === 'none' ? mode : 'none';
+    lines.push('[session_reset]');
+    lines.push(`mode = "${safeMode}"`);
+    if (typeof config.session_reset.idle_minutes === 'number') {
+      lines.push(`idle_minutes = ${Math.trunc(config.session_reset.idle_minutes)}`);
+    }
+    if (typeof config.session_reset.at_hour === 'number') {
+      lines.push(`at_hour = ${Math.trunc(config.session_reset.at_hour)}`);
+    }
+    lines.push('');
+  }
+
   // Integrations
   if (config.integrations) {
     lines.push('[integrations]');
@@ -1153,6 +1199,7 @@ class ConfigManager {
     if (partial.profiles) {
       this.config.profiles = { ...this.config.profiles, ...partial.profiles };
     }
+    assignSessionReset(this.config, partial);
   }
 
   /**

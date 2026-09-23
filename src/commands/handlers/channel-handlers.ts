@@ -1252,6 +1252,129 @@ function isChannelAllowlistedSender(
   return identities.some((identity) => allowed.has(identity.trim().replace(/^@/, '').toLowerCase()));
 }
 
+async function loadMessagingSessionSnapshot(
+  sessionKey: string,
+  inspectCompanion: (
+    key: string,
+    env?: NodeJS.ProcessEnv,
+  ) => { updatedAtMs: number; transcript: string } | null,
+): Promise<{ lastActivityAt: number | null; transcript: string }> {
+  let lastActivityAt: number | null = null;
+  const parts: string[] = [];
+  const consider = (at: number | null, text: string): void => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    parts.push(trimmed);
+    if (at !== null && Number.isFinite(at)) {
+      lastActivityAt = lastActivityAt === null ? at : Math.max(lastActivityAt, at);
+    }
+  };
+
+  const cached = channelAgentCache.get(sessionKey);
+  if (cached) {
+    try {
+      const history = cached.agent.getChatHistory?.() ?? [];
+      const text = history
+        .map((entry) => {
+          const content = typeof entry.content === 'string' ? entry.content.trim() : '';
+          return content ? `${entry.type}: ${content}` : '';
+        })
+        .filter((line) => line.length > 0)
+        .join('\n');
+      consider(cached.lastUsed, text);
+    } catch {
+      // A broken cache entry must not block the inbound turn.
+    }
+  }
+
+  try {
+    const { getSessionStore } = await import('../../persistence/session-store.js');
+    const session = await getSessionStore().loadSession(sessionKey);
+    if (session?.messages?.length) {
+      const at = session.lastAccessedAt instanceof Date
+        ? session.lastAccessedAt.getTime()
+        : Date.parse(String(session.lastAccessedAt));
+      const text = session.messages
+        .map((message) => `${message.type}: ${message.content}`)
+        .filter((line) => line.trim().length > 2)
+        .join('\n');
+      consider(Number.isFinite(at) ? at : null, text);
+    }
+  } catch {
+    // Disk session is optional continuity, not a reason to drop the turn.
+  }
+
+  try {
+    const inspected = inspectCompanion(sessionKey, process.env);
+    if (inspected) consider(inspected.updatedAtMs, inspected.transcript);
+  } catch {
+    // Companion history is one source among others.
+  }
+
+  return { lastActivityAt, transcript: parts.join('\n\n') };
+}
+
+/**
+ * Before a channel turn continues, apply the configured messaging reset.
+ * mode none returns before any session read. A failed memory archive
+ * cancels the clear and the existing transcript stays in place.
+ */
+async function maybeResetInboundMessagingSession(sessionKey: string): Promise<void> {
+  const { applyChannelMessagingSessionReset, resolveSessionResetPolicy } = await import(
+    '../../channels/messaging-session-reset.js'
+  );
+  const { getConfigManager } = await import('../../config/toml-config.js');
+  let policy = resolveSessionResetPolicy(undefined);
+  try {
+    policy = resolveSessionResetPolicy(getConfigManager().getConfig().session_reset);
+  } catch (err) {
+    logger.warn('messaging session reset policy unreadable, keeping the session', {
+      error: err instanceof Error ? err.message : 'unreadable',
+    });
+    return;
+  }
+  if (policy.mode === 'none') return;
+
+  const { inspectCompanionChannelHistory, clearCompanionChannelHistory } = await import(
+    '../../companion/channel-history.js'
+  );
+  const os = await import('node:os');
+  const now = Date.now();
+  const snapshot = await loadMessagingSessionSnapshot(sessionKey, inspectCompanionChannelHistory);
+  const outcome = await applyChannelMessagingSessionReset({
+    sessionKey,
+    now,
+    policy,
+    snapshot,
+    archiveDir: path.join(os.homedir(), '.codebuddy', 'companion', 'session-reset-archive'),
+    resetSession: async () => {
+      const { getSessionStore } = await import('../../persistence/session-store.js');
+      const store = getSessionStore();
+      const existing = await store.loadSession(sessionKey);
+      if (existing && existing.messages.length > 0) {
+        await store.saveSession({ ...existing, messages: [] });
+      }
+      try {
+        clearCompanionChannelHistory(sessionKey, process.env, now);
+      } catch (err) {
+        logger.warn('companion channel history clear failed after the transcript wipe', {
+          sessionHash: hashForLog(sessionKey),
+          error: err instanceof Error ? err.message : 'failed',
+        });
+      }
+      companionChannelHistories.delete(sessionKey);
+      evictChannelAgent(sessionKey, true);
+    },
+  });
+  if (outcome.action === 'cancelled') {
+    logger.warn('messaging session reset cancelled because memory save failed', {
+      sessionHash: hashForLog(sessionKey),
+      reason: outcome.reason,
+      error: outcome.error,
+    });
+  }
+}
+
 export async function registerAIMessageHandler(manager: import('../../channels/index.js').ChannelManager): Promise<void> {
   if (aiHandlerRegistered) return;
   aiHandlerRegistered = true;
@@ -1297,6 +1420,14 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       }
 
       const sessionKey = message.sessionKey || 'default-global';
+      try {
+        await maybeResetInboundMessagingSession(sessionKey);
+      } catch (resetErr) {
+        logger.warn('messaging session reset skipped', {
+          sessionHash: hashForLog(sessionKey),
+          error: resetErr instanceof Error ? resetErr.message : 'failed',
+        });
+      }
 
       // On-demand camera share (« qu'est-ce que tu vois ? ») — Telegram only.
       // The photo sender is scoped to the requesting chat, not the global alert chat.

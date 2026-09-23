@@ -211,6 +211,64 @@ export function rememberCompanionChannelTurn(
   return nextTurns.slice();
 }
 
+function turnsOf(record: CompanionChannelHistoryRecord): ConversationTurn[] {
+  return record.turns
+    .map((turn) => sanitizeTurn(turn))
+    .filter((turn): turn is ConversationTurn => turn !== null);
+}
+
+/**
+ * Read stored companion turns without the idle expiry used by the prompt.
+ * Empty cache entries are ignored so a freshness wipe cannot hide the file.
+ */
+export function inspectCompanionChannelHistory(
+  sessionKey: string,
+  env: NodeJS.ProcessEnv = process.env,
+): { updatedAtMs: number; transcript: string } | null {
+  const key = personKeyFromSession(sessionKey);
+  const candidates: CompanionChannelHistoryRecord[] = [];
+  const cached = memory.get(key);
+  if (cached && isRecord(cached)) candidates.push(cached);
+  if (isChannelHistoryPersistenceEnabled(env)) {
+    const stored = readJsonAtomicSync<CompanionChannelHistoryRecord | null>(
+      resolveChannelHistoryFile(sessionKey, env),
+      null,
+      {
+        mode: 0o600,
+        isValid: (value): value is CompanionChannelHistoryRecord => isRecord(value),
+      },
+    );
+    if (stored) candidates.push(stored);
+  }
+  const withTurns = candidates
+    .map((record) => ({ record, turns: turnsOf(record) }))
+    .filter((entry) => entry.turns.length > 0)
+    .sort((a, b) => Date.parse(b.record.updatedAt) - Date.parse(a.record.updatedAt));
+  const best = withTurns[0];
+  if (!best) return null;
+  const updatedAtMs = Date.parse(best.record.updatedAt);
+  if (!Number.isFinite(updatedAtMs)) return null;
+  return {
+    updatedAtMs,
+    transcript: best.turns.map((turn) => `${turn.role}: ${turn.content}`).join('\n'),
+  };
+}
+
+/** Replace the stored companion transcript with an empty record. */
+export function clearCompanionChannelHistory(
+  sessionKey: string,
+  env: NodeJS.ProcessEnv = process.env,
+  now = Date.now(),
+): void {
+  const next: CompanionChannelHistoryRecord = {
+    schemaVersion: 1,
+    personKey: personKeyFromSession(sessionKey),
+    updatedAt: new Date(now).toISOString(),
+    turns: [],
+  };
+  persistRecord(sessionKey, next, env);
+}
+
 /** Test-only. */
 export function clearCompanionChannelHistoriesForTests(): void {
   memory.clear();

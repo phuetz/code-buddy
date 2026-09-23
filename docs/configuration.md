@@ -246,6 +246,16 @@ maxTokens = 4096
 # Legacy pre-execution command rewriting; explicit opt-in only.
 rtk_enabled = false
 
+# Messaging sessions (Telegram, webchat, and the other channel adapters).
+# mode none is the default and keeps the current transcript.
+# both resets on the first of idle_minutes or the local at_hour boundary.
+# Memory is archived and read back before the transcript is cleared.
+# A failed archive cancels the reset.
+[session_reset]
+mode = "none"
+idle_minutes = 1440
+at_hour = 4
+
 [profiles.fast]
 model = "grok-code-fast-1"
 temperature = 0.3
