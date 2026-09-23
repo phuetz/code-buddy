@@ -358,7 +358,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
             provider: 'chatgpt',
             apiKey: 'oauth-chatgpt', // sentinel consumed by CodeBuddyClient
             baseURL: 'https://chatgpt.com/backend-api/codex',
-            defaultModel: process.env.CHATGPT_MODEL || 'gpt-5.6-sol',
+            defaultModel: process.env.CHATGPT_MODEL || 'gpt-6-sol',
           };
         }
       }

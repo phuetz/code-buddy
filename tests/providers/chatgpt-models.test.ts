@@ -86,7 +86,8 @@ function auth(): ChatGptAuth {
 
 describe('ChatGPT OAuth model policy', () => {
   it('canonicalizes the public API alias for the OAuth backend', () => {
-    expect(normalizeChatGptOAuthModel('gpt-5.6')).toBe(CHATGPT_OAUTH_DEFAULT_MODEL);
+    expect(normalizeChatGptOAuthModel('gpt-5.6')).toBe('gpt-5.6-sol');
+    expect(CHATGPT_OAUTH_DEFAULT_MODEL).toBe('gpt-6-sol');
     expect(isChatGptSubscriptionModel('gpt-5.6')).toBe(true);
     expect(isChatGptSubscriptionModel('gpt-5.6-luna')).toBe(true);
     expect(isChatGptSubscriptionModel('grok-code-fast-1')).toBe(false);

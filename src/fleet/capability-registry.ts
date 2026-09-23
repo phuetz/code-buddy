@@ -320,9 +320,12 @@ function buildOpenAICatalog(): FleetModelDescriptor[] {
 }
 
 function buildChatGptOAuthCatalog(): FleetModelDescriptor[] {
-  const preferred = process.env.CHATGPT_MODEL || 'gpt-5.6-sol';
+  const preferred = process.env.CHATGPT_MODEL || 'gpt-6-sol';
   const ids = [
     preferred,
+    'gpt-6-sol',
+    'gpt-6-astra',
+    'gpt-6-luna',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-5.6-luna',
@@ -333,9 +336,10 @@ function buildChatGptOAuthCatalog(): FleetModelDescriptor[] {
 
   return ids.map((id) => ({
     id,
+    // GPT-6: the window the backend catalogue serves (2026-09-23).
     contextWindow: id === 'gpt-5.6-sol'
       ? 372_000
-      : /^gpt-5\.[45](?:-|$)/.test(id)
+      : /^gpt-6-/.test(id) || /^gpt-5\.[45](?:-|$)/.test(id)
         ? 272_000
         : 200_000,
     strengths: deriveStrengths(id, 'chatgpt-oauth'),
