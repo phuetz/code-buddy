@@ -348,3 +348,8 @@ src/server/mobile/assets/icon-*.png
 # Mission QA and local code index
 _qa/
 .codeexplorer/
+
+# Skills tierces installees localement par `npx skills add` (outillage, pas produit)
+/.agents/
+/skills-lock.json
+/.claude/skills/typesafe-ai
