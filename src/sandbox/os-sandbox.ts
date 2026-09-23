@@ -231,6 +231,38 @@ export function clearCapabilitiesCache(): void {
 // ============================================================================
 
 /**
+ * Mounts shared by bubblewrap and by the landlock+seccomp path (that path is
+ * still bubblewrap, plus a seccomp filter).
+ *
+ * `--tmpfs /tmp` is applied BEFORE any bind. Bubblewrap mounts in order, so a
+ * later tmpfs hides a workDir that lives under the host `/tmp` and `--chdir`
+ * then fails with "No such file or directory".
+ *
+ * Read-only paths stay last. Binding them earlier let a writable parent reopen
+ * `.git` and `.codebuddy`.
+ */
+function appendSandboxMounts(bwrapArgs: string[], config: OSSandboxConfig): void {
+  bwrapArgs.push('--tmpfs', '/tmp');
+
+  for (const p of config.readWritePaths) {
+    if (fs.existsSync(p)) {
+      bwrapArgs.push('--bind', p, p);
+    }
+  }
+
+  if (fs.existsSync(config.workDir)) {
+    bwrapArgs.push('--bind', config.workDir, config.workDir);
+    bwrapArgs.push('--chdir', config.workDir);
+  }
+
+  for (const p of config.readOnlyPaths) {
+    if (fs.existsSync(p)) {
+      bwrapArgs.push('--ro-bind', p, p);
+    }
+  }
+}
+
+/**
  * Execute command in bubblewrap sandbox
  */
 async function execBubblewrap(
@@ -263,31 +295,7 @@ async function execBubblewrap(
   // Mount /dev minimally
   bwrapArgs.push('--dev', '/dev');
 
-  // Mount read-write paths
-  for (const p of config.readWritePaths) {
-    if (fs.existsSync(p)) {
-      bwrapArgs.push('--bind', p, p);
-    }
-  }
-
-  // Mount working directory
-  if (fs.existsSync(config.workDir)) {
-    bwrapArgs.push('--bind', config.workDir, config.workDir);
-    bwrapArgs.push('--chdir', config.workDir);
-  }
-
-  // Read-only overlays are deliberately mounted LAST.  Bubblewrap resolves
-  // overlapping binds in order; doing this before the workspace bind made
-  // `.git` and `.codebuddy` writable again despite the profile claiming the
-  // opposite.
-  for (const p of config.readOnlyPaths) {
-    if (fs.existsSync(p)) {
-      bwrapArgs.push('--ro-bind', p, p);
-    }
-  }
-
-  // Create /tmp
-  bwrapArgs.push('--tmpfs', '/tmp');
+  appendSandboxMounts(bwrapArgs, config);
 
   // Set hostname
   bwrapArgs.push('--hostname', 'sandbox');
@@ -794,29 +802,7 @@ async function execLandlock(
     // Mount /dev minimally
     bwrapArgs.push('--dev', '/dev');
 
-    // Mount read-write paths
-    for (const p of config.readWritePaths) {
-      if (fs.existsSync(p)) {
-        bwrapArgs.push('--bind', p, p);
-      }
-    }
-
-    // Mount working directory
-    if (fs.existsSync(config.workDir)) {
-      bwrapArgs.push('--bind', config.workDir, config.workDir);
-      bwrapArgs.push('--chdir', config.workDir);
-    }
-
-    // See execBubblewrap: overlapping read-only paths must be applied after
-    // every writable parent bind or the parent silently re-opens them.
-    for (const p of config.readOnlyPaths) {
-      if (fs.existsSync(p)) {
-        bwrapArgs.push('--ro-bind', p, p);
-      }
-    }
-
-    // Create /tmp
-    bwrapArgs.push('--tmpfs', '/tmp');
+    appendSandboxMounts(bwrapArgs, config);
 
     // Set hostname
     bwrapArgs.push('--hostname', 'sandbox');
