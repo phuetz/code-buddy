@@ -38,4 +38,31 @@ describe('DiagramTool', () => {
     const entries = await fs.readdir(tmpDir);
     expect(entries).not.toContain('.codebuddy');
   });
+
+  async function asciiEdge(edge: string) {
+    const tool = new DiagramTool();
+    const result = await tool.generateFromMermaid(
+      `flowchart TD\n    A[Start]\n    B[End]\n    ${edge}`,
+      { outputFormat: 'ascii' },
+    );
+    console.log(`ARETE ${JSON.stringify(edge)}:`, JSON.stringify(result.output));
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('Start');
+    expect(result.output).toContain('End');
+    expect(result.output).toContain('▼');
+    return result;
+  }
+
+  it('garde la flèche ASCII sur une arête mermaid sans espace', async () => {
+    await asciiEdge('A-->B');
+  });
+
+  it('garde la flèche ASCII sur une arête mermaid avec espaces', async () => {
+    await asciiEdge('A --> B');
+  });
+
+  it('garde la flèche ASCII sur une arête mermaid étiquetée', async () => {
+    const result = await asciiEdge('A -- Go --> B');
+    expect(result.data).toMatchObject({ mermaidCode: expect.stringContaining('A -- Go --> B') });
+  });
 });

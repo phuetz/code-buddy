@@ -402,8 +402,9 @@ export class DiagramTool {
         continue;
       }
 
-      // Unlabeled (A --> B) and labeled (A -- Go --> B, A -. Go .-> B, A == Go ==> B).
-      const connMatch = trimmed.match(/^(\w+)\s+[-=.]+(?:\s+\S+\s+[-=.]+)?\s*[>)}\]]+\s*(\w+)\s*$/);
+      // Unlabeled (A-->B, A --> B) and labeled (A -- Go --> B, A -. Go .-> B, A == Go ==> B).
+      // Spaces beside the arrow marks are optional. The space before a label stays required.
+      const connMatch = trimmed.match(/^(\w+)\s*[-=.]+(?:\s+\S+\s*[-=.]+)?\s*[>)}\]]+\s*(\w+)\s*$/);
       if (connMatch && connMatch[1] !== undefined && connMatch[2] !== undefined) {
         connections.push({ from: connMatch[1], to: connMatch[2] });
       }
