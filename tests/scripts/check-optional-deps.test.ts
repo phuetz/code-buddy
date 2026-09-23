@@ -75,7 +75,11 @@ describe('check-optional-deps guard', () => {
     const emptyBin = mkdtempSync(path.join(tmpdir(), 'cb-no-npm-'));
     try {
       const { status, output } = runGuard(root, ['--install'], { PATH: emptyBin });
-      expect(output).toMatch(/The reinstall command itself failed: .*ENOENT/);
+      // The reason differs by platform: ENOENT from a direct spawn, "Command
+      // failed: npm install …" from cmd.exe on Windows. Either way, one is shown.
+      expect(output).toMatch(/The reinstall command itself failed: \S/);
+      if (process.platform !== 'win32') expect(output).toMatch(/failed: .*ENOENT/);
+      if (process.platform === 'win32') expect(output).toContain('"absent-pkg@^1.0.0"');
       expect(status).toBe(1);
     } finally {
       rmSync(emptyBin, { recursive: true, force: true });
