@@ -44,7 +44,7 @@ Une valeur vide est ignorée. Un nom fixé dans la configuration et inconnu du c
 
 `[model_roles]` ne lit que `primary`. `[model_aliases]` résout ce nom au moment du choix ci-dessus et dans `buddy models show`. La cible doit être un modèle connu, sinon la configuration est refusée. Ces alias ne s'ajoutent pas à `/switch`.
 
-`/config set` réécrit le fichier résolu ci-dessus, sans effacer `[catalogue]`, `[model_roles]`, `[model_aliases]`, les capacités des `[models.*]`, ni les `[profiles.*]`.
+`/config set` réécrit le fichier résolu ci-dessus, sans effacer `[catalogue]`, `[model_roles]`, `[model_aliases]`, les capacités des `[models.*]`, ni les `[profiles.*]`. Cette réécriture n'ajoute aucune clé absente du fichier, sauf la clé que la commande modifie.
 
 ## Ce que cette version ne fait pas
 

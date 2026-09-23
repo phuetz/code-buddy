@@ -977,6 +977,8 @@ export interface PreservedUserConfig {
   modelAliases?: Record<string, unknown>;
   profiles?: Record<string, unknown>;
   modelExtras: Record<string, Record<string, unknown>>;
+  /** Document lu, sans les valeurs par défaut ajoutées en mémoire. */
+  source?: Record<string, unknown>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -985,13 +987,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 /** Sections que le sérialiseur historique ne sait pas réécrire, lues sur le fichier utilisateur. */
 export function extractPreservedUserConfig(parsed: Record<string, unknown>): PreservedUserConfig {
-  const preserved: PreservedUserConfig = { modelExtras: {} };
-  if (isPlainObject(parsed.catalogue)) preserved.catalogue = parsed.catalogue;
-  if (isPlainObject(parsed.model_roles)) preserved.modelRoles = parsed.model_roles;
-  if (isPlainObject(parsed.model_aliases)) preserved.modelAliases = parsed.model_aliases;
-  if (isPlainObject(parsed.profiles)) preserved.profiles = parsed.profiles;
-  if (isPlainObject(parsed.models)) {
-    for (const [name, raw] of Object.entries(parsed.models)) {
+  const source = structuredClone(parsed);
+  const preserved: PreservedUserConfig = { modelExtras: {}, source };
+  if (isPlainObject(source.catalogue)) preserved.catalogue = source.catalogue;
+  if (isPlainObject(source.model_roles)) preserved.modelRoles = source.model_roles;
+  if (isPlainObject(source.model_aliases)) preserved.modelAliases = source.model_aliases;
+  if (isPlainObject(source.profiles)) preserved.profiles = source.profiles;
+  if (isPlainObject(source.models)) {
+    for (const [name, raw] of Object.entries(source.models)) {
       if (!isPlainObject(raw)) continue;
       const extras: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(raw)) {
@@ -1015,6 +1018,48 @@ function emitTomlValue(value: unknown): string | null {
     return `[${value.map((item) => `"${escapeTomlString(item)}"`).join(', ')}]`;
   }
   return null;
+}
+
+function valuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (left === undefined || right === undefined || left === null || right === null) return false;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * Quoting historique du sérialiseur de configuration : pas d'échappement
+ * supplémentaire, pour que les motifs d'outils déjà écrits restent identiques.
+ * `undefined` et `null` ne produisent rien.
+ */
+function formatConfigValue(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string') return `"${value}"`;
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+    return `[${value.map((item) => `"${item}"`).join(', ')}]`;
+  }
+  return null;
+}
+
+function appendConfigKey(
+  lines: string[],
+  key: string,
+  value: unknown,
+  presence: { rewriting: boolean; inSource: boolean; defaultValue: unknown },
+): void {
+  if (value === undefined || value === null) return;
+  if (typeof value === 'string' && value === '' && !presence.inSource) return;
+  if (presence.rewriting && !presence.inSource && valuesEqual(value, presence.defaultValue)) return;
+  const rendered = formatConfigValue(value);
+  if (rendered === null) return;
+  lines.push(`${key} = ${rendered}`);
+}
+
+function sourceTable(source: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
+  if (!source) return undefined;
+  const value = source[key];
+  return isPlainObject(value) ? value : undefined;
 }
 
 function emitTomlTable(lines: string[], header: string, table: Record<string, unknown>): void {
@@ -1041,16 +1086,24 @@ function emitModelExtras(
   lines: string[],
   name: string,
   model: ModelConfig,
-  preserved?: PreservedUserConfig | null,
+  preserved: PreservedUserConfig | null | undefined,
+  rewriting: boolean,
+  sourceModel: Record<string, unknown> | undefined,
+  defaults: Record<string, unknown> | undefined,
 ): void {
   const extras: Record<string, unknown> = { ...(preserved?.modelExtras[name] ?? {}) };
   for (const [key, value] of Object.entries(model as unknown as Record<string, unknown>)) {
     if (MODEL_STANDARD_KEYS.has(key) || key in extras) continue;
     extras[key] = value;
   }
+  const knownExtras = preserved?.modelExtras[name];
   for (const [key, value] of Object.entries(extras)) {
-    const rendered = emitTomlValue(value);
-    if (rendered !== null) lines.push(`${key} = ${rendered}`);
+    appendConfigKey(lines, key, value, {
+      rewriting,
+      inSource: (!!sourceModel && Object.prototype.hasOwnProperty.call(sourceModel, key))
+        || (!!knownExtras && Object.prototype.hasOwnProperty.call(knownExtras, key)),
+      defaultValue: defaults?.[key],
+    });
   }
 }
 
@@ -1078,90 +1131,175 @@ function emitPreservedSections(lines: string[], preserved?: PreservedUserConfig 
  * `preserved` réécrit les sections de catalogue et les profils du fichier
  * utilisateur, que l'objet typé ne porte pas.
  */
+function emitFlatSection(
+  lines: string[],
+  header: string,
+  live: Record<string, unknown>,
+  defaults: Record<string, unknown> | undefined,
+  source: Record<string, unknown> | undefined,
+  rewriting: boolean,
+  keys: readonly string[],
+): void {
+  const body: string[] = [];
+  for (const key of keys) {
+    appendConfigKey(body, key, live[key], {
+      rewriting,
+      inSource: !!source && Object.prototype.hasOwnProperty.call(source, key),
+      defaultValue: defaults?.[key],
+    });
+  }
+  const listed = source !== undefined;
+  if (body.length === 0 && !listed) return;
+  lines.push(`[${header}]`);
+  lines.push(...body);
+  lines.push('');
+}
+
+function emitNamedSections<T extends object>(
+  lines: string[],
+  headerPrefix: string,
+  liveMap: Record<string, T>,
+  defaultMap: Record<string, T> | undefined,
+  sourceMap: Record<string, unknown> | undefined,
+  rewriting: boolean,
+  fill: (
+    body: string[],
+    name: string,
+    live: T,
+    source: Record<string, unknown> | undefined,
+    defaults: Record<string, unknown> | undefined,
+  ) => void,
+): void {
+  for (const [name, live] of Object.entries(liveMap)) {
+    const listed = !!sourceMap && Object.prototype.hasOwnProperty.call(sourceMap, name);
+    const sourceRaw = listed ? sourceMap?.[name] : undefined;
+    const source = isPlainObject(sourceRaw) ? sourceRaw : undefined;
+    const defaultsRaw = defaultMap?.[name];
+    const defaults = defaultsRaw ? defaultsRaw as unknown as Record<string, unknown> : undefined;
+    if (rewriting && !listed && valuesEqual(live, defaultsRaw)) continue;
+    const body: string[] = [];
+    fill(body, name, live, source, defaults);
+    if (body.length === 0 && !listed) continue;
+    lines.push(`[${headerPrefix}.${name}]`);
+    lines.push(...body);
+    lines.push('');
+  }
+}
+
 export function serializeTOML(config: CodeBuddyConfig, preserved?: PreservedUserConfig | null): string {
   const lines: string[] = [
     '# Code Buddy Configuration',
     '# See https://github.com/phuetz/code-buddy for documentation',
     '',
   ];
-
-  // Root level
-  lines.push(`active_model = "${config.active_model}"`);
-  lines.push('');
-
-  // Providers
-  for (const [name, provider] of Object.entries(config.providers)) {
-    lines.push(`[providers.${name}]`);
-    if (provider.base_url) lines.push(`base_url = "${provider.base_url}"`);
-    lines.push(`api_key_env = "${provider.api_key_env}"`);
-    lines.push(`type = "${provider.type}"`);
-    if (provider.enabled !== undefined) lines.push(`enabled = ${provider.enabled}`);
+  const rewriting = preserved?.source !== undefined;
+  const source = preserved?.source;
+  const sourceHasActive = !!source && Object.prototype.hasOwnProperty.call(source, 'active_model');
+  if (!rewriting || sourceHasActive || config.active_model !== DEFAULT_CONFIG.active_model) {
+    lines.push(`active_model = "${config.active_model}"`);
     lines.push('');
   }
 
-  // Models
-  for (const [name, model] of Object.entries(config.models)) {
-    lines.push(`[models.${name}]`);
-    lines.push(`provider = "${model.provider}"`);
-    if (model.model_id) lines.push(`model_id = "${model.model_id}"`);
-    lines.push(`price_per_m_input = ${model.price_per_m_input}`);
-    lines.push(`price_per_m_output = ${model.price_per_m_output}`);
-    lines.push(`max_context_tokens = ${model.max_context_tokens}`);
-    if (model.description) lines.push(`description = "${model.description}"`);
-    emitModelExtras(lines, name, model, preserved);
-    lines.push('');
-  }
+  emitNamedSections(
+    lines,
+    'providers',
+    config.providers,
+    DEFAULT_CONFIG.providers,
+    sourceTable(source, 'providers'),
+    rewriting,
+    (body, _name, provider, providerSource, defaults) => {
+      const gate = (key: string, value: unknown) => appendConfigKey(body, key, value, {
+        rewriting,
+        inSource: !!providerSource && Object.prototype.hasOwnProperty.call(providerSource, key),
+        defaultValue: defaults?.[key],
+      });
+      gate('base_url', provider.base_url);
+      gate('api_key_env', provider.api_key_env);
+      gate('type', provider.type);
+      gate('enabled', provider.enabled);
+    },
+  );
 
-  // Tool config
-  for (const [name, tool] of Object.entries(config.tool_config)) {
-    lines.push(`[tool_config.${name}]`);
-    lines.push(`permission = "${tool.permission}"`);
-    if (tool.timeout) lines.push(`timeout = ${tool.timeout}`);
-    if (tool.allowlist?.length) {
-      lines.push(`allowlist = [${tool.allowlist.map(p => `"${p}"`).join(', ')}]`);
-    }
-    if (tool.denylist?.length) {
-      lines.push(`denylist = [${tool.denylist.map(p => `"${p}"`).join(', ')}]`);
-    }
-    lines.push('');
-  }
+  emitNamedSections(
+    lines,
+    'models',
+    config.models,
+    DEFAULT_CONFIG.models,
+    sourceTable(source, 'models'),
+    rewriting,
+    (body, name, model, modelSource, defaults) => {
+      const gate = (key: string, value: unknown) => appendConfigKey(body, key, value, {
+        rewriting,
+        inSource: !!modelSource && Object.prototype.hasOwnProperty.call(modelSource, key),
+        defaultValue: defaults?.[key],
+      });
+      gate('provider', model.provider);
+      gate('model_id', model.model_id);
+      gate('price_per_m_input', model.price_per_m_input);
+      gate('price_per_m_output', model.price_per_m_output);
+      gate('max_context_tokens', model.max_context_tokens);
+      gate('description', model.description);
+      emitModelExtras(body, name, model, preserved, rewriting, modelSource, defaults);
+    },
+  );
 
-  // Middleware
-  lines.push('[middleware]');
-  if (config.middleware.max_turns) lines.push(`max_turns = ${config.middleware.max_turns}`);
-  if (config.middleware.turn_warning_threshold) lines.push(`turn_warning_threshold = ${config.middleware.turn_warning_threshold}`);
-  if (config.middleware.max_cost) lines.push(`max_cost = ${config.middleware.max_cost}`);
-  if (config.middleware.cost_warning_threshold) lines.push(`cost_warning_threshold = ${config.middleware.cost_warning_threshold}`);
-  if (config.middleware.auto_compact_threshold) lines.push(`auto_compact_threshold = ${config.middleware.auto_compact_threshold}`);
-  if (config.middleware.context_warning_percentage) lines.push(`context_warning_percentage = ${config.middleware.context_warning_percentage}`);
-  lines.push('');
+  emitNamedSections(
+    lines,
+    'tool_config',
+    config.tool_config,
+    DEFAULT_CONFIG.tool_config,
+    sourceTable(source, 'tool_config'),
+    rewriting,
+    (body, _name, tool, toolSource, defaults) => {
+      const gate = (key: string, value: unknown) => appendConfigKey(body, key, value, {
+        rewriting,
+        inSource: !!toolSource && Object.prototype.hasOwnProperty.call(toolSource, key),
+        defaultValue: defaults?.[key],
+      });
+      gate('permission', tool.permission);
+      gate('timeout', tool.timeout);
+      gate('allowlist', tool.allowlist);
+      gate('denylist', tool.denylist);
+    },
+  );
 
-  // UI
-  lines.push('[ui]');
-  if (config.ui.vim_keybindings !== undefined) lines.push(`vim_keybindings = ${config.ui.vim_keybindings}`);
-  if (config.ui.theme) lines.push(`theme = "${config.ui.theme}"`);
-  if (config.ui.show_tokens !== undefined) lines.push(`show_tokens = ${config.ui.show_tokens}`);
-  if (config.ui.show_cost !== undefined) lines.push(`show_cost = ${config.ui.show_cost}`);
-  if (config.ui.streaming !== undefined) lines.push(`streaming = ${config.ui.streaming}`);
-  if (config.ui.sound_effects !== undefined) lines.push(`sound_effects = ${config.ui.sound_effects}`);
-  lines.push('');
-
-  // Agent
-  lines.push('[agent]');
-  if (config.agent.yolo_mode !== undefined) lines.push(`yolo_mode = ${config.agent.yolo_mode}`);
-  if (config.agent.parallel_tools !== undefined) lines.push(`parallel_tools = ${config.agent.parallel_tools}`);
-  if (config.agent.rag_tool_selection !== undefined) lines.push(`rag_tool_selection = ${config.agent.rag_tool_selection}`);
-  if (config.agent.self_healing !== undefined) lines.push(`self_healing = ${config.agent.self_healing}`);
-  if (config.agent.default_prompt) lines.push(`default_prompt = "${config.agent.default_prompt}"`);
-  lines.push('');
-
-  // Integrations
+  emitFlatSection(
+    lines,
+    'middleware',
+    config.middleware as unknown as Record<string, unknown>,
+    DEFAULT_CONFIG.middleware as unknown as Record<string, unknown>,
+    sourceTable(source, 'middleware'),
+    rewriting,
+    ['max_turns', 'turn_warning_threshold', 'max_cost', 'cost_warning_threshold', 'auto_compact_threshold', 'context_warning_percentage'],
+  );
+  emitFlatSection(
+    lines,
+    'ui',
+    config.ui as unknown as Record<string, unknown>,
+    DEFAULT_CONFIG.ui as unknown as Record<string, unknown>,
+    sourceTable(source, 'ui'),
+    rewriting,
+    ['vim_keybindings', 'theme', 'show_tokens', 'show_cost', 'streaming', 'sound_effects'],
+  );
+  emitFlatSection(
+    lines,
+    'agent',
+    config.agent as unknown as Record<string, unknown>,
+    DEFAULT_CONFIG.agent as unknown as Record<string, unknown>,
+    sourceTable(source, 'agent'),
+    rewriting,
+    ['yolo_mode', 'parallel_tools', 'rag_tool_selection', 'self_healing', 'default_prompt'],
+  );
   if (config.integrations) {
-    lines.push('[integrations]');
-    if (config.integrations.rtk_enabled !== undefined) lines.push(`rtk_enabled = ${config.integrations.rtk_enabled}`);
-    if (config.integrations.rtk_min_output_length !== undefined) lines.push(`rtk_min_output_length = ${config.integrations.rtk_min_output_length}`);
-    if (config.integrations.icm_enabled !== undefined) lines.push(`icm_enabled = ${config.integrations.icm_enabled}`);
-    lines.push('');
+    emitFlatSection(
+      lines,
+      'integrations',
+      config.integrations as unknown as Record<string, unknown>,
+      DEFAULT_CONFIG.integrations as unknown as Record<string, unknown>,
+      sourceTable(source, 'integrations'),
+      rewriting,
+      ['rtk_enabled', 'rtk_min_output_length', 'icm_enabled'],
+    );
   }
 
   emitPreservedSections(lines, preserved);
@@ -1256,7 +1394,19 @@ class ConfigManager {
       this.config.providers = { ...this.config.providers, ...partial.providers };
     }
     if (partial.models) {
-      this.config.models = { ...this.config.models, ...partial.models };
+      const merged: Record<string, ModelConfig> = { ...this.config.models };
+      for (const [name, raw] of Object.entries(partial.models)) {
+        if (!isPlainObject(raw)) continue;
+        // Ne pas remplacer la fiche par un objet à trous : seules les clés
+        // présentes sont copiées. Les champs absents ne sont pas inventés.
+        const base: Record<string, unknown> = merged[name] ? { ...merged[name] } : {};
+        for (const [key, value] of Object.entries(raw)) {
+          if (value === undefined || value === null) continue;
+          base[key] = value;
+        }
+        merged[name] = base as unknown as ModelConfig;
+      }
+      this.config.models = merged;
     }
     if (partial.tool_config) {
       for (const [name, toolConfig] of Object.entries(partial.tool_config)) {
