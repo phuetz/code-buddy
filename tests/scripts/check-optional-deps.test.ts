@@ -8,9 +8,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 const GUARD = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts', 'check-optional-deps.mjs');
 
 /** Runs the guard (report mode, no install) against a fixture repository. */
-function runGuard(root: string): { status: number | null; output: string } {
-  const result = spawnSync(process.execPath, [GUARD], {
-    env: { ...process.env, CHECK_OPTIONAL_DEPS_ROOT: root },
+function runGuard(
+  root: string,
+  extraArgs: string[] = [],
+  extraEnv: Record<string, string> = {},
+): { status: number | null; output: string } {
+  const result = spawnSync(process.execPath, [GUARD, ...extraArgs], {
+    env: { ...process.env, CHECK_OPTIONAL_DEPS_ROOT: root, ...extraEnv },
     encoding: 'utf8',
   });
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
@@ -62,5 +66,19 @@ describe('check-optional-deps guard', () => {
     );
     const { status } = runGuard(root);
     expect(status).toBe(1);
+  });
+
+  // Same failure mode as Windows, where `npm` is an unlaunchable `npm.cmd`:
+  // the reinstall cannot start. The guard must say why, not just "failed".
+  it('reports why the reinstall could not start', () => {
+    writeFileSync(path.join(root, 'src', 'real.ts'), "import thing from 'absent-pkg';\nexport default thing;\n");
+    const emptyBin = mkdtempSync(path.join(tmpdir(), 'cb-no-npm-'));
+    try {
+      const { status, output } = runGuard(root, ['--install'], { PATH: emptyBin });
+      expect(output).toMatch(/The reinstall command itself failed: .*ENOENT/);
+      expect(status).toBe(1);
+    } finally {
+      rmSync(emptyBin, { recursive: true, force: true });
+    }
   });
 });
