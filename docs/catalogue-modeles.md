@@ -1,133 +1,96 @@
 # Catalogue de modèles
 
-Les identifiants et les capacités des modèles changent souvent. On les règle dans la configuration TOML déjà utilisée par Code Buddy, pas dans le code source.
+On règle une partie des modèles dans le TOML déjà utilisé par Code Buddy. Cette page décrit uniquement ce que cette version applique vraiment. Le reste du logiciel garde ses catalogues écrits dans le code.
 
-Fichier lu :
+## Fichier lu
 
-- `CODEBUDDY_CONFIG` s'il est posé
-- sinon `$CODEBUDDY_HOME/config.toml`, ou `~/.codebuddy/config.toml` si `CODEBUDDY_HOME` n'est pas posée
+- `CODEBUDDY_CONFIG` s'il est posé (chemin complet du fichier)
+- sinon `$CODEBUDDY_HOME/.codebuddy/config.toml` si `CODEBUDDY_HOME` est posée
+- sinon `~/.codebuddy/config.toml`
 
-Au démarrage d'une session, `.codebuddy/config.toml` du répertoire courant est ajouté par-dessus ce fichier lorsqu'il existe. Les clés du projet gagnent. `buddy models --config <fichier>` lit exactement ce fichier, sans ouvrir un autre profil.
+Au démarrage d'une session, `.codebuddy/config.toml` du répertoire courant est analysé à part, puis fusionné par-dessus le fichier précédent. Les valeurs du projet gagnent, champ par champ. `buddy models --config <fichier>` lit exactement ce fichier.
 
-Un profil nommé s'active avec `buddy --profile <nom>`. Il ne crée pas un second format : c'est une table `[profiles.<nom>]` du même fichier.
+Un profil nommé s'active avec `buddy --profile <nom>`. `core` et `all` sont intégrés : ils n'ont pas besoin d'être recopiés dans le fichier, et ils ne choisissent pas de modèle. Un profil du fichier peut n'avoir aucun `active_model` : la session démarre quand même.
 
-## Ordre de priorité
+## Ordre réel au démarrage
 
-Pour le modèle effectivement utilisé :
+`loadModel` appelle `resolveStartupModel`. Le premier niveau non vide gagne :
 
-1. l'option `--model` de la ligne de commande
-2. la variable `CODEBUDDY_MODEL`, puis la variable historique `GROK_MODEL`
-3. `active_model` du profil demandé
-4. le rôle `primary` ou `active_model` de la configuration
-5. l'identifiant publié par le fournisseur lors d'une découverte
-6. le catalogue intégré au logiciel
+1. `--model` (ou `-m`)
+2. `CODEBUDDY_MODEL`, puis `GROK_MODEL`
+3. `active_model` du profil demandé, s'il en a un
+4. `[model_roles] primary`, ou `active_model` s'il est différent de la valeur du fichier généré
+5. le modèle sauvé dans les réglages, s'il est compatible avec le fournisseur détecté
+6. le modèle par défaut du fournisseur détecté
 
-Une valeur vide est ignorée. Une valeur présente n'est jamais remplacée en silence par une autre. Si le nom fixé dans la configuration est inconnu, Code Buddy s'arrête et affiche `Configuration de modèle invalide`. Il n'utilise pas un autre modèle à la place.
+Le fichier généré contient `active_model = "grok-code-fast"`. Cette valeur ne masque pas le fournisseur détecté. Pour forcer ce modèle, passez `--model`, `CODEBUDDY_MODEL`, ou `[model_roles] primary`.
 
-`CODEBUDDY_MAX_CONTEXT` reste un plafond explicite de fenêtre de contexte. Il gagne sur la fiche, la découverte et le catalogue intégré.
+Si le fournisseur détecté est Ollama et qu'aucun des niveaux 1 à 4 n'est rempli, la sonde historique des modèles installés s'applique encore. `OLLAMA_MODEL`, s'il est posé et absent du serveur, n'est pas remplacé par un autre tag.
 
-## Fusion avec le catalogue intégré
+Une valeur vide est ignorée. Un nom fixé dans la configuration et inconnu du catalogue arrête la session avec `Configuration de modèle invalide`. Aucun autre modèle n'est mis à la place. Un modèle sauvé incompatible avec le fournisseur détecté est ignoré : c'est le comportement historique, le modèle par défaut du fournisseur est alors utilisé.
 
-`[catalogue] mode = "merge"` est le défaut. Une entrée `[models.<nom>]` ne remplace que les champs qu'elle écrit. Le fournisseur, le prix, la vision ou les outils déjà connus restent en place.
+`CODEBUDDY_MAX_CONTEXT` reste un plafond de fenêtre. Il gagne sur la fiche.
 
-`mode = "replace"` est volontaire : le catalogue intégré n'est plus complété. Il faut alors déclarer chaque modèle utilisé.
+## Ce qu'une entrée de modèle change
 
-Les rôles sont indépendants du catalogue :
+`[catalogue] mode = "merge"` est le seul mode. Il est aussi le défaut. Une entrée `[models.<nom>]` ne remplace que les champs qu'elle écrit, et seulement chez les consommateurs suivants :
 
-- `primary` : modèle principal (équivalent de `active_model`)
-- `fast` ou `compact` : modèle court, pour une tâche rapide
-- `vision` : modèle qui accepte une image
+- `max_context_tokens` (ou `context_window`), `max_tokens` (ou `max_output_tokens`), `reasoning`, `vision`, `tools`, `input` : lus par `getModelToolConfig` au démarrage de la session
+- `price_per_m_input` et `price_per_m_output`, écrits ensemble : lus par `getModelPricing`
 
-Les alias de `[model_aliases]` s'ajoutent à ceux du logiciel. Un alias utilisateur de même nom gagne.
+`provider` et `model_id` restent les colonnes historiques de la table. Cette version ne s'en sert pas pour choisir la clé, l'adresse ou le fournisseur de la session. `buddy models show` ne les affiche pas.
 
-## Découverte de la fenêtre de contexte
+`[model_roles]` ne lit que `primary`. `[model_aliases]` résout ce nom au moment du choix ci-dessus et dans `buddy models show`. La cible doit être un modèle connu, sinon la configuration est refusée. Ces alias ne s'ajoutent pas à `/switch`.
 
-Quand le fournisseur le permet, Code Buddy interroge :
+`/config set` réécrit `config.toml` sans effacer `[catalogue]`, `[model_roles]`, `[model_aliases]`, les capacités des `[models.*]`, ni les `[profiles.*]`.
 
-- Ollama : `POST /api/show`
-- un serveur compatible OpenAI : `GET /v1/models` (`context_length` ou `max_model_len`)
+## Ce que cette version ne fait pas
 
-Le résultat est écrit dans `context-length-cache.json`, à côté du fichier de configuration, ou à l'endroit donné par `--cache`. La durée de vie est `context_cache_ttl_seconds` (défaut : 3600). Une entrée périmée n'est pas réutilisée. Si le fournisseur ne répond pas, la découverte échoue avec un message clair et n'invente pas une fenêtre.
+- pas de `mode = "replace"`
+- pas de rôles `fast`, `compact` ou `vision`
+- pas de `buddy models refresh`, pas de cache JSON de fenêtre de contexte
+- pas de découverte réseau au démarrage pour choisir un identifiant ou une fenêtre
 
 ```bash
 buddy models list --config ./config.toml
-buddy models show exemple-principal --config ./config.toml
-buddy models refresh --config ./config.toml --cache ./context-length-cache.json \
-  --provider ollama --base-url http://127.0.0.1:11434 --model exemple-principal
+buddy models show grok-4 --config ./config.toml
 ```
 
-`refresh` n'écrit le cache que si `--cache` ou `--config` est donné.
+## Exemple
 
-## Exemple complet
-
-Aucune clé n'est écrite ici. `EXEMPLE_API_KEY` est le nom d'une variable d'environnement, pas sa valeur. L'adresse est locale.
+Aucune clé secrète. Les adresses ne sont pas nécessaires ici : le fournisseur de la session reste celui qui est détecté.
 
 ```toml
 [catalogue]
 mode = "merge"
-context_cache_ttl_seconds = 3600
 
 [model_roles]
 primary = "exemple-principal"
-fast = "exemple-rapide"
-compact = "exemple-rapide"
-vision = "exemple-vision"
 
 [model_aliases]
 best = "exemple-principal"
 
 [models.exemple-principal]
-provider = "openai"
-model_id = "exemple-principal"
-price_per_m_input = 0
-price_per_m_output = 0
 max_context_tokens = 128000
+max_tokens = 8192
 reasoning = true
 vision = false
 tools = true
 input = ["text"]
-
-[models.exemple-rapide]
-provider = "openai"
-model_id = "exemple-rapide"
 price_per_m_input = 0
 price_per_m_output = 0
+
+[models.exemple-rapide]
 max_context_tokens = 32000
 reasoning = false
 vision = false
 tools = true
-input = ["text"]
 
-[models.exemple-vision]
-provider = "openai"
-model_id = "exemple-vision"
-price_per_m_input = 0
-price_per_m_output = 0
-max_context_tokens = 128000
-reasoning = false
-vision = true
-tools = true
-input = ["text", "image"]
-
-# Le modèle intégré grok-4 garde son fournisseur et ses prix.
-# Seule la fenêtre est surchargée.
 [models.grok-4]
 max_context_tokens = 128000
 
 [profiles.rapide]
 active_model = "exemple-rapide"
-
-[providers.local]
-base_url = "http://127.0.0.1:11434"
-api_key_env = "EXEMPLE_API_KEY"
-type = "custom"
-enabled = true
 ```
 
-Lancer une session avec ce profil :
-
-```bash
-buddy --profile rapide --model exemple-rapide
-```
-
-Sans `--model`, le profil choisit `exemple-rapide`. Sans profil, le rôle `primary` choisit `exemple-principal`.
+Sans `--model` ni variable d'environnement, `buddy --profile rapide` utilise `exemple-rapide`. Sans profil, `primary` choisit `exemple-principal`.
