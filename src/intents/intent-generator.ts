@@ -3,6 +3,8 @@
 import { generateJsonWithRetry } from '../utils/llm-retry.js';
 import { logger } from '../utils/logger.js';
 import type { CreateIntentInput, IntentCriterion } from './intent-store.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 export interface GenerateIntentOptions {
   model?: string;
@@ -19,7 +21,47 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function buildIntentGeneratorSystemPrompt(): string {
+/**
+ * Décrit le dépôt courant pour le générateur : langage, lanceur de tests et
+ * scripts npm réellement disponibles.
+ *
+ * Sans cela, le modèle devine — et devine mal : le 21/09/2026 il a produit un
+ * critère `python -m pytest tests/…py` sur un dépôt TypeScript qui utilise
+ * vitest, donc un critère qui échoue toujours, pour la mauvaise raison. Une
+ * spécification falsifiable doit être falsifiable sur CE projet.
+ *
+ * Lecture au mieux : si package.json est absent ou illisible, on rend une chaîne
+ * vide et le prompt retombe sur ses consignes générales.
+ */
+export function describeRepositoryContext(cwd: string = process.cwd()): string {
+  try {
+    const raw = fs.readFileSync(path.join(cwd, 'package.json'), 'utf8');
+    const pkg = JSON.parse(raw) as { scripts?: Record<string, string> };
+    const scripts = Object.keys(pkg.scripts ?? {});
+    if (scripts.length === 0) return '';
+
+    const interessants = ['test', 'typecheck', 'lint', 'build', 'validate']
+      .filter((nom) => scripts.includes(nom));
+    const lanceur = /vitest/.test(pkg.scripts?.test ?? '')
+      ? 'vitest (utiliser `npx vitest run <chemin>`)'
+      : /jest/.test(pkg.scripts?.test ?? '')
+        ? 'jest'
+        : 'see the test script';
+
+    return (
+      '\n\nTHIS repository (do not assume another stack):\n' +
+      '- Node.js / TypeScript project with a package.json.\n' +
+      `- Test runner: ${lanceur}.\n` +
+      `- Available npm scripts: ${interessants.join(', ') || scripts.slice(0, 8).join(', ')}.\n` +
+      'Never invent commands from another ecosystem (no pytest, cargo, go test, maven) ' +
+      'unless you can see such a project here. Reference only files that exist.'
+    );
+  } catch {
+    return '';
+  }
+}
+
+export function buildIntentGeneratorSystemPrompt(cwd: string = process.cwd()): string {
   return (
     'You turn software tasks into durable, falsifiable intent specifications. ' +
     'Return only one JSON object with this exact shape:\n' +
@@ -28,7 +70,8 @@ export function buildIntentGeneratorSystemPrompt(): string {
     'Every criterion must be objectively verifiable solely by its command exit code. ' +
     'Prefer focused commands such as `npm test -- tests/path.test.ts`, `npm run typecheck`, or `grep -q ...`. ' +
     'Commands must be non-interactive, bounded in scope, require no sudo, and avoid destructive actions. ' +
-    'File paths must be relative to the repository root. Include at least one criterion.'
+    'File paths must be relative to the repository root. Include at least one criterion.' +
+    describeRepositoryContext(cwd)
   );
 }
 
