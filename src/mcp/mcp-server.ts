@@ -12,8 +12,12 @@
  * shell can write anywhere. Agent tools (`agent_task`, `agent_chat`,
  * `agent_plan`, session tools) construct the real agent with that same write
  * context: its tool handler refuses the unconfined escalation and keeps file
- * writes inside the server workspace. The interactive agent and headless mode
- * do not enter that frame, so their escalation path is unchanged.
+ * writes inside the server workspace, including write destinations named
+ * `output_dir` or `outputDir`. `desktop_screenshot` confines `output_path` to
+ * that same workspace. `memory_save` and `ckg_ingest` do not: they write the
+ * profile memory file and the collective ledger, and the caller cannot choose
+ * another path. The interactive agent and headless mode do not enter that
+ * frame, so their escalation path is unchanged.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -625,7 +629,7 @@ export class CodeBuddyMCPServer {
     registerMemoryTools(this.mcpServer, shouldRegister);
     registerCkgTools(this.mcpServer, shouldRegister);
     registerSessionTools(this.mcpServer, getAgent, shouldRegister);
-    registerDesktopTools(this.mcpServer, shouldRegister);
+    registerDesktopTools(this.mcpServer, shouldRegister, this.workingDirectory);
 
     const candidates = [
       'agent_chat',
