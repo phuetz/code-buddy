@@ -22,7 +22,8 @@ import type {
 } from './types.js';
 import { DEFAULT_HYBRID_CONFIG } from './types.js';
 import { BM25Index, getBM25Index } from './bm25.js';
-import { USearchVectorIndex } from './usearch-index.js';
+import { createVectorIndex } from './vector-index-factory.js';
+import type { VectorEngine, VectorIndexLike } from './vector-index-factory.js';
 import { getEmbeddingProvider, EmbeddingProvider } from '../embeddings/embedding-provider.js';
 import { getMemoryRepository, MemoryRepository } from '../database/repositories/memory-repository.js';
 import { logger } from '../utils/logger.js';
@@ -40,7 +41,9 @@ const DEFAULT_EMBEDDING_DIMENSIONS = 384;
 export class HybridSearchEngine extends EventEmitter {
   private config: HybridSearchConfig;
   private bm25Indexes: Map<SearchSource, BM25Index> = new Map();
-  private vectorIndexes: Map<SearchSource, USearchVectorIndex> = new Map();
+  private vectorIndexes: Map<SearchSource, VectorIndexLike> = new Map();
+  /** Moteur réellement retenu par la fabrique — affiché par `getStats()`. */
+  private vectorEngine: VectorEngine | null = null;
   private embeddingProvider: EmbeddingProvider | null = null;
   private memoryRepository: MemoryRepository | null = null;
   private cache: Map<string, { results: HybridSearchResult[]; timestamp: number }> = new Map();
@@ -89,22 +92,25 @@ export class HybridSearchEngine extends EventEmitter {
     // Using HNSW algorithm for O(log n) approximate nearest neighbor search
     const sources: SearchSource[] = ['memories', 'code', 'messages', 'cache'];
     for (const source of sources) {
-      const vectorIndex = new USearchVectorIndex({
+      // La fabrique choisit : `usearch` là où il s'installe, le sidecar Rust
+      // ailleurs (Windows), la boucle JavaScript seulement si les deux manquent.
+      const { index: vectorIndex, engine } = await createVectorIndex({
+        name: `hybrid-${source}`,
         dimensions: this.embeddingDimensions,
-        metric: 'cos',
         connectivity: 16,
         expansionAdd: 128,
         expansionSearch: 64,
       });
       await vectorIndex.initialize();
       this.vectorIndexes.set(source, vectorIndex);
+      this.vectorEngine = engine;
     }
 
     // Build initial indexes from existing data
     await this.rebuildIndexes();
 
     this.initialized = true;
-    logger.info('Hybrid search engine initialized with USearch vector indexes');
+    logger.info(`Hybrid search engine initialized with ${this.vectorEngine ?? 'no'} vector indexes`);
   }
 
   /**
@@ -502,7 +508,11 @@ export class HybridSearchEngine extends EventEmitter {
     vectorIndexes: Record<string, { size: number; dimensions: number; memoryUsage: number }>;
     cacheSize: number;
     embeddingProviderAvailable: boolean;
+    /** Vrai seulement si le moteur retenu EST usearch — un index Rust ou la boucle
+     *  JavaScript répondent désormais `false`, alors qu'ils comptent des index. */
     usearchEnabled: boolean;
+    /** Le moteur réellement retenu : `usearch`, `rust` ou `javascript`. */
+    vectorEngine: VectorEngine | null;
   } {
     const bm25Indexes: Record<string, { totalDocuments: number; uniqueTerms: number }> = {};
     const vectorIndexes: Record<string, { size: number; dimensions: number; memoryUsage: number }> = {};
@@ -529,7 +539,8 @@ export class HybridSearchEngine extends EventEmitter {
       vectorIndexes,
       cacheSize: this.cache.size,
       embeddingProviderAvailable: this.embeddingProvider !== null,
-      usearchEnabled: this.vectorIndexes.size > 0,
+      usearchEnabled: this.vectorEngine === 'usearch',
+      vectorEngine: this.vectorEngine,
     };
   }
 

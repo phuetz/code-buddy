@@ -11,6 +11,8 @@
 
 import type { KnowledgeGraph } from './knowledge-graph.js';
 import { logger } from '../utils/logger.js';
+import { createVectorIndex } from '../search/vector-index-factory.js';
+import type { VectorEngine, VectorIndexLike } from '../search/vector-index-factory.js';
 
 // ============================================================================
 // Types
@@ -37,7 +39,12 @@ const DEFAULT_CONFIG: GraphEmbeddingConfig = {
   entityPrefix: 'mod:',
 };
 
-type VectorIndexKind = 'usearch' | 'legacy-usearch' | 'brute-force';
+/**
+ * Le moteur retenu vient désormais de `createVectorIndex` : plus de variante
+ * « legacy-usearch » ici. Elle n'existait que pour une signature `add(id, vec)`
+ * qu'aucun index du dépôt n'expose — seulement un mock de test.
+ */
+type VectorIndexKind = VectorEngine | 'brute-force';
 
 function getEmbeddings(batchResult: unknown): number[][] {
   if (Array.isArray(batchResult)) {
@@ -73,7 +80,8 @@ export function createGraphEmbeddingIndex(
   let ready = false;
   let entityTexts: Map<string, string> = new Map();
   let embeddingProvider: any = null;
-  let vectorIndex: any = null;
+  /** Soit un index de la fabrique, soit la boucle locale de dernier recours. */
+  let vectorIndex: VectorIndexLike | BruteForceIndex | null = null;
   let vectorIndexKind: VectorIndexKind = 'brute-force';
   let entityIds: string[] = [];
 
@@ -117,39 +125,43 @@ export function createGraphEmbeddingIndex(
           return;
         }
         const dim = firstEmbedding.length;
+        // La fabrique charge réellement le paquet natif avant de le choisir. Le
+        // `try/catch` d'avant portait sur un import de fichier TypeScript du
+        // dépôt : il réussissait toujours, si bien que le repli n'était jamais
+        // atteint ici et s'activait plus tard, en silence, dans l'index lui-même.
         try {
-          const { USearchVectorIndex } = await import('../search/usearch-index.js');
-          vectorIndex = new USearchVectorIndex({ dimensions: dim, metric: 'cos' });
-          vectorIndexKind = 'usearch';
-          if (typeof vectorIndex.add === 'function' && vectorIndex.add.length >= 2) {
-            const LegacyUSearchVectorIndex = USearchVectorIndex as unknown as new (
-              dimensions: number
-            ) => unknown;
-            vectorIndex = new LegacyUSearchVectorIndex(dim);
-            vectorIndexKind = 'legacy-usearch';
-          }
-        } catch {
-          // Fallback to brute-force
+          const { index, engine } = await createVectorIndex({
+            name: 'graph-embeddings',
+            dimensions: dim,
+            capacity: Math.max(entityIds.length, 1),
+          });
+          vectorIndex = index;
+          vectorIndexKind = engine;
+          await vectorIndex.initialize();
+        } catch (err) {
+          logger.debug(`GraphEmbeddingIndex: fabrique indisponible (${String(err)}) — boucle locale`);
           vectorIndex = new BruteForceIndex(dim);
           vectorIndexKind = 'brute-force';
         }
 
         for (let i = 0; i < entityIds.length; i++) {
-          if (vectorIndexKind === 'usearch') {
+          const embedding = embeddings[i];
+          if (!embedding) continue;
+          if (vectorIndex instanceof BruteForceIndex) {
+            vectorIndex.add(i, embedding);
+          } else {
             await vectorIndex.add({
               id: String(i),
-              embedding: embeddings[i],
+              embedding,
               metadata: { entityId: entityIds[i] },
             });
-          } else if (vectorIndexKind === 'legacy-usearch') {
-            vectorIndex.add(i, embeddings[i]);
-          } else {
-            vectorIndex.add(i, embeddings[i]);
           }
         }
 
         ready = true;
-        logger.debug(`GraphEmbeddingIndex: built with ${entityIds.length} entities, dim=${dim}`);
+        logger.debug(
+          `GraphEmbeddingIndex: built with ${entityIds.length} entities, dim=${dim}, engine=${vectorIndexKind}`,
+        );
       } catch (err) {
         logger.debug(`GraphEmbeddingIndex: failed to build - ${err}`);
         ready = false;
@@ -172,12 +184,14 @@ export function createGraphEmbeddingIndex(
 
         const results = await vectorIndex.search(queryEmbedding, Math.min(k, entityIds.length));
 
+        // `filter(Boolean)` ne rétrécit pas le type : sans prédicat, un identifiant
+        // absent traversait en `undefined` sous le couvert d'un `any`.
         return results
           .map((r: { id: number | string; score: number }) => ({
             entityId: entityIds[Number(r.id)],
             score: r.score,
           }))
-          .filter((r: { entityId: string | undefined; score: number }) => Boolean(r.entityId));
+          .filter((r): r is { entityId: string; score: number } => typeof r.entityId === 'string');
       } catch {
         return [];
       }
