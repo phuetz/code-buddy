@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildIntentGeneratorSystemPrompt,
@@ -59,5 +62,32 @@ describe('generateIntent', () => {
     expect(prompt).toContain('non-interactive');
     expect(prompt).toContain('no sudo');
     expect(prompt).toContain('expectExit');
+  });
+
+  it('grounds the contract in the repository test runner, never another ecosystem', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'cb-intent-repo-'));
+    try {
+      writeFileSync(
+        join(repo, 'package.json'),
+        JSON.stringify({ scripts: { test: 'vitest run', typecheck: 'tsc --noEmit' } }),
+      );
+      const prompt = buildIntentGeneratorSystemPrompt(repo);
+      expect(prompt).toContain('Test runner: vitest');
+      expect(prompt).toContain('Available npm scripts: test, typecheck');
+      expect(prompt).toContain('no pytest');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to the general contract when the repository has no package.json', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'cb-intent-empty-'));
+    try {
+      const prompt = buildIntentGeneratorSystemPrompt(empty);
+      expect(prompt).not.toContain('THIS repository');
+      expect(prompt).toContain('Include at least one criterion.');
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
   });
 });

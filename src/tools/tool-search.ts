@@ -42,7 +42,27 @@ const QUERY_EQUIVALENTS: Record<string, readonly string[]> = {
   executer: ['execute', 'run'],
   lancer: ['run', 'execute'],
   commande: ['command'],
+  terminal: ['terminal', 'bash', 'shell'],
+  lister: ['list', 'directory'],
+  symbole: ['symbol', 'symbols'],
+  symboles: ['symbol', 'symbols'],
+  fonction: ['function', 'symbol', 'symbols'],
+  fonctions: ['function', 'functions', 'symbol', 'symbols'],
+  texte: ['text'],
 };
+
+/**
+ * Words that carry no intent. Dropped from the QUERY only: a French request
+ * ("voir le contenu du fichier") otherwise spends half its weight on "le",
+ * "du", which match whatever description happens to contain them.
+ */
+const QUERY_STOPWORDS = new Set([
+  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'd', 'l',
+  'dans', 'sur', 'pour', 'avec', 'par', 'ce', 'cet', 'cette', 'ces',
+  'mon', 'ton', 'son', 'notre', 'votre', 'leur', 'en', 'au', 'aux',
+  'et', 'ou', 'qui', 'que', 'quoi', 'dont', 'est', 'sont',
+  'the', 'an', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are',
+]);
 
 /** BM25 parameters */
 const K1 = 1.2;   // Term frequency saturation
@@ -138,7 +158,7 @@ export class BM25Index {
    * Returns results sorted by BM25 score (highest first).
    */
   search(query: string, maxResults: number = 10): Array<{ name: string; description: string; score: number }> {
-    const queryTokens = [...new Set(tokenize(query).flatMap(term => [term, ...(QUERY_EQUIVALENTS[term] ?? [])]))];
+    const queryTokens = [...new Set(tokenize(query).filter(term => !QUERY_STOPWORDS.has(term)).flatMap(term => [term, ...(QUERY_EQUIVALENTS[term] ?? [])]))];
     const limit = Number.isFinite(maxResults) ? Math.max(1, Math.min(50, Math.floor(maxResults))) : 10;
     if (queryTokens.length === 0) return [];
 
