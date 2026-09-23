@@ -74,6 +74,7 @@ import {
 } from '../tools/code-exec-tool.js';
 import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { isConfinedTarget } from './workspace-confine.js';
 
 /**
  * Dependencies required to initialize the ToolHandler
@@ -273,10 +274,15 @@ export class ToolHandler {
   /** Keeps code_exec stores and executors isolated between agent instances. */
   private readonly codeExecAgentScopeId: string;
   /**
-   * Set only on the handler the MCP server owns. The agent loop uses another
-   * instance and leaves this false, so its shell escalation is unchanged.
+   * Set on the handler the MCP server owns, and on the handler of an agent
+   * that the MCP server constructed. Any other agent leaves this false.
    */
   private unconfinedShellEscalationRefused = false;
+  /**
+   * Set only with the MCP write context. File paths are resolved against this
+   * root. Unset means the interactive and headless loops are unchanged.
+   */
+  private workspaceWriteRoot: string | undefined;
 
   constructor(private deps: ToolHandlerDependencies) {
     this.codeExecAgentScopeId = deps.agentId?.trim() || `agent_${createCodeExecToolCallId()}`;
@@ -348,6 +354,14 @@ export class ToolHandler {
    */
   refuseUnconfinedShellEscalation(): void {
     this.unconfinedShellEscalationRefused = true;
+  }
+
+  /**
+   * MCP server only. File writes on this handler must stay inside `root`,
+   * even when trust-folder enforcement is off.
+   */
+  confineWritesToWorkspace(root: string): void {
+    this.workspaceWriteRoot = resolve(root);
   }
 
   /** Workspace currently used by tool execution and recovery storage. */
@@ -946,6 +960,53 @@ export class ToolHandler {
   }
 
   /**
+   * Paths named by a write, resolved against the MCP workspace when one was
+   * supplied at construction. No root means no extra check.
+   */
+  private async workspaceConfinementError(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolResult | null> {
+    const root = this.workspaceWriteRoot;
+    if (!root) return null;
+
+    const rawPaths: string[] = [];
+    for (const key of ['path', 'file_path', 'target_file', 'outputPath', 'output_path', 'output_prefix']) {
+      const value = args[key];
+      if (typeof value === 'string' && value.trim() !== '') rawPaths.push(value);
+    }
+    if (Array.isArray(args.files)) {
+      for (const file of args.files) {
+        if (typeof file === 'string' && file.trim() !== '') rawPaths.push(file);
+        else if (file && typeof file === 'object' && typeof (file as { path?: unknown }).path === 'string') {
+          rawPaths.push((file as { path: string }).path);
+        }
+      }
+    }
+    if (toolName === 'apply_patch' && typeof args.patch === 'string') {
+      try {
+        const { parsePatch } = await import('../tools/apply-patch.js');
+        for (const op of parsePatch(args.patch)) {
+          if (typeof op.path === 'string' && op.path.trim() !== '') rawPaths.push(op.path);
+          if (typeof op.moveTo === 'string' && op.moveTo.trim() !== '') rawPaths.push(op.moveTo);
+        }
+      } catch {
+        return {
+          success: false,
+          error: 'Path outside workspace not allowed: patch could not be read',
+        };
+      }
+    }
+
+    for (const raw of rawPaths) {
+      if (!isConfinedTarget(root, raw)) {
+        return { success: false, error: `Path outside workspace not allowed: ${raw}` };
+      }
+    }
+    return null;
+  }
+
+  /**
    * One authorization stage shared by the original tool call and the final
    * post-hook arguments. A `confirm` decision can never silently fall through.
    */
@@ -955,6 +1016,9 @@ export class ToolHandler {
     hookContext: ToolHookContext,
     hooksManager: ReturnType<typeof getToolHooksManager>,
   ): Promise<ToolResult | null> {
+    const outsideWorkspace = await this.workspaceConfinementError(toolName, args);
+    if (outsideWorkspace) return outsideWorkspace;
+
     try {
       const { getPermissionModeManager } = await import('../security/permission-modes.js');
       const shellCommand =

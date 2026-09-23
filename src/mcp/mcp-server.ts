@@ -9,12 +9,17 @@
  * (workspace, protected paths, confirmation). `bash` runs in the workspace
  * sandbox when one exists. If none does, this server refuses the unconfined
  * escalation — even when `CODEBUDDY_AUTO_CONFIRM=true` — because an unconfined
- * shell can write anywhere. The interactive agent and headless mode do not
- * enter that frame, so their escalation path is unchanged.
+ * shell can write anywhere. Agent tools (`agent_task`, `agent_chat`,
+ * `agent_plan`, session tools) construct the real agent with that same write
+ * context: its tool handler refuses the unconfined escalation and keeps file
+ * writes inside the server workspace. The interactive agent and headless mode
+ * do not enter that frame, so their escalation path is unchanged.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { AgentModelClient } from '../agent/codebuddy-agent.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,6 +71,12 @@ export interface CodeBuddyMCPServerOptions {
   tools?: string | string[];
   /** Working directory passed to every registry tool execution. */
   workingDirectory?: string;
+  /**
+   * Replaces the network model when this server constructs its agent.
+   * The CLI leaves it unset. Tests pass a local fake that never opens a socket.
+   * The MCP write context is still applied.
+   */
+  agentModelClient?: AgentModelClient;
 }
 
 export interface MCPToolExposureStats {
@@ -416,6 +427,7 @@ export class CodeBuddyMCPServer {
   private readonly allowWrite: boolean;
   private readonly patterns: string[];
   private readonly workingDirectory: string;
+  private readonly agentModelClient: AgentModelClient | undefined;
   private readonly registryCatalog: RegistryCatalog;
   private readonly supplementalToolNames: string[] = [];
   private writeAccessInitialized = false;
@@ -429,6 +441,7 @@ export class CodeBuddyMCPServer {
     this.allowWrite = resolveAllowWrite(options.allowWrite);
     this.patterns = parseToolPatterns(options.tools);
     this.workingDirectory = path.resolve(options.workingDirectory ?? process.cwd());
+    this.agentModelClient = options.agentModelClient;
     this.registryCatalog = buildRegistryCatalog(this.allowWrite, this.patterns);
 
     this.mcpServer = new McpServer(
@@ -557,7 +570,8 @@ export class CodeBuddyMCPServer {
 
     this.agentInitPromise = (async () => {
       const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
-      const apiKey = resolveActiveProviderApiKey() || '';
+      const injected = this.agentModelClient;
+      const apiKey = injected ? 'local-model' : (resolveActiveProviderApiKey() || '');
 
       if (!apiKey) {
         throw new Error(
@@ -567,9 +581,22 @@ export class CodeBuddyMCPServer {
 
       const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
       this.agent = new CodeBuddyAgent(
-        apiKey,
+        injected ? 'local-model' : apiKey,
         process.env.GROK_BASE_URL,
         process.env.GROK_MODEL,
+        undefined,
+        true,
+        undefined,
+        this.workingDirectory,
+        undefined,
+        undefined,
+        {
+          mcpToolContext: {
+            workspaceRoot: this.workingDirectory,
+            refuseUnconfinedShellEscalation: true,
+          },
+          ...(injected ? { modelClient: injected } : {}),
+        },
       );
       return this.agent;
     })();
@@ -592,7 +619,9 @@ export class CodeBuddyMCPServer {
       !dynamicNames.has(name) && shouldMatchPatterns(name, this.patterns);
     const getAgent = () => this.ensureAgent();
 
-    registerAgentTools(this.mcpServer, getAgent, shouldRegister);
+    registerAgentTools(this.mcpServer, getAgent, shouldRegister, {
+      workspaceRoot: this.workingDirectory,
+    });
     registerMemoryTools(this.mcpServer, shouldRegister);
     registerCkgTools(this.mcpServer, shouldRegister);
     registerSessionTools(this.mcpServer, getAgent, shouldRegister);
@@ -680,12 +709,18 @@ export class CodeBuddyMCPServer {
     }
   }
 
-  async start(): Promise<void> {
+  /** Attach an already-built transport. Used by stdio start and in-process tests. */
+  async connect(transport: Transport): Promise<void> {
     if (this.running) throw new Error('MCP server is already running');
     this.setupApprovalBridge();
-    this.transport = new StdioServerTransport();
-    await this.mcpServer.connect(this.transport);
+    await this.mcpServer.connect(transport);
     this.running = true;
+  }
+
+  async start(): Promise<void> {
+    if (this.running) throw new Error('MCP server is already running');
+    this.transport = new StdioServerTransport();
+    await this.connect(this.transport);
   }
 
   async stop(): Promise<void> {
