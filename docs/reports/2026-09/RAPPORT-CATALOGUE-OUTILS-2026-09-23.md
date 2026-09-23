@@ -15,6 +15,8 @@ Aucun push, aucune fusion. Livraison et preuves :
 | `4af6715f1` | fix(export): compter la taille exportée en octets |
 | `d8504d4fc` | test(catalogue): verrouiller les effets des outils de Jules |
 | `8d6b19fac` | test(catalogue): conserver les tests de Jules déjà verrouillés |
+| `f6294e58e` | docs(catalogue): noter la branche et les preuves du lot 13 |
+| `09aefb6c5` | style(catalogue): retirer les espaces de fin des tests de Jules |
 
 ## Hors périmètre
 
