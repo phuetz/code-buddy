@@ -194,7 +194,7 @@ export function resolveChatGptReasoningEffort(
   )
     ? normalizedRequested as ChatGptReasoningEffort
     : modelInfo?.defaultReasoningEffort ??
-      (/^gpt-5\.6-(?:sol|terra|luna)$/i.test(normalizeChatGptOAuthModel(model))
+      (/^gpt-(?:5\.6-(?:sol|terra|luna)|6-(?:astra|sol|luna))$/i.test(normalizeChatGptOAuthModel(model))
         ? 'medium'
         : undefined);
 
@@ -219,10 +219,12 @@ export function resolveChatGptReasoningEffort(
 
 function inferReasoningEfforts(model: string): ChatGptReasoningEffort[] {
   const normalized = normalizeChatGptOAuthModel(model).toLowerCase();
-  if (normalized === 'gpt-5.6-sol' || normalized === 'gpt-5.6-terra') {
+  // Offline fallback only: mirrors the catalogue's supported_reasoning_levels
+  // (2026-09-23). GPT-6 has no `minimal`; luna stops at `max`.
+  if (['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'gpt-6-sol'].includes(normalized)) {
     return ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
   }
-  if (normalized === 'gpt-5.6-luna') {
+  if (normalized === 'gpt-5.6-luna' || normalized === 'gpt-6-luna') {
     return ['low', 'medium', 'high', 'xhigh', 'max'];
   }
   return ['minimal', 'low', 'medium', 'high', 'xhigh'];
@@ -234,7 +236,7 @@ export function modelUsesResponsesLite(
 ): boolean {
   const info = findChatGptModel(catalog, model);
   if (info) return info.useResponsesLite;
-  return /^gpt-5\.6-(?:sol|terra|luna)$/i.test(normalizeChatGptOAuthModel(model));
+  return /^gpt-(?:5\.6-(?:sol|terra|luna)|6-(?:astra|sol|luna))$/i.test(normalizeChatGptOAuthModel(model));
 }
 
 export function parseChatGptModelCatalog(

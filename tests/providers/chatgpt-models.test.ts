@@ -100,6 +100,16 @@ describe('ChatGPT OAuth model policy', () => {
     expect(isChatGptSubscriptionModel('gpt-60')).toBe(false);
   });
 
+  it('gives GPT-6 the catalogue defaults when the catalogue is unavailable', () => {
+    for (const model of ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
+      expect(resolveChatGptReasoningEffort(undefined, model, null)).toBe('medium');
+      expect(resolveChatGptReasoningEffort('minimal', model, null)).toBe('low');
+      expect(modelUsesResponsesLite(model, null)).toBe(true);
+    }
+    expect(resolveChatGptReasoningEffort('ultra', 'gpt-6-astra', null)).toBe('ultra');
+    expect(resolveChatGptReasoningEffort('ultra', 'gpt-6-luna', null)).toBe('max');
+  });
+
   it('filters hidden/unsupported entries and sorts list-visible API models by priority', () => {
     const catalog = parseChatGptModelCatalog(rawCatalog, 'W/"etag"', 123);
     expect(catalog?.models.map((model) => model.slug)).toEqual([
