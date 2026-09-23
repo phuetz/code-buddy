@@ -1,12 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  applyHeadlessCompactRequest,
+  capCompactToolList,
   HEADLESS_LOCAL_COMPACT_MAX_TOOLS,
   HEADLESS_LOCAL_COMPACT_MAX_TOKENS,
   isHeadlessLocalPromptCompact,
   isHeadlessPromptCompact,
   isLocalLlmProvider,
 } from '../../src/config/headless-local-prompt.js';
+import { logger } from '../../src/utils/logger.js';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('headless local compact prompt', () => {
   it('detects Ollama / LM Studio / vLLM and ignores cloud providers', () => {
@@ -73,5 +80,63 @@ describe('headless local compact prompt', () => {
   it('keeps the old name working for existing callers', () => {
     const env = { CODEBUDDY_HEADLESS: 'true', CODEBUDDY_PROMPT_COMPACT: 'true', CODEBUDDY_PROVIDER: 'openai' };
     expect(isHeadlessLocalPromptCompact(env)).toBe(isHeadlessPromptCompact(env));
+  });
+
+  it('does not let --compact override an explicit refusal, and warns', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    for (const valeur of ['false', '0', 'off', 'FALSE', ' Off ']) {
+      warn.mockClear();
+      const env = { CODEBUDDY_PROMPT_COMPACT: valeur };
+      const decision = applyHeadlessCompactRequest(env, true);
+      expect(decision.refused).toBe(true);
+      expect(env.CODEBUDDY_PROMPT_COMPACT).toBe(valeur);
+      expect(isHeadlessPromptCompact({
+        ...env,
+        CODEBUDDY_HEADLESS: 'true',
+        CODEBUDDY_PROVIDER: 'openai',
+      })).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(`CODEBUDDY_PROMPT_COMPACT=${valeur}`),
+      );
+    }
+    warn.mockClear();
+    const libre: NodeJS.ProcessEnv = {};
+    expect(applyHeadlessCompactRequest(libre, true)).toEqual({ refused: false });
+    expect(libre.CODEBUDDY_PROMPT_COMPACT).toBe('true');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('caps the schemas actually sent at 8, with restore_context inside the ceiling', () => {
+    const schema = (name: string) => ({ function: { name } });
+    // Mesure lot 9, question « Réponds uniquement : OK » : 5 garantis
+    // (cœur compact + restore_context) puis 5 reliquats RAG. Le plafond
+    // annoncé est 8. Les deux en trop sont les deux derniers reliquats,
+    // pas une injection de surface.
+    const measured = [
+      'view_file', 'bash', 'search', 'tool_search', 'restore_context',
+      'video_trailer_plan', 'comfy_recipe', 'x_search', 'peer_tool_invoke', 'web_test',
+    ].map(schema);
+    expect(capCompactToolList(measured).map((tool) => tool.function.name)).toEqual([
+      'view_file', 'bash', 'search', 'tool_search', 'restore_context',
+      'video_trailer_plan', 'comfy_recipe', 'x_search',
+    ]);
+
+    // Outils de surface prependés par l'exécuteur : ils remplissent les
+    // places restantes, ils ne font pas sauter le plafond, et
+    // restore_context n'est pas le premier sacrifié.
+    const withSurface = [
+      'list_peers', 'route_peer', 'peer_delegate', 'peer_tool_invoke',
+      'view_file', 'bash', 'search', 'tool_search', 'restore_context',
+      'video_trailer_plan',
+    ].map(schema);
+    expect(capCompactToolList(withSurface).map((tool) => tool.function.name)).toEqual([
+      'view_file', 'bash', 'search', 'tool_search', 'restore_context',
+      'list_peers', 'route_peer', 'peer_delegate',
+    ]);
+
+    const already = ['bash', 'view_file'].map(schema);
+    expect(capCompactToolList(already).map((tool) => tool.function.name)).toEqual([
+      'bash', 'view_file',
+    ]);
   });
 });

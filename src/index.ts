@@ -2245,7 +2245,11 @@ program
         // replacing the entire system prompt and disabling every tool — the
         // agent surface is what costs, not the wording.
         if (options.compact) {
-          process.env.CODEBUDDY_PROMPT_COMPACT = 'true';
+          // false / 0 / off already in the environment keep the last word.
+          // Overwriting them made `--compact` turn the mode on against the
+          // refusal this flag is documented to respect.
+          const { applyHeadlessCompactRequest } = await import('./config/headless-local-prompt.js');
+          applyHeadlessCompactRequest(process.env, true);
         }
         const { resolveHeadlessOutputFormat } = await import('./cli/headless-options.js');
         const headlessExitCode = await processPromptHeadless(
