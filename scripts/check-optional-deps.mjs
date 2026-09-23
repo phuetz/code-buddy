@@ -28,7 +28,8 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
-const ROOT = path.resolve(import.meta.dirname, '..');
+// CHECK_OPTIONAL_DEPS_ROOT lets the tests run the guard against a fixture repository.
+const ROOT = path.resolve(process.env.CHECK_OPTIONAL_DEPS_ROOT ?? path.join(import.meta.dirname, '..'));
 const SRC = path.join(ROOT, 'src');
 const SHOULD_INSTALL = process.argv.includes('--install');
 
@@ -49,6 +50,19 @@ function sourceFiles(dir, acc = []) {
   return acc;
 }
 
+/**
+ * Drop comments before matching. Without this, prose such as
+ * "// Use a non-literal specifier so tsc doesn't require 'usearch'" reads as
+ * `require 'usearch'`: measured on PR #195 (2026-09-23), where the guard failed
+ * the Windows/Node 20 leg over `usearch`, a package the source deliberately
+ * loads through a non-literal specifier that tsc never resolves. Line comments
+ * are only stripped after a character that cannot end a URL scheme, so
+ * `'http://…'` inside a string survives.
+ */
+function stripComments(text) {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"\\])\/\/.*$/gm, '$1');
+}
+
 /** Modules the source resolves by name — the ones tsc needs types for. */
 function importedFromSource(modules) {
   const files = sourceFiles(SRC);
@@ -60,7 +74,7 @@ function importedFromSource(modules) {
   );
   const found = new Set();
   for (const file of files) {
-    const text = readFileSync(file, 'utf8');
+    const text = stripComments(readFileSync(file, 'utf8'));
     for (const [m, re] of patterns) {
       if (!found.has(m) && re.test(text)) found.add(m);
     }
