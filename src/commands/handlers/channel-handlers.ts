@@ -673,6 +673,19 @@ interface CachedChannelAgent {
 const channelAgentCache = new Map<string, CachedChannelAgent>();
 const channelTurnTails = new Map<string, Promise<void>>();
 const companionChannelHistories = new Map<string, ConversationTurn[]>();
+
+/** Test-only view of the handler-local companion history. */
+export function __companionChannelHistoriesForTests(): ReadonlyMap<string, ConversationTurn[]> {
+  return companionChannelHistories;
+}
+
+/** Test-only: backdate a cached agent so an idle reset can be decided without waiting. */
+export function __ageChannelAgentForTests(sessionKey: string, lastUsed: number): boolean {
+  const cached = channelAgentCache.get(sessionKey);
+  if (!cached) return false;
+  cached.lastUsed = lastUsed;
+  return true;
+}
 const CHANNEL_AGENT_IDLE_MS = 2 * 60 * 60 * 1000; // evict after 2h idle
 const CHANNEL_AGENT_MAX = 50;
 const DEFAULT_CHANNEL_TURN_TIMEOUT_MS = 3 * 60 * 1000;
@@ -1258,35 +1271,39 @@ async function loadMessagingSessionSnapshot(
     key: string,
     env?: NodeJS.ProcessEnv,
   ) => { updatedAtMs: number; transcript: string } | null,
-): Promise<{ lastActivityAt: number | null; transcript: string }> {
+): Promise<{
+  lastActivityAt: number | null;
+  transcript: string;
+  parts: Array<{ source: 'agent-cache' | 'session-store' | 'companion-history' | 'local-map'; transcript: string }>;
+}> {
   let lastActivityAt: number | null = null;
-  const parts: string[] = [];
   const consider = (at: number | null, text: string): void => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    parts.push(trimmed);
     if (at !== null && Number.isFinite(at)) {
       lastActivityAt = lastActivityAt === null ? at : Math.max(lastActivityAt, at);
     }
   };
 
+  let agentText = '';
   const cached = channelAgentCache.get(sessionKey);
   if (cached) {
     try {
       const history = cached.agent.getChatHistory?.() ?? [];
-      const text = history
+      agentText = history
         .map((entry) => {
           const content = typeof entry.content === 'string' ? entry.content.trim() : '';
           return content ? `${entry.type}: ${content}` : '';
         })
         .filter((line) => line.length > 0)
         .join('\n');
-      consider(cached.lastUsed, text);
+      consider(cached.lastUsed, agentText);
     } catch {
       // A broken cache entry must not block the inbound turn.
     }
   }
 
+  let storeText = '';
   try {
     const { getSessionStore } = await import('../../persistence/session-store.js');
     const session = await getSessionStore().loadSession(sessionKey);
@@ -1294,30 +1311,52 @@ async function loadMessagingSessionSnapshot(
       const at = session.lastAccessedAt instanceof Date
         ? session.lastAccessedAt.getTime()
         : Date.parse(String(session.lastAccessedAt));
-      const text = session.messages
+      storeText = session.messages
         .map((message) => `${message.type}: ${message.content}`)
         .filter((line) => line.trim().length > 2)
         .join('\n');
-      consider(Number.isFinite(at) ? at : null, text);
+      consider(Number.isFinite(at) ? at : null, storeText);
     }
   } catch {
     // Disk session is optional continuity, not a reason to drop the turn.
   }
 
+  let companionText = '';
   try {
     const inspected = inspectCompanion(sessionKey, process.env);
-    if (inspected) consider(inspected.updatedAtMs, inspected.transcript);
+    if (inspected) {
+      companionText = inspected.transcript;
+      consider(inspected.updatedAtMs, companionText);
+    }
   } catch {
     // Companion history is one source among others.
   }
 
-  return { lastActivityAt, transcript: parts.join('\n\n') };
+  // No timestamp of its own: a selfie turn can live only in this map.
+  // It is still archived. It does not by itself move the idle clock.
+  const localText = (companionChannelHistories.get(sessionKey) ?? [])
+    .map((turn) => `${turn.role}: ${turn.content}`)
+    .filter((line) => line.trim().length > 2)
+    .join('\n');
+
+  const parts = [
+    { source: 'agent-cache' as const, transcript: agentText.trim() },
+    { source: 'session-store' as const, transcript: storeText.trim() },
+    { source: 'companion-history' as const, transcript: companionText.trim() },
+    { source: 'local-map' as const, transcript: localText.trim() },
+  ];
+  return {
+    lastActivityAt,
+    transcript: parts.map((part) => part.transcript).filter((text) => text.length > 0).join('\n\n'),
+    parts,
+  };
 }
 
 /**
  * Before a channel turn continues, apply the configured messaging reset.
- * mode none returns before any session read. A failed memory archive
- * cancels the clear and the existing transcript stays in place.
+ * mode none returns before any session read. Each store the reset would
+ * clear is archived first. A failed archive of any one of them cancels
+ * the clear and every store stays in place.
  */
 async function maybeResetInboundMessagingSession(sessionKey: string): Promise<void> {
   const { applyChannelMessagingSessionReset, resolveSessionResetPolicy } = await import(
@@ -1346,6 +1385,7 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     now,
     policy,
     snapshot,
+    parts: snapshot.parts,
     archiveDir: path.join(os.homedir(), '.codebuddy', 'companion', 'session-reset-archive'),
     resetSession: async () => {
       const { getSessionStore } = await import('../../persistence/session-store.js');

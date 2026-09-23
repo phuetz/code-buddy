@@ -60,6 +60,34 @@ interface MemoryArchiveRecord {
 const MODES = new Set<MessagingSessionResetMode>(['both', 'idle', 'daily', 'none']);
 const DIGEST_RECEIPT = /^[a-f0-9]{64}$/;
 
+/**
+ * Every store the channel reset erases. Each one is archived on its own.
+ * A failure of any part cancels the reset before anything is cleared.
+ */
+export const MESSAGING_MEMORY_SOURCES = [
+  'agent-cache',
+  'session-store',
+  'companion-history',
+  'local-map',
+] as const;
+
+export type MessagingMemorySource = (typeof MESSAGING_MEMORY_SOURCES)[number];
+
+export interface MessagingMemoryPart {
+  source: MessagingMemorySource;
+  transcript: string;
+}
+
+export function messagingMemoryArchivePath(
+  archiveDir: string,
+  sessionKey: string,
+  source?: MessagingMemorySource,
+): string {
+  const stem = createHash('sha256').update(sessionKey).digest('hex').slice(0, 32);
+  const fileName = source ? `${stem}.${source}.json` : `${stem}.json`;
+  return path.join(archiveDir, fileName);
+}
+
 export function isDigestReceipt(receipt: string): boolean {
   return DIGEST_RECEIPT.test(receipt);
 }
@@ -125,6 +153,7 @@ export function proveMessagingMemorySave(input: {
   transcript: string;
   now: number;
   reason: MessagingSessionResetReason;
+  source?: MessagingMemorySource;
 }): MemorySaveResult {
   const digest = digestTranscript(input.transcript);
   const record: MemoryArchiveRecord = {
@@ -134,8 +163,7 @@ export function proveMessagingMemorySave(input: {
     transcript: input.transcript,
     digest,
   };
-  const fileName = `${createHash('sha256').update(input.sessionKey).digest('hex').slice(0, 32)}.json`;
-  const filePath = path.join(input.archiveDir, fileName);
+  const filePath = messagingMemoryArchivePath(input.archiveDir, input.sessionKey, input.source);
   try {
     writeJsonAtomicSync(filePath, record, { mode: 0o600 });
     const readBack = readJsonAtomicSync<MemoryArchiveRecord | null>(filePath, null, {
@@ -159,6 +187,36 @@ export function proveMessagingMemorySave(input: {
   } catch {
     return { ok: false, error: 'memory archive write failed' };
   }
+}
+
+/**
+ * Archive every erased store. The first failure is returned as-is and the
+ * caller must not clear anything. The receipt covers every part that was proved.
+ */
+export function proveMessagingMemoryParts(input: {
+  archiveDir: string;
+  sessionKey: string;
+  parts: readonly MessagingMemoryPart[];
+  now: number;
+  reason: MessagingSessionResetReason;
+}): MemorySaveResult {
+  const proved: string[] = [];
+  for (const part of input.parts) {
+    const saved = proveMessagingMemorySave({
+      archiveDir: input.archiveDir,
+      sessionKey: input.sessionKey,
+      transcript: part.transcript,
+      now: input.now,
+      reason: input.reason,
+      source: part.source,
+    });
+    if (!saved.ok) return saved;
+    proved.push(`${part.source}:${saved.receipt}`);
+  }
+  return {
+    ok: true,
+    receipt: createHash('sha256').update(proved.join('\n')).digest('hex'),
+  };
 }
 
 export async function enforceMessagingSessionReset(input: {
@@ -195,19 +253,31 @@ export async function applyChannelMessagingSessionReset(input: {
   policy: MessagingSessionResetPolicy;
   snapshot: MessagingSessionSnapshot;
   archiveDir: string;
+  /** When set, each part is proved. Any failure cancels the reset. */
+  parts?: readonly MessagingMemoryPart[];
   resetSession: () => Promise<void>;
 }): Promise<MessagingSessionResetOutcome> {
   return enforceMessagingSessionReset({
     policy: input.policy,
     now: input.now,
     snapshot: input.snapshot,
-    saveMemory: (transcript, reason) => Promise.resolve(proveMessagingMemorySave({
-      archiveDir: input.archiveDir,
-      sessionKey: input.sessionKey,
-      transcript,
-      now: input.now,
-      reason,
-    })),
+    saveMemory: (transcript, reason) => Promise.resolve(
+      input.parts && input.parts.length > 0
+        ? proveMessagingMemoryParts({
+            archiveDir: input.archiveDir,
+            sessionKey: input.sessionKey,
+            parts: input.parts,
+            now: input.now,
+            reason,
+          })
+        : proveMessagingMemorySave({
+            archiveDir: input.archiveDir,
+            sessionKey: input.sessionKey,
+            transcript,
+            now: input.now,
+            reason,
+          }),
+    ),
     resetSession: input.resetSession,
   });
 }
