@@ -109,5 +109,5 @@ Inventaire Express : 150 sites `app.|router.METHOD(` sous `src/server` et le web
 - Un client navigateur sur le HTML du webchat. Seuls HTTP et un client WebSocket de test ont été exercés.
 - Windows, macOS, et une barrière Docker : la mission n'en nomme pas, et elle demande le serveur en processus dans ce worktree.
 - La suite complète du dépôt (~27 000 tests).
-- `tests/security/donnees-personnelles.test.ts` a été exécuté après le commit des tests : 40 tests verts, dont « aucun fichier suivi ne nomme la situation ou l'infrastructure privée ». Il sera rejoué après le commit de ce rapport.
+- `tests/security/donnees-personnelles.test.ts` : 40 tests verts après le commit des tests, puis encore 40 après le commit de ce rapport (arbre suivi, y compris ce fichier).
 - Le profil réel de l'utilisateur : il n'a pas été ouvert.
