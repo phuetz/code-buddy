@@ -13,6 +13,7 @@ import { setActiveCustomAgentRuntime } from '../../agent/custom/custom-agent-run
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   output?: string;
   error?: string;
   passToAI?: boolean;

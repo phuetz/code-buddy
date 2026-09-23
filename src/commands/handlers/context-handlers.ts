@@ -4,6 +4,7 @@ import { getWorkspaceDetector } from "../../utils/workspace-detector.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;

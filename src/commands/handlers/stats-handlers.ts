@@ -6,6 +6,7 @@ import { getSelfHealingEngine } from "../../utils/self-healing.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;

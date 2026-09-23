@@ -11,6 +11,7 @@ import { PolicyEngine } from "../../security/policy-engine.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;

@@ -11,6 +11,7 @@ export interface MemoryCommandContext {
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;

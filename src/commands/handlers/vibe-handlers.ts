@@ -368,6 +368,7 @@ export async function handleVimMode(args: string[]): Promise<CommandHandlerResul
 export async function handleConfig(args: string[]): Promise<CommandHandlerResult> {
   const action = args[0]?.toLowerCase() || 'validate';
   const lines: string[] = [];
+  let failed = false;
 
   try {
     const {
@@ -452,6 +453,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
         const cleanArgs = setArgs.filter(a => a !== '--dry-run' && a !== '--json');
 
         if (cleanArgs.length === 0) {
+          failed = true;
           lines.push('Usage: /config set [--dry-run] [--json] <key> <value>');
           lines.push('');
           lines.push('Set a TOML config value by dot-notation key path.');
@@ -498,9 +500,11 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
             }
 
             const successCount = results.filter(r => r.success).length;
+            if (successCount < results.length) failed = true;
             lines.push('');
             lines.push(`${successCount}/${results.length} values ${isDryRun ? 'would be ' : ''}set successfully.`);
           } catch (parseErr) {
+            failed = true;
             lines.push(`Error: Invalid JSON — ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
           }
           break;
@@ -508,6 +512,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
 
         // Single key-value: /config set <key> <value>
         if (cleanArgs.length < 2) {
+          failed = true;
           lines.push('Error: /config set requires <key> <value>');
           lines.push('');
           lines.push('Example: /config set middleware.max_turns 200');
@@ -516,6 +521,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
 
         const keyPath = cleanArgs[0];
         if (keyPath === undefined) {
+          failed = true;
           lines.push('Error: /config set requires <key> <value>');
           lines.push('');
           lines.push('Example: /config set middleware.max_turns 200');
@@ -554,6 +560,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
             lines.push(`  Warning: ${result.warning}`);
           }
         } else {
+          failed = true;
           lines.push('Config Set Failed');
           lines.push('='.repeat(50));
           lines.push('');
@@ -575,6 +582,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
           lines.push('');
           lines.push(JSON.stringify(defaults, null, 2));
         } else {
+          failed = true;
           lines.push(`Unknown schema: ${schemaName}`);
           lines.push('');
           lines.push('Available schemas:');
@@ -609,6 +617,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
       }
 
       default:
+        failed = true;
         lines.push('Configuration Management');
         lines.push('='.repeat(50));
         lines.push('');
@@ -634,6 +643,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
     }
 
   } catch (error) {
+    failed = true;
     lines.push('Configuration Error');
     lines.push('='.repeat(50));
     lines.push(`Error: ${error instanceof Error ? error.message : String(error)}`);
@@ -641,6 +651,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
 
   return {
     handled: true,
+    ...(failed ? { failed: true } : {}),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),

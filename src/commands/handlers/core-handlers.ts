@@ -6,6 +6,7 @@ import { getConversationExporter } from "../../utils/conversation-export.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;

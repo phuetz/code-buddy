@@ -4,6 +4,7 @@ import { getTTSManager } from "../../input/text-to-speech.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;

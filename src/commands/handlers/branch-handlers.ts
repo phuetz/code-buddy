@@ -3,6 +3,7 @@ import { getBranchManager } from "../../persistence/conversation-branches.js";
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;

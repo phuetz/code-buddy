@@ -1211,7 +1211,8 @@ async function processPromptHeadless(
           // since the agent hasn't processed a user message yet
           cli.stdout(JSON.stringify(slashOutputData));
         }
-        return slash.denied ? 1 : 0;
+        // Code 1: denied surface or failed slash command. Success stays 0.
+        return slash.failed || slash.denied ? 1 : 0;
       }
       if (slash?.passToAI && slash.prompt) {
         prompt = slash.prompt;

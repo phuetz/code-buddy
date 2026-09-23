@@ -22,6 +22,7 @@ import { createHash } from 'crypto';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   response?: string;
   /** Non-zero when the CLI should fail (usage, missing file, unknown subcommand). */
   exitCode?: number;

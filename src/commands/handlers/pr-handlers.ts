@@ -13,6 +13,7 @@ import { logger } from '../../utils/logger.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: {
     type: 'assistant' | 'user';
     content: string;

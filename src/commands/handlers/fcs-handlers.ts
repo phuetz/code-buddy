@@ -13,6 +13,7 @@ import type { FCSConfig as _FCSConfig } from "../../scripting/index.js"; // Type
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;

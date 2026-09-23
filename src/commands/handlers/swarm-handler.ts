@@ -38,6 +38,7 @@ import type { AgentExecutionResult } from '../../agent/multi-agent/types.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;

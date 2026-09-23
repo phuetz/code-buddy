@@ -10,6 +10,7 @@ import { getHistoryManager } from '../../utils/history-manager.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   sendToAI?: boolean;
 }

@@ -19,6 +19,7 @@ import { PREDEFINED_SUBAGENTS, type SubagentConfig } from '../../agent/subagents
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;
