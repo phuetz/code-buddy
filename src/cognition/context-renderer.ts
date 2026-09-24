@@ -114,7 +114,28 @@ function renderImagePosition(value: unknown): string | null {
   const centerY = position.y + position.height / 2;
   const horizontal = centerX < 1 / 3 ? 'gauche' : centerX > 2 / 3 ? 'droite' : 'centre';
   const vertical = centerY < 1 / 3 ? 'haut' : centerY > 2 / 3 ? 'bas' : 'milieu';
-  return `position image=${horizontal}-${vertical}`;
+  const spatial = renderSpatialEstimate(position.spatial);
+  return `position image=${horizontal}-${vertical}${spatial ? `, ${spatial}` : ''}`;
+}
+
+/** Robot-relative wording of the camera ESTIMATE (angles + interpupillary distance). */
+export function renderSpatialEstimate(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const spatial = value as Record<string, unknown>;
+  const { azimuthDeg, distanceM, facing } = spatial;
+  if (
+    spatial.basis !== 'estimate-ipd-v1' ||
+    typeof azimuthDeg !== 'number' || !Number.isFinite(azimuthDeg) ||
+    typeof distanceM !== 'number' || !Number.isFinite(distanceM) || distanceM <= 0
+  ) return null;
+  const side = Math.abs(azimuthDeg) < 10
+    ? 'face au robot'
+    : azimuthDeg > 0 ? 'à droite du robot' : 'à gauche du robot';
+  // Half-metre steps below 3 m: the estimate is ±15 %, finer would overclaim.
+  const rounded = distanceM < 3 ? Math.max(0.5, Math.round(distanceM * 2) / 2) : Math.round(distanceM);
+  const distance = `à environ ${String(rounded).replace('.', ',')} m`;
+  const gaze = facing === true ? ', regarde le robot' : facing === false ? ', ne regarde pas le robot' : '';
+  return `estimation caméra: ${side}, ${distance}${gaze}`;
 }
 
 function relevance(queryWords: Set<string>, line: string): number {

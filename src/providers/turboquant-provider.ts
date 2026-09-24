@@ -4,7 +4,9 @@
  * Routes between Ollama (lightweight) and vLLM (heavy) with TurboQuant KV cache
  * quantization config. Compatible with CodeBuddyResponse interface.
  *
- * TurboQuant reference: https://arxiv.org/abs/2401.12428
+ * TurboQuant reference: https://arxiv.org/abs/2504.19874 (TurboQuant: Online Vector
+ * Quantization with Near-optimal Distortion Rate). An earlier revision cited
+ * 2401.12428, which is an unrelated compiler paper (CIM-MLC).
  * KV cache quantization reduces memory pressure by 2-4x with minimal quality loss.
  */
 

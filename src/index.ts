@@ -3765,7 +3765,7 @@ program
   .command("mcp-server")
   .description("Legacy alias for `buddy mcp serve`")
   .option("--list", "List available MCP tools and exit")
-  .option("--allow-write", "Expose write, shell, and execution tools")
+  .option("--allow-write", "Expose write, shell, and execution tools. In MCP, a tool that is not read-only runs only if it is on the explicit allowlist in src/mcp/mcp-write-allowlist.ts, with its destination keys confined to the workspace. Any other path-shaped string argument that resolves outside the workspace is refused. Other write tools, including computer_control, are refused by default. Shell runs in the workspace sandbox; if no sandbox is available, MCP refuses the unconfined escalation even when CODEBUDDY_AUTO_CONFIRM=true. Agent tools receive that same write context. desktop_screenshot confines output_path. memory_save and ckg_ingest are not on the allowlist; they write the profile and do not take a destination path. The interactive agent and headless mode are unchanged.")
   .option("--tools <glob>", "Restrict exposed tool names with glob patterns")
   .action(async (options) => {
     if (options.list) {

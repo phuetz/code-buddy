@@ -24,12 +24,15 @@ import {
   isSandboxBoundaryFailure,
 } from './execution-policy.js';
 import { confineSpawn } from '../../security/native-sandbox.js';
+import { refusedUnconfinedEscalationResult } from './unconfined-escalation.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
   maxOutputBytes?: number;
   getSandboxManager: () => { validateCommand(cmd: string): { valid: boolean; reason?: string } };
   getRunningProcesses: () => Set<import('child_process').ChildProcess>;
+  /** Per-call flag from the MCP handler. The agent loop leaves it unset. */
+  refuseUnconfinedEscalation?: boolean;
 }
 
 /**
@@ -122,8 +125,17 @@ export async function* executeStreaming(
   }
 
   // Ask only when the command needs authority outside the workspace sandbox.
+  // MCP refuses that host retry before confirmation, so AUTO_CONFIRM cannot grant it.
   const confirmationService = ConfirmationService.getInstance();
   if (requiresDirectApproval) {
+    const refused = refusedUnconfinedEscalationResult(
+      policy.action,
+      true,
+      escalationReason,
+      deps.refuseUnconfinedEscalation === true,
+    );
+    if (refused) return refused;
+
     const confirmationResult = await confirmationService.requestConfirmation(
       {
         operation: 'Run command outside the workspace sandbox (streaming)',

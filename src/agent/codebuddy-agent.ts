@@ -51,10 +51,49 @@ import { classifyLisaIntrospection } from '../identity/lisa-introspection.js';
 import { primeLocalRuntimeModelConfig } from '../config/local-runtime-context.js';
 import { getModelToolConfig } from '../config/model-tools.js';
 import { inferCostProvider } from '../analytics/cost-report.js';
+import path from 'node:path';
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
 import type { ChatEntry, StreamingChunk } from "./types.js";
+
+/**
+ * In-process model. When one is supplied, no network client is constructed.
+ * Production leaves it unset.
+ */
+export interface AgentModelClient {
+  chatStream: (
+    messages: readonly unknown[],
+    tools: readonly unknown[],
+    options?: unknown,
+    search?: unknown,
+  ) => AsyncIterable<unknown>;
+  getCurrentModel(): string;
+  chat?(
+    messages: readonly unknown[],
+    tools: readonly unknown[],
+    options?: unknown,
+    search?: unknown,
+  ): Promise<unknown>;
+  setModel?(model: string): void;
+  setDefaultThinkingLevel?(level: unknown): void;
+  probeToolSupport?(): Promise<boolean>;
+  isEffectiveTargetLocal?(): boolean;
+}
+
+/**
+ * Passed only when this agent is constructed by the MCP server.
+ * Absent on the interactive loop and on headless mode.
+ */
+export interface McpAgentToolContext {
+  readonly workspaceRoot: string;
+  readonly refuseUnconfinedShellEscalation: true;
+}
+
+export interface CodeBuddyAgentLaunchOptions {
+  mcpToolContext?: McpAgentToolContext;
+  modelClient?: AgentModelClient;
+}
 
 /**
  * Main agent class that orchestrates conversation with CodeBuddy AI and tool execution
@@ -146,6 +185,7 @@ export class CodeBuddyAgent extends BaseAgent {
     workingDirectory?: string,
     systemPromptAppend?: string,
     initialSystemPromptOverride?: string,
+    launchOptions?: CodeBuddyAgentLaunchOptions,
   ) {
     super();
     this.systemPromptAppend = systemPromptAppend;
@@ -218,7 +258,15 @@ export class CodeBuddyAgent extends BaseAgent {
     this.repairCoordinator = this.infrastructure.repairCoordinator;
 
     // Initialize Persistent Memory (CLAUDE.md style)
-    initializeMemory(undefined, initialWorkingDirectory).catch(err => {
+    // An injected in-process model is an embedding or a test. Keep its memory
+    // next to the working directory so it does not create a user profile file.
+    const injectedMemory = launchOptions?.modelClient
+      ? {
+          userMemoryPath: path.join(initialWorkingDirectory, '.local-model-user-memory.md'),
+          projectMemoryPath: path.join(initialWorkingDirectory, '.local-model-project-memory.md'),
+        }
+      : undefined;
+    initializeMemory(injectedMemory, initialWorkingDirectory).catch(err => {
       logger.error('Failed to initialize persistent memory', { error: String(err) });
     });
 
@@ -235,8 +283,10 @@ export class CodeBuddyAgent extends BaseAgent {
     this.useRAGToolSelection = useRAGToolSelection;
     this.toolSelectionStrategy = getToolSelectionStrategy({ useRAG: useRAGToolSelection });
 
-    // Initialize client
-    this.codebuddyClient = new CodeBuddyClient(apiKey, modelToUse, baseURL);
+    // Initialize client. An injected model never opens a socket.
+    this.codebuddyClient = launchOptions?.modelClient
+      ? launchOptions.modelClient as unknown as CodeBuddyClient
+      : new CodeBuddyClient(apiKey, modelToUse, baseURL);
 
     // Apply thinkingLevel from settings if configured
     try {
@@ -299,6 +349,12 @@ export class CodeBuddyAgent extends BaseAgent {
       contextZoomSessionIdProvider: () => this.contextManager.getSessionId(),
     });
     this.toolHandler.setWorkingDirectory(workingDirectory);
+    const mcpToolContext = launchOptions?.mcpToolContext;
+    if (mcpToolContext?.refuseUnconfinedShellEscalation === true) {
+      this.toolHandler.refuseUnconfinedShellEscalation();
+      this.toolHandler.confineWritesToWorkspace(mcpToolContext.workspaceRoot);
+      this.toolHandler.setWorkingDirectory(mcpToolContext.workspaceRoot);
+    }
 
     // Initialize Executor
     const timelineEnabled = process.env.CODEBUDDY_TIMELINE === 'true';

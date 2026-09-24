@@ -7,9 +7,16 @@
  * - agent_plan: Create plan without executing
  */
 
+import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ChatEntry } from '../agent/types.js';
+import { isConfinedTarget } from '../agent/workspace-confine.js';
+
+export interface AgentToolRegistrationOptions {
+  /** When set, `agent_task` refuses a working directory outside this root. */
+  workspaceRoot?: string;
+}
 
 type AgentGetter = () => Promise<import('../agent/codebuddy-agent.js').CodeBuddyAgent>;
 
@@ -68,6 +75,7 @@ export function registerAgentTools(
   server: McpServer,
   getAgent: AgentGetter,
   shouldRegister: (name: string) => boolean = () => true,
+  options: AgentToolRegistrationOptions = {},
 ): void {
   // agent_chat - Send message to agent, get response
   if (shouldRegister('agent_chat')) server.tool(
@@ -114,7 +122,13 @@ export function registerAgentTools(
         return await withLock(async () => {
           const agent = await getAgent();
           if (args.working_directory) {
-            process.chdir(args.working_directory);
+            const root = options.workspaceRoot;
+            if (root && !isConfinedTarget(root, args.working_directory)) {
+              throw new Error(
+                `Working directory outside workspace not allowed: ${args.working_directory}`,
+              );
+            }
+            process.chdir(root ? path.resolve(root, args.working_directory) : args.working_directory);
           }
 
           let entries: ChatEntry[];

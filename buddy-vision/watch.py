@@ -50,6 +50,14 @@ YOLO_DEVICE = os.environ.get("BUDDY_VISION_YOLO_DEVICE", "").strip()
 YOLO_CLASSES = os.environ.get("BUDDY_VISION_YOLO_CLASSES", "0")
 MAX_PERSONS = min(8, max(1, int(os.environ.get("BUDDY_VISION_MAX_PERSONS", "1"))))
 TRACK_IOU = min(0.9, max(0.05, float(os.environ.get("BUDDY_VISION_TRACK_IOU", "0.2"))))
+# Spatial estimate (off with BUDDY_VISION_SPATIAL=false). The camera field of
+# view drives the angles and the pinhole focal length used for distance.
+SPATIAL_ENABLED = os.environ.get("BUDDY_VISION_SPATIAL", "true").strip().lower() not in ("0", "false", "off", "no")
+DIAGONAL_FOV_DEG = min(170.0, max(20.0, float(os.environ.get("BUDDY_VISION_DFOV_DEG", "90"))))
+HORIZONTAL_FOV_DEG = os.environ.get("BUDDY_VISION_HFOV_DEG", "").strip()
+DISTANCE_SCALE = min(5.0, max(0.2, float(os.environ.get("BUDDY_VISION_DISTANCE_SCALE", "1"))))
+MIRRORED = os.environ.get("BUDDY_VISION_MIRRORED", "false").strip().lower() in ("1", "true", "on", "yes")
+FACING_MAX_DEG = min(60.0, max(5.0, float(os.environ.get("BUDDY_VISION_FACING_MAX_DEG", "25"))))
 EPISODE_SESSION = secrets.token_hex(4)
 MOTION_FRAME_SLOTS = min(128, max(16, int(os.environ.get("BUDDY_VISION_MOTION_FRAME_SLOTS", "32"))))
 SEMANTIC_FRAME_SLOTS = min(256, max(64, int(os.environ.get("BUDDY_VISION_SEMANTIC_FRAME_SLOTS", "64"))))
@@ -170,6 +178,113 @@ def normalized_box(x1: float, y1: float, x2: float, y2: float, width: int, heigh
     }
 
 
+# Mean adult interpupillary distance; individual values span ~54-74 mm, so a
+# distance built on it is an estimate (±15 % before calibration).
+MEAN_IPD_M = 0.063
+RIGHT_IRIS_CENTER = 468
+LEFT_IRIS_CENTER = 473
+
+
+def horizontal_fov_deg(width: int, height: int) -> float:
+    """Horizontal field of view, from the explicit value or the diagonal one."""
+    if HORIZONTAL_FOV_DEG:
+        return min(170.0, max(10.0, float(HORIZONTAL_FOV_DEG)))
+    diagonal = math.hypot(width, height)
+    half = math.atan(math.tan(math.radians(DIAGONAL_FOV_DEG) / 2) * width / diagonal)
+    return math.degrees(2 * half)
+
+
+def head_yaw_pitch(matrix) -> tuple[float, float] | None:
+    """Yaw/pitch (degrees) of the face forward axis from MediaPipe's 4x4 pose."""
+    try:
+        rotation = np.asarray(matrix, dtype=float)[:3, :3]
+    except (TypeError, ValueError, IndexError):
+        return None
+    if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
+        return None
+    forward = rotation @ np.array([0.0, 0.0, 1.0])
+    yaw = math.degrees(math.atan2(forward[0], forward[2]))
+    pitch = math.degrees(math.atan2(-forward[1], math.hypot(forward[0], forward[2])))
+    return yaw, pitch
+
+
+def estimate_spatial(landmarks, width: int, height: int, yaw_pitch=None) -> dict | None:
+    """Estimate where a face is relative to the camera — an ESTIMATE, not a measure.
+
+    azimuthDeg > 0 means the robot's right (camera frame, un-mirrored), elevation
+    > 0 means above the optical axis. distanceM uses the mean interpupillary
+    distance corrected for head yaw, scaled by BUDDY_VISION_DISTANCE_SCALE (set
+    it once from a tape-measured distance). Returns None when the iris landmarks
+    are missing (older model) or the geometry is degenerate.
+    """
+    if width <= 0 or height <= 0 or len(landmarks) <= LEFT_IRIS_CENTER:
+        return None
+    right_iris = landmarks[RIGHT_IRIS_CENTER]
+    left_iris = landmarks[LEFT_IRIS_CENTER]
+    center_x = (right_iris.x + left_iris.x) / 2
+    center_y = (right_iris.y + left_iris.y) / 2
+    if MIRRORED:
+        center_x = 1.0 - center_x
+    hfov = horizontal_fov_deg(width, height)
+    focal_px = (width / 2) / math.tan(math.radians(hfov) / 2)
+    azimuth = math.degrees(math.atan(((center_x - 0.5) * width) / focal_px))
+    elevation = math.degrees(math.atan(((0.5 - center_y) * height) / focal_px))
+    ipd_px = math.hypot((right_iris.x - left_iris.x) * width, (right_iris.y - left_iris.y) * height)
+    if not math.isfinite(ipd_px) or ipd_px < 2:
+        return None
+    yaw = pitch = None
+    foreshortening = 1.0
+    if yaw_pitch is not None:
+        yaw, pitch = yaw_pitch
+        foreshortening = max(0.5, math.cos(math.radians(min(60.0, abs(yaw)))))
+    distance = focal_px * MEAN_IPD_M / (ipd_px / foreshortening) * DISTANCE_SCALE
+    if not math.isfinite(distance) or distance <= 0:
+        return None
+    spatial = {
+        "basis": "estimate-ipd-v1",
+        "azimuthDeg": round(azimuth, 1),
+        "elevationDeg": round(elevation, 1),
+        "distanceM": round(min(20.0, distance), 2),
+    }
+    if yaw is not None and pitch is not None:
+        # Facing the robot = the head points back toward the camera. Measured
+        # on real frames: yaw < 0 is a head turned toward image-left, pitch > 0
+        # a head tilted down. A person on the image right (azimuth > 0) who
+        # looks at the robot turns left (yaw ~ -azimuth); a person above the
+        # axis (elevation > 0) looks down (pitch ~ +elevation).
+        spatial["headYawDeg"] = round(yaw, 1)
+        spatial["headPitchDeg"] = round(pitch, 1)
+        spatial["facing"] = (
+            abs(yaw + azimuth) <= FACING_MAX_DEG
+            and abs(pitch - elevation) <= FACING_MAX_DEG
+        )
+    return spatial
+
+
+def safe_spatial(value) -> dict | None:
+    """Allowlist the spatial estimate: bounded numbers and one boolean only."""
+    if not isinstance(value, dict) or value.get("basis") != "estimate-ipd-v1":
+        return None
+    bounds = {
+        "azimuthDeg": (-90.0, 90.0),
+        "elevationDeg": (-90.0, 90.0),
+        "distanceM": (0.01, 20.0),
+        "headYawDeg": (-180.0, 180.0),
+        "headPitchDeg": (-180.0, 180.0),
+    }
+    out = {"basis": "estimate-ipd-v1"}
+    for key, (low, high) in bounds.items():
+        item = value.get(key)
+        if item is None and key.startswith("head"):
+            continue
+        if type(item) not in (int, float) or not math.isfinite(item) or not low <= item <= high:
+            return None
+        out[key] = round(float(item), 2 if key == "distanceM" else 1)
+    if isinstance(value.get("facing"), bool) and "headYawDeg" in out:
+        out["facing"] = value["facing"]
+    return out
+
+
 class MediaPipeFaceDetector:
     """MediaPipe face presence + eye-blink evidence for person/drowsy detectors."""
 
@@ -185,6 +300,7 @@ class MediaPipeFaceDetector:
         opts = mp_vision.FaceLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=model_path),
             output_face_blendshapes=True,
+            output_facial_transformation_matrixes=SPATIAL_ENABLED,
             num_faces=min(8, max(1, max_faces)),
             running_mode=mp_vision.RunningMode.IMAGE,
         )
@@ -222,11 +338,18 @@ class MediaPipeFaceDetector:
                         blendshapes.get("eyeBlinkLeft", 0.0)
                         + blendshapes.get("eyeBlinkRight", 0.0)
                     ) / 2.0
-                detections.append({
+                detection = {
                     "box2d": box,
                     "confidence": 0.8,
                     "eyeClosed": detection_eye_closed,
-                })
+                }
+                if SPATIAL_ENABLED:
+                    matrices = getattr(result, "facial_transformation_matrixes", None) or []
+                    pose = head_yaw_pitch(matrices[index]) if index < len(matrices) else None
+                    spatial = estimate_spatial(landmarks, width, height, pose)
+                    if spatial:
+                        detection["spatial"] = spatial
+                detections.append(detection)
         detections.sort(key=lambda item: (
             item["box2d"]["x"], item["box2d"]["y"],
             item["box2d"]["width"], item["box2d"]["height"],
@@ -234,6 +357,8 @@ class MediaPipeFaceDetector:
         if detections:
             evidence["box2d"] = detections[0]["box2d"]
             evidence["confidence"] = detections[0]["confidence"]
+            if detections[0].get("spatial"):
+                evidence["spatial"] = detections[0]["spatial"]
         if eye_closed is not None:
             evidence["eyeClosed"] = round(float(eye_closed), 4)
         return VisionSample(face_present, eye_closed, evidence, detections)
@@ -343,7 +468,10 @@ def box_iou(left: dict, right: dict) -> float:
 
 
 def safe_detection(value) -> dict | None:
-    """Allowlist one anonymous detection; reject identity/depth/landmarks."""
+    """Allowlist one anonymous detection; reject identity/landmarks.
+
+    The only depth kept is the bounded, explicitly-labelled spatial ESTIMATE.
+    """
     if not isinstance(value, dict) or not isinstance(value.get("box2d"), dict):
         return None
     raw_box = value["box2d"]
@@ -375,6 +503,7 @@ def safe_detection(value) -> dict | None:
         },
         "confidence": round(confidence, 4),
         "eyeClosed": round(float(eye_closed), 4) if eye_closed is not None else None,
+        **({"spatial": spatial} if (spatial := safe_spatial(value.get("spatial"))) else {}),
     }
 
 
@@ -933,6 +1062,8 @@ def main() -> None:
                     payload["imagePath"] = keyframe
                 if kind not in ("person_lost", "person_track_lost") and track.get("box2d"):
                     payload["box2d"] = track["box2d"]
+                if kind not in ("person_lost", "person_track_lost") and track.get("spatial"):
+                    payload["spatial"] = track["spatial"]
                 if kind == "drowsy" and track.get("eyeClosed") is not None:
                     payload["eyeClosed"] = track["eyeClosed"]
                 bridge.emit(kind, salience, payload)
@@ -1010,6 +1141,8 @@ def main() -> None:
                         "box2d": track["box2d"],
                         **detector_evidence,
                     }
+                    if track.get("spatial"):
+                        payload["spatial"] = track["spatial"]
                     bridge.emit("person_observed", 20, payload)
 
             emit_aggregate = person is not None and (bool(transitions) or refresh_tracks)

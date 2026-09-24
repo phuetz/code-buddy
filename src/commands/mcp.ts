@@ -121,7 +121,7 @@ export function createMCPCommand(): Command {
     .description('Expose Code Buddy tools as an MCP server over stdio')
     .option(
       '--allow-write',
-      'Expose write, shell, execution, and other non-read-only tools (also CODEBUDDY_MCP_ALLOW_WRITE=1)',
+      'Expose write, shell, and execution tools (also CODEBUDDY_MCP_ALLOW_WRITE=1). In MCP, a tool that is not read-only runs only if it is on the explicit allowlist in src/mcp/mcp-write-allowlist.ts (create_file, str_replace_editor, edit_file, multi_edit, apply_patch, bash, archive, deploy, document, generate_document, markdown_convert, meeting_notes, figma_import, scaffold_app, object_detect, video, video_stitch, video_flow_handoff, image_edit, text_to_speech), each with its destination keys confined to the workspace. Any other string argument that is an absolute path, or a path with a separator resolving outside the workspace, is refused too. Other write tools, including computer_control (notepad and Excel saves), are refused by default. Shell runs in the workspace sandbox; if no sandbox is available, MCP refuses the unconfined escalation even when CODEBUDDY_AUTO_CONFIRM=true. Agent tools receive that same write context. desktop_screenshot confines output_path. memory_save and ckg_ingest are not on the allowlist; they write the profile and do not take a destination path. The interactive agent and headless mode are unchanged.',
     )
     .option(
       '--tools <glob>',

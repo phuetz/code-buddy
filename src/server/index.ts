@@ -209,7 +209,11 @@ function wantsStatusReport(query: Record<string, unknown>): boolean {
 /**
  * Create and configure the Express application
  */
-function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Application {
+function createApp(
+  config: ServerConfig,
+  cognitiveHub: CognitiveHub,
+  resolveListenPort: () => number = () => config.port,
+): Application {
   const app = express();
 
   // Trust proxy (for rate limiting behind reverse proxy)
@@ -888,7 +892,7 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
       },
       servers: [
         {
-          url: `http://${config.host}:${config.port}`,
+          url: `http://${config.host}:${resolveListenPort()}`,
           description: 'Local server',
         },
       ],
@@ -1171,7 +1175,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     cognitiveHub,
     createInternalCognitivePrincipal('embedded-cowork'),
   );
-  const app = createApp(config, cognitiveHub);
+  const advertisedPort = { current: config.port };
+  const app = createApp(config, cognitiveHub, () => advertisedPort.current);
   // Optional TLS: serve the API (including /api/mobile) over HTTPS when
   // CODEBUDDY_HTTPS / CODEBUDDY_MOBILE_TLS is set so the mobile-supervision
   // endpoint can be exposed off-device securely. Default (no env) is plain HTTP,
@@ -1334,6 +1339,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
 
   return new Promise((resolve, reject) => {
     server.listen(config.port, config.host, async () => {
+      const bound = server.address();
+      if (bound && typeof bound === 'object') advertisedPort.current = bound.port;
       const baseUrl = getServerBaseUrl(server, config);
 
       logger.info(`API Server started on ${baseUrl}`);
