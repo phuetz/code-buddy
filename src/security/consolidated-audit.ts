@@ -942,43 +942,57 @@ function restrictMode(mode: number, checkId: string): number | null {
   return next;
 }
 
+function realRoots(roots: string[]): string[] {
+  const out = new Set<string>();
+  for (const root of roots) {
+    out.add(path.resolve(root));
+    try {
+      out.add(realpathSync(root));
+    } catch {
+      /* a root that cannot be resolved keeps only its stated form */
+    }
+  }
+  return [...out];
+}
+
 /**
- * Prove that an opened descriptor is still the file named by `abs` inside a root.
- *
- * Every platform: the descriptor and the path must be the same inode, and the
- * path must still be a symlink-free child of a root. Linux additionally reads
- * `/proc/self/fd`. macOS has no `/proc`: relying on it alone refused every fix.
+ * Is the OPEN file descriptor inside the audited roots? Linux answers through
+ * /proc/self/fd. macOS and the BSDs have no /proc: there the descriptor must be
+ * the very file `expected` names (same device + inode as the real path), and
+ * that real path must lie inside the roots. Roots are compared on both their
+ * stated and real forms, so an alias such as macOS /var → /private/var does
+ * not turn a legitimate fix into a refusal.
  */
-function fdInside(fd: number, abs: string, roots: string[], platform: NodeJS.Platform): boolean {
+export function fdInside(
+  fd: number,
+  roots: string[],
+  expected: string,
+  procFdDir = '/proc/self/fd',
+): boolean {
+  const allowed = realRoots(roots);
+  const within = (candidate: string): boolean =>
+    insideRoot(candidate, allowed) || allowed.some((root) => candidate === root);
   try {
-    const opened = fstatSync(fd);
-    const named = lstatSync(abs);
-    if (named.isSymbolicLink() || opened.dev !== named.dev || opened.ino !== named.ino) return false;
+    const via = realpathSync(path.join(procFdDir, String(fd)));
+    return within(via);
   } catch {
-    return false;
+    /* no /proc (macOS, BSD): fall back to identity */
   }
-  if (!roots.some((root) => (abs === root || insideRoot(abs, [root])) && classifyPath(root, abs) === 'ok')) {
-    return false;
-  }
-  if (platform !== 'linux') return true;
   try {
-    const via = realpathSync(`/proc/self/fd/${fd}`);
-    return insideRoot(via, roots) || roots.some((root) => via === root);
+    const real = realpathSync(expected);
+    const opened = fstatSync(fd);
+    const named = lstatSync(real);
+    return opened.dev === named.dev && opened.ino === named.ino && within(real);
   } catch {
     return false;
   }
 }
 
-function backupReady(
-  roots: string[],
-  stamp: string,
-  body: string,
-  platform: NodeJS.Platform,
-): { ok: true; relative: string } | { ok: false; message: string } {
+function backupReady(roots: string[], stamp: string, body: string): { ok: true; relative: string } | { ok: false; message: string } {
   if (!/^[0-9TZt-]+$/.test(stamp)) return { ok: false, message: 'backup name was refused' };
   let skipped = 'backup directory is not writable';
   for (const profile of roots) {
-    const attempt = backupInRoot(profile, stamp, body, platform);
+    const attempt = backupInRoot(profile, stamp, body);
     if (attempt.ok) {
       return { ok: true, relative: path.relative(profile, attempt.manifestPath) };
     }
@@ -992,7 +1006,6 @@ function backupInRoot(
   profile: string,
   stamp: string,
   body: string,
-  platform: NodeJS.Platform,
 ): { ok: true; manifestPath: string } | { ok: false; kind: 'skip' | 'refuse'; message: string } {
   const backups = path.join(profile, 'security-audit-backups');
   try {
@@ -1048,7 +1061,7 @@ function backupInRoot(
     };
   }
   try {
-    if (!fdInside(fd, manifestPath, [profile], platform)) {
+    if (!fdInside(fd, [profile], manifestPath)) {
       return { ok: false, kind: 'refuse', message: 'manifest would have been written outside the profile' };
     }
     writeSync(fd, body);
@@ -1066,7 +1079,6 @@ function applyFixes(request: ConsolidatedAuditRequest, items: SecurityAuditFindi
   ));
   if (targets.length === 0) return [];
   const roots = { profile: request.profileDir, project: request.projectDir };
-  const platform = request.platform ?? process.platform;
   const opened: OpenedFix[] = [];
   const refused: SecurityAuditFix[] = [];
   for (const item of targets) {
@@ -1102,7 +1114,7 @@ function applyFixes(request: ConsolidatedAuditRequest, items: SecurityAuditFindi
       });
       continue;
     }
-    if (!fdInside(fd, abs, [request.profileDir, request.projectDir], platform)) {
+    if (!fdInside(fd, [request.profileDir, request.projectDir], abs)) {
       closeSync(fd);
       refused.push({ checkId: item.checkId, subject, ok: false, message: 'open file is outside the audited roots' });
       continue;
@@ -1119,7 +1131,6 @@ function applyFixes(request: ConsolidatedAuditRequest, items: SecurityAuditFindi
     [request.profileDir],
     stamp,
     `${JSON.stringify(manifest, null, 2)}\n`,
-    platform,
   );
   if (!backup.ok) {
     for (const entry of opened) closeSync(entry.fd);

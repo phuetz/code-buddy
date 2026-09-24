@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { vi } from 'vitest';
-import { repoScratchRoot } from '../helpers/tmp.js';
+import { tmpdir as osTmpdirForTests } from 'node:os';
+import { realpathSync as fsRealpathForTmp } from 'node:fs';
 
 vi.mock('better-sqlite3', () => {
   const error = new Error("Cannot find package 'better-sqlite3'");
@@ -16,7 +17,7 @@ describe('optional better-sqlite3 degradation', () => {
   beforeEach(() => {
     vi.resetModules();
     previousSessionsDir = process.env.CODEBUDDY_SESSIONS_DIR;
-    tempDir = fs.mkdtempSync(path.join(repoScratchRoot(process.cwd()), '.x4-sqlite-test-'));
+    tempDir = fsRealpathForTmp(fs.mkdtempSync(path.join(osTmpdirForTests(), 'x4-sqlite-test-')));
     process.env.CODEBUDDY_SESSIONS_DIR = path.join(tempDir, 'sessions');
   });
 

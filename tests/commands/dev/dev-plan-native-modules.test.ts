@@ -22,7 +22,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { repoScratchRoot } from '../../helpers/tmp.js';
+import { tmpdir as osTmpdirForTests } from 'node:os';
+import { realpathSync as fsRealpathForTmp } from 'node:fs';
 
 interface ChildResult {
   exitCode: number | null;
@@ -198,7 +199,7 @@ async function withPlanRun(
   failNativeLoads: boolean,
   assertions: (result: ChildResult, cwd: string) => void,
 ): Promise<void> {
-  const root = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.gk-dev-plan-native-'));
+  const root = fsRealpathForTmp(fs.mkdtempSync(path.join(osTmpdirForTests(), 'gk-dev-plan-native-')));
   roots.push(root);
   const home = path.join(root, 'home');
   const probeDir = path.join(root, 'probe');

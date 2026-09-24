@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { UserHooksManager } from '../../src/hooks/user-hooks.js';
-import { repoScratchRoot } from '../helpers/tmp.js';
+import { tmpdir as osTmpdirForTests } from 'node:os';
+import { realpathSync as fsRealpathForTmp } from 'node:fs';
 
 describe('COMPACT1 — user pre_compact hook contract', () => {
   it('uses the existing hooks.json command format and sends JSON on stdin', () => {
-    const workDir = fs.mkdtempSync(path.join(repoScratchRoot(process.cwd()), '.compact1-test-'));
+    const workDir = fsRealpathForTmp(fs.mkdtempSync(path.join(osTmpdirForTests(), 'compact1-test-')));
     try {
       const script = path.join(workDir, 'stdin-hook.cjs');
       fs.writeFileSync(script, [

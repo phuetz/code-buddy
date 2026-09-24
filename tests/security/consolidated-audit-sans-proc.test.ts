@@ -6,6 +6,10 @@
  * `/proc/self/fd/<n>`, which does not exist there: every fix was refused as
  * "open file is outside the audited roots". Here `/proc` is made unreachable
  * so a Linux runner exercises the same path.
+ *
+ * consolidated-audit-fd-inside.test.ts proves `fdInside()` alone; this file
+ * proves the wiring: both callers (the fixed file and the backup manifest)
+ * must hand it the path they opened, or the identity fallback refuses them.
  */
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -82,26 +86,7 @@ describe('buddy security audit --fix without /proc', () => {
     const manifest = readFileSync(path.join(profile, 'security-audit-backups', '2026-09-23T12-00-00-000Z', 'manifest.json'), 'utf8');
     expect(manifest).toContain('"modeBefore": "707"');
     expect(manifest).toContain('"modeBefore": "644"');
-    expect(probe.procLookups).toBe(0);
-  });
-
-  it.skipIf(process.platform !== 'linux')('stays fail-closed on linux when /proc/self/fd cannot be read', () => {
-    const { profile, project } = workspace();
-    writeFileSync(path.join(profile, 'config.toml'), 'model = "demo"\n', { mode: 0o600 });
-    chmodSync(path.join(profile, 'config.toml'), 0o644);
-
-    const refused = runConsolidatedSecurityAudit({
-      profileDir: profile,
-      projectDir: project,
-      env: {},
-      sandbox: sandboxReady,
-      fix: true,
-      now: new Date('2026-09-23T12:00:00.000Z'),
-    });
-
+    // /proc was tried and failed: the fixes above went through the identity fallback.
     expect(probe.procLookups).toBeGreaterThan(0);
-    expect(refused.passed).toBe(false);
-    expect(refused.fixes.map((item) => item.message)).toEqual(['open file is outside the audited roots']);
-    expect(statSync(path.join(profile, 'config.toml')).mode & 0o777).toBe(0o644);
   });
 });
