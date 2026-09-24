@@ -1,6 +1,6 @@
 # Réparation — scan de skill sans lecture
 
-Branche `feat/gardes-boucle-et-audit-securite-2026-09-23`. Pas de push, pas de fusion.
+Branche `feat/gardes-boucle-et-audit-securite-2026-09-23`, correctif `337fac685`. Pas de push, pas de fusion.
 
 `scanFile()` renvoyait une liste de findings vide lorsqu'il ne lisait pas un fichier ordinaire. Un tube nommé, un lien vers un tube, un répertoire ou un fichier illisible passaient donc pour un scan propre. Le parcours de dossier et le pare-feu signalaient déjà `special-file-not-read`.
 
