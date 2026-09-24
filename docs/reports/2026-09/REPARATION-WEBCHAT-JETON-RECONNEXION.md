@@ -35,7 +35,7 @@ Vert, même filtre : 5 réussites, 83 ignorés. Puis les quatre fichiers du doma
 
 Mutant qui rétablit le retour avant mémorisation : `jeton corrigé ignoré pendant la reconnexion`, le bon jeton n'est pas envoyé. Mutant qui retire l'oubli du jeton refusé : `jeton refusé réutilisé`. Les deux fichiers ont été restaurés.
 
-`npx tsc --noEmit` : 0. `eslint --quiet` sur les quatre fichiers touchés : 0. `tests/security/donnees-personnelles.test.ts` : 40 réussites sur l'arbre avant le commit documentaire.
+`npx tsc --noEmit` : 0. `eslint --quiet` sur les quatre fichiers touchés : 0. `tests/security/donnees-personnelles.test.ts` : 40 réussites avant le commit documentaire, puis encore 40 une fois ce rapport suivi.
 
 Chromium headless, vrai canal sur un port lié : champ bloqué au départ, statut `Disconnected` après le mauvais jeton, puis `Connected` et champ actif après le bon jeton saisi pendant la coupure. L'accueil `Welcome to Catalogue WebChat!` suit `Authentication failed`.
 
