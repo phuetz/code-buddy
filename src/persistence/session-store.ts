@@ -378,6 +378,37 @@ export class SessionStore {
     });
   }
 
+  /**
+   * Empty a session's messages only if its file still holds `expected`, the
+   * bytes a caller copied out. Check and write run in one section under the
+   * session lock, so no writer that takes the lock can land between them: a
+   * turn added since the copy leaves the file as it is and returns `changed`.
+   * `beforeRead` runs first inside that section; a throw leaves the file as is.
+   */
+  async clearSessionMessagesIfUnchanged(
+    sessionId: string,
+    expected: Buffer,
+    options: { encrypt: boolean; beforeRead?: () => void },
+  ): Promise<'cleared' | 'changed' | 'protection-changed'> {
+    const filePath = this.getSessionFilePath(sessionId);
+    return withSessionLock(filePath, async () => {
+      options.beforeRead?.();
+      let bytes: Buffer;
+      try {
+        bytes = await fsPromises.readFile(filePath);
+      } catch (error) {
+        if (nodeErrorCode(error) === 'ENOENT') return 'changed';
+        throw error;
+      }
+      if (!bytes.equals(expected)) return 'changed';
+      const read = this.decodeSessionFile(bytes.toString('utf8'));
+      if (read.state !== 'ok') return 'changed';
+      if (this.shouldEncrypt(read.session) !== options.encrypt) return 'protection-changed';
+      await this.writeSessionUnlocked({ ...read.session, messages: [] });
+      return 'cleared';
+    });
+  }
+
   private decodeSessionFile(raw: string): SessionFileRead {
     let data: unknown;
     try {

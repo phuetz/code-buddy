@@ -77,6 +77,8 @@ async function runReset(options: {
   atErase?: (files: { projectFile: string; sessionFile: string; encryptedMessages: unknown }) => void;
   /** Runs at the archive step: after the snapshot, before any archive is written. */
   atArchive?: (files: { sessionFile: string; encryptedMessages: unknown }) => void;
+  /** Runs at the session-save step: inside the session lock, before the file is read again. */
+  atSessionSave?: (files: { sessionFile: string }) => void;
 }): Promise<Run> {
   const fakeHome = tempDir();
   const projectDir = tempDir();
@@ -162,6 +164,10 @@ async function runReset(options: {
     const atErase = options.atErase;
     if (atErase) {
       handlers.__beforeMessagingResetStepForTests('erase', () => atErase({ projectFile, sessionFile: file, encryptedMessages }));
+    }
+    const atSessionSave = options.atSessionSave;
+    if (atSessionSave) {
+      handlers.__beforeMessagingResetStepForTests('session-save', () => atSessionSave({ sessionFile: file }));
     }
     let sessionAtArchive: Buffer | null = null;
     const atArchive = options.atArchive;
@@ -505,5 +511,30 @@ describe('scellement de l archive : garde-fous du module', () => {
     expect(saved.ok).toBe(true);
     expect(() => messaging.openMessagingMemoryArchive(archiveDir, 'sans-cle', 'session-store')).toThrow('memory archive is sealed');
     expect(messaging.openMessagingMemoryArchive(archiveDir, 'sans-cle', 'session-store', () => 'user: SANS_CLE')).toEqual(['user: SANS_CLE']);
+  });
+});
+
+describe('sonde Sol 26m : tour ecrit entre la derniere comparaison et l effacement', () => {
+  it('le verrou de session est tenu a session-save, et le tour ecrit a cet instant reste dans la session', async () => {
+    const late = 'TOUR_CONCURRENT_TARDIF';
+    let lockHeld: boolean | null = null;
+    const run = await runReset({
+      id: 'late-write',
+      encryptSession: false,
+      atSessionSave: ({ sessionFile }) => {
+        lockHeld = existsSync(`${sessionFile}.lock`);
+        const record = JSON.parse(readFileSync(sessionFile, 'utf8'));
+        record.messages.push({ type: 'user', content: late, timestamp: new Date().toISOString() });
+        record.lastAccessedAt = new Date().toISOString();
+        writeFileSync(sessionFile, JSON.stringify(record));
+      },
+    });
+    const saved = run.sessionRaw.includes(late);
+    const archived = run.archiveBytes('session-store').includes(late);
+    const reason = run.logs.find((l) => l.includes('messaging session reset cancelled')) ?? '';
+    console.log('TOUR_TARDIF', JSON.stringify({ lockHeld, saved, archived, changed: reason.includes('session contents changed before erase') }));
+    expect(lockHeld, 'verrou de session tenu pendant la comparaison et l effacement').toBe(true);
+    expect(saved || archived, 'le tour doit rester dans la session ou dans une archive').toBe(true);
+    expect(reason, 'annulation motivee par le changement du fichier').toContain('session contents changed before erase');
   });
 });

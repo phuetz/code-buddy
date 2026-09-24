@@ -728,7 +728,8 @@ export function __seedLocalCompanionHistoryForTests(sessionKey: string, content:
 /**
  * Points of a messaging reset where a test may act. `erase` is the start of
  * the erase callback; every other step is followed by a fresh read of the
- * reset policy, then by the write or erase it names.
+ * reset policy, then by the write or erase it names. `session-save` runs
+ * inside the session lock, before the file is read again and emptied.
  */
 export type MessagingResetStep = 'archive' | 'erase' | 'companion-clear' | 'session-save' | 'memory-evict';
 
@@ -1460,7 +1461,9 @@ async function loadMessagingSessionSnapshot(
  * at that step. The session file is archived as the bytes it holds right
  * then, read once under its lock: an encrypted file gives an encrypted copy,
  * whatever changed since the snapshot. The other stores follow the at-rest
- * rule of those bytes, and the erase only runs on these same bytes.
+ * rule of those bytes, and the erase only runs on these same bytes: it reads
+ * the file again, compares and empties it in one section under the session
+ * lock, so a turn written after the archive is never emptied with it.
  */
 async function maybeResetInboundMessagingSession(sessionKey: string): Promise<void> {
   const {
@@ -1586,10 +1589,6 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
       if (sessionRead.state === 'unreadable') {
         throw new Error(sessionRead.error);
       }
-      const companionRead = readCompanionHistoryForReset(sessionKey, process.env);
-      if (companionRead.state === 'unreadable') {
-        throw new Error(companionRead.error);
-      }
       // Only the bytes that were archived may be erased.
       const sameFile = sessionRead.state === 'ok'
         ? archivedBytes !== null && sessionRead.bytes.equals(archivedBytes)
@@ -1601,19 +1600,30 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
       if (protectionNow.encrypt !== protection.encrypt) {
         throw new Error('session protection changed before erase');
       }
+      // Companion history: read, compared and cleared with no await between.
+      confirmPolicy('companion-clear');
+      const companionRead = readCompanionHistoryForReset(sessionKey, process.env);
+      if (companionRead.state === 'unreadable') {
+        throw new Error(companionRead.error);
+      }
       const provedCompanion = snapshot.parts.find((part) => part.source === 'companion-history')?.transcript ?? '';
       const againCompanion = companionRead.state === 'ok' ? companionRead.transcript.trim() : '';
       if (againCompanion !== provedCompanion.trim()) {
         throw new Error('companion history changed before erase');
       }
-      confirmPolicy('companion-clear');
       const cleared = clearCompanionChannelHistory(sessionKey, process.env, now);
       if (!cleared.ok) {
         throw new Error(cleared.error);
       }
-      if (sessionRead.state === 'ok' && sessionRead.session.messages.length > 0) {
-        confirmPolicy('session-save');
-        await store.saveSession({ ...sessionRead.session, messages: [] });
+      if (sessionRead.state === 'ok' && sessionRead.session.messages.length > 0 && archivedBytes) {
+        // Compared and emptied in one section under the session lock: a turn
+        // written since the archive keeps the file, and the reset stops here.
+        const outcome = await store.clearSessionMessagesIfUnchanged(sessionKey, archivedBytes, {
+          encrypt: protection.encrypt,
+          beforeRead: () => confirmPolicy('session-save'),
+        });
+        if (outcome === 'changed') throw new Error('session contents changed before erase');
+        if (outcome === 'protection-changed') throw new Error('session protection changed before erase');
       }
       confirmPolicy('memory-evict');
       companionChannelHistories.delete(sessionKey);
