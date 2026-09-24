@@ -7,6 +7,8 @@
  * full roundtrip or of same-session follow-up reuse. These tests cover both,
  * driving a fake ChannelManager/channel against fully-mocked core + agent.
  */
+// First import: the user config path is frozen when the loader module loads.
+import '../helpers/config-home-first.js';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

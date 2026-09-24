@@ -2,6 +2,8 @@
  * Messaging session reset. The clock is a number of milliseconds.
  * Nothing in this file waits on a real timer.
  */
+// First import: the user config path is frozen when the loader module loads.
+import '../helpers/config-home-first.js';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
