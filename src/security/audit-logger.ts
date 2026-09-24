@@ -30,7 +30,8 @@ export type AuditAction =
   | 'self_improvement'
   | 'device_register'
   | 'device_verify'
-  | 'device_revoke';
+  | 'device_revoke'
+  | 'voice_turn';
 
 export type AuditDecision = 'allow' | 'block' | 'warn' | 'confirm';
 
