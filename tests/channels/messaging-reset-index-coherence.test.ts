@@ -99,8 +99,8 @@ const NO_ARCHIVE: ReadonlySet<Injection> = new Set(['archive']);
 interface Outcome {
   fileUnchanged: boolean;
   fileHasTurn: boolean;
-  indexedBefore: string[];
-  indexedAfter: string[];
+  indexedBefore: Array<string | undefined>;
+  indexedAfter: Array<string | undefined>;
   searchBefore: { target: boolean; other: boolean };
   searchAfter: { target: boolean; other: boolean };
   archived: string;
