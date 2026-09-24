@@ -1,8 +1,9 @@
 /**
  * A config file that is present on the messaging-reset path but cannot be
  * analysed must cancel the reset, even when another file sets a mode.
- * The home directory is a throwaway created inside the test. Product modules
- * are imported only after that, so the loader's captured path matches it.
+ * The home directory is a throwaway created inside the test, and
+ * CODEBUDDY_HOME points to it: the user file is resolved from that variable
+ * first, and vitest.setup.ts sets it for every test file.
  */
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -92,6 +93,8 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
   const previous = {
     home: process.env.HOME,
     profile: process.env.USERPROFILE,
+    codebuddyHome: process.env.CODEBUDDY_HOME,
+    codebuddyConfig: process.env.CODEBUDDY_CONFIG,
     sessions: process.env.CODEBUDDY_SESSIONS_DIR,
     archive: process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR,
     history: process.env.CODEBUDDY_CHANNEL_HISTORY,
@@ -102,6 +105,8 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     key:
       | 'HOME'
       | 'USERPROFILE'
+      | 'CODEBUDDY_HOME'
+      | 'CODEBUDDY_CONFIG'
       | 'CODEBUDDY_SESSIONS_DIR'
       | 'CODEBUDDY_SESSION_RESET_ARCHIVE_DIR'
       | 'CODEBUDDY_CHANNEL_HISTORY'
@@ -114,6 +119,10 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
   let changedDir = false;
   process.env.HOME = fakeHome;
   process.env.USERPROFILE = fakeHome;
+  // The user file is resolved by resolveUserConfigFile: CODEBUDDY_CONFIG,
+  // then CODEBUDDY_HOME (set per file by vitest.setup.ts), then HOME.
+  process.env.CODEBUDDY_HOME = fakeHome;
+  delete process.env.CODEBUDDY_CONFIG;
   process.env.CODEBUDDY_SESSIONS_DIR = sessionsDir;
   process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = spec.archiveEnv ?? archiveDir;
   const historyDir = spec.companion ? tempDir() : undefined;
@@ -146,6 +155,10 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     const messaging = await import('../../src/channels/messaging-session-reset.js');
     const handlers = await import('../../src/commands/handlers/channel-handlers.js');
     const history = await import('../../src/companion/channel-history.js');
+    expect(toml.resolveUserConfigFile(), 'fichier utilisateur lu dans le faux HOME')
+      .toBe(path.join(fakeHome, '.codebuddy', 'config.toml'));
+    expect(toml.messagingResetConfigPaths()[0], 'meme fichier utilisateur pour la relecture')
+      .toBe(path.join(fakeHome, '.codebuddy', 'config.toml'));
     toml.resetConfigManager();
     store.resetSessionStore();
     handlers.__resetChannelAIHandlerForTests();
@@ -233,6 +246,8 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     if (changedDir) process.chdir(previous.cwd);
     restore('HOME', previous.home);
     restore('USERPROFILE', previous.profile);
+    restore('CODEBUDDY_HOME', previous.codebuddyHome);
+    restore('CODEBUDDY_CONFIG', previous.codebuddyConfig);
     restore('CODEBUDDY_SESSIONS_DIR', previous.sessions);
     restore('CODEBUDDY_SESSION_RESET_ARCHIVE_DIR', previous.archive);
     restore('CODEBUDDY_CHANNEL_HISTORY', previous.history);

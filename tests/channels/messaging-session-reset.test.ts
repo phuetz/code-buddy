@@ -27,7 +27,15 @@ import {
   readCompanionChannelHistory,
   rememberCompanionChannelTurn,
 } from '../../src/companion/channel-history.js';
-import { assignSessionReset, getConfigManager, parseTOML, serializeTOML, DEFAULT_CONFIG } from '../../src/config/toml-config.js';
+import {
+  assignSessionReset,
+  extractPreservedUserConfig,
+  getConfigManager,
+  messagingResetConfigSyntaxError,
+  parseTOML,
+  serializeTOML,
+  DEFAULT_CONFIG,
+} from '../../src/config/toml-config.js';
 import { resetSessionStore } from '../../src/persistence/session-store.js';
 import {
   __beforeMessagingResetEraseForTests,
@@ -338,6 +346,21 @@ at_hour = 7
       atHour: 5,
     });
     expect(serializeTOML(DEFAULT_CONFIG)).not.toContain('[session_reset]');
+  });
+
+  it('[session_reset] se réécrit comme les autres sections plates, avec des valeurs sûres', () => {
+    const source = parseTOML('[session_reset]\nmode = "hebdo"\nidle_minutes = 90\n');
+    const written = serializeTOML(
+      { ...DEFAULT_CONFIG, session_reset: { mode: 'hebdo', idle_minutes: 90.7, at_hour: Number.NaN } },
+      extractPreservedUserConfig(source),
+    );
+    // Réécriture d'un document source : aucune section par défaut ajoutée.
+    expect(written, 'pas de [ui] absent de la source').not.toContain('[ui]');
+    expect(written, 'pas de [agent] absent de la source').not.toContain('[agent]');
+    expect(written).toContain('[session_reset]\nmode = "none"\nidle_minutes = 90\n');
+    expect(written, 'valeur non finie omise').not.toContain('at_hour');
+    expect(messagingResetConfigSyntaxError(written)).toBeNull();
+    expect(parseTOML(written).session_reset).toEqual({ mode: 'none', idle_minutes: 90 });
   });
 
   it('chaque partie effacée est archivée dans son propre fichier avant la remise à zéro', async () => {
