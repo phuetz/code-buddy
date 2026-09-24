@@ -18,6 +18,7 @@ import {
 } from '../../conversation/argument-obligations.js';
 import { shouldRunSemanticResponseGate } from '../../conversation/semantic-response-gate.js';
 import type { ConversationTurn } from '../../conversation/types.js';
+import type { MessagingSessionResetPolicy } from '../../channels/messaging-session-reset.js';
 import {
   MODEL_NAME_PATTERN,
   clearSessionModelOverride,
@@ -648,7 +649,7 @@ export function __resetChannelAIHandlerForTests(): void {
   companionChannelHistories.clear();
   companionChannelActivityAt.clear();
   recentLisaSelfieSessions.clear();
-  beforeMessagingResetEraseForTests = undefined;
+  beforeMessagingResetStepForTests.clear();
   __resetSessionModelOverridesForTests();
 }
 
@@ -707,11 +708,30 @@ export function __seedLocalCompanionHistoryForTests(sessionKey: string, content:
   companionChannelActivityAt.set(sessionKey, at);
 }
 
-let beforeMessagingResetEraseForTests: (() => void) | undefined;
+/**
+ * Points of a messaging reset where a test may act. `erase` is the start of
+ * the erase callback; every other step is followed by a fresh read of the
+ * reset policy, then by the write or erase it names.
+ */
+export type MessagingResetStep = 'archive' | 'erase' | 'companion-clear' | 'session-save' | 'memory-evict';
+
+const beforeMessagingResetStepForTests = new Map<MessagingResetStep, () => void>();
+
+/** Test-only. Runs once, at the given step, then clears itself. */
+export function __beforeMessagingResetStepForTests(step: MessagingResetStep, hook?: () => void): void {
+  if (hook) beforeMessagingResetStepForTests.set(step, hook);
+  else beforeMessagingResetStepForTests.delete(step);
+}
 
 /** Test-only. Runs once, at the start of the erase callback, then clears itself. */
 export function __beforeMessagingResetEraseForTests(hook?: () => void): void {
-  beforeMessagingResetEraseForTests = hook;
+  __beforeMessagingResetStepForTests('erase', hook);
+}
+
+function runMessagingResetStepHookForTests(step: MessagingResetStep): void {
+  const hook = beforeMessagingResetStepForTests.get(step);
+  beforeMessagingResetStepForTests.delete(step);
+  hook?.();
 }
 
 /** Test-only entry to the same reset the inbound receiver uses. */
@@ -1423,7 +1443,9 @@ async function loadMessagingSessionSnapshot(
  * another `session_reset` than the loaded one (another current directory, an
  * edit) and a relative archive directory. Each store the
  * reset would clear is archived first. A failed archive of any one of them
- * cancels the clear and every store stays in place.
+ * cancels the clear and every store stays in place. The policy is read again
+ * right before the archive and before each erase; a change stops the reset
+ * at that step.
  */
 async function maybeResetInboundMessagingSession(sessionKey: string): Promise<void> {
   const {
@@ -1433,16 +1455,30 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
   } = await import('../../channels/messaging-session-reset.js');
   const { messagingResetSessionConfig } = await import('../../config/toml-config.js');
   const os = await import('node:os');
-  let policy = resolveSessionResetPolicy(undefined);
+  let loadedPolicy: MessagingSessionResetPolicy;
   try {
-    policy = resolveSessionResetPolicy(messagingResetSessionConfig());
+    loadedPolicy = resolveSessionResetPolicy(messagingResetSessionConfig());
   } catch (err) {
     logger.warn('messaging session reset policy unavailable, keeping the session', {
       error: err instanceof Error ? err.message : 'unavailable',
     });
     return;
   }
+  const policy = loadedPolicy;
   if (policy.mode === 'none') return;
+  /**
+   * Reads the policy again, files and loaded section, and throws when it is
+   * no longer the one this reset decided on. Called right before each write
+   * or erase: a config file edited while the reset runs stops it at the next
+   * step. What an earlier step already erased stays erased, and archived.
+   */
+  const confirmPolicy = (step: MessagingResetStep): void => {
+    runMessagingResetStepHookForTests(step);
+    const again = resolveSessionResetPolicy(messagingResetSessionConfig());
+    if (again.mode !== policy.mode || again.idleMinutes !== policy.idleMinutes || again.atHour !== policy.atHour) {
+      throw new Error(`messaging reset policy changed before ${step}`);
+    }
+  };
   let archiveDir: string;
   try {
     archiveDir = resolveMessagingSessionResetArchiveDir(process.env, os.homedir());
@@ -1465,6 +1501,15 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     });
     return;
   }
+  try {
+    confirmPolicy('archive');
+  } catch (err) {
+    logger.warn('messaging session reset policy changed before archive, keeping the session', {
+      sessionHash: hashForLog(sessionKey),
+      error: err instanceof Error ? err.message : 'changed',
+    });
+    return;
+  }
   const outcome = await applyChannelMessagingSessionReset({
     sessionKey,
     now,
@@ -1473,9 +1518,7 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     parts: snapshot.parts,
     archiveDir,
     resetSession: async () => {
-      const beforeErase = beforeMessagingResetEraseForTests;
-      beforeMessagingResetEraseForTests = undefined;
-      beforeErase?.();
+      runMessagingResetStepHookForTests('erase');
       const { getSessionStore } = await import('../../persistence/session-store.js');
       const store = getSessionStore();
       const sessionRead = await store.readSessionFileState(sessionKey);
@@ -1496,20 +1539,23 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
       if (againCompanion !== provedCompanion.trim()) {
         throw new Error('companion history changed before erase');
       }
+      confirmPolicy('companion-clear');
       const cleared = clearCompanionChannelHistory(sessionKey, process.env, now);
       if (!cleared.ok) {
         throw new Error(cleared.error);
       }
       if (sessionRead.state === 'ok' && sessionRead.session.messages.length > 0) {
+        confirmPolicy('session-save');
         await store.saveSession({ ...sessionRead.session, messages: [] });
       }
+      confirmPolicy('memory-evict');
       companionChannelHistories.delete(sessionKey);
       companionChannelActivityAt.delete(sessionKey);
       evictChannelAgent(sessionKey, true);
     },
   });
   if (outcome.action === 'cancelled') {
-    logger.warn('messaging session reset cancelled because memory save failed', {
+    logger.warn('messaging session reset cancelled', {
       sessionHash: hashForLog(sessionKey),
       reason: outcome.reason,
       error: outcome.error,

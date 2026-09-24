@@ -4,7 +4,7 @@
  * The home directory is a throwaway created inside the test. Product modules
  * are imported only after that, so the loader's captured path matches it.
  */
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -40,6 +40,20 @@ interface ConfigCase {
    * process to another project, edits, creates or removes a config file.
    */
   afterLoad?: (files: DriftFiles) => void;
+  /**
+   * Runs once at a step of the reset itself, after the configuration was
+   * checked. `setLoadedPolicy` replaces the loaded section in memory only.
+   */
+  atStep?: {
+    step: 'archive' | 'erase' | 'companion-clear' | 'session-save' | 'memory-evict';
+    run: (files: DriftFiles, setLoadedPolicy: (section: Record<string, unknown>) => void) => void;
+  };
+  /** With `keep`: the secret was archived before the policy changed. */
+  archivedAnyway?: boolean;
+  /** Persisted companion history seeded with this secret, and its expected fate. */
+  companion?: { secret: string; keep: boolean };
+  /** Expected presence of the handler-local map after the reset. */
+  localMapKept?: boolean;
   /** Value of CODEBUDDY_SESSION_RESET_ARCHIVE_DIR instead of the temp dir. */
   archiveEnv?: string;
   /** True when the reset must not erase the secret. */
@@ -57,6 +71,19 @@ const IDLE = '[session_reset]\nmode = "idle"\nidle_minutes = 1\n';
 const TRUNCATED = '[session_reset\nmode = "none"\n';
 const NONE = '[session_reset]\nmode = "none"\n';
 
+function driftFiles(fakeHome: string, projectFile: string): DriftFiles {
+  return {
+    userFile: path.join(fakeHome, '.codebuddy', 'config.toml'),
+    projectFile,
+    moveToProject: (content) => {
+      const other = tempDir();
+      mkdirSync(path.join(other, '.codebuddy'), { recursive: true });
+      if (content !== undefined) writeFileSync(path.join(other, '.codebuddy', 'config.toml'), content);
+      process.chdir(other);
+    },
+  };
+}
+
 async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
   const fakeHome = tempDir();
   const projectDir = tempDir();
@@ -68,6 +95,7 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     sessions: process.env.CODEBUDDY_SESSIONS_DIR,
     archive: process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR,
     history: process.env.CODEBUDDY_CHANNEL_HISTORY,
+    historyDir: process.env.CODEBUDDY_CHANNEL_HISTORY_DIR,
     cwd: process.cwd(),
   };
   const restore = (
@@ -76,7 +104,8 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
       | 'USERPROFILE'
       | 'CODEBUDDY_SESSIONS_DIR'
       | 'CODEBUDDY_SESSION_RESET_ARCHIVE_DIR'
-      | 'CODEBUDDY_CHANNEL_HISTORY',
+      | 'CODEBUDDY_CHANNEL_HISTORY'
+      | 'CODEBUDDY_CHANNEL_HISTORY_DIR',
     value: string | undefined,
   ): void => {
     if (value === undefined) delete process.env[key];
@@ -87,7 +116,14 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
   process.env.USERPROFILE = fakeHome;
   process.env.CODEBUDDY_SESSIONS_DIR = sessionsDir;
   process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = spec.archiveEnv ?? archiveDir;
-  process.env.CODEBUDDY_CHANNEL_HISTORY = 'false';
+  const historyDir = spec.companion ? tempDir() : undefined;
+  if (historyDir) {
+    process.env.CODEBUDDY_CHANNEL_HISTORY = 'true';
+    process.env.CODEBUDDY_CHANNEL_HISTORY_DIR = historyDir;
+  } else {
+    process.env.CODEBUDDY_CHANNEL_HISTORY = 'false';
+    delete process.env.CODEBUDDY_CHANNEL_HISTORY_DIR;
+  }
   try {
     process.chdir(projectDir);
     changedDir = true;
@@ -109,6 +145,7 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     const store = await import('../../src/persistence/session-store.js');
     const messaging = await import('../../src/channels/messaging-session-reset.js');
     const handlers = await import('../../src/commands/handlers/channel-handlers.js');
+    const history = await import('../../src/companion/channel-history.js');
     toml.resetConfigManager();
     store.resetSessionStore();
     handlers.__resetChannelAIHandlerForTests();
@@ -117,16 +154,7 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
       toml.getConfigManager().getConfig();
       if (spec.projectModeAtLoad !== undefined) chmodSync(projectFile, 0o644);
       if (spec.project !== undefined) writeFileSync(projectFile, spec.project);
-      spec.afterLoad?.({
-        userFile: path.join(fakeHome, '.codebuddy', 'config.toml'),
-        projectFile,
-        moveToProject: (content) => {
-          const other = tempDir();
-          mkdirSync(path.join(other, '.codebuddy'), { recursive: true });
-          if (content !== undefined) writeFileSync(path.join(other, '.codebuddy', 'config.toml'), content);
-          process.chdir(other);
-        },
-      });
+      spec.afterLoad?.(driftFiles(fakeHome, projectFile));
     }
 
     const sessionKey = `reset-config-${spec.id}`;
@@ -142,7 +170,27 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
       lastAccessedAt: idle,
     }));
     handlers.__seedLocalCompanionHistoryForTests(sessionKey, 'AGENT_OLD', Date.now() - 3_600_000);
+    history.clearCompanionChannelHistoriesForTests();
+    if (spec.companion) {
+      history.rememberCompanionChannelTurn(sessionKey, 'bonjour', spec.companion.secret, process.env, Date.now() - 3_600_000);
+    }
+    const atStep = spec.atStep;
+    if (atStep) {
+      handlers.__beforeMessagingResetStepForTests(atStep.step, () => atStep.run(
+        driftFiles(fakeHome, projectFile),
+        (section) => {
+          (toml.getConfigManager().getConfig() as { session_reset?: unknown }).session_reset = section;
+        },
+      ));
+    }
     await handlers.__resetInboundMessagingSessionForTests(sessionKey);
+    const localMapKept = handlers.__companionChannelHistoriesForTests().has(sessionKey);
+    let companionRaw = '';
+    if (historyDir) {
+      companionRaw = readdirSync(historyDir)
+        .map((name) => readFileSync(path.join(historyDir, name), 'utf8'))
+        .join('\n');
+    }
 
     let raw = '';
     try {
@@ -155,11 +203,27 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
       id: spec.id,
       kept: raw.includes(spec.secret),
       archived: archived.includes(spec.secret),
+      ...(spec.companion ? { companionKept: companionRaw.includes(spec.companion.secret) } : {}),
+      localMapKept,
     };
     console.log('CONFIG_RESET', JSON.stringify(diagnostic));
+    if (spec.companion) {
+      if (spec.companion.keep) {
+        expect(companionRaw, `${spec.id} historique compagnon conserve`).toContain(spec.companion.secret);
+      } else {
+        expect(companionRaw, `${spec.id} historique compagnon efface`).not.toContain(spec.companion.secret);
+      }
+    }
+    if (spec.localMapKept !== undefined) {
+      expect(localMapKept, `${spec.id} carte locale conservee`).toBe(spec.localMapKept);
+    }
     if (spec.keep) {
       expect(raw, `${spec.id} secret conserve`).toContain(spec.secret);
-      expect(archived, `${spec.id} archive du secret`).not.toContain(spec.secret);
+      if (spec.archivedAnyway) {
+        expect(archived, `${spec.id} archive ecrite avant le changement`).toContain(spec.secret);
+      } else {
+        expect(archived, `${spec.id} archive du secret`).not.toContain(spec.secret);
+      }
     } else {
       expect(raw, `${spec.id} secret efface`).not.toContain(spec.secret);
       expect(archived, `${spec.id} archive presente`).toContain(spec.secret);
@@ -172,6 +236,7 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     restore('CODEBUDDY_SESSIONS_DIR', previous.sessions);
     restore('CODEBUDDY_SESSION_RESET_ARCHIVE_DIR', previous.archive);
     restore('CODEBUDDY_CHANNEL_HISTORY', previous.history);
+    restore('CODEBUDDY_CHANNEL_HISTORY_DIR', previous.historyDir);
     vi.resetModules();
   }
 }
@@ -371,6 +436,106 @@ describe('politique chargee differente de celle des fichiers au moment de la rem
       keep: true,
     });
     expect(existsSync(path.join(projectDir, 'archive-relative')), 'archive ecrite dans le projet').toBe(false);
+  });
+});
+
+/**
+ * Class: the policy is read again right before each write or erase, not only
+ * when the reset starts. A config file edited while the reset runs stops it
+ * at the next step; what an earlier step erased had been archived.
+ */
+describe('politique relue juste avant chaque effacement', () => {
+  it('none ecrit apres l archivage, au debut de l effacement, ne efface rien', async () => {
+    // Sonde de la contre-revue Sol (lot 26j), avec l'historique compagnon en plus.
+    await exercise({
+      id: 'avant-effacement',
+      secret: 'AVANT_EFFACEMENT',
+      project: IDLE,
+      companion: { secret: 'AVANT_EFFACEMENT_COMPAGNON', keep: true },
+      atStep: { step: 'erase', run: (files) => writeFileSync(files.projectFile, NONE) },
+      keep: true,
+      archivedAnyway: true,
+      localMapKept: true,
+    });
+  });
+
+  it('none ecrit juste avant l archivage n ecrit aucune archive', async () => {
+    await exercise({
+      id: 'avant-archive',
+      secret: 'AVANT_ARCHIVE',
+      project: IDLE,
+      atStep: { step: 'archive', run: (files) => writeFileSync(files.projectFile, NONE) },
+      keep: true,
+      localMapKept: true,
+    });
+  });
+
+  it('none ecrit juste avant l effacement du compagnon garde tout', async () => {
+    await exercise({
+      id: 'avant-compagnon',
+      secret: 'AVANT_COMPAGNON',
+      user: IDLE,
+      companion: { secret: 'AVANT_COMPAGNON_HISTOIRE', keep: true },
+      atStep: { step: 'companion-clear', run: (files) => writeFileSync(files.userFile, NONE) },
+      keep: true,
+      archivedAnyway: true,
+      localMapKept: true,
+    });
+  });
+
+  it('none ecrit juste avant l ecriture de la session garde la session', async () => {
+    await exercise({
+      id: 'avant-session',
+      secret: 'AVANT_SESSION',
+      project: IDLE,
+      companion: { secret: 'AVANT_SESSION_COMPAGNON', keep: false },
+      atStep: { step: 'session-save', run: (files) => writeFileSync(files.projectFile, NONE) },
+      keep: true,
+      archivedAnyway: true,
+      localMapKept: true,
+    });
+  });
+
+  it('none ecrit juste avant l eviction en memoire garde la carte locale', async () => {
+    await exercise({
+      id: 'avant-memoire',
+      secret: 'AVANT_MEMOIRE',
+      project: IDLE,
+      companion: { secret: 'AVANT_MEMOIRE_COMPAGNON', keep: false },
+      atStep: { step: 'memory-evict', run: (files) => writeFileSync(files.projectFile, NONE) },
+      keep: false,
+      localMapKept: true,
+    });
+  });
+
+  it('une politique changee en memoire seulement arrete aussi la remise a zero', async () => {
+    // Les fichiers restent identiques : seule la section chargee change.
+    await exercise({
+      id: 'memoire-seule',
+      secret: 'MEMOIRE_SEULE',
+      project: IDLE,
+      atStep: { step: 'session-save', run: (_files, setLoadedPolicy) => setLoadedPolicy({ mode: 'none' }) },
+      keep: true,
+      archivedAnyway: true,
+      localMapKept: true,
+    });
+  });
+
+  it('un fichier reecrit avec la meme politique a chaque etape laisse la remise a zero se faire', async () => {
+    const { projectDir } = await exercise({
+      id: 'reecrit-identique',
+      secret: 'REECRIT_IDENTIQUE',
+      project: IDLE,
+      companion: { secret: 'REECRIT_IDENTIQUE_COMPAGNON', keep: false },
+      atStep: {
+        step: 'companion-clear',
+        run: (files) => writeFileSync(files.projectFile, `# meme politique\n${IDLE}\n[ui]\ntheme = "clair"\n`),
+      },
+      keep: false,
+      localMapKept: false,
+    });
+    const rewritten = readFileSync(path.join(projectDir, '.codebuddy', 'config.toml'), 'utf8');
+    expect(rewritten, 'le crochet a reecrit le fichier').toContain('# meme politique');
   });
 });
 
