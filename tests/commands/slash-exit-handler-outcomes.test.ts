@@ -5,10 +5,11 @@
  * Les commandes qui lancent un outil, un navigateur ou une écriture du dépôt
  * ne passent pas par ici : leur retour anticipé est appelé directement.
  */
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { dispatchSlashPrompt } from '../../src/commands/headless-slash.js';
 import { handleBackup } from '../../src/commands/handlers/backup-handlers.js';
 import { handleModelRouter as handleResearchModelRouter } from '../../src/commands/handlers/research-handlers.js';
@@ -52,6 +53,67 @@ function exitCodeOf(result: SlashLike | null): number {
 
 async function viaSlash(prompt: string): Promise<SlashLike | null> {
   return dispatchSlashPrompt(prompt);
+}
+
+function gitIn(cwd: string, args: string[]): void {
+  const env = { ...process.env };
+  delete env.GIT_DIR;
+  delete env.GIT_WORK_TREE;
+  env.GIT_CONFIG_GLOBAL = os.devnull;
+  env.GIT_CONFIG_NOSYSTEM = '1';
+  env.GIT_TERMINAL_PROMPT = '0';
+  const result = spawnSync(
+    'git',
+    ['-c', 'user.name=Code Buddy QA', '-c', 'user.email=qa@example.invalid', '-c', 'commit.gpgsign=false', ...args],
+    { cwd, env, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+  }
+}
+
+/**
+ * /diff lit process.cwd(). Un dépôt jetable rend le succès indépendant
+ * de l'arbre du worktree (propre ou sale).
+ */
+async function diffInIsolatedRepo(withChange: boolean): Promise<SlashLike | null> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slash-exit-diff-'));
+  const saved = {
+    ceiling: process.env.GIT_CEILING_DIRECTORIES,
+    gitDir: process.env.GIT_DIR,
+    workTree: process.env.GIT_WORK_TREE,
+    configGlobal: process.env.GIT_CONFIG_GLOBAL,
+    configNosystem: process.env.GIT_CONFIG_NOSYSTEM,
+  };
+  process.env.GIT_CEILING_DIRECTORIES = root;
+  delete process.env.GIT_DIR;
+  delete process.env.GIT_WORK_TREE;
+  process.env.GIT_CONFIG_GLOBAL = os.devnull;
+  process.env.GIT_CONFIG_NOSYSTEM = '1';
+  const project = path.join(root, 'repo');
+  fs.mkdirSync(project);
+  const spy = vi.spyOn(process, 'cwd').mockReturnValue(project);
+  try {
+    const note = path.join(project, 'note.txt');
+    fs.writeFileSync(note, 'avant\n');
+    gitIn(project, ['init', '-q']);
+    gitIn(project, ['add', 'note.txt']);
+    gitIn(project, ['commit', '-qm', 'base']);
+    if (withChange) fs.writeFileSync(note, 'avant\nslash-exit-diff-marker\n');
+    return await viaSlash('/diff');
+  } finally {
+    spy.mockRestore();
+    const restore = (key: 'GIT_CEILING_DIRECTORIES' | 'GIT_DIR' | 'GIT_WORK_TREE' | 'GIT_CONFIG_GLOBAL' | 'GIT_CONFIG_NOSYSTEM', value: string | undefined) => {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    };
+    restore('GIT_CEILING_DIRECTORIES', saved.ceiling);
+    restore('GIT_DIR', saved.gitDir);
+    restore('GIT_WORK_TREE', saved.workTree);
+    restore('GIT_CONFIG_GLOBAL', saved.configGlobal);
+    restore('GIT_CONFIG_NOSYSTEM', saved.configNosystem);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 let bugFile = '';
@@ -200,7 +262,8 @@ const cases: OutcomeCase[] = [
   { handler: 'handleToolAnalytics', kind: 'succès', label: '/tool-analytics', exitCode: 0, needle: 'ool', run: () => viaSlash('/tool-analytics') },
   { handler: 'handleClearChat', kind: 'succès', label: '/clear', exitCode: 0, needle: 'lear', run: () => viaSlash('/clear') },
   { handler: 'handleUndo', kind: 'succès', label: '/undo', exitCode: 0, needle: 'ndo', run: () => viaSlash('/undo') },
-  { handler: 'handleDiff', kind: 'succès', label: '/diff', exitCode: 0, needle: 'iff', run: () => viaSlash('/diff') },
+  { handler: 'handleDiff', kind: 'succès', label: '/diff dépôt isolé modifié', exitCode: 0, needle: 'slash-exit-diff-marker', run: () => diffInIsolatedRepo(true) },
+  { handler: 'handleDiff', kind: 'succès', label: '/diff dépôt isolé propre', exitCode: 0, needle: 'No uncommitted changes', run: () => diffInIsolatedRepo(false) },
   { handler: 'handleCompact', kind: 'succès', label: '/compact', exitCode: 0, needle: 'ompact', run: () => viaSlash('/compact') },
   { handler: 'handleFork', kind: 'succès', label: '/fork', exitCode: 0, needle: 'Created branch', run: () => viaSlash('/fork') },
   { handler: 'handleBranches', kind: 'succès', label: '/branches', exitCode: 0, needle: 'ranch', run: () => viaSlash('/branches') },
