@@ -47,4 +47,6 @@ Total 145 passés, 1 ignoré.
 Les 68 avertissements `no-explicit-any` du receveur sont préexistants ; les deux autres
 fichiers touchés n'en ont aucun.
 
-Le garde-fou `tests/security/donnees-personnelles.test.ts` est rejoué après ce commit.
+Commit du correctif : `cd2d550ff`. Le garde-fou `tests/security/donnees-personnelles.test.ts`
+a ensuite été rejoué sur l'hôte : 40 passés. Le lien git du worktree sort de la barrière,
+donc ce garde-fou n'y est pas lancé.
