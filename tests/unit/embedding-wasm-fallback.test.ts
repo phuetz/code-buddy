@@ -92,12 +92,14 @@ function runChild(cache: string): Promise<{ stdout: string; stderr: string; kill
 }
 
 describe('repli wasm de transformers.js', () => {
-  it('rejette deux fois un modele illisible sans figer le processus', async () => {
+  // Le blocage visé (Atomics.wait du repli wasm multi-fil) a été observé sous Linux. Sous
+  // Windows, l'enfant lancé par --import tsx ne produit aucune sortie : le harnais n'y vaut rien.
+  it.skipIf(process.platform === 'win32')('rejette deux fois un modele illisible sans figer le processus', async () => {
     const outcome = await runChild(unreadableModelCache());
     const fallbacks = outcome.stderr.split('Using `wasm` as a fallback').length - 1;
     const lines = outcome.stdout.split('\n').filter((line) => /^(ESSAI|FIN)/.test(line));
     const beats = outcome.stdout.split('\n').filter((line) => line.startsWith('BOUCLE')).length;
-    console.log(`ASSERT repli-wasm tue=${outcome.killed} ms=${outcome.ms} replis=${fallbacks} battements=${beats} lignes=${JSON.stringify(lines)}`);
+    console.log(`ASSERT repli-wasm tue=${outcome.killed} ms=${outcome.ms} replis=${fallbacks} battements=${beats} lignes=${JSON.stringify(lines)} stderr=${JSON.stringify(outcome.stderr.slice(0, 400))}`);
 
     expect(outcome.killed, 'ASSERT repli-wasm enfant fini avant le delai').toBe(false);
     expect(fallbacks, 'ASSERT repli-wasm chemin wasm emprunte deux fois').toBeGreaterThanOrEqual(2);
