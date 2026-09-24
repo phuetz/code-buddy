@@ -39,6 +39,7 @@ import {
   HISTORICAL_COST_WARNING_RATIO,
   HISTORICAL_TURN_WARNING_RATIO,
   loadExplicitMiddlewareLimits,
+  type ExplicitMiddlewareLimits,
   readCliFlagValue,
   resolveSessionLimits,
 } from "../config/middleware-limits.js";
@@ -88,6 +89,11 @@ export class CodeBuddyAgent extends BaseAgent {
   private turnWarningRatio = HISTORICAL_TURN_WARNING_RATIO;
   private costWarningRatio = HISTORICAL_COST_WARNING_RATIO;
   private explicitAutoCompactTokens: number | undefined;
+  /**
+   * [middleware] lu une seule fois, dans le projet passé au constructeur
+   * (Cowork ouvre un projet distinct du cwd du processus). /yolo le réutilise.
+   */
+  private fileMiddlewareLimits: ExplicitMiddlewareLimits = {};
   private visionGroundingModel: string | undefined;
   private streamingHandler: StreamingHandler;
   private executor: AgentExecutor;
@@ -164,6 +170,7 @@ export class CodeBuddyAgent extends BaseAgent {
     this.callerMaxToolRounds = typeof maxToolRounds === 'number' && Number.isFinite(maxToolRounds) && maxToolRounds > 0
       ? maxToolRounds
       : undefined;
+    this.fileMiddlewareLimits = loadExplicitMiddlewareLimits({ cwd: initialWorkingDirectory });
     this.applySessionLimits(this.yoloMode);
     if (this.yoloMode) {
       logger.warn(`YOLO MODE ACTIVE - Cost limit: $${this.sessionCostLimit}, Max rounds: ${this.maxToolRounds}`);
@@ -2052,7 +2059,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
       cliMaxToolRounds: this.callerMaxToolRounds,
       cliMaxCost: cliMaxCost !== undefined && Number.isFinite(cliMaxCost) ? cliMaxCost : undefined,
       envMaxCost: envMaxCost !== undefined && Number.isFinite(envMaxCost) ? envMaxCost : undefined,
-      toml: loadExplicitMiddlewareLimits(),
+      toml: this.fileMiddlewareLimits,
       yolo,
     });
     this.maxToolRounds = resolved.maxToolRounds;

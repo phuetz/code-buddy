@@ -262,6 +262,69 @@ describe('middleware — priorité et branchement', () => {
   });
 });
 
+describe('middleware — répertoire de travail de l\'agent', () => {
+  function threshold(agent: AgentPeek): number | undefined {
+    const manager = agent.contextManager as unknown as {
+      config?: { autoCompactThreshold?: number };
+    };
+    return manager.config?.autoCompactThreshold;
+  }
+
+  it('lit le projet demandé au constructeur, pas celui du cwd du processus', () => {
+    const home = freshHome();
+    const processDir = path.join(home, 'projet-a');
+    const activeDir = path.join(home, 'projet-b');
+    writeToml(processDir, '.codebuddy/config.toml', [
+      '[middleware]',
+      'max_turns = 11',
+      'max_cost = 2',
+      'turn_warning_threshold = 0.9',
+      'cost_warning_threshold = 0.9',
+      'auto_compact_threshold = 9999',
+      '',
+    ].join('\n'));
+    writeToml(activeDir, '.codebuddy/config.toml', [
+      '[middleware]',
+      'max_turns = 3',
+      'max_cost = 0.0001',
+      'turn_warning_threshold = 0.5',
+      'cost_warning_threshold = 0.4',
+      'auto_compact_threshold = 4321',
+      '',
+    ].join('\n'));
+    process.chdir(processDir);
+    const agent = new CodeBuddyAgent(
+      'test-api-key', undefined, undefined, undefined, true, undefined, activeDir,
+    ) as unknown as AgentPeek;
+    agents.push(agent as unknown as CodeBuddyAgent);
+    expect(agent.maxToolRounds).toBe(3);
+    expect(agent.sessionCostLimit).toBe(0.0001);
+    expect(agent.turnWarningRatio).toBe(0.5);
+    expect(agent.costWarningRatio).toBe(0.4);
+    expect(threshold(agent)).toBe(4321);
+
+    agent.setYoloMode(true);
+    expect(agent.maxToolRounds).toBe(3);
+    expect(agent.sessionCostLimit).toBe(0.0001);
+    expect(agent.turnWarningRatio).toBe(0.5);
+  });
+
+  it('/yolo ne relit pas un fichier modifié après le démarrage', () => {
+    const home = freshHome();
+    const file = '.codebuddy/config.toml';
+    writeToml(home, file, '[middleware]\nmax_turns = 80\nturn_warning_threshold = 0.5\n');
+    const agent = spawn();
+    expect(agent.maxToolRounds).toBe(80);
+    writeToml(home, file, '[middleware]\nmax_turns = 90\nturn_warning_threshold = 0.9\n');
+    agent.setYoloMode(true);
+    expect(agent.maxToolRounds).toBe(80);
+    expect(agent.turnWarningRatio).toBe(0.5);
+    agent.setYoloMode(false);
+    expect(agent.maxToolRounds).toBe(80);
+    expect(agent.turnWarningRatio).toBe(0.5);
+  });
+});
+
 describe('middleware — consommateurs des seuils', () => {
   it('le seuil de tours du fichier est celui du middleware de la session', async () => {
     const home = freshHome();

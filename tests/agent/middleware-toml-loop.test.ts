@@ -35,6 +35,7 @@ const previous = {
 let scratch: string | undefined;
 let server: Server | undefined;
 const agents: CodeBuddyAgent[] = [];
+const adapters: Array<{ dispose(): void }> = [];
 
 function restoreEnv(): void {
   process.chdir(previous.cwd);
@@ -146,10 +147,59 @@ async function turn(toml: string): Promise<{ hits: number; text: string }> {
   return { hits: hits.count, text: parts.join('\n') };
 }
 
+/**
+ * Chemin de construction de Cowork : le processus tourne depuis A, la
+ * session ouvre le projet B. Seul le fichier de B doit borner la boucle.
+ */
+async function coworkTurn(processToml: string, projectToml: string): Promise<{ hits: number; text: string }> {
+  scratch = mkdtempSync(path.join(tmpdir(), 'mw-loop-cowork-'));
+  const processDir = path.join(scratch, 'processus-a');
+  const projectDir = path.join(scratch, 'projet-b');
+  const profileDir = path.join(scratch, 'profil');
+  for (const [dir, body] of [[processDir, processToml], [projectDir, projectToml]] as const) {
+    mkdirSync(path.join(dir, '.codebuddy'), { recursive: true });
+    writeFileSync(path.join(dir, '.codebuddy', 'config.toml'), body);
+  }
+  mkdirSync(profileDir, { recursive: true });
+  process.env.HOME = profileDir;
+  process.env.CODEBUDDY_HOME = profileDir;
+  delete process.env.CODEBUDDY_CONFIG;
+  delete process.env.MAX_COST;
+  delete process.env.YOLO_MODE;
+  delete process.env.CODEBUDDY_PROVIDER_FALLBACK;
+  process.argv = ['node', 'buddy'];
+  process.chdir(processDir);
+  const hits = { count: 0 };
+  const port = await listen(hits);
+  const { CodeBuddyEngineAdapter } = await import('../../src/desktop/codebuddy-engine-adapter.js');
+  const adapter = new CodeBuddyEngineAdapter({
+    apiKey: 'test-api-key',
+    baseURL: `http://127.0.0.1:${port}/v1`,
+    model: 'grok-3-latest',
+    workingDirectory: projectDir,
+  });
+  adapters.push(adapter);
+  const parts: string[] = [];
+  const result = await adapter.runSession(
+    'mw-cowork-b',
+    [{ role: 'user', content: 'continue jusqu\'au plafond' }],
+    (event) => {
+      const content = (event as { content?: unknown }).content;
+      if (typeof content === 'string') parts.push(content);
+    },
+  );
+  parts.push(result.content);
+  return { hits: hits.count, text: parts.join('\n') };
+}
+
 afterEach(async () => {
   while (agents.length > 0) {
     const agent = agents.pop();
     try { agent?.dispose(); } catch { /* déjà arrêté */ }
+  }
+  while (adapters.length > 0) {
+    const adapter = adapters.pop();
+    try { adapter?.dispose(); } catch { /* déjà arrêté */ }
   }
   if (server) {
     const closing = server;
@@ -157,7 +207,7 @@ afterEach(async () => {
     await new Promise<void>((resolve) => closing.close(() => resolve()));
   }
   restoreEnv();
-  if (scratch) rmSync(scratch, { recursive: true, force: true });
+  if (scratch) rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   scratch = undefined;
 });
 
@@ -175,5 +225,25 @@ describe('middleware — un tour réel s\'arrête sur le fichier', () => {
     expect(result.text).toContain('Session cost limit reached');
     expect(result.text).toContain('Stopping before tool execution');
     expect(result.text).not.toContain('Maximum tool execution rounds reached.');
+  }, 180000);
+});
+
+describe('middleware — Cowork ouvre un projet distinct du cwd', () => {
+  it('max_turns = 3 du projet B arrête la boucle, pas le 8 du répertoire A', async () => {
+    const result = await coworkTurn(
+      '[middleware]\nmax_turns = 8\nmax_cost = 50\n',
+      '[middleware]\nmax_turns = 3\nmax_cost = 50\n',
+    );
+    expect(result.hits).toBe(3);
+    expect(result.text).toContain('Maximum tool execution rounds reached.');
+  }, 180000);
+
+  it('max_cost = 0.0001 du projet B coupe la boucle au premier appel', async () => {
+    const result = await coworkTurn(
+      '[middleware]\nmax_turns = 4\nmax_cost = 50\n',
+      '[middleware]\nmax_turns = 4\nmax_cost = 0.0001\n',
+    );
+    expect(result.hits).toBe(1);
+    expect(result.text).toContain('Session cost limit reached');
   }, 180000);
 });
