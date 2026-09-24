@@ -259,6 +259,8 @@ rtk_enabled = false
 # A config file that is present but unreadable or unparseable cancels the reset.
 # So does a session_reset the files no longer describe since the config was
 # loaded (another current directory, an edit): restart to apply the new one.
+# The policy is read again right before the archive and before each erase;
+# an edit made while the reset runs stops it at that step.
 [session_reset]
 mode = "none"
 idle_minutes = 1440
