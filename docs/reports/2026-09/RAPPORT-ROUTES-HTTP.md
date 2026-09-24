@@ -1,7 +1,7 @@
 # Catalogue des routes HTTP — 23/09/2026
 
 État **source** : `origin/main` `6f745f0e8` (branche `test/catalogue-routes-http-2026-09-23`).
-État **candidat** : cette branche, commits locaux uniquement. La reprise après contre-revue corrige le produit, elle n'ajoute plus seulement des tests : un historique WebChat n'est plus servi sans le jeton quand `authToken` est défini, la page envoie la trame `auth` avant toute saisie, OpenAPI et le statut WebChat annoncent le port réellement lié, et le harnais neutralise `METRICS_*`.
+État **candidat** : cette branche, commits locaux uniquement. La reprise après contre-revue corrige le produit, elle n'ajoute plus seulement des tests : un historique WebChat n'est plus servi sans le jeton quand `authToken` est défini, la page envoie la trame `auth` avant toute saisie, OpenAPI et le statut WebChat annoncent le port réellement lié, et le harnais neutralise `METRICS_*`. Le commit `defb462ec` corrige ensuite le jeton saisi pendant la reconnexion : il remplace l'ancien, et un jeton refusé n'est plus renvoyé tout seul (`docs/reports/2026-09/REPARATION-WEBCHAT-JETON-RECONNEXION.md`).
 État **déployé** : inchangé. Aucun push, aucune fusion, aucun service réel, profil utilisateur non lu.
 
 Le matériau Jules HTTP-A (`tests/verification-routes.test.ts`) ne se charge pas sur cette base : il importe le paquet `jsonwebtoken`, absent du dépôt, en JavaScript non typé, avec des espaces en fin de ligne, un `catch` vide et une assertion conditionnelle (`200 || 503`). HTTP-B s'arrêtait sur `if (!process.env.RUN_REAL_TESTS) return`, donc les tests passaient sans rien appeler. Rien de ces fichiers n'est repris tel quel. Le jeton vient de `createUserToken` (`src/server/auth/jwt.ts`), le même mécanisme que les tests de `tests/server`.
