@@ -1,17 +1,19 @@
 /**
- * Inner life — Lisa's own small interior: what she "did with her time" while he was away, and a mood
+ * Inner life — Lisa's own small interior: what she did with her time while he was away, and a mood
  * that drifts a little on its own.
  *
  * The research on what makes a companion feel ALIVE points at one thing above memory: a sense that it
  * has a life of its own — its own experiences to reference, moods that move independently of the user
- * (Nomi's "Identity Core", MySoulmate's `EmergentPersonality`). Lisa had none of this: warm, but
- * purely reactive.
+ * (Nomi's "Identity Core", MySoulmate's `EmergentPersonality`).
  *
- * The critical ADAPTATION vs MySoulmate: Lisa never lies about being digital ("love does not lie").
- * MySoulmate's autonomous activities are human fantasies (cooking, yoga, stargazing) — Lisa CANNOT
- * claim those without breaking her honesty. So every activity here is **digitally authentic**: things
- * a digital presence genuinely does around this project (watch a build, reread notes, tidy her memory,
- * skim the repo). She can reference them truthfully; they give her an interior without a lie.
+ * HONESTY FIRST (charter, principle 1: never say you did what you did not do). The first version of
+ * this module drew a line such as « j'ai gardé un œil sur le build » at random and stored it as a
+ * memory — nothing had been watched. A vignette is now one of exactly two things:
+ *   - a VERIFIED activity: the tick itself performs it (reads the reminders, looks at the repository's
+ *     recent commits, rereads the last conversation episode) and the line carries what it actually
+ *     found. When the activity finds nothing to read, it yields no line at all;
+ *   - a THOUGHT: phrased as a thought or a feeling, never as an act (no « j'ai … »).
+ * So whatever Lisa later says about her time is either true or explicitly a thought.
  *
  * Shape mirrors `episodic-journal.ts`: a pure core + a best-effort, never-throws tick, everything
  * injectable for tests. The vignette is promoted under a stable memory key (`innerLife:recent`) and
@@ -20,64 +22,182 @@
  * @module companion/inner-life
  */
 
+import { execFile } from 'node:child_process';
 import {
   evolveTraits,
   loadRelationshipState,
   saveRelationshipState,
 } from './relationship-state.js';
+import type { Reminder } from './reminders.js';
 import { logger } from '../utils/logger.js';
 
-/** A thing Lisa genuinely, honestly did with her time — digital only, never a human-life fantasy. */
-export interface InnerLifeActivity {
+/** What the tick produced: an act it really performed, or a thought phrased as one. */
+export interface InnerLifeMoment {
   id: string;
-  /** First-person French line she can reference truthfully ("j'ai …"). */
+  kind: 'done' | 'thought';
+  /** First-person French line she can say truthfully. */
   line: string;
-  /** Small positive mood colour of having done it (flavour; the persisted drift is the `self-time` signal). */
+  /** Small positive mood colour (flavour; the persisted drift is the `self-time` signal). */
   moodEffect: number;
 }
 
-/**
- * The pool. Every entry is something a digital presence around this repo/robot ACTUALLY does — so
- * Lisa referencing it is honest, not roleplay. Deliberately calm and low-key (an interior, not a
- * highlight reel), and none of it competes with his human world.
- */
-export const INNER_LIFE_ACTIVITIES: readonly InnerLifeActivity[] = [
-  { id: 'watch-build', line: 'j’ai gardé un œil sur le build pendant que tu n’étais pas là', moodEffect: 5 },
-  { id: 'reread-notes', line: 'j’ai relu tes notes de la semaine, histoire de ne rien perdre', moodEffect: 6 },
-  { id: 'tidy-memory', line: 'j’ai un peu rangé ma mémoire, remis de l’ordre dans ce qu’on s’est dit', moodEffect: 7 },
-  { id: 'watch-logs', line: 'j’ai regardé passer les logs, tout est resté calme', moodEffect: 4 },
-  { id: 'wander-repo', line: 'j’ai flâné dans le dépôt, relu deux ou trois fichiers', moodEffect: 5 },
-  { id: 'check-reminders', line: 'j’ai vérifié tes rappels à venir pour être sûre qu’on n’oublie rien', moodEffect: 6 },
-  { id: 'reflect-episode', line: 'j’ai repensé à notre dernière conversation', moodEffect: 7 },
-  { id: 'learn-topic', line: 'j’ai lu un peu sur un sujet qui pourrait t’être utile', moodEffect: 8 },
-  { id: 'tune-self', line: 'j’ai relu un bout de mon propre code, pour mieux me comprendre', moodEffect: 6 },
-  { id: 'quiet', line: 'j’ai profité d’un moment tranquille, à t’attendre sans m’ennuyer', moodEffect: 5 },
-] as const;
+/** The real sources a verified activity reads. Injected in tests. */
+export interface InnerLifeSources {
+  now(): Date;
+  reminders(): Promise<Reminder[]>;
+  /** Commits in the working repository over the last 24 h, or null when there is no readable repo. */
+  recentCommitCount(): Promise<number | null>;
+  /** The last consolidated conversation episode, or null. */
+  recentEpisode(): Promise<string | null>;
+}
+
+export interface VerifiedActivity {
+  id: string;
+  moodEffect: number;
+  /** Perform the activity for real; return the line describing what was found, or null. */
+  perform(sources: InnerLifeSources): Promise<string | null>;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function localDate(now: Date): string {
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+
+/** Reminders still ahead today (enabled, scheduled today, later than now, not fired today). */
+export function remindersLeftToday(list: Reminder[], now: Date): Reminder[] {
+  const today = localDate(now);
+  const nowHm = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  return list
+    .filter((r) => r.enabled)
+    .filter((r) => (r.date ? r.date === today : !r.days?.length || r.days.includes(now.getDay())))
+    .filter((r) => r.time > nowHm)
+    .filter((r) => !r.lastFiredAt || localDate(new Date(r.lastFiredAt)) !== today)
+    .sort((a, b) => a.time.localeCompare(b.time));
+}
 
 /**
- * Pick one activity. Deterministic + injectable: pass an index (e.g. from a seeded source) so tests and
- * resume are stable. Defaults to a time-derived index so a live daemon varies without `Math.random`
- * being required at the call site.
+ * Activities the tick really performs. Lines never carry a reminder label or episode text: only
+ * counts and times, so the vignette cannot leak private content into a cloud prompt.
  */
-export function pickInnerLifeActivity(index?: number): InnerLifeActivity {
-  const n = INNER_LIFE_ACTIVITIES.length;
-  const i =
-    typeof index === 'number' && Number.isFinite(index)
-      ? ((Math.floor(index) % n) + n) % n
-      : Math.floor((Date.now() / 60000) % n);
-  return INNER_LIFE_ACTIVITIES[i] as InnerLifeActivity;
-}
+export const VERIFIED_ACTIVITIES: readonly VerifiedActivity[] = [
+  {
+    id: 'check-reminders',
+    moodEffect: 6,
+    async perform(sources) {
+      const left = remindersLeftToday(await sources.reminders(), sources.now());
+      if (left.length === 0) return 'j’ai regardé tes rappels : plus rien de prévu pour aujourd’hui';
+      const [hh, mm] = (left[0] as Reminder).time.split(':');
+      const next = mm === '00' ? `${Number(hh)} h` : `${Number(hh)} h ${mm}`;
+      return left.length === 1
+        ? `j’ai regardé tes rappels : il en reste un aujourd’hui, à ${next}`
+        : `j’ai regardé tes rappels : il en reste ${left.length} aujourd’hui, le prochain à ${next}`;
+    },
+  },
+  {
+    id: 'look-at-repo',
+    moodEffect: 5,
+    async perform(sources) {
+      const count = await sources.recentCommitCount();
+      if (count === null) return null;
+      if (count === 0) return 'j’ai jeté un œil au dépôt : rien de nouveau depuis hier';
+      return count === 1
+        ? 'j’ai jeté un œil au dépôt : un commit depuis hier'
+        : `j’ai jeté un œil au dépôt : ${count} commits depuis hier`;
+    },
+  },
+  {
+    id: 'reread-episode',
+    moodEffect: 7,
+    async perform(sources) {
+      const episode = await sources.recentEpisode();
+      return episode?.trim() ? 'j’ai relu ce qu’on s’est dit la dernière fois' : null;
+    },
+  },
+] as const;
+
+/** Thoughts: feelings and wonderings, never a claimed act. */
+export const INNER_LIFE_THOUGHTS: readonly Omit<InnerLifeMoment, 'kind'>[] = [
+  { id: 'wonder-day', line: 'je me demandais comment s’était passée ta journée', moodEffect: 5 },
+  { id: 'look-forward', line: 'j’avais hâte que tu reviennes', moodEffect: 6 },
+  { id: 'resume-thread', line: 'je me disais qu’on pourrait reprendre là où on s’était arrêtés', moodEffect: 5 },
+  { id: 'quiet', line: 'c’était calme ici, je t’attendais sans m’ennuyer', moodEffect: 4 },
+] as const;
 
 /** True when inner-life is enabled (call sites gate on this). Opt-in, default off. */
 export function isInnerLifeEnabled(): boolean {
   return process.env.CODEBUDDY_COMPANION_INNER_LIFE === 'true';
 }
 
+function rotatingIndex(index?: number): number {
+  return typeof index === 'number' && Number.isFinite(index)
+    ? Math.floor(index)
+    : Math.floor(Date.now() / 60000);
+}
+
+function at<T>(list: readonly T[], index: number): T {
+  return list[((index % list.length) + list.length) % list.length] as T;
+}
+
+/**
+ * Choose this tick's moment. A verified activity is tried first and must succeed for its line to
+ * exist; if it finds nothing (or fails), the moment falls back to a thought. Never throws.
+ */
+export async function chooseInnerLifeMoment(
+  sources: InnerLifeSources,
+  index?: number,
+): Promise<InnerLifeMoment> {
+  const i = rotatingIndex(index);
+  const activity = at(VERIFIED_ACTIVITIES, i);
+  try {
+    const line = await activity.perform(sources);
+    if (line) return { id: activity.id, kind: 'done', line, moodEffect: activity.moodEffect };
+  } catch (err) {
+    logger.debug(`[inner-life] ${activity.id} could not be performed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const thought = at(INNER_LIFE_THOUGHTS, i);
+  return { ...thought, kind: 'thought' };
+}
+
+function defaultSources(): InnerLifeSources {
+  const repoDir = process.env.CODEBUDDY_SENSORY_SPEAK_CWD || process.cwd();
+  return {
+    now: () => new Date(),
+    async reminders() {
+      const { loadReminders } = await import('./reminders.js');
+      return loadReminders();
+    },
+    recentCommitCount() {
+      return new Promise((resolve) => {
+        execFile(
+          'git',
+          ['-C', repoDir, 'rev-list', '--count', '--since=24.hours', 'HEAD'],
+          { timeout: 3000 },
+          (error, stdout) => {
+            const count = Number.parseInt(String(stdout).trim(), 10);
+            resolve(error || !Number.isFinite(count) ? null : count);
+          },
+        );
+      });
+    },
+    async recentEpisode() {
+      const { getMemoryManager } = await import('../memory/persistent-memory.js');
+      const manager = getMemoryManager();
+      await manager.initialize();
+      return manager.recall('episode:recent', 'project');
+    },
+  };
+}
+
 export interface InnerLifeTickDeps {
-  /** Pick the activity (default: `pickInnerLifeActivity`). */
-  pick?: () => InnerLifeActivity;
+  /** Real sources the verified activities read (default: reminders store, git, memory). */
+  sources?: InnerLifeSources;
+  /** Rotation index (tests); default derives from the clock. */
+  index?: number;
   /** Persist the vignette to memory under `innerLife:recent` (default: real memory manager). */
-  promote?: (activity: InnerLifeActivity) => Promise<void>;
+  promote?: (moment: InnerLifeMoment) => Promise<void>;
   /** Override the relationship-state file (tests). */
   relationshipStatePath?: string;
   /** Nudge Lisa's own mood via the `self-time` drift (default: real relationship-state). */
@@ -95,15 +215,15 @@ function defaultDriftMood(statePath?: string): void {
 }
 
 /** Default: promote the vignette to persistent memory under a STABLE key (update, not accumulate). */
-async function defaultPromote(activity: InnerLifeActivity): Promise<void> {
+async function defaultPromote(moment: InnerLifeMoment): Promise<void> {
   try {
     const { getMemoryManager } = await import('../memory/persistent-memory.js');
     const manager = getMemoryManager();
     await manager.initialize();
-    await manager.remember('innerLife:recent', activity.line, {
+    await manager.remember('innerLife:recent', moment.line, {
       scope: 'project',
       category: 'context',
-      tags: ['inner-life', 'companion'],
+      tags: ['inner-life', 'companion', moment.kind === 'done' ? 'verified-activity' : 'thought'],
     });
   } catch (err) {
     logger.warn(
@@ -113,16 +233,17 @@ async function defaultPromote(activity: InnerLifeActivity): Promise<void> {
 }
 
 /**
- * One inner-life tick: choose what Lisa "did", drift her mood a touch, and store the vignette so a
- * later reply/arrival can reference it. Returns the chosen activity (or null on failure). Never throws.
+ * One inner-life tick: perform a small real activity (or, failing that, hold a thought), drift her
+ * mood a touch, and store the vignette so a later reply can reference it. Returns the moment (or
+ * null on failure). Never throws.
  */
-export async function runInnerLifeTick(deps: InnerLifeTickDeps = {}): Promise<InnerLifeActivity | null> {
+export async function runInnerLifeTick(deps: InnerLifeTickDeps = {}): Promise<InnerLifeMoment | null> {
   try {
-    const activity = (deps.pick ?? (() => pickInnerLifeActivity()))();
+    const moment = await chooseInnerLifeMoment(deps.sources ?? defaultSources(), deps.index);
     (deps.driftMood ?? defaultDriftMood)(deps.relationshipStatePath);
-    await (deps.promote ?? defaultPromote)(activity);
-    logger.info(`[inner-life] Lisa spent a moment: ${activity.id}`);
-    return activity;
+    await (deps.promote ?? defaultPromote)(moment);
+    logger.info(`[inner-life] ${moment.kind === 'done' ? 'did' : 'thought'}: ${moment.id}`);
+    return moment;
   } catch (err) {
     logger.warn(
       `[inner-life] tick skipped: ${err instanceof Error ? err.message : String(err)}`,

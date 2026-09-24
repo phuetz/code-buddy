@@ -848,7 +848,7 @@ export function fastCompanionReply(heard: string): string | null {
       text
     )
   ) {
-    return "Plutôt bien. J'ai continué à préparer Code Buddy pour répondre plus vite.";
+    return "Plutôt calme de mon côté. Et toi, comment s'est passée ta journée ?";
   }
   const clock = clockCompanionReply(heard);
   if (clock) return clock;
@@ -943,7 +943,7 @@ export const DEFAULT_TTS_PREWARM_PHRASES = [
   'Tu as passé une bonne journée ?',
   'Tu veux me raconter ta journée ?',
   "Et toi, comment s'est passée ta journée ?",
-  "Plutôt bien. J'ai continué à travailler pour toi, et toi, comment s'est passée ta journée ?",
+  "Plutôt calme de mon côté. Et toi, comment s'est passée ta journée ?",
   'Tu veux qu’on fasse le point ?',
   'Tu veux que je t’aide à organiser la suite ?',
   'Qu’est-ce que tu veux faire maintenant ?',
@@ -1048,16 +1048,9 @@ export const DEFAULT_TTS_PREWARM_PHRASES = [
   'Je vais parler moins longtemps.',
   'Je vais répondre plus vite.',
   'Le cache évite de régénérer la voix.',
-  "Plutôt bien. J'ai continué à préparer Code Buddy pour répondre plus vite.",
-  "Je n'ai pas de journée comme toi, mais j'ai bien travaillé.",
-  'Ma journée a été utile : j’ai amélioré la boucle vocale.',
   'Et toi, comment s’est passée ta journée ?',
   'Amuse-toi bien chez tes amis.',
   'Passe une bonne visite chez tes amis.',
-  'Je continue en autonomie pendant ton absence.',
-  'Je te ferai un résumé quand tu reviens.',
-  'Amuse-toi bien chez tes amis. Je continue en autonomie et je te ferai un résumé quand tu reviens.',
-  `Contente de te retrouver, ${resolveUserName()}. Je peux te faire le résumé de ce que j’ai fait.`,
   'Cache trouvé.',
   'Cache généré.',
   'Cache vocal réutilisé.',
