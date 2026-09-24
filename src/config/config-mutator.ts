@@ -280,7 +280,7 @@ export async function setConfigValue(
 
   // Persist
   try {
-    configManager.saveUserConfig();
+    configManager.saveUserConfig(keyPath, resolvedValue);
   } catch (err) {
     logger.warn(`Failed to save config after setting "${keyPath}": ${err}`, { source: 'ConfigMutator' });
   }

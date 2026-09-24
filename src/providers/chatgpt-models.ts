@@ -11,8 +11,13 @@ import type { ChatGptAuth } from './codex-oauth.js';
 import { logger } from '../utils/logger.js';
 import { getInstallationId } from '../utils/installation-id.js';
 
-export const CHATGPT_OAUTH_DEFAULT_MODEL = 'gpt-5.6-sol';
+// Codex CLI presents gpt-6-sol as the "workhorse model for coding and everyday
+// work" and files gpt-5.6-sol under "older" models (model picker, 2026-09-23).
+// `CHATGPT_MODEL=gpt-5.6-sol` restores the previous default.
+export const CHATGPT_OAUTH_DEFAULT_MODEL = 'gpt-6-sol';
 export const CHATGPT_OAUTH_API_ALIAS = 'gpt-5.6';
+/** The public `gpt-5.6` alias names Sol 5.6, whatever the current default is. */
+const CHATGPT_OAUTH_API_ALIAS_TARGET = 'gpt-5.6-sol';
 export const CHATGPT_OAUTH_SAFE_FALLBACK_MODEL = 'gpt-5.5';
 
 // The backend filters `/models` by this version. Measured on 2026-09-23: the
@@ -91,7 +96,7 @@ export type ChatGptModelCatalogProvider = (
 export function normalizeChatGptOAuthModel(model: string): string {
   const trimmed = model.trim();
   return trimmed.toLowerCase() === CHATGPT_OAUTH_API_ALIAS
-    ? CHATGPT_OAUTH_DEFAULT_MODEL
+    ? CHATGPT_OAUTH_API_ALIAS_TARGET
     : trimmed;
 }
 
