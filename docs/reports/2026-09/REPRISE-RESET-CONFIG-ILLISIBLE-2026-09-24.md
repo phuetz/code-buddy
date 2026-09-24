@@ -10,5 +10,6 @@ Un fichier de configuration présent sur le chemin de remise à zéro, mais illi
 - `4ed24925c` : le test de garde Windows couvre aussi l'essai qui retire le droit de lecture du `config.toml`.
 - `8ea6e270f` : les essais du receveur et de la remise à zéro ne lisent plus le `config.toml` du développeur (HOME jetable importé en premier) ; un profil personnel ne peut plus changer leur verdict.
 - `a57070d6f` : la politique en cache avait été calculée dans le répertoire courant du chargement, mais le contrôle relisait les fichiers dans celui du moment. Après un changement de répertoire vers un projet qui vaut « none », la session était effacée. La section `session_reset` est maintenant recalculée depuis les fichiers au moment de la remise à zéro, puis comparée à celle du chargement. Toute différence annule : autre répertoire, fichier modifié, créé ou supprimé. Même mesure pour un `CODEBUDDY_SESSION_RESET_ARCHIVE_DIR` relatif.
+- Essai ajouté sur l'historique compagnon : un tour arrivé entre l'archive et l'effacement n'est pas effacé (la comparaison compagnon n'était couverte par aucun essai).
 
 Les preuves détaillées (rouges, verts, mutants) sont hors du dépôt public.
