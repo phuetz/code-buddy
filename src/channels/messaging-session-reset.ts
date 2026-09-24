@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { decryptSessionContent, hasEncryptedSessionContent } from '../persistence/session-content.js';
 import type { SessionMessage } from '../persistence/session-store.js';
-import { readJsonAtomicSyncReadOnly, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { readJsonAtomicSyncReadOnly } from '../utils/atomic-write.js';
 
 export type MessagingSessionResetMode = 'both' | 'idle' | 'daily' | 'none';
 export type MessagingSessionResetReason = 'idle' | 'daily';
@@ -242,6 +242,32 @@ export function readMessagingMemoryArchive(
     .join('\n');
 }
 
+/**
+ * Create `filePath` with `bytes`. 'wx' never follows or replaces an existing
+ * path: an archive written by another reset at the same name stays intact
+ * and this save fails instead.
+ */
+function writeNewFileSync(filePath: string, bytes: Uint8Array | string): void {
+  const fd = fs.openSync(filePath, 'wx', 0o600);
+  try {
+    fs.writeFileSync(fd, bytes);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/** Archive entries of a directory that are regular files, never symlinks. */
+function archiveFileNames(directory: string, stem: string): string[] {
+  return fs.readdirSync(directory)
+    .filter((name) => name.startsWith(`${stem}.`) && name.endsWith('.json'))
+    .filter((name) => {
+      const listed = fs.lstatSync(path.join(directory, name));
+      return listed.isFile() && !listed.isSymbolicLink();
+    })
+    .sort();
+}
+
 function openVerbatimSessionCopy(file: string, open: ((sealed: string) => string) | undefined, keyPath?: string): string {
   const data: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
   const messages = (data as { messages?: unknown } | null)?.messages;
@@ -269,13 +295,14 @@ export function openMessagingMemoryArchive(
   if (!raw) return [];
   const directory = path.join(archiveDir, source);
   const stem = sessionStem(sessionKey);
-  return fs.readdirSync(directory)
-    .filter((name) => name.startsWith(`${stem}.`) && name.endsWith('.json'))
-    .sort()
+  return archiveFileNames(directory, stem)
     .map((name) => {
       if (name.endsWith(VERBATIM_SUFFIX)) return openVerbatimSessionCopy(path.join(directory, name), open, keyPath);
       const read = readJsonAtomicSyncReadOnly<MemoryArchiveRecord>(path.join(directory, name), isArchiveRecord);
       if (read.status !== 'ok') throw new Error(`memory archive ${read.status}`);
+      // The digest was proved at save time; a record edited since no longer matches it.
+      const stored = 'sealed' in read.value ? read.value.sealed : read.value.transcript;
+      if (digestTranscript(stored) !== read.value.digest) throw new Error('memory archive digest mismatch');
       if (!('sealed' in read.value)) return read.value.transcript;
       if (!open) throw new Error('memory archive is sealed');
       return open(read.value.sealed);
@@ -403,14 +430,8 @@ export function proveMessagingMemorySave(input: {
     })();
     if (existing) return { ok: false, error: 'memory archive path collision' };
     if (raw) {
-      // 'wx': never follows or replaces an existing path. No decode, no rewrite.
-      const fd = fs.openSync(filePath, 'wx', 0o600);
-      try {
-        fs.writeFileSync(fd, raw);
-        fs.fsyncSync(fd);
-      } finally {
-        fs.closeSync(fd);
-      }
+      // No decode, no rewrite.
+      writeNewFileSync(filePath, raw);
       if (!fs.readFileSync(filePath).equals(Buffer.from(raw))) {
         return { ok: false, error: 'memory archive read-back mismatch' };
       }
@@ -420,7 +441,7 @@ export function proveMessagingMemorySave(input: {
     const record: MemoryArchiveRecord = sealed
       ? { schemaVersion: 1, savedAt, reason: input.reason, encrypted: true, sealed: sealed.payload, digest, epoch }
       : { schemaVersion: 1, savedAt, reason: input.reason, transcript: input.transcript, digest, epoch };
-    writeJsonAtomicSync(filePath, record, { mode: 0o600 });
+    writeNewFileSync(filePath, `${JSON.stringify(record, null, 2)}\n`);
     const readBack = readJsonAtomicSyncReadOnly<MemoryArchiveRecord>(filePath, isArchiveRecord);
     if (readBack.status === 'missing') return { ok: false, error: 'memory archive read-back missing' };
     if (readBack.status !== 'ok') return { ok: false, error: `memory archive read-back ${readBack.status}` };
