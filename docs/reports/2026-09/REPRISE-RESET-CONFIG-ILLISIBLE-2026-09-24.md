@@ -7,5 +7,7 @@ Un fichier de configuration présent sur le chemin de remise à zéro, mais illi
 - `8cc8da33a` : au moment de la remise à zéro, les deux `config.toml` (utilisateur, projet) sont relus. Un fichier qui n'est pas un fichier ordinaire, qui ne se lit pas, ou qui contient une ligne que `parseTOML` ignorerait, annule la remise à zéro.
 - `9d69f6f85` : la politique appliquée vient du cache du chargeur. Le chargeur note maintenant chaque fichier présent qu'il n'a pas pu lire ou analyser ; la remise à zéro s'y refuse, même si le fichier a été réparé depuis. Les autres réglages gardent la fusion tolérante d'avant.
 - Essai ajouté sur la seconde lecture avant effacement : une session modifiée entre l'archive et l'effacement n'est pas effacée.
+- `4ed24925c` : le test de garde Windows couvre aussi l'essai qui retire le droit de lecture du `config.toml`.
+- `8ea6e270f` : les essais du receveur et de la remise à zéro ne lisent plus le `config.toml` du développeur (HOME jetable importé en premier) ; un profil personnel ne peut plus changer leur verdict.
 
 Les preuves détaillées (rouges, verts, mutants) sont hors du dépôt public.
