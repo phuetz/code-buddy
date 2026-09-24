@@ -13,6 +13,15 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { logger } from '../utils/logger.js';
+import {
+  applyDomainPolicy,
+  commandMatchesDeny,
+  domainPolicyFromManagedFile,
+  type DomainAssessment,
+  type DomainPolicy,
+  type DomainPosture,
+  type PolicyFinding,
+} from './domain-policy.js';
 
 // ============================================================================
 // Types
@@ -25,6 +34,8 @@ export interface ManagedPoliciesConfig {
   disallowedCommands: string[];
   maxSessionCost?: number;
   allowedModels?: string[];
+  /** Overlays par domaine. Absents si le fichier n'en déclare pas. */
+  domains?: DomainPolicy;
 }
 
 // ============================================================================
@@ -47,6 +58,7 @@ const DEFAULT_POLICIES: ManagedPoliciesConfig = {
 
 export class ManagedPoliciesManager {
   private policies: ManagedPoliciesConfig = { ...DEFAULT_POLICIES };
+  private domainLoadFindings: PolicyFinding[] = [];
   private managed: boolean = false;
   private systemPath: string;
   private userPath: string;
@@ -67,6 +79,7 @@ export class ManagedPoliciesManager {
 
     if (!loaded) {
       this.policies = { ...DEFAULT_POLICIES };
+      this.domainLoadFindings = [];
       this.managed = false;
       logger.debug('No managed policies found', { source: 'ManagedPoliciesManager' });
     }
@@ -80,7 +93,9 @@ export class ManagedPoliciesManager {
 
       const content = fs.readFileSync(filePath, 'utf-8');
       const parsed = JSON.parse(content) as Partial<ManagedPoliciesConfig>;
+      const domains = domainPolicyFromManagedFile(parsed);
 
+      this.domainLoadFindings = domains.findings;
       this.policies = {
         allowManagedPermissionRulesOnly: parsed.allowManagedPermissionRulesOnly ?? false,
         allowManagedHooksOnly: parsed.allowManagedHooksOnly ?? false,
@@ -88,6 +103,7 @@ export class ManagedPoliciesManager {
         disallowedCommands: Array.isArray(parsed.disallowedCommands) ? parsed.disallowedCommands : [],
         maxSessionCost: typeof parsed.maxSessionCost === 'number' ? parsed.maxSessionCost : undefined,
         allowedModels: Array.isArray(parsed.allowedModels) ? parsed.allowedModels : undefined,
+        ...(domains.policy ? { domains: domains.policy } : {}),
       };
 
       this.managed = true;
@@ -111,19 +127,35 @@ export class ManagedPoliciesManager {
    * Checks if any disallowed command pattern appears in the command string.
    */
   isCommandAllowed(command: string): boolean {
-    for (const disallowed of this.policies.disallowedCommands) {
-      if (command.includes(disallowed)) {
-        return false;
-      }
-    }
-    return true;
+    const denies = [
+      ...this.policies.disallowedCommands,
+      ...(this.policies.domains?.exec?.deny_commands ?? []),
+    ];
+    // allow_commands n'est pas consulté : une liste d'autorisation de politique
+    // ne peut pas rendre licite une commande refusée.
+    return !commandMatchesDeny(command, denies);
+  }
+
+  /**
+   * Posture calculée. Les clauses plus ouvertes restent dans les constats.
+   * Ce résultat n'est pas lu par les exécuteurs.
+   */
+  assessDomain(posture: DomainPosture): DomainAssessment {
+    const applied = applyDomainPolicy(posture, this.policies.domains ?? null);
+    return {
+      effective: applied.effective,
+      findings: [...this.domainLoadFindings, ...applied.findings],
+    };
   }
 
   /**
    * Get the current policies
    */
   getPolicies(): ManagedPoliciesConfig {
-    return { ...this.policies };
+    return {
+      ...this.policies,
+      ...(this.policies.domains ? { domains: { ...this.policies.domains } } : {}),
+    };
   }
 
   /**

@@ -125,6 +125,8 @@ export function renderModelShow(model: string, options: ModelsCommandIO = {}): s
     `demandé: ${choice.requested}`,
     `source: ${choice.source}`,
   ];
+  if (choice.provider) lines.push(`fournisseur: ${choice.provider}`);
+  if (choice.baseUrl) lines.push(`url: ${choice.baseUrl}`);
   return `${lines.join('\n')}\n`;
 }
 

@@ -27,6 +27,7 @@ import {
   selectOllamaModel,
   type OllamaModelSelection,
 } from './ollama-model-selection.js';
+import { checkDomainPolicy } from './domain-policy-check.js';
 import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
 import { isDeclaredProviderFallbackEnabled } from '../providers/provider-failover-policy.js';
 import { formatProviderHealthLines, readProviderHealthSnapshot } from '../providers/provider-health.js';
@@ -928,6 +929,18 @@ export async function runDoctorChecks(cwd?: string, options: DoctorRunOptions = 
   const noSubprocess = options.noSubprocess === true;
   const lookup: CommandLookup = noSubprocess ? (cmd) => commandExistsOnPath(cmd) : commandExists;
   const { checkLlmKeysLive } = await import('./llm-key-check.js');
+  let userConfigCheck: DoctorCheck;
+  try {
+    const { checkUserConfigRecovery } = await import('./config-recovery.js');
+    userConfigCheck = checkUserConfigRecovery();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    userConfigCheck = {
+      name: 'User config file',
+      status: 'warn',
+      message: `check skipped: ${message}`,
+    };
+  }
   return [
     await checkProviderReadiness(offline),
     checkNodeVersion(),
@@ -939,6 +952,7 @@ export async function runDoctorChecks(cwd?: string, options: DoctorRunOptions = 
     ...(offline ? [] : await checkLlmKeysLive()),
     await checkChatGptOAuth(offline),
     ...checkConfigFiles(dir),
+    userConfigCheck,
     // Accidents de collage dans .env (commande shell, guillemets, doublons) —
     // détectés sans jamais afficher les valeurs. src/doctor/env-sanity.ts.
     ...(await import('./env-sanity.js')).checkEnvSanity(dir),
@@ -950,6 +964,7 @@ export async function runDoctorChecks(cwd?: string, options: DoctorRunOptions = 
     checkGit(dir, noSubprocess),
     checkNativeSandbox(noSubprocess),
     checkProviderFailoverHealth(),
+    checkDomainPolicy(),
   ];
 }
 
