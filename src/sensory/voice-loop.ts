@@ -2995,6 +2995,8 @@ function makeDefaultStreamSpeak(
         if (settled) return;
         settled = true;
         closedOk = ok;
+        // The player is gone: stop waiting on the source, whatever it does next.
+        void reader.cancel().catch(() => undefined);
         resolve();
       };
       child.once('error', () => finish(false));
@@ -3009,6 +3011,10 @@ function makeDefaultStreamSpeak(
       logger.warn(
         `[voice] streaming player ${player.cmd} exceeded ${timeoutMs}ms — killing it`
       );
+      // Cancel the source too: a stream that stalls without closing would keep
+      // the loop below parked in reader.read() forever — the robot "speaking",
+      // deaf to the user, with reminders queued behind it.
+      void reader.cancel().catch(() => undefined);
       try {
         child.kill('SIGKILL');
       } catch {
