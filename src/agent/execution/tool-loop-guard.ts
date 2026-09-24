@@ -36,7 +36,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, statSync } from 'node:fs';
 import TOML from '@iarna/toml';
 import type { ToolResult } from '../../types/index.js';
 import { TOOL_METADATA } from '../../tools/metadata.js';
@@ -225,8 +225,9 @@ export class ToolLoopGuard {
       : Number.POSITIVE_INFINITY;
   }
 
+  /** True after any warning this task, including exact_failure and same_tool_failure. */
   get hasWarned(): boolean {
-    return this.warned;
+    return this.warned || this.exactWarned.size > 0 || this.sameWarned.size > 0;
   }
 
   get hasStopped(): boolean {
@@ -446,15 +447,50 @@ export function resolveToolLoopGuardrails(raw: unknown): ToolLoopGuardrailsConfi
   };
 }
 
+const TOOL_LOOP_CONFIG_MAX_BYTES = 512 * 1024;
+
 function readHomeConfigToml(): string | null {
+  const filePath = getCodeBuddyPath('config.toml');
   try {
-    const filePath = getCodeBuddyPath('config.toml');
-    if (!existsSync(filePath)) return null;
-    return readFileSync(filePath, 'utf8');
+    const linked = lstatSync(filePath);
+    const info = linked.isSymbolicLink() ? statSync(filePath) : linked;
+    if (!info.isFile()) {
+      logger.warn('tool loop guardrails: config.toml is not a regular file, historical thresholds kept');
+      return null;
+    }
+    if (info.size > TOOL_LOOP_CONFIG_MAX_BYTES) {
+      logger.warn('tool loop guardrails: config.toml exceeds the read bound, historical thresholds kept', {
+        bytes: info.size,
+      });
+      return null;
+    }
+    const flags = constants.O_RDONLY
+      | constants.O_NONBLOCK
+      | (linked.isSymbolicLink() ? 0 : (typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0));
+    const fd = openSync(filePath, flags);
+    try {
+      const opened = fstatSync(fd);
+      if (!opened.isFile() || opened.size > TOOL_LOOP_CONFIG_MAX_BYTES) {
+        logger.warn('tool loop guardrails: config.toml is not a bounded regular file, historical thresholds kept');
+        return null;
+      }
+      const buf = Buffer.alloc(opened.size);
+      let offset = 0;
+      while (offset < opened.size) {
+        const n = readSync(fd, buf, offset, opened.size - offset, offset);
+        if (n === 0) break;
+        offset += n;
+      }
+      return buf.subarray(0, offset).toString('utf8');
+    } finally {
+      closeSync(fd);
+    }
   } catch (error) {
-    logger.warn('tool loop guardrails: config.toml unreadable, historical thresholds kept', {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    const code = error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: string }).code ?? '')
+      : '';
+    if (code === 'ENOENT') return null;
+    logger.warn('tool loop guardrails: config.toml unreadable, historical thresholds kept', { code });
     return null;
   }
 }

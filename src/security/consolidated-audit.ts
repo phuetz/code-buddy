@@ -28,7 +28,7 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
-  readFileSync,
+  readSync,
   realpathSync,
   writeSync,
 } from 'node:fs';
@@ -133,7 +133,7 @@ const O_NOFOLLOW = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLL
 const LIMITATIONS = [
   'Remote MCP hostnames are not resolved. A passed URL is not a guarantee that DNS stays off private networks.',
   'MCP server checks follow the runtime loader: project mcp.json (mcpServers or servers), project settings.json mcpServers, and profile mcp.json. Project settings.local.json and profile settings.json are not runtime MCP server sources.',
-  'Skill directories are capped at 40 entries and a bounded file walk. A larger tree fails the audit instead of being reported as clean.',
+  'Skill directories are capped at 40 entries and a bounded file walk. A larger tree fails the audit instead of being reported as clean. A symlink or non-regular file inside a skill is not followed and fails the audit.',
   'exact_failure and same_tool_failure accept 0 as off. idempotent_no_progress does not: 0 keeps the historical default and the minimum is 2. same_tool_failure counts every failure of that tool in the turn, even when the arguments differ. warnings_enabled and hard_stop_enabled can both be turned off by the operator.',
 ];
 
@@ -253,6 +253,55 @@ export function inspectAuditRoot(input: string): { ok: true; effective: string }
   return { ok: true, effective };
 }
 
+const CONFIG_TEXT_MAX_BYTES = 512 * 1024;
+
+function pushWrongType(
+  out: SecurityAuditFinding[],
+  announced: Set<string>,
+  abs: string,
+  roots: string[],
+): void {
+  const key = `wrong-type:${path.resolve(abs)}`;
+  if (announced.has(key)) return;
+  announced.add(key);
+  out.push(finding(
+    'config.file.wrong_type',
+    'high',
+    'Expected configuration path is not a regular file',
+    `${redactSecrets(relativeTo(abs, roots))} is not a regular file. The audit did not treat it as clean.`,
+  ));
+}
+
+/** Open with O_NONBLOCK and read only after fstat proves a regular file. */
+function readRegularText(abs: string, maxBytes: number): { text: string | null; error: 'unreadable' | 'too-large' | 'binary' | null } {
+  const flags = constants.O_RDONLY | constants.O_NONBLOCK | O_NOFOLLOW;
+  let fd: number;
+  try {
+    fd = openSync(abs, flags);
+  } catch {
+    return { text: null, error: 'unreadable' };
+  }
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) return { text: null, error: 'unreadable' };
+    if (opened.size > maxBytes) return { text: null, error: 'too-large' };
+    const buf = Buffer.alloc(opened.size);
+    let offset = 0;
+    while (offset < opened.size) {
+      const n = readSync(fd, buf, offset, opened.size - offset, offset);
+      if (n === 0) break;
+      offset += n;
+    }
+    const text = buf.subarray(0, offset).toString('utf8');
+    if (text.includes('\u0000')) return { text: null, error: 'binary' };
+    return { text, error: null };
+  } catch {
+    return { text: null, error: 'unreadable' };
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function readText(abs: string): { text: string | null; skip: string | null; error: string | null } {
   let info;
   try {
@@ -262,15 +311,14 @@ function readText(abs: string): { text: string | null; skip: string | null; erro
     return { text: null, skip: null, error: 'unreadable' };
   }
   if (info.isSymbolicLink()) return { text: null, skip: 'symlink', error: null };
-  if (!info.isFile()) return { text: null, skip: null, error: null };
-  if (info.size > 512 * 1024) return { text: null, skip: 'too-large', error: null };
-  try {
-    const text = readFileSync(abs, 'utf8');
-    if (text.includes('\u0000')) return { text: null, skip: 'binary', error: null };
-    return { text, skip: null, error: null };
-  } catch {
-    return { text: null, skip: null, error: 'unreadable' };
+  if (!info.isFile()) return { text: null, skip: 'wrong-type', error: null };
+  if (info.size > CONFIG_TEXT_MAX_BYTES) return { text: null, skip: 'too-large', error: null };
+  const loaded = readRegularText(abs, CONFIG_TEXT_MAX_BYTES);
+  if (loaded.error === 'too-large' || loaded.error === 'binary') {
+    return { text: null, skip: loaded.error, error: null };
   }
+  if (loaded.error) return { text: null, skip: null, error: 'unreadable' };
+  return { text: loaded.text, skip: null, error: null };
 }
 
 function loadConfigText(
@@ -314,6 +362,10 @@ function loadConfigText(
         `${label} could not be read. The audit did not treat it as empty.`,
       ));
     }
+    return { text: null };
+  }
+  if (loaded.skip === 'wrong-type') {
+    pushWrongType(out, announced, abs, roots);
     return { text: null };
   }
   if (loaded.skip) {
@@ -602,7 +654,10 @@ function collectSuppressions(
   return { accepted, rejected };
 }
 
-function permissionFindings(request: ConsolidatedAuditRequest): SecurityAuditFinding[] {
+function permissionFindings(
+  request: ConsolidatedAuditRequest,
+  announced: Set<string>,
+): SecurityAuditFinding[] {
   if ((request.platform ?? process.platform) === 'win32') return [];
   const out: SecurityAuditFinding[] = [];
   const seen = new Set<string>();
@@ -625,6 +680,18 @@ function permissionFindings(request: ConsolidatedAuditRequest): SecurityAuditFin
     }
     if (gate !== 'ok' || seen.has(path.resolve(abs))) return;
     seen.add(path.resolve(abs));
+    if (kind === 'file') {
+      let listed;
+      try {
+        listed = lstatSync(abs);
+      } catch {
+        return;
+      }
+      if (!listed.isSymbolicLink() && !listed.isFile()) {
+        pushWrongType(out, announced, abs, [base]);
+        return;
+      }
+    }
     const mode = modeBits(abs);
     if (mode === null) return;
     const subject = { path: label, root: rootName };
@@ -695,7 +762,7 @@ function permissionFindings(request: ConsolidatedAuditRequest): SecurityAuditFin
   return out;
 }
 
-function measureSkill(root: string): { overflow: boolean } {
+function measureSkill(root: string): { overflow: boolean; refused: 'symlink' | 'special' | null } {
   let files = 0;
   let bytes = 0;
   const stack = [root];
@@ -706,7 +773,7 @@ function measureSkill(root: string): { overflow: boolean } {
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
-      return { overflow: true };
+      return { overflow: true, refused: null };
     }
     for (const entry of entries) {
       const abs = path.join(dir, entry.name);
@@ -714,20 +781,21 @@ function measureSkill(root: string): { overflow: boolean } {
       try {
         info = lstatSync(abs);
       } catch {
-        return { overflow: true };
+        return { overflow: true, refused: null };
       }
-      if (info.isSymbolicLink()) continue;
+      // Every level of the walk refuses a link or a special file. Neither is opened.
+      if (info.isSymbolicLink()) return { overflow: false, refused: 'symlink' };
       if (info.isDirectory()) {
         stack.push(abs);
         continue;
       }
-      if (!info.isFile()) continue;
+      if (!info.isFile()) return { overflow: false, refused: 'special' };
       files += 1;
       bytes += info.size;
-      if (files > SKILL_FILE_CAP || bytes > SKILL_BYTE_CAP) return { overflow: true };
+      if (files > SKILL_FILE_CAP || bytes > SKILL_BYTE_CAP) return { overflow: true, refused: null };
     }
   }
-  return { overflow: false };
+  return { overflow: false, refused: null };
 }
 
 function skillFindings(request: ConsolidatedAuditRequest): SecurityAuditFinding[] {
@@ -789,6 +857,15 @@ function skillFindings(request: ConsolidatedAuditRequest): SecurityAuditFinding[
       }
       if (!info.isDirectory() && name.toLowerCase() !== 'skill.md') continue;
       const measured = measureSkill(abs);
+      if (measured.refused) {
+        out.push(finding(
+          measured.refused === 'symlink' ? 'skills.tree.symlink' : 'skills.tree.special',
+          'high',
+          measured.refused === 'symlink' ? 'Skill tree contains a symlink' : 'Skill tree contains a special file',
+          `${label} contains a ${measured.refused === 'symlink' ? 'symbolic link' : 'non-regular file'} that was not followed. The audit did not treat it as clean.`,
+        ));
+        continue;
+      }
       if (measured.overflow) {
         out.push(finding(
           'skills.scan.bounded',
@@ -1014,7 +1091,7 @@ function applyFixes(request: ConsolidatedAuditRequest, items: SecurityAuditFindi
     entries: opened.map((entry) => ({ path: entry.subject, modeBefore: entry.mode.toString(8) })),
   };
   const backup = backupReady(
-    [request.profileDir, request.projectDir],
+    [request.profileDir],
     stamp,
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
@@ -1103,7 +1180,7 @@ export function runConsolidatedSecurityAudit(request: ConsolidatedAuditRequest):
   if (!project.ok) scope.push(scopeFinding('project', request.projectDir, project.reason));
   if (!profile.ok || !project.ok) {
     const summary = summarize(scope);
-    return {
+    return redactReport({
       ...base,
       passed: false,
       status: 'failed',
@@ -1111,7 +1188,7 @@ export function runConsolidatedSecurityAudit(request: ConsolidatedAuditRequest):
       suppressedFindings: [],
       summary,
       fixes: [],
-    };
+    });
   }
   const scoped: ConsolidatedAuditRequest = {
     ...request,
@@ -1120,7 +1197,7 @@ export function runConsolidatedSecurityAudit(request: ConsolidatedAuditRequest):
   };
   const announced = new Set<string>();
   const collected = [
-    ...permissionFindings(scoped),
+    ...permissionFindings(scoped, announced),
     ...skillFindings(scoped),
     ...otherFindings(scoped, announced),
   ];
@@ -1171,7 +1248,7 @@ export function runConsolidatedSecurityAudit(request: ConsolidatedAuditRequest):
     : suppressedFindings.length > 0
       ? 'passed_with_suppressions'
       : 'passed';
-  return {
+  return redactReport({
     ...base,
     effectiveProfileDir: profile.effective,
     effectiveProjectDir: project.effective,
@@ -1181,5 +1258,39 @@ export function runConsolidatedSecurityAudit(request: ConsolidatedAuditRequest):
     suppressedFindings,
     summary,
     fixes,
+  });
+}
+
+function redactPath(value: string | null): string | null {
+  return value === null ? null : redactSecrets(value);
+}
+
+function redactFinding(item: SecurityAuditFinding): SecurityAuditFinding {
+  const next: SecurityAuditFinding = { ...item, detail: redactSecrets(item.detail) };
+  if (item.subject !== undefined) next.subject = redactSecrets(item.subject);
+  return next;
+}
+
+function redactReport(report: ConsolidatedAuditReport): ConsolidatedAuditReport {
+  return {
+    ...report,
+    profileDir: redactSecrets(report.profileDir),
+    projectDir: redactSecrets(report.projectDir),
+    effectiveProfileDir: redactPath(report.effectiveProfileDir),
+    effectiveProjectDir: redactPath(report.effectiveProjectDir),
+    findings: report.findings.map(redactFinding),
+    suppressedFindings: report.suppressedFindings.map((item) => ({
+      ...redactFinding(item),
+      reason: redactSecrets(item.reason),
+    })),
+    fixes: report.fixes.map((item) => {
+      const next: SecurityAuditFix = {
+        ...item,
+        subject: redactSecrets(item.subject),
+        message: redactSecrets(item.message),
+      };
+      if (item.backup !== undefined) next.backup = redactSecrets(item.backup);
+      return next;
+    }),
   };
 }

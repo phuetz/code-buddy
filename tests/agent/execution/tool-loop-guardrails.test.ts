@@ -1,3 +1,8 @@
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TOOL_LOOP_GUARDRAILS,
@@ -181,4 +186,82 @@ idempotent_no_progress = 7
     expect(loadToolLoopGuardOptions(() => 'model = "demo"\n')).toEqual({});
     expect(loadToolLoopGuardOptions(() => 'tool_loop_guardrails = "nope"\n').guardrails?.warnAfter?.idempotent_no_progress).toBe(5);
   });
+
+  it('reports hasWarned after an exact_failure warning', () => {
+    const guard = new ToolLoopGuard({
+      isRepeatSafe: () => false,
+      guardrails: { warnAfter: { exact_failure: 2 }, hardStopAfter: { exact_failure: 4 } },
+    });
+    const actions: string[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      actions.push(guard.observe({
+        name: 'view_file',
+        argumentsJson: '{"path":"x"}',
+        result: { success: false, error: `error ${index}` },
+      }).action);
+    }
+    expect(actions[1]).toBe('warn');
+    expect(guard.hasWarned, 'exact_failure warning left hasWarned false').toBe(true);
+    expect(guard.hasStopped).toBe(false);
+  });
+
+  it('reads a regular config.toml from CODEBUDDY_HOME', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'loop-guard-toml-'));
+    const previous = process.env.CODEBUDDY_HOME;
+    process.env.CODEBUDDY_HOME = root;
+    try {
+      writeFileSync(path.join(root, 'config.toml'), '[tool_loop_guardrails]\nwarnings_enabled = false\n', { mode: 0o600 });
+      expect(loadToolLoopGuardOptions().guardrails?.warningsEnabled).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_HOME;
+      else process.env.CODEBUDDY_HOME = previous;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not apply a config.toml larger than the read bound', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'loop-guard-toml-'));
+    const previous = process.env.CODEBUDDY_HOME;
+    process.env.CODEBUDDY_HOME = root;
+    try {
+      const body = `[tool_loop_guardrails]\nwarnings_enabled = false\n${' '.repeat(512 * 1024)}`;
+      writeFileSync(path.join(root, 'config.toml'), body, { mode: 0o600 });
+      const enabled = loadToolLoopGuardOptions().guardrails?.warningsEnabled ?? true;
+      expect(enabled, 'oversized config.toml was applied').toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_HOME;
+      else process.env.CODEBUDDY_HOME = previous;
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('does not block when config.toml is a fifo', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'loop-guard-fifo-'));
+    const made = spawnSync('mkfifo', ['-m', '600', path.join(root, 'config.toml')], { timeout: 2000, encoding: 'utf8' });
+    expect(made.status, made.stderr ?? '').toBe(0);
+    const guardModule = pathToFileURL(path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'), 'src/agent/execution/tool-loop-guard.ts')).href;
+    const ran = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
+      import { loadToolLoopGuardOptions } from ${JSON.stringify(guardModule)};
+      const options = loadToolLoopGuardOptions();
+      console.log('GUARD_RESULT ' + JSON.stringify({ applied: options.guardrails !== undefined }));
+    `], {
+      cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'),
+      env: {
+        PATH: process.env.PATH ?? '/usr/bin:/bin',
+        HOME: root,
+        CODEBUDDY_HOME: root,
+        NO_COLOR: '1',
+        CI: '1',
+        LANG: 'C',
+      },
+      encoding: 'utf8',
+      timeout: 10_000,
+      killSignal: 'SIGKILL',
+    });
+    rmSync(root, { recursive: true, force: true });
+    const timedOut = (ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' || ran.signal != null;
+    if (timedOut) throw new Error('config.toml fifo blocked loadToolLoopGuardOptions');
+    expect(ran.status, ran.stderr ?? '').toBe(0);
+    expect(ran.stdout ?? '').toContain('GUARD_RESULT {"applied":false}');
+  }, 20_000);
 });

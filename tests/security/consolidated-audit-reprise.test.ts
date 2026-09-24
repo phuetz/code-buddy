@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -13,7 +14,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Command } from 'commander';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -134,13 +135,20 @@ describe('security audit --fix stays inside the scope and only removes bits', ()
     expect(report.passed).toBe(true);
   });
 
-  itPosix('does not add owner write when a 0502 directory is tightened', () => {
+  itPosix('does not add owner write or fall back to the project when a 0502 directory cannot store its backup', () => {
     const { profile, project } = workspace();
     chmodSync(profile, 0o502);
-    const report = audit(profile, project, { fix: true, now: new Date('2026-09-23T12:00:00.000Z') });
-    expect(modeOf(profile)).toBe(0o500);
-    expect(modeOf(profile) & 0o200).toBe(0);
-    expect(report.findings.map((item) => item.checkId)).not.toContain('profile.directory.world_writable');
+    try {
+      const report = audit(profile, project, { fix: true, now: new Date('2026-09-23T12:00:00.000Z') });
+      expect(modeOf(profile)).toBe(0o502);
+      expect(modeOf(profile) & 0o200).toBe(0);
+      expect(existsSync(path.join(project, 'security-audit-backups')), 'backup was written in the project').toBe(false);
+      expect(report.passed).toBe(false);
+      expect(report.fixes.some((item) => item.ok)).toBe(false);
+      expect(report.findings.map((item) => item.checkId)).toContain('profile.directory.world_writable');
+    } finally {
+      chmodSync(profile, 0o700);
+    }
   });
 
   itPosix('tightens a credentials file whose relative path contains a space', () => {
@@ -424,3 +432,166 @@ describe('security audit through the real CLI entry point', () => {
 function readNames(dir: string): string[] {
   return readdirSync(dir).slice().sort();
 }
+
+const BOUNDED_MS = 10_000;
+const auditModule = pathToFileURL(path.join(repoRoot, 'src/security/consolidated-audit.ts')).href;
+const scannerModule = pathToFileURL(path.join(repoRoot, 'src/security/skill-scanner.ts')).href;
+
+function childEnv(root: string, profile: string, project: string, target = ''): NodeJS.ProcessEnv {
+  return {
+    PATH: process.env.PATH ?? '/usr/bin:/bin',
+    HOME: root,
+    CODEBUDDY_HOME: profile,
+    NO_COLOR: '1',
+    CI: '1',
+    LANG: 'C',
+    AUDIT_PROFILE: profile,
+    AUDIT_PROJECT: project,
+    AUDIT_TARGET: target,
+  };
+}
+
+function runBounded(code: string, env: NodeJS.ProcessEnv) {
+  return spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code], {
+    cwd: repoRoot,
+    env,
+    encoding: 'utf8',
+    timeout: BOUNDED_MS,
+    killSignal: 'SIGKILL',
+  });
+}
+
+function assertFinished(ran: ReturnType<typeof spawnSync>, message: string): void {
+  const timedOut = (ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' || ran.signal != null;
+  if (timedOut) throw new Error(message);
+}
+
+function makeFifo(target: string): void {
+  const made = spawnSync('mkfifo', ['-m', '600', target], { timeout: 2000, encoding: 'utf8' });
+  if (made.status !== 0) throw new Error(`mkfifo failed: ${made.stderr ?? ''}`);
+}
+
+function skillHome(profile: string): string {
+  const dir = path.join(profile, 'skills', 'bad');
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  chmodSync(path.join(profile, 'skills'), 0o700);
+  chmodSync(dir, 0o700);
+  return dir;
+}
+
+const auditChild = `
+import { runConsolidatedSecurityAudit } from ${JSON.stringify(auditModule)};
+const report = runConsolidatedSecurityAudit({
+  profileDir: process.env.AUDIT_PROFILE,
+  projectDir: process.env.AUDIT_PROJECT,
+  env: {},
+  sandbox: { recommended: 'bwrap', reason: 'injected' },
+});
+console.log('AUDIT_RESULT ' + JSON.stringify({
+  passed: report.passed,
+  status: report.status,
+  ids: report.findings.map((item) => item.checkId),
+}));
+`;
+
+const scannerChild = `
+import { scanSkillFirewall } from ${JSON.stringify(scannerModule)};
+const report = scanSkillFirewall(process.env.AUDIT_TARGET);
+console.log('AUDIT_RESULT ' + JSON.stringify({
+  verdict: report.verdict,
+  patterns: report.findings.map((item) => item.pattern),
+}));
+`;
+
+describe('security audit refuses special files without blocking', () => {
+  itPosix('does not block on a SKILL.md symlink to a fifo and does not pass', () => {
+    const { root, profile, project } = workspace();
+    const fifo = path.join(root, 'outside.fifo');
+    makeFifo(fifo);
+    symlinkSync(fifo, path.join(skillHome(profile), 'SKILL.md'));
+    const ran = runBounded(auditChild, childEnv(root, profile, project));
+    assertFinished(ran, 'skill fifo symlink blocked the security audit');
+    expect(ran.status, ran.stderr ?? '').toBe(0);
+    const line = (ran.stdout ?? '').split('\n').find((item) => item.startsWith('AUDIT_RESULT '));
+    expect(line, ran.stderr ?? '').toBeTruthy();
+    const report = JSON.parse((line ?? '').slice('AUDIT_RESULT '.length)) as { passed: boolean; ids: string[] };
+    expect(report.passed, 'skill fifo symlink was reported passed').toBe(false);
+    expect(report.ids).toContain('skills.tree.symlink');
+  }, 20_000);
+
+  itPosix('does not block on a fifo named SKILL.md and does not pass', () => {
+    const { root, profile, project } = workspace();
+    makeFifo(path.join(skillHome(profile), 'SKILL.md'));
+    const ran = runBounded(auditChild, childEnv(root, profile, project));
+    assertFinished(ran, 'skill fifo blocked the security audit');
+    expect(ran.status, ran.stderr ?? '').toBe(0);
+    const line = (ran.stdout ?? '').split('\n').find((item) => item.startsWith('AUDIT_RESULT '));
+    const report = JSON.parse((line ?? '').slice('AUDIT_RESULT '.length)) as { passed: boolean; ids: string[] };
+    expect(report.passed, 'skill fifo was reported passed').toBe(false);
+    expect(report.ids).toContain('skills.tree.special');
+  }, 20_000);
+
+  itPosix('does not block when the skill scanner meets a fifo', () => {
+    const { root, profile, project } = workspace();
+    const dir = skillHome(profile);
+    const fifo = path.join(root, 'outside.fifo');
+    makeFifo(fifo);
+    symlinkSync(fifo, path.join(dir, 'SKILL.md'));
+    const ran = runBounded(scannerChild, childEnv(root, profile, project, dir));
+    assertFinished(ran, 'skill fifo symlink blocked scanSkillFirewall');
+    expect(ran.status, ran.stderr ?? '').toBe(0);
+    const line = (ran.stdout ?? '').split('\n').find((item) => item.startsWith('AUDIT_RESULT '));
+    const report = JSON.parse((line ?? '').slice('AUDIT_RESULT '.length)) as { patterns: string[] };
+    expect(report.patterns).toContain('special-file-not-read');
+  }, 20_000);
+
+  it('does not pass when config.toml is a directory', () => {
+    const { profile, project } = workspace();
+    mkdirSync(path.join(profile, 'config.toml'), { mode: 0o700 });
+    const report = audit(profile, project);
+    expect(report.passed, 'directory config.toml was reported passed').toBe(false);
+    expect(report.status).not.toBe('passed');
+    expect(report.findings.map((item) => item.checkId)).toContain('config.file.wrong_type');
+  });
+
+  itPosix('does not write the fix backup into the project when the profile is not writable', () => {
+    const { profile, project } = workspace();
+    const file = path.join(profile, 'config.toml');
+    writeFileSync(file, 'name = "example"\n', { mode: 0o644 });
+    chmodSync(profile, 0o500);
+    try {
+      const report = audit(profile, project, { fix: true, now: new Date('2026-09-23T12:00:00.000Z') });
+      const backup = path.join(project, 'security-audit-backups', '2026-09-23T12-00-00-000Z', 'manifest.json');
+      expect(existsSync(backup), 'backup was written in the project').toBe(false);
+      expect(report.passed, 'fix fell back to the project and reported passed').toBe(false);
+      expect(report.fixes.some((item) => item.ok)).toBe(false);
+      expect(modeOf(file)).toBe(0o644);
+    } finally {
+      chmodSync(profile, 0o700);
+    }
+  });
+
+  it('redacts a secret embedded in a profile path', () => {
+    const token = `ghp_${'z'.repeat(36)}`;
+    const root = mkdtempSync(path.join(tmpdir(), 'security-audit-reprise-'));
+    dirs.push(root);
+    const profile = path.join(root, token, 'profile');
+    const project = path.join(root, 'project');
+    mkdirSync(profile, { recursive: true, mode: 0o700 });
+    mkdirSync(project, { mode: 0o700 });
+    const report = audit(profile, project);
+    const rendered = `${JSON.stringify(report)}\n${formatSecurityAuditText(report)}`;
+    expect(rendered, 'secret from a path was copied into the report').not.toContain(token);
+  });
+
+  it('does not flag a regular skill file as a symlink or a special file', () => {
+    const { profile, project } = workspace();
+    const dir = path.join(profile, 'skills', 'ok');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(path.join(dir, 'SKILL.md'), '# note\n', { mode: 0o600 });
+    const report = audit(profile, project);
+    const ids = report.findings.map((item) => item.checkId);
+    expect(ids).not.toContain('skills.tree.symlink');
+    expect(ids).not.toContain('skills.tree.special');
+  });
+});

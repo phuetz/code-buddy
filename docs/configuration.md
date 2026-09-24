@@ -275,6 +275,10 @@ idempotent_no_progress = 8
 # (process, gpu_media_job) are never counted. A result that changes does not
 # trip the historical identical-result mode. The section is read from the
 # profile config.toml, not from a named [profiles.<name>] overlay.
+# A fifo, directory, or other non-regular config.toml is not read: the guard
+# keeps its historical thresholds and the security audit fails that path.
+# The read is capped at 512 KiB. A symlink is followed only when its target
+# is a regular file inside that cap.
 
 [[security.audit.suppressions]]
 checkId = "skills.firewall.review"
