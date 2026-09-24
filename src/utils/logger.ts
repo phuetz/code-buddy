@@ -326,13 +326,17 @@ export class Logger {
   }
 
   /**
-   * Close file stream
+   * Close file stream. Resolves once the log file is released: end() returns
+   * before that, and Windows refuses to remove a directory holding it.
    */
-  close(): void {
-    if (this.fileStream) {
-      this.fileStream.end();
-      this.fileStream = undefined;
-    }
+  close(): Promise<void> {
+    const stream = this.fileStream;
+    this.fileStream = undefined;
+    if (!stream || stream.closed) return Promise.resolve();
+    return new Promise((resolve) => {
+      stream.once('close', () => resolve());
+      stream.end();
+    });
   }
 
   /**
