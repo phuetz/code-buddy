@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { handleLogin, handleLogout } from '../../src/commands/handlers/auth-handlers.js';
 import { handleBtw } from '../../src/commands/handlers/btw-handler.js';
 import { handleSubagent } from '../../src/commands/handlers/subagent-handler.js';
@@ -30,6 +30,21 @@ import { handleSuggest } from '../../src/commands/handlers/suggest-handler.js';
 import { handleTransform } from '../../src/commands/handlers/transform-handler.js';
 import { handleAvatar } from '../../src/commands/handlers/ui-handlers.js';
 import { announcesSlashFailure } from '../../src/commands/slash-failure.js';
+
+/**
+ * HOME isolé AVANT tout import : plusieurs gestionnaires (branches, historique,
+ * identifiants) figent leurs chemins sous ~/.codebuddy au chargement. Sans cela,
+ * le test écrit dans le HOME du développeur qui le lance.
+ */
+const isolatedHome = await vi.hoisted(async () => {
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const home = mkdtempSync(join(tmpdir(), 'slash-exit-failures-home-'));
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  return home;
+});
 
 interface SlashResult {
   failed?: boolean;
@@ -182,6 +197,10 @@ function textOf(result: SlashResult): string {
 }
 
 describe('échecs slash : le drapeau failed est posé', () => {
+  it('tourne dans un HOME jetable, jamais celui du développeur', () => {
+    expect(os.homedir()).toBe(isolatedHome);
+  });
+
   it.each(cases)('$handler annonce un échec et pose failed', async ({ run, needle }) => {
     const result = await run();
     const text = textOf(result);

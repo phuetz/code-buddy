@@ -57,6 +57,30 @@ async function viaSlash(prompt: string): Promise<SlashLike | null> {
 }
 
 /**
+ * HOME isolé AVANT tout import : /logout efface ~/.codebuddy/codex-auth.json et
+ * /history lit ~/.codebuddy/history.json, chemins figés au chargement des modules.
+ * Sans cela, le test efface les vrais identifiants du développeur qui le lance.
+ */
+const isolatedHome = await vi.hoisted(async () => {
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const home = mkdtempSync(join(tmpdir(), 'slash-exit-home-'));
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  return home;
+});
+
+/** Le TTS réel parlerait sur un hôte équipé : le test fixe « indisponible ». */
+vi.mock('../../src/input/text-to-speech.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/input/text-to-speech.js')>();
+  const manager = actual.getTTSManager();
+  manager.isAvailable = async () => ({ available: false, reason: 'désactivé par le test' });
+  manager.speak = async () => {};
+  return { ...actual, getTTSManager: () => manager };
+});
+
+/**
  * La détection réelle dit oui sur macOS, Windows et un Linux avec xclip,
  * non ailleurs. Le test fixe la réponse pour ne pas dépendre de l'hôte.
  */
@@ -332,6 +356,10 @@ const cases: OutcomeCase[] = [
 ];
 
 describe('sortie headless des gestionnaires touchés', () => {
+  it('tourne dans un HOME jetable, jamais celui du développeur', () => {
+    expect(os.homedir()).toBe(isolatedHome);
+  });
+
   it.each(cases)('$handler $kind $label → $exitCode', async ({ run, exitCode, needle }) => {
     const result = await run();
     const output = textOf(result);
