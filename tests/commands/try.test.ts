@@ -16,7 +16,7 @@ const chatGptProvider: TryProvider = {
   label: 'ChatGPT OAuth',
   apiKey: 'oauth-chatgpt',
   baseURL: 'https://chatgpt.com/backend-api/codex',
-  model: 'gpt-5.6-sol',
+  model: 'gpt-6-sol',
 };
 
 describe('buddy try', () => {

@@ -155,9 +155,12 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     baseUrlEnvKeys: [],
     modelEnvKeys: ['CHATGPT_MODEL'],
     defaultBaseURL: 'https://chatgpt.com/backend-api/codex',
-    defaultModel: 'gpt-5.6-sol',
+    defaultModel: 'gpt-6-sol',
     apiKeyPlaceholder: 'oauth-chatgpt',
     models: [
+      'gpt-6-sol',
+      'gpt-6-astra',
+      'gpt-6-luna',
       'gpt-5.6-sol',
       'gpt-5.6-terra',
       'gpt-5.6-luna',

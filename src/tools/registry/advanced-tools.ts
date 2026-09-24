@@ -5,6 +5,7 @@
  * JSReplTool already implements ITool natively; MultiEditTool needs a thin adapter.
  */
 
+import path from 'path';
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
 
@@ -32,11 +33,9 @@ async function getMultiEdit() {
   return multiEditInstance;
 }
 
-async function getCodebaseMapper() {
-  if (!codebaseMapperInstance) {
-    const { CodebaseMapper } = await import('../../context/codebase-map.js');
-    codebaseMapperInstance = new CodebaseMapper();
-  }
+async function getCodebaseMapper(rootDir: string, maxFiles: number) {
+  const { CodebaseMapper } = await import('../../context/codebase-map.js');
+  codebaseMapperInstance = new CodebaseMapper(rootDir, maxFiles);
   return codebaseMapperInstance;
 }
 
@@ -190,12 +189,17 @@ export class CodebaseMapExecuteTool implements ITool {
       return this.executeGraphOperation(operation, input);
     }
 
-    const mapper = await getCodebaseMapper();
+    const requestedRoot = typeof input.root === 'string' ? input.root.trim() : '';
+    const rootDir = requestedRoot !== '' ? path.resolve(requestedRoot) : process.cwd();
+    // Un root explicite est cartographié en entier. Le plafond 5000 ne s'applique
+    // qu'au balayage implicite du répertoire courant, pour ne pas lire tout un disque.
+    const maxFiles = requestedRoot !== '' ? Number.POSITIVE_INFINITY : 5000;
+    const mapper = await getCodebaseMapper(rootDir, maxFiles);
 
     switch (operation) {
       case 'build': {
         const map = await mapper.buildMap({ deep: !!input.deep });
-        return { success: true, output: `Codebase map built: ${map.summary.totalFiles} files, ${map.summary.totalLines} lines` };
+        return { success: true, output: `Codebase map built: ${map.summary.totalFiles} files, ${map.summary.totalLines} lines, root ${map.rootDir}` };
       }
       case 'summary': {
         const map = await mapper.buildMap();
@@ -453,6 +457,7 @@ export class CodebaseMapExecuteTool implements ITool {
         type: 'object',
         properties: {
           operation: { type: 'string', enum: ['build', 'summary', 'search', 'symbols', 'graph_query', 'graph_neighbors', 'graph_path', 'graph_stats', 'graph_file_functions'], description: 'The operation to perform' },
+          root: { type: 'string', description: 'Project root to map. Defaults to the current working directory. An explicit root is not capped at 5000 files.' },
           query: { type: 'string', description: 'Search query or entity name for graph operations' },
           target: { type: 'string', description: 'Target entity for graph_path' },
           depth: { type: 'number', description: 'Depth for graph_neighbors (default 2, max 4)' },
@@ -469,6 +474,7 @@ export class CodebaseMapExecuteTool implements ITool {
     if (typeof input !== 'object' || input === null) return { valid: false, errors: ['Input must be an object'] };
     const d = input as Record<string, unknown>;
     if (!d.operation || typeof d.operation !== 'string') return { valid: false, errors: ['operation is required'] };
+    if (d.root !== undefined && (typeof d.root !== 'string' || d.root.trim() === '')) return { valid: false, errors: ['root must be a non-empty string when provided'] };
     if (d.operation === 'search' && typeof d.query !== 'string') return { valid: false, errors: ['query is required for search'] };
     if (d.operation === 'graph_neighbors' && typeof d.query !== 'string') return { valid: false, errors: ['query (entity) is required for graph_neighbors'] };
     if (d.operation === 'graph_path' && (typeof d.query !== 'string' || typeof d.target !== 'string')) return { valid: false, errors: ['query (source) and target are required for graph_path'] };
