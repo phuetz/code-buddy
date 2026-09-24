@@ -107,13 +107,20 @@ if (!SHOULD_INSTALL) {
 
 console.warn(`[optional-deps] Attempting one targeted reinstall…`);
 const specs = missing.map((m) => `${m}@${pkg.optionalDependencies[m]}`);
+// On Windows `npm` is `npm.cmd`, a batch file: execFileSync cannot launch it
+// without a shell (ENOENT, or EINVAL since Node's CVE-2024-27980 fix), so this
+// repair failed on every Windows runner. Through the shell, each spec is quoted:
+// cmd.exe treats `^` in `pkg@^1.2.3` as an escape character.
+const onWindows = process.platform === 'win32';
 try {
-  execFileSync('npm', ['install', '--no-save', '--include=optional', ...specs], {
-    cwd: ROOT,
-    stdio: 'inherit',
-  });
-} catch {
-  console.error('[optional-deps] The reinstall command itself failed.');
+  execFileSync(
+    'npm',
+    ['install', '--no-save', '--include=optional', ...(onWindows ? specs.map((s) => `"${s}"`) : specs)],
+    { cwd: ROOT, stdio: 'inherit', shell: onWindows },
+  );
+} catch (err) {
+  // Say why: a bare "failed" hid this defect for two days.
+  console.error(`[optional-deps] The reinstall command itself failed: ${err?.message ?? err}`);
 }
 
 const stillMissing = missing.filter((m) => !existsSync(path.join(ROOT, 'node_modules', m)));
