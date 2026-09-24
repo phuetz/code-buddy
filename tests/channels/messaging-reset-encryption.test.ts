@@ -317,6 +317,23 @@ describe('scellement de l archive : garde-fous du module', () => {
     expect(filesUnder(archiveDir)).toEqual([]);
   });
 
+  it('une archive scellee qui ne se rouvre pas avec la cle annule la remise a zero', async () => {
+    const messaging = await import('../../src/channels/messaging-session-reset.js');
+    let erased = false;
+    const outcome = await messaging.applyChannelMessagingSessionReset({
+      sessionKey: 'autre-cle',
+      now: 10_000_000,
+      policy: plainPolicy,
+      snapshot: { lastActivityAt: 0, transcript: 'user: AUTRE_CLE' },
+      parts: [{ source: 'session-store', transcript: 'user: AUTRE_CLE' }],
+      archiveDir: tempDir(),
+      sealer: { seal: async () => 'CHIFFRE_AVEC_UNE_AUTRE_CLE', open: () => 'user: illisible' },
+      resetSession: async () => { erased = true; },
+    });
+    expect(outcome).toMatchObject({ action: 'cancelled', error: 'memory archive cannot be opened' });
+    expect(erased).toBe(false);
+  });
+
   it('des parties scellees en partie seulement sont refusees', async () => {
     const messaging = await import('../../src/channels/messaging-session-reset.js');
     const archiveDir = tempDir();
