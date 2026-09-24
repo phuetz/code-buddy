@@ -268,8 +268,17 @@ function archiveFileNames(directory: string, stem: string): string[] {
     .sort();
 }
 
+/** A verbatim copy is named `<stem>.<epoch>.<sha256 of its bytes>.session.json`. */
+const VERBATIM_DIGEST = /\.([0-9a-f]{64})\.session\.json$/;
+
 function openVerbatimSessionCopy(file: string, open: ((sealed: string) => string) | undefined, keyPath?: string): string {
-  const data: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+  // The receipt proved at save time is in the name, created with the file:
+  // bytes edited since no longer match it.
+  const receipt = VERBATIM_DIGEST.exec(path.basename(file))?.[1];
+  if (!receipt) throw new Error('memory archive digest missing');
+  const bytes = fs.readFileSync(file);
+  if (createHash('sha256').update(bytes).digest('hex') !== receipt) throw new Error('memory archive digest mismatch');
+  const data: unknown = JSON.parse(bytes.toString('utf8'));
   const messages = (data as { messages?: unknown } | null)?.messages;
   if (!Array.isArray(messages)) throw new Error('memory archive invalid');
   const stored = messages as SessionMessage[];
@@ -408,7 +417,8 @@ export function proveMessagingMemorySave(input: {
   const digest = raw
     ? createHash('sha256').update(raw).digest('hex')
     : digestTranscript(sealed ? sealed.payload : input.transcript);
-  const suffix = raw ? VERBATIM_SUFFIX : '.json';
+  // A verbatim copy carries its receipt in its name; a record carries it inside.
+  const suffix = raw ? `.${digest}${VERBATIM_SUFFIX}` : '.json';
   try {
     let directory = input.archiveDir;
     if (input.source) directory = prepareSourceDirectory(input.archiveDir, input.source);

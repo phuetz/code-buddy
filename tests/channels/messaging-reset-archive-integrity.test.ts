@@ -55,6 +55,24 @@ describe('remise a zero : integrite des archives et des purges', () => {
     expect(() => openMessagingMemoryArchive(archiveDir, SAVE.sessionKey, SAVE.source)).toThrow('memory archive digest mismatch');
   });
 
+  it('une copie brute de session modifiee apres sa preuve est refusee a la restauration', () => {
+    const archiveDir = tempDir();
+    const raw = Buffer.from(JSON.stringify({ messages: [{ type: 'user', content: 'ORIGINAL', timestamp: '2026-09-23T00:00:00Z' }] }));
+    const saved = proveMessagingMemorySave({ ...SAVE, source: 'session-store', archiveDir, transcript: 'user: ORIGINAL', raw });
+    expect(saved.ok).toBe(true);
+    expect(openMessagingMemoryArchive(archiveDir, SAVE.sessionKey, 'session-store')).toEqual(['user: ORIGINAL']);
+    const directory = path.join(archiveDir, 'session-store');
+    const name = readdirSync(directory)[0]!;
+    const file = path.join(directory, name);
+    // Still valid JSON, still a session: only the receipt can tell.
+    writeFileSync(file, readFileSync(file, 'utf8').replace('ORIGINAL', 'MODIFIE'));
+    expect(() => openMessagingMemoryArchive(archiveDir, SAVE.sessionKey, 'session-store')).toThrow('memory archive digest mismatch');
+    // A copy whose name lost its receipt is not restored either.
+    writeFileSync(file, raw);
+    fs.renameSync(file, path.join(directory, name.replace(/\.[0-9a-f]{64}\.session\.json$/, '.session.json')));
+    expect(() => openMessagingMemoryArchive(archiveDir, SAVE.sessionKey, 'session-store')).toThrow('memory archive digest missing');
+  });
+
   it.skipIf(process.platform === 'win32')(
     'un lien symbolique de nom conforme n est pas suivi par la restauration (liens reserves aux administrateurs sous Windows)',
     () => {
