@@ -1,0 +1,1915 @@
+# Exemple de configuration Code Buddy
+# Généré depuis le schéma TOML. Chaque clé d'écriture a un marqueur « cle: ».
+# Le défaut est indiqué en commentaire. Une clé absente du fichier réel n'est pas inventée à l'écriture.
+# Les adresses d'exemple ne sont pas des services. Aucune clé secrète n'est écrite ici.
+# model_id, mode replace, les rôles autres que primary et le cache de fenêtre ne sont pas des clés d'écriture.
+
+# cle: active_model
+# défaut : grok-code-fast
+# Modèle actif. La valeur du fichier généré ne masque pas le fournisseur détecté
+active_model = "grok-code-fast"
+
+# cle: advisor
+# défaut : absent
+# Second avis
+
+# cle: advisor.api_key_env
+# défaut : absent
+# Variable de la clé du second avis, jamais la clé
+[advisor]
+api_key_env = "EXAMPLE_API_KEY"
+
+# cle: advisor.base_url
+# défaut : absent
+# URL du second avis
+[advisor]
+base_url = "https://example.invalid/v1"
+
+# cle: advisor.enabled
+# défaut : absent
+# Second avis activé
+[advisor]
+enabled = false
+
+# cle: advisor.model
+# défaut : absent
+# Modèle du second avis
+[advisor]
+model = "exemple"
+
+# cle: agent
+# défaut : absent
+# Comportement de l'agent
+
+# cle: agent.architect_model
+# défaut : absent
+# Modèle de planification
+[agent]
+architect_model = "exemple"
+
+# cle: agent.default_prompt
+# défaut : default
+# Identifiant du prompt système
+[agent]
+default_prompt = "default"
+
+# cle: agent.editor_model
+# défaut : absent
+# Modèle d'édition
+[agent]
+editor_model = "exemple"
+
+# cle: agent.parallel_tools
+# défaut : false
+# Outils en parallèle
+[agent]
+parallel_tools = false
+
+# cle: agent.rag_tool_selection
+# défaut : true
+# Sélection d'outils par similarité
+[agent]
+rag_tool_selection = true
+
+# cle: agent.self_healing
+# défaut : true
+# Réparation proposée après une erreur
+[agent]
+self_healing = true
+
+# cle: agent.yolo_mode
+# défaut : false
+# Autonomie élargie
+[agent]
+yolo_mode = false
+
+# cle: agent_defaults
+# défaut : absent
+# Réglages par agent
+
+# cle: agent_defaults.agents
+# défaut : absent
+# Réglages par agent
+
+# cle: agent_defaults.agents.*
+# défaut : absent
+
+# cle: agent_defaults.agents.*.maxTokens
+# défaut : absent
+# Jetons de sortie
+[agent_defaults.agents.exemple]
+maxTokens = 0
+
+# cle: agent_defaults.agents.*.model
+# défaut : absent
+# Modèle de cet agent
+[agent_defaults.agents.exemple]
+model = "exemple"
+
+# cle: agent_defaults.agents.*.temperature
+# défaut : absent
+# Température
+[agent_defaults.agents.exemple]
+temperature = 0
+
+# cle: agent_defaults.imageGenerationModel
+# défaut : absent
+# Modèle de génération d'image
+[agent_defaults]
+imageGenerationModel = "exemple"
+
+# cle: autonomous_fleet
+# défaut : absent
+# Flotte autonome
+
+# cle: autonomous_fleet.enabled
+# défaut : false
+# Battement autonome de flotte
+[autonomous_fleet]
+enabled = false
+
+# cle: autonomous_fleet.host
+# défaut : absent
+# Nom d'hôte annoncé
+[autonomous_fleet]
+host = "exemple"
+
+# cle: autonomous_fleet.interval_minutes
+# défaut : 30
+# Intervalle en minutes
+[autonomous_fleet]
+interval_minutes = 30
+
+# cle: autonomous_fleet.llm_provider
+# défaut : cloud
+# Fournisseur des tâches autonomes
+[autonomous_fleet]
+llm_provider = "cloud"
+
+# cle: autonomous_fleet.max_task_ms
+# défaut : 600000
+# Durée maximale d'une tâche, en millisecondes
+[autonomous_fleet]
+max_task_ms = 600000
+
+# cle: autonomous_fleet.priority_threshold
+# défaut : high
+# Priorité la plus basse acceptée
+[autonomous_fleet]
+priority_threshold = "high"
+
+# cle: autonomous_fleet.repo_path
+# défaut : absent
+# Dépôt qui sert de bus
+[autonomous_fleet]
+repo_path = "exemple"
+
+# cle: catalogue
+# défaut : absent
+# Mode du catalogue
+
+# cle: catalogue.mode
+# défaut : merge
+# Seul mode accepté. Une entrée ne remplace que les champs qu'elle écrit
+[catalogue]
+mode = "merge"
+
+# cle: daily_reset
+# défaut : absent
+# Remise à zéro quotidienne
+
+# cle: daily_reset.enabled
+# défaut : false
+# Remise à zéro quotidienne
+[daily_reset]
+enabled = false
+
+# cle: daily_reset.idle_minutes
+# défaut : 0
+# Inactivité avant remise à zéro, 0 pour désactiver
+[daily_reset]
+idle_minutes = 0
+
+# cle: daily_reset.post_summary
+# défaut : true
+# Publier un résumé
+[daily_reset]
+post_summary = true
+
+# cle: daily_reset.reset_hour
+# défaut : 4
+# Heure, 0 à 23
+[daily_reset]
+reset_hour = 4
+
+# cle: daily_reset.reset_minute
+# défaut : 0
+# Minute, 0 à 59
+[daily_reset]
+reset_minute = 0
+
+# cle: daily_reset.timezone
+# défaut : absent
+# Fuseau horaire
+[daily_reset]
+timezone = "exemple"
+
+# cle: enterprise_modules
+# défaut : absent
+# Modules d'entreprise
+
+# cle: enterprise_modules.enabled
+# défaut : false
+# Interrupteur des modules
+[enterprise_modules]
+enabled = false
+
+# cle: enterprise_modules.plugin_conflict_detector
+# défaut : absent
+# Détecteur de conflit de greffons
+
+# cle: enterprise_modules.plugin_conflict_detector.enabled
+# défaut : absent
+# Module activé
+[enterprise_modules.plugin_conflict_detector]
+enabled = false
+
+# cle: enterprise_modules.retry_fallback_engine
+# défaut : absent
+# Repli de nouvelle tentative, inactif par défaut
+
+# cle: enterprise_modules.retry_fallback_engine.enabled
+# défaut : absent
+# Module activé
+[enterprise_modules.retry_fallback_engine]
+enabled = false
+
+# cle: enterprise_modules.semantic_memory_search
+# défaut : absent
+# Recherche sémantique supplémentaire, inactive par défaut
+
+# cle: enterprise_modules.semantic_memory_search.enabled
+# défaut : absent
+# Module activé
+[enterprise_modules.semantic_memory_search]
+enabled = false
+
+# cle: enterprise_modules.smart_compaction_engine
+# défaut : absent
+# Compactage supplémentaire, inactif par défaut
+
+# cle: enterprise_modules.smart_compaction_engine.enabled
+# défaut : absent
+# Module activé
+[enterprise_modules.smart_compaction_engine]
+enabled = false
+
+# cle: enterprise_modules.tool_lifecycle_hooks
+# défaut : absent
+# Crochets de cycle de vie, inactifs par défaut
+
+# cle: enterprise_modules.tool_lifecycle_hooks.enabled
+# défaut : absent
+# Module activé
+[enterprise_modules.tool_lifecycle_hooks]
+enabled = false
+
+# cle: enterprise_modules.tool_policy_engine
+# défaut : absent
+# Moteur de politique d'outils, inactif par défaut
+
+# cle: enterprise_modules.tool_policy_engine.enabled
+# défaut : absent
+# Module activé
+[enterprise_modules.tool_policy_engine]
+enabled = false
+
+# cle: heartbeat
+# défaut : absent
+# Battement
+
+# cle: heartbeat.active_hours_end
+# défaut : 22
+# Heure de fin, 0 à 23
+[heartbeat]
+active_hours_end = 22
+
+# cle: heartbeat.active_hours_start
+# défaut : 8
+# Heure de début, 0 à 23
+[heartbeat]
+active_hours_start = 8
+
+# cle: heartbeat.enabled
+# défaut : false
+# Battement périodique
+[heartbeat]
+enabled = false
+
+# cle: heartbeat.heartbeat_file
+# défaut : .codebuddy/HEARTBEAT.md
+# Liste de contrôle
+[heartbeat]
+heartbeat_file = ".codebuddy/HEARTBEAT.md"
+
+# cle: heartbeat.interval_minutes
+# défaut : 30
+# Intervalle en minutes
+[heartbeat]
+interval_minutes = 30
+
+# cle: heartbeat.max_consecutive_suppressions
+# défaut : 5
+# Relances silencieuses avant une revue
+[heartbeat]
+max_consecutive_suppressions = 5
+
+# cle: heartbeat.suppression_keyword
+# défaut : HEARTBEAT_OK
+# Mot qui évite une relance
+[heartbeat]
+suppression_keyword = "HEARTBEAT_OK"
+
+# cle: integrations
+# défaut : absent
+# Intégrations
+
+# cle: integrations.icm_enabled
+# défaut : true
+# Mémoire de contexte persistante
+[integrations]
+icm_enabled = true
+
+# cle: integrations.rtk_enabled
+# défaut : false
+# Compression des sorties de commandes, désactivée par défaut
+[integrations]
+rtk_enabled = false
+
+# cle: integrations.rtk_min_output_length
+# défaut : 500
+# Longueur minimale avant compression
+[integrations]
+rtk_min_output_length = 500
+
+# cle: llm
+# défaut : absent
+# Repli de fournisseur
+
+# cle: llm.enabled
+# défaut : false
+# Repli automatique entre fournisseurs
+[llm]
+enabled = false
+
+# cle: llm.local_only
+# défaut : absent
+# Limiter le repli aux exécutions locales
+[llm]
+local_only = false
+
+# cle: llm.manualOrder
+# défaut : absent
+# Ordre manuel des fournisseurs
+[llm]
+manualOrder = ["exemple"]
+
+# cle: llm.order
+# défaut : absent
+# Ordre du repli
+[llm]
+order = "resilience"
+
+# cle: llm.together_strategy
+# défaut : absent
+# Stratégie collective
+[llm]
+together_strategy = "ensemble"
+
+# cle: lsp
+# défaut : absent
+# Serveur de langage
+
+# cle: lsp.aiCompletion
+# défaut : absent
+# Complétions
+
+# cle: lsp.aiCompletion.debounceMs
+# défaut : absent
+# Délai avant une demande, en millisecondes
+[lsp.aiCompletion]
+debounceMs = 0
+
+# cle: lsp.aiCompletion.enabled
+# défaut : absent
+# Complétions inline
+[lsp.aiCompletion]
+enabled = false
+
+# cle: lsp.aiCompletion.maxSuggestions
+# défaut : absent
+# Nombre de suggestions
+[lsp.aiCompletion]
+maxSuggestions = 0
+
+# cle: lsp.aiCompletion.maxTokens
+# défaut : absent
+# Jetons par suggestion
+[lsp.aiCompletion]
+maxTokens = 0
+
+# cle: lsp.aiCompletion.model
+# défaut : absent
+# Modèle des complétions
+[lsp.aiCompletion]
+model = "exemple"
+
+# cle: middleware
+# défaut : absent
+# Limites de session
+
+# cle: middleware.auto_compact_threshold
+# défaut : 80000
+# Seuil de compactage automatique, en jetons
+[middleware]
+auto_compact_threshold = 80000
+
+# cle: middleware.context_warning_percentage
+# défaut : 0.7
+# Seuil d'avertissement du contexte, entre 0 et 1
+[middleware]
+context_warning_percentage = 0.7
+
+# cle: middleware.cost_warning_threshold
+# défaut : 0.8
+# Seuil d'avertissement du coût, entre 0 et 1
+[middleware]
+cost_warning_threshold = 0.8
+
+# cle: middleware.max_cost
+# défaut : 10
+# Plafond de coût de session
+[middleware]
+max_cost = 10
+
+# cle: middleware.max_turns
+# défaut : 100
+# Tours maximum
+[middleware]
+max_turns = 100
+
+# cle: middleware.turn_warning_threshold
+# défaut : 0.8
+# Seuil d'avertissement des tours, entre 0 et 1
+[middleware]
+turn_warning_threshold = 0.8
+
+# cle: model_aliases
+# défaut : absent
+# Alias vers un nom de modèle
+
+# cle: model_aliases.*
+# défaut : absent
+[model_aliases]
+exemple = "exemple"
+
+# cle: model_pairs
+# défaut : absent
+# Paire architecte et éditeur
+
+# cle: model_pairs.architect
+# défaut : absent
+# Modèle qui planifie
+[model_pairs]
+architect = "exemple"
+
+# cle: model_pairs.editor
+# défaut : absent
+# Modèle qui modifie
+[model_pairs]
+editor = "exemple"
+
+# cle: model_roles
+# défaut : absent
+# Rôles. Seul primary est lu
+
+# cle: model_roles.primary
+# défaut : absent
+# Modèle principal de la session
+[model_roles]
+primary = "exemple"
+
+# cle: models
+# défaut : absent
+# Modèles déclarés
+
+# cle: models.*
+# défaut : absent
+
+# cle: models.*.context_window
+# défaut : absent
+# Alias de la fenêtre de contexte
+[models.exemple]
+context_window = 0
+
+# cle: models.*.description
+# défaut : absent
+# Libellé affiché
+[models.exemple]
+description = "exemple"
+
+# cle: models.*.input
+# défaut : absent
+# Modalités d'entrée : text et image
+[models.exemple]
+input = ["text"]
+
+# cle: models.*.max_context_tokens
+# défaut : absent
+# Fenêtre de contexte déclarée
+[models.exemple]
+max_context_tokens = 0
+
+# cle: models.*.max_output_tokens
+# défaut : absent
+# Alias du plafond de sortie
+[models.exemple]
+max_output_tokens = 0
+
+# cle: models.*.max_tokens
+# défaut : absent
+# Plafond de sortie
+[models.exemple]
+max_tokens = 0
+
+# cle: models.*.price_per_m_input
+# défaut : absent
+# Prix d'un million de jetons entrants. À écrire avec le prix sortant
+[models.exemple]
+price_per_m_input = ["text"]
+
+# cle: models.*.price_per_m_output
+# défaut : absent
+# Prix d'un million de jetons sortants. À écrire avec le prix entrant
+[models.exemple]
+price_per_m_output = 0
+
+# cle: models.*.provider
+# défaut : absent
+# Colonne historique. Elle ne choisit pas le fournisseur de la session
+[models.exemple]
+provider = "exemple"
+
+# cle: models.*.reasoning
+# défaut : absent
+# Le modèle raisonne
+[models.exemple]
+reasoning = false
+
+# cle: models.*.tools
+# défaut : absent
+# Le modèle appelle des outils
+[models.exemple]
+tools = false
+
+# cle: models.*.vision
+# défaut : absent
+# Le modèle accepte une image. Si cette clé est absente, input peut la déduire
+[models.exemple]
+vision = false
+
+# cle: multi_agent_system
+# défaut : absent
+# Système multi-agent
+
+# cle: multi_agent_system.coordination
+# défaut : absent
+# Coordinateur
+
+# cle: multi_agent_system.coordination.auto_resolve_enabled
+# défaut : false
+# Résolution automatique des conflits
+[multi_agent_system.coordination]
+auto_resolve_enabled = false
+
+# cle: multi_agent_system.coordination.auto_resolve_strategy
+# défaut : none
+# Stratégie de résolution
+[multi_agent_system.coordination]
+auto_resolve_strategy = "prefer-reviewer"
+
+# cle: multi_agent_system.coordination.checkpoint_interval
+# défaut : 5
+# Tâches entre deux points de reprise
+[multi_agent_system.coordination]
+checkpoint_interval = 5
+
+# cle: multi_agent_system.coordination.conflict_timeout
+# défaut : 30000
+# Délai de conflit, en millisecondes
+[multi_agent_system.coordination]
+conflict_timeout = 30000
+
+# cle: multi_agent_system.coordination.enable_adaptive_allocation
+# défaut : true
+# Répartition adaptative
+[multi_agent_system.coordination]
+enable_adaptive_allocation = true
+
+# cle: multi_agent_system.coordination.enable_conflict_resolution
+# défaut : true
+# Détection de conflits
+[multi_agent_system.coordination]
+enable_conflict_resolution = true
+
+# cle: multi_agent_system.coordination.enable_learning
+# défaut : true
+# Apprentissage de la répartition
+[multi_agent_system.coordination]
+enable_learning = true
+
+# cle: multi_agent_system.coordination.enable_per_workflow_stop
+# défaut : false
+# Arrêt d'un seul flux
+[multi_agent_system.coordination]
+enable_per_workflow_stop = false
+
+# cle: multi_agent_system.coordination.enable_persistence
+# défaut : false
+# Conserver les métriques
+[multi_agent_system.coordination]
+enable_persistence = false
+
+# cle: multi_agent_system.coordination.enabled
+# défaut : false
+# Coordinateur avancé
+[multi_agent_system.coordination]
+enabled = false
+
+# cle: multi_agent_system.coordination.history_size
+# défaut : 50
+# Taille de l'historique
+[multi_agent_system.coordination]
+history_size = 50
+
+# cle: multi_agent_system.coordination.max_concurrent_workflows
+# défaut : 1
+# Flux simultanés
+[multi_agent_system.coordination]
+max_concurrent_workflows = 1
+
+# cle: multi_agent_system.coordination.max_parallel_per_agent
+# défaut : 2
+# Tâches parallèles par agent
+[multi_agent_system.coordination]
+max_parallel_per_agent = 2
+
+# cle: multi_agent_system.coordination.metrics_ttl_days
+# défaut : 30
+# Jours avant qu'une métrique soit périmée
+[multi_agent_system.coordination]
+metrics_ttl_days = 30
+
+# cle: multi_agent_system.coordination.min_assignment_confidence
+# défaut : 0.6
+# Confiance minimale
+[multi_agent_system.coordination]
+min_assignment_confidence = 0.6
+
+# cle: multi_agent_system.coordination.queue_policy
+# défaut : queue
+# File pleine
+[multi_agent_system.coordination]
+queue_policy = "queue"
+
+# cle: multi_agent_system.cost_warning_threshold_percent
+# défaut : 0.8
+# Seuil d'avertissement du coût
+[multi_agent_system]
+cost_warning_threshold_percent = 0.8
+
+# cle: multi_agent_system.default_strategy
+# défaut : hierarchical
+# Stratégie
+[multi_agent_system]
+default_strategy = "sequential"
+
+# cle: multi_agent_system.enabled
+# défaut : false
+# Système multi-agent
+[multi_agent_system]
+enabled = false
+
+# cle: multi_agent_system.graceful_cost_overflow
+# défaut : true
+# Arrêt propre au plafond
+[multi_agent_system]
+graceful_cost_overflow = true
+
+# cle: multi_agent_system.max_iterations
+# défaut : 5
+# Itérations
+[multi_agent_system]
+max_iterations = 5
+
+# cle: multi_agent_system.max_workflow_cost_usd
+# défaut : 0
+# Plafond de coût, 0 pour désactiver
+[multi_agent_system]
+max_workflow_cost_usd = 0
+
+# cle: multi_agent_system.parallel_agents
+# défaut : 3
+# Agents en parallèle
+[multi_agent_system]
+parallel_agents = 3
+
+# cle: multi_agent_system.sessions
+# défaut : absent
+# Registre de sessions
+
+# cle: multi_agent_system.sessions.enable_persistence
+# défaut : true
+# Écrire les sessions
+[multi_agent_system.sessions]
+enable_persistence = true
+
+# cle: multi_agent_system.sessions.enabled
+# défaut : false
+# Registre de sessions
+[multi_agent_system.sessions]
+enabled = false
+
+# cle: multi_agent_system.sessions.idle_timeout_minutes
+# défaut : 30
+# Inactivité avant nettoyage
+[multi_agent_system.sessions]
+idle_timeout_minutes = 30
+
+# cle: multi_agent_system.sessions.max_per_workflow
+# défaut : 10
+# Sous-agents par flux
+[multi_agent_system.sessions]
+max_per_workflow = 10
+
+# cle: multi_agent_system.sessions.max_sessions
+# défaut : 1000
+# Sessions conservées
+[multi_agent_system.sessions]
+max_sessions = 1000
+
+# cle: multi_agent_system.sessions.max_spawn_per_minute
+# défaut : 0
+# Créations par minute, 0 pour désactiver
+[multi_agent_system.sessions]
+max_spawn_per_minute = 0
+
+# cle: multi_agent_system.sessions.require_confirmation_for_send
+# défaut : false
+# Confirmer un envoi
+[multi_agent_system.sessions]
+require_confirmation_for_send = false
+
+# cle: multi_agent_system.sessions.require_confirmation_for_spawn
+# défaut : false
+# Confirmer une création
+[multi_agent_system.sessions]
+require_confirmation_for_spawn = false
+
+# cle: multi_agent_system.timeout_ms
+# défaut : 600000
+# Délai d'un flux, en millisecondes
+[multi_agent_system]
+timeout_ms = 600000
+
+# cle: profiles
+# défaut : absent
+# Profils nommés, activés avec --profile
+
+# cle: profiles.*
+# défaut : absent
+
+# cle: profiles.*.active_model
+# défaut : absent
+# Modèle du profil, ou modèle actif à la racine
+[profiles.exemple]
+active_model = "exemple"
+
+# cle: profiles.*.advisor
+# défaut : absent
+# Second avis
+
+# cle: profiles.*.advisor.api_key_env
+# défaut : absent
+# Variable de la clé du second avis, jamais la clé
+[profiles.exemple.advisor]
+api_key_env = "EXAMPLE_API_KEY"
+
+# cle: profiles.*.advisor.base_url
+# défaut : absent
+# URL du second avis
+[profiles.exemple.advisor]
+base_url = "https://example.invalid/v1"
+
+# cle: profiles.*.advisor.enabled
+# défaut : absent
+# Second avis activé
+[profiles.exemple.advisor]
+enabled = false
+
+# cle: profiles.*.advisor.model
+# défaut : absent
+# Modèle du second avis
+[profiles.exemple.advisor]
+model = "exemple"
+
+# cle: profiles.*.agent
+# défaut : absent
+# Comportement de l'agent
+
+# cle: profiles.*.agent.architect_model
+# défaut : absent
+# Modèle de planification
+[profiles.exemple.agent]
+architect_model = "exemple"
+
+# cle: profiles.*.agent.default_prompt
+# défaut : default
+# Identifiant du prompt système
+[profiles.exemple.agent]
+default_prompt = "default"
+
+# cle: profiles.*.agent.editor_model
+# défaut : absent
+# Modèle d'édition
+[profiles.exemple.agent]
+editor_model = "exemple"
+
+# cle: profiles.*.agent.parallel_tools
+# défaut : false
+# Outils en parallèle
+[profiles.exemple.agent]
+parallel_tools = false
+
+# cle: profiles.*.agent.rag_tool_selection
+# défaut : true
+# Sélection d'outils par similarité
+[profiles.exemple.agent]
+rag_tool_selection = true
+
+# cle: profiles.*.agent.self_healing
+# défaut : true
+# Réparation proposée après une erreur
+[profiles.exemple.agent]
+self_healing = true
+
+# cle: profiles.*.agent.yolo_mode
+# défaut : false
+# Autonomie élargie
+[profiles.exemple.agent]
+yolo_mode = false
+
+# cle: profiles.*.agent_defaults
+# défaut : absent
+# Réglages par agent
+
+# cle: profiles.*.agent_defaults.agents
+# défaut : absent
+# Réglages par agent
+
+# cle: profiles.*.agent_defaults.agents.*
+# défaut : absent
+
+# cle: profiles.*.agent_defaults.agents.*.maxTokens
+# défaut : absent
+# Jetons de sortie
+[profiles.exemple.agent_defaults.agents.exemple]
+maxTokens = 0
+
+# cle: profiles.*.agent_defaults.agents.*.model
+# défaut : absent
+# Modèle de cet agent
+[profiles.exemple.agent_defaults.agents.exemple]
+model = "exemple"
+
+# cle: profiles.*.agent_defaults.agents.*.temperature
+# défaut : absent
+# Température
+[profiles.exemple.agent_defaults.agents.exemple]
+temperature = 0
+
+# cle: profiles.*.agent_defaults.imageGenerationModel
+# défaut : absent
+# Modèle de génération d'image
+[profiles.exemple.agent_defaults]
+imageGenerationModel = "exemple"
+
+# cle: profiles.*.autonomous_fleet
+# défaut : absent
+# Flotte autonome
+
+# cle: profiles.*.autonomous_fleet.enabled
+# défaut : false
+# Battement autonome de flotte
+[profiles.exemple.autonomous_fleet]
+enabled = false
+
+# cle: profiles.*.autonomous_fleet.host
+# défaut : absent
+# Nom d'hôte annoncé
+[profiles.exemple.autonomous_fleet]
+host = "exemple"
+
+# cle: profiles.*.autonomous_fleet.interval_minutes
+# défaut : 30
+# Intervalle en minutes
+[profiles.exemple.autonomous_fleet]
+interval_minutes = 30
+
+# cle: profiles.*.autonomous_fleet.llm_provider
+# défaut : cloud
+# Fournisseur des tâches autonomes
+[profiles.exemple.autonomous_fleet]
+llm_provider = "cloud"
+
+# cle: profiles.*.autonomous_fleet.max_task_ms
+# défaut : 600000
+# Durée maximale d'une tâche, en millisecondes
+[profiles.exemple.autonomous_fleet]
+max_task_ms = 600000
+
+# cle: profiles.*.autonomous_fleet.priority_threshold
+# défaut : high
+# Priorité la plus basse acceptée
+[profiles.exemple.autonomous_fleet]
+priority_threshold = "high"
+
+# cle: profiles.*.autonomous_fleet.repo_path
+# défaut : absent
+# Dépôt qui sert de bus
+[profiles.exemple.autonomous_fleet]
+repo_path = "exemple"
+
+# cle: profiles.*.catalogue
+# défaut : absent
+# Mode du catalogue
+
+# cle: profiles.*.catalogue.mode
+# défaut : merge
+# Seul mode accepté. Une entrée ne remplace que les champs qu'elle écrit
+[profiles.exemple.catalogue]
+mode = "merge"
+
+# cle: profiles.*.daily_reset
+# défaut : absent
+# Remise à zéro quotidienne
+
+# cle: profiles.*.daily_reset.enabled
+# défaut : false
+# Remise à zéro quotidienne
+[profiles.exemple.daily_reset]
+enabled = false
+
+# cle: profiles.*.daily_reset.idle_minutes
+# défaut : 0
+# Inactivité avant remise à zéro, 0 pour désactiver
+[profiles.exemple.daily_reset]
+idle_minutes = 0
+
+# cle: profiles.*.daily_reset.post_summary
+# défaut : true
+# Publier un résumé
+[profiles.exemple.daily_reset]
+post_summary = true
+
+# cle: profiles.*.daily_reset.reset_hour
+# défaut : 4
+# Heure, 0 à 23
+[profiles.exemple.daily_reset]
+reset_hour = 4
+
+# cle: profiles.*.daily_reset.reset_minute
+# défaut : 0
+# Minute, 0 à 59
+[profiles.exemple.daily_reset]
+reset_minute = 0
+
+# cle: profiles.*.daily_reset.timezone
+# défaut : absent
+# Fuseau horaire
+[profiles.exemple.daily_reset]
+timezone = "exemple"
+
+# cle: profiles.*.enterprise_modules
+# défaut : absent
+# Modules d'entreprise
+
+# cle: profiles.*.enterprise_modules.enabled
+# défaut : false
+# Interrupteur des modules
+[profiles.exemple.enterprise_modules]
+enabled = false
+
+# cle: profiles.*.enterprise_modules.plugin_conflict_detector
+# défaut : absent
+# Détecteur de conflit de greffons
+
+# cle: profiles.*.enterprise_modules.plugin_conflict_detector.enabled
+# défaut : absent
+# Module activé
+[profiles.exemple.enterprise_modules.plugin_conflict_detector]
+enabled = false
+
+# cle: profiles.*.enterprise_modules.retry_fallback_engine
+# défaut : absent
+# Repli de nouvelle tentative, inactif par défaut
+
+# cle: profiles.*.enterprise_modules.retry_fallback_engine.enabled
+# défaut : absent
+# Module activé
+[profiles.exemple.enterprise_modules.retry_fallback_engine]
+enabled = false
+
+# cle: profiles.*.enterprise_modules.semantic_memory_search
+# défaut : absent
+# Recherche sémantique supplémentaire, inactive par défaut
+
+# cle: profiles.*.enterprise_modules.semantic_memory_search.enabled
+# défaut : absent
+# Module activé
+[profiles.exemple.enterprise_modules.semantic_memory_search]
+enabled = false
+
+# cle: profiles.*.enterprise_modules.smart_compaction_engine
+# défaut : absent
+# Compactage supplémentaire, inactif par défaut
+
+# cle: profiles.*.enterprise_modules.smart_compaction_engine.enabled
+# défaut : absent
+# Module activé
+[profiles.exemple.enterprise_modules.smart_compaction_engine]
+enabled = false
+
+# cle: profiles.*.enterprise_modules.tool_lifecycle_hooks
+# défaut : absent
+# Crochets de cycle de vie, inactifs par défaut
+
+# cle: profiles.*.enterprise_modules.tool_lifecycle_hooks.enabled
+# défaut : absent
+# Module activé
+[profiles.exemple.enterprise_modules.tool_lifecycle_hooks]
+enabled = false
+
+# cle: profiles.*.enterprise_modules.tool_policy_engine
+# défaut : absent
+# Moteur de politique d'outils, inactif par défaut
+
+# cle: profiles.*.enterprise_modules.tool_policy_engine.enabled
+# défaut : absent
+# Module activé
+[profiles.exemple.enterprise_modules.tool_policy_engine]
+enabled = false
+
+# cle: profiles.*.heartbeat
+# défaut : absent
+# Battement
+
+# cle: profiles.*.heartbeat.active_hours_end
+# défaut : 22
+# Heure de fin, 0 à 23
+[profiles.exemple.heartbeat]
+active_hours_end = 22
+
+# cle: profiles.*.heartbeat.active_hours_start
+# défaut : 8
+# Heure de début, 0 à 23
+[profiles.exemple.heartbeat]
+active_hours_start = 8
+
+# cle: profiles.*.heartbeat.enabled
+# défaut : false
+# Battement périodique
+[profiles.exemple.heartbeat]
+enabled = false
+
+# cle: profiles.*.heartbeat.heartbeat_file
+# défaut : .codebuddy/HEARTBEAT.md
+# Liste de contrôle
+[profiles.exemple.heartbeat]
+heartbeat_file = ".codebuddy/HEARTBEAT.md"
+
+# cle: profiles.*.heartbeat.interval_minutes
+# défaut : 30
+# Intervalle en minutes
+[profiles.exemple.heartbeat]
+interval_minutes = 30
+
+# cle: profiles.*.heartbeat.max_consecutive_suppressions
+# défaut : 5
+# Relances silencieuses avant une revue
+[profiles.exemple.heartbeat]
+max_consecutive_suppressions = 5
+
+# cle: profiles.*.heartbeat.suppression_keyword
+# défaut : HEARTBEAT_OK
+# Mot qui évite une relance
+[profiles.exemple.heartbeat]
+suppression_keyword = "HEARTBEAT_OK"
+
+# cle: profiles.*.integrations
+# défaut : absent
+# Intégrations
+
+# cle: profiles.*.integrations.icm_enabled
+# défaut : true
+# Mémoire de contexte persistante
+[profiles.exemple.integrations]
+icm_enabled = true
+
+# cle: profiles.*.integrations.rtk_enabled
+# défaut : false
+# Compression des sorties de commandes, désactivée par défaut
+[profiles.exemple.integrations]
+rtk_enabled = false
+
+# cle: profiles.*.integrations.rtk_min_output_length
+# défaut : 500
+# Longueur minimale avant compression
+[profiles.exemple.integrations]
+rtk_min_output_length = 500
+
+# cle: profiles.*.llm
+# défaut : absent
+# Repli de fournisseur
+
+# cle: profiles.*.llm.enabled
+# défaut : false
+# Repli automatique entre fournisseurs
+[profiles.exemple.llm]
+enabled = false
+
+# cle: profiles.*.llm.local_only
+# défaut : absent
+# Limiter le repli aux exécutions locales
+[profiles.exemple.llm]
+local_only = false
+
+# cle: profiles.*.llm.manualOrder
+# défaut : absent
+# Ordre manuel des fournisseurs
+[profiles.exemple.llm]
+manualOrder = ["exemple"]
+
+# cle: profiles.*.llm.order
+# défaut : absent
+# Ordre du repli
+[profiles.exemple.llm]
+order = "resilience"
+
+# cle: profiles.*.llm.together_strategy
+# défaut : absent
+# Stratégie collective
+[profiles.exemple.llm]
+together_strategy = "ensemble"
+
+# cle: profiles.*.lsp
+# défaut : absent
+# Serveur de langage
+
+# cle: profiles.*.lsp.aiCompletion
+# défaut : absent
+# Complétions
+
+# cle: profiles.*.lsp.aiCompletion.debounceMs
+# défaut : absent
+# Délai avant une demande, en millisecondes
+[profiles.exemple.lsp.aiCompletion]
+debounceMs = 0
+
+# cle: profiles.*.lsp.aiCompletion.enabled
+# défaut : absent
+# Complétions inline
+[profiles.exemple.lsp.aiCompletion]
+enabled = false
+
+# cle: profiles.*.lsp.aiCompletion.maxSuggestions
+# défaut : absent
+# Nombre de suggestions
+[profiles.exemple.lsp.aiCompletion]
+maxSuggestions = 0
+
+# cle: profiles.*.lsp.aiCompletion.maxTokens
+# défaut : absent
+# Jetons par suggestion
+[profiles.exemple.lsp.aiCompletion]
+maxTokens = 0
+
+# cle: profiles.*.lsp.aiCompletion.model
+# défaut : absent
+# Modèle des complétions
+[profiles.exemple.lsp.aiCompletion]
+model = "exemple"
+
+# cle: profiles.*.middleware
+# défaut : absent
+# Limites de session
+
+# cle: profiles.*.middleware.auto_compact_threshold
+# défaut : 80000
+# Seuil de compactage automatique, en jetons
+[profiles.exemple.middleware]
+auto_compact_threshold = 80000
+
+# cle: profiles.*.middleware.context_warning_percentage
+# défaut : 0.7
+# Seuil d'avertissement du contexte, entre 0 et 1
+[profiles.exemple.middleware]
+context_warning_percentage = 0.7
+
+# cle: profiles.*.middleware.cost_warning_threshold
+# défaut : 0.8
+# Seuil d'avertissement du coût, entre 0 et 1
+[profiles.exemple.middleware]
+cost_warning_threshold = 0.8
+
+# cle: profiles.*.middleware.max_cost
+# défaut : 10
+# Plafond de coût de session
+[profiles.exemple.middleware]
+max_cost = 10
+
+# cle: profiles.*.middleware.max_turns
+# défaut : 100
+# Tours maximum
+[profiles.exemple.middleware]
+max_turns = 100
+
+# cle: profiles.*.middleware.turn_warning_threshold
+# défaut : 0.8
+# Seuil d'avertissement des tours, entre 0 et 1
+[profiles.exemple.middleware]
+turn_warning_threshold = 0.8
+
+# cle: profiles.*.model_aliases
+# défaut : absent
+# Alias vers un nom de modèle
+
+# cle: profiles.*.model_aliases.*
+# défaut : absent
+[profiles.exemple.model_aliases]
+exemple = "exemple"
+
+# cle: profiles.*.model_pairs
+# défaut : absent
+# Paire architecte et éditeur
+
+# cle: profiles.*.model_pairs.architect
+# défaut : absent
+# Modèle qui planifie
+[profiles.exemple.model_pairs]
+architect = "exemple"
+
+# cle: profiles.*.model_pairs.editor
+# défaut : absent
+# Modèle qui modifie
+[profiles.exemple.model_pairs]
+editor = "exemple"
+
+# cle: profiles.*.model_roles
+# défaut : absent
+# Rôles. Seul primary est lu
+
+# cle: profiles.*.model_roles.primary
+# défaut : absent
+# Modèle principal de la session
+[profiles.exemple.model_roles]
+primary = "exemple"
+
+# cle: profiles.*.models
+# défaut : absent
+# Modèles déclarés
+
+# cle: profiles.*.models.*
+# défaut : absent
+
+# cle: profiles.*.models.*.context_window
+# défaut : absent
+# Alias de la fenêtre de contexte
+[profiles.exemple.models.exemple]
+context_window = 0
+
+# cle: profiles.*.models.*.description
+# défaut : absent
+# Libellé affiché
+[profiles.exemple.models.exemple]
+description = "exemple"
+
+# cle: profiles.*.models.*.input
+# défaut : absent
+# Modalités d'entrée : text et image
+[profiles.exemple.models.exemple]
+input = ["text"]
+
+# cle: profiles.*.models.*.max_context_tokens
+# défaut : absent
+# Fenêtre de contexte déclarée
+[profiles.exemple.models.exemple]
+max_context_tokens = 0
+
+# cle: profiles.*.models.*.max_output_tokens
+# défaut : absent
+# Alias du plafond de sortie
+[profiles.exemple.models.exemple]
+max_output_tokens = 0
+
+# cle: profiles.*.models.*.max_tokens
+# défaut : absent
+# Plafond de sortie
+[profiles.exemple.models.exemple]
+max_tokens = 0
+
+# cle: profiles.*.models.*.price_per_m_input
+# défaut : absent
+# Prix d'un million de jetons entrants. À écrire avec le prix sortant
+[profiles.exemple.models.exemple]
+price_per_m_input = ["text"]
+
+# cle: profiles.*.models.*.price_per_m_output
+# défaut : absent
+# Prix d'un million de jetons sortants. À écrire avec le prix entrant
+[profiles.exemple.models.exemple]
+price_per_m_output = 0
+
+# cle: profiles.*.models.*.provider
+# défaut : absent
+# Colonne historique. Elle ne choisit pas le fournisseur de la session
+[profiles.exemple.models.exemple]
+provider = "exemple"
+
+# cle: profiles.*.models.*.reasoning
+# défaut : absent
+# Le modèle raisonne
+[profiles.exemple.models.exemple]
+reasoning = false
+
+# cle: profiles.*.models.*.tools
+# défaut : absent
+# Le modèle appelle des outils
+[profiles.exemple.models.exemple]
+tools = false
+
+# cle: profiles.*.models.*.vision
+# défaut : absent
+# Le modèle accepte une image. Si cette clé est absente, input peut la déduire
+[profiles.exemple.models.exemple]
+vision = false
+
+# cle: profiles.*.multi_agent_system
+# défaut : absent
+# Système multi-agent
+
+# cle: profiles.*.multi_agent_system.coordination
+# défaut : absent
+# Coordinateur
+
+# cle: profiles.*.multi_agent_system.coordination.auto_resolve_enabled
+# défaut : false
+# Résolution automatique des conflits
+[profiles.exemple.multi_agent_system.coordination]
+auto_resolve_enabled = false
+
+# cle: profiles.*.multi_agent_system.coordination.auto_resolve_strategy
+# défaut : none
+# Stratégie de résolution
+[profiles.exemple.multi_agent_system.coordination]
+auto_resolve_strategy = "prefer-reviewer"
+
+# cle: profiles.*.multi_agent_system.coordination.checkpoint_interval
+# défaut : 5
+# Tâches entre deux points de reprise
+[profiles.exemple.multi_agent_system.coordination]
+checkpoint_interval = 5
+
+# cle: profiles.*.multi_agent_system.coordination.conflict_timeout
+# défaut : 30000
+# Délai de conflit, en millisecondes
+[profiles.exemple.multi_agent_system.coordination]
+conflict_timeout = 30000
+
+# cle: profiles.*.multi_agent_system.coordination.enable_adaptive_allocation
+# défaut : true
+# Répartition adaptative
+[profiles.exemple.multi_agent_system.coordination]
+enable_adaptive_allocation = true
+
+# cle: profiles.*.multi_agent_system.coordination.enable_conflict_resolution
+# défaut : true
+# Détection de conflits
+[profiles.exemple.multi_agent_system.coordination]
+enable_conflict_resolution = true
+
+# cle: profiles.*.multi_agent_system.coordination.enable_learning
+# défaut : true
+# Apprentissage de la répartition
+[profiles.exemple.multi_agent_system.coordination]
+enable_learning = true
+
+# cle: profiles.*.multi_agent_system.coordination.enable_per_workflow_stop
+# défaut : false
+# Arrêt d'un seul flux
+[profiles.exemple.multi_agent_system.coordination]
+enable_per_workflow_stop = false
+
+# cle: profiles.*.multi_agent_system.coordination.enable_persistence
+# défaut : false
+# Conserver les métriques
+[profiles.exemple.multi_agent_system.coordination]
+enable_persistence = false
+
+# cle: profiles.*.multi_agent_system.coordination.enabled
+# défaut : false
+# Coordinateur avancé
+[profiles.exemple.multi_agent_system.coordination]
+enabled = false
+
+# cle: profiles.*.multi_agent_system.coordination.history_size
+# défaut : 50
+# Taille de l'historique
+[profiles.exemple.multi_agent_system.coordination]
+history_size = 50
+
+# cle: profiles.*.multi_agent_system.coordination.max_concurrent_workflows
+# défaut : 1
+# Flux simultanés
+[profiles.exemple.multi_agent_system.coordination]
+max_concurrent_workflows = 1
+
+# cle: profiles.*.multi_agent_system.coordination.max_parallel_per_agent
+# défaut : 2
+# Tâches parallèles par agent
+[profiles.exemple.multi_agent_system.coordination]
+max_parallel_per_agent = 2
+
+# cle: profiles.*.multi_agent_system.coordination.metrics_ttl_days
+# défaut : 30
+# Jours avant qu'une métrique soit périmée
+[profiles.exemple.multi_agent_system.coordination]
+metrics_ttl_days = 30
+
+# cle: profiles.*.multi_agent_system.coordination.min_assignment_confidence
+# défaut : 0.6
+# Confiance minimale
+[profiles.exemple.multi_agent_system.coordination]
+min_assignment_confidence = 0.6
+
+# cle: profiles.*.multi_agent_system.coordination.queue_policy
+# défaut : queue
+# File pleine
+[profiles.exemple.multi_agent_system.coordination]
+queue_policy = "queue"
+
+# cle: profiles.*.multi_agent_system.cost_warning_threshold_percent
+# défaut : 0.8
+# Seuil d'avertissement du coût
+[profiles.exemple.multi_agent_system]
+cost_warning_threshold_percent = 0.8
+
+# cle: profiles.*.multi_agent_system.default_strategy
+# défaut : hierarchical
+# Stratégie
+[profiles.exemple.multi_agent_system]
+default_strategy = "sequential"
+
+# cle: profiles.*.multi_agent_system.enabled
+# défaut : false
+# Système multi-agent
+[profiles.exemple.multi_agent_system]
+enabled = false
+
+# cle: profiles.*.multi_agent_system.graceful_cost_overflow
+# défaut : true
+# Arrêt propre au plafond
+[profiles.exemple.multi_agent_system]
+graceful_cost_overflow = true
+
+# cle: profiles.*.multi_agent_system.max_iterations
+# défaut : 5
+# Itérations
+[profiles.exemple.multi_agent_system]
+max_iterations = 5
+
+# cle: profiles.*.multi_agent_system.max_workflow_cost_usd
+# défaut : 0
+# Plafond de coût, 0 pour désactiver
+[profiles.exemple.multi_agent_system]
+max_workflow_cost_usd = 0
+
+# cle: profiles.*.multi_agent_system.parallel_agents
+# défaut : 3
+# Agents en parallèle
+[profiles.exemple.multi_agent_system]
+parallel_agents = 3
+
+# cle: profiles.*.multi_agent_system.sessions
+# défaut : absent
+# Registre de sessions
+
+# cle: profiles.*.multi_agent_system.sessions.enable_persistence
+# défaut : true
+# Écrire les sessions
+[profiles.exemple.multi_agent_system.sessions]
+enable_persistence = true
+
+# cle: profiles.*.multi_agent_system.sessions.enabled
+# défaut : false
+# Registre de sessions
+[profiles.exemple.multi_agent_system.sessions]
+enabled = false
+
+# cle: profiles.*.multi_agent_system.sessions.idle_timeout_minutes
+# défaut : 30
+# Inactivité avant nettoyage
+[profiles.exemple.multi_agent_system.sessions]
+idle_timeout_minutes = 30
+
+# cle: profiles.*.multi_agent_system.sessions.max_per_workflow
+# défaut : 10
+# Sous-agents par flux
+[profiles.exemple.multi_agent_system.sessions]
+max_per_workflow = 10
+
+# cle: profiles.*.multi_agent_system.sessions.max_sessions
+# défaut : 1000
+# Sessions conservées
+[profiles.exemple.multi_agent_system.sessions]
+max_sessions = 1000
+
+# cle: profiles.*.multi_agent_system.sessions.max_spawn_per_minute
+# défaut : 0
+# Créations par minute, 0 pour désactiver
+[profiles.exemple.multi_agent_system.sessions]
+max_spawn_per_minute = 0
+
+# cle: profiles.*.multi_agent_system.sessions.require_confirmation_for_send
+# défaut : false
+# Confirmer un envoi
+[profiles.exemple.multi_agent_system.sessions]
+require_confirmation_for_send = false
+
+# cle: profiles.*.multi_agent_system.sessions.require_confirmation_for_spawn
+# défaut : false
+# Confirmer une création
+[profiles.exemple.multi_agent_system.sessions]
+require_confirmation_for_spawn = false
+
+# cle: profiles.*.multi_agent_system.timeout_ms
+# défaut : 600000
+# Délai d'un flux, en millisecondes
+[profiles.exemple.multi_agent_system]
+timeout_ms = 600000
+
+# cle: profiles.*.providers
+# défaut : absent
+# Fournisseurs
+
+# cle: profiles.*.providers.*
+# défaut : absent
+
+# cle: profiles.*.providers.*.api_key_env
+# défaut : absent
+# Nom de la variable qui porte la clé, jamais la clé elle-même
+[profiles.exemple.providers.exemple]
+api_key_env = "EXAMPLE_API_KEY"
+
+# cle: profiles.*.providers.*.base_url
+# défaut : absent
+# URL de base du fournisseur
+[profiles.exemple.providers.exemple]
+base_url = "https://example.invalid/v1"
+
+# cle: profiles.*.providers.*.enabled
+# défaut : absent
+# Fournisseur utilisable
+[profiles.exemple.providers.exemple]
+enabled = false
+
+# cle: profiles.*.providers.*.type
+# défaut : absent
+# Protocole du fournisseur
+[profiles.exemple.providers.exemple]
+type = "openai"
+
+# cle: profiles.*.surface
+# défaut : absent
+# Surface visible
+
+# cle: profiles.*.surface.hidden_capabilities
+# défaut : 
+# Domaines masqués de la surface
+[profiles.exemple.surface]
+hidden_capabilities = ["film"]
+
+# cle: profiles.*.team_session
+# défaut : absent
+# Session d'équipe
+
+# cle: profiles.*.team_session.auto_reconnect
+# défaut : true
+# Reconnexion automatique
+[profiles.exemple.team_session]
+auto_reconnect = true
+
+# cle: profiles.*.team_session.enable_encryption
+# défaut : true
+# Chiffrer les sessions
+[profiles.exemple.team_session]
+enable_encryption = true
+
+# cle: profiles.*.team_session.enabled
+# défaut : false
+# Sessions d'équipe
+[profiles.exemple.team_session]
+enabled = false
+
+# cle: profiles.*.team_session.encryption_key
+# défaut : absent
+# Référence de la clé de chiffrement, jamais la clé en clair
+[profiles.exemple.team_session]
+encryption_key = "exemple"
+
+# cle: profiles.*.team_session.heartbeat_interval
+# défaut : 30000
+# Intervalle de battement, en millisecondes
+[profiles.exemple.team_session]
+heartbeat_interval = 30000
+
+# cle: profiles.*.team_session.max_reconnect_attempts
+# défaut : 10
+# Tentatives de reconnexion
+[profiles.exemple.team_session]
+max_reconnect_attempts = 10
+
+# cle: profiles.*.team_session.reconnect_interval
+# défaut : 5000
+# Délai de reconnexion, en millisecondes
+[profiles.exemple.team_session]
+reconnect_interval = 5000
+
+# cle: profiles.*.team_session.server_url
+# défaut : absent
+# URL de synchronisation
+[profiles.exemple.team_session]
+server_url = "https://example.invalid/v1"
+
+# cle: profiles.*.tool_config
+# défaut : absent
+# Outils
+
+# cle: profiles.*.tool_config.*
+# défaut : absent
+
+# cle: profiles.*.tool_config.*.allowlist
+# défaut : absent
+# Motifs autorisés
+[profiles.exemple.tool_config.exemple]
+allowlist = ["exemple"]
+
+# cle: profiles.*.tool_config.*.denylist
+# défaut : absent
+# Motifs refusés
+[profiles.exemple.tool_config.exemple]
+denylist = ["exemple"]
+
+# cle: profiles.*.tool_config.*.permission
+# défaut : absent
+# Niveau d'autorisation
+[profiles.exemple.tool_config.exemple]
+permission = "always"
+
+# cle: profiles.*.tool_config.*.settings
+# défaut : absent
+# Réglages propres à l'outil
+
+# cle: profiles.*.tool_config.*.settings.*
+# défaut : absent
+[profiles.exemple.tool_config.exemple.settings]
+exemple = "exemple"
+
+# cle: profiles.*.tool_config.*.timeout
+# défaut : absent
+# Délai en secondes
+[profiles.exemple.tool_config.exemple]
+timeout = 0
+
+# cle: profiles.*.ui
+# défaut : absent
+# Interface
+
+# cle: profiles.*.ui.show_cost
+# défaut : true
+# Afficher le coût
+[profiles.exemple.ui]
+show_cost = true
+
+# cle: profiles.*.ui.show_tokens
+# défaut : true
+# Afficher le compteur de jetons
+[profiles.exemple.ui]
+show_tokens = true
+
+# cle: profiles.*.ui.sound_effects
+# défaut : false
+# Sons d'interface
+[profiles.exemple.ui]
+sound_effects = false
+
+# cle: profiles.*.ui.streaming
+# défaut : true
+# Réponse en flux
+[profiles.exemple.ui]
+streaming = true
+
+# cle: profiles.*.ui.theme
+# défaut : default
+# Nom du thème
+[profiles.exemple.ui]
+theme = "default"
+
+# cle: profiles.*.ui.vim_keybindings
+# défaut : false
+# Raccourcis vim
+[profiles.exemple.ui]
+vim_keybindings = false
+
+# cle: providers
+# défaut : absent
+# Fournisseurs
+
+# cle: providers.*
+# défaut : absent
+
+# cle: providers.*.api_key_env
+# défaut : absent
+# Nom de la variable qui porte la clé, jamais la clé elle-même
+[providers.exemple]
+api_key_env = "EXAMPLE_API_KEY"
+
+# cle: providers.*.base_url
+# défaut : absent
+# URL de base du fournisseur
+[providers.exemple]
+base_url = "https://example.invalid/v1"
+
+# cle: providers.*.enabled
+# défaut : absent
+# Fournisseur utilisable
+[providers.exemple]
+enabled = false
+
+# cle: providers.*.type
+# défaut : absent
+# Protocole du fournisseur
+[providers.exemple]
+type = "openai"
+
+# cle: surface
+# défaut : absent
+# Surface visible
+
+# cle: surface.hidden_capabilities
+# défaut : 
+# Domaines masqués de la surface
+[surface]
+hidden_capabilities = ["film"]
+
+# cle: team_session
+# défaut : absent
+# Session d'équipe
+
+# cle: team_session.auto_reconnect
+# défaut : true
+# Reconnexion automatique
+[team_session]
+auto_reconnect = true
+
+# cle: team_session.enable_encryption
+# défaut : true
+# Chiffrer les sessions
+[team_session]
+enable_encryption = true
+
+# cle: team_session.enabled
+# défaut : false
+# Sessions d'équipe
+[team_session]
+enabled = false
+
+# cle: team_session.encryption_key
+# défaut : absent
+# Référence de la clé de chiffrement, jamais la clé en clair
+[team_session]
+encryption_key = "exemple"
+
+# cle: team_session.heartbeat_interval
+# défaut : 30000
+# Intervalle de battement, en millisecondes
+[team_session]
+heartbeat_interval = 30000
+
+# cle: team_session.max_reconnect_attempts
+# défaut : 10
+# Tentatives de reconnexion
+[team_session]
+max_reconnect_attempts = 10
+
+# cle: team_session.reconnect_interval
+# défaut : 5000
+# Délai de reconnexion, en millisecondes
+[team_session]
+reconnect_interval = 5000
+
+# cle: team_session.server_url
+# défaut : absent
+# URL de synchronisation
+[team_session]
+server_url = "https://example.invalid/v1"
+
+# cle: tool_config
+# défaut : absent
+# Outils
+
+# cle: tool_config.*
+# défaut : absent
+
+# cle: tool_config.*.allowlist
+# défaut : absent
+# Motifs autorisés
+[tool_config.exemple]
+allowlist = ["exemple"]
+
+# cle: tool_config.*.denylist
+# défaut : absent
+# Motifs refusés
+[tool_config.exemple]
+denylist = ["exemple"]
+
+# cle: tool_config.*.permission
+# défaut : absent
+# Niveau d'autorisation
+[tool_config.exemple]
+permission = "always"
+
+# cle: tool_config.*.settings
+# défaut : absent
+# Réglages propres à l'outil
+
+# cle: tool_config.*.settings.*
+# défaut : absent
+[tool_config.exemple.settings]
+exemple = "exemple"
+
+# cle: tool_config.*.timeout
+# défaut : absent
+# Délai en secondes
+[tool_config.exemple]
+timeout = 0
+
+# cle: ui
+# défaut : absent
+# Interface
+
+# cle: ui.show_cost
+# défaut : true
+# Afficher le coût
+[ui]
+show_cost = true
+
+# cle: ui.show_tokens
+# défaut : true
+# Afficher le compteur de jetons
+[ui]
+show_tokens = true
+
+# cle: ui.sound_effects
+# défaut : false
+# Sons d'interface
+[ui]
+sound_effects = false
+
+# cle: ui.streaming
+# défaut : true
+# Réponse en flux
+[ui]
+streaming = true
+
+# cle: ui.theme
+# défaut : default
+# Nom du thème
+[ui]
+theme = "default"
+
+# cle: ui.vim_keybindings
+# défaut : false
+# Raccourcis vim
+[ui]
+vim_keybindings = false
