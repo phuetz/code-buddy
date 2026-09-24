@@ -351,6 +351,7 @@ describe('exemple commenté', () => {
     const example = deliveredExample();
     const generated = renderTomlExample();
     expect(example).toBe(generated);
+    expect(example.split('\n').filter((line) => /[ \t]$/.test(line))).toEqual([]);
     const missing = listWritableConfigPaths().filter((key) => !example.includes(`# cle: ${key}\n`));
     expect(missing, missing.join(', ')).toEqual([]);
   });

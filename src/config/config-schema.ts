@@ -813,11 +813,17 @@ function isBranch(schema: ZodTypeAny | null): boolean {
   return name === 'ZodObject' || name === 'ZodRecord';
 }
 
+function describeDefault(fallback: unknown): string {
+  if (fallback === undefined) return 'absent';
+  const text = String(fallback);
+  return text === '' ? 'vide' : text;
+}
+
 function exampleComments(path: string, node: ZodTypeAny | null): string[] {
   const fallback = defaultOf(node);
   const lines = [
     `# cle: ${path}`,
-    `# défaut : ${fallback === undefined ? 'absent' : String(fallback)}`,
+    `# défaut : ${describeDefault(fallback)}`,
   ];
   const description = descriptionOf(node);
   if (description) lines.push(`# ${description}`);
