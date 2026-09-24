@@ -533,11 +533,12 @@ export function describeVoiceReadiness(
     warnings.push(
       permissionMode === 'default'
         ? "Voice ACT is ON in scoped 'default' posture — safe reads and validated shell " +
-            'inspection are available; writes and risky actions retain approval gates.'
+            'inspection are available; file writes and any shell command beyond a read need a ' +
+            'human approval, and are refused when nobody can answer.'
         : `Voice ACT is ON in '${permissionMode}' posture — spoken commands will EDIT FILES / RUN ` +
-            'COMMANDS derived from a possibly-misheard transcript. Static blocklist (rm/mkfs/chaining) ' +
-            'and secret/deploy guard still apply, but git reset --hard / truncate / redirections are NOT ' +
-            "blocked. Use 'plan' unless you mean it."
+            'COMMANDS derived from a possibly-misheard transcript. Only catastrophic patterns are ' +
+            'blocked: workspace mutations such as rm, mv, truncate or redirections run without a ' +
+            "prompt. Use 'default' unless you mean it."
     );
     warnings.push(
       `Voice ACT applies '${permissionMode}' only to its async turn; concurrent code, Cowork, ` +
