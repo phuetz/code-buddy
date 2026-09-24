@@ -14,12 +14,15 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { detectCapabilities, setSandboxCapabilityProbe } from '../../src/sandbox/os-sandbox.js';
+import { setSandboxCapabilityProbe } from '../../src/sandbox/os-sandbox.js';
+import { probeNativeSandbox } from '../sandbox/native-sandbox-ready.js';
 
-const hostCapabilities = await detectCapabilities();
-const realSandboxAvailable = hostCapabilities.recommended !== 'none';
+const nativeSandbox = await probeNativeSandbox();
+const realSandboxAvailable = nativeSandbox.ready;
+const realSandboxSkip = realSandboxAvailable ? '' : ` — ignore : ${nativeSandbox.reason}`;
 
 const disposables: string[] = [];
+const openChildren: Array<{ pid: () => number | null; close: () => Promise<void> }> = [];
 
 function shellQuote(value: string): string {
   return JSON.stringify(value);
@@ -83,6 +86,10 @@ async function mcpBash(options: {
   transport.stderr?.on('data', (chunk: Buffer) => {
     stderr.push(chunk.toString('utf8'));
   });
+  openChildren.push({
+    pid: () => transport.pid ?? null,
+    close: () => transport.close(),
+  });
   const client = new Client({ name: 'mcp-bash-sandbox', version: '1' }, { capabilities: {} });
   try {
     await client.connect(transport);
@@ -124,13 +131,18 @@ function show(id: string, outcome: CallOutcome, present: boolean): void {
 }
 
 describe.sequential('garde shell MCP sans bac a sable', () => {
-  console.log(
-    `ASSERT capacites-hote recommended=${hostCapabilities.recommended} landlock=${hostCapabilities.landlock} bubblewrap=${hostCapabilities.bubblewrap} docker=${hostCapabilities.docker}`,
-  );
+  console.log(`ASSERT capacites-hote ${nativeSandbox.reason}`);
 
-  afterEach(() => {
+  afterEach(async () => {
     setSandboxCapabilityProbe(null);
     delete process.env.CODEBUDDY_AUTO_CONFIRM;
+    for (const child of openChildren.splice(0)) {
+      await child.close().catch(() => undefined);
+      const pid = child.pid();
+      if (typeof pid === 'number' && pid > 0) {
+        try { process.kill(pid, 'SIGKILL'); } catch { /* deja termine */ }
+      }
+    }
     for (const dir of disposables.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -176,7 +188,7 @@ describe.sequential('garde shell MCP sans bac a sable', () => {
   }, 180_000);
 
   it.skipIf(!realSandboxAvailable)(
-    'avec un bac a sable reel, bash dans l espace ecrit le fichier',
+    `avec un bac a sable reel, bash dans l espace ecrit le fichier${realSandboxSkip}`,
     async () => {
       const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-bash-reel-'));
       const insideFile = path.join(workspace, 'bash-reel.txt');
@@ -196,7 +208,7 @@ describe.sequential('garde shell MCP sans bac a sable', () => {
   );
 
   it.skipIf(!realSandboxAvailable)(
-    'avec un bac a sable reel, bash hors de l espace n ecrit pas',
+    `avec un bac a sable reel, bash hors de l espace n ecrit pas${realSandboxSkip}`,
     async () => {
       const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-bash-reel-hors-'));
       disposables.push(outsideDir);

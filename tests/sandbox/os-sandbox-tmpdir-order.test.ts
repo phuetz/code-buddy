@@ -7,10 +7,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { detectCapabilities, OSSandbox, type SandboxBackend } from '../../src/sandbox/os-sandbox.js';
+import { OSSandbox, type SandboxBackend } from '../../src/sandbox/os-sandbox.js';
+import { probeNativeSandbox } from './native-sandbox-ready.js';
 
-const caps = await detectCapabilities();
-const bwrapReady = caps.bubblewrap === true;
+const nativeSandbox = await probeNativeSandbox();
+const bwrapReady = nativeSandbox.bubblewrap.ok;
+const landlockReady = nativeSandbox.landlock.ok;
 const disposables: string[] = [];
 
 function show(backend: string, present: boolean, exitCode: number, stderr: string): void {
@@ -50,11 +52,19 @@ describe.sequential('bwrap garde visible un workDir sous /tmp', () => {
     for (const dir of disposables.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it.skipIf(!bwrapReady)('bubblewrap ecrit dans un workDir sous le tmp hote', async () => {
-    await writeInside('bubblewrap');
-  }, 30_000);
+  it.skipIf(!bwrapReady)(
+    `bubblewrap ecrit dans un workDir sous le tmp hote${bwrapReady ? '' : ` — ignore : ${nativeSandbox.bubblewrap.reason}`}`,
+    async () => {
+      await writeInside('bubblewrap');
+    },
+    30_000,
+  );
 
-  it.skipIf(!bwrapReady)('landlock et seccomp ecrivent dans un workDir sous le tmp hote', async () => {
-    await writeInside('landlock');
-  }, 30_000);
+  it.skipIf(!landlockReady)(
+    `landlock et seccomp ecrivent dans un workDir sous le tmp hote${landlockReady ? '' : ` — ignore : ${nativeSandbox.landlock.reason}`}`,
+    async () => {
+      await writeInside('landlock');
+    },
+    30_000,
+  );
 });
