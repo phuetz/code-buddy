@@ -33,12 +33,13 @@ du catalogue a échoué sous Windows. **Balayage** : les tests qui créaient leu
 temporaires dans le dépôt (`mkdtempSync(path.join(repoRoot | process.cwd(), '.…'))`) les créent
 désormais sous `os.tmpdir()`, soit 11 fichiers.
 
-**Laissés tels quels, volontairement** :
-- `tests/cli/headless-output-flags.test.ts` et `tests/commands/dev/dev-lifecycle.test.ts` :
-  déplacés, leurs sous-processus expirent au bout de 20 s. Ils dépendent d'un dossier situé dans
-  le dépôt, pour une raison qui reste à établir.
-- `tests/unit/workspace-isolation.test.ts` : il teste ce qui est à l'intérieur ou à l'extérieur de
-  l'espace de travail. Déplacer ses dossiers risquait de vider ses assertions de leur sens sans le
-  faire échouer.
+**Trois fichiers ne pouvaient pas sortir du dépôt** :
+- `tests/cli/headless-output-flags.test.ts` et `tests/commands/dev/dev-lifecycle.test.ts` : la
+  CLI qu'ils lancent refuse d'écrire hors de son espace de travail. Déplacés vers le dossier
+  temporaire du système, ils expiraient au bout de 20 s.
+- `tests/unit/workspace-isolation.test.ts` : il teste justement ce qui est dans l'espace de
+  travail ou hors de lui.
 
-Ces trois fichiers peuvent encore, par intermittence, laisser un dossier visible dans le dépôt.
+Pour ces trois fichiers, les dossiers restent dans l'espace de travail, mais sous `_qa/tmp/`,
+qu'ignore git. Leur sens est préservé, et le contrôle `git status` du catalogue ne les voit plus.
+Le contrôle du catalogue n'a pas été assoupli : c'est lui qui a révélé toutes ces fuites.
