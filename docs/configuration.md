@@ -261,6 +261,9 @@ rtk_enabled = false
 # loaded (another current directory, an edit): restart to apply the new one.
 # The policy is read again right before the archive and before each erase;
 # an edit made while the reset runs stops it at that step.
+# When the session store would encrypt the session (encrypted flag, encrypted
+# messages, or SESSION_ENCRYPTION=true), every archived store is sealed with
+# the same key and reopened before anything is cleared; none is kept in clear.
 [session_reset]
 mode = "none"
 idle_minutes = 1440
