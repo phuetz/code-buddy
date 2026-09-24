@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import {
   SKILL_MANAGE_TOOL,
   SKILLS_LIST_TOOL,
@@ -208,6 +210,53 @@ function summarizeCandidate(candidate: SkillCandidateSummarySource): Record<stri
   };
 }
 
+function declaredSkillName(content: string): string | null {
+  const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const name = frontmatter?.[1]?.match(/^name:\s*['"]?([a-zA-Z0-9_-]+)['"]?\s*$/m);
+  return name?.[1] ?? null;
+}
+
+/** Supprime un SKILL.md d'espace de travail qui n'est pas dans le lockfile du hub. */
+async function deleteUnregisteredWorkspaceSkill(name: string): Promise<boolean> {
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) return false;
+  const root = path.resolve(process.cwd(), '.codebuddy', 'skills');
+  let realRoot: string;
+  try {
+    realRoot = await fs.realpath(root);
+  } catch {
+    return false;
+  }
+  let entries;
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+    const skillFile = path.join(root, entry.name, 'SKILL.md');
+    let realFile: string;
+    let content: string;
+    try {
+      const stat = await fs.lstat(skillFile);
+      if (!stat.isFile() || stat.isSymbolicLink()) continue;
+      realFile = await fs.realpath(skillFile);
+      content = await fs.readFile(realFile, 'utf8');
+    } catch {
+      continue;
+    }
+    const relative = path.relative(realRoot, realFile);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+    if (declaredSkillName(content) !== name) continue;
+    const skillDir = path.dirname(realFile);
+    const dirRelative = path.relative(realRoot, skillDir);
+    if (dirRelative.startsWith('..') || path.isAbsolute(dirRelative) || dirRelative === '') continue;
+    await fs.rm(skillDir, { recursive: true, force: true });
+    return true;
+  }
+  return false;
+}
+
 function candidateReviewPath(candidate: ResearchScriptSkillCandidate): string {
   return candidate.skillPath.replace(/\\/g, '/').replace(/\/?SKILL\.md$/i, '/candidate-review.json');
 }
@@ -391,7 +440,16 @@ export class SkillManageExecuteTool implements ITool {
       }
 
       const before = getSkillsHub().info(name);
-      const removed = await getSkillsHub().uninstall(name);
+      let removed = false;
+      try {
+        removed = await getSkillsHub().uninstall(name);
+        if (!removed) removed = await deleteUnregisteredWorkspaceSkill(name);
+      } catch (error) {
+        return {
+          success: false,
+          error: `skill_manage delete: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
       if (!removed) {
         return { success: false, error: `skill_manage delete: skill not found: ${name}` };
       }

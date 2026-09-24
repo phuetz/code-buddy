@@ -107,8 +107,9 @@ export class CodebaseMapper {
   private maxFileSize = 1024 * 1024;  // 1MB max per file
   private maxFiles = 5000;
 
-  constructor(rootDir?: string) {
+  constructor(rootDir?: string, maxFiles = 5000) {
     this.rootDir = rootDir || process.cwd();
+    this.maxFiles = maxFiles;
   }
 
   async buildMap(options: { deep?: boolean } = {}): Promise<CodebaseMap> {

@@ -58,3 +58,31 @@ Code Buddy ne pouvait donc pas voir GPT-6, quelle que soit sa table de modèles.
 - La version de client figée vieillira de nouveau. La lire depuis le Codex CLI installé
   éviterait de la remettre à jour à la main.
 - Le message « Set --model to override » s'affiche même quand `--model` est passé.
+
+## Suite : GPT-6 Sol devient le modèle ChatGPT par défaut (PR empilée)
+
+Motif : le sélecteur de modèle du Codex CLI à jour présente gpt-6-sol comme « Workhorse
+model for coding and everyday work » et range gpt-5.6-sol dans les modèles « Older ». Patrice
+confirme des quotas larges sur la famille GPT-6.
+
+Modifié (défauts de l'abonnement ChatGPT seulement) : `CHATGPT_OAUTH_DEFAULT_MODEL`,
+`CHATGPT_MODEL` (schéma d'environnement et `src/index.ts`), catalogue de fournisseurs
+`chatgpt`, catalogue de flotte `chatgpt-oauth` (fenêtre GPT-6 à 272 000), adaptateur serveur,
+assistant d'accueil.
+
+Piège évité : l'alias public `gpt-5.6` était converti en « le défaut ». Il désigne désormais
+explicitement `gpt-5.6-sol`, sinon demander `gpt-5.6` aurait donné `gpt-6-sol`.
+
+Volontairement inchangé : ce qui décrit l'API publique d'OpenAI (tarifs, catalogue `openai`,
+`constants.ts`, `toml-config.ts`) et le mode compagnon (`COMPANION_DEFAULT_MODEL`, voix de
+Lisa : latence et quota à décider à part).
+
+Retour arrière : `CHATGPT_MODEL=gpt-5.6-sol` (couvert par le test `provider-detector`).
+
+Vérifié :
+- 7 tests affirmaient l'ancien défaut ; mis à jour un par un après lecture de chaque message ;
+- balayage `tests/{providers,commands,config,utils,wizard,fleet,server,doctor,codebuddy,companion}` :
+  515 fichiers, 5 526 tests verts, 1 échec `fleet-listener` (« replaces a real connecting
+  ws ») **identique sans la modification** (4 exécutions, 2 avec, 2 sans) ;
+- `tsc --noEmit` 0 ;
+- bout en bout sans `-m` : `"model":"gpt-6-sol"`, sans avertissement.

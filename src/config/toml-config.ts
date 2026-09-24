@@ -584,7 +584,41 @@ export interface HeartbeatConfig {
  *   [profiles.deep-review.middleware]
  *   max_turns = 200
  */
-export type ProfileConfig = Partial<Omit<CodeBuddyConfig, 'profiles'>>;
+export type ProfileConfig = Partial<Omit<CodeBuddyConfig, 'profiles'>> & {
+  /**
+   * Point the profile straight at a provider endpoint.
+   *
+   * `active_model` names an entry of the `models` section, which assumes that
+   * section exists. Most profiles written by hand do not: they name a URL and a
+   * model directly, because that is the shortest thing to write and it is what
+   * the CLI flags `--base-url` / `--model` accept.
+   *
+   * Both were accepted silently before — merged into the config and read by
+   * nobody. A profile could therefore have no effect at all while looking
+   * perfectly applied.
+   */
+  baseURL?: string;
+  model?: string;
+};
+
+/**
+ * Clés qu'un profil peut porter. Tout le reste est une faute de frappe ou un
+ * schéma imaginaire.
+ *
+ * Liste **dérivée du type**, pas écrite de mémoire. Ma première version l'était
+ * et oubliait `surface` — employée par les profils intégrés `core` et `all` —
+ * ce qui faisait avertir sur des profils parfaitement valides. Une liste tenue
+ * à la main diverge de ce qu'elle décrit ; celle-ci se corrige en même temps
+ * que `CodeBuddyConfig`.
+ */
+export const PROFILE_KNOWN_KEYS = new Set<keyof CodeBuddyConfig | 'baseURL' | 'model'>([
+  'active_model', 'providers', 'models', 'tool_config', 'middleware', 'ui',
+  'agent', 'integrations', 'surface', 'model_pairs', 'llm', 'agent_defaults',
+  'advisor', 'lsp', 'heartbeat', 'autonomous_fleet', 'daily_reset',
+  'team_session', 'multi_agent_system', 'enterprise_modules',
+  // Les deux que ProfileConfig ajoute pour designer un fournisseur directement.
+  'baseURL', 'model',
+]) as ReadonlySet<string>;
 
 /**
  * Full configuration structure
@@ -1518,6 +1552,20 @@ class ConfigManager {
    * Deep merge config
    */
   private mergeConfig(partial: Partial<CodeBuddyConfig>): void {
+    // Le fournisseur qu'un profil désigne directement.
+    //
+    // Cette fusion recopie champ par champ, d'après une liste explicite : tout
+    // ce qui n'y figure pas est ignoré EN SILENCE. `baseURL` et `model` n'y
+    // étaient pas, alors que ce sont précisément les deux clés qu'un profil
+    // écrit à la main contient. Un `--profile` s'appliquait donc « avec
+    // succès » sans jamais changer de fournisseur.
+    const avecFournisseur = partial as Partial<CodeBuddyConfig> & { baseURL?: string; model?: string };
+    if (avecFournisseur.baseURL) {
+      (this.config as typeof avecFournisseur).baseURL = avecFournisseur.baseURL;
+    }
+    if (avecFournisseur.model) {
+      (this.config as typeof avecFournisseur).model = avecFournisseur.model;
+    }
     if (partial.active_model) {
       this.config.active_model = partial.active_model;
     }
@@ -1712,6 +1760,24 @@ class ConfigManager {
       throw new Error(
         `Profile "${profileName}" not found. ` +
         `Available profiles: ${Object.keys(cfg.profiles ?? {}).join(', ') || '(none defined)'}`
+      );
+    }
+    // Une clé inconnue dans un profil ne fait rien, et ne disait rien.
+    //
+    // `mergeConfig` accepte n'importe quoi : un profil écrit selon un schéma
+    // imaginaire s'applique « avec succès » et n'a aucun effet. Mesuré le
+    // 18/09 : trois profils déclaraient `baseURL` et `model` alors que le type
+    // ne les connaissait pas — aucun n'a jamais changé de fournisseur, et rien
+    // ne l'a signalé. Un outil qui échoue en silence est pire qu'un outil qui
+    // échoue bruyamment.
+    // `--help` ne doit rien afficher d'autre que l'aide. Un avertissement de
+    // configuration y est du bruit, et un test du depot le verifie.
+    const afficheAide = process.argv.includes('--help') || process.argv.includes('-h');
+    const inconnues = Object.keys(profile).filter((cle) => !PROFILE_KNOWN_KEYS.has(cle));
+    if (inconnues.length > 0 && !afficheAide) {
+      logger.warn(
+        `Profil « ${profileName} » : clé(s) ignorée(s) car inconnue(s) — ${inconnues.join(', ')}. ` +
+        `Clés reconnues : ${[...PROFILE_KNOWN_KEYS].sort().join(', ')}.`,
       );
     }
     this.mergeConfig(profile);
