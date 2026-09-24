@@ -161,22 +161,15 @@ export class GetTodoListTool implements ITool {
   readonly description = 'Get the current todo list to see all tasks and their status';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
-    const filter = input.filter as string | undefined;
-    const result = await getTodo().viewTodoList();
-
-    // Apply filter if specified
-    if (filter && filter !== 'all' && result.success && result.output) {
-      const lines = result.output.split('\n');
-      const filtered = lines.filter(line => {
-        if (filter === 'pending') return line.includes('⬜') || line.includes('pending');
-        if (filter === 'in_progress') return line.includes('🔄') || line.includes('in_progress');
-        if (filter === 'completed') return line.includes('✅') || line.includes('completed');
-        return true;
-      });
-      return { success: true, output: filtered.join('\n') || 'No todos matching filter' };
+    const filter = typeof input.filter === 'string' ? input.filter : undefined;
+    const known = ['pending', 'in_progress', 'completed'] as const;
+    if (!filter || filter === 'all') {
+      return getTodo().viewTodoList();
     }
-
-    return result;
+    if (!known.includes(filter as (typeof known)[number])) {
+      return { success: false, error: `Invalid filter: ${filter}` };
+    }
+    return getTodo().viewTodoList(filter as (typeof known)[number]);
   }
 
   getSchema(): ToolSchema {
