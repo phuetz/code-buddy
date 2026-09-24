@@ -9,6 +9,7 @@ import path from 'path';
 import { CronAgentBridge, resetCronAgentBridge } from '../../src/daemon/cron-agent-bridge.js';
 import { RunStore } from '../../src/observability/run-store.js';
 import type { CronJob } from '../../src/scheduler/cron-scheduler.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cron-run-rec-'));
@@ -35,12 +36,8 @@ describe('CronAgentBridge run recording', () => {
 
   afterEach(async () => {
     store.dispose();
-    await new Promise((r) => setTimeout(r, 60));
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-    } catch {
-      // ignore
-    }
+    await store.whenStreamsClosed();
+    removeTestDir(tmpDir);
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
   });
 
