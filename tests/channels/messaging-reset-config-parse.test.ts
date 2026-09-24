@@ -1,9 +1,9 @@
 /**
  * A config file that is present on the messaging-reset path but cannot be
  * analysed must cancel the reset, even when another file sets a mode.
- * The home directory is a throwaway created inside the test, and
- * CODEBUDDY_HOME points to it: the user file is resolved from that variable
- * first, and vitest.setup.ts sets it for every test file.
+ * HOME and CODEBUDDY_HOME are two throwaways created inside the test. The
+ * user file lives under CODEBUDDY_HOME, which the product resolves first and
+ * vitest.setup.ts sets for every test file.
  */
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -87,6 +87,9 @@ function driftFiles(fakeHome: string, projectFile: string): DriftFiles {
 
 async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
   const fakeHome = tempDir();
+  // A second throwaway for HOME: a loader that still read the user file
+  // under HOME instead of CODEBUDDY_HOME would miss it and be caught.
+  const osHome = tempDir();
   const projectDir = tempDir();
   const sessionsDir = tempDir();
   const archiveDir = tempDir();
@@ -117,8 +120,8 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     else process.env[key] = value;
   };
   let changedDir = false;
-  process.env.HOME = fakeHome;
-  process.env.USERPROFILE = fakeHome;
+  process.env.HOME = osHome;
+  process.env.USERPROFILE = osHome;
   // The user file is resolved by resolveUserConfigFile: CODEBUDDY_CONFIG,
   // then CODEBUDDY_HOME (set per file by vitest.setup.ts), then HOME.
   process.env.CODEBUDDY_HOME = fakeHome;
@@ -294,6 +297,17 @@ describe('configuration presente mais inanalysable', () => {
       user: IDLE,
       projectAtLoad: TRUNCATED,
       project: NONE,
+      keep: true,
+    });
+  });
+
+  it('un toml utilisateur inanalysable au chargement puis repare annule la remise a zero', async () => {
+    await exercise({
+      id: 'utilisateur-repare',
+      secret: 'UTILISATEUR_REPARE_APRES_CHARGEMENT',
+      user: TRUNCATED,
+      project: IDLE,
+      afterLoad: (files) => writeFileSync(files.userFile, IDLE),
       keep: true,
     });
   });
