@@ -48,4 +48,9 @@ describe('garde Windows des essais POSIX de remise à zéro', () => {
   it('P7 le fichier compagnon illisible ne s execute pas sous Windows', () => {
     expect(registration(reset, 'chmodSync(historyFile, 0o000)'), 'P7 compagnon garde Windows').toBe(GARDE);
   });
+
+  it('la configuration illisible au chargement ne s execute pas sous Windows', () => {
+    const config = readFileSync(path.join(here, 'messaging-reset-config-parse.test.ts'), 'utf8');
+    expect(registration(config, 'projectModeAtLoad: 0o000'), 'configuration garde Windows').toBe(GARDE);
+  });
 });
