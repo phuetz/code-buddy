@@ -22,6 +22,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import type { VoiceQualificationObservation } from './voice-qualification.js';
 
 export type SensoryResponsePolicy = 'contextual' | 'addressed' | 'always';
 
@@ -110,7 +111,18 @@ export interface ResponseDecision {
 /** The rare second-stage judgment: given the utterance + recent context, chime in? */
 export type JudgeFn = (transcript: string, context: string[]) => Promise<boolean>;
 
+export interface AmbiguousVoiceTurn {
+  transcript: string;
+  sessionStartedAt: number;
+  remainingMs: number;
+}
+
 export interface ResponseDeciderOptions {
+  /** Optional bounded semantic rescue, only for ambiguous explicitly engaged follow-ups. */
+  qualifyAmbiguous?: (turn: AmbiguousVoiceTurn, isCurrent: () => boolean) => Promise<VoiceQualificationObservation | undefined>;
+  /** Observation only: never awaited and never changes the local decision. */
+  observeAmbiguous?: (turn: AmbiguousVoiceTurn, isCurrent: () => boolean) => void;
+
   /** Name that counts as being addressed. Default explicit option || CODEBUDDY_ROBOT_NAME || active persona robotName || 'Buddy'. */
   robotName?: string;
   /** Post-reply window (ms) where follow-ups are treated as addressed. Default 120000. */
@@ -543,9 +555,25 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
   let engagementSource: EngagementSource = 'addressed';
   let recentAmbientAt: number[] = [];
   let closeReason: string | undefined;
+  let observationEpoch = 0;
   const pruneAmbient = (): void => {
     const cutoff = now() - ambientBurstWindowMs;
     recentAmbientAt = recentAmbientAt.filter((timestamp) => timestamp >= cutoff);
+  };
+  const observeAmbiguous = (text: string): void => {
+    if (!opts.observeAmbiguous || engagementSource !== 'addressed') return;
+    const remainingMs = engageWindowMs - (now() - lastEngagedAt);
+    if (remainingMs <= 0 || now() - dialogueStartedAt >= conversationMaxMs) return;
+    const epoch = observationEpoch;
+    try {
+      opts.observeAmbiguous(
+        { transcript: text, sessionStartedAt: dialogueStartedAt, remainingMs },
+        () => epoch === observationEpoch && now() - lastEngagedAt < engageWindowMs
+          && now() - dialogueStartedAt < conversationMaxMs,
+      );
+    } catch {
+      // Observation failures must never interfere with the local response gate.
+    }
   };
   const staySilent = (reason: string): ResponseDecision => {
     pruneAmbient();
@@ -557,6 +585,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
     return recentAmbientAt.length >= ambientBurstMinTurns;
   };
   const markEngaged = (source: EngagementSource = 'addressed'): void => {
+    observationEpoch += 1;
     const t = now();
     // A fresh dialogue when the previous window had lapsed; otherwise keep the original
     // dialogue anchor so the total cap measures from the FIRST address, not each extension.
@@ -567,6 +596,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
     closeReason = undefined;
   };
   const close = (reason = 'explicit'): void => {
+    observationEpoch += 1;
     lastEngagedAt = Number.NEGATIVE_INFINITY;
     dialogueStartedAt = Number.NEGATIVE_INFINITY;
     recentAmbientAt = [];
@@ -603,6 +633,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
   }
 
   async function decide(transcript: string): Promise<ResponseDecision> {
+    observationEpoch += 1;
     try {
       const text = (transcript ?? '').trim();
       if (!text) return { respond: false, reason: 'empty' };
@@ -639,6 +670,45 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
           // conversation becomes explicitly engaged and normal long follow-ups work.
           return staySilent('ambient-in-window');
         }
+        if (opts.qualifyAmbiguous && engagementSource === 'addressed'
+          && !isBriefConversationAnswer(text) && !isDirectGreeting(text) && !isDirectCheckIn(text)
+          && now() - dialogueStartedAt < conversationMaxMs) {
+          const epoch = observationEpoch;
+          const isCurrent = () => epoch === observationEpoch
+            && now() - lastEngagedAt < engageWindowMs
+            && now() - dialogueStartedAt < conversationMaxMs;
+          try {
+            const judgment = await opts.qualifyAmbiguous({
+              transcript: text, sessionStartedAt: dialogueStartedAt,
+              remainingMs: Math.max(0, engageWindowMs - (now() - lastEngagedAt)),
+            }, isCurrent);
+            if (!isCurrent()) return { respond: false, reason: 'qualification-stale' };
+            if (judgment?.outcome === 'ambient' && (judgment.confidence ?? 0) >= 0.7
+              && (judgment.probabilities?.ambient ?? 0) >= 0.85) {
+              return staySilent('jev-ambient');
+            }
+            // Conservative starting threshold; validate on held-out French voice turns.
+            if (judgment?.outcome === 'continuation' && (judgment.confidence ?? 0) >= 0.7
+              && (judgment.probabilities?.continuation ?? 0) >= 0.85) {
+              if (conversationMode) markEngaged('addressed');
+              return { respond: true, reason: 'jev-continuation', conversationAction: 'continue' };
+            }
+            // This block only runs when the local name match FAILED (e.g. the
+            // transcript heard "Isa" for "Lisa"). A confident "addresses the
+            // assistant" verdict is exactly the rescue Jev is here for: answer.
+            // It used to fall into the silent branch below (audit 2026-09-24, A3).
+            if (judgment?.outcome === 'direct_address' && (judgment.confidence ?? 0) >= 0.7
+              && (judgment.probabilities?.direct_address ?? 0) >= 0.85) {
+              markEngaged('addressed');
+              return { respond: true, reason: 'jev-direct-address' };
+            }
+            if (judgment && ['continuation', 'direct_address', 'ambient', 'uncertain'].includes(judgment.outcome)) {
+              return staySilent(judgment.outcome === 'ambient' ? 'jev-ambient' : 'jev-uncertain');
+            }
+          } catch {
+            // The deterministic local policy remains authoritative on provider failure.
+          }
+        }
         if (
           isDirectedFollowUp(text)
           || isBriefConversationAnswer(text)
@@ -652,6 +722,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
           }
           return { respond: true, reason: 'engaged' };
         }
+        observeAmbiguous(text);
         // Ambient cross-talk INSIDE the window → stay silent (don't answer the room). The window
         // still expires on its own if no directed follow-up extends it.
         return staySilent('ambient-in-window');

@@ -226,4 +226,14 @@ describe('agent-reply ACT model routing', () => {
       },
     ]);
   });
+  it.each(['gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'])(
+    'routes pinned %s through OAuth instead of inheriting Ollama from the fast lane', async model => {
+      process.env.CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL = model;
+      routingState.hasCodexCredentials.mockReturnValue(true);
+      const reply = makeAgentReply({ summarize: async output => output });
+      await expect(reply('inspecte le dépôt')).resolves.toBe('Route prête.');
+      expect(routingState.routes).toEqual([{ model, apiKey: 'oauth-chatgpt',
+        baseURL: 'https://chatgpt.com/backend-api/codex/responses' }]);
+    });
+
 });

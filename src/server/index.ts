@@ -1413,7 +1413,18 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           for (const warning of responsePolicy.warnings) {
             logger.warn(`[respond-policy] ${warning}`);
           }
-          const responseDecider = createResponseDecider({ chimeIn: responsePolicy.chimeIn });
+          const { createVoiceQualifier } = await import('../sensory/voice-qualification.js');
+          const voiceQualifier = createVoiceQualifier({
+            onObservation: (result) => logger.info('[voice-qualification] result', { ...result }),
+          });
+          sensoryTeardown.push(() => voiceQualifier.dispose());
+          const responseDecider = createResponseDecider({
+            chimeIn: responsePolicy.chimeIn,
+            ...(voiceQualifier.serving
+              ? { qualifyAmbiguous: voiceQualifier.observe }
+              : { observeAmbiguous: (turn: import('../sensory/respond-decider.js').AmbiguousVoiceTurn, isCurrent: () => boolean) => { void voiceQualifier.observe(turn, isCurrent); } }),
+          });
+          logger.info('[voice-qualification] configured', { enabled: voiceQualifier.enabled, serving: voiceQualifier.serving });
           const { setVoiceResponseDecider } = await import('../sensory/voice-loop.js');
           setVoiceResponseDecider(responseDecider);
           sensoryTeardown.push(() => setVoiceResponseDecider(undefined));
@@ -1644,6 +1655,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               let latestVoiceTiming: import('../sensory/voice-loop.js').VoiceReplyTiming | undefined;
               const reply = makeVoiceReply({
                 replyFn,
+                onSpoke: (text) => voiceQualifier.noteSpoken(text),
                 onConversationTurn: async (turn) => {
                   await conversationBridge.recordVoiceTurn(turn);
                 },
