@@ -10,7 +10,7 @@
  */
 
 import http from 'http';
-import { randomUUID } from 'crypto';
+import { randomUUID, timingSafeEqual } from 'crypto';
 import type {
   ChannelConfig,
   ChannelUser,
@@ -162,12 +162,15 @@ export class WebChatChannel extends BaseChannel {
         });
 
         this.server.listen(port, host, () => {
+          const readAddress = this.server?.address;
+          const bound = typeof readAddress === 'function' ? readAddress.call(this.server) : undefined;
+          const boundPort = bound && typeof bound === 'object' ? bound.port : port;
           this.status.connected = true;
           this.status.authenticated = true;
           this.status.info = {
-            port,
+            port: boundPort,
             host,
-            url: `http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`,
+            url: `http://${host === '0.0.0.0' ? 'localhost' : host}:${boundPort}`,
           };
 
           logger.debug('WebChat server started', { port, host });
@@ -368,6 +371,11 @@ export class WebChatChannel extends BaseChannel {
     }
 
     if (url === '/api/history') {
+      if (!this.historyAuthorized(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Authentication required' }));
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ messages: this.messageHistory }));
       return;
@@ -381,6 +389,25 @@ export class WebChatChannel extends BaseChannel {
   // ==========================================================================
   // WebSocket Handler
   // ==========================================================================
+
+  /**
+   * HTTP history is public only when no auth token is configured.
+   * A configured token is required as `Authorization: Bearer`, same secret as the WebSocket `auth` frame.
+   */
+  private historyAuthorized(req: http.IncomingMessage): boolean {
+    const expected = this.webChatConfig.authToken;
+    if (!expected) return true;
+    const raw = req.headers.authorization;
+    const header = Array.isArray(raw) ? raw[0] : raw;
+    if (!header) return false;
+    const match = /^Bearer\s+(\S+)\s*$/i.exec(header);
+    const provided = match?.[1];
+    if (!provided) return false;
+    const given = Buffer.from(provided);
+    const want = Buffer.from(expected);
+    if (given.length !== want.length) return false;
+    return timingSafeEqual(given, want);
+  }
 
   /**
    * Handle a new WebSocket connection
@@ -692,6 +719,9 @@ export class WebChatChannel extends BaseChannel {
   #input-area button { padding: 10px 20px; border: none; border-radius: 8px; background: #e94560; color: white; font-size: 14px; cursor: pointer; }
   #input-area button:hover { background: #c73650; }
   #input-area button:disabled { background: #555; cursor: not-allowed; }
+  #auth-area { display: none; padding: 12px 20px; background: #16213e; gap: 8px; align-items: center; }
+  #auth-area input { flex: 1; padding: 10px 14px; border: 1px solid #333; border-radius: 8px; background: #1a1a2e; color: #e0e0e0; font-size: 14px; outline: none; }
+  #auth-area button { padding: 10px 20px; border: none; border-radius: 8px; background: #0f3460; color: white; font-size: 14px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -700,37 +730,78 @@ export class WebChatChannel extends BaseChannel {
   <span id="status" class="status">Connecting...</span>
 </div>
 <div id="messages"></div>
+<div id="auth-area">
+  <input id="token-input" type="password" placeholder="Access token" autocomplete="off">
+  <button id="auth-btn" type="button">Unlock</button>
+</div>
 <div id="input-area">
   <input id="msg-input" type="text" placeholder="Type a message..." autocomplete="off" disabled>
   <button id="send-btn" disabled>Send</button>
 </div>
 <script>
 (function() {
+  const authRequired = ${this.webChatConfig.authToken ? 'true' : 'false'};
   const messagesEl = document.getElementById('messages');
   const inputEl = document.getElementById('msg-input');
   const sendBtn = document.getElementById('send-btn');
   const statusEl = document.getElementById('status');
+  const tokenInput = document.getElementById('token-input');
+  const authBtn = document.getElementById('auth-btn');
+  const authArea = document.getElementById('auth-area');
   let ws = null;
   let reconnectTimer = null;
   let typingTimer = null;
+  let authenticated = !authRequired;
+  let heldToken = '';
+  if (authRequired && location.hash && location.hash.indexOf('#token=') === 0) {
+    try { heldToken = decodeURIComponent(location.hash.slice(7)); } catch (e) { heldToken = ''; }
+    if (history && history.replaceState) history.replaceState(null, '', location.pathname + location.search);
+  }
+
+  function enableChat() {
+    authenticated = true;
+    inputEl.disabled = false;
+    sendBtn.disabled = false;
+    if (authArea) authArea.style.display = 'none';
+    inputEl.focus();
+  }
+
+  function lockChat() {
+    authenticated = false;
+    inputEl.disabled = true;
+    sendBtn.disabled = true;
+  }
+
+  function sendAuth(token) {
+    if (!token) return;
+    heldToken = token;
+    if (!ws || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: 'auth', token: token }));
+  }
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(proto + '://' + location.host);
 
     ws.onopen = function() {
-      statusEl.textContent = 'Connected';
-      statusEl.className = 'status connected';
-      inputEl.disabled = false;
-      sendBtn.disabled = false;
-      inputEl.focus();
+      if (!authRequired) {
+        statusEl.textContent = 'Connected';
+        statusEl.className = 'status connected';
+        enableChat();
+        return;
+      }
+      statusEl.textContent = 'Authentication required';
+      statusEl.className = 'status';
+      lockChat();
+      if (authArea) authArea.style.display = 'flex';
+      if (heldToken) sendAuth(heldToken);
     };
 
     ws.onclose = function() {
       statusEl.textContent = 'Disconnected';
       statusEl.className = 'status';
-      inputEl.disabled = true;
-      sendBtn.disabled = true;
+      lockChat();
+      if (authRequired && authArea) authArea.style.display = 'flex';
       reconnectTimer = setTimeout(connect, 3000);
     };
 
@@ -749,10 +820,23 @@ export class WebChatChannel extends BaseChannel {
           addMessage(msg.content, msg.user, msg.timestamp);
           scrollBottom();
         } else if (msg.type === 'system') {
+          if (msg.content === 'Authentication failed') {
+            heldToken = '';
+          }
+          if (msg.content === 'Authentication failed' || msg.content === 'Please authenticate first') {
+            lockChat();
+            if (authArea) authArea.style.display = 'flex';
+            statusEl.textContent = msg.content;
+            statusEl.className = 'status';
+          } else if (authRequired && !authenticated && msg.content && String(msg.content).indexOf('Welcome to ') === 0) {
+            enableChat();
+            statusEl.textContent = 'Connected';
+            statusEl.className = 'status connected';
+          }
           addSystemMessage(msg.content);
           scrollBottom();
         }
-      } catch(e) { logger.error('WebSocket parse error', e); }
+      } catch (e) { statusEl.textContent = 'Error'; }
     };
   }
 
@@ -786,7 +870,7 @@ export class WebChatChannel extends BaseChannel {
 
   function sendMessage() {
     const text = inputEl.value.trim();
-    if (!text || !ws || ws.readyState !== 1) return;
+    if (!authenticated || !text || !ws || ws.readyState !== 1) return;
     ws.send(JSON.stringify({ type: 'message', content: text }));
     addMessage(text, { displayName: 'You', isBot: false }, new Date().toISOString());
     scrollBottom();
@@ -799,15 +883,17 @@ export class WebChatChannel extends BaseChannel {
   }
 
   sendBtn.addEventListener('click', sendMessage);
+  authBtn.addEventListener('click', function() { sendAuth(tokenInput.value.trim()); });
+  tokenInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') sendAuth(tokenInput.value.trim());
+  });
   inputEl.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') sendMessage();
-    // Send typing indicator
-    if (ws && ws.readyState === 1) {
-      clearTimeout(typingTimer);
-      typingTimer = setTimeout(function() {
-        ws.send(JSON.stringify({ type: 'typing' }));
-      }, 300);
-    }
+    if (!authenticated || !ws || ws.readyState !== 1) return;
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(function() {
+      ws.send(JSON.stringify({ type: 'typing' }));
+    }, 300);
   });
 
   connect();

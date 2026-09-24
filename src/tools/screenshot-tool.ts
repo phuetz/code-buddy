@@ -35,6 +35,22 @@ export interface ScreenshotResult {
 }
 
 /**
+ * Screen grabber used by {@link ScreenshotTool.capture}. Production leaves this
+ * unset and uses the platform tool. Tests replace the grabber only — not the
+ * tool — so a headless run can still prove where the PNG is written.
+ */
+export type ScreenshotSensor = (
+  outputPath: string,
+  options: ScreenshotOptions,
+) => Promise<ScreenshotResult>;
+
+let screenshotSensor: ScreenshotSensor | null = null;
+
+export function setScreenshotSensor(sensor: ScreenshotSensor | null): void {
+  screenshotSensor = sensor;
+}
+
+/**
  * Screenshot Tool for capturing screen, windows, and regions
  * Works on Linux (with scrot/gnome-screenshot), macOS (screencapture), and Windows (PowerShell)
  */
@@ -47,19 +63,19 @@ export class ScreenshotTool {
    */
   async capture(options: ScreenshotOptions = {}): Promise<ToolResult> {
     try {
-      // Ensure output directory exists
-      await this.vfs.ensureDir(this.defaultOutputDir);
-
       const format = options.format || 'png';
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `screenshot_${timestamp}.${format}`;
       const outputPath = options.outputPath || path.join(this.defaultOutputDir, filename);
+      await this.vfs.ensureDir(path.dirname(outputPath));
 
       const platform = process.platform;
 
       let result: ScreenshotResult;
 
-      if (platform === 'darwin') {
+      if (screenshotSensor) {
+        result = await screenshotSensor(outputPath, options);
+      } else if (platform === 'darwin') {
         result = await this.captureMacOS(outputPath, options);
       } else if (platform === 'linux') {
         // On WSL2, scrot captures a black X11 root window.

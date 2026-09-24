@@ -133,6 +133,34 @@ describe('makeDefaultStreamSpeak — ElevenLabs engine', () => {
     expect(streamed.length).toBeGreaterThan(44);
   });
 
+  // A server that sends some audio then goes silent without closing the
+  // connection used to leave speak() pending forever: the play timeout killed
+  // the player but never cancelled reader.read(), so the robot stayed "speaking"
+  // (deaf to the user, reminders queued behind it). Audit 2026-09-24, A5.
+  it('returns after the play timeout when the stream stalls without closing', async () => {
+    process.env.CODEBUDDY_VOICE_PLAY_TIMEOUT_MS = '300';
+    openElevenLabsAudioStream.mockImplementation(async () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(pcm16Mono24kStreamWavHeader()));
+          controller.enqueue(new Uint8Array(pcmBody()));
+          // …and nothing more: no close, no error.
+        },
+      }),
+    );
+    try {
+      const playerPromise = __voiceAudioPlayerTest.resolveVoiceAudioPlayer();
+      const streamSpeak = __voiceAudioPlayerTest.makeDefaultStreamSpeak(playerPromise, 'elevenlabs');
+      const outcome = await Promise.race([
+        streamSpeak!('Une phrase dont le flux cale.').then(() => 'terminé'),
+        new Promise<string>((resolve) => setTimeout(() => resolve('bloqué'), 3_000)),
+      ]);
+      expect(outcome).toBe('terminé');
+    } finally {
+      delete process.env.CODEBUDDY_VOICE_PLAY_TIMEOUT_MS;
+    }
+  });
+
   it('stays undefined when the operator opts out via CODEBUDDY_ELEVENLABS_AUDIO_STREAM=false', () => {
     process.env.CODEBUDDY_ELEVENLABS_AUDIO_STREAM = 'false';
     const playerPromise = __voiceAudioPlayerTest.resolveVoiceAudioPlayer();

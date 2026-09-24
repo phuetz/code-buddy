@@ -8,9 +8,10 @@ import type { ChatEntry } from '../../agent/types.js';
 import { initializeDatabase } from '../../database/database-manager.js';
 import { getExportManager, type ConversationMessage, type ExportFormat } from '../../utils/export-manager.js';
 import { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 function reply(content: string): CommandHandlerResult {
-  return { handled: true, entry: { type: 'assistant', content, timestamp: new Date() } };
+  return { handled: true, ...failureFlag(content), entry: { type: 'assistant', content, timestamp: new Date() } };
 }
 
 /** Map the visible transcript to export messages; UI-only entries are skipped. */
@@ -85,6 +86,15 @@ export async function handleExport(
   if (result.success && result.filePath) {
     return {
       handled: true,
+...failureFlag(`${sessionIdArg ? `Session ${sessionIdArg}` : 'Current conversation'} exported successfully!
+
+**Format:** ${format}
+**File:** ${result.filePath}
+
+Use the following command to view the export:
+\`\`\`bash
+cat "${result.filePath}"
+\`\`\``),
       entry: {
         type: 'assistant',
         content: `${sessionIdArg ? `Session ${sessionIdArg}` : 'Current conversation'} exported successfully!
@@ -102,6 +112,7 @@ cat "${result.filePath}"
   } else {
     return {
       handled: true,
+...failureFlag(`Failed to export ${sessionIdArg ? `session ${sessionIdArg}` : 'the current conversation'}: ${result.error}`),
       entry: {
         type: 'assistant',
         content: `Failed to export ${sessionIdArg ? `session ${sessionIdArg}` : 'the current conversation'}: ${result.error}`,
@@ -122,6 +133,7 @@ export async function handleExportList(): Promise<CommandHandlerResult> {
   if (exports.length === 0) {
     return {
       handled: true,
+...failureFlag('No exported files found.'),
       entry: {
         type: 'assistant',
         content: 'No exported files found.',
@@ -159,6 +171,7 @@ export async function handleExportList(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -219,6 +232,7 @@ All exports are saved with timestamps for easy organization.
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: 'assistant',
       content,

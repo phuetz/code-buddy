@@ -15,6 +15,7 @@ import type { CommandHandlerResult } from './branch-handlers.js';
 import { getLessonsTracker, renderLessonConceptGraph } from '../../agent/lessons-tracker.js';
 import type { LessonGraphRenderFormat } from '../../agent/lessons-tracker.js';
 import { getTrackCommands } from '../../tracks/track-commands.js';
+import { failureFlag } from '../slash-failure.js';
 
 // ─── /quota ──────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ export async function handleQuota(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(output),
     entry: { type: 'assistant', content: output, timestamp: new Date() },
   };
 }
@@ -43,6 +45,7 @@ export function handleLessonsCommand(args: string): CommandHandlerResult {
     const output = block ?? 'No lessons recorded yet.';
     return {
       handled: true,
+...failureFlag(output),
       entry: { type: 'assistant', content: output, timestamp: new Date() },
     };
   }
@@ -57,6 +60,7 @@ export function handleLessonsCommand(args: string): CommandHandlerResult {
     if (stats.newestAt) lines.push(`Newest: ${new Date(stats.newestAt).toISOString().slice(0, 10)}`);
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: { type: 'assistant', content: lines.join('\n'), timestamp: new Date() },
     };
   }
@@ -66,6 +70,7 @@ export function handleLessonsCommand(args: string): CommandHandlerResult {
     const item = tracker.add('INSIGHT', content, 'manual');
     return {
       handled: true,
+...failureFlag(`Lesson added [${item.id}]`),
       entry: {
         type: 'assistant',
         content: `Lesson added [${item.id}]`,
@@ -84,6 +89,7 @@ export function handleLessonsCommand(args: string): CommandHandlerResult {
           results.map(r => `  [${r.id}] ${r.category}: ${r.content}`).join('\n');
     return {
       handled: true,
+...failureFlag(output),
       entry: { type: 'assistant', content: output, timestamp: new Date() },
     };
   }
@@ -93,6 +99,7 @@ export function handleLessonsCommand(args: string): CommandHandlerResult {
     const graph = tracker.buildConceptGraph({ query, concept, includeKeywords });
     return {
       handled: true,
+...failureFlag(renderLessonConceptGraph(graph, format)),
       entry: { type: 'assistant', content: renderLessonConceptGraph(graph, format), timestamp: new Date() },
     };
   }
@@ -100,6 +107,7 @@ export function handleLessonsCommand(args: string): CommandHandlerResult {
   // Unknown sub-command → show help
   return {
     handled: true,
+...failureFlag('Usage: /lessons [list|add <content>|search <query>|graph [query] [--concept <concept>] [--no-keywords] [--json|--markdown|--mermaid]|stats]'),
     entry: {
       type: 'assistant',
       content: 'Usage: /lessons [list|add <content>|search <query>|graph [query] [--concept <concept>] [--no-keywords] [--json|--markdown|--mermaid]|stats]',
@@ -193,6 +201,7 @@ export async function handleCoverage(args: string[]): Promise<CommandHandlerResu
 
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: { type: 'assistant', content: lines.join('\n'), timestamp: new Date() },
       };
     } catch (err) {
@@ -209,6 +218,7 @@ export async function handleCoverage(args: string[]): Promise<CommandHandlerResu
       const targets = await getCoverageTargets(process.cwd());
       return {
         handled: true,
+...failureFlag(`Coverage targets: lines=${targets.lines}%, functions=${targets.functions}%, branches=${targets.branches}%, statements=${targets.statements}%`),
         entry: {
           type: 'assistant',
           content: `Coverage targets: lines=${targets.lines}%, functions=${targets.functions}%, branches=${targets.branches}%, statements=${targets.statements}%`,
@@ -218,6 +228,7 @@ export async function handleCoverage(args: string[]): Promise<CommandHandlerResu
     } catch (err) {
       return {
         handled: true,
+...failureFlag(`Failed to read coverage targets: ${err instanceof Error ? err.message : String(err)}`),
         entry: { type: 'assistant', content: `Failed to read coverage targets: ${err instanceof Error ? err.message : String(err)}`, timestamp: new Date() },
       };
     }
@@ -225,6 +236,7 @@ export async function handleCoverage(args: string[]): Promise<CommandHandlerResu
 
   return {
     handled: true,
+...failureFlag('Usage: /coverage check|targets'),
     entry: {
       type: 'assistant',
       content: 'Usage: /coverage check|targets',
@@ -291,6 +303,7 @@ export async function handleTelemetry(args: string[]): Promise<CommandHandlerRes
 function telemetryResult(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }
@@ -315,6 +328,7 @@ export async function handleVulns(args: string[]): Promise<CommandHandlerResult>
 
   return {
     handled: true,
+...failureFlag(result.output || result.error || 'Scan complete.'),
     entry: {
       type: 'assistant',
       content: result.output || result.error || 'Scan complete.',
@@ -340,6 +354,7 @@ export async function handleTrack(args: string[]): Promise<CommandHandlerResult>
     if (result.prompt) {
       return {
         handled: true,
+...failureFlag(result.message),
         passToAI: true,
         prompt: result.prompt,
         entry: {
@@ -353,6 +368,9 @@ export async function handleTrack(args: string[]): Promise<CommandHandlerResult>
     // Otherwise just display the result
     return {
       handled: true,
+...failureFlag(result.success
+          ? result.message
+          : `Error: ${result.message}`),
       entry: {
         type: 'assistant',
         content: result.success
@@ -364,6 +382,7 @@ export async function handleTrack(args: string[]): Promise<CommandHandlerResult>
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error executing track command: ${error instanceof Error ? error.message : 'Unknown error'}`),
       entry: {
         type: 'assistant',
         content: `Error executing track command: ${error instanceof Error ? error.message : 'Unknown error'}`,

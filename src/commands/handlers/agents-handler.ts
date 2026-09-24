@@ -44,6 +44,7 @@ import type {
 } from '../../agent/multi-agent/types.js';
 import type { PersistedWorkflow } from '../../agent/multi-agent/workflow-persistence.js';
 import { resolveProviderFromCatalog } from '../../providers/provider-catalog.js';
+import { failureFlag } from '../slash-failure.js';
 
 const VALID_ACTIONS = new Set([
   'enable', 'disable', 'status', 'run', 'plan', 'stop', 'strategy',
@@ -210,6 +211,7 @@ let lastResult: LastResult | null = null;
 function textResult(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

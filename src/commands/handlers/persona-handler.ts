@@ -1,5 +1,6 @@
 import { getPersonaManager } from '../../personas/persona-manager.js';
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 /**
  * Handler for the `/persona` slash command.
@@ -28,6 +29,7 @@ export function handlePersonaCommand(args: string): CommandHandlerResult {
     lines.push('\nUse `/persona use <id>` to switch.');
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: { type: 'assistant', content: lines.join('\n'), timestamp: new Date() },
     };
   }
@@ -45,6 +47,7 @@ export function handlePersonaCommand(args: string): CommandHandlerResult {
     if (!match) {
       return {
         handled: true,
+...failureFlag(`Persona "${parts.slice(1).join(' ')}" not found. Use \`/persona list\` to see available personas.`),
         entry: {
           type: 'assistant',
           content: `Persona "${parts.slice(1).join(' ')}" not found. Use \`/persona list\` to see available personas.`,
@@ -55,6 +58,7 @@ export function handlePersonaCommand(args: string): CommandHandlerResult {
     manager.setActivePersona(match.id);
     return {
       handled: true,
+...failureFlag(`Switched to persona **${match.name}**.\n${match.description}`),
       entry: {
         type: 'assistant',
         content: `Switched to persona **${match.name}**.\n${match.description}`,
@@ -73,6 +77,7 @@ export function handlePersonaCommand(args: string): CommandHandlerResult {
     if (!persona) {
       return {
         handled: true,
+...failureFlag(targetId ? `Persona "${targetId}" not found.` : 'No active persona.'),
         entry: {
           type: 'assistant',
           content: targetId ? `Persona "${targetId}" not found.` : 'No active persona.',
@@ -100,6 +105,7 @@ export function handlePersonaCommand(args: string): CommandHandlerResult {
 
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: { type: 'assistant', content: lines.join('\n'), timestamp: new Date() },
     };
   }
@@ -109,6 +115,7 @@ export function handlePersonaCommand(args: string): CommandHandlerResult {
     manager.setActivePersona('default');
     return {
       handled: true,
+...failureFlag('Persona reset to **Default Assistant**.'),
       entry: {
         type: 'assistant',
         content: 'Persona reset to **Default Assistant**.',
@@ -120,6 +127,7 @@ export function handlePersonaCommand(args: string): CommandHandlerResult {
   // Unknown sub-command
   return {
     handled: true,
+...failureFlag('Usage: /persona [list|use <name>|info [name]|reset]'),
     entry: {
       type: 'assistant',
       content: 'Usage: /persona [list|use <name>|info [name]|reset]',

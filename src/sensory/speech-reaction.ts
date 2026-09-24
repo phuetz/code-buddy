@@ -63,7 +63,22 @@ import {
   type TurnDecisionProvider,
 } from './turn-detector.js';
 
+/**
+ * What the journal keeps of a heard utterance. The microphone is open all day:
+ * every conversation in the room, most of it never addressed to the robot, used
+ * to land verbatim in journald (3 161 phrases in 36 h), bypassing the encrypted
+ * percept store. By default only its length is logged; the text stays available
+ * at debug level, or at info with CODEBUDDY_SPEECH_LOG_TRANSCRIPTS=true.
+ */
+export function describeHeardForLog(text: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (env.CODEBUDDY_SPEECH_LOG_TRANSCRIPTS === 'true') return text;
+  logger.debug(`[speech] transcript: ${text}`);
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return `${words} mot${words > 1 ? 's' : ''}, texte masqué`;
+}
+
 // Re-exported for back-compat: callers + tests import these from speech-reaction.
+
 export { resolveSpeechRecognitionEngine };
 export type { SpeechRecognitionEngine };
 
@@ -2090,7 +2105,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
             ? 'applied'
             : 'none';
         logger.info(
-          `[speech] heard (${sttMs}ms STT, engine=${sttEngine}, model=${sttModel}, language=${sttLanguage}, hotwords=${hotwordsState}) → ${text}`
+          `[speech] heard (${sttMs}ms STT, engine=${sttEngine}, model=${sttModel}, language=${sttLanguage}, hotwords=${hotwordsState}) → ${describeHeardForLog(text)}`
         );
 
         let backchannel: ConversationCueHandle | null = null;
@@ -2581,7 +2596,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           (turnId === undefined || bargedSpeechTurnId !== turnId)
         ) {
           if (turnId !== undefined) bargedSpeechTurnId = turnId;
-          logger.info(`[speech] barge-in → ${text}`);
+          logger.info(`[speech] barge-in → ${describeHeardForLog(text)}`);
           try {
             if (acousticBargeIn && options.onBargeInStart) {
               options.onBargeInStart(payload, activeTurnId);

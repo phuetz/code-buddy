@@ -192,9 +192,9 @@ describe('Default Configuration', () => {
   });
 
   it('should have sensible middleware defaults', () => {
-    expect(DEFAULT_CONFIG.middleware.max_turns).toBe(100);
+    expect(DEFAULT_CONFIG.middleware.max_turns).toBe(50);
     expect(DEFAULT_CONFIG.middleware.max_cost).toBe(10.0);
-    expect(DEFAULT_CONFIG.middleware.auto_compact_threshold).toBe(80000);
+    expect(DEFAULT_CONFIG.middleware.auto_compact_threshold).toBeUndefined();
   });
 
   it('keeps legacy RTK rewriting opt-in while accepting explicit legacy enablement', () => {

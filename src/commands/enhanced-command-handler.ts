@@ -145,6 +145,7 @@ import {
 } from "./handlers/index.js";
 
 import type { CommandHandlerResult } from "./handlers/index.js";
+import { failureFlag } from './slash-failure.js';
 
 export type { CommandHandlerResult };
 
@@ -175,6 +176,7 @@ async function handleDocsGenerate(): Promise<CommandHandlerResult> {
     if (graph.getStats().tripleCount < 10) {
       return {
         handled: true,
+...failureFlag('Cannot generate docs: code graph is empty. Ensure source files exist.'),
         entry: { type: 'assistant', content: 'Cannot generate docs: code graph is empty. Ensure source files exist.', timestamp: new Date() },
       };
     }
@@ -189,12 +191,15 @@ async function handleDocsGenerate(): Promise<CommandHandlerResult> {
       (result.errors.length > 0 ? `\nErrors: ${result.errors.join('; ')}` : '');
     return {
       handled: true,
+...failureFlag(msg),
       entry: { type: 'assistant', content: msg, timestamp: new Date() },
     };
   } catch (err) {
+    const content = `Documentation generation failed: ${err instanceof Error ? err.message : String(err)}`;
     return {
       handled: true,
-      entry: { type: 'assistant', content: `Documentation generation failed: ${err instanceof Error ? err.message : String(err)}`, timestamp: new Date() },
+      ...failureFlag(content),
+      entry: { type: 'assistant', content, timestamp: new Date() },
     };
   }
 }
@@ -203,6 +208,7 @@ async function handlePromptCommand(args: string): Promise<CommandHandlerResult> 
   const output = await handlePromptCommandRaw(args);
   return {
     handled: true,
+...failureFlag(output),
     entry: { type: 'assistant', content: output, timestamp: new Date() },
   };
 }
@@ -448,12 +454,14 @@ export class EnhancedCommandHandler {
       if (action === 'detect') {
         return {
           handled: true,
+...failureFlag(formatDetectedLinters(configs)),
           entry: { type: 'assistant', content: formatDetectedLinters(configs), timestamp: new Date() },
         };
       }
       if (configs.length === 0) {
         return {
           handled: true,
+...failureFlag('No linters detected for this project.\n\nSupported: eslint, ruff, clippy, golangci-lint, rubocop, phpstan.'),
           entry: {
             type: 'assistant',
             content: 'No linters detected for this project.\n\nSupported: eslint, ruff, clippy, golangci-lint, rubocop, phpstan.',
@@ -465,6 +473,7 @@ export class EnhancedCommandHandler {
       if (availableConfigs.length === 0) {
         return {
           handled: true,
+...failureFlag(formatDetectedLinters(configs) + '\n\nNo linter CLIs are installed. Install one to use /lint.'),
           entry: {
             type: 'assistant',
             content: formatDetectedLinters(configs) + '\n\nNo linter CLIs are installed. Install one to use /lint.',
@@ -481,14 +490,17 @@ export class EnhancedCommandHandler {
           results.push(await runner.run(config, files.length > 0 ? files : undefined));
         }
       }
+      const failedLint = results.some((item: { success?: boolean }) => item.success === false);
       return {
         handled: true,
+        ...(failedLint ? { failed: true } : {}),
         entry: { type: 'assistant', content: formatLintResults(results), timestamp: new Date() },
       };
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       return {
         handled: true,
+        failed: true,
         entry: { type: 'assistant', content: `Lint error: ${msg}`, timestamp: new Date() },
       };
     }
@@ -501,12 +513,14 @@ export class EnhancedCommandHandler {
       const findings = await scanForSecrets(targetPath);
       return {
         handled: true,
+...failureFlag(formatFindings(findings)),
         entry: { type: 'assistant', content: formatFindings(findings), timestamp: new Date() },
       };
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       return {
         handled: true,
+        failed: true,
         entry: { type: 'assistant', content: `Secrets scan error: ${msg}`, timestamp: new Date() },
       };
     }

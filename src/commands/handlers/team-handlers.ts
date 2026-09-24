@@ -25,6 +25,7 @@ import { getModelToolConfig } from '../../config/model-tools.js';
 import { getPermissionModeManager } from '../../security/permission-modes.js';
 import type { CommandHandlerResult } from './branch-handlers.js';
 import { _resolveAgentsCredentials } from './agents-handler.js';
+import { failureFlag } from '../slash-failure.js';
 
 export interface TeamDelegatedTask {
   task: TeamTask;
@@ -64,6 +65,7 @@ let teamRunActive = false;
 function reply(content: string): CommandHandlerResult {
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: 'assistant',
       content,

@@ -348,12 +348,19 @@ describe('Document and Media Tools VFS Migration', () => {
   });
 
   describe('DiagramTool', () => {
-    it('should use VFS for ensuring output dir', async () => {
+    it('does not create .codebuddy when the output is ASCII', async () => {
       const tool = new DiagramTool();
-      
-      // We'll test generating ASCII which doesn't require external tools
+
       await tool.generateFromMermaid('graph TD; A-->B;', { outputFormat: 'ascii' });
-      
+
+      expect(mockEnsureDir).not.toHaveBeenCalled();
+    });
+
+    it('still ensures the output directory for a rendered format', async () => {
+      const tool = new DiagramTool();
+
+      await tool.generateFromMermaid('graph TD; A-->B;', { outputFormat: 'svg' });
+
       expect(mockEnsureDir).toHaveBeenCalled();
     });
   });

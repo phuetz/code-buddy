@@ -4,6 +4,8 @@
 
 ### Added
 
+- **agent:** `[tool_loop_guardrails]` in `config.toml` sets `warn_after` and `hard_stop_after` for `exact_failure`, `same_tool_failure`, and `idempotent_no_progress` on the existing tool-loop guard. Unset keys keep the historical 5-then-3 behaviour; the two failure counters stay off until set.
+- **security:** `buddy security audit [--fix] [--json]` reports stable `checkId`s for the skill firewall, profile modes, plaintext configuration secrets, the native sandbox, and MCP guards. Accepted suppressions live in configuration (`checkId` plus a reason). `--fix` only tightens file modes, and only after a mode backup.
 - **deploy:** `buddy deploy run` provides one-click web publishing for static and build projects targeting Cloudflare Pages (`wrangler`) and Netlify (`netlify-cli`). Simulation is active by default; `--apply` uploads with credentials strictly confined to the child environment. `buddy deploy platforms` lists upload targets versus config generators.
 - **provision:** `buddy provision db-auth` overlays versioned SQL migrations, a typed TypeScript client, and authentication views (`SignIn`, `SignUp`, `SignOut`) for local Docker Postgres (`--target local`) or hosted Supabase (`--target supabase`). Simulation by default; requires `--apply` to write files.
 - **sessions:** Unified recents index (`recents-index.json`) bridging CLI sessions, Cowork SQLite threads, and mobile conversations. Supported commands: `buddy session list` (with origin markers), `buddy session resume <id>`, `buddy session search`, and `buddy session last`. Cowork sessions can be resumed from CLI via automatic lazy bridge files.
@@ -15,6 +17,7 @@
 
 ### Fixed
 
+- **security:** `buddy security audit` takes `--profile-dir` so it no longer collides with the global `--profile` name. A missing or unreadable profile or project fails the audit instead of being reported as passed. `--fix` only removes permission bits, refuses symlinks, and writes its mode backup inside the profile (never the project). A critical finding cannot be suppressed into a passed result. Incomplete config and skill scans fail the audit. A directory or other non-regular config file fails the audit. A symlink or special file inside a skill fails the audit and is not opened. Profile and project paths in the report are passed through the same secret redaction as finding details. The tool-loop guard reads `config.toml` only when it is a regular file within 512 KiB, and refuses a fifo or other special file instead of blocking the turn. `hasWarned` is true after an `exact_failure` or `same_tool_failure` warning.
 - **skills:** File watcher resilience against kernel inotify table exhaustion (`ENOSPC` / `EMFILE` / `ENFILE`). Falls back to synchronous on-demand reads and degrades health reporting gracefully without crashing.
 - **sessions:** Strict prefix disambiguation in `materializeUnifiedSession` refuses ambiguous abbreviated IDs to prevent resuming incorrect sessions.
 - **deploy:** Filesystem sandboxing prevents `outputDir` from escaping the project root in `buddy deploy run`.

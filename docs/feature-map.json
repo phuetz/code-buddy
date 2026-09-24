@@ -1,0 +1,1699 @@
+{
+  "schemaVersion": 1,
+  "builtFrom": {
+    "commit": "76b513ccf",
+    "inventory": "docs/INVENTAIRE-FONCTIONNALITES.md",
+    "codeExplorerIndexedAt": "2026-09-24T07:27:30Z"
+  },
+  "papers": {
+    "1703.06907": {
+      "title": "Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World",
+      "citedIn": [
+        "docs/research/ETUDE-PERCEPTION-MONDE-PHYSIQUE.md:315"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2004.09544": {
+      "title": "Grounding Conversations with Improvised Dialogues",
+      "citedIn": [
+        "docs/lisa-product-roadmap.md:300"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2106.03706": {
+      "title": "A Comprehensive Assessment of Dialog Evaluation Metrics",
+      "citedIn": [
+        "docs/lisa-product-roadmap.md:302"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2212.04356": {
+      "title": "Whisper paper (informal name used in repo)",
+      "citedIn": [
+        "docs/research/voice-realtime-notes.md:9"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2305.10601": {
+      "title": "Tree of Thoughts: Deliberate Problem Solving with Large Language Models",
+      "authors": "Yao et al.",
+      "year": 2023,
+      "citedIn": [
+        "README.fr.md:48",
+        "docs/learning-mechanisms.md:47",
+        "src/agent/middleware/reasoning-middleware.ts:8"
+      ],
+      "verified": true
+    },
+    "2305.14325": {
+      "title": "Improving Factuality and Reasoning in Language Models through Multiagent Debate",
+      "citedIn": [
+        "docs/research/council-scientific-notes.md:10",
+        "docs/research/council-scientific-notes.md:11"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2305.19118": {
+      "title": "Encouraging Divergent Thinking in Large Language Models through Multi-Agent Debate",
+      "citedIn": [
+        "docs/research/council-scientific-notes.md:13",
+        "docs/research/council-scientific-notes.md:14"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2307.07924": {
+      "title": "ChatDev: Communicative Agents for Software Development",
+      "citedIn": [
+        "docs/research/council-scientific-notes.md:28",
+        "docs/research/council-scientific-notes.md:29"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2308.00352": {
+      "title": "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework",
+      "citedIn": [
+        "docs/research/council-scientific-notes.md:25",
+        "docs/research/council-scientific-notes.md:26"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2308.15022": {
+      "title": "Recursive Summarization (informal name used in repo)",
+      "citedIn": [
+        "src/context/context-manager-v2.ts:9",
+        "src/context/context-manager-v2.ts:1022"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2311.17371": {
+      "title": "Should we be going MAD? A Look at Multi-Agent Debate Strategies for LLMs",
+      "year": 2024,
+      "citedIn": [
+        "docs/research/council-scientific-notes.md:19",
+        "docs/research/council-scientific-notes.md:20"
+      ],
+      "verified": true
+    },
+    "2312.13010": {
+      "title": "AgentCoder: Multi-Agent-based Code Generation with Iterative Testing and Optimisation",
+      "citedIn": [
+        "docs/research/council-scientific-notes.md:22",
+        "docs/research/council-scientific-notes.md:23"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2402.01030": {
+      "title": "Code as Action (informal paradigm name; repo describes the CodeAct paradigm)",
+      "citedIn": [
+        "src/agent/modes/codeact-mode.ts:8"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2402.06627": {
+      "title": "Feedback Loops Drive In-Context Reward Hacking",
+      "citedIn": [
+        "docs/archive/internal/self-improvement-research-2026.md:38",
+        "docs/archive/internal/self-improvement-research-2026.md:102",
+        "docs/archive/internal/self-improvement-research-2026.md:122",
+        "docs/archive/internal/self-improvement-research-2026.md:140",
+        "docs/reports/2026-09/AUDIT-DGM2.md:59"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2406.04692": {
+      "title": "Mixture-of-Agents Enhances Large Language Model Capabilities",
+      "citedIn": [
+        "docs/research/council-scientific-notes.md:7",
+        "docs/research/council-scientific-notes.md:8"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2406.06110": {
+      "title": "Recurrent Context Compression",
+      "citedIn": [
+        "src/context/context-manager-v2.ts:8"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2406.06608": {
+      "title": "The Prompt Report",
+      "citedIn": [
+        "src/prompts/system-base.ts:6"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2406.07394": {
+      "title": "MCTSr (informal abbreviation used in repo)",
+      "citedIn": [
+        "README.fr.md:48",
+        "docs/learning-mechanisms.md:47",
+        "docs/reasoning.md:31",
+        "src/agent/middleware/reasoning-middleware.ts:9",
+        "src/agent/reasoning/mcts.ts:7",
+        "src/agent/reasoning/types.ts:8"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2408.08435": {
+      "title": "Automated Design of Agentic Systems",
+      "authors": "Shengran Hu, Cong Lu, Jeff Clune (UBC, Vector Institute)",
+      "year": 2024,
+      "citedIn": [
+        "docs/reports/2026-09/AUDIT-DGM2.md:52"
+      ],
+      "verified": true
+    },
+    "2409.09584": {
+      "title": "RethinkMCTS",
+      "citedIn": [
+        "README.fr.md:48",
+        "docs/learning-mechanisms.md:47",
+        "src/agent/middleware/reasoning-middleware.ts:10",
+        "src/agent/reasoning/mcts.ts:6",
+        "src/agent/reasoning/tree-of-thought.ts:9",
+        "src/agent/reasoning/types.ts:7"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2409.13740": {
+      "title": "PaperQA2 (informal project name used in repo)",
+      "citedIn": [
+        "docs/research-guide.md:272"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2410.04444": {
+      "title": "Gödel Agent: A Self-Referential Agent Framework for Recursively Self-Improvement",
+      "authors": "Xunjian Yin, Xinyi Wang, Liangming Pan, Li Lin, Xiaojun Wan, William Yang Wang",
+      "year": 2024,
+      "citedIn": [
+        "docs/archive/internal/self-improvement-research-2026.md:51",
+        "docs/archive/internal/self-improvement-research-2026.md:140",
+        "docs/reports/2026-09/AUDIT-DGM2.md:40"
+      ],
+      "verified": true
+    },
+    "2410.07408": {
+      "title": "Digital Cousins (CoRL 2024)",
+      "year": 2024,
+      "citedIn": [
+        "docs/research/ETUDE-PERCEPTION-MONDE-PHYSIQUE.md:315"
+      ],
+      "verified": true
+    },
+    "2501.13956": {
+      "citedIn": [
+        "src/research/publication-sources.ts:18",
+        "tests/research/publication-sources.test.ts:8",
+        "tests/research/publication-sources.test.ts:21"
+      ],
+      "verified": true,
+      "year": null,
+      "title": "Zep: A Temporal Knowledge Graph Architecture for Agent Memory"
+    },
+    "2502.08788": {
+      "title": "Stop Overvaluing Multi-Agent Debate -- We Must Rethink Evaluation and Embrace Model Heterogeneity",
+      "citedIn": [
+        "docs/research/council-scientific-notes.md:16",
+        "docs/research/council-scientific-notes.md:17"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2503.01747": {
+      "title": "CLT misuse in LLM evals (paraphrased in repo)",
+      "citedIn": [
+        "docs/archive/internal/self-improvement-research-2026.md:33",
+        "docs/archive/internal/self-improvement-research-2026.md:115",
+        "docs/archive/internal/self-improvement-research-2026.md:119",
+        "docs/archive/internal/self-improvement-research-2026.md:138",
+        "docs/reports/2026-09/AUDIT-DGM2.md:60"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2504.13171": {
+      "title": "Sleep-time Compute",
+      "citedIn": [
+        "docs/designs/code-buddy-tomorrow-plan.md:469"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2504.15228": {
+      "title": "A Self-Improving Coding Agent",
+      "authors": "Maxime Robeyns, Martin Szummer, Laurence Aitchison",
+      "year": 2025,
+      "citedIn": [
+        "docs/reports/2026-09/AUDIT-DGM2.md:46"
+      ],
+      "verified": true
+    },
+    "2504.19874": {
+      "title": "TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate",
+      "year": 2025,
+      "citedIn": [
+        "src/providers/turboquant-provider.ts:7"
+      ],
+      "verified": true
+    },
+    "2505.03275": {
+      "title": "RAG-MCP",
+      "citedIn": [
+        "src/agent/execution/tool-selection-strategy.ts:15",
+        "src/tools/tool-selector.ts:8"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2505.22954": {
+      "title": "Darwin Gödel Machine: Open-Ended Evolution of Self-Improving Agents",
+      "authors": "Jenny Zhang, Shengran Hu, Cong Lu, Robert Lange, Jeff Clune (Sakana AI, UBC, Vector Institute)",
+      "year": 2025,
+      "citedIn": [
+        "docs/FABLE5-CODEX-COORDINATION.md:522",
+        "docs/archive/internal/self-improvement-research-2026.md:22",
+        "docs/archive/internal/self-improvement-research-2026.md:114",
+        "docs/archive/internal/self-improvement-research-2026.md:117",
+        "docs/archive/internal/self-improvement-research-2026.md:122",
+        "docs/archive/internal/self-improvement-research-2026.md:138",
+        "docs/reports/2026-09/AUDIT-DGM2.md:20"
+      ],
+      "verified": true
+    },
+    "2506.09985": {
+      "title": "V-JEPA 2 (informal name used in repo)",
+      "citedIn": [
+        "docs/archive/internal/self-improvement-research-2026.md:84",
+        "docs/archive/internal/self-improvement-research-2026.md:139",
+        "docs/research/ETUDE-PERCEPTION-MONDE-PHYSIQUE.md:314"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2506.12286": {
+      "title": "SWE-bench Illusion",
+      "citedIn": [
+        "docs/archive/internal/self-improvement-research-2026.md:43",
+        "docs/archive/internal/self-improvement-research-2026.md:141",
+        "docs/reports/2026-09/AUDIT-DGM2.md:58"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2506.13131": {
+      "title": "AlphaEvolve: A coding agent for scientific and algorithmic discovery",
+      "authors": "Google DeepMind",
+      "year": 2025,
+      "citedIn": [
+        "docs/FABLE5-CODEX-COORDINATION.md:522",
+        "docs/reports/2026-09/AUDIT-DGM2.md:33"
+      ],
+      "verified": true
+    },
+    "2507.08794": {
+      "title": "One Token to Fool LLM-as-a-Judge",
+      "citedIn": [
+        "docs/archive/internal/self-improvement-research-2026.md:37",
+        "docs/archive/internal/self-improvement-research-2026.md:102",
+        "docs/archive/internal/self-improvement-research-2026.md:122",
+        "docs/archive/internal/self-improvement-research-2026.md:140",
+        "docs/reports/2026-09/AUDIT-DGM2.md:59"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2509.16941": {
+      "title": "SWE-bench Pro",
+      "citedIn": [
+        "docs/FABLE5-CODEX-COORDINATION.md:522",
+        "docs/archive/internal/self-improvement-research-2026.md:43",
+        "docs/archive/internal/self-improvement-research-2026.md:141",
+        "docs/reports/2026-09/AUDIT-DGM2.md:58"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2509.19349": {
+      "title": "ShinkaEvolve: Towards Open-Ended And Sample-Efficient Program Evolution",
+      "year": 2025,
+      "citedIn": [
+        "docs/reports/2026-09/AUDIT-DGM2.md:26"
+      ],
+      "verified": true,
+      "authors": "Robert Tjarko Lange, Yuki Imajuku, Edoardo Cetin"
+    },
+    "2511.14972": {
+      "title": "Harmful traits of AI companions",
+      "citedIn": [
+        "docs/audits/2026-07-16-lisa-personality-audit.md:82"
+      ],
+      "verified": true,
+      "year": null
+    },
+    "2606.21228": {
+      "title": "Sakana Fugu Technical Report",
+      "year": 2026,
+      "citedIn": [
+        "docs/learning-mechanisms.md:46",
+        "docs/research/council-scientific-notes.md:31",
+        "docs/research/council-scientific-notes.md:32"
+      ],
+      "verified": true
+    },
+    "2608.25512": {
+      "title": "A Programming Paradigm for Spatiotemporal Composability",
+      "authors": "Yifan Shi (Peking University, DeepSeek-AI), Wei Zhang (Peking University), Tianyi Cui (DeepSeek-AI)",
+      "year": 2026,
+      "citedIn": [
+        "docs/audits/2026-09-06-deepseek-harness-etude.md:15",
+        "docs/audits/2026-09-06-deepseek-harness-etude.md:23",
+        "docs/audits/2026-09-06-deepseek-harness-etude.md:33",
+        "docs/audits/2026-09-06-deepseek-harness-etude.md:347"
+      ],
+      "verified": true
+    }
+  },
+  "features": [
+    {
+      "id": "boucle-agentique",
+      "section": "1. Le socle : un agent qui exécute",
+      "name": "Boucle agentique",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/agent/execution/agent-executor.ts",
+        "src/agent/codebuddy-agent.ts",
+        "src/utils/autonomy-manager.ts"
+      ],
+      "tests": [
+        "tests/agent/execution/agent-executor.test.ts",
+        "tests/agent/execution/agent-executor-loop-guard.test.ts",
+        "tests/agent/codebuddy-agent.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "catalogue-outils",
+      "section": "1. Le socle : un agent qui exécute",
+      "name": "230 outils",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/codebuddy/tools.ts",
+        "src/tools/registry/index.ts",
+        "src/tools/registry/tool-registry.ts",
+        "src/tools/metadata.ts"
+      ],
+      "tests": [
+        "tests/unit/tool-registry.test.ts",
+        "tests/unit/formal-tool-registry.test.ts",
+        "tests/tools/self-describe.test.ts"
+      ],
+      "papers": [],
+      "notes": "Aucun test ne vérifie le chiffre de 230 outils ; les tests couvrent le registre, pas le décompte."
+    },
+    {
+      "id": "fournisseurs",
+      "section": "1. Le socle : un agent qui exécute",
+      "name": "15 fournisseurs",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/codebuddy/client.ts",
+        "src/codebuddy/providers/provider-openai-compat.ts",
+        "src/codebuddy/providers/provider-gemini-native.ts",
+        "src/providers/provider-catalog.ts"
+      ],
+      "tests": [
+        "tests/providers/provider-catalog.test.ts",
+        "tests/codebuddy/providers/provider-openai-compat.test.ts",
+        "tests/codebuddy/providers/provider-gemini-native.test.ts",
+        "tests/codebuddy/providers/provider-chatgpt-responses.test.ts"
+      ],
+      "papers": [],
+      "notes": "Les 15 fournisseurs passent surtout par la route OpenAI-compatible ; pas de test par fournisseur réel (Bedrock, Azure, Copilot…)."
+    },
+    {
+      "id": "selection-outils-rag",
+      "section": "1. Le socle : un agent qui exécute",
+      "name": "Sélection d'outils par RAG",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/agent/execution/tool-selection-strategy.ts",
+        "src/codebuddy/tools.ts",
+        "src/tools/tool-selector.ts"
+      ],
+      "tests": [
+        "tests/tools/tool-selector.test.ts",
+        "tests/agent/execution/tool-selection-lite.test.ts",
+        "tests/agent/skill-tool-selection.test.ts"
+      ],
+      "papers": [
+        {
+          "arxiv": "2505.03275",
+          "link": "cited",
+          "evidence": "src/agent/execution/tool-selection-strategy.ts:15"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "bascule-fournisseur",
+      "section": "1. Le socle : un agent qui exécute",
+      "name": "Bascule de fournisseur",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_PROVIDER_FALLBACK",
+      "code": [
+        "src/codebuddy/client.ts",
+        "src/providers/provider-fallback.ts",
+        "src/providers/provider-health.ts",
+        "src/codebuddy/provider-failover-kind.ts"
+      ],
+      "tests": [
+        "tests/codebuddy/client-provider-fallback.test.ts",
+        "tests/codebuddy/provider-failover.test.ts",
+        "tests/codebuddy/provider-failover-kind.test.ts",
+        "tests/codebuddy/provider-failover-http.test.ts"
+      ],
+      "papers": [],
+      "notes": "Preuve marquée ⚠️ (hors légende) : exécution réelle du 24/09 avec défaut connu (sortie JSON annonce le modèle en panne, coût fictif) ; des tests existent aussi."
+    },
+    {
+      "id": "modes-autorisation",
+      "section": "1. Le socle : un agent qui exécute",
+      "name": "Modes d'autorisation",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/security/permission-modes.ts",
+        "src/utils/confirmation-service.ts"
+      ],
+      "tests": [
+        "tests/security/permission-modes.test.ts",
+        "tests/cli/permission-mode-option.test.ts",
+        "tests/commands/apply-permission-mode.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "bac-a-sable-noyau",
+      "section": "1. Le socle : un agent qui exécute",
+      "name": "Bac à sable noyau",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_NATIVE_SANDBOX",
+      "code": [
+        "src/security/native-sandbox.ts",
+        "src/security/landlock-confine.py"
+      ],
+      "tests": [
+        "tests/security/native-sandbox.test.ts"
+      ],
+      "papers": [],
+      "notes": "Un seul fichier de test direct ; tests/sandbox/landlock-sandbox.test.ts et seatbelt-profile.test.ts visent l'ancien module src/sandbox, pas native-sandbox."
+    },
+    {
+      "id": "memoire-travail",
+      "section": "2. Mémoire — les cinq couches",
+      "name": "Travail — ce qu'il voit",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/context/context-manager-v2.ts",
+        "src/agent/facades/agent-context-facade.ts"
+      ],
+      "tests": [
+        "tests/context-manager-v2.test.ts",
+        "tests/context/context-manager-v2-gaps.test.ts",
+        "tests/context/context-manager-v2-tool-failures.test.ts"
+      ],
+      "papers": [
+        {
+          "arxiv": "2406.06110",
+          "link": "cited",
+          "evidence": "src/context/context-manager-v2.ts:8"
+        },
+        {
+          "arxiv": "2308.15022",
+          "link": "cited",
+          "evidence": "src/context/context-manager-v2.ts:1022"
+        }
+      ],
+      "notes": "Le code se réclame de ces articles ; la fidélité du mécanisme (compression récurrente) n'a pas été vérifiée, d'où « cited »."
+    },
+    {
+      "id": "memoire-travail-etendue",
+      "section": "2. Mémoire — les cinq couches",
+      "name": "Travail étendue — compaction réversible",
+      "proof": [
+        "unproven"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_CONTEXT_ZOOM",
+      "code": [
+        "src/context/segment-archive.ts",
+        "src/tools/context-expand-tool.ts",
+        "src/tools/registry/context-expand-tools.ts"
+      ],
+      "tests": [
+        "tests/context/segment-archive.test.ts",
+        "tests/catalogue/lessons/context-expand-tool.test.ts",
+        "tests/context/revue-gemini-segment-archive-hash.test.ts"
+      ],
+      "papers": [],
+      "notes": "Non marqué 💤 dans l'inventaire mais opt-in par CODEBUDDY_CONTEXT_ZOOM dans le code ; des tests existent malgré le ❓."
+    },
+    {
+      "id": "memoire-episodique",
+      "section": "2. Mémoire — les cinq couches",
+      "name": "Épisodique — ce qui s'est passé",
+      "proof": [
+        "unproven"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_EPISODE_JOURNAL / CODEBUDDY_TIMELINE",
+      "code": [
+        "src/sensory/episodic-journal.ts",
+        "src/sessions/timeline.ts",
+        "src/sessions/timeline-snapshot.ts"
+      ],
+      "tests": [
+        "tests/sensory/episodic-journal.test.ts",
+        "tests/sessions/timeline.test.ts",
+        "tests/sessions/gk29-timeline-restore.test.ts",
+        "tests/commands/replay.test.ts"
+      ],
+      "papers": [],
+      "notes": "Deux mécanismes distincts sous un même nom (journal d'épisodes du robot, chronologie de session), tous deux opt-in bien que non marqués 💤."
+    },
+    {
+      "id": "memoire-semantique-ckg",
+      "section": "2. Mémoire — les cinq couches",
+      "name": "Sémantique — ce qu'il sait",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_COLLECTIVE_MEMORY",
+      "code": [
+        "src/memory/collective-knowledge-graph.ts",
+        "src/memory/buddy-memory-client.ts",
+        "buddy-memory/src/store.rs",
+        "buddy-memory/src/ann.rs"
+      ],
+      "tests": [
+        "tests/memory/collective-knowledge-graph.test.ts",
+        "tests/memory/ckg-hybrid-mmr.test.ts",
+        "tests/memory/ckg-engine-default.test.ts",
+        "tests/memory/ckg-fact-reconciliation.test.ts"
+      ],
+      "papers": [],
+      "notes": "La barrière ne gouverne que l'injection dans le contexte ; le stockage (buddy research) fonctionne sans. Tests Rust dans buddy-memory/ non listés."
+    },
+    {
+      "id": "memoire-procedurale",
+      "section": "2. Mémoire — les cinq couches",
+      "name": "Procédurale — comment faire",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SELF_IMPROVE",
+      "code": [
+        "src/agent/self-improvement/engine.ts",
+        "src/agent/self-improvement/tool-engine.ts",
+        "src/agent/self-improvement/skill-engine.ts",
+        "src/agent/self-improvement/empirical-gate.ts"
+      ],
+      "tests": [
+        "tests/agent/self-improvement/engine.test.ts",
+        "tests/agent/self-improvement/empirical-gate.test.ts",
+        "tests/agent/self-improvement/tool-gate.test.ts",
+        "tests/agent/self-improvement/skill-gate.test.ts"
+      ],
+      "papers": [
+        {
+          "arxiv": "2505.22954",
+          "link": "implements",
+          "evidence": "src/agent/self-improvement/empirical-gate.ts:4"
+        },
+        {
+          "arxiv": "2503.01747",
+          "link": "implements",
+          "evidence": "src/agent/self-improvement/paired-gate.ts:8"
+        }
+      ],
+      "notes": "empirical-gate.ts:4 dit « Inspired by the Darwin Gödel Machine » sans l'identifiant (cité en docs/reports/2026-09/AUDIT-DGM2.md:20) ; paired-gate.ts:8 renvoie à la doc archivée docs/archive/internal/self-improvement-research-2026.md:33 qui cite 2503.01747. Opt-in non marqué 💤."
+    },
+    {
+      "id": "oubli-ebbinghaus",
+      "section": "2. Mémoire — les cinq couches",
+      "name": "Oubli",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_MEMORY_FORGET",
+      "code": [
+        "src/memory/memory-forgetting.ts",
+        "src/memory/persistent-memory.ts",
+        "src/sensory/dreaming.ts"
+      ],
+      "tests": [
+        "tests/memory/memory-forgetting.test.ts",
+        "tests/memory/revue-gemini-forgetting-pinned.test.ts"
+      ],
+      "papers": [],
+      "notes": "Opt-in (CODEBUDDY_MEMORY_FORGET) bien que non marqué 💤 ; déclenché via le rêve (dreaming.ts)."
+    },
+    {
+      "id": "verifier-independant",
+      "section": "3. Vérification — ne pas se croire sur parole",
+      "name": "Verifier indépendant",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/agent/specialized/verifier-agent.ts"
+      ],
+      "tests": [
+        "tests/unit/verifier-agent.test.ts",
+        "tests/agents/verifier-delegation.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "porte-preuves-buts",
+      "section": "3. Vérification — ne pas se croire sur parole",
+      "name": "Porte de preuves sur les buts",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/goals/goal-evidence-gate.ts",
+        "src/goals/goal-judge.ts",
+        "src/goals/goal-loop.ts"
+      ],
+      "tests": [
+        "tests/goals/goal-evidence-gate.test.ts",
+        "tests/goals/goal-judge.test.ts",
+        "tests/goals/goal-loop.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "buddy-loop",
+      "section": "3. Vérification — ne pas se croire sur parole",
+      "name": "`buddy loop`",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/agent/dev-loop/dev-loop.ts",
+        "src/commands/loop-cli.ts",
+        "src/agent/dev-loop/structural-gate.ts"
+      ],
+      "tests": [
+        "tests/agent/dev-loop.test.ts",
+        "tests/commands/loop-cli-options.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "porte-revue-diff",
+      "section": "3. Vérification — ne pas se croire sur parole",
+      "name": "Porte de revue de diff",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_DIFF_REVIEW",
+      "code": [
+        "src/review/write-gate.ts",
+        "src/review/review-engine.ts",
+        "src/tools/review-gate-helper.ts",
+        "src/review/apply-transaction.ts"
+      ],
+      "tests": [
+        "tests/review/write-gate.test.ts",
+        "tests/review/review-engine.test.ts",
+        "tests/review/apply-transaction.test.ts",
+        "tests/review/static-gate.test.ts"
+      ],
+      "papers": [],
+      "notes": "Défaut `off` dans le code (CODEBUDDY_DIFF_REVIEW) alors que l'inventaire ne marque pas 💤 et dit « toute écriture passe par une revue »."
+    },
+    {
+      "id": "espace-fantome",
+      "section": "3. Vérification — ne pas se croire sur parole",
+      "name": "Espace de travail fantôme",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SHADOW_WORKSPACE",
+      "code": [
+        "src/speculative/shadow-workspace.ts",
+        "src/commands/shadow.ts"
+      ],
+      "tests": [
+        "tests/speculative/gk29-shadow-write-gate.test.ts",
+        "tests/speculative/shadow-cli.test.ts",
+        "tests/speculative/gk29-shadow-list-clean.test.ts"
+      ],
+      "papers": [],
+      "notes": "Opt-in (CODEBUDDY_SHADOW_WORKSPACE) non marqué 💤."
+    },
+    {
+      "id": "registre-intentions",
+      "section": "3. Vérification — ne pas se croire sur parole",
+      "name": "Registre d'intentions",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_INTENTS",
+      "code": [
+        "src/intents/intent-checker.ts",
+        "src/intents/intent-generator.ts",
+        "src/intents/intent-store.ts",
+        "src/commands/intents.ts"
+      ],
+      "tests": [
+        "tests/intents/intent-checker.test.ts",
+        "tests/intents/intent-generator.test.ts",
+        "tests/intents/gk29-intent-drift.test.ts",
+        "tests/intents/intents-cli.test.ts"
+      ],
+      "papers": [],
+      "notes": "Opt-in (CODEBUDDY_INTENTS) non marqué 💤."
+    },
+    {
+      "id": "flotte-peer-chat",
+      "section": "4. Plusieurs cerveaux",
+      "name": "Flotte (`peer.chat`)",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/fleet/peer-chat-bridge.ts",
+        "src/fleet/peer-session-store.ts",
+        "src/server/websocket/handler.ts"
+      ],
+      "tests": [
+        "tests/server/peer-chat-bridge.test.ts",
+        "tests/fleet/peer-chat-stream.test.ts",
+        "tests/fleet/peer-chat-client-factory.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "outils-distants",
+      "section": "4. Plusieurs cerveaux",
+      "name": "Outils distants",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT",
+      "code": [
+        "src/fleet/peer-tool-bridge.ts"
+      ],
+      "tests": [
+        "tests/fleet/peer-tool-bridge.test.ts",
+        "tests/fleet/revue-gemini-peer-tool-traversal.test.ts",
+        "tests/agent/execution/peer-tool-always-include.test.ts"
+      ],
+      "papers": [],
+      "notes": "Fermé par défaut dans les faits (échoue sans CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT) bien que non marqué 💤."
+    },
+    {
+      "id": "conseil-modeles",
+      "section": "4. Plusieurs cerveaux",
+      "name": "Conseil de modèles",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_COUNCIL_ROUTING",
+      "code": [
+        "src/council/council-engine.ts",
+        "src/council/judge.ts",
+        "src/commands/council.ts",
+        "src/fleet/model-scoreboard.ts"
+      ],
+      "tests": [
+        "tests/council/council-engine.test.ts",
+        "tests/council/judge.test.ts",
+        "tests/fleet/model-scoreboard.test.ts",
+        "tests/agent/facades/model-routing-facade-scoreboard.test.ts"
+      ],
+      "papers": [
+        {
+          "arxiv": "2406.04692",
+          "link": "cited",
+          "evidence": "docs/research/council-scientific-notes.md:7"
+        },
+        {
+          "arxiv": "2305.14325",
+          "link": "cited",
+          "evidence": "docs/research/council-scientific-notes.md:10"
+        },
+        {
+          "arxiv": "2305.19118",
+          "link": "cited",
+          "evidence": "docs/research/council-scientific-notes.md:13"
+        },
+        {
+          "arxiv": "2502.08788",
+          "link": "cited",
+          "evidence": "docs/research/council-scientific-notes.md:16"
+        },
+        {
+          "arxiv": "2311.17371",
+          "link": "cited",
+          "evidence": "docs/research/council-scientific-notes.md:19"
+        },
+        {
+          "arxiv": "2312.13010",
+          "link": "cited",
+          "evidence": "docs/research/council-scientific-notes.md:22"
+        },
+        {
+          "arxiv": "2308.00352",
+          "link": "cited",
+          "evidence": "docs/research/council-scientific-notes.md:25"
+        },
+        {
+          "arxiv": "2307.07924",
+          "link": "cited",
+          "evidence": "docs/research/council-scientific-notes.md:28"
+        },
+        {
+          "arxiv": "2606.21228",
+          "link": "cited",
+          "evidence": "docs/research/council-scientific-notes.md:31"
+        }
+      ],
+      "notes": "La barrière ne concerne que l'entraînement du routage principal ; `buddy council` lui-même se lance à la demande. Les articles sont cités dans une note de conception, pas dans src/."
+    },
+    {
+      "id": "batch-swarm-team",
+      "section": "4. Plusieurs cerveaux",
+      "name": "`/batch`, `/swarm`, `/team`",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/commands/handlers/batch-handlers.ts",
+        "src/commands/handlers/swarm-handler.ts",
+        "src/commands/handlers/team-handlers.ts",
+        "src/agent/multi-agent/team-manager.ts"
+      ],
+      "tests": [
+        "tests/commands/batch-slash-wiring.test.ts",
+        "tests/commands/swarm-thread-delegation.test.ts",
+        "tests/commands/team-thread-delegation.test.ts",
+        "tests/agent/team-manager.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "federation-graphes",
+      "section": "4. Plusieurs cerveaux",
+      "name": "Fédération de graphes",
+      "proof": [
+        "unproven"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_CKG_SYNC",
+      "code": [
+        "src/fleet/peer-ckg-bridge.ts"
+      ],
+      "tests": [
+        "tests/fleet/peer-ckg-bridge.test.ts"
+      ],
+      "papers": [],
+      "notes": "Un test unitaire existe malgré le ❓ ; jamais éprouvé entre deux vrais pairs."
+    },
+    {
+      "id": "si-lecons",
+      "section": "5. Auto-amélioration — bornée par l'expérience",
+      "name": "Leçons",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SELF_IMPROVE",
+      "code": [
+        "src/agent/self-improvement/engine.ts",
+        "src/agent/self-improvement/empirical-gate.ts",
+        "src/agent/self-improvement/paired-gate.ts",
+        "src/agent/self-improvement/evolutionary-archive.ts"
+      ],
+      "tests": [
+        "tests/agent/self-improvement/engine.test.ts",
+        "tests/agent/self-improvement/empirical-gate.test.ts",
+        "tests/agent/self-improvement/paired-gate.test.ts",
+        "tests/agent/self-improvement/learning-store.test.ts"
+      ],
+      "papers": [
+        {
+          "arxiv": "2505.22954",
+          "link": "implements",
+          "evidence": "src/agent/self-improvement/empirical-gate.ts:4"
+        },
+        {
+          "arxiv": "2503.01747",
+          "link": "implements",
+          "evidence": "docs/reports/2026-09/AUDIT-DGM2.md:80"
+        }
+      ],
+      "notes": "Le code nomme DGM sans numéro arXiv (numéro dans docs/reports/2026-09/AUDIT-DGM2.md:20) ; paired-gate.ts:9 renvoie à docs/self-improvement-research-2026.md, absent du dépôt."
+    },
+    {
+      "id": "si-outils",
+      "section": "5. Auto-amélioration — bornée par l'expérience",
+      "name": "Outils",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SELF_IMPROVE",
+      "code": [
+        "src/agent/self-improvement/tool-engine.ts",
+        "src/agent/self-improvement/tool-gate.ts",
+        "src/agent/self-improvement/sandbox-scorer.ts",
+        "src/tools/register-tool-handler.ts"
+      ],
+      "tests": [
+        "tests/agent/self-improvement/tool-gate.test.ts",
+        "tests/agent/self-improvement/authored-artifact-gate.test.ts",
+        "tests/agent/self-improvement/llm-tool-proposer.test.ts",
+        "tests/tools/register-tool-handler.test.ts"
+      ],
+      "papers": [],
+      "notes": "L'audit DGM2 (ligne 78) situe la défense par cas cachés face au reward hacking sans l'attribuer à un article précis ; aucun lien posé."
+    },
+    {
+      "id": "si-savoir-faire",
+      "section": "5. Auto-amélioration — bornée par l'expérience",
+      "name": "Savoir-faire",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SELF_IMPROVE",
+      "code": [
+        "src/agent/self-improvement/skill-engine.ts",
+        "src/agent/self-improvement/skill-gate.ts",
+        "src/agent/self-improvement/skill-mutator.ts",
+        "src/security/skill-scanner.ts"
+      ],
+      "tests": [
+        "tests/agent/self-improvement/skill-gate.test.ts",
+        "tests/agent/self-improvement/skill-mutator.test.ts",
+        "tests/agent/self-improvement/skill-consolidator.test.ts",
+        "tests/agent/self-improvement/skills-dgm-regressions.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "si-strategies",
+      "section": "5. Auto-amélioration — bornée par l'expérience",
+      "name": "Stratégies",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SELF_IMPROVE_STRATEGIES",
+      "code": [
+        "src/agent/self-improvement/strategy-engine.ts",
+        "src/agent/self-improvement/strategy-gate.ts",
+        "src/agent/self-improvement/strategy-types.ts",
+        "src/agent/self-improvement/strategy-runtime.ts"
+      ],
+      "tests": [
+        "tests/agent/self-improvement/strategy-gate.test.ts",
+        "tests/agent/self-improvement/strategy-engine.test.ts",
+        "tests/agent/self-improvement/strategy-adversarial.test.ts",
+        "tests/agent/self-improvement/strategy-store-runtime.test.ts"
+      ],
+      "papers": [
+        {
+          "arxiv": "2503.01747",
+          "link": "implements",
+          "evidence": "src/agent/self-improvement/strategy-gate.ts:8"
+        }
+      ],
+      "notes": "La génération par l'engine suppose aussi CODEBUDDY_SELF_IMPROVE ; le lien 2503.01747 passe par pairedBayesianDecision (paired-gate), que l'audit DGM2:60 rattache à cet article. Surface proposée par l'audit (Proposition 4, docs/reports/2026-09/AUDIT-DGM2.md:151)."
+    },
+    {
+      "id": "perception-systeme-nerveux",
+      "section": "6. Perception — le robot",
+      "name": "Système nerveux (Rust)",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "buddy-sense/src/main.rs",
+        "buddy-sense/src/bus.rs",
+        "buddy-sense/src/bridge.rs",
+        "src/sensory/sensory-bridge.ts"
+      ],
+      "tests": [
+        "tests/sensory/sensory-bridge.test.ts"
+      ],
+      "papers": [],
+      "notes": "Les 20 tests Rust sont en ligne (#[cfg(test)] dans bus.rs, bridge.rs, senses/*.rs), pas sous tests/ ; le test listé couvre le côté TS du pont ; côté Code Buddy le pont exige CODEBUDDY_SENSORY=true."
+    },
+    {
+      "id": "perception-yeux",
+      "section": "6. Perception — le robot",
+      "name": "Yeux (Python/MediaPipe)",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SENSORY_CAMERA",
+      "code": [
+        "buddy-vision/watch.py",
+        "src/sensory/semantic-vision-reaction.ts",
+        "src/sensory/vision-reaction.ts"
+      ],
+      "tests": [
+        "tests/sensory/vision-reaction.test.ts",
+        "tests/sensory/camera-captions.test.ts",
+        "tests/sensory/arrival-greeting.test.ts"
+      ],
+      "papers": [],
+      "notes": "Tests Python des détecteurs hors tests/ : buddy-vision/test_watch.py ; la passerelle d'alerte Telegram (alert.ts) dépend de CODEBUDDY_SENSORY_ALERT_TOKEN."
+    },
+    {
+      "id": "perception-voix",
+      "section": "6. Perception — le robot",
+      "name": "Voix",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SENSORY_SPEAK",
+      "code": [
+        "src/sensory/speech-reaction.ts",
+        "src/sensory/voice-loop.ts",
+        "src/sensory/voice-turn-coordinator.ts",
+        "src/sensory/agent-reply.ts"
+      ],
+      "tests": [
+        "tests/sensory/speech-reaction.test.ts",
+        "tests/sensory/voice-loop.test.ts",
+        "tests/sensory/voice-interrupt.test.ts",
+        "tests/sensory/agent-reply.test.ts"
+      ],
+      "papers": [
+        {
+          "arxiv": "2212.04356",
+          "link": "cited",
+          "evidence": "docs/research/voice-realtime-notes.md:9"
+        }
+      ],
+      "notes": "Preuve ⚠️ (usage quotidien, audit 24/09 à 25 constats) codée executed ; pas de 💤 dans l'inventaire mais la boucle parlée est opt-in (CODEBUDDY_SENSORY_SPEAK, interruption CODEBUDDY_SENSORY_BARGE_IN)."
+    },
+    {
+      "id": "perception-reve",
+      "section": "6. Perception — le robot",
+      "name": "Rêve",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SENSORY",
+      "code": [
+        "src/sensory/dreaming.ts",
+        "src/sensory/heartbeat-scheduler.ts",
+        "src/sensory/sensory-memory.ts"
+      ],
+      "tests": [
+        "tests/sensory/dreaming.test.ts",
+        "tests/sensory/hole-dreaming-hallucination-memory.test.ts",
+        "tests/sensory/heartbeat-scheduler.test.ts",
+        "tests/sensory/sensory-memory.test.ts"
+      ],
+      "papers": [],
+      "notes": "Câblé dans src/server/index.ts:1956 sous CODEBUDDY_SENSORY ; cadence CODEBUDDY_DREAM_EVERY."
+    },
+    {
+      "id": "perception-rappels",
+      "section": "6. Perception — le robot",
+      "name": "Rappels",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_REMINDERS",
+      "code": [
+        "src/companion/reminders.ts",
+        "src/companion/reminder-runner.ts",
+        "src/tools/registry/remind-tools.ts"
+      ],
+      "tests": [
+        "tests/companion/reminders.test.ts",
+        "tests/companion/reminder-runner.test.ts",
+        "tests/companion/reminders-voice-mgmt.test.ts",
+        "tests/companion/reminders-address-gate.test.ts"
+      ],
+      "papers": [],
+      "notes": "Preuve ⚠️ (en usage) codée executed ; opt-in malgré l'absence de 💤."
+    },
+    {
+      "id": "perception-regles-sensorielles",
+      "section": "6. Perception — le robot",
+      "name": "Règles sensorielles",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SENSORY_RULES",
+      "code": [
+        "src/sensory/sensory-rules-engine.ts",
+        "src/sensory/sensory-action-executor.ts",
+        "src/sensory/rule-templates.ts"
+      ],
+      "tests": [
+        "tests/sensory/sensory-rules-engine.test.ts",
+        "tests/sensory/sensory-rules.test.ts",
+        "tests/sensory/sensory-rules-admin.test.ts",
+        "tests/sensory/gk20-rules-contracts.test.ts"
+      ],
+      "papers": [],
+      "notes": "Preuve ⚠️ codée executed : l'exécution du 24/09 a INFIRMÉ la promesse (5 commandes destructrices sur 10 acceptées) ; exige aussi CODEBUDDY_SENSORY_TOKEN."
+    },
+    {
+      "id": "media-film-long",
+      "section": "7. Médias",
+      "name": "Film long",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/tools/video/film-assemble.ts",
+        "src/tools/video/film-project.ts",
+        "src/agent/film/film-producer.ts",
+        "src/tools/video/narration.ts"
+      ],
+      "tests": [
+        "tests/tools/video/film-assemble.test.ts",
+        "tests/tools/video/film-project.test.ts",
+        "tests/agent/film-producer.test.ts",
+        "tests/tools/video/narration.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "media-prompt-video",
+      "section": "7. Médias",
+      "name": "Prompt → vidéo",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/agent/film/video-studio.ts",
+        "src/agent/film/scene-planner.ts",
+        "src/tools/video/scene-render.ts",
+        "src/tools/video/subtitles.ts"
+      ],
+      "tests": [
+        "tests/agent/video-studio.test.ts",
+        "tests/agent/scene-planner.test.ts",
+        "tests/tools/video/scene-render.test.ts",
+        "tests/tools/video/subtitles.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "media-images",
+      "section": "7. Médias",
+      "name": "Images",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/tools/media-generation-tool.ts"
+      ],
+      "tests": [
+        "tests/tools/media-generation-tool.test.ts",
+        "tests/tools/comfyui-fallback-detection.test.ts",
+        "tests/tools/comfyui-image-real.test.ts"
+      ],
+      "papers": [],
+      "notes": "Fournisseur choisi par CODEBUDDY_IMAGE_PROVIDER / COMFYUI_URL, repli par CODEBUDDY_COMFYUI_FALLBACK_URLS."
+    },
+    {
+      "id": "media-entrainement-perception",
+      "section": "7. Médias",
+      "name": "Entraînement de la perception",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_VISION_TRAIN",
+      "code": [
+        "src/vision-train/engine.ts",
+        "src/vision-train/curriculum.ts",
+        "src/vision-train/scorer.ts",
+        "src/commands/vision-train.ts"
+      ],
+      "tests": [
+        "tests/vision-train/engine.test.ts",
+        "tests/vision-train/scorer.test.ts",
+        "tests/vision-train/yolo-labels.test.ts",
+        "tests/vision-train/coco-to-labels.test.ts"
+      ],
+      "papers": [
+        {
+          "arxiv": "1703.06907",
+          "link": "implements",
+          "evidence": "docs/research/ETUDE-PERCEPTION-MONDE-PHYSIQUE.md:315"
+        }
+      ],
+      "notes": "Opt-in (fail-closed) malgré l'absence de 💤 ; domain randomization dans curriculum.ts:3, rattachée à vision-train par ETUDE-PERCEPTION-MONDE-PHYSIQUE.md:89 ; pas de test dédié à curriculum.ts."
+    },
+    {
+      "id": "cli-ink",
+      "section": "8. Interfaces",
+      "name": "CLI (Ink/React)",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/index.ts",
+        "src/ui/components/ChatInterface.tsx",
+        "src/commands/slash/builtin-commands.ts",
+        "src/themes/theme-manager.ts"
+      ],
+      "tests": [
+        "tests/ui/chat-interface.test.tsx",
+        "tests/commands/slash-commands.test.ts",
+        "tests/themes/theme-manager.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "cowork-gui",
+      "section": "8. Interfaces",
+      "name": "Cowork",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "cowork/src/main/index.ts",
+        "cowork/src/main/window-management.ts",
+        "cowork/src/main/ipc-main-bridge.ts"
+      ],
+      "tests": [
+        "cowork/src/main/ipc-main-bridge.test.ts",
+        "cowork/e2e/chat-flow.spec.ts"
+      ],
+      "papers": [],
+      "notes": "Tests sous cowork/ (602 fichiers de test Vitest + e2e Playwright), pas sous tests/."
+    },
+    {
+      "id": "pwa-mobile",
+      "section": "8. Interfaces",
+      "name": "PWA mobile",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_MOBILE_PWA",
+      "code": [
+        "src/server/mobile/index.ts",
+        "src/companion/mobile-history.ts",
+        "src/server/mobile/album.ts",
+        "src/server/mobile/assets/app.js"
+      ],
+      "tests": [
+        "tests/server/mobile-pwa.test.ts",
+        "tests/companion/mobile-history.test.ts",
+        "tests/server/mobile-shared-photos.test.ts",
+        "tests/server/mobile-ws-resume.test.ts"
+      ],
+      "papers": [],
+      "notes": "Non marquée 💤 mais la route n'est montée que sous CODEBUDDY_MOBILE_PWA=true (src/server/mobile/index.ts:380), éteinte par défaut dans le code."
+    },
+    {
+      "id": "serveur-http",
+      "section": "8. Interfaces",
+      "name": "Serveur HTTP",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/server/index.ts",
+        "src/server/routes/chat.ts",
+        "src/server/routes/a2a-protocol.ts",
+        "src/server/websocket/handler.ts"
+      ],
+      "tests": [
+        "tests/server/api-server.test.ts",
+        "tests/server/serv1-openai-completions-errors.test.ts",
+        "tests/server/a2a-protocol.test.ts",
+        "tests/server/catalogue-routes-http-a.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "serveur-mcp",
+      "section": "8. Interfaces",
+      "name": "Serveur MCP",
+      "proof": [
+        "unproven"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/mcp/mcp-server.ts",
+        "src/commands/mcp.ts"
+      ],
+      "tests": [
+        "tests/mcp/mcp-server.test.ts",
+        "tests/server/mcp/mcp-server-approval.test.ts"
+      ],
+      "papers": [],
+      "notes": "Tests unitaires présents malgré le ❓ ; un second serveur existe (src/integrations/mcp/mcp-server.ts) — le point d'entrée `buddy mcp serve` charge src/mcp/mcp-server.ts."
+    },
+    {
+      "id": "pare-feu-competences",
+      "section": "9. Garde-fous",
+      "name": "Pare-feu de compétences",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/security/skill-scanner.ts",
+        "src/security/text-deobfuscation.ts"
+      ],
+      "tests": [
+        "tests/security/skill-scanner.test.ts",
+        "tests/security/skill-firewall-deob-all.test.ts",
+        "tests/security/audit-secaudit-skill-firewall-obfuscation.test.ts"
+      ],
+      "papers": [],
+      "notes": "Dé-obfuscation étendue à toutes les capacités par défaut ; CODEBUDDY_SKILL_FIREWALL_DEOB_ALL=false la restreint."
+    },
+    {
+      "id": "validateur-commandes",
+      "section": "9. Garde-fous",
+      "name": "Validateur de commandes",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/tools/bash/command-validator.ts",
+        "src/security/bash-parser.ts",
+        "src/security/dangerous-patterns.ts",
+        "src/sandbox/execpolicy.ts"
+      ],
+      "tests": [
+        "tests/bash/command-validator-security-regression.test.ts",
+        "tests/security/bash-parser.test.ts",
+        "tests/sandbox/execpolicy.test.ts"
+      ],
+      "papers": [],
+      "notes": "Défaut connu 24/09 : `rm -rf src` passe tous les validateurs statiques ; seule la classification ExecPolicy distingue lecture et écriture."
+    },
+    {
+      "id": "garde-secrets",
+      "section": "9. Garde-fous",
+      "name": "Garde des secrets",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/security/secrets-detector.ts",
+        "src/security/secret-scrubber.ts",
+        "src/config/secret-ref.ts"
+      ],
+      "tests": [
+        "tests/unit/secrets-detector.test.ts",
+        "tests/security/secret-scrubber.test.ts",
+        "tests/config/secret-sources.test.ts"
+      ],
+      "papers": [],
+      "notes": "Aucun hook local ne bloque un commit (.husky/pre-commit = lint-staged seul) ; le scan des fichiers suivis est fait en CI par trufflehog (.github/workflows/security.yml:34) ; le code liste détecte/masque, il n'empêche pas l'écriture."
+    },
+    {
+      "id": "garde-deploiement",
+      "section": "9. Garde-fous",
+      "name": "Garde de déploiement",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/security/policy-engine.ts",
+        "src/utils/confirmation-service.ts"
+      ],
+      "tests": [
+        "tests/security/policy-engine.test.ts",
+        "tests/fleet/audit-secaudit-peer-needs-approval.test.ts"
+      ],
+      "papers": [],
+      "notes": "Détection par mots-clés (deploy/publish/release/prod/docker… dans la commande, policy-engine.ts:177) : grossière, un chemin de worktree contenant « release » déclenche la garde."
+    },
+    {
+      "id": "nettoyage-sortie",
+      "section": "9. Garde-fous",
+      "name": "Nettoyage de sortie",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/utils/output-sanitizer.ts"
+      ],
+      "tests": [
+        "tests/unit/output-sanitizer.test.ts",
+        "tests/agent/streaming/output-sanitization.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "reparation-transcript",
+      "section": "9. Garde-fous",
+      "name": "Réparation de transcript",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/context/transcript-repair.ts",
+        "src/agent/execution/agent-executor.ts"
+      ],
+      "tests": [
+        "tests/context/transcript-repair.test.ts",
+        "tests/context/transcript-repair-hardening.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "echange-competences-signees",
+      "section": "Éprouvé le 24/09",
+      "name": "Échange de compétences signées",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SKILL_EXCHANGE",
+      "code": [
+        "src/skills/skill-exchange.ts",
+        "src/skills/skill-signing.ts",
+        "src/commands/skills-cli/index.ts"
+      ],
+      "tests": [
+        "tests/skills/skill-exchange.test.ts",
+        "tests/skills/skill-exchange-errors.test.ts",
+        "tests/skills/skill-exchange-command-lifecycle.test.ts"
+      ],
+      "papers": [],
+      "notes": "Défaut 24/09 : l'export ne trouve qu'une compétence fournie sur 8 (fichiers plats `.skill.md`) ; la vérification d'intégrité SHA-256 fonctionne."
+    },
+    {
+      "id": "espace-multi-depots",
+      "section": "Éprouvé le 24/09",
+      "name": "Espace de travail multi-dépôts",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_WORKSPACE",
+      "code": [
+        "src/tools/workspace-tools.ts",
+        "src/workspace/workspace-config.ts",
+        "src/commands/ws.ts"
+      ],
+      "tests": [
+        "tests/workspace/workspace-search.test.ts",
+        "tests/workspace/workspace-read.test.ts",
+        "tests/workspace/ws-cli.test.ts"
+      ],
+      "papers": [],
+      "notes": ""
+    },
+    {
+      "id": "sessions-voyage-temps",
+      "section": "Éprouvé le 24/09",
+      "name": "Sessions voyage dans le temps",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_TIMELINE",
+      "code": [
+        "src/sessions/timeline.ts",
+        "src/sessions/timeline-snapshot.ts",
+        "src/commands/replay.ts"
+      ],
+      "tests": [
+        "tests/sessions/timeline.test.ts",
+        "tests/sessions/gk29-timeline-restore.test.ts",
+        "tests/commands/replay.test.ts"
+      ],
+      "papers": [],
+      "notes": "Défaut 24/09 : `replay --at`, décrit comme « inspecter », propose une restauration et bloque sans terminal."
+    },
+    {
+      "id": "auto-banc-capacites",
+      "section": "Éprouvé le 24/09",
+      "name": "Auto-banc de capacités",
+      "proof": [
+        "executed"
+      ],
+      "offByDefault": true,
+      "gate": "CODEBUDDY_SELF_BENCH",
+      "code": [
+        "src/agent/self-improvement/continuous-benchmark.ts",
+        "src/agent/self-improvement/capability-benchmark.ts",
+        "src/commands/cli/improve-command.ts"
+      ],
+      "tests": [
+        "tests/self-improvement/continuous-benchmark.test.ts",
+        "tests/agent/self-improvement/capability-benchmark.test.ts"
+      ],
+      "papers": [],
+      "notes": "Échec 24/09 : ne mesure pas la capacité (consignes sans contexte, réponses attendues propres au dépôt) et recommande un modèle à 0 %."
+    },
+    {
+      "id": "configuration-fichier",
+      "section": "Éprouvé le 24/09",
+      "name": "Configuration par fichier",
+      "proof": [
+        "tests"
+      ],
+      "offByDefault": false,
+      "gate": null,
+      "code": [
+        "src/config/toml-config.ts",
+        "src/utils/settings-manager.ts",
+        "src/config/middleware-limits.ts"
+      ],
+      "tests": [
+        "tests/toml-config.test.ts",
+        "tests/utils/settings-manager.test.ts",
+        "tests/config/middleware-facades.test.ts"
+      ],
+      "papers": [],
+      "notes": "Défaut du 24/09 corrigé par fix/config-facades-2026-09-24 : `[middleware]` est branché sur le pipeline (middleware-limits.ts), relu à chaque changement de projet, au profil actif et à la reprise d'une session. Le rechargement à chaud, jamais démarré, est retiré."
+    }
+  ]
+}

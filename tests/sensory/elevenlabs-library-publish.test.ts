@@ -103,6 +103,13 @@ describe('publishToVoiceLibrary', () => {
     fs.writeFileSync(path.join(dir, 'index.lock'), '');
     expect(publishToVoiceLibrary('Concurrent', VOICE, src, dir)).toBeNull();
   });
+
+  it("leaves another writer's live lock in place when it cannot take it", () => {
+    const lockPath = path.join(dir, 'index.lock');
+    fs.writeFileSync(lockPath, '');
+    publishToVoiceLibrary('Concurrent', VOICE, src, dir);
+    expect(fs.existsSync(lockPath)).toBe(true);
+  });
 });
 
 describe('isPaidElevenLabsVoice', () => {

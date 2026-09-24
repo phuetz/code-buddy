@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -6,6 +7,7 @@ import {
   scanDirectory,
   scanAllSkills,
   scanSkillFirewall,
+  scanDeniesInstall,
   formatScanReport,
 } from '../../src/security/skill-scanner.js';
 
@@ -266,6 +268,8 @@ describe('scanFile', () => {
     ].join('\n'));
     const result = scanFile(fp);
     expect(result.findings).toHaveLength(0);
+    expect(result.textRead).toBe(true);
+    expect(scanDeniesInstall(result)).toBe(false);
   });
 
   it('should produce no findings for a markdown-only file', () => {
@@ -344,6 +348,71 @@ describe('scanFile', () => {
     const result = scanFile('/nonexistent/file.ts');
     expect(result.findings).toHaveLength(0);
     expect(result.file).toBe('/nonexistent/file.ts');
+    expect(result.textRead).toBe(false);
+    expect(scanDeniesInstall(result)).toBe(true);
+  });
+
+  // A directory is not a regular file. Windows has no mkfifo, so this case
+  // stays in the CI matrix without opening anything.
+  it('refuses a directory instead of reporting zero findings', () => {
+    const result = scanFile(tmpDir);
+    expect(
+      result.findings.map((finding) => finding.description),
+      'scanFile a annoncé zéro finding pour un répertoire',
+    ).toContain('Refused to read a special; the scan did not follow or block on it');
+    expect(result.textRead).toBe(false);
+    expect(scanDeniesInstall(result)).toBe(true);
+  });
+
+  // Named pipes and symlinks to them are POSIX fixtures. Opening them without
+  // a guard can block the worker; these cases only stat or use a bounded mkfifo.
+  it.skipIf(process.platform === 'win32')('refuses a named pipe instead of reporting zero findings', () => {
+    const fp = path.join(tmpDir, 'SKILL.md');
+    const made = spawnSync('mkfifo', ['-m', '600', fp], { timeout: 2000, encoding: 'utf8' });
+    expect(made.status, made.stderr || made.error?.message).toBe(0);
+    const result = scanFile(fp);
+    expect(
+      result.findings.map((finding) => finding.description),
+      'scanFile a annoncé zéro finding pour un tube nommé',
+    ).toContain('Refused to read a special; the scan did not follow or block on it');
+    const finding = result.findings.find((item) => item.pattern === 'special-file-not-read');
+    expect(finding?.severity).toBe('high');
+    expect(finding?.line).toBe(0);
+    expect(finding?.evidence).toBe('SKILL.md');
+    expect(result.textRead).toBe(false);
+    expect(scanDeniesInstall(result)).toBe(true);
+  });
+
+  it.skipIf(process.platform === 'win32')('refuses a symlink to a named pipe instead of reporting zero findings', () => {
+    const fifo = path.join(tmpDir, 'outside.fifo');
+    const link = path.join(tmpDir, 'SKILL.md');
+    const made = spawnSync('mkfifo', ['-m', '600', fifo], { timeout: 2000, encoding: 'utf8' });
+    expect(made.status, made.stderr || made.error?.message).toBe(0);
+    fs.symlinkSync(fifo, link);
+    const result = scanFile(link);
+    expect(
+      result.findings.map((finding) => finding.description),
+      'scanFile a annoncé zéro finding pour un lien vers un tube',
+    ).toContain('Refused to read a symlink; the scan did not follow or block on it');
+    expect(result.textRead).toBe(false);
+    expect(scanDeniesInstall(result)).toBe(true);
+  });
+
+  // Mode 000 does not hide a file from its owner on Windows.
+  it.skipIf(process.platform === 'win32')('refuses an unreadable regular file instead of reporting zero findings', () => {
+    const fp = writeTestFile('SKILL.md', 'hello\n');
+    fs.chmodSync(fp, 0o000);
+    try {
+      const result = scanFile(fp);
+      expect(
+        result.findings.map((finding) => finding.description),
+        'scanFile a annoncé zéro finding pour un fichier illisible',
+      ).toContain('Refused to read a file; the scan did not follow or block on it');
+      expect(result.textRead).toBe(false);
+      expect(scanDeniesInstall(result)).toBe(true);
+    } finally {
+      fs.chmodSync(fp, 0o600);
+    }
   });
 
   it('should include a scannedAt timestamp', () => {

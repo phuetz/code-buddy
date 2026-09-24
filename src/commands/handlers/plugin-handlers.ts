@@ -1,6 +1,7 @@
 import type { CommandHandlerResult } from './branch-handlers.js';
 import { getPluginMarketplace } from '../../plugins/marketplace.js';
 import { getPluginManager } from '../../plugins/plugin-manager.js';
+import { failureFlag } from '../slash-failure.js';
 
 /**
  * Plugins - Manage plugin marketplace and local plugins
@@ -48,6 +49,7 @@ export async function handlePlugins(args: string[]): Promise<CommandHandlerResul
         if (!param) {
           return {
             handled: true,
+...failureFlag('Usage: /plugins search <query>'),
             entry: {
               type: 'assistant',
               content: 'Usage: /plugins search <query>',
@@ -72,6 +74,7 @@ export async function handlePlugins(args: string[]): Promise<CommandHandlerResul
         if (!param) {
           return {
             handled: true,
+...failureFlag('Usage: /plugins install <id>'),
             entry: {
               type: 'assistant',
               content: 'Usage: /plugins install <id>',
@@ -89,6 +92,7 @@ export async function handlePlugins(args: string[]): Promise<CommandHandlerResul
         if (!param) {
           return {
             handled: true,
+...failureFlag('Usage: /plugins uninstall <id>'),
             entry: {
               type: 'assistant',
               content: 'Usage: /plugins uninstall <id>',
@@ -104,6 +108,7 @@ export async function handlePlugins(args: string[]): Promise<CommandHandlerResul
         if (!param) {
           return {
             handled: true,
+...failureFlag('Usage: /plugins enable <id>'),
             entry: { type: 'assistant', content: 'Usage: /plugins enable <id>', timestamp: new Date() }
           };
         }
@@ -119,6 +124,7 @@ export async function handlePlugins(args: string[]): Promise<CommandHandlerResul
         if (!param) {
           return {
             handled: true,
+...failureFlag('Usage: /plugins disable <id>'),
             entry: { type: 'assistant', content: 'Usage: /plugins disable <id>', timestamp: new Date() }
           };
         }
@@ -154,6 +160,7 @@ export async function handlePlugins(args: string[]): Promise<CommandHandlerResul
 
     return {
       handled: true,
+...failureFlag(content),
       entry: {
         type: 'assistant',
         content,
@@ -164,6 +171,7 @@ export async function handlePlugins(args: string[]): Promise<CommandHandlerResul
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       handled: true,
+...failureFlag(`❌ Plugin error: ${errorMessage}`),
       entry: {
         type: 'assistant',
         content: `❌ Plugin error: ${errorMessage}`,
@@ -184,6 +192,7 @@ export async function handlePlugin(args: string[]): Promise<CommandHandlerResult
   if (!isLocal) {
     return {
       handled: true,
+...failureFlag('/plugin is restricted to local terminal sessions (owner-only).'),
       entry: {
         type: 'assistant',
         content: '/plugin is restricted to local terminal sessions (owner-only).',

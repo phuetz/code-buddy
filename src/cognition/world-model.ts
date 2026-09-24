@@ -14,13 +14,48 @@ export interface ObservationCursor {
   eventId: string;
 }
 
-/** A camera-relative observation only. It carries no metric depth or identity. */
+/**
+ * Where a face is relative to the robot — an ESTIMATE from one monocular camera
+ * (field of view + mean interpupillary distance), never a measurement. Azimuth
+ * > 0 is the robot's right, elevation > 0 above its camera axis.
+ */
+export interface WorldSpatialEstimate {
+  basis: 'estimate-ipd-v1';
+  azimuthDeg: number;
+  elevationDeg: number;
+  distanceM: number;
+  facing?: boolean;
+}
+
+/** A camera-relative observation. No identity; depth only as a labelled estimate. */
 export interface WorldObservation2D {
   sensorId: string;
   x: number;
   y: number;
   width: number;
   height: number;
+  spatial?: WorldSpatialEstimate;
+}
+
+export function safeSpatialEstimate(value: unknown): WorldSpatialEstimate | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as Record<string, unknown>;
+  if (candidate.basis !== 'estimate-ipd-v1') return undefined;
+  const { azimuthDeg, elevationDeg, distanceM, facing } = candidate;
+  if (
+    typeof azimuthDeg !== 'number' || !Number.isFinite(azimuthDeg) || Math.abs(azimuthDeg) > 90 ||
+    typeof elevationDeg !== 'number' || !Number.isFinite(elevationDeg) || Math.abs(elevationDeg) > 90 ||
+    typeof distanceM !== 'number' || !Number.isFinite(distanceM) || distanceM <= 0 || distanceM > 20
+  ) {
+    return undefined;
+  }
+  return {
+    basis: 'estimate-ipd-v1',
+    azimuthDeg,
+    elevationDeg,
+    distanceM,
+    ...(typeof facing === 'boolean' ? { facing } : {}),
+  };
 }
 
 export interface WorldEntityObservation2D extends WorldObservation2D {
@@ -221,6 +256,9 @@ export class WorldModel {
               y: observation.observation2d.y,
               width: observation.observation2d.width,
               height: observation.observation2d.height,
+              ...(safeSpatialEstimate(observation.observation2d.spatial)
+                ? { spatial: safeSpatialEstimate(observation.observation2d.spatial) }
+                : {}),
               observedAt: observation.observedAt,
             }
           : null

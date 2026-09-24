@@ -13,6 +13,7 @@
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 // ============================================================================
 // Fast Mode State (session-scoped)
@@ -119,6 +120,7 @@ export async function handleFastMode(args: string[]): Promise<CommandHandlerResu
       const restored = disableFastMode();
       return {
         handled: true,
+...failureFlag(`Fast mode **disabled**.${restored ? ` Restored model: ${restored}` : ''}`),
         entry: {
           type: 'assistant',
           content: `Fast mode **disabled**.${restored ? ` Restored model: ${restored}` : ''}`,
@@ -129,6 +131,7 @@ export async function handleFastMode(args: string[]): Promise<CommandHandlerResu
       enableFastMode();
       return {
         handled: true,
+...failureFlag(`Fast mode **enabled**. Using model: \`${fastModel}\`\nService tier: \`flex\` (low-latency)`),
         entry: {
           type: 'assistant',
           content: `Fast mode **enabled**. Using model: \`${fastModel}\`\nService tier: \`flex\` (low-latency)`,
@@ -142,6 +145,7 @@ export async function handleFastMode(args: string[]): Promise<CommandHandlerResu
     enableFastMode();
     return {
       handled: true,
+...failureFlag(`Fast mode **enabled**. Model: \`${fastModel}\`, service_tier: \`flex\``),
       entry: {
         type: 'assistant',
         content: `Fast mode **enabled**. Model: \`${fastModel}\`, service_tier: \`flex\``,
@@ -154,6 +158,7 @@ export async function handleFastMode(args: string[]): Promise<CommandHandlerResu
     const restored = disableFastMode();
     return {
       handled: true,
+...failureFlag(`Fast mode **disabled**.${restored ? ` Restored model: ${restored}` : ''}`),
       entry: {
         type: 'assistant',
         content: `Fast mode **disabled**.${restored ? ` Restored model: ${restored}` : ''}`,
@@ -175,6 +180,7 @@ export async function handleFastMode(args: string[]): Promise<CommandHandlerResu
 
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -187,6 +193,7 @@ export async function handleFastMode(args: string[]): Promise<CommandHandlerResu
     setFastModel(args[1]);
     return {
       handled: true,
+...failureFlag(`Fast model set to: \`${args[1]}\``),
       entry: {
         type: 'assistant',
         content: `Fast model set to: \`${args[1]}\``,
@@ -197,6 +204,15 @@ export async function handleFastMode(args: string[]): Promise<CommandHandlerResu
 
   return {
     handled: true,
+...failureFlag([
+        '**Fast Mode** — Toggle between main and fast model',
+        '',
+        '`/fast`          Toggle fast mode on/off',
+        '`/fast on`       Enable fast mode',
+        '`/fast off`      Disable fast mode',
+        '`/fast status`   Show configuration',
+        '`/fast model <m>` Set fast model',
+      ].join('\n')),
     entry: {
       type: 'assistant',
       content: [

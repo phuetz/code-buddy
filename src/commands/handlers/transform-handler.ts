@@ -12,6 +12,7 @@
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 const TRANSFORM_TYPES = ['modernize', 'typescript', 'async', 'functional', 'es-modules'] as const;
 type TransformType = typeof TRANSFORM_TYPES[number];
@@ -103,6 +104,7 @@ export async function handleTransform(args: string[]): Promise<CommandHandlerRes
 
     return {
       handled: true,
+...failureFlag(usage.join('\n')),
       entry: { type: 'assistant', content: usage.join('\n'), timestamp: new Date() },
     };
   }
@@ -113,6 +115,7 @@ export async function handleTransform(args: string[]): Promise<CommandHandlerRes
   if (!TRANSFORM_TYPES.includes(type as TransformType)) {
     return {
       handled: true,
+...failureFlag(`Unknown transformation type: "${type}"\n\nAvailable types: ${TRANSFORM_TYPES.join(', ')}`),
       entry: {
         type: 'assistant',
         content: `Unknown transformation type: "${type}"\n\nAvailable types: ${TRANSFORM_TYPES.join(', ')}`,
@@ -125,6 +128,7 @@ export async function handleTransform(args: string[]): Promise<CommandHandlerRes
   if (!filePath) {
     return {
       handled: true,
+...failureFlag(`Please specify a file or directory to transform.\n\nUsage: /transform ${type} <file|directory>`),
       entry: {
         type: 'assistant',
         content: `Please specify a file or directory to transform.\n\nUsage: /transform ${type} <file|directory>`,

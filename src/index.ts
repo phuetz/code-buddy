@@ -29,7 +29,7 @@ import {
   installPermissionModeActionHook,
   parseCliPermissionMode,
 } from './cli/permission-mode-option.js';
-import { getRequestedProfile } from './cli/requested-profile.js';
+import { preloadRequestedProfile } from './cli/preload-profile.js';
 import { registerBackupCommand } from './commands/cli/backup-command.js';
 import { registerSensoryCommand } from './commands/cli/sensory-command.js';
 import { getConfigManager } from './config/toml-config.js';
@@ -358,7 +358,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
             provider: 'chatgpt',
             apiKey: 'oauth-chatgpt', // sentinel consumed by CodeBuddyClient
             baseURL: 'https://chatgpt.com/backend-api/codex',
-            defaultModel: process.env.CHATGPT_MODEL || 'gpt-5.6-sol',
+            defaultModel: process.env.CHATGPT_MODEL || 'gpt-6-sol',
           };
         }
       }
@@ -532,9 +532,24 @@ async function detectOnboardedLocalProvider(): Promise<DetectedProvider | null> 
 async function loadApiKey(): Promise<string | undefined> {
   await ensureEnvLoaded();
 
-  // Check environment-detected provider first
+  // Un profil qui désigne une URL ne doit pas hériter de la clé d'un autre.
+  //
+  // La détection pose une clé sentinelle quand une session ChatGPT existe, et
+  // le client bascule alors sur le backend Codex sur la seule foi de cette
+  // sentinelle — `this.isChatGptProvider = apiKey === CHATGPT_OAUTH_SENTINEL ||
+  // …`. Résultat mesuré : `--profile openrouter` transmettait bien son URL et
+  // son modèle, et l'appel partait quand même chez ChatGPT, qui répondait
+  // « ce modèle n'est pas servi par le backend Codex ».
+  //
+  // On rend donc la main à l'environnement et aux réglages dès qu'un profil
+  // nomme une URL : c'est un choix explicite, il prime sur une supposition.
+  const urlDuProfil = profilActif().baseURL;
   const detected = await getDetectedProvider();
-  if (detected) return detected.apiKey;
+  if (detected && !urlDuProfil) return detected.apiKey;
+  if (detected && urlDuProfil && detected.baseURL === urlDuProfil) {
+    // Même destination : la clé détectée est la bonne.
+    return detected.apiKey;
+  }
 
   // Priority: secure credential storage > legacy settings file
   const getCredentialManager = await lazyImport.credentialManager();
@@ -552,8 +567,30 @@ async function loadApiKey(): Promise<string | undefined> {
 }
 
 // Load base URL from detected provider or user settings
+/**
+ * Ce qu'un `--profile` explicite impose, s'il impose quelque chose.
+ *
+ * Un profil nommé sur la ligne de commande est un choix de l'utilisateur ; une
+ * détection d'environnement est une supposition. Le choix doit gagner. Il
+ * perdait : `loadBaseURL()` consultait `getDetectedProvider()` en premier, si
+ * bien qu'une session ChatGPT présente dans l'environnement écrasait un
+ * `--profile openrouter` sans un mot.
+ */
+function profilActif(): { baseURL?: string; model?: string } {
+  try {
+    const cfg = getConfigManager().getConfig() as { baseURL?: string; model?: string };
+    return { baseURL: cfg.baseURL, model: cfg.model };
+  } catch (_err) {
+    return {};
+  }
+}
+
 async function loadBaseURL(): Promise<string> {
   await ensureEnvLoaded();
+
+  // Un profil explicite prime sur toute détection.
+  const duProfil = profilActif().baseURL;
+  if (duProfil) return duProfil;
 
   // Check environment-detected provider first
   const detected = await getDetectedProvider();
@@ -605,13 +642,48 @@ async function saveCommandLineSettings(
 
 /** Providers served by a local OpenAI-compatible runtime (no cloud model catalog). */
 
-// Load model from detected provider or user settings
-async function loadModel(): Promise<string | undefined> {
+// Load model from detected provider or user settings.
+// Une seule chaîne : resolveStartupModel. Le `--model` de l'appelant y entre
+// en premier. Sans choix explicite, le active_model du fichier généré ne
+// masque pas le fournisseur détecté. Ollama garde sa sonde ensuite.
+let startupAliasDecision: {
+  model: string | null;
+  provider?: string;
+  baseUrl?: string;
+} | null = null;
+
+async function applyStartupAlias(
+  apiKey: string | undefined,
+  baseURL: string | undefined,
+  model: string | undefined,
+  explicit: { apiKey?: string; baseURL?: string },
+): Promise<{ apiKey: string | undefined; baseURL: string | undefined; model: string | undefined }> {
+  const decision = startupAliasDecision;
+  if (!decision?.model || !model || (!decision.provider && !decision.baseUrl)) {
+    return { apiKey, baseURL, model };
+  }
+  const { sessionLaunchFromDecision } = await import('./config/alias-session.js');
+  try {
+    const launched = sessionLaunchFromDecision(
+      { apiKey: apiKey ?? '', baseURL: baseURL ?? '', model },
+      decision,
+      process.env,
+      explicit,
+    );
+    return { apiKey: launched.apiKey, baseURL: launched.baseURL, model: launched.model };
+  } catch (error) {
+    const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+    if (error instanceof CatalogueConfigError) {
+      cli.error(error.message);
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
+async function loadModel(cliModel?: string): Promise<string | undefined> {
   await ensureEnvLoaded();
   const { isModelCompatibleWithProvider } = await import('./providers/model-provider-compat.js');
-
-  // 1. Explicit env var takes highest priority
-  if (process.env.GROK_MODEL) return process.env.GROK_MODEL;
 
   const detected = await getDetectedProvider();
 
@@ -623,6 +695,33 @@ async function loadModel(): Promise<string | undefined> {
     settingsModel = getSettingsManager().getCurrentModel() || undefined;
   } catch (_err) {
     logger.debug('Failed to load model from settings manager', { error: _err });
+  }
+
+  // Catalogue TOML. Une configuration illisible s'arrête ici : on ne continue
+  // pas avec un autre modèle.
+  try {
+    const catalogue = await import('./config/model-catalogue.js');
+    const decision = catalogue.resolveStartupModel({
+      argv: process.argv,
+      cli: cliModel,
+      env: process.env,
+      allowUserHome: true,
+      settingsModel: settingsModel ?? null,
+      detected: detected
+        ? { provider: detected.provider, defaultModel: detected.defaultModel }
+        : null,
+      isCompatible: (model, provider) => isModelCompatibleWithProvider(model, provider),
+    });
+    startupAliasDecision = decision;
+    if (decision.model) return decision.model;
+    startupAliasDecision = null;
+  } catch (error) {
+    const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+    if (error instanceof CatalogueConfigError) {
+      cli.error(error.message);
+      process.exit(1);
+    }
+    throw error;
   }
 
   // 2. Local runtime (Ollama): resolve to a model that is ACTUALLY installed,
@@ -644,10 +743,17 @@ async function loadModel(): Promise<string | undefined> {
         ? settingsModel
         : undefined) ||
       detected.defaultModel;
+    const explicitOllamaModel = process.env.OLLAMA_MODEL?.trim();
     const resolution = await resolveInstalledOllamaModel({
       baseURL: detected.baseURL,
       requested,
+      strict: Boolean(explicitOllamaModel),
     });
+    if (explicitOllamaModel && resolution.substitutionRefused) {
+      const { strictModelRefusalMessage } = await import('./providers/local-model-resolver.js');
+      cli.error(strictModelRefusalMessage(explicitOllamaModel));
+      process.exit(1);
+    }
     if (resolution.model) return resolution.model;
     const hint = buildOllamaPullHint({
       baseURL: detected.baseURL,
@@ -913,18 +1019,6 @@ async function finalizeHeadlessRun(code: number): Promise<void> {
     // Ignore identity manager shutdown errors.
   }
   try {
-    const { resetHotReloadManager } = await import('./config/hot-reload/index.js');
-    resetHotReloadManager();
-  } catch (_error) {
-    // Ignore hot reload shutdown errors.
-  }
-  try {
-    const { resetConfigWatcher } = await import('./config/hot-reload/watcher.js');
-    resetConfigWatcher();
-  } catch (_error) {
-    // Ignore config watcher shutdown errors.
-  }
-  try {
     const { resetSettingsHierarchy } = await import('./config/settings-hierarchy.js');
     resetSettingsHierarchy();
   } catch (_error) {
@@ -1084,24 +1178,38 @@ async function processPromptHeadless(
     const customAgentConfig = await loadCustomAgentForCli(agentName, false);
     const modelToUse = customAgentConfig?.model ?? model;
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
-    // Evolved execution strategy (opt-in CODEBUDDY_SELF_IMPROVE_STRATEGIES): fills only what
-    // the user left unset — an explicit --max-tool-rounds always wins. Off ⇒ empty overlay.
+    // --resume / --continue : le projet de la session reprise fait foi pour
+    // [middleware] et la stratégie, pas le répertoire d'où la commande part.
+    const { getSessionStore: getHeadlessSessionStore } = await import('./persistence/session-store.js');
+    const resumeStore = getHeadlessSessionStore();
+    const resumeId = resumeStore.isEphemeral() ? null : resumeStore.getCurrentSessionId();
+    const resumeSession = resumeId ? await resumeStore.loadSession(resumeId) : null;
+    const projectDir = resumeSession?.workingDirectory || process.cwd();
+    // Stratégie opt-in : elle ne comble que l'absence de --max-tool-rounds et de
+    // [middleware].max_turns. Désactivée, l'overlay est vide.
     const { resolveStrategyOverlay, applyStrategyCostCap } = await import('./agent/self-improvement/strategy-runtime.js');
-    const strategy = resolveStrategyOverlay('headless', { maxToolRounds });
+    const strategy = resolveStrategyOverlay('headless', { maxToolRounds }, { workDir: projectDir });
+    const { loadExplicitMiddlewareLimits } = await import('./config/middleware-limits.js');
+    const tomlLimits = loadExplicitMiddlewareLimits({ cwd: projectDir });
+    // Seul --max-tool-rounds (ou la stratégie, faute de fichier) passe au
+    // constructeur : max_turns du fichier reste au rang du fichier.
+    const callerRounds = maxToolRounds ?? (tomlLimits.maxTurns === undefined ? strategy.maxToolRounds : undefined);
+    const rounds = maxToolRounds ?? tomlLimits.maxTurns ?? strategy.maxToolRounds;
     if (strategy.strategyId && strategy.strategyId !== 'baseline') {
       const cost = applyStrategyCostCap(strategy);
       logger.info(
-        `Execution strategy ${strategy.strategyId} in force (rounds ${strategy.maxToolRounds ?? maxToolRounds ?? 'explicit'}, cost cap ${cost.maxCostUsd !== undefined ? `$${cost.maxCostUsd}` : 'explicit'}, ${strategy.systemPromptAppend ? 'with' : 'no'} directives)`,
+        `Execution strategy ${strategy.strategyId} in force (rounds ${rounds ?? 'historical'}, cost cap ${cost.maxCostUsd !== undefined ? `$${cost.maxCostUsd}` : 'explicit'}, ${strategy.systemPromptAppend ? 'with' : 'no'} directives)`,
       );
     }
     agent = new CodeBuddyAgent(
       apiKey,
       baseURL,
       modelToUse,
-      maxToolRounds ?? strategy.maxToolRounds,
+      callerRounds,
       true,
       undefined,
-      undefined,
+      // Nouvelle session : undefined, comme avant (cwd du processus).
+      resumeSession?.workingDirectory || undefined,
       strategy.systemPromptAppend,
     );
     await applyActiveLlmFailover(agent);
@@ -1211,7 +1319,8 @@ async function processPromptHeadless(
           // since the agent hasn't processed a user message yet
           cli.stdout(JSON.stringify(slashOutputData));
         }
-        return slash.denied ? 1 : 0;
+        // Code 1: denied surface or failed slash command. Success stays 0.
+        return slash.failed || slash.denied ? 1 : 0;
       }
       if (slash?.passToAI && slash.prompt) {
         prompt = slash.prompt;
@@ -1569,6 +1678,10 @@ program
   .option(
     "--no-self-heal",
     "disable self-healing auto-correction"
+  )
+  .option(
+    "--compact",
+    "headless: smallest possible prompt and tool set (any provider, not just local runtimes)"
   )
   .option(
     "--force-tools",
@@ -1986,7 +2099,22 @@ program
         : null;
       let apiKey = options.apiKey || explicitProvider?.apiKey || await loadApiKey();
       let baseURL = options.baseUrl || explicitProvider?.baseURL || await loadBaseURL();
-      let model = options.model || explicitProvider?.model || await loadModel();  // let: can be overridden by --agent
+      try {
+        const catalogue = await import('./config/model-catalogue.js');
+        catalogue.loadAndActivateUserCatalogue(process.env, true);
+      } catch (error) {
+        const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+        if (error instanceof CatalogueConfigError) {
+          cli.error(error.message);
+          process.exit(1);
+        }
+        throw error;
+      }
+      let model = await loadModel(options.model || explicitProvider?.model);  // let: can be overridden by --agent
+      ({ apiKey, baseURL, model } = await applyStartupAlias(apiKey, baseURL, model, {
+        ...(options.apiKey ? { apiKey: options.apiKey } : {}),
+        ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
+      }));
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2024,10 +2152,17 @@ program
             cachedProvider = undefined;
             const nextApiKey = options.apiKey || await loadApiKey();
             if (!nextApiKey) return null;
+            const nextBase = options.baseUrl || await loadBaseURL();
+            const nextModel = await loadModel(options.model);
+            const launched = await applyStartupAlias(nextApiKey, nextBase, nextModel, {
+              ...(options.apiKey ? { apiKey: options.apiKey } : {}),
+              ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
+            });
+            if (!launched.apiKey || !launched.baseURL) return null;
             return {
-              apiKey: nextApiKey,
-              baseURL: options.baseUrl || await loadBaseURL(),
-              model: options.model || await loadModel(),
+              apiKey: launched.apiKey,
+              baseURL: launched.baseURL,
+              model: launched.model,
             };
           },
           onLoginError: (err) => {
@@ -2192,6 +2327,19 @@ program
 
       // Headless mode: process prompt and exit (if prompt, message, or piped input provided)
       if (combinedPrompt && (promptArg || pipedInput)) {
+        // `--compact` asks for the shortest possible prompt, whatever the
+        // provider. The mode already existed but was only reachable against a
+        // local runtime. Measured on a one-sentence question against a remote
+        // provider: 5 991 input tokens by default, and still 4 660 after
+        // replacing the entire system prompt and disabling every tool — the
+        // agent surface is what costs, not the wording.
+        if (options.compact) {
+          // false / 0 / off already in the environment keep the last word.
+          // Overwriting them made `--compact` turn the mode on against the
+          // refusal this flag is documented to respect.
+          const { applyHeadlessCompactRequest } = await import('./config/headless-local-prompt.js');
+          applyHeadlessCompactRequest(process.env, true);
+        }
         const { resolveHeadlessOutputFormat } = await import('./cli/headless-options.js');
         const headlessExitCode = await processPromptHeadless(
           combinedPrompt,
@@ -2634,9 +2782,16 @@ gitCommand
 
     try {
       // Get API key from options, environment, or user settings
-      const apiKey = options.apiKey || await loadApiKey();
-      const baseURL = options.baseUrl || await loadBaseURL();
-      const model = options.model || await loadModel();
+      const loadedKey = options.apiKey || await loadApiKey();
+      const loadedBase = options.baseUrl || await loadBaseURL();
+      const loadedModel = await loadModel(options.model);
+      const launched = await applyStartupAlias(loadedKey, loadedBase, loadedModel, {
+        ...(options.apiKey ? { apiKey: options.apiKey } : {}),
+        ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
+      });
+      const apiKey = launched.apiKey;
+      const baseURL = launched.baseURL;
+      const model = launched.model;
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2705,6 +2860,16 @@ function addLazyCommand(
     await parent.parseAsync(process.argv);
   });
 }
+
+addLazyCommand(
+  program,
+  'models',
+  'Lister, afficher ou rafraîchir le catalogue de modèles',
+  async () => {
+    const { createModelsCommand } = await import('./commands/models-command.js');
+    return createModelsCommand();
+  },
+);
 
 addLazyCommand(
   program,
@@ -3601,7 +3766,7 @@ program
   .command("mcp-server")
   .description("Legacy alias for `buddy mcp serve`")
   .option("--list", "List available MCP tools and exit")
-  .option("--allow-write", "Expose write, shell, and execution tools")
+  .option("--allow-write", "Expose write, shell, and execution tools. In MCP, a tool that is not read-only runs only if it is on the explicit allowlist in src/mcp/mcp-write-allowlist.ts, with its destination keys confined to the workspace. Any other path-shaped string argument that resolves outside the workspace is refused. Other write tools, including computer_control, are refused by default. Shell runs in the workspace sandbox; if no sandbox is available, MCP refuses the unconfined escalation even when CODEBUDDY_AUTO_CONFIRM=true. Agent tools receive that same write context. desktop_screenshot confines output_path. memory_save and ckg_ingest are not on the allowlist; they write the profile and do not take a destination path. The interactive agent and headless mode are unchanged.")
   .option("--tools <glob>", "Restrict exposed tool names with glob patterns")
   .action(async (options) => {
     if (options.list) {
@@ -3663,6 +3828,11 @@ addLazyCommandGroup(program, 'self', 'Inspect Code Buddy’s documented self-mod
 addLazyCommandGroup(program, 'widgets', 'Inline conversation widgets: list, preview, generate (authored)', async () => {
   const { registerWidgetsCommand } = await import('./commands/widgets.js');
   registerWidgetsCommand(program);
+});
+
+addLazyCommandGroup(program, 'security', 'Consolidated security audit of the local profile and project', async () => {
+  const { registerSecurityCommand } = await import('./commands/cli/security-command.js');
+  registerSecurityCommand(program);
 });
 
 // Utility commands (doctor, security-audit, onboard, webhook) are all registered
@@ -3825,6 +3995,11 @@ addLazyCommandGroup(program, 'session', 'Manage saved sessions', async () => {
 addLazyCommandGroup(program, 'config', 'Show environment variable configuration and validation', async () => {
   const { registerConfigCommand } = await import('./commands/cli/config-command.js');
   registerConfigCommand(program);
+});
+
+addLazyCommandGroup(program, 'policy', 'Constats et réparation des politiques par domaine', async () => {
+  const { registerPolicyCommand } = await import('./commands/cli/policy-command.js');
+  registerPolicyCommand(program);
 });
 
 // Dev workflows — plan, run, pr, fix-ci, explain
@@ -4323,33 +4498,7 @@ installPermissionModeActionHook(program, async (mode) => {
 // Apply the profile before parsing so it governs root chat, lazy subcommands,
 // slash-command menus, tool selection, and `buddy --help` consistently.
 process.argv = hoistPermissionModeOption(process.argv);
-const requestedProfile = getRequestedProfile(process.argv);
-if (requestedProfile.kind === 'missing') {
-  try {
-    getConfigManager().load();
-  } catch (_error) {
-    // Listing available names is best-effort; the missing-value error still stands.
-  }
-  let available = '(none defined)';
-  try {
-    const names = Object.keys(getConfigManager().getConfig().profiles ?? {});
-    if (names.length) available = names.join(', ');
-  } catch (_error) {
-    available = 'core, all';
-  }
-  process.stderr.write(
-    `error: option '--profile <name>' argument missing. Available profiles: ${available}\n`,
-  );
-  process.exitCode = 1;
-} else if (requestedProfile.kind === 'value') {
-  try {
-    getConfigManager().load();
-    getConfigManager().applyProfile(requestedProfile.name);
-  } catch (err) {
-    process.stderr.write(`Profile error: ${err instanceof Error ? err.message : String(err)}\n`);
-    process.exitCode = 1;
-  }
-}
+preloadRequestedProfile(process.argv);
 
 function isRootHelpRequest(argv: readonly string[]): boolean {
   const args = argv.slice(2);

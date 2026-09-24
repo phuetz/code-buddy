@@ -1,8 +1,10 @@
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { getThemeManager } from "../../themes/theme-manager.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;
@@ -16,6 +18,7 @@ export function handleTheme(args: string[]): CommandHandlerResult {
   const action = (args[0]?.toLowerCase() === "set" ? args[1] : args[0])?.toLowerCase();
 
   let content: string;
+  let failed = false;
 
   if (!action || action === "list" || action === "status" || action === "current") {
     const themes = themeManager.getAvailableThemes();
@@ -50,6 +53,7 @@ export function handleTheme(args: string[]): CommandHandlerResult {
         content += `\nCustom color overrides are still applied.`;
       }
     } else {
+      failed = true;
       const themes = themeManager.getAvailableThemes();
       content = `❌ Theme "${action}" not found.\n\n`;
       content += `Available themes:\n`;
@@ -59,6 +63,7 @@ export function handleTheme(args: string[]): CommandHandlerResult {
 
   return {
     handled: true,
+    ...(failed ? { failed: true } : {}),
     entry: {
       type: "assistant",
       content,
@@ -137,6 +142,7 @@ export function handleAvatar(args: string[]): CommandHandlerResult {
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,

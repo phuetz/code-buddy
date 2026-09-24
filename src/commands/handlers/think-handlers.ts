@@ -12,6 +12,7 @@ import {
   ReasoningResult,
   Problem,
 } from '../../agent/reasoning/types.js';
+import { failureFlag } from '../slash-failure.js';
 import {
   getTreeOfThoughtReasoner,
   TreeOfThoughtReasoner,
@@ -107,11 +108,13 @@ export async function handleThink(
 ): Promise<CommandHandlerResult> {
   // /think (no args) → show help
   if (args.length === 0) {
+    // Page d'aide : succès, même si le texte commence par « Usage: ».
+    const help = buildHelpText();
     return {
       handled: true,
       entry: {
         type: 'assistant',
-        content: buildHelpText(),
+        content: help,
         timestamp: new Date(),
       },
     };
@@ -125,6 +128,7 @@ export async function handleThink(
     activeThinkingMode = null;
     return {
       handled: true,
+...failureFlag('Reasoning mode disabled.'),
       entry: {
         type: 'assistant',
         content: 'Reasoning mode disabled.',
@@ -151,6 +155,7 @@ export async function handleThink(
 
     return {
       handled: true,
+...failureFlag(content),
       entry: {
         type: 'assistant',
         content,
@@ -171,6 +176,14 @@ export async function handleThink(
 
     return {
       handled: true,
+...failureFlag([
+          `Reasoning mode set to: ${first}`,
+          '',
+          formatModeConfig(first),
+          '',
+          'All subsequent complex queries will use this reasoning depth.',
+          'Use /think off to disable.',
+        ].join('\n')),
       entry: {
         type: 'assistant',
         content: [
@@ -192,11 +205,12 @@ export async function handleThink(
     return runReasoning(problemText);
   }
 
+  const help = buildHelpText();
   return {
     handled: true,
     entry: {
       type: 'assistant',
-      content: buildHelpText(),
+      content: help,
       timestamp: new Date(),
     },
   };
@@ -214,6 +228,7 @@ async function runReasoning(
   if (!apiKey) {
     return {
       handled: true,
+...failureFlag('Error: GROK_API_KEY is not set. Cannot run reasoning.'),
       entry: {
         type: 'assistant',
         content: 'Error: GROK_API_KEY is not set. Cannot run reasoning.',
@@ -255,6 +270,7 @@ async function runReasoning(
 
       return {
         handled: true,
+...failureFlag(output),
         entry: {
           type: 'assistant',
           content: output,
@@ -271,6 +287,7 @@ async function runReasoning(
 
     return {
       handled: true,
+...failureFlag(formatted),
       entry: {
         type: 'assistant',
         content: formatted,

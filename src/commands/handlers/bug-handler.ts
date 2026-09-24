@@ -12,6 +12,7 @@
 
 import * as path from 'path';
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 export async function handleBug(args: string[]): Promise<CommandHandlerResult> {
   // Parse arguments
@@ -81,6 +82,7 @@ export async function handleBug(args: string[]): Promise<CommandHandlerResult> {
 function result(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

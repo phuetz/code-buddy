@@ -1,9 +1,11 @@
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { CodeBuddyClient } from "../../codebuddy/client.js";
 import { AITestRunner, createAITestRunner } from "../../testing/ai-integration-tests.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;
@@ -18,6 +20,16 @@ export function handleGenerateTests(args: string[]): CommandHandlerResult {
   if (!targetFile) {
     return {
       handled: true,
+...failureFlag(`🧪 Test Generator
+
+Usage: /generate-tests <file>
+
+Example: /generate-tests src/utils/helpers.ts
+
+This will:
+1. Analyze the file
+2. Detect the test framework
+3. Generate comprehensive tests`),
       entry: {
         type: "assistant",
         content: `🧪 Test Generator
@@ -65,6 +77,10 @@ export async function handleAITest(
   if (!codebuddyClient && !apiKey) {
     return {
       handled: true,
+...failureFlag(`❌ AI Test Failed
+
+No GROK_API_KEY environment variable found.
+Set your API key to run integration tests.`),
       entry: {
         type: "assistant",
         content: `❌ AI Test Failed
@@ -117,6 +133,7 @@ Set your API key to run integration tests.`,
 
     return {
       handled: true,
+...failureFlag(resultContent),
       entry: {
         type: "assistant",
         content: resultContent,
@@ -126,6 +143,11 @@ Set your API key to run integration tests.`,
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`❌ AI Test Error
+
+${error instanceof Error ? error.message : String(error)}
+
+Check your API key and network connection.`),
       entry: {
         type: "assistant",
         content: `❌ AI Test Error

@@ -116,11 +116,16 @@ export async function executeAdvisor(
     };
   }
 
-  const apiKey = process.env[cfg.api_key_env];
+  const { resolveSecretRef } = await import('../config/secret-ref.js');
+  const storedKeyName = cfg.api_key_env;
+  const storedBase = cfg.base_url;
+  const keyName = typeof storedKeyName === 'string' ? await resolveSecretRef(storedKeyName) : storedKeyName;
+  const baseUrl = typeof storedBase === 'string' ? await resolveSecretRef(storedBase) : storedBase;
+  const apiKey = keyName ? process.env[keyName] : undefined;
   if (!apiKey) {
     return {
       success: false,
-      error: `Advisor API key not set. Define ${cfg.api_key_env} in your environment.`,
+      error: `Advisor API key not set. Define ${storedKeyName} in your environment.`,
     };
   }
 
@@ -129,7 +134,7 @@ export async function executeAdvisor(
 
   let client: InstanceType<typeof CodeBuddyClient>;
   try {
-    client = new CodeBuddyClient(apiKey, cfg.model, cfg.base_url);
+    client = new CodeBuddyClient(apiKey, cfg.model, baseUrl);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
