@@ -519,7 +519,7 @@ at_hour = 7
     expect(outsideFiles, 'P3 outsideFiles').toEqual([]);
   });
 
-  it('P3b un tube nommé à la place du dossier est refusé sans attente', () => {
+  it.runIf(process.platform !== 'win32')('P3b un tube nommé à la place du dossier est refusé sans attente', () => {
     const dir = tempDir();
     const fifo = path.join(dir, 'tube');
     execFileSync('mkfifo', [fifo], { timeout: 2000 });
@@ -568,7 +568,7 @@ at_hour = 7
     expect(readMessagingMemoryArchive(dir, sessionKey, 'session-store')).toContain('user: ANCIEN-DISQUE');
   });
 
-  it('P5 un vidage compagnon non écrit ne réussit pas et l ancien texte revient', () => {
+  it.runIf(process.platform !== 'win32')('P5 un vidage compagnon non écrit ne réussit pas et l ancien texte revient', () => {
     const dir = tempDir();
     const env = {
       CODEBUDDY_CHANNEL_HISTORY: 'true',

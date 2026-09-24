@@ -2275,7 +2275,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       );
     });
 
-    it('P5 un échec du vidage compagnon n efface pas les autres magasins', async () => {
+    it.runIf(process.platform !== 'win32')('P5 un échec du vidage compagnon n efface pas les autres magasins', async () => {
       const { chmodSync, mkdtempSync, rmSync } = await import('node:fs');
       const { tmpdir } = await import('node:os');
       const {
