@@ -12,7 +12,7 @@ import {
 } from '../database/optional-sqlite.js';
 import { withSessionLock } from './session-lock.js';
 import { logger } from '../utils/logger.js';
-import { readJsonAtomicSync, writeJsonAtomic } from '../utils/atomic-write.js';
+import { readJsonAtomicSync, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 /** Metadata for chat sessions */
 export interface SessionMetadata {
@@ -384,11 +384,17 @@ export class SessionStore {
    * session lock, so no writer that takes the lock can land between them: a
    * turn added since the copy leaves the file as it is and returns `changed`.
    * The SQLite index rows of the session are deleted in the same section,
-   * after the comparison and before the file is renamed: a turn is written
-   * to both under this lock, so neither can gain a turn in between.
-   * `beforeRead` runs first inside that section, `beforeIndexPurge` after the
-   * comparison, `beforeWrite` right before the rename; a throw from any of
-   * them stops there, and what was not yet purged stays as it is.
+   * after the emptied file is written: a turn is written to both under this
+   * lock, so neither can gain a turn in between. The index loses the turns
+   * only once the file no longer holds them, so a session whose file keeps
+   * its turns stays found by the search.
+   * `beforeRead` runs first inside that section, `beforeWrite` right before
+   * the file is written, `beforeIndexPurge` right before the index purge. A
+   * throw from `beforeRead` or `beforeWrite` stops there with nothing erased.
+   * Any failure from the write on (including one reported after the rename,
+   * or from the index purge) puts `expected` back in the file before it is
+   * rethrown, and the index purge is one transaction: both stores stay as
+   * they were.
    */
   async clearSessionMessagesIfUnchanged(
     sessionId: string,
@@ -414,13 +420,36 @@ export class SessionStore {
       const read = this.decodeSessionFile(bytes.toString('utf8'));
       if (read.state !== 'ok') return 'changed';
       if (this.shouldEncrypt(read.session) !== options.encrypt) return 'protection-changed';
-      options.beforeIndexPurge?.();
-      const dbRepository = await this.ensureDatabaseRepository();
-      dbRepository?.deleteMessages(sessionId);
       options.beforeWrite?.();
-      await this.writeSessionUnlocked({ ...read.session, messages: [] });
+      try {
+        await this.writeSessionUnlocked({ ...read.session, messages: [] });
+        options.beforeIndexPurge?.();
+        const dbRepository = await this.ensureDatabaseRepository();
+        dbRepository?.deleteMessages(sessionId);
+      } catch (error) {
+        await this.restoreSessionBytesUnlocked(filePath, expected);
+        throw error;
+      }
       return 'cleared';
     });
+  }
+
+  /**
+   * After a failed erase, put back the bytes the file held, unless it still
+   * holds them. The caller holds the session lock. A restore that fails too
+   * is logged and the erase error still propagates: the index then keeps the
+   * turns, and the archive written before the erase keeps them as well.
+   */
+  private async restoreSessionBytesUnlocked(filePath: string, expected: Buffer): Promise<void> {
+    try {
+      const current = await fsPromises.readFile(filePath).catch(() => null);
+      if (current && current.equals(expected)) return;
+      await writeFileAtomic(filePath, expected, { mode: 0o600 });
+    } catch (error) {
+      logger.warn('[session-store] session erase failed and the session file could not be restored', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private decodeSessionFile(raw: string): SessionFileRead {
