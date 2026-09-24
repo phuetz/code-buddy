@@ -16,7 +16,18 @@
  * only after that, so every captured path matches it.
  */
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,8 +39,34 @@ const dirs: string[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  // Retries absorb a brief scan by an antivirus or indexer on Windows; a file
+  // this process still holds open keeps failing, so a leak is still reported.
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
+
+/**
+ * Files under `roots` this process still holds open. Windows refuses to delete
+ * an open file, so a handle left at teardown fails there with EBUSY; Linux
+ * deletes it anyway, so the leak is looked for in /proc/self/fd instead. Where
+ * there is no /proc (macOS, Windows) the list is empty and the teardown's
+ * `rmSync` is the check.
+ */
+function openHandlesUnder(roots: string[]): string[] {
+  const fdDir = '/proc/self/fd';
+  if (!existsSync(fdDir)) return [];
+  const real = roots.map((root) => realpathSync(root) + path.sep);
+  const open: string[] = [];
+  for (const fd of readdirSync(fdDir)) {
+    let target: string;
+    try {
+      target = readlinkSync(path.join(fdDir, fd));
+    } catch {
+      continue;
+    }
+    if (real.some((root) => target.startsWith(root))) open.push(target);
+  }
+  return open;
+}
 
 function tempDir(): string {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'cb-reset-race-'));
@@ -407,6 +444,9 @@ describe.skipIf(!sqliteAvailable)('remise a zero : index SQLite de la session', 
     const keys = ['HOME', 'USERPROFILE', 'CODEBUDDY_HOME', 'CODEBUDDY_SESSIONS_DIR', 'CODEBUDDY_SESSION_RESET_ARCHIVE_DIR', 'CODEBUDDY_CHANNEL_HISTORY'] as const;
     const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
     const previousCwd = process.cwd();
+    // The session store opens `codebuddy.db` through a process-wide singleton
+    // that nothing closes: the test closes it before its directories go.
+    let closeDatabase = (): void => {};
     Object.assign(process.env, {
       HOME: fakeHome,
       USERPROFILE: fakeHome,
@@ -425,6 +465,7 @@ describe.skipIf(!sqliteAvailable)('remise a zero : index SQLite de la session', 
       const handlers = await import('../../src/commands/handlers/channel-handlers.js');
       const { getSessionRepository } = await import('../../src/database/repositories/session-repository.js');
       const messaging = await import('../../src/channels/messaging-session-reset.js');
+      closeDatabase = (await import('../../src/database/index.js')).resetDatabaseSystem;
       toml.resetConfigManager();
       storeModule.resetSessionStore();
       handlers.__resetChannelAIHandlerForTests();
@@ -459,14 +500,17 @@ describe.skipIf(!sqliteAvailable)('remise a zero : index SQLite de la session', 
       await late;
       if (step) handlers.__beforeMessagingResetStepForTests(step);
 
-      return {
+      const outcome = {
         indexedBefore,
         indexedAfter: repository.getMessages(session.id).map((row) => row.content),
         indexedSearch: repository.searchMessages(SESSION_TURN).map((result) => result.message.content),
         fileAfter: readFileSync(file, 'utf8'),
         archived: messaging.openMessagingMemoryArchive(archiveDir, session.id, 'session-store').join('\n'),
       };
+      closeDatabase();
+      return { ...outcome, openHandles: openHandlesUnder([fakeHome, codebuddyHome, sessionsDir, archiveDir, projectDir]) };
     } finally {
+      closeDatabase();
       process.chdir(previousCwd);
       for (const key of keys) {
         const value = previous[key];
@@ -484,6 +528,7 @@ describe.skipIf(!sqliteAvailable)('remise a zero : index SQLite de la session', 
     expect(outcome.fileAfter, 'fichier vide').not.toContain(SESSION_TURN);
     expect(outcome.indexedAfter, 'index vide').toEqual([]);
     expect(outcome.indexedSearch, 'recherche indexee').toEqual([]);
+    expect(outcome.openHandles, 'fichiers encore ouverts au demontage').toEqual([]);
   });
 
   for (const step of ['index-purge', 'session-rename'] as const) {
@@ -494,6 +539,7 @@ describe.skipIf(!sqliteAvailable)('remise a zero : index SQLite de la session', 
       expect(outcome.indexedAfter, 'index apres').toEqual([LATE_TURN]);
       expect(outcome.fileAfter, 'fichier apres').toContain(LATE_TURN);
       expect(outcome.fileAfter, 'fichier apres').not.toContain(SESSION_TURN);
+      expect(outcome.openHandles, 'fichiers encore ouverts au demontage').toEqual([]);
     });
   }
 });
