@@ -18,7 +18,9 @@ export const CATALOGUE_USER_ID = 'catalogue-http-user';
 
 const REPO_ROOT = process.cwd();
 
-const SAVED_ENV = new Map<string, string | undefined>();
+const envFrames: Array<Map<string, string | undefined>> = [];
+
+const METRICS_ENV = ['METRICS_FILE', 'METRICS_PATH', 'METRICS_INTERVAL', 'METRICS_CONSOLE'] as const;
 
 const DROPPED_ENV = [
   'CODEBUDDY_PROVIDER',
@@ -57,11 +59,12 @@ export interface CatalogueServer {
   restore: () => Promise<void>;
 }
 
-function remember(name: string): void {
-  if (!SAVED_ENV.has(name)) SAVED_ENV.set(name, process.env[name]);
+function remember(frame: Map<string, string | undefined>, name: string): void {
+  if (!frame.has(name)) frame.set(name, process.env[name]);
 }
 
 export function isolateCatalogueEnv(tempRoot: string): void {
+  const frame = new Map<string, string | undefined>();
   for (const name of Object.keys(process.env)) {
     if (
       name.endsWith('_API_KEY')
@@ -70,71 +73,116 @@ export function isolateCatalogueEnv(tempRoot: string): void {
       || name.endsWith('_PASSWORD')
       || name.includes('CREDENTIAL')
     ) {
-      remember(name);
+      remember(frame, name);
       delete process.env[name];
     }
   }
   for (const name of DROPPED_ENV) {
-    remember(name);
+    remember(frame, name);
     delete process.env[name];
   }
-  for (const name of ['HOME', 'CODEBUDDY_HOME', 'CODEBUDDY_SESSIONS_DIR', 'JWT_SECRET']) {
-    remember(name);
+  for (const name of ['HOME', 'CODEBUDDY_HOME', 'CODEBUDDY_SESSIONS_DIR', 'JWT_SECRET', ...METRICS_ENV]) {
+    remember(frame, name);
   }
+  for (const name of METRICS_ENV) delete process.env[name];
   process.env.HOME = tempRoot;
   process.env.CODEBUDDY_HOME = path.join(tempRoot, 'codebuddy-home');
   process.env.CODEBUDDY_SESSIONS_DIR = path.join(tempRoot, 'sessions');
   process.env.JWT_SECRET = CATALOGUE_JWT_SECRET;
   mkdirSync(process.env.CODEBUDDY_HOME, { recursive: true });
   mkdirSync(process.env.CODEBUDDY_SESSIONS_DIR, { recursive: true });
+  envFrames.push(frame);
 }
 
 export function restoreCatalogueEnv(): void {
-  for (const [name, value] of SAVED_ENV) {
+  const frame = envFrames.pop();
+  if (!frame) return;
+  for (const [name, value] of frame) {
     if (value === undefined) delete process.env[name];
     else process.env[name] = value;
   }
-  SAVED_ENV.clear();
 }
 
-export async function startCatalogueServer(): Promise<CatalogueServer> {
+export async function startCatalogueServer(options?: {
+  start?: (config: {
+    port: number;
+    host: string;
+    authEnabled: boolean;
+    websocketEnabled: boolean;
+    logging: boolean;
+    rateLimit: boolean;
+    cors: boolean;
+    jwtSecret: string;
+  }) => Promise<{ server: HttpServer }>;
+}): Promise<CatalogueServer> {
   const tempRoot = mkdtempSync(path.join(tmpdir(), 'cb-catalogue-http-'));
   const workDir = path.join(tempRoot, 'work');
   mkdirSync(workDir, { recursive: true });
   isolateCatalogueEnv(tempRoot);
   const cwdBefore = process.cwd();
-  process.chdir(workDir);
-
-  const { startServer } = await import('../../src/server/index.js');
-  const { createUserToken } = await import('../../src/server/auth/jwt.js');
-  const scopes: ApiScope[] = ['admin'];
-  const token = createUserToken(CATALOGUE_USER_ID, scopes, CATALOGUE_JWT_SECRET, '1h');
-  const started = await startServer({
-    port: 0,
-    host: '127.0.0.1',
-    authEnabled: true,
-    websocketEnabled: true,
-    logging: false,
-    rateLimit: false,
-    cors: false,
-    jwtSecret: CATALOGUE_JWT_SECRET,
-  });
-  const address = started.server.address() as AddressInfo;
-  return {
-    repoRoot: REPO_ROOT,
-    tempRoot,
-    workDir,
-    server: started.server,
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    port: address.port,
-    token,
-    restore: async () => {
-      const { stopServer } = await import('../../src/server/index.js');
-      await stopServer(started.server);
+  let released = false;
+  let started: { server: HttpServer } | undefined;
+  const release = (): void => {
+    if (released) return;
+    released = true;
+    try {
       process.chdir(cwdBefore);
+    } finally {
       restoreCatalogueEnv();
-    },
+    }
   };
+  try {
+    process.chdir(workDir);
+    const { createUserToken } = await import('../../src/server/auth/jwt.js');
+    const scopes: ApiScope[] = ['admin'];
+    const token = createUserToken(CATALOGUE_USER_ID, scopes, CATALOGUE_JWT_SECRET, '1h');
+    const launch = options?.start ?? (await import('../../src/server/index.js')).startServer;
+    started = await launch({
+      port: 0,
+      host: '127.0.0.1',
+      authEnabled: true,
+      websocketEnabled: true,
+      logging: false,
+      rateLimit: false,
+      cors: false,
+      jwtSecret: CATALOGUE_JWT_SECRET,
+    });
+    const address = started.server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Le serveur catalogue n\'a pas de port');
+    }
+    const running = started;
+    const port = address.port;
+    return {
+      repoRoot: REPO_ROOT,
+      tempRoot,
+      workDir,
+      server: running.server,
+      baseUrl: `http://127.0.0.1:${port}`,
+      port,
+      token,
+      restore: async () => {
+        const { stopServer } = await import('../../src/server/index.js');
+        try {
+          await stopServer(running.server);
+        } finally {
+          release();
+        }
+      },
+    };
+  } catch (error) {
+    if (started) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 2_000);
+        started?.server.close(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+    release();
+    throw error;
+  }
 }
 
 export async function httpCall(
@@ -152,6 +200,7 @@ export async function httpCall(
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(8_000),
   });
   const text = await response.text();
   return { status: response.status, text };
@@ -185,12 +234,18 @@ const ALLOWED_DIRTY = [
   'tests/server/catalogue-routes-http-harness.ts',
   'docs/reports/2026-09/RAPPORT-ROUTES-HTTP.md',
   'docs/FABLE5-CODEX-COORDINATION.md',
+  'tests/channels/webchat.test.ts',
+  'tests/channels/webchat-page-drive.ts',
+  'tests/server/catalogue-routes-http-isolation.test.ts',
+  'src/channels/webchat/index.ts',
+  'src/server/index.ts',
 ];
 
 export function unexpectedRepoDirtyPaths(repoRoot: string): string[] {
   const output = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
     cwd: repoRoot,
     encoding: 'utf8',
+    timeout: 8_000,
   });
   return output
     .split('\n')

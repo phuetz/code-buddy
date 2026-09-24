@@ -8,8 +8,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 
 import { WebChatChannel } from '../../src/channels/webchat/index.js';
+import { createUserToken } from '../../src/server/auth/jwt.js';
+import { driveWebChatPage } from '../channels/webchat-page-drive.js';
 import {
   type CatalogueServer,
+  CATALOGUE_JWT_SECRET,
   asArray,
   asObject,
   httpCall,
@@ -27,6 +30,18 @@ const UNAUTHORIZED = {
 const REMOTE_NAME = 'catalogue-remote';
 const REMOTE_URL = 'http://192.0.2.10/a2a';
 const WEBCHAT_TOKEN = 'catalogue-webchat-token';
+const READ_TOKEN = createUserToken('catalogue-http-reader', ['read'], CATALOGUE_JWT_SECRET, '1h');
+const CHAT_TOKEN = createUserToken('catalogue-http-chat', ['chat'], CATALOGUE_JWT_SECRET, '1h');
+const FORBIDDEN_ADMIN = {
+  code: 'FORBIDDEN',
+  message: 'Required scope(s): admin',
+  status: 403,
+};
+const FORBIDDEN_READ = {
+  code: 'FORBIDDEN',
+  message: 'Required scope(s): read',
+  status: 403,
+};
 
 let ctx: CatalogueServer;
 let webchat: WebChatChannel;
@@ -77,8 +92,16 @@ function openSocket(url: string): Promise<SocketInbox> {
     else queue.push(message);
   });
   return new Promise((resolve, reject) => {
-    ws.once('error', reject);
+    const timer = setTimeout(() => {
+      ws.terminate();
+      reject(new Error(`délai dépassé : ouverture ${url}`));
+    }, 8_000);
+    ws.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
     ws.once('open', () => {
+      clearTimeout(timer);
       resolve({
         ws,
         next: (label: string) => {
@@ -166,6 +189,10 @@ describe('catalogue HTTP partie B', () => {
     expect(refused.status).toBe(401);
     expect(parseJson(refused.text, 'agents sans jeton')).toEqual(UNAUTHORIZED);
 
+    const readOnly = await httpCall(ctx.baseUrl, READ_TOKEN, 'GET', '/api/a2a/agents');
+    expect(readOnly.status, 'jeton read accepté sur une route admin').toBe(403);
+    expect(parseJson(readOnly.text, 'agents avec jeton read')).toEqual(FORBIDDEN_ADMIN);
+
     const response = await httpCall(ctx.baseUrl, ctx.token, 'GET', '/api/a2a/agents');
     expect(response.status).toBe(200);
     const body = asRecord(parseJson(response.text, 'agents'), 'agents');
@@ -176,7 +203,28 @@ describe('catalogue HTTP partie B', () => {
   });
 
   it('enregistre, bat le cœur puis retire un agent distant', async () => {
-    const registered = await httpCall(ctx.baseUrl, ctx.token, 'POST', '/api/a2a/agents/register', {
+    const chatRegister = await httpCall(ctx.baseUrl, CHAT_TOKEN, 'POST', '/api/a2a/agents/register', {
+      name: REMOTE_NAME,
+      url: REMOTE_URL,
+      card: { skills: [{ id: 'catalogue-skill' }] },
+    });
+    expect(chatRegister.status, 'jeton chat accepté sur register').toBe(403);
+    expect(parseJson(chatRegister.text, 'register avec jeton chat')).toEqual(FORBIDDEN_READ);
+
+    const chatBeat = await httpCall(
+      ctx.baseUrl,
+      CHAT_TOKEN,
+      'POST',
+      `/api/a2a/agents/${REMOTE_NAME}/heartbeat`,
+    );
+    expect(chatBeat.status, 'jeton chat accepté sur heartbeat').toBe(403);
+    expect(parseJson(chatBeat.text, 'heartbeat avec jeton chat')).toEqual(FORBIDDEN_READ);
+
+    const chatDelete = await httpCall(ctx.baseUrl, CHAT_TOKEN, 'DELETE', `/api/a2a/agents/${REMOTE_NAME}`);
+    expect(chatDelete.status, 'jeton chat accepté sur delete').toBe(403);
+    expect(parseJson(chatDelete.text, 'delete avec jeton chat')).toEqual(FORBIDDEN_READ);
+
+    const registered = await httpCall(ctx.baseUrl, READ_TOKEN, 'POST', '/api/a2a/agents/register', {
       name: REMOTE_NAME,
       url: REMOTE_URL,
       card: { skills: [{ id: 'catalogue-skill' }] },
@@ -200,7 +248,7 @@ describe('catalogue HTTP partie B', () => {
 
     const beat = await httpCall(
       ctx.baseUrl,
-      ctx.token,
+      READ_TOKEN,
       'POST',
       `/api/a2a/agents/${REMOTE_NAME}/heartbeat`,
     );
@@ -218,7 +266,7 @@ describe('catalogue HTTP partie B', () => {
     expect(updated.lastHeartbeat).toEqual(expect.any(Number));
     expect(updated.lastHeartbeat as number).toBeGreaterThanOrEqual(heartbeatBefore);
 
-    const removed = await httpCall(ctx.baseUrl, ctx.token, 'DELETE', `/api/a2a/agents/${REMOTE_NAME}`);
+    const removed = await httpCall(ctx.baseUrl, READ_TOKEN, 'DELETE', `/api/a2a/agents/${REMOTE_NAME}`);
     expect(removed.status).toBe(200);
     expect(parseJson(removed.text, 'delete')).toEqual({ status: 'unregistered', agent: REMOTE_NAME });
 
@@ -341,12 +389,7 @@ describe('catalogue HTTP partie B', () => {
   });
 
   it('webchat refuse un message anonyme, puis diffuse et archive', async () => {
-    const advertised = (webchat as unknown as { status: { info?: { port?: number } } }).status.info;
-    expect(advertised?.port).toBe(0);
-    expect(webchatBase.startsWith('http://127.0.0.1:')).toBe(true);
-    expect(webchatBase).not.toBe('http://127.0.0.1:0');
-
-    const healthBefore = await fetch(`${webchatBase}/api/health`);
+    const healthBefore = await fetch(`${webchatBase}/api/health`, { signal: AbortSignal.timeout(8_000) });
     expect(healthBefore.status).toBe(200);
     const healthBody = asRecord(parseJson(await healthBefore.text(), 'webchat health'), 'webchat health');
     expect(healthBody.status).toBe('ok');
@@ -362,8 +405,15 @@ describe('catalogue HTTP partie B', () => {
     expect(badAuth).toEqual({ type: 'system', content: 'Authentication failed' });
 
     await new Promise<void>((resolve, reject) => {
-      sender.ws.once('close', () => resolve());
-      sender.ws.once('error', reject);
+      const timer = setTimeout(() => reject(new Error('délai dépassé : fermeture webchat')), 8_000);
+      sender.ws.once('close', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      sender.ws.once('error', (error) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
     });
 
     const again = await openSocket(webchatBase.replace('http://', 'ws://'));
@@ -391,14 +441,35 @@ describe('catalogue HTTP partie B', () => {
     expect(delivered.content).toBe('catalogue-webchat-preuve');
     expect(delivered.id).toBe('catalogue-webchat-1');
 
-    const history = await fetch(`${webchatBase}/api/history`);
+    const anonymousHistory = await httpCall(webchatBase, WEBCHAT_TOKEN, 'GET', '/api/history', undefined, false);
+    expect(anonymousHistory.status, 'historique anonyme malgré authToken').toBe(401);
+    expect(anonymousHistory.text, 'fuite du message sans jeton').not.toContain('catalogue-webchat-preuve');
+
+    const wrongHistory = await httpCall(webchatBase, 'mauvais-jeton', 'GET', '/api/history');
+    expect(wrongHistory.status, 'mauvais jeton accepté').toBe(401);
+    expect(wrongHistory.text, 'fuite du message avec un mauvais jeton').not.toContain('catalogue-webchat-preuve');
+
+    const history = await httpCall(webchatBase, WEBCHAT_TOKEN, 'GET', '/api/history');
     expect(history.status).toBe(200);
-    const historyBody = asRecord(parseJson(await history.text(), 'historique'), 'historique');
+    const historyBody = asRecord(parseJson(history.text, 'historique'), 'historique');
     const messages = asArray(historyBody.messages, 'historique.messages');
     expect(messages).toHaveLength(1);
     expect(asRecord(messages[0], 'message archivé').content).toBe('catalogue-webchat-preuve');
 
-    const healthAfter = await fetch(`${webchatBase}/api/health`);
+    const page = await httpCall(webchatBase, WEBCHAT_TOKEN, 'GET', '/', undefined, false);
+    expect(page.status).toBe(200);
+    expect(page.text, 'le jeton ne doit pas être dans la page').not.toContain(WEBCHAT_TOKEN);
+    const driven = driveWebChatPage(page.text);
+    expect(driven.inputDisabled(), 'champ activé sans auth').toBe(true);
+    driven.submitToken(WEBCHAT_TOKEN);
+    expect(driven.frames, 'aucune trame auth').toContainEqual({ type: 'auth', token: WEBCHAT_TOKEN });
+
+    const advertised = (webchat as unknown as { status: { info?: { port?: number } } }).status.info;
+    const boundPort = Number(webchatBase.slice('http://127.0.0.1:'.length));
+    expect(advertised?.port, 'webchat annonce le port 0').toBe(boundPort);
+    expect(boundPort).toBeGreaterThan(0);
+
+    const healthAfter = await fetch(`${webchatBase}/api/health`, { signal: AbortSignal.timeout(8_000) });
     expect(asRecord(parseJson(await healthAfter.text(), 'health après'), 'health après').clients).toBe(2);
     again.close();
     peer.close();

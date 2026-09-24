@@ -80,7 +80,7 @@ describe('catalogue HTTP partie A', () => {
     expect(response.text).toContain('# HELP codebuddy_memory_rss_bytes Resident set size');
   });
 
-  it('GET /api/docs exige un jeton et annonce le port configuré 0', async () => {
+  it('GET /api/docs exige un jeton et annonce le port lié', async () => {
     const refused = await httpCall(ctx.baseUrl, ctx.token, 'GET', '/api/docs', undefined, false);
     expect(refused.status).toBe(401);
     expect(parseJson(refused.text, 'docs sans jeton')).toEqual(UNAUTHORIZED);
@@ -94,7 +94,7 @@ describe('catalogue HTTP partie A', () => {
     expect(body.openapi).toBe('3.0.0');
     expect(info.title).toBe('Code Buddy API');
     expect(info.version).toBe('2.2.0');
-    expect(first.url).toBe('http://127.0.0.1:0');
+    expect(first.url, 'OpenAPI annonce le port 0').toBe(`http://127.0.0.1:${ctx.port}`);
     expect(ctx.port).toBeGreaterThan(0);
   });
 
