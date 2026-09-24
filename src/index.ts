@@ -609,6 +609,41 @@ async function saveCommandLineSettings(
 // Une seule chaîne : resolveStartupModel. Le `--model` de l'appelant y entre
 // en premier. Sans choix explicite, le active_model du fichier généré ne
 // masque pas le fournisseur détecté. Ollama garde sa sonde ensuite.
+let startupAliasDecision: {
+  model: string | null;
+  provider?: string;
+  baseUrl?: string;
+} | null = null;
+
+async function applyStartupAlias(
+  apiKey: string | undefined,
+  baseURL: string | undefined,
+  model: string | undefined,
+  explicit: { apiKey?: string; baseURL?: string },
+): Promise<{ apiKey: string | undefined; baseURL: string | undefined; model: string | undefined }> {
+  const decision = startupAliasDecision;
+  if (!decision?.model || !model || (!decision.provider && !decision.baseUrl)) {
+    return { apiKey, baseURL, model };
+  }
+  const { sessionLaunchFromDecision } = await import('./config/alias-session.js');
+  try {
+    const launched = sessionLaunchFromDecision(
+      { apiKey: apiKey ?? '', baseURL: baseURL ?? '', model },
+      decision,
+      process.env,
+      explicit,
+    );
+    return { apiKey: launched.apiKey, baseURL: launched.baseURL, model: launched.model };
+  } catch (error) {
+    const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+    if (error instanceof CatalogueConfigError) {
+      cli.error(error.message);
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
 async function loadModel(cliModel?: string): Promise<string | undefined> {
   await ensureEnvLoaded();
   const { isModelCompatibleWithProvider } = await import('./providers/model-provider-compat.js');
@@ -640,7 +675,9 @@ async function loadModel(cliModel?: string): Promise<string | undefined> {
         : null,
       isCompatible: (model, provider) => isModelCompatibleWithProvider(model, provider),
     });
+    startupAliasDecision = decision;
     if (decision.model) return decision.model;
+    startupAliasDecision = null;
   } catch (error) {
     const { CatalogueConfigError } = await import('./config/model-catalogue.js');
     if (error instanceof CatalogueConfigError) {
@@ -2030,6 +2067,10 @@ program
         throw error;
       }
       let model = await loadModel(options.model || explicitProvider?.model);  // let: can be overridden by --agent
+      ({ apiKey, baseURL, model } = await applyStartupAlias(apiKey, baseURL, model, {
+        ...(options.apiKey ? { apiKey: options.apiKey } : {}),
+        ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
+      }));
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2067,10 +2108,17 @@ program
             cachedProvider = undefined;
             const nextApiKey = options.apiKey || await loadApiKey();
             if (!nextApiKey) return null;
+            const nextBase = options.baseUrl || await loadBaseURL();
+            const nextModel = await loadModel(options.model);
+            const launched = await applyStartupAlias(nextApiKey, nextBase, nextModel, {
+              ...(options.apiKey ? { apiKey: options.apiKey } : {}),
+              ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
+            });
+            if (!launched.apiKey || !launched.baseURL) return null;
             return {
-              apiKey: nextApiKey,
-              baseURL: options.baseUrl || await loadBaseURL(),
-              model: await loadModel(options.model),
+              apiKey: launched.apiKey,
+              baseURL: launched.baseURL,
+              model: launched.model,
             };
           },
           onLoginError: (err) => {
@@ -2677,9 +2725,16 @@ gitCommand
 
     try {
       // Get API key from options, environment, or user settings
-      const apiKey = options.apiKey || await loadApiKey();
-      const baseURL = options.baseUrl || await loadBaseURL();
-      const model = await loadModel(options.model);
+      const loadedKey = options.apiKey || await loadApiKey();
+      const loadedBase = options.baseUrl || await loadBaseURL();
+      const loadedModel = await loadModel(options.model);
+      const launched = await applyStartupAlias(loadedKey, loadedBase, loadedModel, {
+        ...(options.apiKey ? { apiKey: options.apiKey } : {}),
+        ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
+      });
+      const apiKey = launched.apiKey;
+      const baseURL = launched.baseURL;
+      const model = launched.model;
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;

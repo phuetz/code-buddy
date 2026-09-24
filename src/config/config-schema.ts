@@ -294,12 +294,23 @@ function modelRolesShape(): Record<string, ZodTypeAny> {
   };
 }
 
+function aliasValueSchema(): ZodTypeAny {
+  return z.union([
+    z.string().describe('Nom de modèle, ou un autre alias'),
+    z.object({
+      model: z.string().describe('Nom de modèle, ou un autre alias'),
+      provider: z.string().optional().describe('Fournisseur réellement utilisé par la session. Absent : le fournisseur détecté reste'),
+      base_url: z.string().optional().describe('URL réellement utilisée par la session. Absente : celle du fournisseur, ou l\'URL détectée'),
+    }).strict().describe('Alias avec modèle, fournisseur et URL'),
+  ]).describe('Cible d\'un alias');
+}
+
 function sectionShape(mode: ObjectMode): Record<string, ZodTypeAny> {
   return {
     active_model: z.string().optional().describe('Modèle du profil, ou modèle actif à la racine'),
     catalogue: asObject(catalogueShape(), mode).optional().describe('Mode du catalogue'),
     model_roles: asObject(modelRolesShape(), mode).optional().describe('Rôles. Seul primary est lu'),
-    model_aliases: z.record(z.string()).optional().describe('Alias vers un nom de modèle'),
+    model_aliases: z.record(aliasValueSchema()).optional().describe('Alias résolus avant le catalogue. Chaîne, ou table model, provider et base_url'),
     providers: z.record(asObject(providerShape(), mode)).optional().describe('Fournisseurs'),
     models: z.record(asObject(modelShape(), mode)).optional().describe('Modèles déclarés'),
     tool_config: z.record(asObject(toolShape(), mode)).optional().describe('Outils'),
@@ -452,6 +463,20 @@ function ownSchemaChild(shape: Record<string, ZodTypeAny>, part: string): ZodTyp
   return shape[part];
 }
 
+function unionOptions(schema: ZodTypeAny): ZodTypeAny[] {
+  const options = schema._def.options;
+  return Array.isArray(options) ? options as ZodTypeAny[] : [];
+}
+
+/** Branche objet d'une union chaîne | table, pour écrire model, provider ou base_url. */
+function unionObject(schema: ZodTypeAny): ZodTypeAny | null {
+  for (const option of unionOptions(schema)) {
+    const inner = unwrap(option);
+    if (typeName(inner) === 'ZodObject') return inner;
+  }
+  return null;
+}
+
 function descriptionOf(schema: ZodTypeAny | null): string | undefined {
   if (!schema) return undefined;
   const own = schema._def.description as string | undefined;
@@ -495,6 +520,18 @@ export function classifyConfigPath(keyPath: string, schema: ZodTypeAny = writabl
     const denied = configSegmentError(keyPath, part);
     if (denied) return { ok: false, kind: 'unknown', message: denied };
     node = unwrap(node);
+    if (typeName(node) === 'ZodUnion') {
+      const branch = unionObject(node);
+      if (!branch) {
+        const stopped = parts.slice(0, index).join('.');
+        return {
+          ok: false,
+          kind: 'through-scalar',
+          message: `Cannot navigate through non-object at "${stopped}" (type: string)`,
+        };
+      }
+      node = branch;
+    }
     const name = typeName(node);
     if (name === 'ZodObject') {
       const shape = node._def.shape() as Record<string, ZodTypeAny>;
@@ -540,6 +577,11 @@ function schemaAt(keyPath: string, schema: ZodTypeAny = writableTomlSchema): Zod
   for (const part of parts) {
     if (configSegmentError(keyPath, part)) return null;
     node = unwrap(node);
+    if (typeName(node) === 'ZodUnion') {
+      const branch = unionObject(node);
+      if (!branch) return null;
+      node = branch;
+    }
     const name = typeName(node);
     if (name === 'ZodObject') {
       const shape = node._def.shape() as Record<string, ZodTypeAny>;
@@ -647,6 +689,18 @@ function collectPaths(schema: ZodTypeAny, prefix: string, into: string[]): void 
     if (prefix) into.push(prefix);
     const star = prefix ? `${prefix}.*` : '*';
     collectPaths(node._def.valueType as ZodTypeAny, star, into);
+    return;
+  }
+  if (name === 'ZodUnion') {
+    if (prefix) into.push(prefix);
+    const branch = unionObject(node);
+    if (!branch) return;
+    const shape = branch._def.shape() as Record<string, ZodTypeAny>;
+    for (const key of Object.keys(shape).sort()) {
+      const child = shape[key];
+      if (!child) continue;
+      collectPaths(child, prefix ? `${prefix}.${key}` : key, into);
+    }
     return;
   }
   if (name === 'ZodIntersection' || name === 'ZodAnd') {
@@ -775,6 +829,9 @@ function jsonSchemaOf(schema: ZodTypeAny): Record<string, unknown> {
       type: 'object',
       additionalProperties: jsonSchemaOf(schema._def.valueType as ZodTypeAny),
     });
+  }
+  if (name === 'ZodUnion') {
+    return withDescription({ anyOf: unionOptions(schema).map((option) => jsonSchemaOf(option)) });
   }
   if (name === 'ZodObject') {
     const shape = schema._def.shape() as Record<string, ZodTypeAny>;

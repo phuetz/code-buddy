@@ -7,13 +7,16 @@
  * réel si l'appelant fournit le texte ou un chemin explicite.
  *
  * Cette version ne découvre pas les modèles et n'écrit pas de cache.
- * `provider` reste une colonne historique : il ne choisit pas le fournisseur.
- * `model_id` utilisateur est refusé, sauf s'il répète l'identifiant intégré.
+ * `provider` sur une entrée `[models.*]` reste une colonne historique : il ne
+ * choisit pas le fournisseur. `provider` et `base_url` sur un alias, eux, sont
+ * le fournisseur et l'URL de la session. `model_id` utilisateur est refusé,
+ * sauf s'il répète l'identifiant intégré.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { findRuntimeProvider } from '../providers/provider-catalog.js';
 import { installCataloguePriceOverlays, type ModelPricing } from './model-pricing.js';
 import { findModelToolConfig, installModelCatalogueOverlays } from './model-tools.js';
 import { getModelRegistry } from './model-registry.js';
@@ -53,11 +56,18 @@ export interface CatalogueRoles {
   primary?: string;
 }
 
+/** Cible d'un alias. `provider` et `baseUrl` absents : la session garde le fournisseur détecté. */
+export interface ModelAliasTarget {
+  model: string;
+  provider?: string;
+  baseUrl?: string;
+}
+
 export interface CatalogueDocument {
   mode: 'merge';
   activeModel?: string;
   roles: CatalogueRoles;
-  aliases: Record<string, string>;
+  aliases: Record<string, ModelAliasTarget>;
   models: Record<string, CataloguePatch>;
   profiles: Record<string, { activeModel?: string }>;
 }
@@ -76,6 +86,12 @@ export interface ResolvedChoice {
   source: CatalogueSource;
   /** Jeton d'origine si un alias a été résolu. Identique à `model` sinon. */
   requested: string;
+  /** Vrai si au moins un alias a été suivi avant la lecture du catalogue. */
+  viaAlias: boolean;
+  /** Fournisseur demandé par l'alias le plus proche du nom saisi. */
+  provider?: string;
+  /** URL demandée par l'alias le plus proche du nom saisi. */
+  baseUrl?: string;
 }
 
 export interface StartupDetectedProvider {
@@ -100,6 +116,12 @@ export interface StartupModelRequest {
 export interface StartupModelDecision {
   model: string | null;
   source: CatalogueSource | 'none';
+  /** Vrai si le modèle vient d'un alias résolu avant le catalogue. */
+  viaAlias?: boolean;
+  /** Présent seulement si l'alias choisit le fournisseur de la session. */
+  provider?: string;
+  /** Présent seulement si l'alias choisit l'URL de la session. */
+  baseUrl?: string;
 }
 
 const ENTRY_KEYS = [
@@ -191,7 +213,7 @@ export function mergeCatalogueDocuments(
  */
 export function resolveModelByPriority(
   input: PriorityInput,
-  aliases: ReadonlyMap<string, string> = new Map(),
+  aliases: ReadonlyMap<string, ModelAliasTarget> = new Map(),
 ): ResolvedChoice {
   const ordered: Array<[CatalogueSource, string | null | undefined]> = [
     ['cli', input.cli],
@@ -204,12 +226,15 @@ export function resolveModelByPriority(
   for (const [source, raw] of ordered) {
     const requested = raw?.trim();
     if (!requested) continue;
-    const alias = aliases.get(requested.toLowerCase());
-    if (alias !== undefined && !alias.trim()) {
-      throw new CatalogueConfigError(`l'alias « ${requested} » est vide. Donnez-lui un modèle, ou retirez la ligne.`);
-    }
-    const model = alias?.trim() || requested;
-    return { model, source, requested };
+    const resolved = resolveAliasChain(requested, aliases);
+    return {
+      model: resolved.model,
+      source,
+      requested,
+      viaAlias: resolved.viaAlias,
+      ...(resolved.provider ? { provider: resolved.provider } : {}),
+      ...(resolved.baseUrl ? { baseUrl: resolved.baseUrl } : {}),
+    };
   }
   throw new CatalogueConfigError(
     'aucun modèle n\'est défini (ligne de commande, environnement, profil, configuration, réglage sauvé ou fournisseur détecté)',
@@ -251,7 +276,7 @@ export function selectionFromDocument(
     profileName?: string | null;
     settings?: string | null;
     detected?: string | null;
-    aliases?: ReadonlyMap<string, string>;
+    aliases?: ReadonlyMap<string, ModelAliasTarget>;
   } = {},
 ): ResolvedChoice {
   const profileName = options.profileName ?? null;
@@ -269,7 +294,7 @@ export function selectionFromDocument(
     },
     aliases,
   );
-  if (choice.source === 'profile' || choice.source === 'user') {
+  if (choice.viaAlias || choice.source === 'profile' || choice.source === 'user') {
     assertKnownModel(choice.model, document, aliases, choice.source, choice.requested);
   }
   return choice;
@@ -295,10 +320,13 @@ export function builtinCatalogueEntries(): Record<string, CatalogueEntry> {
   return entries;
 }
 
-export function aliasMap(document: CatalogueDocument, extra?: ReadonlyMap<string, string>): Map<string, string> {
-  const map = new Map<string, string>();
+export function aliasMap(
+  document: CatalogueDocument,
+  extra?: ReadonlyMap<string, string>,
+): Map<string, ModelAliasTarget> {
+  const map = new Map<string, ModelAliasTarget>();
   const base = extra ?? getModelRegistry().getAliases();
-  for (const [alias, target] of base) map.set(alias.toLowerCase(), target);
+  for (const [alias, target] of base) map.set(alias.toLowerCase(), { model: target });
   for (const [alias, target] of Object.entries(document.aliases)) {
     map.set(alias.toLowerCase(), target);
   }
@@ -365,7 +393,7 @@ export function selectConfiguredModel(options: {
   );
   assertKnownModel(choice.model, document, aliases, choice.source, choice.requested);
   const merged = mergeCatalogue(builtinCatalogueEntries(), document);
-  const entry = findEntry(merged, choice.model) ?? findEntry(merged, choice.requested);
+  const entry = findEntry(merged, choice.model);
   return entry ? canonicalModelId(entry) : choice.model;
 }
 
@@ -391,13 +419,16 @@ export function resolveStartupModel(request: StartupModelRequest = {}): StartupM
       { cli, env: envModel, profile: profileModel, user: userModel },
       aliases,
     );
+    ensureAliasTarget(choice, document);
     if (document && (choice.source === 'profile' || choice.source === 'user')) {
-      assertKnownModel(choice.model, document, aliases, choice.source, choice.requested);
+      if (!choice.viaAlias) {
+        assertKnownModel(choice.model, document, aliases, choice.source, choice.requested);
+      }
       const merged = mergeCatalogue(builtinCatalogueEntries(), document);
-      const entry = findEntry(merged, choice.model) ?? findEntry(merged, choice.requested);
-      return { model: entry ? canonicalModelId(entry) : choice.model, source: choice.source };
+      const entry = findEntry(merged, choice.model);
+      return startupDecision(entry ? canonicalModelId(entry) : choice.model, choice.source, choice);
     }
-    return { model: choice.model, source: choice.source };
+    return startupDecision(choice.model, choice.source, choice);
   }
 
   if (request.detected?.provider === 'ollama') {
@@ -416,7 +447,8 @@ export function resolveStartupModel(request: StartupModelRequest = {}): StartupM
     },
     aliases,
   );
-  return { model: choice.model, source: choice.source };
+  ensureAliasTarget(choice, document);
+  return startupDecision(choice.model, choice.source, choice);
 }
 
 export function capabilityOverlays(document: CatalogueDocument): Record<string, {
@@ -631,20 +663,71 @@ function parseRoles(value: unknown, source: string): CatalogueRoles {
   return roles;
 }
 
-function parseAliases(value: unknown, source: string): Record<string, string> {
+function parseAliases(value: unknown, source: string): Record<string, ModelAliasTarget> {
   if (value === undefined) return {};
   const record = asRecord(value);
   if (!record) throw new CatalogueConfigError(`la section [model_aliases] doit être une table (${source}).`);
-  const aliases: Record<string, string> = {};
+  const aliases: Record<string, ModelAliasTarget> = {};
   for (const [alias, target] of Object.entries(record)) {
-    if (typeof target !== 'string' || !target.trim()) {
+    aliases[alias] = parseAliasTarget(alias, target, source);
+  }
+  return aliases;
+}
+
+function parseAliasTarget(alias: string, target: unknown, source: string): ModelAliasTarget {
+  if (typeof target === 'string') {
+    if (!target.trim()) {
       throw new CatalogueConfigError(
         `l'alias « ${alias} » doit désigner un modèle non vide (${source}). Corrigez la cible, ou retirez l'alias.`,
       );
     }
-    aliases[alias] = target.trim();
+    return { model: target.trim() };
   }
-  return aliases;
+  const record = asRecord(target);
+  if (!record) {
+    throw new CatalogueConfigError(
+      `l'alias « ${alias} » doit être un nom de modèle ou une table model, provider, base_url (${source}).`,
+    );
+  }
+  for (const key of Object.keys(record)) {
+    if (key !== 'model' && key !== 'provider' && key !== 'base_url') {
+      throw new CatalogueConfigError(
+        `champ inconnu « ${key} » sur l'alias « ${alias} » (${source}). Les champs lus sont model, provider et base_url.`,
+      );
+    }
+  }
+  if (typeof record.model !== 'string' || !record.model.trim()) {
+    throw new CatalogueConfigError(
+      `l'alias « ${alias} » doit désigner un modèle non vide (${source}). Corrigez model, ou retirez l'alias.`,
+    );
+  }
+  const parsed: ModelAliasTarget = { model: record.model.trim() };
+  if (record.provider !== undefined) {
+    if (typeof record.provider !== 'string' || !record.provider.trim()) {
+      throw new CatalogueConfigError(`l'alias « ${alias} ».provider doit être un nom non vide (${source}).`);
+    }
+    parsed.provider = record.provider.trim();
+  }
+  if (record.base_url !== undefined) {
+    if (typeof record.base_url !== 'string' || !isHttpUrl(record.base_url)) {
+      throw new CatalogueConfigError(
+        `l'alias « ${alias} ».base_url doit être une URL http ou https (${source}).`,
+      );
+    }
+    parsed.baseUrl = record.base_url.trim().replace(/\/$/, '');
+  }
+  return parsed;
+}
+
+function isHttpUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function parseModels(value: unknown, source: string): Record<string, CataloguePatch> {
@@ -762,7 +845,7 @@ function patchFromTable(id: string, table: Record<string, unknown>, source: stri
 function assertKnownModel(
   model: string,
   document: CatalogueDocument,
-  aliases: ReadonlyMap<string, string>,
+  _aliases: ReadonlyMap<string, ModelAliasTarget>,
   source: CatalogueSource,
   requested: string,
 ): void {
@@ -894,32 +977,111 @@ function nonNegativeNumber(value: unknown, label: string): number {
 
 export const CATALOGUE_ENTRY_FIELDS = ENTRY_KEYS;
 
-/** Refus minimal : cible inconnue, ou chaîne qui revient sur un alias. Pas de résolution multi-sauts. */
-function aliasTargetsProblem(document: CatalogueDocument): string | null {
-  const table = new Map<string, { name: string; target: string }>();
-  for (const [name, target] of Object.entries(document.aliases)) {
-    table.set(name.toLowerCase(), { name, target: target.trim() });
+interface ResolvedAlias {
+  model: string;
+  viaAlias: boolean;
+  provider?: string;
+  baseUrl?: string;
+}
+
+const ALIAS_HOP_LIMIT = 8;
+
+/**
+ * Suit la chaîne avant toute lecture du catalogue.
+ * Le premier alias qui fixe provider ou base_url gagne : c'est le nom saisi.
+ * Une boucle, un fournisseur inutilisable ou une chaîne trop longue lèvent.
+ */
+function resolveAliasChain(
+  requested: string,
+  table: ReadonlyMap<string, ModelAliasTarget>,
+): ResolvedAlias {
+  const seen = new Set<string>();
+  const display: string[] = [];
+  let cursor = requested.trim();
+  let provider: string | undefined;
+  let baseUrl: string | undefined;
+  let viaAlias = false;
+  for (let hop = 0; hop < ALIAS_HOP_LIMIT; hop += 1) {
+    const key = cursor.toLowerCase();
+    const target = table.get(key);
+    if (!target) {
+      return {
+        model: cursor,
+        viaAlias,
+        ...(provider ? { provider } : {}),
+        ...(baseUrl ? { baseUrl } : {}),
+      };
+    }
+    if (seen.has(key)) {
+      display.push(cursor);
+      throw new CatalogueConfigError(
+        `l'alias « ${requested.trim()} » est circulaire (${display.join(' → ')}). Une cible doit nommer un modèle connu, pas revenir sur un alias.`,
+      );
+    }
+    seen.add(key);
+    display.push(cursor);
+    viaAlias = true;
+    if (target.provider) {
+      const problem = aliasProviderProblem(target.provider, cursor);
+      if (problem) throw new CatalogueConfigError(problem);
+      if (!provider) provider = target.provider;
+    }
+    if (!baseUrl && target.baseUrl) baseUrl = target.baseUrl;
+    const next = target.model.trim();
+    if (!next) {
+      throw new CatalogueConfigError(`l'alias « ${cursor} » est vide. Donnez-lui un modèle, ou retirez la ligne.`);
+    }
+    cursor = next;
   }
-  for (const start of table.values()) {
-    const seen = new Set<string>();
-    const display: string[] = [];
-    let cursor: { name: string; target: string } | undefined = start;
-    while (cursor) {
-      const key = cursor.name.toLowerCase();
-      if (seen.has(key)) {
-        display.push(cursor.name);
-        return `l'alias « ${start.name} » est circulaire (${display.join(' → ')}). Une cible doit nommer un modèle connu, pas revenir sur un alias.`;
-      }
-      seen.add(key);
-      display.push(cursor.name);
-      const next = table.get(cursor.target.toLowerCase());
-      if (!next) {
-        if (!isConcreteModel(cursor.target, document)) {
-          return `l'alias « ${cursor.name} » désigne « ${cursor.target} », qui est inconnu du catalogue. Déclarez-le dans [models.<nom>], ou corrigez la cible.`;
-        }
-        break;
-      }
-      cursor = next;
+  throw new CatalogueConfigError(
+    `l'alias « ${requested.trim()} » forme une chaîne trop longue (${display.join(' → ')}). Une cible doit nommer un modèle connu.`,
+  );
+}
+
+function aliasProviderProblem(provider: string, requested: string): string | null {
+  const entry = findRuntimeProvider(provider);
+  if (!entry || entry.runtimeSupport !== 'direct' || entry.authMode === 'oauth') {
+    return `l'alias « ${requested} » indique le fournisseur « ${provider} », qui ne peut pas être choisi par un alias. La session ne change pas de fournisseur en silence.`;
+  }
+  return null;
+}
+
+function ensureAliasTarget(choice: ResolvedChoice, document: CatalogueDocument | null): void {
+  if (!choice.viaAlias) return;
+  const doc = document ?? emptyDocument();
+  assertKnownModel(choice.model, doc, new Map(), choice.source, choice.requested);
+  if (choice.provider) {
+    const problem = aliasProviderProblem(choice.provider, choice.requested);
+    if (problem) throw new CatalogueConfigError(problem);
+  }
+}
+
+function startupDecision(model: string, source: CatalogueSource, choice: ResolvedChoice): StartupModelDecision {
+  return {
+    model,
+    source,
+    ...(choice.viaAlias ? { viaAlias: true } : {}),
+    ...(choice.provider ? { provider: choice.provider } : {}),
+    ...(choice.baseUrl ? { baseUrl: choice.baseUrl } : {}),
+  };
+}
+
+/** Même marche que la résolution : cible inconnue, boucle, ou fournisseur inutilisable. */
+function aliasTargetsProblem(document: CatalogueDocument): string | null {
+  const table = aliasMap(document);
+  for (const name of Object.keys(document.aliases)) {
+    let resolved: ResolvedAlias;
+    try {
+      resolved = resolveAliasChain(name, table);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    if (resolved.provider) {
+      const problem = aliasProviderProblem(resolved.provider, name);
+      if (problem) return problem;
+    }
+    if (!isConcreteModel(resolved.model, document)) {
+      return `l'alias « ${name} » désigne « ${resolved.model} », qui est inconnu du catalogue. Déclarez-le dans [models.<nom>], ou corrigez la cible.`;
     }
   }
   return null;
