@@ -57,6 +57,12 @@ interface Run {
   /** Every file the reset could have written: home, sessions, archive, history, project. */
   everyFile: () => Array<{ file: string; bytes: string }>;
   sessionRaw: string;
+  /** Session file bytes as written before the reset ran. */
+  sessionBefore: Buffer;
+  /** Session file bytes at the archive step, after `atArchive` ran. */
+  sessionAtArchive: () => Buffer | null;
+  /** Every archive file of one source, as raw bytes. */
+  archiveFiles: (source: Source) => Buffer[];
   /** Messages of the emptied session, opened with the session key. */
   sessionMessagesAfter: () => unknown[];
   logs: string[];
@@ -68,7 +74,9 @@ async function runReset(options: {
   encryptSession: boolean;
   sessionEncryptionEnv?: boolean;
   /** Runs at the erase step, after the archive is written. */
-  atErase?: (files: { projectFile: string }) => void;
+  atErase?: (files: { projectFile: string; sessionFile: string; encryptedMessages: unknown }) => void;
+  /** Runs at the archive step: after the snapshot, before any archive is written. */
+  atArchive?: (files: { sessionFile: string; encryptedMessages: unknown }) => void;
 }): Promise<Run> {
   const fakeHome = tempDir();
   const projectDir = tempDir();
@@ -132,6 +140,7 @@ async function runReset(options: {
     if (options.encryptSession) {
       expect(readFileSync(file, 'utf8'), 'session chiffree au depart').not.toContain(SECRETS.session);
     }
+    const sessionBefore = readFileSync(file);
 
     const disposeOptions: unknown[] = [];
     handlers.__seedChannelAgentForTests(sessionKey, {
@@ -148,8 +157,18 @@ async function runReset(options: {
         logs.push(JSON.stringify(args));
       }) as never);
     }
+    // Same messages, encrypted: what another process writing this session would produce.
+    const encryptedMessages = options.atArchive || options.atErase ? await content.encryptSessionContent(messages) : null;
     const atErase = options.atErase;
-    if (atErase) handlers.__beforeMessagingResetStepForTests('erase', () => atErase({ projectFile }));
+    if (atErase) {
+      handlers.__beforeMessagingResetStepForTests('erase', () => atErase({ projectFile, sessionFile: file, encryptedMessages }));
+    }
+    let sessionAtArchive: Buffer | null = null;
+    const atArchive = options.atArchive;
+    handlers.__beforeMessagingResetStepForTests('archive', () => {
+      atArchive?.({ sessionFile: file, encryptedMessages });
+      sessionAtArchive = existsSync(file) ? readFileSync(file) : null;
+    });
 
     await handlers.__resetInboundMessagingSessionForTests(sessionKey);
 
@@ -161,6 +180,9 @@ async function runReset(options: {
       archiveBytes: (source) => filesUnder(path.join(archiveDir, source))
         .map((f) => readFileSync(f, 'latin1'))
         .join('\n'),
+      archiveFiles: (source) => filesUnder(path.join(archiveDir, source)).map((f) => readFileSync(f)),
+      sessionBefore,
+      sessionAtArchive: () => sessionAtArchive,
       restore: (source) => messaging.openMessagingMemoryArchive(
         archiveDir,
         sessionKey,
@@ -201,7 +223,8 @@ describe('remise a zero d une session chiffree : aucune copie en clair', () => {
       console.log('ARCHIVE_CHIFFREE', JSON.stringify({ source, written: bytes.length > 0, plaintext: bytes.includes(EXPECTED[source]) }));
       expect(bytes, `${source} archive ecrite`).not.toBe('');
       expect(bytes, `${source} archive sans octet en clair`).not.toContain(EXPECTED[source]);
-      expect(bytes, `${source} archive marquee chiffree`).toContain('"encrypted": true');
+      // The session file is copied verbatim: its own envelope, not an archive record.
+      expect(bytes, `${source} archive marquee chiffree`).toContain(source === 'session-store' ? '__encrypted' : '"encrypted": true');
       expect(run.restore(source).join('\n'), `${source} restauration`).toContain(EXPECTED[source]);
       expect(run.sessionMessagesAfter(), 'session videe').toEqual([]);
     });
@@ -252,15 +275,92 @@ describe('remise a zero d une session chiffree : aucune copie en clair', () => {
     ]);
   });
 
-  it('SESSION_ENCRYPTION=true : la session serait chiffree a la prochaine ecriture, l archive l est deja', async () => {
+  it('SESSION_ENCRYPTION=true sur une session encore en clair : rien n est archive ni efface', async () => {
     const run = await runReset({ id: 'env', encryptSession: false, sessionEncryptionEnv: true });
-    const bytes = (Object.keys(EXPECTED) as Source[]).map((source) => run.archiveBytes(source)).join('\n');
+    const bytes = (Object.keys(EXPECTED) as Source[]).map((source) => run.archiveBytes(source)).filter(Boolean).join('\n');
     const leaks = Object.values(SECRETS).filter((secret) => bytes.includes(secret));
-    console.log('ENV_CHIFFREMENT', JSON.stringify({ leaks, sessionPlain: run.sessionRaw.includes(SECRETS.session) }));
-    expect(bytes).not.toBe('');
+    console.log('ENV_CHIFFREMENT', JSON.stringify({ archived: bytes.length, leaks, sessionKept: run.sessionRaw === run.sessionBefore.toString('utf8') }));
+    // A verbatim copy of a clear file would be a new clear file. The reset
+    // waits for the next save, which encrypts the session, and keeps it whole.
+    expect(bytes, 'aucune archive').toBe('');
+    expect(run.sessionRaw, 'session intacte, octet pour octet').toBe(run.sessionBefore.toString('utf8'));
+    expect(run.logs.some((line) => line.includes('session not yet encrypted at rest')), 'annulation journalisee').toBe(true);
+  });
+
+  it('sonde Sol 1 : SESSION_ENCRYPTION active apres l instantane, aucune archive en clair', async () => {
+    const run = await runReset({
+      id: 'bascule-chiffrement',
+      encryptSession: false,
+      atArchive: () => { process.env.SESSION_ENCRYPTION = 'true'; },
+    });
+    const bytes = (Object.keys(EXPECTED) as Source[]).map((source) => run.archiveBytes(source)).filter(Boolean).join('\n');
+    const leaks = Object.values(SECRETS).filter((secret) => bytes.includes(secret));
+    console.log('BASCULE_CHIFFREMENT', JSON.stringify({ archived: bytes.length, leaks, sessionKept: run.sessionRaw === run.sessionBefore.toString('utf8') }));
     expect(leaks, 'archives sans octet en clair').toEqual([]);
-    expect(run.sessionRaw, 'session reecrite chiffree').toContain('__encrypted');
-    expect(run.restore('session-store').join('\n')).toContain(SECRETS.session);
+    expect(run.sessionRaw, 'session intacte').toBe(run.sessionBefore.toString('utf8'));
+  });
+
+  it('sonde Sol 2 : un autre processus chiffre la session apres l instantane, l archive est ses octets chiffres', async () => {
+    const run = await runReset({
+      id: 'session-chiffree-concurrente',
+      encryptSession: false,
+      atArchive: ({ sessionFile, encryptedMessages }) => {
+        const record = JSON.parse(readFileSync(sessionFile, 'utf8'));
+        writeFileSync(sessionFile, JSON.stringify({ ...record, encrypted: true, messages: encryptedMessages }));
+      },
+    });
+    const written = run.sessionAtArchive();
+    const files = run.archiveFiles('session-store');
+    const bytes = (Object.keys(EXPECTED) as Source[]).map((source) => run.archiveBytes(source)).filter(Boolean).join('\n');
+    const leaks = Object.values(SECRETS).filter((secret) => bytes.includes(secret));
+    console.log('CHIFFREMENT_CONCURRENT', JSON.stringify({
+      files: files.length,
+      verbatim: written !== null && files.length === 1 && files[0]!.equals(written),
+      leaks,
+      sessionSealed: run.sessionRaw.includes('__encrypted'),
+    }));
+    expect(written?.toString('utf8'), 'le fichier ecrit par l autre processus est chiffre').not.toContain(SECRETS.session);
+    expect(files.length, 'une archive de session').toBe(1);
+    expect(files[0]!.equals(written!), 'archive = octets du fichier au moment de l archivage').toBe(true);
+    expect(leaks, 'aucune archive ne porte un octet de message en clair').toEqual([]);
+    expect(run.restore('session-store').join('\n'), 'restauration avec la cle').toContain(SECRETS.session);
+    expect(run.sessionMessagesAfter(), 'session videe').toEqual([]);
+  });
+
+  for (const encryptSession of [true, false]) {
+    it(`archive de session = copie octet pour octet du fichier (${encryptSession ? 'chiffre' : 'en clair'})`, async () => {
+      const run = await runReset({ id: `octets-${encryptSession}`, encryptSession });
+      const files = run.archiveFiles('session-store');
+      console.log('OCTET_POUR_OCTET', JSON.stringify({ encryptSession, files: files.length, equal: files.length === 1 && files[0]!.equals(run.sessionBefore) }));
+      expect(files.length).toBe(1);
+      expect(files[0]!.equals(run.sessionBefore), 'memes octets').toBe(true);
+    });
+  }
+
+  it('fichier de session reecrit entre archive et effacement (memes messages, chiffres) : rien n est efface', async () => {
+    const run = await runReset({
+      id: 'reecrit-avant-effacement',
+      encryptSession: false,
+      atErase: ({ sessionFile, encryptedMessages }) => {
+        const record = JSON.parse(readFileSync(sessionFile, 'utf8'));
+        writeFileSync(sessionFile, JSON.stringify({ ...record, encrypted: true, messages: encryptedMessages }));
+      },
+    });
+    const kept = run.sessionMessagesAfter() as Array<{ content?: string }>;
+    console.log('REECRIT_AVANT_EFFACEMENT', JSON.stringify({ kept: kept.length, cancelled: run.logs.some((l) => l.includes('session contents changed before erase')) }));
+    expect(run.logs.some((line) => line.includes('session contents changed before erase')), 'annulation').toBe(true);
+    expect(kept.map((m) => m.content), 'session conservee').toEqual([SECRETS.session]);
+  });
+
+  it('SESSION_ENCRYPTION active entre archive en clair et effacement : rien n est efface', async () => {
+    const run = await runReset({
+      id: 'regle-avant-effacement',
+      encryptSession: false,
+      atErase: () => { process.env.SESSION_ENCRYPTION = 'true'; },
+    });
+    console.log('REGLE_AVANT_EFFACEMENT', JSON.stringify({ kept: run.sessionRaw === run.sessionBefore.toString('utf8') }));
+    expect(run.logs.some((line) => line.includes('session protection changed before erase')), 'annulation').toBe(true);
+    expect(run.sessionRaw, 'session intacte').toBe(run.sessionBefore.toString('utf8'));
   });
 
   it('temoin : une session en clair, sans chiffrement demande, reste archivee en clair et restaurable', async () => {
@@ -332,6 +432,44 @@ describe('scellement de l archive : garde-fous du module', () => {
     });
     expect(outcome).toMatchObject({ action: 'cancelled', error: 'memory archive cannot be opened' });
     expect(erased).toBe(false);
+  });
+
+  it('une partie brute est ecrite telle quelle, jamais scellee, et refusee si aussi scellee', async () => {
+    const messaging = await import('../../src/channels/messaging-session-reset.js');
+    const archiveDir = tempDir();
+    const raw = Buffer.from('{"messages":[{"type":"user","content":"OCTETS_BRUTS","timestamp":"2026-01-01T00:00:00.000Z"}]}\n');
+    let sealedCalls = 0;
+    const outcome = await messaging.applyChannelMessagingSessionReset({
+      sessionKey: 'brut',
+      now: 10_000_000,
+      policy: plainPolicy,
+      snapshot: { lastActivityAt: 0, transcript: 'user: OCTETS_BRUTS' },
+      parts: [
+        { source: 'session-store', transcript: 'user: OCTETS_BRUTS', raw },
+        { source: 'local-map', transcript: 'user: CARTE' },
+      ],
+      archiveDir,
+      sealer: { seal: async (text) => { sealedCalls += 1; return `SCELLE-${text.length}`; }, open: () => 'user: CARTE' },
+      resetSession: async () => {},
+    });
+    const files = filesUnder(path.join(archiveDir, 'session-store'));
+    expect(outcome.action).toBe('reset');
+    expect(sealedCalls, 'seule la partie non brute est scellee').toBe(1);
+    expect(files.length).toBe(1);
+    expect(readFileSync(files[0]!).equals(raw), 'octets identiques').toBe(true);
+    expect(files[0]!.endsWith('.session.json')).toBe(true);
+    if (process.platform !== 'win32') expect(statSync(files[0]!).mode & 0o777).toBe(0o600);
+    const both = messaging.proveMessagingMemorySave({
+      archiveDir: tempDir(),
+      sessionKey: 'brut-scelle',
+      transcript: 'x',
+      now: 10_000_000,
+      reason: 'idle',
+      source: 'session-store',
+      raw,
+      sealed: { payload: 'SCELLE', open: () => 'x' },
+    });
+    expect(both).toEqual({ ok: false, error: 'memory archive is both sealed and verbatim' });
   });
 
   it('des parties scellees en partie seulement sont refusees', async () => {

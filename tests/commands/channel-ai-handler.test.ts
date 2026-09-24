@@ -116,6 +116,12 @@ vi.mock('../../src/persistence/session-store.js', () => ({
   getSessionStore: () => ({
     loadSession: hoisted.loadSession,
     readSessionFileState: hoisted.readSessionFileState,
+    // The bytes are those of this memory double: the session as JSON, never encrypted.
+    readSessionFileCopy: async (key: string) => {
+      const read = await hoisted.readSessionFileState(key);
+      if (read.state !== 'ok') return read;
+      return { state: 'ok', bytes: Buffer.from(JSON.stringify(read.session)), session: read.session, sealedAtRest: false };
+    },
     saveSession: hoisted.saveSession,
     // Same rule as the real store for the sessions these tests write: never encrypted.
     contentProtection: (session: { encrypted?: boolean } | null) => ({ encrypt: session?.encrypted === true }),
