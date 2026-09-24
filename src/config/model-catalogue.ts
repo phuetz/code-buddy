@@ -753,6 +753,12 @@ function parseProfiles(value: unknown, source: string): CatalogueDocument['profi
   for (const [name, raw] of Object.entries(record)) {
     const table = asRecord(raw);
     if (!table) continue;
+    // [profiles.nom.x] arrive aplati en « nom.x » : sous-table du profil nom.
+    if (name.includes('.')) {
+      const base = name.split('.')[0];
+      if (base && !ownValue(profiles, base)) profiles[base] = {};
+      continue;
+    }
     const profile: { activeModel?: string } = {};
     if (table.fast_model !== undefined || table.vision_model !== undefined) {
       throw new CatalogueConfigError(

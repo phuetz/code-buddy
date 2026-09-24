@@ -8,16 +8,28 @@
 
 import { ConversationMiddleware, MiddlewareContext, MiddlewareResult } from './types.js';
 
+function usableRatio(ratio: number | undefined): number {
+  return typeof ratio === 'number' && Number.isFinite(ratio) && ratio > 0 && ratio <= 1 ? ratio : 0.8;
+}
+
 export class CostLimitMiddleware implements ConversationMiddleware {
   readonly name = 'cost-limit';
   readonly priority = 20;
 
   private isSessionCostLimitReached: () => boolean;
+  private readonly ratioSource: number | (() => number) | undefined;
 
+  /** Une fonction est relue à chaque tour : l'agent peut changer de projet. */
   constructor(deps: {
     isSessionCostLimitReached: () => boolean;
+    warningRatio?: number | (() => number);
   }) {
     this.isSessionCostLimitReached = deps.isSessionCostLimitReached;
+    this.ratioSource = deps.warningRatio;
+  }
+
+  private get warningRatio(): number {
+    return usableRatio(typeof this.ratioSource === 'function' ? this.ratioSource() : this.ratioSource);
   }
 
   afterTurn(context: MiddlewareContext): MiddlewareResult {
@@ -28,8 +40,7 @@ export class CostLimitMiddleware implements ConversationMiddleware {
       };
     }
 
-    // Warn at 80% of cost limit
-    const warnThreshold = context.sessionCostLimit * 0.8;
+    const warnThreshold = context.sessionCostLimit * this.warningRatio;
     if (context.sessionCost >= warnThreshold) {
       return {
         action: 'warn',

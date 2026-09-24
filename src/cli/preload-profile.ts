@@ -4,7 +4,7 @@
  * puis `$CODEBUDDY_HOME/.codebuddy/config.toml`, puis `~/.codebuddy/config.toml`.
  */
 
-import { getConfigManager } from '../config/toml-config.js';
+import { getConfigManager, profileNamesOf } from '../config/toml-config.js';
 import { getRequestedProfile } from './requested-profile.js';
 
 export function preloadRequestedProfile(
@@ -20,7 +20,7 @@ export function preloadRequestedProfile(
     }
     let available = '(none defined)';
     try {
-      const names = Object.keys(getConfigManager().getConfig().profiles ?? {});
+      const names = profileNamesOf(getConfigManager().getConfig().profiles);
       if (names.length) available = names.join(', ');
     } catch (_error) {
       available = 'core, all';
