@@ -27,6 +27,38 @@ const HKDF_DIGEST = 'sha256';
 const HKDF_INFO = 'codebuddy-session-encryption/v2';
 const ENCRYPTION_VERSION = 2;
 
+/**
+ * The session lock is re-entrant for its own PID, so it does not order key
+ * creations inside one process: parallel first encryptions would each write a
+ * different key and all but the last would become unreadable. Each key path
+ * gets one queue here; the file lock still guards against other processes.
+ */
+const persistentKeyQueues = new Map<string, Promise<unknown>>();
+
+function loadOrCreatePersistentKey(keyPath: string): Promise<Buffer> {
+  const previous = persistentKeyQueues.get(keyPath) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(async () => {
+    await fs.ensureDir(path.dirname(keyPath));
+    return withSessionLock(keyPath, async () => {
+      let key: Buffer;
+      try { key = await fs.readFile(keyPath); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        key = crypto.randomBytes(KEY_LENGTH);
+        await writeFileAtomic(keyPath, key, { mode: 0o600 });
+      }
+      if (key.length !== KEY_LENGTH) throw new Error('Invalid session encryption key');
+      return key;
+    });
+  });
+  persistentKeyQueues.set(keyPath, next);
+  void next.then(
+    () => { if (persistentKeyQueues.get(keyPath) === next) persistentKeyQueues.delete(keyPath); },
+    () => { if (persistentKeyQueues.get(keyPath) === next) persistentKeyQueues.delete(keyPath); },
+  );
+  return next;
+}
+
 export interface EncryptedData {
   /** Encrypted ciphertext (base64) */
   ciphertext: string;
@@ -83,19 +115,8 @@ export class SessionEncryption {
     }
 
     if (this.config.requirePersistentKey) {
-      await fs.ensureDir(path.dirname(this.config.keyPath));
-      await withSessionLock(this.config.keyPath, async () => {
-        let key: Buffer;
-        try { key = await fs.readFile(this.config.keyPath); }
-        catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-          key = crypto.randomBytes(KEY_LENGTH);
-          await writeFileAtomic(this.config.keyPath, key, { mode: 0o600 });
-        }
-        if (key.length !== KEY_LENGTH) throw new Error('Invalid session encryption key');
-        this.key = key;
-        this.initialized = true;
-      });
+      this.key = await loadOrCreatePersistentKey(this.config.keyPath);
+      this.initialized = true;
       return;
     }
 
