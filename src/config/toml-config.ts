@@ -5,10 +5,14 @@
  * Supports providers, models, tool configs, and user preferences.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
+import { commitValidConfigText, writeRejectedConfig, ConfigWriteRejectedError } from './config-backup.js';
+import { ownValue } from './own-lookup.js';
+import { resolveSecretRefs } from './secret-ref.js';
+import { USER_CONFIG_DELETE, configSegmentError, validateOnDiskDocument } from './config-schema.js';
 
 // ============================================================================
 // JSONC Utilities
@@ -1381,7 +1385,9 @@ function assignKeyPath(root: Record<string, unknown>, keyPath: string, value: un
   let current = root;
   for (let index = 0; index < parts.length - 1; index += 1) {
     const segment = parts[index] ?? '';
-    const next = current[segment];
+    const denied = configSegmentError(keyPath, segment);
+    if (denied) throw new Error(denied);
+    const next = Object.hasOwn(current, segment) ? current[segment] : undefined;
     if (!isPlainObject(next)) {
       const created: Record<string, unknown> = {};
       current[segment] = created;
@@ -1391,12 +1397,78 @@ function assignKeyPath(root: Record<string, unknown>, keyPath: string, value: un
     }
   }
   const leaf = parts[parts.length - 1] ?? '';
+  const deniedLeaf = configSegmentError(keyPath, leaf);
+  if (deniedLeaf) throw new Error(deniedLeaf);
   current[leaf] = value;
 }
 
 function readUserDocument(file: string): Record<string, unknown> {
   if (!existsSync(file)) return {};
   return parseTOML(readFileSync(file, 'utf-8'));
+}
+
+let catalogueWriteCheck: ((text: string) => string | null) | null = null;
+
+/** Branche le contrôle du catalogue sans import circulaire. */
+export function registerCatalogueWriteCheck(check: (text: string) => string | null): void {
+  catalogueWriteCheck = check;
+}
+
+/**
+ * Dit pourquoi un texte de configuration ne peut pas remplacer le fichier actif.
+ * `null` si le texte est acceptable. N'écrit rien.
+ */
+export function assessUserConfigText(text: string): string | null {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parseTOML(text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `Le fichier de configuration n'est pas lisible : ${message}`;
+  }
+  const structural = validateOnDiskDocument(parsed);
+  if (structural) return structural;
+  if (!catalogueWriteCheck) return null;
+  return catalogueWriteCheck(text);
+}
+
+function pruneEmptyTables(value: Record<string, unknown>): void {
+  for (const [key, child] of Object.entries(value)) {
+    if (!isPlainObject(child)) continue;
+    pruneEmptyTables(child);
+    if (Object.keys(child).length === 0) delete value[key];
+  }
+}
+
+function deleteKeyPath(root: Record<string, unknown>, keyPath: string): void {
+  const parts = keyPath.split('.');
+  if (parts.length === 0 || parts.some((part) => part.length === 0)) {
+    throw new Error(`chemin de configuration vide: ${keyPath}`);
+  }
+  let current = root;
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const segment = parts[index] ?? '';
+    const denied = configSegmentError(keyPath, segment);
+    if (denied) throw new Error(denied);
+    const next = Object.hasOwn(current, segment) ? current[segment] : undefined;
+    if (!isPlainObject(next)) return;
+    current = next;
+  }
+  const leaf = parts[parts.length - 1] ?? '';
+  const deniedLeaf = configSegmentError(keyPath, leaf);
+  if (deniedLeaf) throw new Error(deniedLeaf);
+  if (Object.hasOwn(current, leaf)) delete current[leaf];
+  pruneEmptyTables(root);
+}
+
+function commitUserDocument(file: string, document: Record<string, unknown>): void {
+  const serialized = serializeUserDocument(document);
+  const problem = assessUserConfigText(serialized);
+  if (problem) {
+    const rejectedPath = writeRejectedConfig(file, serialized, problem);
+    throw new ConfigWriteRejectedError(problem, rejectedPath);
+  }
+  commitValidConfigText(file, serialized);
 }
 
 // ============================================================================
@@ -1506,7 +1578,8 @@ class ConfigManager {
         if (!isPlainObject(raw)) continue;
         // Ne pas remplacer la fiche par un objet à trous : seules les clés
         // présentes sont copiées. Les champs absents ne sont pas inventés.
-        const base: Record<string, unknown> = merged[name] ? { ...merged[name] } : {};
+        const previous = ownValue<ModelConfig>(merged, name);
+        const base: Record<string, unknown> = previous ? { ...previous } : {};
         for (const [key, value] of Object.entries(raw)) {
           if (value === undefined || value === null) continue;
           base[key] = value;
@@ -1517,8 +1590,9 @@ class ConfigManager {
     }
     if (partial.tool_config) {
       for (const [name, toolConfig] of Object.entries(partial.tool_config)) {
+        const previous = ownValue<ToolConfig>(this.config.tool_config, name);
         this.config.tool_config[name] = {
-          ...this.config.tool_config[name],
+          ...previous,
           ...toolConfig,
         };
       }
@@ -1562,7 +1636,7 @@ class ConfigManager {
    */
   getActiveModel(): ModelConfig & { name: string } {
     const config = this.getConfig();
-    const model = config.models[config.active_model];
+    const model = ownValue<ModelConfig>(config.models, config.active_model);
     if (!model) {
       throw new Error(`Model "${config.active_model}" not found in config`);
     }
@@ -1574,11 +1648,11 @@ class ConfigManager {
    */
   getProviderForModel(modelName: string): ProviderConfig & { name: string } {
     const config = this.getConfig();
-    const model = config.models[modelName];
+    const model = ownValue<ModelConfig>(config.models, modelName);
     if (!model) {
       throw new Error(`Model "${modelName}" not found in config`);
     }
-    const provider = config.providers[model.provider];
+    const provider = ownValue<ProviderConfig>(config.providers, model.provider);
     if (!provider) {
       throw new Error(`Provider "${model.provider}" not found in config`);
     }
@@ -1589,7 +1663,7 @@ class ConfigManager {
    * Get tool config
    */
   getToolConfig(toolName: string): ToolConfig | undefined {
-    return this.getConfig().tool_config[toolName];
+    return ownValue<ToolConfig>(this.getConfig().tool_config, toolName);
   }
 
   /**
@@ -1636,6 +1710,18 @@ class ConfigManager {
    * fichier, puis la clé demandée y est appliquée. `this.config` reste
    * l'objet fusionné (projet compris) et n'est pas sérialisé ici.
    */
+  /**
+   * Document utilisateur seul, sans la couche projet ni les défauts ajoutés en mémoire.
+   */
+  readUserConfigDocument(): Record<string, unknown> {
+    return readUserDocument(configFile());
+  }
+
+  /** Mémorise une écriture refusée sans remplacer le fichier actif. */
+  noteRejectedWrite(payload: string, reason: string): string {
+    return writeRejectedConfig(configFile(), payload, reason);
+  }
+
   saveUserConfig(keyPath?: string, value?: unknown): void {
     const file = configFile();
     const dir = dirname(file);
@@ -1644,11 +1730,11 @@ class ConfigManager {
     }
     const document = readUserDocument(file);
     if (keyPath !== undefined && keyPath.length > 0) {
-      assignKeyPath(document, keyPath, value);
+      if (value === USER_CONFIG_DELETE) deleteKeyPath(document, keyPath);
+      else assignKeyPath(document, keyPath, value);
     }
     // Couche utilisateur relue. serializeTOML(this.config) réécrirait l'objet fusionné.
-    const serialized = serializeUserDocument(document);
-    writeFileSync(file, serialized);
+    commitUserDocument(file, document);
     this.preservedUser = extractPreservedUserConfig(document);
   }
 
@@ -1656,7 +1742,7 @@ class ConfigManager {
    * Set active model
    */
   setActiveModel(modelName: string): void {
-    if (!this.config.models[modelName]) {
+    if (!ownValue(this.config.models, modelName)) {
       throw new Error(`Model "${modelName}" not found`);
     }
     this.config.active_model = modelName;
@@ -1669,8 +1755,8 @@ class ConfigManager {
    */
   applyProfile(profileName: string): void {
     const cfg = this.getConfig();
-    const profile = cfg.profiles?.[profileName];
-    if (!profile) {
+    const profile = ownValue<Partial<CodeBuddyConfig>>(cfg.profiles, profileName);
+    if (!profile || !isPlainObject(profile)) {
       throw new Error(
         `Profile "${profileName}" not found. ` +
         `Available profiles: ${Object.keys(cfg.profiles ?? {}).join(', ') || '(none defined)'}`
@@ -1707,6 +1793,25 @@ class ConfigManager {
   }
 
   /**
+   * Copie résolue pour l'usage. Le fichier et l'objet stocké gardent les références.
+   */
+  async getConfigForUse(): Promise<CodeBuddyConfig> {
+    const stored = this.getConfig();
+    const copy = JSON.parse(JSON.stringify(stored)) as Record<string, unknown>;
+    return await resolveSecretRefs(copy) as unknown as CodeBuddyConfig;
+  }
+
+  /**
+   * Même contrôle que l'écriture, sans sauvegarde ni fichier refusé.
+   */
+  previewUserWrite(keyPath: string, value: unknown): string | null {
+    const staged = JSON.parse(JSON.stringify(readUserDocument(configFile()))) as Record<string, unknown>;
+    if (value === USER_CONFIG_DELETE) deleteKeyPath(staged, keyPath);
+    else assignKeyPath(staged, keyPath, value);
+    return assessUserConfigText(serializeUserDocument(staged));
+  }
+
+  /**
    * Get config file path
    */
   getConfigPath(): string {
@@ -1731,7 +1836,13 @@ class ConfigManager {
       mkdirSync(dir, { recursive: true });
     }
     if (!existsSync(file)) {
-      writeFileSync(file, serializeTOML(DEFAULT_CONFIG));
+      const serialized = serializeTOML(DEFAULT_CONFIG);
+      const problem = assessUserConfigText(serialized);
+      if (problem) {
+        writeRejectedConfig(file, serialized, problem);
+        throw new ConfigWriteRejectedError(problem, file);
+      }
+      commitValidConfigText(file, serialized);
     }
   }
 

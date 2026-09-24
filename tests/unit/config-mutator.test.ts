@@ -229,7 +229,7 @@ describe('Config Mutator', () => {
       }
     });
 
-    it('should resolve env var in SecretRef value', async () => {
+    it('should keep a SecretRef literal instead of the resolved value', async () => {
       process.env.TEST_CONFIG_VAR = 'resolved-value';
 
       const result = await setConfigValue(
@@ -238,7 +238,8 @@ describe('Config Mutator', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.newValue).toBe('resolved-value');
+      expect(result.newValue).toBe('${env:TEST_CONFIG_VAR}');
+      expect(JSON.stringify(result)).not.toContain('resolved-value');
 
       delete process.env.TEST_CONFIG_VAR;
     });
