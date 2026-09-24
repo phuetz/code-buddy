@@ -74,6 +74,16 @@ import {
 } from '../tools/code-exec-tool.js';
 import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  catalogFleetSafe,
+  confineAllowlistedWrite,
+  isMcpReadOnlyTool,
+  lookupMcpWriteAllowlist,
+  mcpWriteAllowlistRefusal,
+  toLegacyName,
+  type McpToolWriteFacts,
+} from '../mcp/mcp-write-allowlist.js';
+import { resolveToolEffect } from '../tools/tool-effect.js';
 
 /**
  * Dependencies required to initialize the ToolHandler
@@ -272,6 +282,16 @@ export class ToolHandler {
   private currentRecoverySessionId: string | undefined;
   /** Keeps code_exec stores and executors isolated between agent instances. */
   private readonly codeExecAgentScopeId: string;
+  /**
+   * Set on the handler the MCP server owns, and on the handler of an agent
+   * that the MCP server constructed. Any other agent leaves this false.
+   */
+  private unconfinedShellEscalationRefused = false;
+  /**
+   * Set only with the MCP write context. File paths are resolved against this
+   * root. Unset means the interactive and headless loops are unchanged.
+   */
+  private workspaceWriteRoot: string | undefined;
 
   constructor(private deps: ToolHandlerDependencies) {
     this.codeExecAgentScopeId = deps.agentId?.trim() || `agent_${createCodeExecToolCallId()}`;
@@ -335,6 +355,22 @@ export class ToolHandler {
   /** Restore a session-owned cwd without re-registering workspace-authored tools. */
   restoreWorkingDirectory(dir: string): void {
     this.currentWorkingDirectory = dir;
+  }
+
+  /**
+   * MCP server only. An unconfined shell escalation is refused for every tool
+   * call on this handler, including when auto-confirm would otherwise grant it.
+   */
+  refuseUnconfinedShellEscalation(): void {
+    this.unconfinedShellEscalationRefused = true;
+  }
+
+  /**
+   * MCP server only. File writes on this handler must stay inside `root`,
+   * even when trust-folder enforcement is off.
+   */
+  confineWritesToWorkspace(root: string): void {
+    this.workspaceWriteRoot = resolve(root);
   }
 
   /** Workspace currently used by tool execution and recovery storage. */
@@ -933,6 +969,50 @@ export class ToolHandler {
   }
 
   /**
+   * MCP write context only. Read-only tools are unchanged. Any other tool
+   * runs only when it is on the explicit allowlist; its destination keys and
+   * any path-shaped string argument must stay inside the workspace. No root
+   * means the interactive and headless loops are unchanged.
+   */
+  private mcpWriteFacts(toolName: string): McpToolWriteFacts {
+    const legacy = toLegacyName(toolName);
+    const registered = this.registry.get(toolName) ?? this.registry.get(legacy);
+    let adapter: { effect?: 'read' | 'reversible' | 'emission'; modifiesFiles?: boolean; fleetSafe?: boolean } | undefined;
+    try {
+      adapter = registered?.tool.getMetadata?.() ?? registered?.metadata;
+    } catch {
+      adapter = registered?.metadata;
+    }
+    const effect = resolveToolEffect(
+      legacy,
+      adapter?.effect ? { effect: adapter.effect } : undefined,
+    );
+    return {
+      effect,
+      modifiesFiles: adapter?.modifiesFiles === true || registered?.metadata?.modifiesFiles === true,
+      fleetSafe: adapter?.fleetSafe === true
+        || registered?.metadata?.fleetSafe === true
+        || catalogFleetSafe(toolName),
+    };
+  }
+
+  private async workspaceConfinementError(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolResult | null> {
+    const root = this.workspaceWriteRoot;
+    if (!root) return null;
+
+    const entry = lookupMcpWriteAllowlist(toolName);
+    if (entry) {
+      const error = await confineAllowlistedWrite(root, args, entry);
+      return error ? { success: false, error } : null;
+    }
+    if (isMcpReadOnlyTool(this.mcpWriteFacts(toolName))) return null;
+    return { success: false, error: mcpWriteAllowlistRefusal(toolName) };
+  }
+
+  /**
    * One authorization stage shared by the original tool call and the final
    * post-hook arguments. A `confirm` decision can never silently fall through.
    */
@@ -942,6 +1022,9 @@ export class ToolHandler {
     hookContext: ToolHookContext,
     hooksManager: ReturnType<typeof getToolHooksManager>,
   ): Promise<ToolResult | null> {
+    const outsideWorkspace = await this.workspaceConfinementError(toolName, args);
+    if (outsideWorkspace) return outsideWorkspace;
+
     try {
       const { getPermissionModeManager } = await import('../security/permission-modes.js');
       const shellCommand =
@@ -1054,6 +1137,7 @@ export class ToolHandler {
       !PRECISE_RUNTIME_APPROVAL_TOOLS.has(toolName)
     ) {
       let confirmed: boolean;
+      let refusalFeedback: string | undefined;
       if (this.confirmationCallback) {
         confirmed = await this.confirmationCallback(toolName, args, policyDecision);
       } else {
@@ -1080,6 +1164,7 @@ export class ToolHandler {
           'tool',
         );
         confirmed = result.confirmed;
+        if (!confirmed && result.feedback) refusalFeedback = result.feedback;
       }
 
       if (!confirmed) {
@@ -1088,9 +1173,10 @@ export class ToolHandler {
           hookContext,
           new Error('User cancelled execution'),
         );
+        const detail = refusalFeedback ? `: ${refusalFeedback}` : '';
         return {
           success: false,
-          error: `User cancelled execution of "${toolName}"`,
+          error: `User cancelled execution of "${toolName}"${detail}`,
         };
       }
       // Never promote one approval to PolicyManager's process-global
@@ -1251,12 +1337,17 @@ export class ToolHandler {
           : {}
       ),
     };
+    const refuseUnconfinedShell = this.unconfinedShellEscalationRefused
+      || executionExtra?.refuseUnconfinedShellEscalation === true;
+    const contextExtraWithBoundary = refuseUnconfinedShell
+      ? { ...contextExtra, refuseUnconfinedShellEscalation: true }
+      : contextExtra;
     let context: IToolExecutionContext = {
       cwd: this.currentWorkingDirectory ?? process.cwd(),
       botId: this.currentBotId,
       ...(sessionId ? { sessionId } : {}),
       ...(abortSignal ? { abortSignal } : {}),
-      ...(Object.keys(contextExtra).length > 0 ? { extra: contextExtra } : {}),
+      ...(Object.keys(contextExtraWithBoundary).length > 0 ? { extra: contextExtraWithBoundary } : {}),
     };
 
     const toolCatalog = toolName === 'code_exec' || toolName === 'tool_search' ? [
@@ -1600,6 +1691,9 @@ export class ToolHandler {
             timeout,
             this.currentWorkingDirectory,
             abortSignalFromExecutionExtra(executionExtra),
+            this.unconfinedShellEscalationRefused
+              ? { refuseUnconfinedEscalation: true }
+              : undefined,
           );
           let streamed = await gen.next();
           while (!streamed.done) {

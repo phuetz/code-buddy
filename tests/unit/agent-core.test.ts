@@ -972,6 +972,8 @@ describe("Agent Core Module Tests", () => {
           expect.any(String),
           // 4th arg is the AbortSignal (registry/bash-tools.ts passes it through);
           // undefined when no cancellation signal is supplied.
+          undefined,
+          // 5th arg carries the MCP shell options; outside MCP it stays undefined.
           undefined
         );
         expect(mockExecuteHooks).toHaveBeenCalledWith("pre-bash", expect.objectContaining({ command: expect.stringContaining("ls -la") }));

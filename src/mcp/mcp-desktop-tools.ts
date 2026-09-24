@@ -13,8 +13,10 @@
  *    CODEBUDDY_MCP_DESKTOP_CONTROL=1 (fail-closed: not registered when unset).
  */
 
+import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { isConfinedTarget } from '../agent/workspace-confine.js';
 import { logger } from '../utils/logger.js';
 import type { DesktopAutomationManager } from '../desktop-automation/automation-manager.js';
 import type { MouseButton } from '../desktop-automation/types.js';
@@ -57,9 +59,35 @@ function fail(text: string) {
 /**
  * Register desktop-automation tools with the MCP server.
  */
+/**
+ * An explicit output_path must stay inside the server workspace. When the
+ * caller omits it, the PNG is still placed under that workspace rather than
+ * the process cwd. No workspace means the historical path (not an MCP server).
+ */
+function confinedScreenshotPath(
+  workspaceRoot: string | undefined,
+  requested: string | undefined,
+): { ok: true; outputPath?: string } | { ok: false; error: string } {
+  const trimmed = typeof requested === 'string' ? requested.trim() : '';
+  if (!workspaceRoot) {
+    return trimmed ? { ok: true, outputPath: trimmed } : { ok: true };
+  }
+  if (trimmed && !isConfinedTarget(workspaceRoot, trimmed)) {
+    return { ok: false, error: `Path outside workspace not allowed: ${trimmed}` };
+  }
+  if (!trimmed) {
+    return {
+      ok: true,
+      outputPath: path.join(workspaceRoot, '.codebuddy', 'screenshots', `mcp-desktop-${Date.now()}.png`),
+    };
+  }
+  return { ok: true, outputPath: trimmed };
+}
+
 export function registerDesktopTools(
   server: McpServer,
   shouldRegister: (name: string) => boolean = () => true,
+  workspaceRoot?: string,
 ): void {
   // ---- Read-only: screenshot ------------------------------------------------
   if (shouldRegister('desktop_screenshot')) server.tool(
@@ -74,11 +102,16 @@ export function registerDesktopTools(
     },
     async (args) => {
       try {
+        const decided = confinedScreenshotPath(workspaceRoot, args.output_path);
+        if (!decided.ok) return fail(decided.error);
         const { ScreenshotTool } = await import('../tools/screenshot-tool.js');
         const tool = new ScreenshotTool();
-        const result = args.region
-          ? await tool.captureRegion(args.region.x, args.region.y, args.region.width, args.region.height)
-          : await tool.capture({ fullscreen: true, ...(args.output_path ? { outputPath: args.output_path } : {}) });
+        const result = await tool.capture({
+          ...(args.region
+            ? { region: args.region }
+            : { fullscreen: true as const }),
+          ...(decided.outputPath ? { outputPath: decided.outputPath } : {}),
+        });
         if (!result.success) return fail(`Screenshot failed: ${result.error ?? 'unknown error'}`);
         return ok(result.output ?? JSON.stringify(result.data ?? {}, null, 2));
       } catch (err) {

@@ -45,6 +45,7 @@ import {
   isSandboxBoundaryFailure,
 } from './execution-policy.js';
 import { confineSpawn } from '../../security/native-sandbox.js';
+import { refusedUnconfinedEscalationResult } from './unconfined-escalation.js';
 
 /**
  * Vrai seulement pour un `cd` SEUL, qui doit changer le répertoire de la session.
@@ -150,11 +151,13 @@ export class BashTool implements Disposable {
     timeout: number = 30000,
     cwd?: string,
     signal?: AbortSignal,
+    options?: { refuseUnconfinedEscalation?: boolean },
   ): AsyncGenerator<string, ToolResult, undefined> {
     return yield* executeStreamingImpl(command, timeout, {
       getCurrentDirectory: () => cwd ?? this.currentDirectory,
       getSandboxManager: () => this.sandboxManager,
       getRunningProcesses: () => this.runningProcesses,
+      refuseUnconfinedEscalation: options?.refuseUnconfinedEscalation === true,
     }, signal);
   }
 
@@ -349,8 +352,9 @@ export class BashTool implements Disposable {
     timeout: number = 30000,
     cwd?: string,
     signal?: AbortSignal,
+    options?: { refuseUnconfinedEscalation?: boolean },
   ): Promise<ToolResult> {
-    return this.executeInternal(command, timeout, cwd, true, signal);
+    return this.executeInternal(command, timeout, cwd, true, signal, options);
   }
 
   private async executeInternal(
@@ -359,6 +363,7 @@ export class BashTool implements Disposable {
     cwd: string | undefined,
     allowSelfHealing: boolean,
     signal?: AbortSignal,
+    options?: { refuseUnconfinedEscalation?: boolean },
   ): Promise<ToolResult> {
     try {
       if (signal?.aborted) {
@@ -486,6 +491,14 @@ export class BashTool implements Disposable {
       }
 
       if (requiresDirectApproval) {
+        const refused = refusedUnconfinedEscalationResult(
+          policy.action,
+          true,
+          escalationReason,
+          options?.refuseUnconfinedEscalation === true,
+        );
+        if (refused) return refused;
+
         const confirmationResult = await this.confirmationService.requestConfirmation(
           {
             operation: 'Run command outside the workspace sandbox',
@@ -546,7 +559,7 @@ export class BashTool implements Disposable {
               // of the approved one. Route it through validation, RTK freeze,
               // policy, sandbox and exact approval again; only disable nested
               // healing to keep the retry budget bounded.
-              return this.executeInternal(fixCmd, timeout * 2, effectiveCwd, false, signal);
+              return this.executeInternal(fixCmd, timeout * 2, effectiveCwd, false, signal, options);
             }
           );
 

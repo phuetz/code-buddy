@@ -134,7 +134,9 @@ export class EmbeddingProvider extends EventEmitter {
 
     try {
       // Dynamic import of transformers.js
-      const { pipeline } = await import('@xenova/transformers');
+      const transformers = await import('@xenova/transformers');
+      pinSingleThreadWasmFallback(transformers);
+      const { pipeline } = transformers;
 
       // Set cache directory
       process.env.TRANSFORMERS_CACHE = this.config.cacheDir;
@@ -488,4 +490,25 @@ export function resetEmbeddingProvider(): void {
 
 function isTestRuntime(): boolean {
   return process.env.NODE_ENV === 'test';
+}
+
+/**
+ * transformers.js 2.x retries a model that `onnxruntime-node` cannot load
+ * (a truncated or corrupt `.onnx` in its cache) on the `onnxruntime-web` wasm
+ * backend. Under Node its threaded build cannot start its pthread workers, and
+ * the second such retry in a process parks the main thread in a wasm
+ * `Atomics.wait` that never returns: the event loop stops, so no timer, test
+ * timeout or signal-driven report can fire. The single-threaded build has no
+ * workers to wait for and rejects the bad model in milliseconds. The wasm
+ * backend is only ever a fallback here, so the healthy path is unchanged.
+ */
+function pinSingleThreadWasmFallback(transformers: object): void {
+  let wasm: { numThreads?: number } | undefined;
+  try {
+    wasm = (transformers as { env?: { backends?: { onnx?: { wasm?: { numThreads?: number } } } } })
+      .env?.backends?.onnx?.wasm;
+  } catch {
+    return; // a partial module stand-in without `env`
+  }
+  if (wasm) wasm.numThreads = 1;
 }
