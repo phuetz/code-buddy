@@ -4,10 +4,28 @@
  * The registry's `fleetSafe: true` metadata is the default allowlist. Tools
  * without that audited read-only contract are only registered after an
  * explicit `--allow-write` / `CODEBUDDY_MCP_ALLOW_WRITE=1` opt-in.
+ *
+ * `--allow-write` is not a silent yes. In the MCP write context a tool that is
+ * not read-only runs only when it is on `MCP_WRITE_ALLOWLIST`
+ * (`src/mcp/mcp-write-allowlist.ts`). That list names each tool and the
+ * argument keys that are its write destinations. Those keys, and any other
+ * string argument that is an absolute path or a path with a separator
+ * resolving outside the workspace, stay inside the server workspace. Every
+ * other write tool (`computer_control`, including notepad and Excel saves)
+ * is refused with a reason. `bash` is on the list and still runs in the
+ * workspace sandbox; if none exists, this server refuses the unconfined
+ * escalation even when `CODEBUDDY_AUTO_CONFIRM=true`. Agent tools construct
+ * the real agent with that same write context. `desktop_screenshot` confines
+ * `output_path` on its own path. `memory_save` and `ckg_ingest` are not on
+ * the allowlist: they do not take a destination path and still write the
+ * profile memory file and the collective ledger. The interactive agent and
+ * headless mode do not enter that frame, so their escalation path is unchanged.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { AgentModelClient } from '../agent/codebuddy-agent.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,6 +54,7 @@ import { registerMemoryTools } from './mcp-memory-tools.js';
 import { registerPrompts } from './mcp-prompts.js';
 import { registerResources } from './mcp-resources.js';
 import { registerSessionTools } from './mcp-session-tools.js';
+import { runWithRefusedUnconfinedEscalation } from '../tools/bash/unconfined-escalation.js';
 
 const PACKAGE_VERSION_FALLBACK = '0.1.0';
 const WRITE_ENV = 'CODEBUDDY_MCP_ALLOW_WRITE';
@@ -58,6 +77,12 @@ export interface CodeBuddyMCPServerOptions {
   tools?: string | string[];
   /** Working directory passed to every registry tool execution. */
   workingDirectory?: string;
+  /**
+   * Replaces the network model when this server constructs its agent.
+   * The CLI leaves it unset. Tests pass a local fake that never opens a socket.
+   * The MCP write context is still applied.
+   */
+  agentModelClient?: AgentModelClient;
 }
 
 export interface MCPToolExposureStats {
@@ -408,17 +433,21 @@ export class CodeBuddyMCPServer {
   private readonly allowWrite: boolean;
   private readonly patterns: string[];
   private readonly workingDirectory: string;
+  private readonly agentModelClient: AgentModelClient | undefined;
   private readonly registryCatalog: RegistryCatalog;
   private readonly supplementalToolNames: string[] = [];
   private writeAccessInitialized = false;
 
   private agent: import('../agent/codebuddy-agent.js').CodeBuddyAgent | null = null;
   private agentInitPromise: Promise<import('../agent/codebuddy-agent.js').CodeBuddyAgent> | null = null;
+  private guardedHandler: import('../agent/tool-handler.js').ToolHandler | null = null;
+  private guardedHandlerPromise: Promise<import('../agent/tool-handler.js').ToolHandler> | null = null;
 
   constructor(options: CodeBuddyMCPServerOptions = {}) {
     this.allowWrite = resolveAllowWrite(options.allowWrite);
     this.patterns = parseToolPatterns(options.tools);
     this.workingDirectory = path.resolve(options.workingDirectory ?? process.cwd());
+    this.agentModelClient = options.agentModelClient;
     this.registryCatalog = buildRegistryCatalog(this.allowWrite, this.patterns);
 
     this.mcpServer = new McpServer(
@@ -488,6 +517,59 @@ export class CodeBuddyMCPServer {
     this.writeAccessInitialized = true;
   }
 
+  /**
+   * Write tools must use the same authorization as the agent loop.
+   * A full model client is not required: file guards do not call an LLM.
+   */
+  private async ensureGuardedHandler(): Promise<import('../agent/tool-handler.js').ToolHandler> {
+    if (this.guardedHandler) return this.guardedHandler;
+    if (this.guardedHandlerPromise) return this.guardedHandlerPromise;
+
+    this.guardedHandlerPromise = (async () => {
+      const [
+        { ToolHandler },
+        { CheckpointManager },
+        { HooksManager },
+        { PluginMarketplace },
+        { RepairCoordinator },
+      ] = await Promise.all([
+        import('../agent/tool-handler.js'),
+        import('../checkpoints/checkpoint-manager.js'),
+        import('../hooks/lifecycle-hooks.js'),
+        import('../plugins/marketplace.js'),
+        import('../agent/execution/repair-coordinator.js'),
+      ]);
+      const handler = new ToolHandler({
+        checkpointManager: new CheckpointManager(),
+        hooksManager: new HooksManager(this.workingDirectory),
+        marketplace: new PluginMarketplace({ autoUpdate: false }),
+        repairCoordinator: new RepairCoordinator({ enabled: false }),
+      });
+      handler.setWorkingDirectory(this.workingDirectory);
+      handler.refuseUnconfinedShellEscalation();
+      handler.confineWritesToWorkspace(this.workingDirectory);
+      this.guardedHandler = handler;
+      return handler;
+    })();
+
+    return this.guardedHandlerPromise;
+  }
+
+  private async executeGuardedTool(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolResult> {
+    const handler = await this.ensureGuardedHandler();
+    return runWithRefusedUnconfinedEscalation(() => handler.executeTool({
+      id: `mcp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      type: 'function',
+      function: {
+        name,
+        arguments: JSON.stringify(args),
+      },
+    }, { refuseUnconfinedShellEscalation: true }));
+  }
+
   private async ensureAgent(): Promise<import('../agent/codebuddy-agent.js').CodeBuddyAgent> {
     await this.ensureWriteAccess();
     if (this.agent) return this.agent;
@@ -495,7 +577,8 @@ export class CodeBuddyMCPServer {
 
     this.agentInitPromise = (async () => {
       const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
-      const apiKey = resolveActiveProviderApiKey() || '';
+      const injected = this.agentModelClient;
+      const apiKey = injected ? 'local-model' : (resolveActiveProviderApiKey() || '');
 
       if (!apiKey) {
         throw new Error(
@@ -505,9 +588,22 @@ export class CodeBuddyMCPServer {
 
       const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
       this.agent = new CodeBuddyAgent(
-        apiKey,
+        injected ? 'local-model' : apiKey,
         process.env.GROK_BASE_URL,
         process.env.GROK_MODEL,
+        undefined,
+        true,
+        undefined,
+        this.workingDirectory,
+        undefined,
+        undefined,
+        {
+          mcpToolContext: {
+            workspaceRoot: this.workingDirectory,
+            refuseUnconfinedShellEscalation: true,
+          },
+          ...(injected ? { modelClient: injected } : {}),
+        },
       );
       return this.agent;
     })();
@@ -530,11 +626,13 @@ export class CodeBuddyMCPServer {
       !dynamicNames.has(name) && shouldMatchPatterns(name, this.patterns);
     const getAgent = () => this.ensureAgent();
 
-    registerAgentTools(this.mcpServer, getAgent, shouldRegister);
+    registerAgentTools(this.mcpServer, getAgent, shouldRegister, {
+      workspaceRoot: this.workingDirectory,
+    });
     registerMemoryTools(this.mcpServer, shouldRegister);
     registerCkgTools(this.mcpServer, shouldRegister);
     registerSessionTools(this.mcpServer, getAgent, shouldRegister);
-    registerDesktopTools(this.mcpServer, shouldRegister);
+    registerDesktopTools(this.mcpServer, shouldRegister, this.workingDirectory);
 
     const candidates = [
       'agent_chat',
@@ -585,7 +683,6 @@ export class CodeBuddyMCPServer {
         },
         async (rawArgs) => {
           try {
-            if (!definition.readOnly) await this.ensureWriteAccess();
             const args = rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)
               ? rawArgs as Record<string, unknown>
               : {};
@@ -595,6 +692,15 @@ export class CodeBuddyMCPServer {
                 success: false,
                 error: `Validation failed: ${validation.errors?.join(', ') || 'invalid arguments'}`,
               });
+            }
+
+            // Read-only tools stay on the direct adapter path. Write tools keep
+            // the explicit --allow-write check, then the agent ToolHandler
+            // (workspace trust, protected paths, confirmation). A non-interactive
+            // MCP client is refused unless an explicit policy already allows it.
+            if (!definition.readOnly) {
+              await this.ensureWriteAccess();
+              return this.formatResult(await this.executeGuardedTool(definition.name, args));
             }
 
             const context: IToolExecutionContext = { cwd: this.workingDirectory };
@@ -610,12 +716,18 @@ export class CodeBuddyMCPServer {
     }
   }
 
-  async start(): Promise<void> {
+  /** Attach an already-built transport. Used by stdio start and in-process tests. */
+  async connect(transport: Transport): Promise<void> {
     if (this.running) throw new Error('MCP server is already running');
     this.setupApprovalBridge();
-    this.transport = new StdioServerTransport();
-    await this.mcpServer.connect(this.transport);
+    await this.mcpServer.connect(transport);
     this.running = true;
+  }
+
+  async start(): Promise<void> {
+    if (this.running) throw new Error('MCP server is already running');
+    this.transport = new StdioServerTransport();
+    await this.connect(this.transport);
   }
 
   async stop(): Promise<void> {
@@ -632,6 +744,8 @@ export class CodeBuddyMCPServer {
       this.agent = null;
       this.agentInitPromise = null;
     }
+    this.guardedHandler = null;
+    this.guardedHandlerPromise = null;
 
     await this.mcpServer.close();
     this.transport = null;

@@ -117,9 +117,37 @@ const DEFAULT_CONFIG: OSSandboxConfig = {
 let cachedCapabilities: SandboxCapabilities | null = null;
 
 /**
+ * Deadline for every capability probe (bwrap, docker version). A probe that
+ * never exits used to pin the caller, including a test module's top-level
+ * await, where no test timeout applies. Five seconds is enough for a live
+ * daemon and short enough that a stuck one is reported unavailable.
+ */
+export const CAPABILITY_PROBE_TIMEOUT_MS = 5_000;
+
+/**
+ * Test seam. Production leaves this unset, so detection is unchanged.
+ * A probe replaces the host scan for the current process only; it is not a
+ * mutable flag read by the agent loop.
+ */
+type SandboxCapabilityProbe = () => Promise<SandboxCapabilities> | SandboxCapabilities;
+let capabilityProbe: SandboxCapabilityProbe | null = null;
+
+export function setSandboxCapabilityProbe(probe: SandboxCapabilityProbe | null): void {
+  capabilityProbe = probe;
+  cachedCapabilities = null;
+}
+
+export function sandboxCapabilityProbeInstalled(): boolean {
+  return capabilityProbe !== null;
+}
+
+/**
  * Detect available sandbox backends
  */
 export async function detectCapabilities(): Promise<SandboxCapabilities> {
+  if (capabilityProbe) {
+    return capabilityProbe();
+  }
   if (cachedCapabilities) {
     return cachedCapabilities;
   }
@@ -174,9 +202,14 @@ export async function detectCapabilities(): Promise<SandboxCapabilities> {
     const result = await execSimple('docker', ['version', '--format', '{{.Server.Os}}']);
     if (result.exitCode === 0) {
       capabilities.docker = result.stdout.trim().toLowerCase() !== 'windows';
-    } else {
+    } else if (!result.stderr.includes('probe timed out')) {
+      // A format the daemon does not understand (docker→podman shims) still
+      // gets the historical probe. A probe that already hit its deadline must
+      // not be started a second time.
       const fallback = await execSimple('docker', ['version', '--format', '{{.Server.Version}}']);
       capabilities.docker = fallback.exitCode === 0;
+    } else {
+      capabilities.docker = false;
     }
   } catch {
     capabilities.docker = false;
@@ -211,6 +244,38 @@ export function clearCapabilitiesCache(): void {
 // ============================================================================
 
 /**
+ * Mounts shared by bubblewrap and by the landlock+seccomp path (that path is
+ * still bubblewrap, plus a seccomp filter).
+ *
+ * `--tmpfs /tmp` is applied BEFORE any bind. Bubblewrap mounts in order, so a
+ * later tmpfs hides a workDir that lives under the host `/tmp` and `--chdir`
+ * then fails with "No such file or directory".
+ *
+ * Read-only paths stay last. Binding them earlier let a writable parent reopen
+ * `.git` and `.codebuddy`.
+ */
+function appendSandboxMounts(bwrapArgs: string[], config: OSSandboxConfig): void {
+  bwrapArgs.push('--tmpfs', '/tmp');
+
+  for (const p of config.readWritePaths) {
+    if (fs.existsSync(p)) {
+      bwrapArgs.push('--bind', p, p);
+    }
+  }
+
+  if (fs.existsSync(config.workDir)) {
+    bwrapArgs.push('--bind', config.workDir, config.workDir);
+    bwrapArgs.push('--chdir', config.workDir);
+  }
+
+  for (const p of config.readOnlyPaths) {
+    if (fs.existsSync(p)) {
+      bwrapArgs.push('--ro-bind', p, p);
+    }
+  }
+}
+
+/**
  * Execute command in bubblewrap sandbox
  */
 async function execBubblewrap(
@@ -243,31 +308,7 @@ async function execBubblewrap(
   // Mount /dev minimally
   bwrapArgs.push('--dev', '/dev');
 
-  // Mount read-write paths
-  for (const p of config.readWritePaths) {
-    if (fs.existsSync(p)) {
-      bwrapArgs.push('--bind', p, p);
-    }
-  }
-
-  // Mount working directory
-  if (fs.existsSync(config.workDir)) {
-    bwrapArgs.push('--bind', config.workDir, config.workDir);
-    bwrapArgs.push('--chdir', config.workDir);
-  }
-
-  // Read-only overlays are deliberately mounted LAST.  Bubblewrap resolves
-  // overlapping binds in order; doing this before the workspace bind made
-  // `.git` and `.codebuddy` writable again despite the profile claiming the
-  // opposite.
-  for (const p of config.readOnlyPaths) {
-    if (fs.existsSync(p)) {
-      bwrapArgs.push('--ro-bind', p, p);
-    }
-  }
-
-  // Create /tmp
-  bwrapArgs.push('--tmpfs', '/tmp');
+  appendSandboxMounts(bwrapArgs, config);
 
   // Set hostname
   bwrapArgs.push('--hostname', 'sandbox');
@@ -774,29 +815,7 @@ async function execLandlock(
     // Mount /dev minimally
     bwrapArgs.push('--dev', '/dev');
 
-    // Mount read-write paths
-    for (const p of config.readWritePaths) {
-      if (fs.existsSync(p)) {
-        bwrapArgs.push('--bind', p, p);
-      }
-    }
-
-    // Mount working directory
-    if (fs.existsSync(config.workDir)) {
-      bwrapArgs.push('--bind', config.workDir, config.workDir);
-      bwrapArgs.push('--chdir', config.workDir);
-    }
-
-    // See execBubblewrap: overlapping read-only paths must be applied after
-    // every writable parent bind or the parent silently re-opens them.
-    for (const p of config.readOnlyPaths) {
-      if (fs.existsSync(p)) {
-        bwrapArgs.push('--ro-bind', p, p);
-      }
-    }
-
-    // Create /tmp
-    bwrapArgs.push('--tmpfs', '/tmp');
+    appendSandboxMounts(bwrapArgs, config);
 
     // Set hostname
     bwrapArgs.push('--hostname', 'sandbox');
@@ -1208,12 +1227,41 @@ export class OSSandbox extends EventEmitter implements SandboxBackendInterface {
 /**
  * Simple exec wrapper
  */
-function execSimple(command: string, args: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+function execSimple(
+  command: string,
+  args: string[],
+  timeoutMs: number = CAPABILITY_PROBE_TIMEOUT_MS,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    const proc = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    // A new process group lets the deadline kill the probe and the children
+    // it spawned (a shell waiting on sleep, a stuck docker helper). Windows
+    // has no POSIX group; the direct kill below is the fallback there.
+    const detached = process.platform !== 'win32';
+    const proc = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], detached });
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    let timedOut = false;
+
+    const finish = (exitCode: number, out: string, err: string): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ exitCode, stdout: out, stderr: err });
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      const pid = proc.pid;
+      if (detached && typeof pid === 'number' && pid > 0) {
+        try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ }
+      }
+      try { proc.kill('SIGKILL'); } catch { /* already gone */ }
+      // A probe stuck in uninterruptible sleep must not keep the process alive.
+      proc.unref();
+      finish(1, stdout, 'probe timed out');
+    }, timeoutMs);
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString();
@@ -1224,11 +1272,11 @@ function execSimple(command: string, args: string[]): Promise<{ exitCode: number
     });
 
     proc.on('close', (code) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
+      finish(code ?? 1, stdout, timedOut ? 'probe timed out' : stderr);
     });
 
     proc.on('error', () => {
-      resolve({ exitCode: 1, stdout: '', stderr: 'Command not found' });
+      finish(1, '', 'Command not found');
     });
   });
 }

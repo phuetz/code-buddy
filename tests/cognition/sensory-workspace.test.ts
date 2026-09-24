@@ -449,4 +449,80 @@ describe('sensory cognitive workspace shadow adapter', () => {
       else process.env.CODEBUDDY_VISION_CONTEXT_PRIVACY = previous;
     }
   });
+
+  it('carries the camera spatial estimate to the world, and nothing else', async () => {
+    const cognition = wireSensoryWorkspace({ worldSweepMs: 0 });
+    const emit = (spatial: Record<string, unknown>, episode: string) =>
+      getGlobalEventBus().emit('sensory:perception', {
+        source: 'test',
+        metadata: {
+          modality: 'vision',
+          kind: 'person_entered',
+          salience: 200,
+          payload: {
+            camera: 'brio',
+            presenceEpisodeId: episode,
+            occupancyCount: 1,
+            box2d: { x: 0.6, y: 0.2, width: 0.2, height: 0.3 },
+            spatial,
+          },
+        },
+      });
+    try {
+      emit({
+        basis: 'estimate-ipd-v1',
+        azimuthDeg: 18.5,
+        elevationDeg: 4,
+        distanceM: 1.42,
+        facing: true,
+        landmarks: [[0.1, 0.2]],
+      }, 'a');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const track = cognition.snapshotWorld().find((entity) => entity.type === 'person-track');
+      expect(track?.observation2d?.spatial).toEqual({
+        basis: 'estimate-ipd-v1',
+        azimuthDeg: 18.5,
+        elevationDeg: 4,
+        distanceM: 1.42,
+        facing: true,
+      });
+      expect(JSON.stringify(cognition.workspace.snapshot())).not.toContain('landmarks');
+    } finally {
+      cognition.close();
+    }
+  });
+
+  it('drops a spatial estimate that is unlabelled or out of bounds', async () => {
+    for (const spatial of [
+      { basis: 'metric', azimuthDeg: 1, elevationDeg: 1, distanceM: 1 },
+      { basis: 'estimate-ipd-v1', azimuthDeg: 1, elevationDeg: 1, distanceM: 400 },
+      { basis: 'estimate-ipd-v1', azimuthDeg: 'droite', elevationDeg: 1, distanceM: 1 },
+    ]) {
+      resetEventBus();
+      const cognition = wireSensoryWorkspace({ worldSweepMs: 0 });
+      try {
+        getGlobalEventBus().emit('sensory:perception', {
+          source: 'test',
+          metadata: {
+            modality: 'vision',
+            kind: 'person_entered',
+            salience: 200,
+            payload: {
+              camera: 'brio',
+              presenceEpisodeId: 'b',
+              occupancyCount: 1,
+              box2d: { x: 0.1, y: 0.2, width: 0.2, height: 0.3 },
+              spatial,
+            },
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const track = cognition.snapshotWorld().find((entity) => entity.type === 'person-track');
+        expect(track?.observation2d).toBeTruthy();
+        expect(track?.observation2d?.spatial).toBeUndefined();
+      } finally {
+        cognition.close();
+      }
+    }
+  });
 });

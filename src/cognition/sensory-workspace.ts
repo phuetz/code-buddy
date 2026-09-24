@@ -14,6 +14,7 @@ import {
   type WorldEntity,
   type WorldObservation,
   type WorldObservation2D,
+  safeSpatialEstimate,
 } from './world-model.js';
 
 export interface SafeSensoryPercept {
@@ -62,7 +63,11 @@ function safeTrackerId(value: unknown, sensorId: string): string | undefined {
     .slice(0, 20)}`;
 }
 
-function safeObservation2D(value: unknown, sensorId: string): WorldObservation2D | undefined {
+function safeObservation2D(
+  value: unknown,
+  sensorId: string,
+  spatialValue?: unknown,
+): WorldObservation2D | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const candidate = value as Record<string, unknown>;
   const { x, y, width, height } = candidate;
@@ -81,7 +86,8 @@ function safeObservation2D(value: unknown, sensorId: string): WorldObservation2D
   ) {
     return undefined;
   }
-  return { sensorId, x, y, width, height };
+  const spatial = safeSpatialEstimate(spatialValue);
+  return { sensorId, x, y, width, height, ...(spatial ? { spatial } : {}) };
 }
 
 function visionContextPrivacy(): WorkspacePrivacy {
@@ -111,6 +117,7 @@ export interface UntrustedSensoryPercept {
   occupancyCount?: unknown;
   departureConfirmed?: unknown;
   box2d?: unknown;
+  spatial?: unknown;
 }
 
 /**
@@ -137,7 +144,7 @@ export function sanitizeSensoryPercept(
     input.occupancyCount <= 100
     ? input.occupancyCount
     : undefined;
-  const observation2d = safeObservation2D(input.box2d, sensorId);
+  const observation2d = safeObservation2D(input.box2d, sensorId, input.spatial);
   const confidence = safeConfidence(input.confidence, options.fallbackConfidence ?? 0.8);
   return {
     modality,
@@ -353,6 +360,7 @@ export function wireSensoryWorkspace(options: {
       occupancyCount: rawPayload.occupancyCount,
       departureConfirmed: rawPayload.departureConfirmed,
       box2d: rawPayload.box2d,
+      spatial: rawPayload.spatial,
     }, { receivedAt, fallbackConfidence: semanticConfidence });
     if (!safePercept) return;
     const rawSceneDescription = perception.kind === 'scene_described' &&
