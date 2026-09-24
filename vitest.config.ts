@@ -83,12 +83,15 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    setupFiles: ['./vitest.setup.ts'],
+    // home-isolation d'abord : HOME/USERPROFILE/XDG jetables par fichier AVANT tout import
+    // (incident du 24/09/2026 : `/logout` testé a effacé le vrai ~/.codebuddy/codex-auth.json).
+    setupFiles: ['./tests/setup/home-isolation.ts', './vitest.setup.ts'],
     // TESTWRITE1 (2026-09-04): fingerprints .codebuddy/settings.json and
     // .codebuddy/CODEBUDDY_MEMORY.md before any test file runs and fails the
     // whole run if either changed by the time every worker is done — see the
     // guard file for the two real incidents this catches.
-    globalSetup: ['./tests/hygiene/no-repo-writes-global-setup.ts'],
+    // home-isolation-global : HOME appelant mémorisé et parent des HOME jetables, supprimé à la fin.
+    globalSetup: ['./tests/setup/home-isolation-global.ts', './tests/hygiene/no-repo-writes-global-setup.ts'],
     // windows-latest runners show I/O stall bursts: on 2026-08-22 three
     // different real-I/O suites (migration-e2e, execute-code RPC, ocr-tool)
     // each crossed 20 s once on a Windows job while finishing in < 5 s on
