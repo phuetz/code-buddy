@@ -29,4 +29,8 @@ l'étude indépendante L3 (conduite en parallèle par la flotte).
    branchement : échange de lien entre la décision et l'exécution (l'outil devra ouvrir sans suivre
    les liens et revérifier). Écarté : fuseau de l'expiration (Lisa et son propriétaire partagent la
    même horloge locale).
-
+3. Second juge, d'une autre lignée (agy, Gemini 3.6 Flash High), sur la version corrigée. Trois failles
+   restantes, toutes confirmées et corrigées : une cible PARENT d'un garde-fou (déplacer `~/.codebuddy`)
+   n'était pas protégée ; un lien symbolique PENDANT vers un dossier protégé faisait juger la cible par
+   son dossier autorisé (désormais : chemin injugeable ⇒ refus) ; le dossier contenant le fichier de
+   mandats n'était pas contrôlé (écriture de groupe ou d'autrui ⇒ fichier ignoré).

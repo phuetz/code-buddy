@@ -143,6 +143,21 @@ describe('decideAutonomousAction — the charter, in order', () => {
     expect(decideAutonomousAction(request, context(home, [own])).decision).toBe('deny');
   });
 
+  it('a target that CONTAINS a guardrail is protected too', () => {
+    const home = sandboxHome();
+    const own = { ...RANGER, chemins: ['~'] };
+    for (const target of [path.join(home, '.codebuddy'), home]) {
+      expect(decideAutonomousAction(move(home, { targets: [target] }), context(home, [own])).decision, target).toBe('deny');
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('a dangling symlink cannot hide where a write lands', () => {
+    const home = sandboxHome();
+    const trap = path.join(home, 'Téléchargements', 'pendant');
+    symlinkSync(path.join(home, '.codebuddy', 'lisa', 'pas-encore', 'injecte.json'), trap);
+    expect(decideAutonomousAction(move(home, { targets: [trap] }), context(home)).decision).toBe('deny');
+  });
+
   it.skipIf(process.platform === 'win32')('a symlink planted in an allowed folder is judged by where it leads', () => {
     const home = sandboxHome();
     const trap = path.join(home, 'Téléchargements', 'piège');
@@ -207,6 +222,14 @@ expire = "2026-12-31"
     dirs.push(aliasDir);
     expect(loadMandates(path.join(aliasDir, 'mandats.toml')).mandates).toEqual([]);
     expect(loadMandates(real).mandates).toHaveLength(1);
+  });
+
+  it.skipIf(process.platform === 'win32')('refuses a file whose directory others can write', () => {
+    const file = write(VALID);
+    chmodSync(path.dirname(file), 0o777);
+    expect(loadMandates(file).mandates).toEqual([]);
+    chmodSync(path.dirname(file), 0o700);
+    expect(loadMandates(file).mandates).toHaveLength(1);
   });
 
   it.skipIf(process.platform === 'win32')('refuses a symlinked or group-writable file', () => {

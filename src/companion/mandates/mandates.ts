@@ -23,7 +23,7 @@
  * @module companion/mandates/mandates
  */
 
-import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import TOML from '@iarna/toml';
@@ -101,6 +101,16 @@ export function loadMandates(file: string = mandatesFilePath()): LoadedMandates 
   if (process.platform !== 'win32' && (stat.mode & 0o022) !== 0) {
     return refuse(`mandate file is writable by group or others, ignored: ${file}`);
   }
+  // Someone who can write the DIRECTORY can replace the file whatever the file's own mode.
+  if (process.platform !== 'win32') {
+    try {
+      if ((statSync(path.dirname(file)).mode & 0o022) !== 0) {
+        return refuse(`mandate directory is writable by group or others, ignored: ${path.dirname(file)}`);
+      }
+    } catch {
+      return refuse(`mandate directory cannot be inspected, ignored: ${path.dirname(file)}`);
+    }
+  }
   try {
     const parsed = mandatesFileSchema.safeParse(TOML.parse(readFileSync(file, 'utf8')));
     if (!parsed.success) {
@@ -177,13 +187,21 @@ function expandHome(p: string, home: string): string {
  * guardrail must be judged by where it leads. For a path that does not exist yet, its nearest
  * existing ancestor is resolved and the rest re-appended.
  */
-export function realTarget(target: string): string {
+export function realTarget(target: string): string | null {
   let current = path.resolve(target);
   const rest: string[] = [];
   for (;;) {
     try {
       return path.join(realpathSync(current), ...rest);
     } catch {
+      // A component that EXISTS but cannot be resolved is a dangling (or looping) symlink: where a
+      // write through it would land is unknown, so the path cannot be judged at all.
+      try {
+        lstatSync(current);
+        return null;
+      } catch {
+        /* truly absent: judge by its nearest existing ancestor */
+      }
       const parent = path.dirname(current);
       if (parent === current) return path.resolve(target);
       rest.unshift(path.basename(current));
@@ -195,6 +213,7 @@ export function realTarget(target: string): string {
 function isUnder(target: string, root: string): boolean {
   const t = realTarget(target);
   const r = realTarget(root);
+  if (t === null || r === null) return false;
   return t === r || t.startsWith(r + path.sep);
 }
 
@@ -212,7 +231,12 @@ export function decideAutonomousAction(request: ActionRequest, context: Decision
   const targets = request.targets ?? [];
   // The default guardrails are ALWAYS enforced; a caller can only add to them.
   const protectedPaths = [...defaultProtectedPaths(home), ...context.protectedPaths];
-  const guarded = targets.find((t) => protectedPaths.some((p) => isUnder(t, p)));
+  if (targets.some((t) => realTarget(t) === null)) {
+    return { decision: 'deny', reason: 'a target goes through a dangling symlink: where it lands is unknown' };
+  }
+  // Protected when the target is a guardrail, lies inside one, or CONTAINS one (moving or
+  // deleting ~/.codebuddy would take ~/.codebuddy/lisa with it).
+  const guarded = targets.find((t) => protectedPaths.some((p) => isUnder(t, p) || isUnder(p, t)));
   if (guarded && request.effect !== 'read') {
     return { decision: 'deny', reason: `Lisa never writes her own guardrails (${guarded})` };
   }
