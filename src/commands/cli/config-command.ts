@@ -104,4 +104,80 @@ export function registerConfigCommand(program: Command): void {
 
       console.log('');
     });
+
+  const bindMutation = (opts: { dryRun?: boolean; json?: boolean }): { dryRun: boolean; json: boolean } => ({
+    dryRun: opts.dryRun === true,
+    json: opts.json === true,
+  });
+
+  config
+    .command('set [key] [value]')
+    .description('Set a user config key outside a session. Unknown keys are refused.')
+    .option('--dry-run', 'Report the change without writing')
+    .option('--json', 'Print the structured report, or pass a JSON object of keys when value is omitted')
+    .action(async (key: string | undefined, value: string | undefined, opts: { dryRun?: boolean; json?: boolean }) => {
+      const flags = bindMutation(opts);
+      const { runConfigSet, formatConfigReport } = await import('../../config/config-cli.js');
+      let batch: Record<string, unknown> | undefined;
+      let singleKey = key;
+      let singleValue = value;
+      if (flags.json && key && value === undefined && key.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(key) as unknown;
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('le JSON doit être un objet de clés');
+          }
+          batch = parsed as Record<string, unknown>;
+          singleKey = undefined;
+          singleValue = undefined;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(message);
+          process.exitCode = 1;
+          return;
+        }
+      }
+      const report = await runConfigSet({
+        ...(singleKey ? { key: singleKey } : {}),
+        ...(singleValue !== undefined ? { value: singleValue } : {}),
+        ...(batch ? { batch } : {}),
+        dryRun: flags.dryRun,
+      });
+      process.stdout.write(formatConfigReport(report, flags.json));
+      if (!report.ok) process.exitCode = 1;
+    });
+
+  config
+    .command('patch <key> <value>')
+    .description('Merge an object into the user config. Null removes a key. Scalars replace.')
+    .option('--dry-run', 'Report the change without writing')
+    .option('--json', 'Print the structured report')
+    .action(async (key: string, value: string, opts: { dryRun?: boolean; json?: boolean }) => {
+      const flags = bindMutation(opts);
+      const { runConfigPatch, formatConfigReport } = await import('../../config/config-cli.js');
+      const report = await runConfigPatch({ key, value, dryRun: flags.dryRun });
+      process.stdout.write(formatConfigReport(report, flags.json));
+      if (!report.ok) process.exitCode = 1;
+    });
+
+  config
+    .command('unset <key>')
+    .description('Remove a key from the user config file')
+    .option('--dry-run', 'Report the change without writing')
+    .option('--json', 'Print the structured report')
+    .action(async (key: string, opts: { dryRun?: boolean; json?: boolean }) => {
+      const flags = bindMutation(opts);
+      const { runConfigUnset, formatConfigReport } = await import('../../config/config-cli.js');
+      const report = await runConfigUnset({ key, dryRun: flags.dryRun });
+      process.stdout.write(formatConfigReport(report, flags.json));
+      if (!report.ok) process.exitCode = 1;
+    });
+
+  config
+    .command('schema')
+    .description('Print the JSON Schema of the TOML config and the environment variables')
+    .action(async () => {
+      const { runConfigSchema } = await import('../../config/config-cli.js');
+      process.stdout.write(`${JSON.stringify(runConfigSchema(), null, 2)}\n`);
+    });
 }

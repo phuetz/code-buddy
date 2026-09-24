@@ -1,5 +1,9 @@
 # Configuration
 
+## Fichier TOML
+
+`buddy config set`, `buddy config patch` et `buddy config unset` modifient le fichier utilisateur hors session. `--dry-run --json` imprime un rapport `ok`, `operations`, `checks`, `errors`. Une clé inconnue est refusée. `buddy config schema` imprime le schéma JSON du TOML et des variables d'environnement. L'exemple commenté, généré depuis ce schéma, est `docs/config.toml.example`. Chaque écriture valide tourne `.bak`, `.bak.1` et `.last-good`. Une écriture refusée laisse le fichier actif en place et dépose `.rejected.*`. `buddy doctor --fix` restaure `.last-good` quand le fichier actif est illisible ou refusé.
+
 ## Environment Variables
 
 ### Required

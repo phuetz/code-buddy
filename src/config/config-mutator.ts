@@ -13,6 +13,11 @@
 import { logger } from '../utils/logger.js';
 import type { CodeBuddyConfig } from './toml-config.js';
 import { resolveSecretRef } from './secret-ref.js';
+import {
+  USER_CONFIG_DELETE,
+  classifyConfigPath,
+  validateConfigValue,
+} from './config-schema.js';
 
 async function lazyGetConfigManager() {
   const { getConfigManager } = await import('./toml-config.js');
@@ -210,12 +215,86 @@ function navigateKeyPath(
  * @param value - The value to set
  * @param opts - Options (dryRun, json)
  */
+function failure(
+  keyPath: string,
+  value: unknown,
+  dryRun: boolean,
+  error: string,
+  oldValue?: unknown,
+): ConfigSetResult {
+  return {
+    success: false,
+    key: keyPath,
+    oldValue,
+    newValue: value,
+    dryRun,
+    error,
+  };
+}
+
+async function noteRejection(keyPath: string, reason: string, dryRun: boolean): Promise<void> {
+  if (dryRun) return;
+  const configManager = await lazyGetConfigManager() as {
+    noteRejectedWrite?: (payload: string, reason: string) => string;
+  };
+  if (typeof configManager.noteRejectedWrite !== 'function') return;
+  configManager.noteRejectedWrite(`# cle: ${keyPath}\n`, reason);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readAt(root: Record<string, unknown>, keyPath: string): unknown {
+  const parts = keyPath.split('.');
+  let current: unknown = root;
+  for (const part of parts) {
+    if (!isRecord(current)) return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
+/** Feuilles d'un patch. `null` demande la suppression de cette feuille. */
+function patchLeaves(prefix: string, value: unknown): Array<[string, unknown]> {
+  if (isRecord(value)) {
+    const entries = Object.entries(value);
+    if (entries.length === 0) return [[prefix, value]];
+    return entries.flatMap(([key, child]) => patchLeaves(prefix ? `${prefix}.${key}` : key, child));
+  }
+  return [[prefix, value]];
+}
+
+function mergePatch(base: unknown, patch: unknown): unknown {
+  if (patch === null) return undefined;
+  if (isRecord(base) && isRecord(patch)) {
+    const merged: Record<string, unknown> = { ...base };
+    for (const [key, child] of Object.entries(patch)) {
+      if (child === null) {
+        delete merged[key];
+        continue;
+      }
+      const next = mergePatch(merged[key], child);
+      if (next === undefined) delete merged[key];
+      else merged[key] = next;
+    }
+    return merged;
+  }
+  return patch;
+}
+
 export async function setConfigValue(
   keyPath: string,
   value: unknown,
   opts?: ConfigSetOptions,
 ): Promise<ConfigSetResult> {
   const dryRun = opts?.dryRun ?? false;
+  const classified = classifyConfigPath(keyPath);
+  if (!classified.ok) {
+    await noteRejection(keyPath, classified.message, dryRun);
+    return failure(keyPath, value, dryRun, classified.message);
+  }
+
   const configManager = await lazyGetConfigManager();
   const config = configManager.getConfig() as CodeBuddyConfig;
 
@@ -249,18 +328,18 @@ export async function setConfigValue(
   // Type validation
   const typeError = validateValueType(currentValue, resolvedValue);
   if (typeError) {
-    return {
-      success: false,
-      key: keyPath,
-      oldValue: currentValue,
-      newValue: resolvedValue,
-      dryRun,
-      error: `Type mismatch for "${keyPath}": ${typeError}`,
-    };
+    const message = `Type mismatch for "${keyPath}": ${typeError}`;
+    await noteRejection(keyPath, message, dryRun);
+    return failure(keyPath, resolvedValue, dryRun, message, currentValue);
   }
 
   // Coerce the value to the expected type
   resolvedValue = coerceValue(currentValue, resolvedValue);
+  const schemaError = validateConfigValue(keyPath, resolvedValue);
+  if (schemaError) {
+    await noteRejection(keyPath, schemaError, dryRun);
+    return failure(keyPath, resolvedValue, dryRun, schemaError, currentValue);
+  }
 
   // Dry-run: return preview without modifying
   if (dryRun) {
@@ -278,11 +357,14 @@ export async function setConfigValue(
   // Apply the change
   parent[leafKey] = resolvedValue;
 
-  // Persist
+  // Persist. Une écriture refusée ne reste ni en mémoire ni sur le fichier actif.
   try {
     configManager.saveUserConfig(keyPath, resolvedValue);
   } catch (err) {
-    logger.warn(`Failed to save config after setting "${keyPath}": ${err}`, { source: 'ConfigMutator' });
+    parent[leafKey] = currentValue;
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(`Failed to save config after setting "${keyPath}": ${message}`, { source: 'ConfigMutator' });
+    return failure(keyPath, resolvedValue, dryRun, message, currentValue);
   }
 
   logger.info(`Config set: ${keyPath} = ${JSON.stringify(resolvedValue)}`, { source: 'ConfigMutator' });
@@ -317,4 +399,113 @@ export async function setConfigBatch(
   }
 
   return results;
+}
+
+/**
+ * Fusionne un objet dans la couche utilisateur seule.
+ * Un scalaire remplace la cible. `null` retire la clé.
+ * La couche projet n'est pas relue pour construire la valeur écrite.
+ */
+export async function patchConfigValue(
+  keyPath: string,
+  value: unknown,
+  opts?: ConfigSetOptions,
+): Promise<ConfigSetResult> {
+  const dryRun = opts?.dryRun ?? false;
+  if (value === null) return unsetConfigValue(keyPath, opts);
+  if (!isRecord(value)) return setConfigValue(keyPath, value, opts);
+
+  const leaves = patchLeaves(keyPath, value);
+  for (const [leaf, leafValue] of leaves) {
+    if (leafValue === null) {
+      const classified = classifyConfigPath(leaf);
+      if (!classified.ok) {
+        await noteRejection(leaf, classified.message, dryRun);
+        return failure(keyPath, value, dryRun, classified.message);
+      }
+      continue;
+    }
+    const classified = classifyConfigPath(leaf);
+    if (!classified.ok) {
+      await noteRejection(leaf, classified.message, dryRun);
+      return failure(keyPath, value, dryRun, classified.message);
+    }
+    const schemaError = validateConfigValue(leaf, leafValue);
+    if (schemaError) {
+      await noteRejection(leaf, schemaError, dryRun);
+      return failure(keyPath, value, dryRun, schemaError);
+    }
+  }
+
+  const configManager = await lazyGetConfigManager() as {
+    readUserConfigDocument?: () => Record<string, unknown>;
+    saveUserConfig: (keyPath?: string, value?: unknown) => void;
+    getConfig: () => CodeBuddyConfig;
+  };
+  const userDocument = configManager.readUserConfigDocument?.() ?? {};
+  const oldValue = readAt(userDocument, keyPath);
+  const merged = mergePatch(oldValue, value);
+  if (dryRun) {
+    return {
+      success: true,
+      key: keyPath,
+      oldValue,
+      newValue: merged,
+      dryRun: true,
+    };
+  }
+  try {
+    configManager.saveUserConfig(keyPath, merged);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return failure(keyPath, value, false, message, oldValue);
+  }
+  return {
+    success: true,
+    key: keyPath,
+    oldValue,
+    newValue: merged,
+    dryRun: false,
+  };
+}
+
+/** Retire une clé du fichier utilisateur. N'écrit pas `undefined`. */
+export async function unsetConfigValue(
+  keyPath: string,
+  opts?: ConfigSetOptions,
+): Promise<ConfigSetResult> {
+  const dryRun = opts?.dryRun ?? false;
+  const classified = classifyConfigPath(keyPath);
+  if (!classified.ok) {
+    await noteRejection(keyPath, classified.message, dryRun);
+    return failure(keyPath, undefined, dryRun, classified.message);
+  }
+  const configManager = await lazyGetConfigManager() as {
+    readUserConfigDocument?: () => Record<string, unknown>;
+    saveUserConfig: (keyPath?: string, value?: unknown) => void;
+    getConfig: () => CodeBuddyConfig;
+  };
+  const userDocument = configManager.readUserConfigDocument?.() ?? {};
+  const oldValue = readAt(userDocument, keyPath);
+  if (dryRun) {
+    return { success: true, key: keyPath, oldValue, newValue: undefined, dryRun: true };
+  }
+  try {
+    configManager.saveUserConfig(keyPath, USER_CONFIG_DELETE);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return failure(keyPath, undefined, false, message, oldValue);
+  }
+  const memory = configManager.getConfig() as unknown as Record<string, unknown>;
+  const parts = keyPath.split('.');
+  let cursor: unknown = memory;
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    if (!isRecord(cursor)) {
+      cursor = undefined;
+      break;
+    }
+    cursor = cursor[parts[index] ?? ''];
+  }
+  if (isRecord(cursor)) delete cursor[parts[parts.length - 1] ?? ''];
+  return { success: true, key: keyPath, oldValue, newValue: undefined, dryRun: false };
 }
