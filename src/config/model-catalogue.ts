@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { installCataloguePriceOverlays, type ModelPricing } from './model-pricing.js';
 import { findModelToolConfig, installModelCatalogueOverlays } from './model-tools.js';
 import { getModelRegistry } from './model-registry.js';
-import { DEFAULT_CONFIG, parseTOML, resolveUserConfigFile } from './toml-config.js';
+import { DEFAULT_CONFIG, parseTOML, registerCatalogueWriteCheck, resolveUserConfigFile } from './toml-config.js';
 
 export class CatalogueConfigError extends Error {
   constructor(detail: string) {
@@ -893,3 +893,18 @@ function nonNegativeNumber(value: unknown, label: string): number {
 }
 
 export const CATALOGUE_ENTRY_FIELDS = ENTRY_KEYS;
+
+registerCatalogueWriteCheck((text: string): string | null => {
+  // model_id déjà présent est conservé par la réécriture. Il n'est pas une clé
+  // d'écriture : le contrôle du reste du document ne doit pas bloquer une autre clé.
+  const withoutHistoricalModelId = text
+    .split('\n')
+    .filter((line) => !/^\s*model_id\s*=/.test(line))
+    .join('\n');
+  try {
+    parseCatalogueConfig(withoutHistoricalModelId, 'écriture');
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+});

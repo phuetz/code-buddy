@@ -5,10 +5,12 @@
  * Supports providers, models, tool configs, and user preferences.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
+import { commitValidConfigText, writeRejectedConfig, ConfigWriteRejectedError } from './config-backup.js';
+import { USER_CONFIG_DELETE, validateOnDiskDocument } from './config-schema.js';
 
 // ============================================================================
 // JSONC Utilities
@@ -1365,6 +1367,66 @@ function readUserDocument(file: string): Record<string, unknown> {
   return parseTOML(readFileSync(file, 'utf-8'));
 }
 
+let catalogueWriteCheck: ((text: string) => string | null) | null = null;
+
+/** Branche le contrôle du catalogue sans import circulaire. */
+export function registerCatalogueWriteCheck(check: (text: string) => string | null): void {
+  catalogueWriteCheck = check;
+}
+
+/**
+ * Dit pourquoi un texte de configuration ne peut pas remplacer le fichier actif.
+ * `null` si le texte est acceptable. N'écrit rien.
+ */
+export function assessUserConfigText(text: string): string | null {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parseTOML(text);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `Le fichier de configuration n'est pas lisible : ${message}`;
+  }
+  const structural = validateOnDiskDocument(parsed);
+  if (structural) return structural;
+  if (!catalogueWriteCheck) return null;
+  return catalogueWriteCheck(text);
+}
+
+function pruneEmptyTables(value: Record<string, unknown>): void {
+  for (const [key, child] of Object.entries(value)) {
+    if (!isPlainObject(child)) continue;
+    pruneEmptyTables(child);
+    if (Object.keys(child).length === 0) delete value[key];
+  }
+}
+
+function deleteKeyPath(root: Record<string, unknown>, keyPath: string): void {
+  const parts = keyPath.split('.');
+  if (parts.length === 0 || parts.some((part) => part.length === 0)) {
+    throw new Error(`chemin de configuration vide: ${keyPath}`);
+  }
+  let current = root;
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const segment = parts[index] ?? '';
+    const next = current[segment];
+    if (!isPlainObject(next)) return;
+    current = next;
+  }
+  const leaf = parts[parts.length - 1] ?? '';
+  delete current[leaf];
+  pruneEmptyTables(root);
+}
+
+function commitUserDocument(file: string, document: Record<string, unknown>): void {
+  const serialized = serializeUserDocument(document);
+  const problem = assessUserConfigText(serialized);
+  if (problem) {
+    const rejectedPath = writeRejectedConfig(file, serialized, problem);
+    throw new ConfigWriteRejectedError(problem, rejectedPath);
+  }
+  commitValidConfigText(file, serialized);
+}
+
 // ============================================================================
 // Configuration Manager
 // ============================================================================
@@ -1588,6 +1650,18 @@ class ConfigManager {
    * fichier, puis la clé demandée y est appliquée. `this.config` reste
    * l'objet fusionné (projet compris) et n'est pas sérialisé ici.
    */
+  /**
+   * Document utilisateur seul, sans la couche projet ni les défauts ajoutés en mémoire.
+   */
+  readUserConfigDocument(): Record<string, unknown> {
+    return readUserDocument(configFile());
+  }
+
+  /** Mémorise une écriture refusée sans remplacer le fichier actif. */
+  noteRejectedWrite(payload: string, reason: string): string {
+    return writeRejectedConfig(configFile(), payload, reason);
+  }
+
   saveUserConfig(keyPath?: string, value?: unknown): void {
     const file = configFile();
     const dir = dirname(file);
@@ -1596,11 +1670,11 @@ class ConfigManager {
     }
     const document = readUserDocument(file);
     if (keyPath !== undefined && keyPath.length > 0) {
-      assignKeyPath(document, keyPath, value);
+      if (value === USER_CONFIG_DELETE) deleteKeyPath(document, keyPath);
+      else assignKeyPath(document, keyPath, value);
     }
     // Couche utilisateur relue. serializeTOML(this.config) réécrirait l'objet fusionné.
-    const serialized = serializeUserDocument(document);
-    writeFileSync(file, serialized);
+    commitUserDocument(file, document);
     this.preservedUser = extractPreservedUserConfig(document);
   }
 
@@ -1665,7 +1739,13 @@ class ConfigManager {
       mkdirSync(dir, { recursive: true });
     }
     if (!existsSync(file)) {
-      writeFileSync(file, serializeTOML(DEFAULT_CONFIG));
+      const serialized = serializeTOML(DEFAULT_CONFIG);
+      const problem = assessUserConfigText(serialized);
+      if (problem) {
+        writeRejectedConfig(file, serialized, problem);
+        throw new ConfigWriteRejectedError(problem, file);
+      }
+      commitValidConfigText(file, serialized);
     }
   }
 
