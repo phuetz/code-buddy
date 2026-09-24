@@ -67,6 +67,8 @@ import {
   type CompanionSafetyEventKind,
   type CompanionSafetyEventRisk,
 } from '../../companion/safety-ledger.js';
+import { failureFlag } from '../slash-failure.js';
+
 import {
   formatCompanionContinuityStatus,
   getCompanionContinuityStatus,
@@ -86,6 +88,10 @@ function entry(content: string): ChatEntry {
     content,
     timestamp: new Date(),
   };
+}
+
+function companionResult(content: string): CommandHandlerResult {
+  return { handled: true, ...failureFlag(content), entry: entry(content) };
 }
 
 function collectFlagValue(
@@ -129,17 +135,25 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       refreshCompanionContinuity();
       return {
         handled: true,
+...failureFlag(formatCompanionContinuityStatus(getCompanionContinuityStatus())),
         entry: entry(formatCompanionContinuityStatus(getCompanionContinuityStatus())),
       };
     }
     if (continuityAction === 'status' || continuityAction === 'verify') {
       return {
         handled: true,
+...failureFlag(formatCompanionContinuityStatus(getCompanionContinuityStatus())),
         entry: entry(formatCompanionContinuityStatus(getCompanionContinuityStatus())),
       };
     }
     return {
       handled: true,
+...failureFlag([
+        'Usage: /companion continuity init',
+        '       /companion continuity status',
+        '       /companion continuity refresh',
+        '       /companion continuity verify',
+      ].join('\n')),
       entry: entry([
         'Usage: /companion continuity init',
         '       /companion continuity status',
@@ -160,12 +174,14 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
         passphrase: key.passphrase,
         bundlePath: flagValue(args, '--output'),
       });
-      return { handled: true, entry: entry(formatCompanionMigrationResult(result, key.keyPath)) };
+      return { handled: true,
+      ...failureFlag(formatCompanionMigrationResult(result, key.keyPath)), entry: entry(formatCompanionMigrationResult(result, key.keyPath)) };
     }
     if (migrationAction === 'verify' || migrationAction === 'restore') {
       const bundlePath = args[2] && !args[2].startsWith('--') ? args[2] : flagValue(args, '--bundle');
       if (!bundlePath) {
-        return { handled: true, entry: entry('A migration bundle path is required.') };
+        return { handled: true,
+        ...failureFlag('A migration bundle path is required.'), entry: entry('A migration bundle path is required.') };
       }
       const key = readCompanionMigrationPassphrase({ keyFile });
       const apply = migrationAction === 'restore' && args.includes('--apply');
@@ -176,10 +192,16 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
         apply,
         overwrite,
       });
-      return { handled: true, entry: entry(formatCompanionMigrationResult(result, key.keyPath)) };
+      return { handled: true,
+      ...failureFlag(formatCompanionMigrationResult(result, key.keyPath)), entry: entry(formatCompanionMigrationResult(result, key.keyPath)) };
     }
     return {
       handled: true,
+...failureFlag([
+        'Usage: /companion migration export [--output <path>] [--key-file <path>]',
+        '       /companion migration verify <bundle> [--key-file <path>]',
+        '       /companion migration restore <bundle> [--apply] [--overwrite] [--key-file <path>]',
+      ].join('\n')),
       entry: entry([
         'Usage: /companion migration export [--output <path>] [--key-file <path>]',
         '       /companion migration verify <bundle> [--key-file <path>]',
@@ -193,24 +215,33 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     if (perceptAction === 'recent' || perceptAction === 'list') {
       const limit = flagValue(args, '--limit');
       const modality = flagValue(args, '--modality') as CompanionPerceptModality | undefined;
-      return {
-        handled: true,
-        entry: entry(formatCompanionPercepts(await readRecentCompanionPercepts({
-          limit: limit ? parseInt(limit, 10) : undefined,
-          modality,
-        }))),
-      };
+      const percepts = await readRecentCompanionPercepts({
+        limit: limit ? parseInt(limit, 10) : undefined,
+        modality,
+      });
+      return companionResult(formatCompanionPercepts(percepts));
     }
 
     if (perceptAction === 'stats' || perceptAction === 'status') {
-      return {
-        handled: true,
-        entry: entry(formatCompanionPerceptStats(await getCompanionPerceptStats())),
-      };
+      return companionResult(formatCompanionPerceptStats(await getCompanionPerceptStats()));
     }
 
     return {
       handled: true,
+...failureFlag([
+        'Usage: /companion percepts recent [--limit <n>] [--modality <vision|hearing|screen|self|memory|tool|suggestion>]',
+        '       /companion percepts stats',
+        '       /companion live [--no-record]',
+        '       /companion doctor [--json]',
+        '       /companion listen-check [--wav <path>]',
+        '       /companion evaluate [--no-record]',
+        '       /companion improve [--dry-run] [--no-record] [--no-run-mission]',
+        '       /companion radar [--no-record]',
+        '       /companion impulses [--no-record]',
+        '       /companion check-in [--text <text>] [--preview]',
+        '       /companion missions sync|list|run-next|start|done|dismiss',
+        '       /companion safety recent|stats',
+      ].join('\n')),
       entry: entry([
         'Usage: /companion percepts recent [--limit <n>] [--modality <vision|hearing|screen|self|memory|tool|suggestion>]',
         '       /companion percepts stats',
@@ -233,27 +264,30 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     if (args.includes('--json')) {
       return {
         handled: true,
+...failureFlag(JSON.stringify(report, null, 2)),
         entry: entry(JSON.stringify(report, null, 2)),
       };
     }
     return {
       handled: true,
+...failureFlag(formatCompanionDoctorReport(report)),
       entry: entry(formatCompanionDoctorReport(report)),
     };
   }
 
   if (action === 'listen-check' || action === 'heard') {
     const wav = flagValue(args, '--wav');
-    return {
-      handled: true,
-      entry: entry(formatCompanionListenCheck(await buildCompanionListenCheck({ wav }))),
-    };
+    return companionResult(formatCompanionListenCheck(await buildCompanionListenCheck({ wav })));
   }
 
   if (action === 'self' || action === 'proprioception') {
     const percept = await recordCompanionSelfState();
     return {
       handled: true,
+...failureFlag([
+        `Self-state percept recorded: ${percept.id}`,
+        percept.summary,
+      ].join('\n')),
       entry: entry([
         `Self-state percept recorded: ${percept.id}`,
         percept.summary,
@@ -267,6 +301,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     });
     return {
       handled: true,
+...failureFlag(formatCompanionLiveBrief(brief)),
       entry: entry(formatCompanionLiveBrief(brief)),
     };
   }
@@ -277,6 +312,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     });
     return {
       handled: true,
+...failureFlag(formatCompanionSelfEvaluation(evaluation)),
       entry: entry(formatCompanionSelfEvaluation(evaluation)),
     };
   }
@@ -289,6 +325,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     });
     return {
       handled: true,
+...failureFlag(formatCompanionImprovementCycle(cycle)),
       entry: entry(formatCompanionImprovementCycle(cycle)),
     };
   }
@@ -299,6 +336,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     });
     return {
       handled: true,
+...failureFlag(formatCompanionCompetitiveRadar(radar)),
       entry: entry(formatCompanionCompetitiveRadar(radar)),
     };
   }
@@ -314,6 +352,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     });
     return {
       handled: true,
+...failureFlag(formatCompanionCheckIn(cue)),
       entry: entry(formatCompanionCheckIn(cue)),
     };
   }
@@ -324,6 +363,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
     });
     return {
       handled: true,
+...failureFlag(formatCompanionImpulseBrief(brief)),
       entry: entry(formatCompanionImpulseBrief(brief)),
     };
   }
@@ -336,6 +376,12 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       });
       return {
         handled: true,
+...failureFlag([
+          `Mission board synced from ${result.radarId}.`,
+          `Created: ${result.created}, updated: ${result.updated}, unchanged: ${result.unchanged}`,
+          '',
+          formatCompanionMissionBoard(result.board),
+        ].join('\n')),
         entry: entry([
           `Mission board synced from ${result.radarId}.`,
           `Created: ${result.created}, updated: ${result.updated}, unchanged: ${result.unchanged}`,
@@ -350,6 +396,9 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       const board = await readCompanionMissionBoard();
       return {
         handled: true,
+...failureFlag(formatCompanionMissionBoard(status
+          ? { ...board, missions: board.missions.filter(mission => mission.status === status) }
+          : board)),
         entry: entry(formatCompanionMissionBoard(status
           ? { ...board, missions: board.missions.filter(mission => mission.status === status) }
           : board)),
@@ -362,6 +411,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       });
       return {
         handled: true,
+...failureFlag(formatCompanionMissionRun(result)),
         entry: entry(formatCompanionMissionRun(result)),
       };
     }
@@ -378,12 +428,21 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       const mission = await updateCompanionMissionStatus(missionId, nextStatus);
       return {
         handled: true,
+...failureFlag(`Mission ${mission.id} marked ${mission.status}.`),
         entry: entry(`Mission ${mission.id} marked ${mission.status}.`),
       };
     }
 
     return {
       handled: true,
+...failureFlag([
+        'Usage: /companion missions sync [--no-record]',
+        '       /companion missions list [--status <open|in_progress|done|dismissed>]',
+        '       /companion missions run-next [--dry-run]',
+        '       /companion missions start <id>',
+        '       /companion missions done <id>',
+        '       /companion missions dismiss <id>',
+      ].join('\n')),
       entry: entry([
         'Usage: /companion missions sync [--no-record]',
         '       /companion missions list [--status <open|in_progress|done|dismissed>]',
@@ -401,25 +460,24 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       const limit = flagValue(args, '--limit');
       const kind = flagValue(args, '--kind') as CompanionSafetyEventKind | undefined;
       const risk = flagValue(args, '--risk') as CompanionSafetyEventRisk | undefined;
-      return {
-        handled: true,
-        entry: entry(formatCompanionSafetyEvents(await readRecentCompanionSafetyEvents({
-          limit: limit ? parseInt(limit, 10) : undefined,
-          kind,
-          risk,
-        }))),
-      };
+      const events = await readRecentCompanionSafetyEvents({
+        limit: limit ? parseInt(limit, 10) : undefined,
+        kind,
+        risk,
+      });
+      return companionResult(formatCompanionSafetyEvents(events));
     }
 
     if (safetyAction === 'stats' || safetyAction === 'status') {
-      return {
-        handled: true,
-        entry: entry(formatCompanionSafetyLedgerStats(await getCompanionSafetyLedgerStats())),
-      };
+      return companionResult(formatCompanionSafetyLedgerStats(await getCompanionSafetyLedgerStats()));
     }
 
     return {
       handled: true,
+...failureFlag([
+        'Usage: /companion safety recent [--limit <n>] [--kind <sense|tool|mission|permission|data>] [--risk <low|medium|high>]',
+        '       /companion safety stats',
+      ].join('\n')),
       entry: entry([
         'Usage: /companion safety recent [--limit <n>] [--kind <sense|tool|mission|permission|data>] [--risk <low|medium|high>]',
         '       /companion safety stats',
@@ -430,10 +488,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
   if (action === 'camera' || action === 'vision' || action === 'see') {
     const cameraAction = args[1]?.toLowerCase() || 'status';
     if (cameraAction === 'status' || cameraAction === 'doctor') {
-      return {
-        handled: true,
-        entry: entry(formatCameraStatus(await checkCameraAvailability())),
-      };
+      return companionResult(formatCameraStatus(await checkCameraAvailability()));
     }
 
     if (cameraAction === 'snapshot' || cameraAction === 'snap') {
@@ -449,6 +504,12 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       if (result.success) {
         return {
           handled: true,
+...failureFlag([
+            `Camera snapshot saved: ${result.path}`,
+            result.perceptId ? `Percept recorded: ${result.perceptId}` : '',
+            result.command ? `Command: ${result.command}` : '',
+            'Buddy can now inspect this image with the vision/OCR tools or include it in the next multimodal turn.',
+          ].filter(Boolean).join('\n')),
           entry: entry([
             `Camera snapshot saved: ${result.path}`,
             result.perceptId ? `Percept recorded: ${result.perceptId}` : '',
@@ -482,12 +543,18 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       });
       return {
         handled: true,
+...failureFlag(formatCameraSnapshotInspection(result)),
         entry: entry(formatCameraSnapshotInspection(result)),
       };
     }
 
     return {
       handled: true,
+...failureFlag([
+        'Usage: /companion camera status',
+        '       /companion camera snapshot [--output <path>] [--device <device>] [--timeout-ms <ms>]',
+        '       /companion camera inspect [--image <path>] [--ocr] [--language <lang>]',
+      ].join('\n')),
       entry: entry([
         'Usage: /companion camera status',
         '       /companion camera snapshot [--output <path>] [--device <device>] [--timeout-ms <ms>]',
@@ -525,18 +592,38 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       formatCompanionStatus(result.status),
     ];
 
-    return { handled: true, entry: entry(lines.join('\n')) };
+    return { handled: true,
+    ...failureFlag(lines.join('\n')), entry: entry(lines.join('\n')) };
   }
 
   if (action === 'status' || action === 'doctor') {
-    return {
-      handled: true,
-      entry: entry(formatCompanionStatus(await getCompanionStatus())),
-    };
+    return companionResult(formatCompanionStatus(await getCompanionStatus()));
   }
 
   return {
     handled: true,
+...failureFlag([
+      'Usage: /companion status',
+      '       /companion setup [--force] [--no-voice] [--no-set-model]',
+      '       /companion live [--no-record]',
+      '       /companion self',
+      '       /companion evaluate [--no-record]',
+      '       /companion improve [--dry-run] [--no-record] [--no-run-mission]',
+      '       /companion radar [--no-record]',
+      '       /companion impulses [--no-record]',
+      '       /companion check-in [--text <text>] [--preview]',
+      '       /companion missions sync|list|run-next|start|done|dismiss',
+      '       /companion safety recent|stats',
+      '       /companion continuity init|status|refresh|verify',
+      '       /companion migration export|verify|restore',
+      '       /companion camera status',
+      '       /companion camera snapshot [--output <path>] [--device <device>]',
+      '       /companion camera inspect [--image <path>] [--ocr]',
+      '       /companion percepts recent [--limit <n>] [--modality <name>]',
+      '       /companion percepts stats',
+      '',
+      'This configures Buddy as a ChatGPT-backed project companion with voice-first, camera-aware, and live-session defaults.',
+    ].join('\n')),
     entry: entry([
       'Usage: /companion status',
       '       /companion setup [--force] [--no-voice] [--no-set-model]',

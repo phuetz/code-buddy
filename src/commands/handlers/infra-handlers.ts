@@ -10,6 +10,8 @@ import { logger } from '../../utils/logger.js';
 import { fetchOllamaStatus } from '../ollama.js';
 import type { CommandHandlerResult } from './backup-handlers.js';
 
+import { failureFlag } from '../slash-failure.js';
+
 // ---------------------------------------------------------------------------
 // Health check helpers
 // ---------------------------------------------------------------------------
@@ -213,10 +215,12 @@ async function handleInfraStats(): Promise<CommandHandlerResult> {
     const routingStats = getTurboQuantStats();
     const lines = ['TurboQuant Routing Stats', '========================', ''];
     lines.push(formatRoutingStats(routingStats));
-    return { handled: true, response: lines.join('\n') };
+    return { handled: true,
+    ...failureFlag(lines.join('\n')), response: lines.join('\n') };
   } catch {
     return {
       handled: true,
+...failureFlag('TurboQuant stats not available (plugin not loaded).'),
       response: 'TurboQuant stats not available (plugin not loaded).',
     };
   }
@@ -250,5 +254,6 @@ async function handleInfraHealth(): Promise<CommandHandlerResult> {
   lines.push('Ollama Summary:');
   lines.push(formatOllamaSummary(await fetchOllamaStatus(ollamaUrl)));
 
-  return { handled: true, response: lines.join('\n') };
+  return { handled: true,
+  ...failureFlag(lines.join('\n')), response: lines.join('\n') };
 }

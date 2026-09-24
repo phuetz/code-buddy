@@ -471,33 +471,28 @@ enabled_servers = ["exemple"]
 
 [middleware]
 # cle: middleware.auto_compact_threshold
-# défaut : 80000
-# Seuil de compactage automatique, en jetons
-auto_compact_threshold = 80000
-
-# cle: middleware.context_warning_percentage
-# défaut : 0.7
-# Seuil d'avertissement du contexte, entre 0 et 1
-context_warning_percentage = 0.7
+# défaut : absent
+# Seuil de compactage en jetons, seulement s'il est écrit. Absent : minimum entre 200000 et la fenêtre. CODEBUDDY_AUTOCOMPACT_PCT, s'il est posé, gagne.
+auto_compact_threshold = 120000
 
 # cle: middleware.cost_warning_threshold
 # défaut : 0.8
-# Seuil d'avertissement du coût, entre 0 et 1
+# Fraction du plafond de coût qui déclenche l'avertissement. Absent : 0,8.
 cost_warning_threshold = 0.8
 
 # cle: middleware.max_cost
 # défaut : 10
-# Plafond de coût de session
+# Plafond de coût de session en dollars. Absent : 10, ou 100 en mode YOLO, jamais au-dessus de 1000. --max-price gagne sur le fichier.
 max_cost = 10
 
 # cle: middleware.max_turns
-# défaut : 100
-# Tours maximum
-max_turns = 100
+# défaut : 50
+# Tours d'outils maximum. Absent : 50, ou 400 en mode YOLO. --max-tool-rounds gagne sur le fichier.
+max_turns = 50
 
 # cle: middleware.turn_warning_threshold
 # défaut : 0.8
-# Seuil d'avertissement des tours, entre 0 et 1
+# Fraction du plafond de tours qui déclenche l'avertissement. Absent : 0,8.
 turn_warning_threshold = 0.8
 
 # cle: model_aliases
@@ -1266,33 +1261,28 @@ enabled_servers = ["exemple"]
 
 [profiles.exemple.middleware]
 # cle: profiles.*.middleware.auto_compact_threshold
-# défaut : 80000
-# Seuil de compactage automatique, en jetons
-auto_compact_threshold = 80000
-
-# cle: profiles.*.middleware.context_warning_percentage
-# défaut : 0.7
-# Seuil d'avertissement du contexte, entre 0 et 1
-context_warning_percentage = 0.7
+# défaut : absent
+# Seuil de compactage en jetons, seulement s'il est écrit. Absent : minimum entre 200000 et la fenêtre. CODEBUDDY_AUTOCOMPACT_PCT, s'il est posé, gagne.
+auto_compact_threshold = 120000
 
 # cle: profiles.*.middleware.cost_warning_threshold
 # défaut : 0.8
-# Seuil d'avertissement du coût, entre 0 et 1
+# Fraction du plafond de coût qui déclenche l'avertissement. Absent : 0,8.
 cost_warning_threshold = 0.8
 
 # cle: profiles.*.middleware.max_cost
 # défaut : 10
-# Plafond de coût de session
+# Plafond de coût de session en dollars. Absent : 10, ou 100 en mode YOLO, jamais au-dessus de 1000. --max-price gagne sur le fichier.
 max_cost = 10
 
 # cle: profiles.*.middleware.max_turns
-# défaut : 100
-# Tours maximum
-max_turns = 100
+# défaut : 50
+# Tours d'outils maximum. Absent : 50, ou 400 en mode YOLO. --max-tool-rounds gagne sur le fichier.
+max_turns = 50
 
 # cle: profiles.*.middleware.turn_warning_threshold
 # défaut : 0.8
-# Seuil d'avertissement des tours, entre 0 et 1
+# Fraction du plafond de tours qui déclenche l'avertissement. Absent : 0,8.
 turn_warning_threshold = 0.8
 
 # cle: profiles.*.model_aliases

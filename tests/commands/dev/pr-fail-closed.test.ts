@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -65,7 +66,7 @@ function initRepo(work: string, origin: string): void {
 
 describe('buddy dev pr fail-closed', () => {
   it('prints title/body and exits 1 when gh is not authenticated on a GitHub origin', async () => {
-    const root = fs.mkdtempSync(path.join(repoRoot, '.gk18-pr-'));
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gk18-pr-')));
     roots.push(root);
     const work = path.join(root, 'work');
     const home = path.join(root, 'home');
@@ -84,7 +85,7 @@ describe('buddy dev pr fail-closed', () => {
   });
 
   it('pushes to a local bare remote when gh fails', async () => {
-    const root = fs.mkdtempSync(path.join(repoRoot, '.gk18-pr-'));
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gk18-pr-')));
     roots.push(root);
     const work = path.join(root, 'work');
     const home = path.join(root, 'home');

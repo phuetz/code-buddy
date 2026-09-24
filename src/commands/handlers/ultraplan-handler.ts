@@ -5,6 +5,7 @@ import { getWorkspaceIndexer } from '../../knowledge/workspace-indexer.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
+import { failureFlag } from '../slash-failure.js';
 
 const execAsync = promisify(exec);
 
@@ -13,6 +14,7 @@ export async function handleUltraplan(args: string[], onProgress?: (msg: string)
   if (!prompt) {
     return {
       handled: true,
+...failureFlag('Please provide a prompt for Ultraplan. Example: /ultraplan create a robust auth system'),
       entry: { type: 'assistant', content: 'Please provide a prompt for Ultraplan. Example: /ultraplan create a robust auth system', timestamp: new Date() }
     };
   }
@@ -21,6 +23,7 @@ export async function handleUltraplan(args: string[], onProgress?: (msg: string)
   if (!API_KEY) {
     return {
       handled: true,
+...failureFlag('API_KEY is missing. Please set GOOGLE_API_KEY or GEMINI_API_KEY.'),
       entry: { type: 'assistant', content: 'API_KEY is missing. Please set GOOGLE_API_KEY or GEMINI_API_KEY.', timestamp: new Date() }
     };
   }
@@ -135,6 +138,7 @@ export async function handleUltraplan(args: string[], onProgress?: (msg: string)
 
   return {
     handled: true,
+...failureFlag(finalText),
     entry: { type: 'assistant', content: finalText, timestamp: new Date() }
   };
 }

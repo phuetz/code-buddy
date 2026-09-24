@@ -9,9 +9,11 @@ import { getToolFilter, setToolFilter, createToolFilter, resetToolFilter } from 
 import * as fs from 'fs';
 import * as path from 'path';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../../utils/atomic-write.js';
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;
@@ -73,6 +75,7 @@ export function handlePermissions(args: string[]): CommandHandlerResult {
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,

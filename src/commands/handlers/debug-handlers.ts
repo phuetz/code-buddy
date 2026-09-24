@@ -20,9 +20,11 @@ import { ChatEntry } from '../../agent/codebuddy-agent.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import chalk from 'chalk';
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;
@@ -166,6 +168,7 @@ All debug history has been reset:
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: 'assistant',
       content,

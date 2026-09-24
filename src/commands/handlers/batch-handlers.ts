@@ -22,6 +22,7 @@ import {
 } from '../../agent/delegation/thread-delegation.js';
 import { getModelToolConfig } from '../../config/model-tools.js';
 import { getPermissionModeManager } from '../../security/permission-modes.js';
+import { failureFlag } from '../slash-failure.js';
 
 // ============================================================================
 // Types
@@ -766,6 +767,7 @@ export async function handleBatchSlashCommand(
   const content = await handleBatchCommand(args.join(' '), chatFn, spawnFn);
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

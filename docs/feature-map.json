@@ -1685,15 +1685,15 @@
       "code": [
         "src/config/toml-config.ts",
         "src/utils/settings-manager.ts",
-        "src/config/hot-reload/index.ts"
+        "src/config/middleware-limits.ts"
       ],
       "tests": [
         "tests/toml-config.test.ts",
         "tests/utils/settings-manager.test.ts",
-        "tests/config/hot-reload/hot-reload.test.ts"
+        "tests/config/middleware-facades.test.ts"
       ],
       "papers": [],
-      "notes": "Défaut 24/09 (comparaison de code OpenClaw, pas une exécution mesurée) : la section `[middleware]` (toml-config.ts:864) n'est lue par aucun code et le rechargement à chaud n'est jamais démarré."
+      "notes": "Défaut du 24/09 corrigé par fix/config-facades-2026-09-24 : `[middleware]` est branché sur le pipeline (middleware-limits.ts), relu à chaque changement de projet, au profil actif et à la reprise d'une session. Le rechargement à chaud, jamais démarré, est retiré."
     }
   ]
 }

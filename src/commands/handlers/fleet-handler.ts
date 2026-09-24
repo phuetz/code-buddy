@@ -59,6 +59,7 @@ import {
   type PeerChatProviderId,
 } from '../../fleet/peer-chat-client-factory.js';
 import { sanitizePeerText } from '../../fleet/peer-text-sanitizer.js';
+import { failureFlag } from '../slash-failure.js';
 
 // eslint-disable-next-line no-control-regex -- Fleet stream chunks may contain terminal control bytes from remote peers.
 const ANSI_ESCAPE_PATTERN = /\x1B\[[0-?]*[ -/]*[@-~]/g;
@@ -173,6 +174,7 @@ const STALE_THRESHOLD_MS = 90_000;
 function textResult(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

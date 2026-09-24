@@ -4,6 +4,7 @@
 
 import { CommandHandlerResult } from './branch-handlers.js';
 import { logger } from '../../utils/logger.js';
+import { failureFlag } from '../slash-failure.js';
 
 const VALID_ACTIONS = new Set(['enable', 'disable', 'status', 'help', '']);
 
@@ -73,6 +74,7 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
   if (!VALID_ACTIONS.has(action)) {
     return {
       handled: true,
+...failureFlag(`Unknown heartbeat action: ${args[0]}\n\n${HELP_TEXT}`),
       entry: {
         type: 'assistant',
         content: `Unknown heartbeat action: ${args[0]}\n\n${HELP_TEXT}`,
@@ -84,6 +86,7 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
   if (action === 'help' || action === '') {
     return {
       handled: true,
+...failureFlag(HELP_TEXT),
       entry: { type: 'assistant', content: HELP_TEXT, timestamp: new Date() },
     };
   }
@@ -110,6 +113,7 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
       startCompanionAlwaysOnLoops();
       return {
         handled: true,
+...failureFlag('Heartbeat engine already running. Companion loops re-armed. Use /heartbeat status.'),
         entry: {
           type: 'assistant',
           content: 'Heartbeat engine already running. Companion loops re-armed. Use /heartbeat status.',
@@ -123,6 +127,7 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
     logger.info('Heartbeat engine enabled via slash command');
     return {
       handled: true,
+...failureFlag('Heartbeat engine started. Companion impulse loops armed if their env flags are on.'),
       entry: {
         type: 'assistant',
         content: 'Heartbeat engine started. Companion impulse loops armed if their env flags are on.',
@@ -136,6 +141,7 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
       stopCompanionAlwaysOnLoops();
       return {
         handled: true,
+...failureFlag('Heartbeat engine is not running.'),
         entry: {
           type: 'assistant',
           content: 'Heartbeat engine is not running.',
@@ -148,6 +154,7 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
     logger.info('Heartbeat engine disabled via slash command');
     return {
       handled: true,
+...failureFlag('Heartbeat engine and companion always-on loops stopped.'),
       entry: {
         type: 'assistant',
         content: 'Heartbeat engine and companion always-on loops stopped.',
@@ -161,6 +168,7 @@ export async function handleHeartbeat(args: string[]): Promise<CommandHandlerRes
   const text = formatStatusLines(status, ec.intervalMs, ec.heartbeatFilePath);
   return {
     handled: true,
+...failureFlag(text),
     entry: { type: 'assistant', content: text, timestamp: new Date() },
   };
 }

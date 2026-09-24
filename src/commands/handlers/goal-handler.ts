@@ -7,6 +7,7 @@ import {
 } from '../../goals/goal-decomposer.js';
 import { getGoalManager } from '../../goals/goal-manager.js';
 import { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 export interface GoalHandlerOptions {
   sessionKey?: string;
@@ -117,6 +118,7 @@ export async function handleGoal(
 
   return {
     handled: true,
+...failureFlag(intro + planBlock),
     entry: {
       type: 'assistant',
       content: intro + planBlock,
@@ -212,6 +214,7 @@ export async function handleSubgoal(
 function textResult(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

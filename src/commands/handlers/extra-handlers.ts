@@ -15,9 +15,11 @@ import { ChatEntry } from '../../agent/codebuddy-agent.js';
 import fs from 'fs';
 import { execFileSync, spawnSync } from 'child_process';
 import path from 'path';
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;
@@ -36,6 +38,7 @@ export async function handleUndo(_args: string[]): Promise<CommandHandlerResult>
     if (checkpoints.length === 0) {
       return {
         handled: true,
+...failureFlag('No checkpoints available to undo. File changes create automatic checkpoints that can be reverted.'),
         entry: {
           type: 'assistant',
           content: 'No checkpoints available to undo. File changes create automatic checkpoints that can be reverted.',
@@ -49,6 +52,7 @@ export async function handleUndo(_args: string[]): Promise<CommandHandlerResult>
     if (!lastCheckpoint) {
       return {
         handled: true,
+...failureFlag('No checkpoints available to undo. File changes create automatic checkpoints that can be reverted.'),
         entry: {
           type: 'assistant',
           content: 'No checkpoints available to undo. File changes create automatic checkpoints that can be reverted.',
@@ -81,6 +85,8 @@ export async function handleUndo(_args: string[]): Promise<CommandHandlerResult>
 
       return {
         handled: true,
+...failureFlag(previewLines.join('\n') +
+            `Undo successful. Files restored:\n${restoredList}`),
         entry: {
           type: 'assistant',
           content: previewLines.join('\n') +
@@ -102,6 +108,7 @@ export async function handleUndo(_args: string[]): Promise<CommandHandlerResult>
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error during undo: ${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: 'assistant',
         content: `Error during undo: ${error instanceof Error ? error.message : String(error)}`,
@@ -125,6 +132,7 @@ export async function handleDiff(_args: string[]): Promise<CommandHandlerResult>
     } catch {
       return {
         handled: true,
+...failureFlag('Not inside a git repository.'),
         entry: {
           type: 'assistant',
           content: 'Not inside a git repository.',
@@ -152,6 +160,7 @@ export async function handleDiff(_args: string[]): Promise<CommandHandlerResult>
     if (!unstagedDiff && !stagedDiff) {
       return {
         handled: true,
+...failureFlag('No uncommitted changes.'),
         entry: {
           type: 'assistant',
           content: 'No uncommitted changes.',
@@ -187,6 +196,7 @@ export async function handleDiff(_args: string[]): Promise<CommandHandlerResult>
 
     return {
       handled: true,
+...failureFlag(sections.join('\n\n') + (statsSummary ? '\n' + statsSummary : '')),
       entry: {
         type: 'assistant',
         content: sections.join('\n\n') + (statsSummary ? '\n' + statsSummary : ''),
@@ -196,6 +206,7 @@ export async function handleDiff(_args: string[]): Promise<CommandHandlerResult>
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error getting diff: ${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: 'assistant',
         content: `Error getting diff: ${error instanceof Error ? error.message : String(error)}`,
@@ -238,6 +249,7 @@ export async function handleContextStats(
   if (!agent) {
     return {
       handled: true,
+...failureFlag('Context stats are only available when an agent is active.'),
       entry: {
         type: 'assistant',
         content: 'Context stats are only available when an agent is active.',
@@ -354,6 +366,7 @@ export async function handleContextStats(
 
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -366,6 +379,7 @@ export async function handleContextStats(
       const formatted = agent.formatContextStats();
       return {
         handled: true,
+...failureFlag(formatted),
         entry: {
           type: 'assistant',
           content: formatted,
@@ -375,6 +389,7 @@ export async function handleContextStats(
     } catch {
       return {
         handled: true,
+...failureFlag(`Error getting context stats: ${error instanceof Error ? error.message : String(error)}`),
         entry: {
           type: 'assistant',
           content: `Error getting context stats: ${error instanceof Error ? error.message : String(error)}`,
@@ -395,6 +410,7 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
   if (!query) {
     return {
       handled: true,
+...failureFlag('Usage: /search <query>\n\nSearch the codebase for a text pattern.\n\nExamples:\n  /search TODO\n  /search function handleSubmit\n  /search import.*express'),
       entry: {
         type: 'assistant',
         content: 'Usage: /search <query>\n\nSearch the codebase for a text pattern.\n\nExamples:\n  /search TODO\n  /search function handleSubmit\n  /search import.*express',
@@ -421,6 +437,7 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
     } else if (rgResult.status === 1) {
       return {
         handled: true,
+...failureFlag(`No matches found for: ${query}`),
         entry: {
           type: 'assistant',
           content: `No matches found for: ${query}`,
@@ -439,6 +456,7 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
       } else if (gitGrepResult.status === 1) {
         return {
           handled: true,
+...failureFlag(`No matches found for: ${query}`),
           entry: {
             type: 'assistant',
             content: `No matches found for: ${query}`,
@@ -453,6 +471,7 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
     if (!output.trim()) {
       return {
         handled: true,
+...failureFlag(`No matches found for: ${query}`),
         entry: {
           type: 'assistant',
           content: `No matches found for: ${query}`,
@@ -474,6 +493,7 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
 
     return {
       handled: true,
+...failureFlag(`Search results for "${query}"${totalLabel}:\n\n\`\`\`\n${formattedLines.join('\n')}\n\`\`\``),
       entry: {
         type: 'assistant',
         content: `Search results for "${query}"${totalLabel}:\n\n\`\`\`\n${formattedLines.join('\n')}\n\`\`\``,
@@ -483,6 +503,7 @@ export async function handleSearch(args: string[]): Promise<CommandHandlerResult
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Search error: ${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: 'assistant',
         content: `Search error: ${error instanceof Error ? error.message : String(error)}`,
@@ -527,6 +548,7 @@ export async function handleTest(args: string[]): Promise<CommandHandlerResult> 
 
     return {
       handled: true,
+...failureFlag(`Test results${file ? ` for ${file}` : ''}:\n\n\`\`\`\n${truncated}\n\`\`\``),
       entry: {
         type: 'assistant',
         content: `Test results${file ? ` for ${file}` : ''}:\n\n\`\`\`\n${truncated}\n\`\`\``,
@@ -536,6 +558,7 @@ export async function handleTest(args: string[]): Promise<CommandHandlerResult> 
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error running tests: ${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: 'assistant',
         content: `Error running tests: ${error instanceof Error ? error.message : String(error)}`,
@@ -603,6 +626,7 @@ export async function handleFix(_args: string[]): Promise<CommandHandlerResult> 
 
     return {
       handled: true,
+...failureFlag(results.join('\n\n')),
       entry: {
         type: 'assistant',
         content: results.join('\n\n'),
@@ -612,6 +636,7 @@ export async function handleFix(_args: string[]): Promise<CommandHandlerResult> 
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error running fix: ${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: 'assistant',
         content: `Error running fix: ${error instanceof Error ? error.message : String(error)}`,
@@ -656,6 +681,7 @@ export async function handleReview(_args: string[]): Promise<CommandHandlerResul
     if (!diff.trim()) {
       return {
         handled: true,
+...failureFlag('No changes to review. Stage changes with `git add` or make modifications first.'),
         entry: {
           type: 'assistant',
           content: 'No changes to review. Stage changes with `git add` or make modifications first.',
@@ -685,6 +711,7 @@ Provide a structured code review covering:
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error getting changes for review: ${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: 'assistant',
         content: `Error getting changes for review: ${error instanceof Error ? error.message : String(error)}`,

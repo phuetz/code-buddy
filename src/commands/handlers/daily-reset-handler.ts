@@ -25,6 +25,7 @@
 
 import { CommandHandlerResult } from './branch-handlers.js';
 import { logger } from '../../utils/logger.js';
+import { failureFlag } from '../slash-failure.js';
 
 const VALID_ACTIONS = new Set(['enable', 'disable', 'status', 'run', 'help', '']);
 
@@ -82,6 +83,7 @@ export async function handleDailyReset(args: string[]): Promise<CommandHandlerRe
   if (!VALID_ACTIONS.has(action)) {
     return {
       handled: true,
+...failureFlag(`Unknown daily-reset action: ${args[0]}\n\n${HELP_TEXT}`),
       entry: {
         type: 'assistant',
         content: `Unknown daily-reset action: ${args[0]}\n\n${HELP_TEXT}`,
@@ -93,6 +95,7 @@ export async function handleDailyReset(args: string[]): Promise<CommandHandlerRe
   if (action === 'help' || action === '') {
     return {
       handled: true,
+...failureFlag(HELP_TEXT),
       entry: { type: 'assistant', content: HELP_TEXT, timestamp: new Date() },
     };
   }
@@ -116,6 +119,7 @@ export async function handleDailyReset(args: string[]): Promise<CommandHandlerRe
     if (engine.isEnabled() && (engine as unknown as { timer: unknown }).timer) {
       return {
         handled: true,
+...failureFlag('Daily reset scheduler already running. Use /daily-reset status.'),
         entry: {
           type: 'assistant',
           content: 'Daily reset scheduler already running. Use /daily-reset status.',
@@ -129,6 +133,7 @@ export async function handleDailyReset(args: string[]): Promise<CommandHandlerRe
     logger.info('DailyResetManager enabled via slash command');
     return {
       handled: true,
+...failureFlag('Daily reset scheduler started. Use /daily-reset status to see next reset time.'),
       entry: {
         type: 'assistant',
         content: 'Daily reset scheduler started. Use /daily-reset status to see next reset time.',
@@ -142,6 +147,7 @@ export async function handleDailyReset(args: string[]): Promise<CommandHandlerRe
     logger.info('DailyResetManager disabled via slash command');
     return {
       handled: true,
+...failureFlag('Daily reset scheduler stopped.'),
       entry: {
         type: 'assistant',
         content: 'Daily reset scheduler stopped.',
@@ -154,6 +160,9 @@ export async function handleDailyReset(args: string[]): Promise<CommandHandlerRe
     const result = await engine.runReset([]);
     return {
       handled: true,
+...failureFlag(`Daily reset triggered manually at ${result.triggeredAt.toISOString()}\n` +
+          `Messages cleared: ${result.messagesCleared} (engine internal state — does not affect agent session in V0.1)\n` +
+          (result.summaryMessage ? `\nSummary:\n${result.summaryMessage}` : '')),
       entry: {
         type: 'assistant',
         content:
@@ -178,6 +187,7 @@ export async function handleDailyReset(args: string[]): Promise<CommandHandlerRe
   );
   return {
     handled: true,
+...failureFlag(text),
     entry: { type: 'assistant', content: text, timestamp: new Date() },
   };
 }
