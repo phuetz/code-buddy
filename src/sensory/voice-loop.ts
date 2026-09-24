@@ -1879,8 +1879,10 @@ export function setVoiceResponseDecider(decider: ResponseDecider | undefined): v
 }
 
 /**
- * Determine if the utterance addresses the robot by name or takes place inside
- * an active engagement window, consulting the respond-decider.
+ * Determine if the utterance addresses the robot by name.
+ * For IDENTITY purposes, only 'addressed' (explicit name mention) counts as robotNamed.
+ * The 'engaged' reason (inside engagement window) is valid for DECIDING to reply,
+ * but does NOT grant the 'present' identity role.
  */
 export async function resolveVoiceRobotNamed(
   heard: string,
@@ -1891,11 +1893,11 @@ export async function resolveVoiceRobotNamed(
   }
   if (replyOpts?.respondDecision) {
     const reason = replyOpts.respondDecision.reason;
-    return reason === 'addressed' || reason === 'engaged';
+    return reason === 'addressed';
   }
   const decider = replyOpts?.responseDecider ?? getVoiceResponseDecider();
   const decision = await decider.decide(heard);
-  return decision.reason === 'addressed' || decision.reason === 'engaged';
+  return decision.reason === 'addressed';
 }
 
 export async function defaultReply(
