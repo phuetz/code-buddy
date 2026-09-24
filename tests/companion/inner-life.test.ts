@@ -97,6 +97,27 @@ describe('verified activities', () => {
     expect(moment.line).not.toContain('secret-label');
   });
 
+  it('compares times as numbers: an unpadded morning time is not "still ahead" in the afternoon', () => {
+    const now = new Date(2026, 8, 24, 14, 30);
+    expect(remindersLeftToday([reminder('9:00'), reminder('18:05'), reminder('15:00')], now).map((r) => r.time))
+      .toEqual(['15:00', '18:05']);
+  });
+
+  it('every verified line stays digital and never names a reminder', async () => {
+    const full = sources({
+      reminders: async () => [reminder('18:00'), reminder('19:30')],
+      recentCommitCount: async () => 4,
+      recentEpisode: async () => 'on a parlé du train pour Lyon',
+    });
+    for (let i = 0; i < VERIFIED_ACTIVITIES.length; i++) {
+      const moment = await chooseInnerLifeMoment(full, i);
+      expect(moment.kind).toBe('done');
+      expect(moment.line).not.toMatch(HUMAN_LIFE);
+      expect(moment.line).not.toContain('secret-label');
+      expect(moment.line).not.toContain('Lyon');
+    }
+  });
+
   it('check-reminders drops one already fired today', () => {
     const now = new Date(2026, 8, 24, 14, 30);
     const fired = reminder('16:00', { lastFiredAt: new Date(2026, 8, 24, 16, 0).toISOString() });
@@ -105,7 +126,7 @@ describe('verified activities', () => {
 
   it('look-at-repo reports the real commit count, and nothing without a repo', async () => {
     expect((await chooseInnerLifeMoment(sources({ recentCommitCount: async () => 7 }), 1)).line)
-      .toBe('j’ai jeté un œil au dépôt : 7 commits depuis hier');
+      .toBe('j’ai jeté un œil au dépôt : 7 commits en 24 heures');
     expect((await chooseInnerLifeMoment(sources({ recentCommitCount: async () => null }), 1)).kind)
       .toBe('thought');
   });
@@ -145,7 +166,7 @@ describe('runInnerLifeTick', () => {
       });
 
       expect(moment).toMatchObject({ id: 'look-at-repo', kind: 'done' });
-      expect(promoted).toBe('j’ai jeté un œil au dépôt : 3 commits depuis hier');
+      expect(promoted).toBe('j’ai jeté un œil au dépôt : 3 commits en 24 heures');
       // Mood moved on its own (self-time signal): from 40 toward baseline, strictly up.
       const after = personalityOf(loadRelationshipState(statePath)).mood;
       expect(after).toBeGreaterThan(40);

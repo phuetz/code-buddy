@@ -16,7 +16,7 @@
  * @module sensory/voice-turn-journal
  */
 
-import { appendFileSync, chmodSync, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { auditLogger } from '../security/audit-logger.js';
@@ -40,7 +40,10 @@ export function voiceTurnLogPath(env: NodeJS.ProcessEnv = process.env): string |
   return path.join(homedir(), '.codebuddy', 'lisa', 'voice-turns.jsonl');
 }
 
-/** Record one completed voice turn. Never throws. */
+/**
+ * Record one completed voice turn. A turn cut short by barge-in before completion is not a
+ * completed turn and is not recorded here. Never throws.
+ */
 export function recordVoiceTurn(turn: VoiceTurnRecord, now: Date = new Date()): void {
   try {
     auditLogger.log({
@@ -57,7 +60,16 @@ export function recordVoiceTurn(turn: VoiceTurnRecord, now: Date = new Date()): 
   if (!file) return;
   try {
     mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    if (existsSync(file) && statSync(file).size > MAX_BYTES) renameSync(file, `${file}.1`);
+    if (existsSync(file)) {
+      // Tighten BEFORE writing: a pre-existing, looser file must not receive one more line first.
+      chmodSync(file, 0o600);
+      if (statSync(file).size > MAX_BYTES) {
+        // Windows refuses to rename over an existing file; drop the previous generation first so
+        // rotation cannot fail silently and let the journal grow without bound.
+        rmSync(`${file}.1`, { force: true });
+        renameSync(file, `${file}.1`);
+      }
+    }
     const line = JSON.stringify({
       ts: now.toISOString(),
       route: turn.route,

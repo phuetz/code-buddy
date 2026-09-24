@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -42,9 +42,22 @@ describe('voice-turn journal', () => {
   it('writes an audit entry without the words', () => {
     journalFile();
     const log = vi.spyOn(auditLogger, 'log');
-    recordVoiceTurn({ heard: 'mon code secret est 1234', reply: 'Noté.', route: 'conversation' });
-    expect(log).toHaveBeenCalledWith(expect.objectContaining({ action: 'voice_turn', source: 'voice', target: 'conversation' }));
-    expect(JSON.stringify(log.mock.calls)).not.toContain('1234');
+    const heard = 'mon code secret est 1234';
+    const reply = 'Noté, je le garde pour moi.';
+    recordVoiceTurn({ heard, reply, route: 'conversation' });
+    expect(log).toHaveBeenCalledTimes(1);
+    const entry = log.mock.calls[0]![0];
+    expect(entry).toEqual({
+      action: 'voice_turn',
+      decision: 'allow',
+      source: 'voice',
+      target: 'conversation',
+      details: `heard=${heard.length} chars, reply=${reply.length} chars`,
+    });
+    const serialized = JSON.stringify(entry);
+    for (const word of [...heard.split(' '), ...reply.split(' ')].filter((w) => w.length > 3)) {
+      expect(serialized).not.toContain(word);
+    }
   });
 
   it('rotates past 5 MB instead of growing without bound', () => {
@@ -54,6 +67,25 @@ describe('voice-turn journal', () => {
     recordVoiceTurn({ heard: 'c', reply: 'd', route: 'shortcut' });
     expect(statSync(`${file}.1`).size).toBeGreaterThan(5 * 1024 * 1024);
     expect(readFileSync(file, 'utf8').trim().split('\n')).toHaveLength(1);
+  });
+
+  it('keeps rotating when a previous generation already exists', () => {
+    const file = journalFile();
+    recordVoiceTurn({ heard: 'a', reply: 'b', route: 'shortcut' });
+    writeFileSync(`${file}.1`, 'older generation\n');
+    writeFileSync(file, 'x'.repeat(5 * 1024 * 1024 + 1));
+    recordVoiceTurn({ heard: 'c', reply: 'd', route: 'shortcut' });
+    expect(statSync(`${file}.1`).size).toBeGreaterThan(5 * 1024 * 1024);
+    expect(statSync(file).size).toBeLessThan(1024);
+  });
+
+  it('tightens a looser pre-existing file before writing to it', () => {
+    if (process.platform === 'win32') return;
+    const file = journalFile();
+    recordVoiceTurn({ heard: 'a', reply: 'b', route: 'shortcut' });
+    chmodSync(file, 0o644);
+    recordVoiceTurn({ heard: 'c', reply: 'd', route: 'shortcut' });
+    expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 
   it('can be switched off, and never throws', () => {

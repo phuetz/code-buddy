@@ -66,16 +66,24 @@ function localDate(now: Date): string {
   return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
 }
 
+/** Minutes since midnight for a stored 'H:MM' / 'HH:MM' time (the store accepts both), or null. */
+function minutesOfDay(time: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
 /** Reminders still ahead today (enabled, scheduled today, later than now, not fired today). */
 export function remindersLeftToday(list: Reminder[], now: Date): Reminder[] {
   const today = localDate(now);
-  const nowHm = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
   return list
     .filter((r) => r.enabled)
     .filter((r) => (r.date ? r.date === today : !r.days?.length || r.days.includes(now.getDay())))
-    .filter((r) => r.time > nowHm)
+    // Compared as numbers: a string compare would put '9:00' after '14:30'.
+    .filter((r) => (minutesOfDay(r.time) ?? -1) > nowMinutes)
     .filter((r) => !r.lastFiredAt || localDate(new Date(r.lastFiredAt)) !== today)
-    .sort((a, b) => a.time.localeCompare(b.time));
+    .sort((a, b) => (minutesOfDay(a.time) ?? 0) - (minutesOfDay(b.time) ?? 0));
 }
 
 /**
@@ -102,10 +110,10 @@ export const VERIFIED_ACTIVITIES: readonly VerifiedActivity[] = [
     async perform(sources) {
       const count = await sources.recentCommitCount();
       if (count === null) return null;
-      if (count === 0) return 'j’ai jeté un œil au dépôt : rien de nouveau depuis hier';
+      if (count === 0) return 'j’ai jeté un œil au dépôt : rien de nouveau en 24 heures';
       return count === 1
-        ? 'j’ai jeté un œil au dépôt : un commit depuis hier'
-        : `j’ai jeté un œil au dépôt : ${count} commits depuis hier`;
+        ? 'j’ai jeté un œil au dépôt : un commit en 24 heures'
+        : `j’ai jeté un œil au dépôt : ${count} commits en 24 heures`;
     },
   },
   {
@@ -240,8 +248,9 @@ async function defaultPromote(moment: InnerLifeMoment): Promise<void> {
 export async function runInnerLifeTick(deps: InnerLifeTickDeps = {}): Promise<InnerLifeMoment | null> {
   try {
     const moment = await chooseInnerLifeMoment(deps.sources ?? defaultSources(), deps.index);
-    (deps.driftMood ?? defaultDriftMood)(deps.relationshipStatePath);
+    // Store first: a mood must not drift for a moment that was never kept.
     await (deps.promote ?? defaultPromote)(moment);
+    (deps.driftMood ?? defaultDriftMood)(deps.relationshipStatePath);
     logger.info(`[inner-life] ${moment.kind === 'done' ? 'did' : 'thought'}: ${moment.id}`);
     return moment;
   } catch (err) {

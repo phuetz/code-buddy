@@ -222,7 +222,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
     category: 'work',
     requiresAgent: true,
     examples: ['Continue en autonomie', 'Travaille pendant mon absence'],
-    reply: 'Je m’y mets, et je te dirai ce que j’ai réellement fait.',
+    reply: 'Je m’y mets.',
     patterns: [
       lisaCommand(
         'continue en autonomie|travaille en autonomie|travaille pendant mon absence|continue pendant mon absence'
