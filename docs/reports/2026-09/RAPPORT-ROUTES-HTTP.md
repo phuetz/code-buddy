@@ -112,7 +112,7 @@ Inventaire Express : 150 sites `app.|router.METHOD(` sous `src/server` et le web
 - Le succès de `POST /api/a2a/tasks/send` avec un message : cela lancerait l'exécuteur et un modèle.
 - Les routes JSON-RPC A2A, le chat (`/api/chat`, `/v1`), la recherche du hub, les démons, le cron, les battements qui sortent du processus, l'authentification d'appareil.
 - Un navigateur graphique. Le script servi par `GET /` a été exécuté dans un DOM et un WebSocket simulés, pas dans Chrome ou Firefox.
-- Windows, macOS, et une barrière Docker réseau coupé : les suites ci-dessus ont tourné sur l'hôte Linux, là où le dépôt de travail peut appeler `git status`.
+- Windows et macOS. Une barrière Docker au réseau coupé a rejoué les canaris, le canal WebChat, l'isolement et le catalogue : la base SQLite y répond `error` (deux tests de santé), alors qu'elle répond `ok` sur l'hôte. Les corrections WebChat, OpenAPI et A2A y sont vertes.
 - La suite complète du dépôt (~27 000 tests).
 - `tests/security/donnees-personnelles.test.ts` : 40 tests verts sur l'index qui contient ces corrections.
 - Le profil réel de l'utilisateur : il n'a pas été ouvert.
