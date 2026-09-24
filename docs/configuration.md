@@ -261,9 +261,14 @@ rtk_enabled = false
 # loaded (another current directory, an edit): restart to apply the new one.
 # The policy is read again right before the archive and before each erase;
 # an edit made while the reset runs stops it at that step.
-# When the session store would encrypt the session (encrypted flag, encrypted
-# messages, or SESSION_ENCRYPTION=true), every archived store is sealed with
-# the same key and reopened before anything is cleared; none is kept in clear.
+# The disk session is archived as a byte-for-byte copy of its file, read once
+# under the session lock: an encrypted file gives an encrypted copy. When the
+# session store would encrypt the session (encrypted flag, encrypted messages,
+# or SESSION_ENCRYPTION=true), the other stores are sealed with the same key
+# and reopened before anything is cleared; none is kept in clear. A session
+# still in clear on disk while encryption is required is neither archived nor
+# cleared until its next save encrypts it. The clear only runs if the file
+# still holds the archived bytes and the same encryption rule applies.
 [session_reset]
 mode = "none"
 idle_minutes = 1440
