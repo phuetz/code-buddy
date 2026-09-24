@@ -29,6 +29,11 @@ export interface ScanResult {
   file: string;
   findings: ScanFinding[];
   scannedAt: number;
+  /**
+   * False when this call did not read regular-file text.
+   * An empty findings list is not an authorization unless this is true.
+   */
+  textRead?: boolean;
 }
 
 export type SkillFirewallCapability =
@@ -119,7 +124,38 @@ function unreadFinding(filePath: string, kind: string): ScanResult {
       evidence: path.basename(filePath).slice(0, 120),
     }],
     scannedAt: Date.now(),
+    textRead: false,
   };
+}
+
+/**
+ * A missing path stays an empty result. Every other unread path is an
+ * explicit refusal, never a clean scan.
+ */
+function refusalResult(filePath: string): ScanResult {
+  let linked: fs.Stats;
+  try {
+    linked = fs.lstatSync(filePath);
+  } catch {
+    return { file: filePath, findings: [], scannedAt: Date.now(), textRead: false };
+  }
+  if (linked.isSymbolicLink()) {
+    let targetIsFile = false;
+    try {
+      targetIsFile = fs.statSync(filePath).isFile();
+    } catch {
+      targetIsFile = false;
+    }
+    return unreadFinding(filePath, targetIsFile ? 'file' : 'symlink');
+  }
+  if (linked.isFile()) return unreadFinding(filePath, 'file');
+  return unreadFinding(filePath, 'special');
+}
+
+/** A scan that neither read text nor explained why is still a refusal. */
+function readOrRefuse(result: ScanResult): ScanResult {
+  if (result.textRead === true || result.findings.length > 0) return result;
+  return unreadFinding(result.file, 'file');
 }
 
 /**
@@ -341,13 +377,10 @@ function getDangerousPatterns(): DangerousPattern[] {
  * Scan a single file for dangerous patterns.
  */
 export function scanFile(filePath: string): ScanResult {
-  const findings: ScanFinding[] = [];
-
   try {
     const content = readTextForScan(filePath);
-    if (content === null) {
-      return { file: filePath, findings, scannedAt: Date.now() };
-    }
+    if (content === null) return refusalResult(filePath);
+    const findings: ScanFinding[] = [];
     const lines = content.split('\n');
     const patterns = getDangerousPatterns();
 
@@ -379,15 +412,22 @@ export function scanFile(filePath: string): ScanResult {
     // override slipped through on 2026-09-03. Dotall matching here catches
     // both without re-enabling those comment false positives for eval/shell.
     findings.push(...collectPromptInjectionFindings(content, filePath, findings));
+    return { file: filePath, findings, scannedAt: Date.now(), textRead: true };
   } catch (error) {
     logger.debug(`Failed to scan file: ${filePath}`, { error });
+    return { file: filePath, findings: [], scannedAt: Date.now(), textRead: false };
   }
+}
 
-  return {
-    file: filePath,
-    findings,
-    scannedAt: Date.now(),
-  };
+/**
+ * True when this result must not authorize an install or a registration.
+ * Critical findings still block. A high finding that is not an unread file
+ * keeps the historical allow. An unread file never does.
+ */
+export function scanDeniesInstall(result: ScanResult): boolean {
+  if (result.textRead !== true) return true;
+  if (result.findings.some((finding) => finding.pattern === 'special-file-not-read')) return true;
+  return result.findings.some((finding) => finding.severity === 'critical');
 }
 
 /**
@@ -435,7 +475,9 @@ export function scanDirectory(dirPath: string, withinScripts = false): ScanResul
       || isExecutableOrShebang(fullPath)
     ) {
       const result = scanFile(fullPath);
-      if (result.findings.length > 0) {
+      if (result.textRead !== true) {
+        results.push(result.findings.length > 0 ? result : unreadFinding(fullPath, 'file'));
+      } else if (result.findings.length > 0) {
         results.push(result);
       }
     }
@@ -493,7 +535,7 @@ export function scanSkillFirewall(targetPath: string): SkillFirewallReport {
   }
   const results = info.isDirectory() && !info.isSymbolicLink()
     ? scanDirectory(normalizedTarget)
-    : [scanFile(normalizedTarget)];
+    : [readOrRefuse(scanFile(normalizedTarget))];
   return buildSkillFirewallReport(normalizedTarget, results);
 }
 
