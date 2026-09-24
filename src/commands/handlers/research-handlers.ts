@@ -421,10 +421,11 @@ export function handlePromptCache(args: string[]): CommandHandlerResult {
 
     case 'off': {
       manager.updateConfig({ enabled: false });
+      // ❌ indique l'état désactivé, pas un échec : ne pas passer par failureFlag.
+      const disabled = '❌ Prompt caching disabled.';
       return {
         handled: true,
-...failureFlag('❌ Prompt caching disabled.'),
-        entry: createEntry('❌ Prompt caching disabled.'),
+        entry: createEntry(disabled),
       };
     }
 
@@ -535,10 +536,11 @@ export function handleModelRouter(args: string[]): CommandHandlerResult {
 
     case 'off': {
       router.updateConfig({ enabled: false });
+      // ❌ indique l'état désactivé, pas un échec : ne pas passer par failureFlag.
+      const disabled = '❌ Model routing disabled. All requests will use the default model.';
       return {
         handled: true,
-...failureFlag('❌ Model routing disabled. All requests will use the default model.'),
-        entry: createEntry('❌ Model routing disabled. All requests will use the default model.'),
+        entry: createEntry(disabled),
       };
     }
 

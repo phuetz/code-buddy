@@ -18,6 +18,7 @@ import { handleChangeMode } from '../../src/commands/handlers/missing-handlers.j
 import { handleCloud } from '../../src/commands/handlers/cloud-handlers.js';
 import { handleDailyReset } from '../../src/commands/handlers/daily-reset-handler.js';
 import { handleFCS } from '../../src/commands/handlers/fcs-handlers.js';
+import { handleModelRouter as handleResearchModelRouter, handlePromptCache } from '../../src/commands/handlers/research-handlers.js';
 import { handleFleet } from '../../src/commands/handlers/fleet-handler.js';
 import { handleHeartbeat } from '../../src/commands/handlers/heartbeat-handler.js';
 import { handleHistory } from '../../src/commands/handlers/history-handlers.js';
@@ -186,6 +187,20 @@ describe('échecs slash : le drapeau failed est posé', () => {
     const text = textOf(result);
     expect(text, text).toContain(needle);
     expect(result.failed, text).toBe(true);
+  });
+
+  it('/prompt-cache off désactive le cache et ne pose pas failed', () => {
+    const result = handlePromptCache(['off']);
+    const text = textOf(result);
+    expect(text, text).toContain('Prompt caching disabled');
+    expect(result.failed, text).toBeUndefined();
+  });
+
+  it('le routeur interne off désactive et ne pose pas failed', () => {
+    const result = handleResearchModelRouter(['off']);
+    const text = textOf(result);
+    expect(text, text).toContain('Model routing disabled');
+    expect(result.failed, text).toBeUndefined();
   });
 
   it('/fcs validate fichier valide ne pose pas failed', () => {

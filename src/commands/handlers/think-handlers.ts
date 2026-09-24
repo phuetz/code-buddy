@@ -108,12 +108,13 @@ export async function handleThink(
 ): Promise<CommandHandlerResult> {
   // /think (no args) → show help
   if (args.length === 0) {
+    // Page d'aide : succès, même si le texte commence par « Usage: ».
+    const help = buildHelpText();
     return {
       handled: true,
-...failureFlag(buildHelpText()),
       entry: {
         type: 'assistant',
-        content: buildHelpText(),
+        content: help,
         timestamp: new Date(),
       },
     };
@@ -204,12 +205,12 @@ export async function handleThink(
     return runReasoning(problemText);
   }
 
+  const help = buildHelpText();
   return {
     handled: true,
-...failureFlag(buildHelpText()),
     entry: {
       type: 'assistant',
-      content: buildHelpText(),
+      content: help,
       timestamp: new Date(),
     },
   };

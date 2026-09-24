@@ -315,6 +315,22 @@ describe('headless slash exit code', () => {
     expect(result.exitCode, detail(result)).toBe(1);
   }, 180_000);
 
+  it('/prompt-cache off : code 0 et la désactivation annoncée', async () => {
+    const prompt = '/prompt-cache off';
+    const result = await runCli({ name: 'prompt-cache-off', prompt });
+    assertNoLlm(result, prompt);
+    expect(result.stdout, detail(result)).toContain('Prompt caching disabled');
+    expect(result.exitCode, detail(result)).toBe(0);
+  }, 180_000);
+
+  it('/prompt-cache on : code 0 et l activation annoncée', async () => {
+    const prompt = '/prompt-cache on';
+    const result = await runCli({ name: 'prompt-cache-on', prompt });
+    assertNoLlm(result, prompt);
+    expect(result.stdout, detail(result)).toContain('Prompt caching enabled');
+    expect(result.exitCode, detail(result)).toBe(0);
+  }, 180_000);
+
   it('/fcs validate fichier absent : code 1 et Script not found', async () => {
     const prompt = '/fcs validate missing.fcs';
     const result = await runCli({ name: 'fcs-validate-absent', prompt });
