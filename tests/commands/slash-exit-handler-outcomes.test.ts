@@ -12,6 +12,7 @@ import path from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { dispatchSlashPrompt } from '../../src/commands/headless-slash.js';
 import { handleBackup } from '../../src/commands/handlers/backup-handlers.js';
+import { handleCopy } from '../../src/commands/handlers/clipboard-handler.js';
 import { handleModelRouter as handleResearchModelRouter } from '../../src/commands/handlers/research-handlers.js';
 
 interface SlashLike {
@@ -53,6 +54,26 @@ function exitCodeOf(result: SlashLike | null): number {
 
 async function viaSlash(prompt: string): Promise<SlashLike | null> {
   return dispatchSlashPrompt(prompt);
+}
+
+/**
+ * La détection réelle dit oui sur macOS, Windows et un Linux avec xclip,
+ * non ailleurs. Le test fixe la réponse pour ne pas dépendre de l'hôte.
+ */
+const clipboard = vi.hoisted(() => ({ available: false }));
+vi.mock('../../src/utils/clipboard.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/utils/clipboard.js')>()),
+  isClipboardAvailable: () => clipboard.available,
+  copyToClipboard: () => true,
+}));
+
+async function copyWithClipboard(available: boolean, prompt: string): Promise<SlashLike | null> {
+  clipboard.available = available;
+  try {
+    return await viaSlash(prompt);
+  } finally {
+    clipboard.available = false;
+  }
 }
 
 function gitIn(cwd: string, args: string[]): void {
@@ -241,7 +262,25 @@ const cases: OutcomeCase[] = [
   { handler: 'handleReplace', kind: 'succès', label: '/replace', exitCode: 0, needle: 'find & replace', run: () => viaSlash('/replace') },
 
   { handler: 'handleSwitch', kind: 'succès', label: '/switch', exitCode: 0, needle: 'witch', run: () => viaSlash('/switch') },
-  { handler: 'handleCopy', kind: 'succès', label: '/copy', exitCode: 0, needle: 'Clipboard is not available', run: () => viaSlash('/copy') },
+  { handler: 'handleCopy', kind: 'succès', label: '/copy <texte>', exitCode: 0, needle: 'Copied to clipboard', run: () => copyWithClipboard(true, '/copy slash-exit-copie') },
+  { handler: 'handleCopy', kind: 'échec', label: '/copy sans presse-papiers', exitCode: 1, needle: 'Clipboard is not available', run: () => copyWithClipboard(false, '/copy') },
+  { handler: 'handleCopy', kind: 'échec', label: '/copy sans réponse', exitCode: 1, needle: 'No assistant response found to copy', run: () => copyWithClipboard(true, '/copy') },
+  { handler: 'handleCopy', kind: 'échec', label: '/copy code sans réponse', exitCode: 1, needle: 'No assistant response found to copy', run: () => copyWithClipboard(true, '/copy code') },
+  {
+    handler: 'handleCopy',
+    kind: 'échec',
+    label: '/copy code sans bloc',
+    exitCode: 1,
+    needle: 'No code block found',
+    run: async () => {
+      clipboard.available = true;
+      try {
+        return handleCopy(['code'], [{ type: 'assistant', content: 'réponse sans bloc de code', timestamp: new Date() }]);
+      } finally {
+        clipboard.available = false;
+      }
+    },
+  },
   { handler: 'handleGoal', kind: 'succès', label: '/goal', exitCode: 0, needle: 'oal', run: () => viaSlash('/goal') },
   { handler: 'handleGoal', kind: 'succès', label: '/goal clear', exitCode: 0, needle: 'goal', run: () => viaSlash('/goal clear') },
 

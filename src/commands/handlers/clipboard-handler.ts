@@ -52,9 +52,11 @@ export function handleCopy(
 ): CommandHandlerResult {
   // Check clipboard availability
   if (!isClipboardAvailable()) {
+    // Rien n'a été copié : échec. Ces messages ne passent pas par failureFlag,
+    // dont le motif ne les reconnaît pas (« found to », « not available »).
     return {
       handled: true,
-...failureFlag('Clipboard is not available on this system. On Linux, install xclip, xsel, or wl-copy.'),
+      failed: true,
       entry: {
         type: 'assistant',
         content: 'Clipboard is not available on this system. On Linux, install xclip, xsel, or wl-copy.',
@@ -72,7 +74,7 @@ export function handleCopy(
     if (!lastMessage) {
       return {
         handled: true,
-...failureFlag('No assistant response found to copy.'),
+        failed: true,
         entry: {
           type: 'assistant',
           content: 'No assistant response found to copy.',
@@ -85,7 +87,7 @@ export function handleCopy(
     if (!codeBlock) {
       return {
         handled: true,
-...failureFlag('No code block found in the last response.'),
+        failed: true,
         entry: {
           type: 'assistant',
           content: 'No code block found in the last response.',
@@ -133,7 +135,7 @@ export function handleCopy(
   if (!lastMessage) {
     return {
       handled: true,
-...failureFlag('No assistant response found to copy.'),
+      failed: true,
       entry: {
         type: 'assistant',
         content: 'No assistant response found to copy.',
