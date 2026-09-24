@@ -86,8 +86,16 @@ export interface MessagingMemoryPart {
 
 const ARCHIVE_EPOCH = /^[0-9a-z]{8,80}$/;
 
+/**
+ * Throws on a relative configured directory: it would resolve against
+ * whatever directory the process is in when the reset runs, so archives
+ * would land in, and be looked for in, a different place after a chdir.
+ */
 export function resolveMessagingSessionResetArchiveDir(env: NodeJS.ProcessEnv, homeDir: string): string {
   const configured = env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR?.trim();
+  if (configured && !path.isAbsolute(configured)) {
+    throw new Error('memory archive directory must be absolute');
+  }
   if (configured) return configured;
   return path.join(homeDir, '.codebuddy', 'companion', 'session-reset-archive');
 }

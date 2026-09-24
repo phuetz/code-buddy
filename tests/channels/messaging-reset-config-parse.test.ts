@@ -4,7 +4,7 @@
  * The home directory is a throwaway created inside the test. Product modules
  * are imported only after that, so the loader's captured path matches it.
  */
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -35,15 +35,29 @@ interface ConfigCase {
   projectAtLoad?: string;
   /** Project file mode when the configuration is first loaded (POSIX only). */
   projectModeAtLoad?: number;
+  /**
+   * Runs after the configuration is loaded and before the turn: moves the
+   * process to another project, edits, creates or removes a config file.
+   */
+  afterLoad?: (files: DriftFiles) => void;
+  /** Value of CODEBUDDY_SESSION_RESET_ARCHIVE_DIR instead of the temp dir. */
+  archiveEnv?: string;
   /** True when the reset must not erase the secret. */
   keep: boolean;
+}
+
+interface DriftFiles {
+  userFile: string;
+  projectFile: string;
+  /** A second project with its own config file, made the current directory. */
+  moveToProject: (content?: string) => void;
 }
 
 const IDLE = '[session_reset]\nmode = "idle"\nidle_minutes = 1\n';
 const TRUNCATED = '[session_reset\nmode = "none"\n';
 const NONE = '[session_reset]\nmode = "none"\n';
 
-async function exercise(spec: ConfigCase): Promise<void> {
+async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
   const fakeHome = tempDir();
   const projectDir = tempDir();
   const sessionsDir = tempDir();
@@ -72,7 +86,7 @@ async function exercise(spec: ConfigCase): Promise<void> {
   process.env.HOME = fakeHome;
   process.env.USERPROFILE = fakeHome;
   process.env.CODEBUDDY_SESSIONS_DIR = sessionsDir;
-  process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = archiveDir;
+  process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = spec.archiveEnv ?? archiveDir;
   process.env.CODEBUDDY_CHANNEL_HISTORY = 'false';
   try {
     process.chdir(projectDir);
@@ -98,11 +112,21 @@ async function exercise(spec: ConfigCase): Promise<void> {
     toml.resetConfigManager();
     store.resetSessionStore();
     handlers.__resetChannelAIHandlerForTests();
-    if (spec.projectAtLoad !== undefined || spec.projectModeAtLoad !== undefined) {
+    if (spec.projectAtLoad !== undefined || spec.projectModeAtLoad !== undefined || spec.afterLoad) {
       // The process read its configuration earlier, then the file was repaired.
       toml.getConfigManager().getConfig();
       if (spec.projectModeAtLoad !== undefined) chmodSync(projectFile, 0o644);
       if (spec.project !== undefined) writeFileSync(projectFile, spec.project);
+      spec.afterLoad?.({
+        userFile: path.join(fakeHome, '.codebuddy', 'config.toml'),
+        projectFile,
+        moveToProject: (content) => {
+          const other = tempDir();
+          mkdirSync(path.join(other, '.codebuddy'), { recursive: true });
+          if (content !== undefined) writeFileSync(path.join(other, '.codebuddy', 'config.toml'), content);
+          process.chdir(other);
+        },
+      });
     }
 
     const sessionKey = `reset-config-${spec.id}`;
@@ -140,6 +164,7 @@ async function exercise(spec: ConfigCase): Promise<void> {
       expect(raw, `${spec.id} secret efface`).not.toContain(spec.secret);
       expect(archived, `${spec.id} archive presente`).toContain(spec.secret);
     }
+    return { projectDir };
   } finally {
     if (changedDir) process.chdir(previous.cwd);
     restore('HOME', previous.home);
@@ -225,6 +250,116 @@ describe('configuration presente mais inanalysable', () => {
       user: IDLE,
       keep: false,
     });
+  });
+});
+
+/**
+ * Class: the policy applied must be the one the files describe when the
+ * reset runs. The cached policy may have been built in another directory or
+ * from another content; any difference cancels, an identical policy does not.
+ */
+describe('politique chargee differente de celle des fichiers au moment de la remise a zero', () => {
+  it('changement de repertoire vers un projet qui vaut none annule la remise a zero', async () => {
+    await exercise({
+      id: 'cwd-vers-none',
+      secret: 'CWD_VERS_NONE',
+      project: IDLE,
+      afterLoad: (files) => files.moveToProject(NONE),
+      keep: true,
+    });
+  });
+
+  it('changement de repertoire vers un projet sans configuration annule la remise a zero', async () => {
+    await exercise({
+      id: 'cwd-vers-absent',
+      secret: 'CWD_VERS_ABSENT',
+      project: IDLE,
+      afterLoad: (files) => files.moveToProject(),
+      keep: true,
+    });
+  });
+
+  it('changement de repertoire depuis un projet none vers un projet idle ne remet pas a zero', async () => {
+    await exercise({
+      id: 'cwd-depuis-none',
+      secret: 'CWD_DEPUIS_NONE',
+      project: NONE,
+      afterLoad: (files) => files.moveToProject(IDLE),
+      keep: true,
+    });
+  });
+
+  it('changement de repertoire vers un projet de meme politique laisse la remise a zero se faire', async () => {
+    await exercise({
+      id: 'cwd-meme-politique',
+      secret: 'CWD_MEME_POLITIQUE',
+      project: IDLE,
+      afterLoad: (files) => files.moveToProject(`# autre projet\n${IDLE}`),
+      keep: false,
+    });
+  });
+
+  it('un projet passe de idle a none apres chargement annule la remise a zero', async () => {
+    await exercise({
+      id: 'projet-edite-none',
+      secret: 'PROJET_EDITE_NONE',
+      project: IDLE,
+      afterLoad: (files) => writeFileSync(files.projectFile, NONE),
+      keep: true,
+    });
+  });
+
+  it('un projet none cree apres chargement annule la remise a zero', async () => {
+    await exercise({
+      id: 'projet-cree-none',
+      secret: 'PROJET_CREE_NONE',
+      user: IDLE,
+      afterLoad: (files) => writeFileSync(files.projectFile, NONE),
+      keep: true,
+    });
+  });
+
+  it('un projet idle supprime apres chargement annule la remise a zero', async () => {
+    await exercise({
+      id: 'projet-supprime',
+      secret: 'PROJET_SUPPRIME',
+      user: NONE,
+      project: IDLE,
+      afterLoad: (files) => rmSync(files.projectFile),
+      keep: true,
+    });
+  });
+
+  it('un utilisateur passe de idle a none apres chargement annule la remise a zero', async () => {
+    await exercise({
+      id: 'utilisateur-edite-none',
+      secret: 'UTILISATEUR_EDITE_NONE',
+      user: IDLE,
+      afterLoad: (files) => writeFileSync(files.userFile, NONE),
+      keep: true,
+    });
+  });
+
+  it('une modification hors session_reset laisse la remise a zero se faire', async () => {
+    await exercise({
+      id: 'edition-hors-section',
+      secret: 'EDITION_HORS_SECTION',
+      project: IDLE,
+      afterLoad: (files) => writeFileSync(files.projectFile, `${IDLE}\n[ui]\ntheme = "sombre"\n`),
+      keep: false,
+    });
+  });
+
+  it('un dossier d archive relatif annule la remise a zero sans rien ecrire dans le projet', async () => {
+    const relative = path.join('archive-relative', 'sous-dossier');
+    const { projectDir } = await exercise({
+      id: 'archive-relative',
+      secret: 'ARCHIVE_RELATIVE',
+      user: IDLE,
+      archiveEnv: relative,
+      keep: true,
+    });
+    expect(existsSync(path.join(projectDir, 'archive-relative')), 'archive ecrite dans le projet').toBe(false);
   });
 });
 

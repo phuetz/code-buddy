@@ -1419,7 +1419,9 @@ async function loadMessagingSessionSnapshot(
  * Before a channel turn continues, apply the configured messaging reset.
  * mode none returns before any session read. A present config file that
  * cannot be read or parsed, now or when the configuration was loaded,
- * cancels before any session read. Each store the
+ * cancels before any session read, and so do config files that now describe
+ * another `session_reset` than the loaded one (another current directory, an
+ * edit) and a relative archive directory. Each store the
  * reset would clear is archived first. A failed archive of any one of them
  * cancels the clear and every store stays in place.
  */
@@ -1435,12 +1437,21 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
   try {
     policy = resolveSessionResetPolicy(messagingResetSessionConfig());
   } catch (err) {
-    logger.warn('messaging session reset policy unreadable, keeping the session', {
-      error: err instanceof Error ? err.message : 'unreadable',
+    logger.warn('messaging session reset policy unavailable, keeping the session', {
+      error: err instanceof Error ? err.message : 'unavailable',
     });
     return;
   }
   if (policy.mode === 'none') return;
+  let archiveDir: string;
+  try {
+    archiveDir = resolveMessagingSessionResetArchiveDir(process.env, os.homedir());
+  } catch (err) {
+    logger.warn('messaging session reset archive directory refused, keeping the session', {
+      error: err instanceof Error ? err.message : 'refused',
+    });
+    return;
+  }
 
   const { clearCompanionChannelHistory, readCompanionHistoryForReset } = await import(
     '../../companion/channel-history.js'
@@ -1460,7 +1471,7 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     policy,
     snapshot,
     parts: snapshot.parts,
-    archiveDir: resolveMessagingSessionResetArchiveDir(process.env, os.homedir()),
+    archiveDir,
     resetSession: async () => {
       const beforeErase = beforeMessagingResetEraseForTests;
       beforeMessagingResetEraseForTests = undefined;

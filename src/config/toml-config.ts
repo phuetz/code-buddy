@@ -1123,13 +1123,10 @@ const CONFIG_DIR = join(homedir(), '.codebuddy');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.toml');
 const PROJECT_CONFIG_FILE = '.codebuddy/config.toml';
 
-export type MessagingResetConfigRead =
-  | { kind: 'absent' }
-  | { kind: 'ok' }
-  | { kind: 'unreadable'; error: string }
-  | { kind: 'unparseable'; error: string };
-
-/** User config, then project config: the same two paths `load` reads. */
+/**
+ * User config, then project config, resolved against the current directory:
+ * the files `load` would read if it ran now.
+ */
 export function messagingResetConfigPaths(): readonly [string, string] {
   return [CONFIG_FILE, join(process.cwd(), PROJECT_CONFIG_FILE)];
 }
@@ -1167,49 +1164,65 @@ function readConfigFile(filePath: string): ConfigFileRead {
   return { kind: 'ok', content };
 }
 
-export function classifyMessagingResetConfigFile(filePath: string): MessagingResetConfigRead {
-  const read = readConfigFile(filePath);
-  if (read.kind === 'unparseable') return { kind: 'unparseable', error: read.error };
-  if (read.kind === 'ok') return { kind: 'ok' };
-  return read;
-}
+export type MessagingResetConfigFailure = 'unreadable' | 'unparseable' | 'changed';
 
 export class MessagingResetConfigError extends Error {
-  readonly kind: 'unreadable' | 'unparseable';
+  readonly kind: MessagingResetConfigFailure;
 
-  constructor(kind: 'unreadable' | 'unparseable') {
-    super(
-      kind === 'unparseable'
-        ? 'messaging reset config unparseable'
-        : 'messaging reset config unreadable',
-    );
+  constructor(kind: MessagingResetConfigFailure) {
+    super(`messaging reset config ${kind === 'changed' ? 'changed since load' : kind}`);
     this.name = 'MessagingResetConfigError';
     this.kind = kind;
   }
 }
 
-/** Throws when any reset-path config file is present but unreadable or unparseable. */
-export function assertMessagingResetConfigsReadable(): void {
+/**
+ * The `[session_reset]` the config files describe now, merged the way `load`
+ * merges them. Throws when a present file is unreadable or unparseable.
+ */
+function sessionResetOnDisk(): SessionResetTomlConfig | undefined {
+  const merged: { session_reset?: SessionResetTomlConfig } = {};
   for (const filePath of messagingResetConfigPaths()) {
-    const verdict = classifyMessagingResetConfigFile(filePath);
-    if (verdict.kind === 'unreadable' || verdict.kind === 'unparseable') {
-      throw new MessagingResetConfigError(verdict.kind);
+    const read = readConfigFile(filePath);
+    if (read.kind === 'absent') continue;
+    if (read.kind === 'unreadable' || read.kind === 'unparseable') {
+      throw new MessagingResetConfigError(read.kind);
     }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = parseTOML(read.content);
+    } catch {
+      throw new MessagingResetConfigError('unparseable');
+    }
+    assignSessionReset(merged, parsed);
   }
+  return merged.session_reset;
+}
+
+function canonicalSessionReset(section: SessionResetTomlConfig | undefined): string {
+  if (section === undefined) return 'absent';
+  const entries = Object.entries(section).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return JSON.stringify(entries);
 }
 
 /**
  * The `session_reset` section a messaging reset may act on. Throws when the
  * loaded configuration was built from a file it could not read or parse,
  * even if that file has been repaired since: the cached policy never saw it.
- * Also throws when a file is unreadable or unparseable now.
+ * Also throws when a file is unreadable or unparseable now, and when the
+ * files now describe another policy than the one loaded: the current
+ * directory moved to another project, or a file was edited, created or
+ * removed since the load.
  */
 export function messagingResetSessionConfig(): SessionResetTomlConfig | undefined {
   const manager = getConfigManager();
   const config = manager.getConfig();
   const failed = manager.getLoadFailures()[0];
   if (failed) throw new MessagingResetConfigError(failed);
-  assertMessagingResetConfigsReadable();
+  const onDisk = sessionResetOnDisk();
+  if (canonicalSessionReset(onDisk) !== canonicalSessionReset(manager.getLoadedFileSessionReset())) {
+    throw new MessagingResetConfigError('changed');
+  }
   return config.session_reset;
 }
 
@@ -1220,6 +1233,8 @@ class ConfigManager {
   private config: CodeBuddyConfig;
   private loaded = false;
   private loadFailures: Array<'unreadable' | 'unparseable'> = [];
+  /** `session_reset` as the files described it at load, before any profile. */
+  private loadedFileSessionReset: SessionResetTomlConfig | undefined;
 
   constructor() {
     this.config = { ...DEFAULT_CONFIG };
@@ -1259,6 +1274,9 @@ class ConfigManager {
       }
     }
 
+    this.loadedFileSessionReset = this.config.session_reset
+      ? { ...this.config.session_reset }
+      : undefined;
     this.loaded = true;
     return this.config;
   }
@@ -1323,6 +1341,12 @@ class ConfigManager {
   getLoadFailures(): ReadonlyArray<'unreadable' | 'unparseable'> {
     if (!this.loaded) this.load();
     return this.loadFailures;
+  }
+
+  /** `session_reset` as the config files described it at the last load. */
+  getLoadedFileSessionReset(): Readonly<SessionResetTomlConfig> | undefined {
+    if (!this.loaded) this.load();
+    return this.loadedFileSessionReset;
   }
 
   /**
