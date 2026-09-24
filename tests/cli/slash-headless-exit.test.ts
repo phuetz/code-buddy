@@ -187,7 +187,16 @@ describe('headless slash exit code', () => {
   });
 
   afterAll(async () => {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        server.closeAllConnections?.();
+        resolve();
+      }, 2_000);
+      server.close(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
   });
 
   it('commande inconnue : code 1 et le texte Unknown command', async () => {
@@ -254,6 +263,55 @@ describe('headless slash exit code', () => {
     const result = await runCli({ name: 'inconnu-stdin', prompt: null, stdin: `${prompt}\n` });
     assertNoLlm(result, prompt);
     expect(result.stdout, detail(result)).toMatch(/Unknown command/i);
+    expect(result.exitCode, detail(result)).toBe(1);
+  }, 180_000);
+
+  it('/config set --json --dry-run type incompatible : code 1 et success false', async () => {
+    const prompt = '/config set --json --dry-run middleware.max_turns not-a-number';
+    const result = await runCli({ name: 'config-json-type', prompt });
+    assertNoLlm(result, prompt);
+    expect(result.stdout, detail(result)).toContain('"success": false');
+    expect(result.stdout, detail(result)).toContain('Type mismatch');
+    expect(result.exitCode, detail(result)).toBe(1);
+  }, 180_000);
+
+  it('/config set --dry-run type incompatible : code 1', async () => {
+    const prompt = '/config set --dry-run middleware.max_turns not-a-number';
+    const result = await runCli({ name: 'config-text-type', prompt });
+    assertNoLlm(result, prompt);
+    expect(result.stdout, detail(result)).toContain('Config Set Failed');
+    expect(result.exitCode, detail(result)).toBe(1);
+  }, 180_000);
+
+  it('/config set --json [] : code 1, batch vide refusé', async () => {
+    const prompt = '/config set --json []';
+    const result = await runCli({ name: 'config-json-vide', prompt });
+    assertNoLlm(result, prompt);
+    expect(result.stdout, detail(result)).toContain('non-empty object');
+    expect(result.exitCode, detail(result)).toBe(1);
+  }, 180_000);
+
+  it('/trigger add sans source : code 1', async () => {
+    const prompt = '/trigger add';
+    const result = await runCli({ name: 'trigger-add', prompt });
+    assertNoLlm(result, prompt);
+    expect(result.stdout, detail(result)).toContain('--source is required');
+    expect(result.exitCode, detail(result)).toBe(1);
+  }, 180_000);
+
+  it('/worktree add sans chemin : code 1', async () => {
+    const prompt = '/worktree add';
+    const result = await runCli({ name: 'worktree-add', prompt });
+    assertNoLlm(result, prompt);
+    expect(result.stdout, detail(result)).toContain('Usage: /worktree add <path>');
+    expect(result.exitCode, detail(result)).toBe(1);
+  }, 180_000);
+
+  it('/script run fichier absent : code 1', async () => {
+    const prompt = '/script run slash-exit-missing.bs';
+    const result = await runCli({ name: 'script-absent', prompt });
+    assertNoLlm(result, prompt);
+    expect(result.stdout, detail(result)).toContain('Script not found:');
     expect(result.exitCode, detail(result)).toBe(1);
   }, 180_000);
 

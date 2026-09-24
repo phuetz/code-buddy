@@ -22,10 +22,77 @@ export interface CommandHandlerResult {
   prompt?: string;
 }
 
+const HEADLESS_SCRIPT_TIMEOUT_DEFAULT_MS = 30_000;
+const HEADLESS_SCRIPT_TIMEOUT_MAX_MS = 300_000;
+
+export function headlessScriptTimeoutMs(raw = process.env.CODEBUDDY_HEADLESS_SCRIPT_TIMEOUT_MS): number {
+  if (raw === undefined || raw.trim() === '') return HEADLESS_SCRIPT_TIMEOUT_DEFAULT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) return HEADLESS_SCRIPT_TIMEOUT_DEFAULT_MS;
+  return Math.min(Math.floor(parsed), HEADLESS_SCRIPT_TIMEOUT_MAX_MS);
+}
+
+function scriptResult(content: string, failed = false): CommandHandlerResult {
+  return {
+    handled: true,
+    ...(failed ? { failed: true } : {}),
+    entry: {
+      type: 'assistant',
+      content,
+      timestamp: new Date(),
+    },
+  };
+}
+
 /**
- * Handle /script command
+ * Run a script and return its outcome. Headless callers use this so a failure
+ * becomes exit code 1. The wait is capped by headlessScriptTimeoutMs.
  */
-export function handleScript(args: string[]): CommandHandlerResult {
+export async function runScriptForExitCode(fullPath: string): Promise<CommandHandlerResult> {
+  const timeoutMs = headlessScriptTimeoutMs();
+  const manager = getScriptManager();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<{ kind: 'timeout' }>((resolve) => {
+    timer = setTimeout(() => resolve({ kind: 'timeout' }), timeoutMs);
+    timer.unref();
+  });
+  const run = manager.execute(fullPath, {
+    verbose: false,
+    enableAI: true,
+    enableBash: true,
+    enableFileOps: true,
+    timeout: timeoutMs,
+  }).then(
+    (result) => ({ kind: 'done' as const, result }),
+    (error: unknown) => ({ kind: 'error' as const, error }),
+  );
+  try {
+    const outcome = await Promise.race([run, timeout]);
+    if (outcome.kind === 'timeout') {
+      return scriptResult(
+        `❌ Script timed out after ${timeoutMs}ms: ${path.basename(fullPath)}`,
+        true,
+      );
+    }
+    if (outcome.kind === 'error') {
+      const message = outcome.error instanceof Error ? outcome.error.message : String(outcome.error);
+      return scriptResult(`❌ Script error: ${message}`, true);
+    }
+    if (!outcome.result.success) {
+      return scriptResult(`❌ Script failed: ${outcome.result.error ?? 'unknown error'}`, true);
+    }
+    const lines = [
+      `✅ Script completed in ${outcome.result.duration}ms`,
+      ...outcome.result.output,
+    ];
+    return scriptResult(lines.join('\n'));
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Handle /script. Headless run waits for the script; the TUI still returns at once. */
+export function handleScript(args: string[]): CommandHandlerResult | Promise<CommandHandlerResult> {
   const action = args[0]?.toLowerCase();
   const target = args.slice(1).join(' ');
 
@@ -61,34 +128,20 @@ export function handleScript(args: string[]): CommandHandlerResult {
       break;
   }
 
-  return {
-    handled: true,
-    entry: {
-      type: "assistant",
-      content,
-      timestamp: new Date(),
-    },
-  };
+  return scriptResult(content, content.startsWith('❌'));
 }
 
 /**
  * Run a script file
  */
-function handleScriptRun(filePath: string): CommandHandlerResult {
+function handleScriptRun(filePath: string): CommandHandlerResult | Promise<CommandHandlerResult> {
   if (!filePath) {
-    return {
-      handled: true,
-      entry: {
-        type: "assistant",
-        content: `❌ Usage: /script run <file.bs>
+    return scriptResult(`❌ Usage: /script run <file.bs>
 
 Examples:
   /script run deploy.bs
   /script run ./scripts/backup.bs
-  /script run ~/automation/daily.bs`,
-        timestamp: new Date(),
-      },
-    };
+  /script run ~/automation/daily.bs`, true);
   }
 
   // Resolve path
@@ -97,28 +150,17 @@ Examples:
     : path.resolve(process.cwd(), filePath);
 
   if (!fs.existsSync(fullPath)) {
-    return {
-      handled: true,
-      entry: {
-        type: "assistant",
-        content: `❌ Script not found: ${fullPath}`,
-        timestamp: new Date(),
-      },
-    };
+    return scriptResult(`❌ Script not found: ${fullPath}`, true);
   }
 
-  // Execute asynchronously and return placeholder
-  // The actual execution happens in the background
-  executeScriptAsync(fullPath);
+  // Headless must observe the outcome. The interactive TUI still returns at once.
+  if (process.env.CODEBUDDY_HEADLESS === 'true') {
+    return runScriptForExitCode(fullPath);
+  }
 
-  return {
-    handled: true,
-    entry: {
-      type: "assistant",
-      content: `🚀 Running script: ${path.basename(fullPath)}...`,
-      timestamp: new Date(),
-    },
-  };
+  void executeScriptAsync(fullPath);
+
+  return scriptResult(`🚀 Running script: ${path.basename(fullPath)}...`);
 }
 
 /**

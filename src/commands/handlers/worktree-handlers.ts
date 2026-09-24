@@ -82,8 +82,10 @@ export function handleWorktree(args: string[]): CommandHandlerResult {
     content = `❌ Git worktree error: ${error instanceof Error ? error.message : String(error)}`;
   }
 
+  const failed = content.startsWith('❌') || content.startsWith('⚠️');
   return {
     handled: true,
+    ...(failed ? { failed: true } : {}),
     entry: {
       type: "assistant",
       content,

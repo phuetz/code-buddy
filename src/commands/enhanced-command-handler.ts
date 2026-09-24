@@ -481,14 +481,17 @@ export class EnhancedCommandHandler {
           results.push(await runner.run(config, files.length > 0 ? files : undefined));
         }
       }
+      const failedLint = results.some((item: { success?: boolean }) => item.success === false);
       return {
         handled: true,
+        ...(failedLint ? { failed: true } : {}),
         entry: { type: 'assistant', content: formatLintResults(results), timestamp: new Date() },
       };
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       return {
         handled: true,
+        failed: true,
         entry: { type: 'assistant', content: `Lint error: ${msg}`, timestamp: new Date() },
       };
     }
@@ -507,6 +510,7 @@ export class EnhancedCommandHandler {
       const msg = error instanceof Error ? error.message : String(error);
       return {
         handled: true,
+        failed: true,
         entry: { type: 'assistant', content: `Secrets scan error: ${msg}`, timestamp: new Date() },
       };
     }

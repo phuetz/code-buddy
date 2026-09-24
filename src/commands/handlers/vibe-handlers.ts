@@ -365,6 +365,10 @@ export async function handleVimMode(args: string[]): Promise<CommandHandlerResul
 // /config - Configuration Validation
 // ============================================================================
 
+function isConfigBatch(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleConfig(args: string[]): Promise<CommandHandlerResult> {
   const action = args[0]?.toLowerCase() || 'validate';
   const lines: string[] = [];
@@ -381,8 +385,10 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
       case 'validate': {
         // Run full validation
         const report = await handleConfigValidateCommand();
+        const validationFailed = report.includes('[ERROR] Configuration validation failed');
         return {
           handled: true,
+          ...(validationFailed ? { failed: true } : {}),
           entry: {
             type: 'assistant',
             content: report,
@@ -481,7 +487,12 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
         if (isJson && cleanArgs.length === 1) {
           const batchJson = cleanArgs[0] ?? '';
           try {
-            const batch = JSON.parse(batchJson) as Record<string, unknown>;
+            const batch: unknown = JSON.parse(batchJson);
+            if (!isConfigBatch(batch) || Object.keys(batch).length === 0) {
+              failed = true;
+              lines.push('Error: batch JSON must be a non-empty object of dot-notation keys');
+              break;
+            }
             const results = await setConfigBatch(batch, { dryRun: isDryRun, json: isJson });
 
             lines.push(isDryRun ? 'Config Set (Dry Run)' : 'Config Set (Batch)');
@@ -541,6 +552,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
         }
 
         const result = await setConfigValue(keyPath, parsedValue, { dryRun: isDryRun, json: isJson });
+        if (!result.success) failed = true;
 
         if (isJson) {
           lines.push(JSON.stringify(result, null, 2));
@@ -560,7 +572,6 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
             lines.push(`  Warning: ${result.warning}`);
           }
         } else {
-          failed = true;
           lines.push('Config Set Failed');
           lines.push('='.repeat(50));
           lines.push('');
