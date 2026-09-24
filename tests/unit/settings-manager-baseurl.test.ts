@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
@@ -20,7 +22,11 @@ function resetSettingsManager(): void {
 }
 
 describe('SettingsManager baseURL hardening', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // L'écriture atomique (non simulée) vise ~/.codebuddy : ce test supposait que le dossier
+    // existait déjà dans le HOME appelant. Il est créé dans le HOME jetable du fichier.
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    actualFs.mkdirSync(path.join(os.homedir(), '.codebuddy'), { recursive: true });
     resetSettingsManager();
     vi.clearAllMocks();
     delete process.env.GROK_BASE_URL;
