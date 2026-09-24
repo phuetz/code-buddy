@@ -133,6 +133,7 @@ import {
   registerChannelBotPersona,
   __resetChannelAIHandlerForTests,
   __ageChannelAgentForTests,
+  __ageLocalCompanionHistoryForTests,
   __companionChannelHistoriesForTests,
 } from '../../src/commands/handlers/channel-handlers.js';
 import {
@@ -2050,6 +2051,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
 
   describe('reprise — carte locale archivée avant la remise à zéro', () => {
     let savedSessionReset: unknown;
+    let archiveDir = '';
 
     const getCfg = async (): Promise<{ session_reset?: unknown }> => {
       const { getConfigManager } = await import('../../src/config/toml-config.js');
@@ -2060,11 +2062,15 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       const cfg = await getCfg();
       savedSessionReset = cfg.session_reset;
       cfg.session_reset = undefined;
+      archiveDir = mkdtempSync(join(tmpdir(), 'cb-reset-archive-'));
+      process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = archiveDir;
     });
 
     afterEach(async () => {
       const cfg = await getCfg();
       cfg.session_reset = savedSessionReset;
+      delete process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+      rmSync(archiveDir, { recursive: true, force: true });
     });
 
     function seedOldSession(session: string, content: string): void {
@@ -2082,12 +2088,35 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
 
     async function readArchives(session: string): Promise<string> {
       const { createHash } = await import('node:crypto');
-      const { homedir } = await import('node:os');
-      const { readdirSync, readFileSync } = await import('node:fs');
-      const dir = join(homedir(), '.codebuddy', 'companion', 'session-reset-archive');
+      const { lstatSync, readdirSync, readFileSync } = await import('node:fs');
+      const dir = process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR ?? archiveDir;
       const stem = createHash('sha256').update(session).digest('hex').slice(0, 32);
-      const names = readdirSync(dir).filter((name) => name.startsWith(stem) && name.endsWith('.json'));
-      return names.map((name) => readFileSync(join(dir, name), 'utf8')).join('\n');
+      const chunks: string[] = [];
+      const visit = (current: string, depth: number): void => {
+        if (depth > 3) return;
+        let names: string[] = [];
+        try {
+          names = readdirSync(current);
+        } catch {
+          return;
+        }
+        for (const name of names) {
+          const full = join(current, name);
+          let listed;
+          try {
+            listed = lstatSync(full);
+          } catch {
+            continue;
+          }
+          if (listed.isSymbolicLink()) continue;
+          if (listed.isDirectory()) visit(full, depth + 1);
+          else if (listed.isFile() && name.startsWith(stem) && name.endsWith('.json')) {
+            chunks.push(readFileSync(full, 'utf8'));
+          }
+        }
+      };
+      visit(dir, 0);
+      return chunks.join('\n');
     }
 
     it('archive le tour selfie conservé seulement dans la carte locale', async () => {
@@ -2114,6 +2143,8 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
         await manager.emit(makeMessage('Lisa, envoie-moi une photo de toi', session), channel);
         const localBefore = __companionChannelHistoriesForTests().get(session) ?? [];
         expect(localBefore.some((turn) => turn.content.includes('CAPTION-SELFIE-UNIQUE'))).toBe(true);
+        const selfieAgo = Date.now() - 3_600_000;
+        expect(__ageLocalCompanionHistoryForTests(session, selfieAgo)).toBe(true);
 
         seedOldSession(session, 'ANCIEN-MESSAGE-DISQUE');
         const cfg = await getCfg();
@@ -2139,9 +2170,9 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
 
     it('un échec de sauvegarde de la carte n efface rien', async () => {
       process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
-      const { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync } = await import('node:fs');
-      const { tmpdir, homedir } = await import('node:os');
-      const { messagingMemoryArchivePath } = await import('../../src/channels/messaging-session-reset.js');
+      const { mkdtempSync, rmSync, statSync, writeFileSync } = await import('node:fs');
+      const { tmpdir } = await import('node:os');
+      const { readMessagingMemoryArchive } = await import('../../src/channels/messaging-session-reset.js');
       const { inspectCompanionChannelHistory, rememberCompanionChannelTurn } = await import(
         '../../src/companion/channel-history.js'
       );
@@ -2177,14 +2208,14 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
             turn.content.includes('CAPTION-SELFIE-UNIQUE'),
           ),
         ).toBe(true);
+        expect(__ageLocalCompanionHistoryForTests(session, ago)).toBe(true);
 
         seedOldSession(session, 'ANCIEN-MESSAGE-DISQUE');
         rememberCompanionChannelTurn(session, 'bonjour', 'COMPAGNON-FICHIER-UNIQUE', process.env, ago);
 
-        const archiveDir = join(homedir(), '.codebuddy', 'companion', 'session-reset-archive');
-        const blocked = messagingMemoryArchivePath(archiveDir, session, 'local-map');
-        mkdirSync(blocked, { recursive: true });
-        expect(statSync(blocked).isDirectory()).toBe(true);
+        const blocked = join(archiveDir, 'local-map');
+        writeFileSync(blocked, 'bloque');
+        expect(statSync(blocked).isFile()).toBe(true);
 
         const cfg = await getCfg();
         cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
@@ -2208,15 +2239,177 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
           true,
         );
         expect(inspectCompanionChannelHistory(session, process.env)?.transcript).toContain('COMPAGNON-FICHIER-UNIQUE');
-        const diskArchive = readFileSync(messagingMemoryArchivePath(archiveDir, session, 'session-store'), 'utf8');
-        expect(diskArchive).toContain('ANCIEN-MESSAGE-DISQUE');
-        const agentArchive = readFileSync(messagingMemoryArchivePath(archiveDir, session, 'agent-cache'), 'utf8');
-        expect(agentArchive).toContain('latest question');
-        expect(statSync(blocked).isDirectory()).toBe(true);
+        expect(readMessagingMemoryArchive(archiveDir, session, 'session-store')).toContain('ANCIEN-MESSAGE-DISQUE');
+        expect(readMessagingMemoryArchive(archiveDir, session, 'agent-cache')).toContain('latest question');
+        expect(statSync(blocked).isFile()).toBe(true);
       } finally {
         selfie.mockRestore();
         delete process.env.CODEBUDDY_CHANNEL_HISTORY_DIR;
         rmSync(historyDir, { recursive: true, force: true });
+      }
+    });
+
+    it('P2 une lecture agent ratée annule la remise à zéro', async () => {
+      const session = 'sess-p2-lecture';
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const channel = { type: 'telegram', send: makeSuccessfulSend() };
+      await manager.emit(makeMessage('lance les tests', session), channel);
+      expect(__ageChannelAgentForTests(session, Date.now() - 3_600_000)).toBe(true);
+      seedOldSession(session, 'ANCIEN-MESSAGE-DISQUE');
+      hoisted.getChatHistory.mockImplementation(() => {
+        throw new Error('lecture agent impossible');
+      });
+      const cfg = await getCfg();
+      cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
+      const savesBefore = hoisted.saveSession.mock.calls.length;
+      await manager.emit(makeMessage('Coucou', session), channel);
+      const wiped = hoisted.saveSession.mock.calls.slice(savesBefore).some((call) => {
+        const saved = call[0] as { messages?: unknown[] } | undefined;
+        return Array.isArray(saved?.messages) && saved.messages.length === 0;
+      });
+      expect(wiped, 'P2 reset après lecture agent échouée').toBe(false);
+      const stored = hoisted.sessions.get(session) as { messages?: Array<{ content?: string }> } | undefined;
+      expect(stored?.messages?.some((message) => String(message.content).includes('ANCIEN-MESSAGE-DISQUE'))).toBe(
+        true,
+      );
+    });
+
+    it('P5 un échec du vidage compagnon n efface pas les autres magasins', async () => {
+      const { chmodSync, mkdtempSync, rmSync } = await import('node:fs');
+      const { tmpdir } = await import('node:os');
+      const {
+        clearCompanionChannelHistoriesForTests,
+        inspectCompanionChannelHistory,
+        rememberCompanionChannelTurn,
+      } = await import('../../src/companion/channel-history.js');
+      const historyDir = mkdtempSync(join(tmpdir(), 'cb-p5-'));
+      const previousHistory = process.env.CODEBUDDY_CHANNEL_HISTORY;
+      const previousDir = process.env.CODEBUDDY_CHANNEL_HISTORY_DIR;
+      process.env.CODEBUDDY_CHANNEL_HISTORY = 'true';
+      process.env.CODEBUDDY_CHANNEL_HISTORY_DIR = historyDir;
+      const session = 'sess-p5-disque';
+      try {
+        const ago = Date.now() - 3_600_000;
+        rememberCompanionChannelTurn(session, 'bonjour', 'ANCIEN-COMPAGNON', process.env, ago);
+        seedOldSession(session, 'ANCIEN-MESSAGE-DISQUE');
+        chmodSync(historyDir, 0o500);
+        const cfg = await getCfg();
+        cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
+        const manager = makeManager();
+        await registerAIMessageHandler(manager as any);
+        const channel = { type: 'telegram', send: makeSuccessfulSend() };
+        const savesBefore = hoisted.saveSession.mock.calls.length;
+        await manager.emit(makeMessage('Coucou', session), channel);
+        const wiped = hoisted.saveSession.mock.calls.slice(savesBefore).some((call) => {
+          const saved = call[0] as { messages?: unknown[] } | undefined;
+          return Array.isArray(saved?.messages) && saved.messages.length === 0;
+        });
+        expect(wiped, 'P5 autres magasins effacés').toBe(false);
+        chmodSync(historyDir, 0o700);
+        clearCompanionChannelHistoriesForTests();
+        expect(inspectCompanionChannelHistory(session, process.env)?.transcript, 'P5 oldRestored').toContain(
+          'ANCIEN-COMPAGNON',
+        );
+      } finally {
+        try {
+          chmodSync(historyDir, 0o700);
+        } catch {
+          /* the directory may already be writable */
+        }
+        if (previousHistory === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY;
+        else process.env.CODEBUDDY_CHANNEL_HISTORY = previousHistory;
+        if (previousDir === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY_DIR;
+        else process.env.CODEBUDDY_CHANNEL_HISTORY_DIR = previousDir;
+        rmSync(historyDir, { recursive: true, force: true });
+      }
+    });
+
+    it('P4 deux arrivées chevauchées ne remettent pas à zéro deux fois', async () => {
+      const session = 'sess-p4-chevauche';
+      const releases: Array<() => void> = [];
+      let observing = true;
+      let wipes = 0;
+      const previousHistory = process.env.CODEBUDDY_CHANNEL_HISTORY;
+      process.env.CODEBUDDY_CHANNEL_HISTORY = 'false';
+      hoisted.saveSession.mockImplementation(async (saved: { id?: string; messages?: unknown[] }) => {
+        if (
+          observing
+          && saved?.id === session
+          && Array.isArray(saved.messages)
+          && saved.messages.length === 0
+        ) {
+          wipes += 1;
+          await new Promise<void>((resolve) => {
+            releases.push(resolve);
+          });
+        }
+        hoisted.sessions.set(saved.id, saved);
+      });
+      try {
+        seedOldSession(session, 'ANCIEN-MESSAGE-DISQUE');
+        const cfg = await getCfg();
+        cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
+        const manager = makeManager();
+        await registerAIMessageHandler(manager as any);
+        const channel = { type: 'telegram', send: makeSuccessfulSend() };
+        const first = manager.emit(makeMessage('premier message', session), channel);
+        await vi.waitUntil(() => wipes >= 1, { timeout: 8000, interval: 20 });
+        let secondSettled = false;
+        const second = manager.emit(makeMessage('second message', session), channel).then(() => {
+          secondSettled = true;
+        });
+        await vi.waitUntil(() => wipes >= 2 || secondSettled, { timeout: 2000, interval: 20 }).catch(() => undefined);
+        expect(wipes, 'P4 deux resets chevauchés').toBe(1);
+        expect(secondSettled, 'P4 second a fini pendant le premier reset').toBe(false);
+        observing = false;
+        for (const release of releases.splice(0)) release();
+        await Promise.allSettled([first, second]);
+      } finally {
+        observing = false;
+        for (const release of releases.splice(0)) release();
+        if (previousHistory === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY;
+        else process.env.CODEBUDDY_CHANNEL_HISTORY = previousHistory;
+      }
+    });
+
+    it('P6 une conversation faite seulement de selfies échoit', async () => {
+      process.env.CODEBUDDY_COMPANION_PERSONA = 'copine';
+      const selfie = vi.spyOn(lisaSelfieRouter, 'tryServeCompanionSelfie').mockImplementation(async (text) => {
+        if (!lisaSelfieRuntime.isLisaSelfieRequest(text)) return null;
+        return {
+          handled: true,
+          caption: 'CAPTION-SELFIE-UNIQUE',
+          imagePath: join('cache', 'hit.png'),
+          mimeType: 'image/png',
+          refused: false,
+          reason: 'ok',
+          contentTier: 'safe',
+          style: 'portrait',
+        };
+      });
+      try {
+        const manager = makeManager();
+        await registerAIMessageHandler(manager as any);
+        const channel = { type: 'telegram', send: makeSuccessfulSend() };
+        const session = 'sess-p6-selfie';
+        await manager.emit(makeMessage('Lisa, envoie-moi une photo de toi', session), channel);
+        expect(
+          (__companionChannelHistoriesForTests().get(session) ?? []).some((turn) =>
+            turn.content.includes('CAPTION-SELFIE-UNIQUE'),
+          ),
+        ).toBe(true);
+        expect(__ageLocalCompanionHistoryForTests(session, Date.now() - 3_600_000)).toBe(true);
+        const cfg = await getCfg();
+        cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
+        await manager.emit(makeMessage('Coucou', session), channel);
+        const stillThere = (__companionChannelHistoriesForTests().get(session) ?? []).some((turn) =>
+          turn.content.includes('CAPTION-SELFIE-UNIQUE'),
+        );
+        expect(stillThere, 'P6 selfie seul jamais échu').toBe(false);
+        expect(await readArchives(session)).toContain('CAPTION-SELFIE-UNIQUE');
+      } finally {
+        selfie.mockRestore();
       }
     });
   });

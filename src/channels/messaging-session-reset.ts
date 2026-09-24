@@ -11,7 +11,7 @@
  * @module channels/messaging-session-reset
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
@@ -55,6 +55,7 @@ interface MemoryArchiveRecord {
   reason: MessagingSessionResetReason;
   transcript: string;
   digest: string;
+  epoch: string;
 }
 
 const MODES = new Set<MessagingSessionResetMode>(['both', 'idle', 'daily', 'none']);
@@ -76,16 +77,111 @@ export type MessagingMemorySource = (typeof MESSAGING_MEMORY_SOURCES)[number];
 export interface MessagingMemoryPart {
   source: MessagingMemorySource;
   transcript: string;
+  /**
+   * Omitted or `ok`: the transcript was read, even when it is empty.
+   * `failed`: the store could not be read. Nothing may be archived or erased.
+   */
+  readState?: 'ok' | 'failed';
 }
 
+const ARCHIVE_EPOCH = /^[0-9a-z]{8,80}$/;
+
+export function resolveMessagingSessionResetArchiveDir(env: NodeJS.ProcessEnv, homeDir: string): string {
+  const configured = env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR?.trim();
+  if (configured) return configured;
+  return path.join(homeDir, '.codebuddy', 'companion', 'session-reset-archive');
+}
+
+function sessionStem(sessionKey: string): string {
+  return createHash('sha256').update(sessionKey).digest('hex').slice(0, 32);
+}
+
+function allocateArchiveEpoch(now: number): string {
+  const time = Math.max(0, Math.floor(now)).toString(36);
+  return `${time}${randomBytes(4).toString('hex')}`;
+}
+
+/**
+ * One epoch file per save. Without `epoch`, the returned path is only a
+ * stable prefix helper; saves themselves never reuse a previous file.
+ */
 export function messagingMemoryArchivePath(
   archiveDir: string,
   sessionKey: string,
   source?: MessagingMemorySource,
+  epoch?: string,
 ): string {
-  const stem = createHash('sha256').update(sessionKey).digest('hex').slice(0, 32);
-  const fileName = source ? `${stem}.${source}.json` : `${stem}.json`;
-  return path.join(archiveDir, fileName);
+  if (epoch !== undefined && !ARCHIVE_EPOCH.test(epoch)) {
+    throw new Error('invalid archive epoch');
+  }
+  const directory = source ? path.join(archiveDir, source) : archiveDir;
+  const fileName = epoch ? `${sessionStem(sessionKey)}.${epoch}.json` : `${sessionStem(sessionKey)}.json`;
+  return path.join(directory, fileName);
+}
+
+function assertRealDirectory(directory: string, label: string): void {
+  const listed = fs.lstatSync(directory);
+  if (listed.isSymbolicLink() || !listed.isDirectory()) {
+    throw new Error(`${label} is not a real directory`);
+  }
+}
+
+function prepareRealDirectory(directory: string, label: string): void {
+  try {
+    assertRealDirectory(directory, label);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') throw err;
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    assertRealDirectory(directory, label);
+  }
+}
+
+function prepareSourceDirectory(archiveDir: string, source: MessagingMemorySource): string {
+  prepareRealDirectory(archiveDir, 'memory archive directory');
+  const child = path.join(archiveDir, source);
+  try {
+    assertRealDirectory(child, 'memory archive source');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') throw err;
+    fs.mkdirSync(child, { mode: 0o700 });
+    assertRealDirectory(child, 'memory archive source');
+  }
+  return child;
+}
+
+/** Read every epoch already stored for one session source. Symlinks are skipped. */
+export function readMessagingMemoryArchive(
+  archiveDir: string,
+  sessionKey: string,
+  source?: MessagingMemorySource,
+): string {
+  const directory = source ? path.join(archiveDir, source) : archiveDir;
+  const stem = sessionStem(sessionKey);
+  let names: string[];
+  try {
+    const listed = fs.lstatSync(directory);
+    if (listed.isSymbolicLink() || !listed.isDirectory()) return '';
+    names = fs.readdirSync(directory);
+  } catch {
+    return '';
+  }
+  return names
+    .filter((name) => name.startsWith(`${stem}.`) && name.endsWith('.json'))
+    .sort()
+    .map((name) => {
+      const full = path.join(directory, name);
+      try {
+        const listed = fs.lstatSync(full);
+        if (listed.isSymbolicLink() || !listed.isFile()) return '';
+        return fs.readFileSync(full, 'utf8');
+      } catch {
+        return '';
+      }
+    })
+    .filter((text) => text.length > 0)
+    .join('\n');
 }
 
 export function isDigestReceipt(receipt: string): boolean {
@@ -147,6 +243,16 @@ export function decideMessagingSessionReset(
   return null;
 }
 
+function isArchiveRecord(value: unknown): value is MemoryArchiveRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<MemoryArchiveRecord>;
+  return candidate.schemaVersion === 1
+    && typeof candidate.transcript === 'string'
+    && typeof candidate.digest === 'string'
+    && typeof candidate.epoch === 'string'
+    && (candidate.reason === 'idle' || candidate.reason === 'daily');
+}
+
 export function proveMessagingMemorySave(input: {
   archiveDir: string;
   sessionKey: string;
@@ -156,33 +262,47 @@ export function proveMessagingMemorySave(input: {
   source?: MessagingMemorySource;
 }): MemorySaveResult {
   const digest = digestTranscript(input.transcript);
-  const record: MemoryArchiveRecord = {
-    schemaVersion: 1,
-    savedAt: new Date(input.now).toISOString(),
-    reason: input.reason,
-    transcript: input.transcript,
-    digest,
-  };
-  const filePath = messagingMemoryArchivePath(input.archiveDir, input.sessionKey, input.source);
   try {
+    let directory = input.archiveDir;
+    if (input.source) directory = prepareSourceDirectory(input.archiveDir, input.source);
+    else prepareRealDirectory(input.archiveDir, 'memory archive directory');
+    let epoch = allocateArchiveEpoch(input.now);
+    let filePath = path.join(directory, `${sessionStem(input.sessionKey)}.${epoch}.json`);
+    for (let attempt = 0; attempt < 5 && fs.existsSync(filePath); attempt += 1) {
+      epoch = allocateArchiveEpoch(input.now + attempt + 1);
+      filePath = path.join(directory, `${sessionStem(input.sessionKey)}.${epoch}.json`);
+    }
+    if (fs.existsSync(filePath)) return { ok: false, error: 'memory archive path collision' };
+    const existing = (() => {
+      try {
+        return fs.lstatSync(filePath);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw err;
+      }
+    })();
+    if (existing) return { ok: false, error: 'memory archive path collision' };
+    const record: MemoryArchiveRecord = {
+      schemaVersion: 1,
+      savedAt: new Date(input.now).toISOString(),
+      reason: input.reason,
+      transcript: input.transcript,
+      digest,
+      epoch,
+    };
     writeJsonAtomicSync(filePath, record, { mode: 0o600 });
     const readBack = readJsonAtomicSync<MemoryArchiveRecord | null>(filePath, null, {
       mode: 0o600,
-      isValid: (value): value is MemoryArchiveRecord => {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-        const candidate = value as Partial<MemoryArchiveRecord>;
-        return candidate.schemaVersion === 1
-          && typeof candidate.transcript === 'string'
-          && typeof candidate.digest === 'string'
-          && (candidate.reason === 'idle' || candidate.reason === 'daily');
-      },
+      isValid: isArchiveRecord,
     });
     if (!readBack) return { ok: false, error: 'memory archive read-back failed' };
-    if (readBack.transcript !== input.transcript || readBack.digest !== digest) {
+    if (readBack.transcript !== input.transcript || readBack.digest !== digest || readBack.epoch !== epoch) {
       return { ok: false, error: 'memory archive read-back mismatch' };
     }
     const onDisk = fs.readFileSync(filePath, 'utf8');
-    if (!onDisk.includes(digest)) return { ok: false, error: 'memory archive read-back mismatch' };
+    if (!onDisk.includes(digest) || !onDisk.includes(epoch)) {
+      return { ok: false, error: 'memory archive read-back mismatch' };
+    }
     return { ok: true, receipt: digest };
   } catch {
     return { ok: false, error: 'memory archive write failed' };
@@ -200,6 +320,11 @@ export function proveMessagingMemoryParts(input: {
   now: number;
   reason: MessagingSessionResetReason;
 }): MemorySaveResult {
+  for (const part of input.parts) {
+    if (part.readState === 'failed') {
+      return { ok: false, error: `memory read failed: ${part.source}` };
+    }
+  }
   const proved: string[] = [];
   for (const part of input.parts) {
     const saved = proveMessagingMemorySave({
@@ -243,7 +368,15 @@ export async function enforceMessagingSessionReset(input: {
     };
   }
 
-  await input.resetSession();
+  try {
+    await input.resetSession();
+  } catch (err) {
+    return {
+      action: 'cancelled',
+      reason,
+      error: err instanceof Error ? err.message : 'reset failed',
+    };
+  }
   return { action: 'reset', reason, receipt: saved.receipt };
 }
 

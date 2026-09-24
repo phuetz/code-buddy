@@ -251,7 +251,11 @@ rtk_enabled = false
 # both resets on the first of idle_minutes or the local at_hour boundary.
 # Each store the reset clears (agent cache, disk session, companion file,
 # in-memory companion map) is archived and read back on its own.
-# A failed archive of any one of them cancels the whole reset.
+# A later reset writes a new epoch file and does not replace the previous one.
+# A failed read is not an empty archive: the reset is cancelled.
+# A failed archive, or a failed companion-history wipe, cancels the clear.
+# CODEBUDDY_SESSION_RESET_ARCHIVE_DIR relocates the archive directory.
+# A symlink or a non-directory at that path is refused.
 [session_reset]
 mode = "none"
 idle_minutes = 1440

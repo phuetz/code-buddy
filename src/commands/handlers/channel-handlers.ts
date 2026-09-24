@@ -646,6 +646,7 @@ export function __resetChannelAIHandlerForTests(): void {
   channelTurnTails.clear();
   channelBotPersonas.clear();
   companionChannelHistories.clear();
+  companionChannelActivityAt.clear();
   recentLisaSelfieSessions.clear();
   __resetSessionModelOverridesForTests();
 }
@@ -673,10 +674,19 @@ interface CachedChannelAgent {
 const channelAgentCache = new Map<string, CachedChannelAgent>();
 const channelTurnTails = new Map<string, Promise<void>>();
 const companionChannelHistories = new Map<string, ConversationTurn[]>();
+/** Epoch ms of the latest local-map turn. Selfie-only chats have no other clock. */
+const companionChannelActivityAt = new Map<string, number>();
 
 /** Test-only view of the handler-local companion history. */
 export function __companionChannelHistoriesForTests(): ReadonlyMap<string, ConversationTurn[]> {
   return companionChannelHistories;
+}
+
+/** Test-only: backdate the local map so an idle reset can be decided without waiting. */
+export function __ageLocalCompanionHistoryForTests(sessionKey: string, at: number): boolean {
+  if (!companionChannelHistories.has(sessionKey) || !Number.isFinite(at)) return false;
+  companionChannelActivityAt.set(sessionKey, at);
+  return true;
 }
 
 /** Test-only: backdate a cached agent so an idle reset can be decided without waiting. */
@@ -1010,6 +1020,7 @@ function rememberCompanionChannelTurn(
       { role: 'assistant' as const, content: assistantText },
     ].slice(-20),
   );
+  companionChannelActivityAt.set(sessionKey, Date.now());
 }
 
 function hashForLog(value: unknown): string | undefined {
@@ -1265,17 +1276,39 @@ function isChannelAllowlistedSender(
   return identities.some((identity) => allowed.has(identity.trim().replace(/^@/, '').toLowerCase()));
 }
 
+type MessagingSnapshotPart = {
+  source: 'agent-cache' | 'session-store' | 'companion-history' | 'local-map';
+  transcript: string;
+  readState: 'ok' | 'failed';
+};
+
+function readFailure(source: MessagingSnapshotPart['source'], err: unknown): {
+  ok: false;
+  source: MessagingSnapshotPart['source'];
+  error: string;
+} {
+  return {
+    ok: false,
+    source,
+    error: err instanceof Error ? err.message : 'read failed',
+  };
+}
+
 async function loadMessagingSessionSnapshot(
   sessionKey: string,
   inspectCompanion: (
     key: string,
     env?: NodeJS.ProcessEnv,
   ) => { updatedAtMs: number; transcript: string } | null,
-): Promise<{
-  lastActivityAt: number | null;
-  transcript: string;
-  parts: Array<{ source: 'agent-cache' | 'session-store' | 'companion-history' | 'local-map'; transcript: string }>;
-}> {
+): Promise<
+  | {
+    ok: true;
+    lastActivityAt: number | null;
+    transcript: string;
+    parts: MessagingSnapshotPart[];
+  }
+  | { ok: false; source: MessagingSnapshotPart['source']; error: string }
+> {
   let lastActivityAt: number | null = null;
   const consider = (at: number | null, text: string): void => {
     const trimmed = text.trim();
@@ -1298,8 +1331,8 @@ async function loadMessagingSessionSnapshot(
         .filter((line) => line.length > 0)
         .join('\n');
       consider(cached.lastUsed, agentText);
-    } catch {
-      // A broken cache entry must not block the inbound turn.
+    } catch (err) {
+      return readFailure('agent-cache', err);
     }
   }
 
@@ -1317,8 +1350,8 @@ async function loadMessagingSessionSnapshot(
         .join('\n');
       consider(Number.isFinite(at) ? at : null, storeText);
     }
-  } catch {
-    // Disk session is optional continuity, not a reason to drop the turn.
+  } catch (err) {
+    return readFailure('session-store', err);
   }
 
   let companionText = '';
@@ -1328,24 +1361,25 @@ async function loadMessagingSessionSnapshot(
       companionText = inspected.transcript;
       consider(inspected.updatedAtMs, companionText);
     }
-  } catch {
-    // Companion history is one source among others.
+  } catch (err) {
+    return readFailure('companion-history', err);
   }
 
-  // No timestamp of its own: a selfie turn can live only in this map.
-  // It is still archived. It does not by itself move the idle clock.
   const localText = (companionChannelHistories.get(sessionKey) ?? [])
     .map((turn) => `${turn.role}: ${turn.content}`)
     .filter((line) => line.trim().length > 2)
     .join('\n');
+  const localAt = companionChannelActivityAt.get(sessionKey);
+  if (localAt !== undefined) consider(localAt, localText);
 
-  const parts = [
-    { source: 'agent-cache' as const, transcript: agentText.trim() },
-    { source: 'session-store' as const, transcript: storeText.trim() },
-    { source: 'companion-history' as const, transcript: companionText.trim() },
-    { source: 'local-map' as const, transcript: localText.trim() },
+  const parts: MessagingSnapshotPart[] = [
+    { source: 'agent-cache', transcript: agentText.trim(), readState: 'ok' },
+    { source: 'session-store', transcript: storeText.trim(), readState: 'ok' },
+    { source: 'companion-history', transcript: companionText.trim(), readState: 'ok' },
+    { source: 'local-map', transcript: localText.trim(), readState: 'ok' },
   ];
   return {
+    ok: true,
     lastActivityAt,
     transcript: parts.map((part) => part.transcript).filter((text) => text.length > 0).join('\n\n'),
     parts,
@@ -1359,9 +1393,11 @@ async function loadMessagingSessionSnapshot(
  * the clear and every store stays in place.
  */
 async function maybeResetInboundMessagingSession(sessionKey: string): Promise<void> {
-  const { applyChannelMessagingSessionReset, resolveSessionResetPolicy } = await import(
-    '../../channels/messaging-session-reset.js'
-  );
+  const {
+    applyChannelMessagingSessionReset,
+    resolveMessagingSessionResetArchiveDir,
+    resolveSessionResetPolicy,
+  } = await import('../../channels/messaging-session-reset.js');
   const { getConfigManager } = await import('../../config/toml-config.js');
   let policy = resolveSessionResetPolicy(undefined);
   try {
@@ -1380,29 +1416,33 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
   const os = await import('node:os');
   const now = Date.now();
   const snapshot = await loadMessagingSessionSnapshot(sessionKey, inspectCompanionChannelHistory);
+  if (!snapshot.ok) {
+    logger.warn('messaging session reset cancelled because a memory read failed', {
+      sessionHash: hashForLog(sessionKey),
+      source: snapshot.source,
+    });
+    return;
+  }
   const outcome = await applyChannelMessagingSessionReset({
     sessionKey,
     now,
     policy,
     snapshot,
     parts: snapshot.parts,
-    archiveDir: path.join(os.homedir(), '.codebuddy', 'companion', 'session-reset-archive'),
+    archiveDir: resolveMessagingSessionResetArchiveDir(process.env, os.homedir()),
     resetSession: async () => {
+      const cleared = clearCompanionChannelHistory(sessionKey, process.env, now);
+      if (!cleared.ok) {
+        throw new Error(cleared.error);
+      }
       const { getSessionStore } = await import('../../persistence/session-store.js');
       const store = getSessionStore();
       const existing = await store.loadSession(sessionKey);
       if (existing && existing.messages.length > 0) {
         await store.saveSession({ ...existing, messages: [] });
       }
-      try {
-        clearCompanionChannelHistory(sessionKey, process.env, now);
-      } catch (err) {
-        logger.warn('companion channel history clear failed after the transcript wipe', {
-          sessionHash: hashForLog(sessionKey),
-          error: err instanceof Error ? err.message : 'failed',
-        });
-      }
       companionChannelHistories.delete(sessionKey);
+      companionChannelActivityAt.delete(sessionKey);
       evictChannelAgent(sessionKey, true);
     },
   });
@@ -1411,6 +1451,17 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
       sessionHash: hashForLog(sessionKey),
       reason: outcome.reason,
       error: outcome.error,
+    });
+  }
+}
+
+async function resetInboundMessagingSessionQuietly(sessionKey: string): Promise<void> {
+  try {
+    await maybeResetInboundMessagingSession(sessionKey);
+  } catch (resetErr) {
+    logger.warn('messaging session reset skipped', {
+      sessionHash: hashForLog(sessionKey),
+      error: resetErr instanceof Error ? resetErr.message : 'failed',
     });
   }
 }
@@ -1460,14 +1511,6 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       }
 
       const sessionKey = message.sessionKey || 'default-global';
-      try {
-        await maybeResetInboundMessagingSession(sessionKey);
-      } catch (resetErr) {
-        logger.warn('messaging session reset skipped', {
-          sessionHash: hashForLog(sessionKey),
-          error: resetErr instanceof Error ? resetErr.message : 'failed',
-        });
-      }
 
       // On-demand camera share (« qu'est-ce que tu vois ? ») — Telegram only.
       // The photo sender is scoped to the requesting chat, not the global alert chat.
@@ -1548,6 +1591,8 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             includeImageBytes: false,
           });
           if (served) {
+            await serializeChannelTurn(sessionKey, async () => {
+            await resetInboundMessagingSessionQuietly(sessionKey);
             if (served.imagePath) {
               const ch = channel as {
                 sendImageFile?: (id: string, p: string, c?: string) => Promise<void>;
@@ -1599,6 +1644,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             // The selfie IS a turn of the conversation: without this the next
             // companion prompt has no trace of the photo that was just sent.
             rememberCompanionChannelTurn(sessionKey, message.content, served.caption);
+            });
             return;
           }
         } catch (selfieErr) {
@@ -1778,6 +1824,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
 
       const queuedAt = Date.now();
       await serializeChannelTurn(sessionKey, async (turn) => {
+      await resetInboundMessagingSessionQuietly(sessionKey);
       const queueWaitMs = Date.now() - queuedAt;
       if (queueWaitMs >= 1_000) {
         logger.info('Channel turn dequeued after waiting', {

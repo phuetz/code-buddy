@@ -2,7 +2,8 @@
  * Messaging session reset. The clock is a number of milliseconds.
  * Nothing in this file waits on a real timer.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -11,8 +12,8 @@ import {
   decideMessagingSessionReset,
   DEFAULT_MESSAGING_SESSION_RESET_POLICY,
   enforceMessagingSessionReset,
-  messagingMemoryArchivePath,
   proveMessagingMemorySave,
+  readMessagingMemoryArchive,
   resolveSessionResetPolicy,
   type MessagingSessionResetPolicy,
   type MessagingSessionSnapshot,
@@ -351,7 +352,7 @@ at_hour = 7
       archiveDir: dir,
       resetSession: async () => {
         for (const part of parts) {
-          const raw = readFileSync(messagingMemoryArchivePath(dir, sessionKey, part.source), 'utf8');
+          const raw = readMessagingMemoryArchive(dir, sessionKey, part.source);
           expect(raw).toContain(part.transcript);
         }
         reset = true;
@@ -373,9 +374,9 @@ at_hour = 7
       { source: 'companion-history' as const, transcript: 'user: memoire fichier' },
       { source: 'local-map' as const, transcript: 'assistant: CAPTION-SELFIE-UNIQUE' },
     ];
-    const blockedPath = messagingMemoryArchivePath(dir, sessionKey, 'local-map');
-    mkdirSync(blockedPath, { recursive: true });
-    expect(statSync(blockedPath).isDirectory()).toBe(true);
+    const blockedPath = path.join(dir, 'local-map');
+    writeFileSync(blockedPath, 'bloque');
+    expect(statSync(blockedPath).isFile()).toBe(true);
     let blockedReset = false;
     const cancelled = await applyChannelMessagingSessionReset({
       sessionKey,
@@ -390,17 +391,204 @@ at_hour = 7
     });
     expect(blockedReset, 'carte').toBe(false);
     expect(cancelled).toMatchObject({ action: 'cancelled', reason: 'idle' });
-    expect(readFileSync(messagingMemoryArchivePath(dir, sessionKey, 'session-store'), 'utf8')).toContain(
-      'user: memoire disque',
-    );
-    expect(readFileSync(messagingMemoryArchivePath(dir, sessionKey, 'agent-cache'), 'utf8')).toContain(
-      'user: memoire agent',
-    );
-    expect(readFileSync(messagingMemoryArchivePath(dir, sessionKey, 'companion-history'), 'utf8')).toContain(
-      'user: memoire fichier',
-    );
-    expect(statSync(messagingMemoryArchivePath(dir, sessionKey, 'local-map')).isDirectory()).toBe(true);
-    expect(existsSync(messagingMemoryArchivePath(dir, sessionKey, 'local-map'))).toBe(true);
+    expect(readMessagingMemoryArchive(dir, sessionKey, 'session-store')).toContain('user: memoire disque');
+    expect(readMessagingMemoryArchive(dir, sessionKey, 'agent-cache')).toContain('user: memoire agent');
+    expect(readMessagingMemoryArchive(dir, sessionKey, 'companion-history')).toContain('user: memoire fichier');
+    expect(statSync(blockedPath).isFile()).toBe(true);
+    expect(readMessagingMemoryArchive(dir, sessionKey, 'local-map')).toBe('');
+  });
+
+  function walkJsonFiles(dir: string, depth = 0): string[] {
+    if (depth > 4) return [];
+    let names: string[] = [];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return [];
+    }
+    const files: string[] = [];
+    for (const name of names) {
+      if (name === '.' || name === '..') continue;
+      const full = path.join(dir, name);
+      let listed;
+      try {
+        listed = lstatSync(full);
+      } catch {
+        continue;
+      }
+      if (listed.isSymbolicLink()) continue;
+      if (listed.isDirectory()) files.push(...walkJsonFiles(full, depth + 1));
+      else if (listed.isFile() && name.endsWith('.json')) files.push(full);
+    }
+    return files;
+  }
+
+  it('P1 deux cycles de la même session conservent l archive du premier', async () => {
+    const dir = tempDir();
+    const sessionKey = 'webchat:deux-epoques';
+    const now1 = localMs(2026, 9, 23, 12, 0);
+    const base = now1 - 11 * 60_000;
+    const firstParts = [
+      { source: 'agent-cache' as const, transcript: 'SECRET_FIRST_EPOCH' },
+      { source: 'session-store' as const, transcript: 'disque-1' },
+      { source: 'companion-history' as const, transcript: 'comp-1' },
+      { source: 'local-map' as const, transcript: 'carte-1' },
+    ];
+    const first = await applyChannelMessagingSessionReset({
+      sessionKey,
+      now: now1,
+      policy: policy({ mode: 'idle', idleMinutes: 10 }),
+      snapshot: snapshot(base, 'SECRET_FIRST_EPOCH'),
+      parts: firstParts,
+      archiveDir: dir,
+      resetSession: async () => undefined,
+    });
+    const second = await applyChannelMessagingSessionReset({
+      sessionKey,
+      now: now1 + 60 * 60_000,
+      policy: policy({ mode: 'idle', idleMinutes: 10 }),
+      snapshot: snapshot(now1, 'SECOND_EPOCH'),
+      parts: [
+        { source: 'agent-cache' as const, transcript: 'SECOND_EPOCH' },
+        { source: 'session-store' as const, transcript: 'disque-2' },
+        { source: 'companion-history' as const, transcript: 'comp-2' },
+        { source: 'local-map' as const, transcript: 'carte-2' },
+      ],
+      archiveDir: dir,
+      resetSession: async () => undefined,
+    });
+    const files = walkJsonFiles(dir);
+    const blob = files.map((file) => readFileSync(file, 'utf8')).join('\n');
+    const firstStillSaved = blob.includes('SECRET_FIRST_EPOCH');
+    const secondSaved = blob.includes('SECOND_EPOCH');
+    expect(first.action, 'P1 premier cycle').toBe('reset');
+    expect(second.action, 'P1 second cycle').toBe('reset');
+    expect(firstStillSaved, 'P1 firstStillSaved').toBe(true);
+    expect(secondSaved, 'P1 secondSaved').toBe(true);
+  });
+
+  it('P2 une lecture ratée n est pas une archive vide', async () => {
+    const dir = tempDir();
+    const sessionKey = 'webchat:lecture-ratee';
+    const now = localMs(2026, 9, 23, 12, 0);
+    let reset = false;
+    const parts: Array<{
+      source: 'agent-cache' | 'session-store' | 'companion-history' | 'local-map';
+      transcript: string;
+      readState: 'ok' | 'failed';
+    }> = [
+      { source: 'agent-cache', transcript: '', readState: 'failed' },
+      { source: 'session-store', transcript: 'user: ANCIEN-DISQUE', readState: 'ok' },
+      { source: 'companion-history', transcript: '', readState: 'ok' },
+      { source: 'local-map', transcript: '', readState: 'ok' },
+    ];
+    const outcome = await applyChannelMessagingSessionReset({
+      sessionKey,
+      now,
+      policy: policy({ mode: 'idle', idleMinutes: 10 }),
+      snapshot: snapshot(now - 11 * 60_000, 'user: ANCIEN-DISQUE'),
+      parts,
+      archiveDir: dir,
+      resetSession: async () => {
+        reset = true;
+      },
+    });
+    expect(reset, 'P2 resetSession après lecture ratée').toBe(false);
+    expect(outcome.action, 'P2 action').toBe('cancelled');
+    const emptyAgentCertified = walkJsonFiles(dir).some((file) => {
+      return file.includes('agent-cache') && readFileSync(file, 'utf8').includes('"transcript": ""');
+    });
+    expect(emptyAgentCertified, 'P2 archive vide certifiée').toBe(false);
+  });
+
+  it('P3 un lien symbolique de dossier d archive n est pas suivi', () => {
+    const dir = tempDir();
+    const outside = tempDir();
+    const link = path.join(dir, 'archive-lie');
+    symlinkSync(outside, link);
+    const saved = proveMessagingMemorySave({
+      archiveDir: link,
+      sessionKey: 'webchat:lien',
+      transcript: 'NE-DOIT-PAS-SORTIR',
+      now: localMs(2026, 9, 23, 12, 0),
+      reason: 'idle',
+      source: 'agent-cache',
+    });
+    const outsideFiles = readdirSync(outside);
+    expect(saved.ok, 'P3 lien suivi').toBe(false);
+    expect(outsideFiles, 'P3 outsideFiles').toEqual([]);
+  });
+
+  it('P3b un tube nommé à la place du dossier est refusé sans attente', () => {
+    const dir = tempDir();
+    const fifo = path.join(dir, 'tube');
+    execFileSync('mkfifo', [fifo], { timeout: 2000 });
+    const started = Date.now();
+    const saved = proveMessagingMemorySave({
+      archiveDir: fifo,
+      sessionKey: 'webchat:tube',
+      transcript: 'NE-DOIT-PAS-BLOQUER',
+      now: localMs(2026, 9, 23, 12, 0),
+      reason: 'idle',
+      source: 'agent-cache',
+    });
+    expect(Date.now() - started, 'P3b attente').toBeLessThan(2000);
+    expect(saved.ok, 'P3b tube ouvert').toBe(false);
+  });
+
+  it('une mémoire vide lue avec succès reste archivée', async () => {
+    const dir = tempDir();
+    const sessionKey = 'webchat:vide-lu';
+    const now = localMs(2026, 9, 23, 12, 0);
+    let reset = false;
+    const parts: Array<{
+      source: 'agent-cache' | 'session-store' | 'companion-history' | 'local-map';
+      transcript: string;
+      readState: 'ok' | 'failed';
+    }> = [
+      { source: 'agent-cache', transcript: '', readState: 'ok' },
+      { source: 'session-store', transcript: 'user: ANCIEN-DISQUE', readState: 'ok' },
+      { source: 'companion-history', transcript: '', readState: 'ok' },
+      { source: 'local-map', transcript: '', readState: 'ok' },
+    ];
+    const outcome = await applyChannelMessagingSessionReset({
+      sessionKey,
+      now,
+      policy: policy({ mode: 'idle', idleMinutes: 10 }),
+      snapshot: snapshot(now - 11 * 60_000, 'user: ANCIEN-DISQUE'),
+      parts,
+      archiveDir: dir,
+      resetSession: async () => {
+        reset = true;
+      },
+    });
+    expect(reset, 'vide lu').toBe(true);
+    expect(outcome.action).toBe('reset');
+    expect(readMessagingMemoryArchive(dir, sessionKey, 'agent-cache')).toContain('"transcript": ""');
+    expect(readMessagingMemoryArchive(dir, sessionKey, 'session-store')).toContain('user: ANCIEN-DISQUE');
+  });
+
+  it('P5 un vidage compagnon non écrit ne réussit pas et l ancien texte revient', () => {
+    const dir = tempDir();
+    const env = {
+      CODEBUDDY_CHANNEL_HISTORY: 'true',
+      CODEBUDDY_CHANNEL_HISTORY_DIR: dir,
+    };
+    rememberCompanionChannelTurn('telegram:p5', 'bonjour', 'ANCIEN-COMPAGNON', env, Date.now() - 1000);
+    chmodSync(dir, 0o500);
+    let failed = false;
+    try {
+      const result = clearCompanionChannelHistory('telegram:p5', env, Date.now()) as { ok?: boolean } | void;
+      failed = Boolean(result && typeof result === 'object' && result.ok === false);
+    } catch {
+      failed = true;
+    } finally {
+      chmodSync(dir, 0o700);
+    }
+    clearCompanionChannelHistoriesForTests();
+    const restored = inspectCompanionChannelHistory('telegram:p5', env)?.transcript.includes('ANCIEN-COMPAGNON') === true;
+    expect(failed, 'P5 vidage compagnon échoué non signalé').toBe(true);
+    expect(restored, 'P5 oldRestored').toBe(true);
   });
 
   it('un historique de canal déjà périmé pour le prompt reste lisible pour la sauvegarde, puis s efface', () => {

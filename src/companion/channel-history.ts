@@ -254,19 +254,41 @@ export function inspectCompanionChannelHistory(
   };
 }
 
-/** Replace the stored companion transcript with an empty record. */
+export type CompanionHistoryClearResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Replace the stored companion transcript with an empty record.
+ * A disk failure leaves both the file and the memory cache unchanged.
+ */
 export function clearCompanionChannelHistory(
   sessionKey: string,
   env: NodeJS.ProcessEnv = process.env,
   now = Date.now(),
-): void {
+): CompanionHistoryClearResult {
   const next: CompanionChannelHistoryRecord = {
     schemaVersion: 1,
     personKey: personKeyFromSession(sessionKey),
     updatedAt: new Date(now).toISOString(),
     turns: [],
   };
-  persistRecord(sessionKey, next, env);
+  if (!isChannelHistoryPersistenceEnabled(env)) {
+    memory.set(next.personKey, next);
+    return { ok: true };
+  }
+  const file = resolveChannelHistoryFile(sessionKey, env);
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    writeJsonAtomicSync(file, next, { mode: 0o600 });
+  } catch (err) {
+    logger.warn('[channel-history] could not persist companion channel history', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  memory.set(next.personKey, next);
+  return { ok: true };
 }
 
 /** Test-only. */
