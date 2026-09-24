@@ -174,6 +174,31 @@ repo_path = "exemple"
 [catalogue]
 mode = "merge"
 
+# cle: channels
+# défaut : absent
+# Canaux de messagerie
+
+# cle: channels.*
+# défaut : absent
+
+# cle: channels.*.dm_policy
+# défaut : absent
+# Messages privés. disabled est plus fermé
+[channels.exemple]
+dm_policy = "open"
+
+# cle: channels.*.enabled
+# défaut : absent
+# Canal utilisable
+[channels.exemple]
+enabled = false
+
+# cle: channels.*.group_policy
+# défaut : absent
+# Accueil des groupes. allowlist est plus fermé que open
+[channels.exemple]
+group_policy = "open"
+
 # cle: daily_reset
 # défaut : absent
 # Remise à zéro quotidienne
@@ -283,6 +308,50 @@ enabled = false
 # Module activé
 [enterprise_modules.tool_policy_engine]
 enabled = false
+
+# cle: exec
+# défaut : absent
+# Approbations d'exécution
+
+# cle: exec.allow_commands
+# défaut : absent
+# Commandes pré-autorisées. Une politique ne peut pas en ajouter
+[exec]
+allow_commands = ["exemple"]
+
+# cle: exec.approvals
+# défaut : absent
+# Approbation des commandes. always est plus fermé que off
+[exec]
+approvals = "off"
+
+# cle: exec.deny_commands
+# défaut : absent
+# Fragments de commande refusés
+[exec]
+deny_commands = ["exemple"]
+
+# cle: gateway
+# défaut : absent
+# Passerelle
+
+# cle: gateway.auth_mode
+# défaut : absent
+# Authentification. none est plus ouvert que token
+[gateway]
+auth_mode = "token"
+
+# cle: gateway.bind
+# défaut : absent
+# Écoute. lan est plus ouvert que loopback
+[gateway]
+bind = "loopback"
+
+# cle: gateway.port
+# défaut : absent
+# Port de la passerelle
+[gateway]
+port = 3000
 
 # cle: heartbeat
 # défaut : absent
@@ -423,6 +492,22 @@ maxTokens = 0
 # Modèle des complétions
 [lsp.aiCompletion]
 model = "exemple"
+
+# cle: mcp
+# défaut : absent
+# Serveurs MCP
+
+# cle: mcp.allow_write
+# défaut : absent
+# Écriture via les serveurs. false retire une autorisation
+[mcp]
+allow_write = false
+
+# cle: mcp.enabled_servers
+# défaut : absent
+# Serveurs que la configuration active
+[mcp]
+enabled_servers = ["exemple"]
 
 # cle: middleware
 # défaut : absent
@@ -979,6 +1064,31 @@ repo_path = "exemple"
 [profiles.exemple.catalogue]
 mode = "merge"
 
+# cle: profiles.*.channels
+# défaut : absent
+# Canaux de messagerie
+
+# cle: profiles.*.channels.*
+# défaut : absent
+
+# cle: profiles.*.channels.*.dm_policy
+# défaut : absent
+# Messages privés. disabled est plus fermé
+[profiles.exemple.channels.exemple]
+dm_policy = "open"
+
+# cle: profiles.*.channels.*.enabled
+# défaut : absent
+# Canal utilisable
+[profiles.exemple.channels.exemple]
+enabled = false
+
+# cle: profiles.*.channels.*.group_policy
+# défaut : absent
+# Accueil des groupes. allowlist est plus fermé que open
+[profiles.exemple.channels.exemple]
+group_policy = "open"
+
 # cle: profiles.*.daily_reset
 # défaut : absent
 # Remise à zéro quotidienne
@@ -1088,6 +1198,50 @@ enabled = false
 # Module activé
 [profiles.exemple.enterprise_modules.tool_policy_engine]
 enabled = false
+
+# cle: profiles.*.exec
+# défaut : absent
+# Approbations d'exécution
+
+# cle: profiles.*.exec.allow_commands
+# défaut : absent
+# Commandes pré-autorisées. Une politique ne peut pas en ajouter
+[profiles.exemple.exec]
+allow_commands = ["exemple"]
+
+# cle: profiles.*.exec.approvals
+# défaut : absent
+# Approbation des commandes. always est plus fermé que off
+[profiles.exemple.exec]
+approvals = "off"
+
+# cle: profiles.*.exec.deny_commands
+# défaut : absent
+# Fragments de commande refusés
+[profiles.exemple.exec]
+deny_commands = ["exemple"]
+
+# cle: profiles.*.gateway
+# défaut : absent
+# Passerelle
+
+# cle: profiles.*.gateway.auth_mode
+# défaut : absent
+# Authentification. none est plus ouvert que token
+[profiles.exemple.gateway]
+auth_mode = "token"
+
+# cle: profiles.*.gateway.bind
+# défaut : absent
+# Écoute. lan est plus ouvert que loopback
+[profiles.exemple.gateway]
+bind = "loopback"
+
+# cle: profiles.*.gateway.port
+# défaut : absent
+# Port de la passerelle
+[profiles.exemple.gateway]
+port = 3000
 
 # cle: profiles.*.heartbeat
 # défaut : absent
@@ -1228,6 +1382,22 @@ maxTokens = 0
 # Modèle des complétions
 [profiles.exemple.lsp.aiCompletion]
 model = "exemple"
+
+# cle: profiles.*.mcp
+# défaut : absent
+# Serveurs MCP
+
+# cle: profiles.*.mcp.allow_write
+# défaut : absent
+# Écriture via les serveurs. false retire une autorisation
+[profiles.exemple.mcp]
+allow_write = false
+
+# cle: profiles.*.mcp.enabled_servers
+# défaut : absent
+# Serveurs que la configuration active
+[profiles.exemple.mcp]
+enabled_servers = ["exemple"]
 
 # cle: profiles.*.middleware
 # défaut : absent
@@ -1637,6 +1807,22 @@ enabled = false
 [profiles.exemple.providers.exemple]
 type = "openai"
 
+# cle: profiles.*.sandbox
+# défaut : absent
+# Bac à sable
+
+# cle: profiles.*.sandbox.backend
+# défaut : absent
+# Moteur d'isolation choisi
+[profiles.exemple.sandbox]
+backend = "bwrap"
+
+# cle: profiles.*.sandbox.mode
+# défaut : absent
+# Posture du bac à sable. all est plus fermé que off
+[profiles.exemple.sandbox]
+mode = "off"
+
 # cle: profiles.*.surface
 # défaut : absent
 # Surface visible
@@ -1809,6 +1995,22 @@ enabled = false
 # Protocole du fournisseur
 [providers.exemple]
 type = "openai"
+
+# cle: sandbox
+# défaut : absent
+# Bac à sable
+
+# cle: sandbox.backend
+# défaut : absent
+# Moteur d'isolation choisi
+[sandbox]
+backend = "bwrap"
+
+# cle: sandbox.mode
+# défaut : absent
+# Posture du bac à sable. all est plus fermé que off
+[sandbox]
+mode = "off"
 
 # cle: surface
 # défaut : absent

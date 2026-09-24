@@ -305,6 +305,44 @@ function aliasValueSchema(): ZodTypeAny {
   ]).describe('Cible d\'un alias');
 }
 
+function gatewayShape(): Record<string, ZodTypeAny> {
+  return {
+    bind: z.enum(['loopback', 'lan']).optional().describe('Écoute. lan est plus ouvert que loopback'),
+    port: z.number().int().min(1).max(65535).optional().describe('Port de la passerelle'),
+    auth_mode: z.enum(['token', 'none']).optional().describe('Authentification. none est plus ouvert que token'),
+  };
+}
+
+function channelEntryShape(): Record<string, ZodTypeAny> {
+  return {
+    enabled: z.boolean().optional().describe('Canal utilisable'),
+    group_policy: z.enum(['open', 'allowlist']).optional().describe('Accueil des groupes. allowlist est plus fermé que open'),
+    dm_policy: z.enum(['open', 'allowlist', 'disabled']).optional().describe('Messages privés. disabled est plus fermé'),
+  };
+}
+
+function mcpShape(): Record<string, ZodTypeAny> {
+  return {
+    allow_write: z.boolean().optional().describe('Écriture via les serveurs. false retire une autorisation'),
+    enabled_servers: z.array(z.string()).optional().describe('Serveurs que la configuration active'),
+  };
+}
+
+function sandboxShape(): Record<string, ZodTypeAny> {
+  return {
+    mode: z.enum(['off', 'non-main', 'all']).optional().describe('Posture du bac à sable. all est plus fermé que off'),
+    backend: z.enum(['bwrap', 'docker', 'landlock', 'seatbelt', 'ssh']).optional().describe('Moteur d\'isolation choisi'),
+  };
+}
+
+function execShape(): Record<string, ZodTypeAny> {
+  return {
+    approvals: z.enum(['off', 'ask', 'always']).optional().describe('Approbation des commandes. always est plus fermé que off'),
+    allow_commands: z.array(z.string()).optional().describe('Commandes pré-autorisées. Une politique ne peut pas en ajouter'),
+    deny_commands: z.array(z.string()).optional().describe('Fragments de commande refusés'),
+  };
+}
+
 function sectionShape(mode: ObjectMode): Record<string, ZodTypeAny> {
   return {
     active_model: z.string().optional().describe('Modèle du profil, ou modèle actif à la racine'),
@@ -330,6 +368,11 @@ function sectionShape(mode: ObjectMode): Record<string, ZodTypeAny> {
     team_session: asObject(teamSessionShape(), mode).optional().describe('Session d\'équipe'),
     multi_agent_system: asObject(multiAgentShape(mode), mode).optional().describe('Système multi-agent'),
     enterprise_modules: asObject(enterpriseShape(mode), mode).optional().describe('Modules d\'entreprise'),
+    gateway: asObject(gatewayShape(), mode).optional().describe('Passerelle'),
+    channels: z.record(asObject(channelEntryShape(), mode)).optional().describe('Canaux de messagerie'),
+    mcp: asObject(mcpShape(), mode).optional().describe('Serveurs MCP'),
+    sandbox: asObject(sandboxShape(), mode).optional().describe('Bac à sable'),
+    exec: asObject(execShape(), mode).optional().describe('Approbations d\'exécution'),
   };
 }
 
@@ -722,6 +765,7 @@ function sampleToml(path: string, schema: ZodTypeAny | null): string {
   const node = schema ? unwrap(schema) : null;
   const name = node ? typeName(node) : '';
   if (path.endsWith('base_url') || path.endsWith('server_url')) return '"https://example.invalid/v1"';
+  if (path.endsWith('.port')) return '3000';
   if (path.endsWith('api_key_env')) return '"EXAMPLE_API_KEY"';
   if (path.endsWith('hidden_capabilities')) return '["film"]';
   if (path.endsWith('input')) return '["text"]';

@@ -27,6 +27,7 @@ import {
   selectOllamaModel,
   type OllamaModelSelection,
 } from './ollama-model-selection.js';
+import { checkDomainPolicy } from './domain-policy-check.js';
 import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
 import { isDeclaredProviderFallbackEnabled } from '../providers/provider-failover-policy.js';
 import { formatProviderHealthLines, readProviderHealthSnapshot } from '../providers/provider-health.js';
@@ -963,6 +964,7 @@ export async function runDoctorChecks(cwd?: string, options: DoctorRunOptions = 
     checkGit(dir, noSubprocess),
     checkNativeSandbox(noSubprocess),
     checkProviderFailoverHealth(),
+    checkDomainPolicy(),
   ];
 }
 

@@ -3935,6 +3935,11 @@ addLazyCommandGroup(program, 'config', 'Show environment variable configuration 
   registerConfigCommand(program);
 });
 
+addLazyCommandGroup(program, 'policy', 'Constats et réparation des politiques par domaine', async () => {
+  const { registerPolicyCommand } = await import('./commands/cli/policy-command.js');
+  registerPolicyCommand(program);
+});
+
 // Dev workflows — plan, run, pr, fix-ci, explain
 addLazyCommandGroup(program, 'dev', 'Golden-path developer workflows (plan, run, pr, fix-ci, explain)', async () => {
   const { registerDevCommands } = await import('./commands/dev/index.js');
