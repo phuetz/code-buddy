@@ -109,6 +109,12 @@ interface ImproveBenchOptions extends ImproveOptions {
   scenarios?: string;
 }
 
+interface ImproveMapOptions extends ImproveOptions {
+  file: string;
+  targets: string;
+  check?: boolean;
+}
+
 interface ImproveDigestOptions extends ImproveOptions {
   since: string;
   html?: string;
@@ -521,6 +527,45 @@ export function registerImproveCommands(program: Command): void {
         `Active after: ${engine.activeStrategy.id}`,
       ].filter(Boolean).join('\n');
       print({ kind: 'self_improvement_strategies', cycle: r }, options, text);
+    });
+
+  improve
+    .command('map')
+    .description(
+      'Read the feature map (features ↔ code ↔ tests ↔ research papers ↔ proof) and rank the weakest features as improvement targets',
+    )
+    .option('--file <path>', 'feature map to read', 'docs/feature-map.json')
+    .option('--targets <n>', 'number of targets to rank', '5')
+    .option('--check', 'exit 1 when the map drifted from the repository (missing paths, unknown papers)')
+    .option('--json', 'output JSON')
+    .action(async (options: ImproveMapOptions) => {
+      const nodePath = await import('node:path');
+      const { existsSync } = await import('node:fs');
+      const { loadFeatureMap, validateFeatureMap, selectFeatureTargets, summarizeFeatureMap } =
+        await import('../../agent/self-improvement/feature-map.js');
+      const file = nodePath.resolve(options.file);
+      const root = nodePath.resolve(nodePath.dirname(file), '..');
+      const map = loadFeatureMap(file);
+      const problems = validateFeatureMap(map, (p) => existsSync(nodePath.join(root, p)));
+      const errors = problems.filter((p) => p.severity === 'error');
+      const summary = summarizeFeatureMap(map);
+      const targets = selectFeatureTargets(map, Math.max(0, Number.parseInt(options.targets, 10) || 0));
+      const text = [
+        `Feature map ${options.file} — built from ${map.builtFrom.commit}`,
+        `  ${summary.features} features: ${summary.executed} proven by execution, ${summary.testsOnly} by tests only, ${summary.unproven} never exercised`,
+        `  ${summary.withoutCode} without code, ${summary.withoutTests} without tests, ${summary.withPapers} grounded in papers (${summary.papers} papers)`,
+        `  ${errors.length} error(s), ${problems.length - errors.length} warning(s)`,
+        ...problems.map((p) => `    ${p.severity === 'error' ? '✗' : '!'} ${p.kind}${p.featureId ? ` [${p.featureId}]` : ''}: ${p.detail}`),
+        'Targets (weakest evidence first):',
+        ...targets.map(
+          (t, i) =>
+            `  ${i + 1}. ${t.feature.id} — ${t.reasons.join('; ')}` +
+            (t.fitnessTests.length ? `\n     guard: ${t.fitnessTests.join(', ')}` : '') +
+            (t.grounding.length ? `\n     papers: ${t.grounding.map((g) => `${g.arxiv} ${g.title}`).join(' · ')}` : ''),
+        ),
+      ].join('\n');
+      print({ kind: 'self_improvement_feature_map', summary, problems, targets }, options, text);
+      if (options.check && errors.length > 0) process.exitCode = 1;
     });
 
   improve
