@@ -394,7 +394,8 @@ export class SessionStore {
    * Any failure from the write on (including one reported after the rename,
    * or from the index purge) puts `expected` back in the file before it is
    * rethrown, and the index purge is one transaction: both stores stay as
-   * they were.
+   * they were. Only if that restore fails too (it is logged) can the file
+   * stay emptied while the index keeps the turns; the archive keeps them.
    */
   async clearSessionMessagesIfUnchanged(
     sessionId: string,
