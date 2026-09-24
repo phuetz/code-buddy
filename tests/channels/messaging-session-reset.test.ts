@@ -650,6 +650,60 @@ at_hour = 7
     }
   });
 
+  it('P8 une session modifiee entre l archive et l effacement n est pas effacee', async () => {
+    const sessionsDir = tempDir();
+    const archiveDir = tempDir();
+    const sessionKey = 'probe-changed';
+    const sessionFile = path.join(sessionsDir, `${sessionKey}.json`);
+    const previousSessions = process.env.CODEBUDDY_SESSIONS_DIR;
+    const previousArchive = process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+    const previousHistory = process.env.CODEBUDDY_CHANNEL_HISTORY;
+    process.env.CODEBUDDY_SESSIONS_DIR = sessionsDir;
+    process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = archiveDir;
+    process.env.CODEBUDDY_CHANNEL_HISTORY = 'false';
+    resetSessionStore();
+    __resetChannelAIHandlerForTests();
+    const idle = new Date(Date.now() - 3_600_000).toISOString();
+    const session = {
+      id: sessionKey,
+      name: 'probe',
+      workingDirectory: sessionsDir,
+      model: 'probe',
+      messages: [{ type: 'user', content: 'ARCHIVED_SECRET', timestamp: idle }],
+      createdAt: idle,
+      lastAccessedAt: idle,
+    };
+    writeFileSync(sessionFile, JSON.stringify(session));
+    __seedLocalCompanionHistoryForTests(sessionKey, 'AGENT_OLD', Date.now() - 3_600_000);
+    __beforeMessagingResetEraseForTests(() => {
+      writeFileSync(sessionFile, JSON.stringify({
+        ...session,
+        messages: [...session.messages, { type: 'user', content: 'LATE_SECRET', timestamp: idle }],
+      }));
+    });
+    const cfg = getConfigManager().getConfig() as { session_reset?: { mode?: string; idle_minutes?: number } };
+    const previousPolicy = cfg.session_reset;
+    cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
+    try {
+      await __resetInboundMessagingSessionForTests(sessionKey);
+      const archived = readMessagingMemoryArchive(archiveDir, sessionKey, 'session-store');
+      expect(archived, 'P8 archive ecrite avant la modification').toContain('ARCHIVED_SECRET');
+      expect(archived, 'P8 le message tardif n est pas archive').not.toContain('LATE_SECRET');
+      expect(readFileSync(sessionFile, 'utf8'), 'P8 message tardif efface sans archive').toContain('LATE_SECRET');
+    } finally {
+      cfg.session_reset = previousPolicy;
+      __beforeMessagingResetEraseForTests(undefined);
+      __resetChannelAIHandlerForTests();
+      resetSessionStore();
+      if (previousSessions === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR;
+      else process.env.CODEBUDDY_SESSIONS_DIR = previousSessions;
+      if (previousArchive === undefined) delete process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+      else process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = previousArchive;
+      if (previousHistory === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY;
+      else process.env.CODEBUDDY_CHANNEL_HISTORY = previousHistory;
+    }
+  });
+
   it.runIf(process.platform !== 'win32')(
     'P7 une session illisible puis relisible n est pas archivee vide ni effacee',
     async () => {

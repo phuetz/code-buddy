@@ -4,7 +4,7 @@
  * The home directory is a throwaway created inside the test. Product modules
  * are imported only after that, so the loader's captured path matches it.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -28,12 +28,20 @@ interface ConfigCase {
   user?: string;
   project?: string;
   projectIsDirectory?: boolean;
+  /**
+   * Project file content when the configuration is first loaded, before the
+   * turn. It is replaced by `project` before the reset runs.
+   */
+  projectAtLoad?: string;
+  /** Project file mode when the configuration is first loaded (POSIX only). */
+  projectModeAtLoad?: number;
   /** True when the reset must not erase the secret. */
   keep: boolean;
 }
 
 const IDLE = '[session_reset]\nmode = "idle"\nidle_minutes = 1\n';
 const TRUNCATED = '[session_reset\nmode = "none"\n';
+const NONE = '[session_reset]\nmode = "none"\n';
 
 async function exercise(spec: ConfigCase): Promise<void> {
   const fakeHome = tempDir();
@@ -77,8 +85,10 @@ async function exercise(spec: ConfigCase): Promise<void> {
     if (spec.projectIsDirectory) {
       mkdirSync(path.join(projectDir, '.codebuddy', 'config.toml'));
     } else if (spec.project !== undefined) {
-      writeFileSync(path.join(projectDir, '.codebuddy', 'config.toml'), spec.project);
+      writeFileSync(path.join(projectDir, '.codebuddy', 'config.toml'), spec.projectAtLoad ?? spec.project);
     }
+    const projectFile = path.join(projectDir, '.codebuddy', 'config.toml');
+    if (spec.projectModeAtLoad !== undefined) chmodSync(projectFile, spec.projectModeAtLoad);
 
     vi.resetModules();
     const toml = await import('../../src/config/toml-config.js');
@@ -88,6 +98,12 @@ async function exercise(spec: ConfigCase): Promise<void> {
     toml.resetConfigManager();
     store.resetSessionStore();
     handlers.__resetChannelAIHandlerForTests();
+    if (spec.projectAtLoad !== undefined || spec.projectModeAtLoad !== undefined) {
+      // The process read its configuration earlier, then the file was repaired.
+      toml.getConfigManager().getConfig();
+      if (spec.projectModeAtLoad !== undefined) chmodSync(projectFile, 0o644);
+      if (spec.project !== undefined) writeFileSync(projectFile, spec.project);
+    }
 
     const sessionKey = `reset-config-${spec.id}`;
     const file = path.join(sessionsDir, `${sessionKey}.json`);
@@ -166,6 +182,42 @@ describe('configuration presente mais inanalysable', () => {
     });
   });
 
+  it('un toml de projet inanalysable au chargement puis repare annule la remise a zero', async () => {
+    await exercise({
+      id: 'projet-repare',
+      secret: 'PROJET_REPARE_APRES_CHARGEMENT',
+      user: IDLE,
+      projectAtLoad: TRUNCATED,
+      project: NONE,
+      keep: true,
+    });
+  });
+
+  it.runIf(process.platform !== 'win32')(
+    'un toml de projet illisible au chargement puis relisible annule la remise a zero',
+    async () => {
+      await exercise({
+        id: 'projet-relisible',
+        secret: 'PROJET_RELISIBLE_APRES_CHARGEMENT',
+        user: IDLE,
+        project: NONE,
+        projectModeAtLoad: 0o000,
+        keep: true,
+      });
+    },
+  );
+
+  it('un toml de projet sain au chargement puis tronque annule la remise a zero', async () => {
+    await exercise({
+      id: 'projet-abime',
+      secret: 'PROJET_ABIME_APRES_CHARGEMENT',
+      user: IDLE,
+      projectAtLoad: IDLE,
+      project: TRUNCATED,
+      keep: true,
+    });
+  });
+
   it('un toml utilisateur idle et un projet absent laisse la remise a zero se faire', async () => {
     await exercise({
       id: 'idle-autorise',
@@ -173,5 +225,17 @@ describe('configuration presente mais inanalysable', () => {
       user: IDLE,
       keep: false,
     });
+  });
+});
+
+describe('configuration ecrite par le produit', () => {
+  it('le toml que le produit serialise n est jamais classe inanalysable', async () => {
+    vi.resetModules();
+    const toml = await import('../../src/config/toml-config.js');
+    const written = toml.serializeTOML({
+      ...toml.DEFAULT_CONFIG,
+      session_reset: { mode: 'idle', idle_minutes: 30, at_hour: 4 },
+    });
+    expect(toml.messagingResetConfigSyntaxError(written), 'toml du produit refuse').toBeNull();
   });
 });

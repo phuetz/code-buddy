@@ -1134,11 +1134,18 @@ export function messagingResetConfigPaths(): readonly [string, string] {
   return [CONFIG_FILE, join(process.cwd(), PROJECT_CONFIG_FILE)];
 }
 
+type ConfigFileRead =
+  | { kind: 'absent' }
+  | { kind: 'unreadable'; error: string }
+  | { kind: 'unparseable'; error: string; content: string }
+  | { kind: 'ok'; content: string };
+
 /**
  * Absent (`ENOENT`) is not a failure. A present file that is not a regular
  * file, cannot be read, or contains a line `parseTOML` would drop is.
+ * One read serves both the verdict and the parse.
  */
-export function classifyMessagingResetConfigFile(filePath: string): MessagingResetConfigRead {
+function readConfigFile(filePath: string): ConfigFileRead {
   let isFile = false;
   try {
     isFile = statSync(filePath).isFile();
@@ -1156,8 +1163,15 @@ export function classifyMessagingResetConfigFile(filePath: string): MessagingRes
     return { kind: 'unreadable', error: code ?? 'read failed' };
   }
   const syntax = messagingResetConfigSyntaxError(content);
-  if (syntax) return { kind: 'unparseable', error: syntax };
-  return { kind: 'ok' };
+  if (syntax) return { kind: 'unparseable', error: syntax, content };
+  return { kind: 'ok', content };
+}
+
+export function classifyMessagingResetConfigFile(filePath: string): MessagingResetConfigRead {
+  const read = readConfigFile(filePath);
+  if (read.kind === 'unparseable') return { kind: 'unparseable', error: read.error };
+  if (read.kind === 'ok') return { kind: 'ok' };
+  return read;
 }
 
 export class MessagingResetConfigError extends Error {
@@ -1185,11 +1199,27 @@ export function assertMessagingResetConfigsReadable(): void {
 }
 
 /**
+ * The `session_reset` section a messaging reset may act on. Throws when the
+ * loaded configuration was built from a file it could not read or parse,
+ * even if that file has been repaired since: the cached policy never saw it.
+ * Also throws when a file is unreadable or unparseable now.
+ */
+export function messagingResetSessionConfig(): SessionResetTomlConfig | undefined {
+  const manager = getConfigManager();
+  const config = manager.getConfig();
+  const failed = manager.getLoadFailures()[0];
+  if (failed) throw new MessagingResetConfigError(failed);
+  assertMessagingResetConfigsReadable();
+  return config.session_reset;
+}
+
+/**
  * Configuration manager singleton
  */
 class ConfigManager {
   private config: CodeBuddyConfig;
   private loaded = false;
+  private loadFailures: Array<'unreadable' | 'unparseable'> = [];
 
   constructor() {
     this.config = { ...DEFAULT_CONFIG };
@@ -1205,25 +1235,27 @@ class ConfigManager {
     // Start with defaults
     this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 
-    // Load user config
-    if (existsSync(CONFIG_FILE)) {
-      try {
-        const content = readFileSync(CONFIG_FILE, 'utf-8');
-        const userConfig = parseTOML(content) as Partial<CodeBuddyConfig>;
-        this.mergeConfig(userConfig);
-      } catch (error) {
-        logger.warn(`Warning: Failed to parse user config: ${error}`, { source: 'ConfigManager' });
+    this.loadFailures = [];
+    for (const [label, filePath] of [
+      ['user', CONFIG_FILE],
+      ['project', PROJECT_CONFIG_FILE],
+    ] as const) {
+      // Project config overrides user config.
+      const read = readConfigFile(filePath);
+      if (read.kind === 'absent') continue;
+      if (read.kind === 'unreadable') {
+        this.loadFailures.push('unreadable');
+        logger.warn(`Warning: Failed to parse ${label} config: ${read.error}`, { source: 'ConfigManager' });
+        continue;
       }
-    }
-
-    // Load project config (overrides user config)
-    if (existsSync(PROJECT_CONFIG_FILE)) {
+      // parseTOML skips the lines it cannot read; other settings keep that
+      // lenient merge, the messaging reset refuses it.
+      if (read.kind === 'unparseable') this.loadFailures.push('unparseable');
       try {
-        const content = readFileSync(PROJECT_CONFIG_FILE, 'utf-8');
-        const projectConfig = parseTOML(content) as Partial<CodeBuddyConfig>;
-        this.mergeConfig(projectConfig);
+        this.mergeConfig(parseTOML(read.content) as Partial<CodeBuddyConfig>);
       } catch (error) {
-        logger.warn(`Warning: Failed to parse project config: ${error}`, { source: 'ConfigManager' });
+        this.loadFailures.push('unparseable');
+        logger.warn(`Warning: Failed to parse ${label} config: ${error}`, { source: 'ConfigManager' });
       }
     }
 
@@ -1285,6 +1317,12 @@ class ConfigManager {
   getConfig(): Readonly<CodeBuddyConfig> {
     if (!this.loaded) this.load();
     return this.config;
+  }
+
+  /** Config files the last load found present but could not read or parse. */
+  getLoadFailures(): ReadonlyArray<'unreadable' | 'unparseable'> {
+    if (!this.loaded) this.load();
+    return this.loadFailures;
   }
 
   /**
