@@ -30,6 +30,11 @@ function describeExit(result: ChildResult): string {
 const repoRoot = process.cwd();
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 const roots: string[] = [];
+// The child is killed after CHILD_TIMEOUT_MS; the test must outlive it, or the
+// default 20 s cuts a slow but healthy run first (seen at 20 s under a loaded
+// full sweep, 2026-09-24).
+const CHILD_TIMEOUT_MS = 45_000;
+const TEST_TIMEOUT_MS = CHILD_TIMEOUT_MS + 15_000;
 
 function runDevPlan(
   port: number,
@@ -66,7 +71,7 @@ function runDevPlan(
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGKILL');
-    }, 45000); // instable sous charge du balayage complet (2× 15 s dépassés le 03/09), passe seul en ~2 s
+    }, CHILD_TIMEOUT_MS); // instable sous charge du balayage complet (2× 15 s dépassés le 03/09), passe seul en ~2 s
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.once('error', reject);
@@ -142,7 +147,7 @@ describe('buddy dev plan lifecycle', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('exits 1 and does not write PLAN.md when the model returns an empty plan', async () => {
     const root = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), 'r17-dev-plan-'));
@@ -161,5 +166,5 @@ describe('buddy dev plan lifecycle', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  });
+  }, TEST_TIMEOUT_MS);
 });
