@@ -34,6 +34,10 @@ Seconde contre-revue : le cliché de la construction survivait à tout changemen
 
 Tests : trois points d'entrée × deux cas, `/yolo` jusqu'à l'exécuteur, tours réels (reprise, Cowork réutilisé, profil Cowork), CLI réel `--resume`/`--continue` depuis A sur une session de B.
 
+Barrière Docker sans réseau. Rouge : 21 tests sur 50 échouent sur la source de départ `ccbb58807`. Vert : 52/52 sur `636dc42de`. Treize mutants, chacun tué par au moins un test (relecture inerte, exécuteur figé, seuils de tours et de coût figés, headless dans le cwd, sous-tables ignorées, profils limités à argv, profils gardés au chargement, compactage sans retour, catalogue sans repli, routage pair sans rang). `tests/agent` : 2833 verts et les mêmes 163 rouges d'image que la base. Appelants (42 entrées) : 2125 verts et les mêmes 29 rouges ; les tests CLI qui tombaient sur l'arbre en lecture seule, rejoués sur copie inscriptible : mêmes 2 rouges que la base.
+
+Hors de cette façade, non corrigé : la couche projet de `ConfigManager` (`.codebuddy/config.toml` relatif au cwd du processus), l'index de documentation, le prompt « chat seul », les hooks `SessionEnd` et l'inférence dialectique lisent encore le cwd du processus, pas le projet de la session.
+
 ## Vérification
 
 Barrière Docker sans réseau, racine en lecture seule, profil factice. Rouge 13 échecs sur 16 avant le correctif. Vert 16 sur 16 après. Mutants : tours, coût, deux seuils, compactage, refus, module retiré — chacun refait échouer le test qui le protège. `tests/config` : 36 fichiers, 524 tests. `tsc` : seulement les deux `TS2307` de `@phuetz/companion-core`. Lint ciblé : 0. Confidentialité du diff : 0.
