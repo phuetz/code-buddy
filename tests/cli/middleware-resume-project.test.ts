@@ -12,6 +12,9 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { StrategyStore } from '../../src/agent/self-improvement/strategy-store.js';
+import { BASELINE_STRATEGY } from '../../src/agent/self-improvement/strategy-types.js';
+
 function cleanEnv(): Record<string, string> {
   return Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] =>
@@ -73,7 +76,12 @@ let homeDir = '';
 let dirA = '';
 let dirB = '';
 
-function run(cwd: string, extra: string[]): Promise<{ exitCode: number | null; stderr: string; hits: number }> {
+function run(
+  cwd: string,
+  extra: string[],
+  env: Record<string, string> = {},
+  home = homeDir,
+): Promise<{ exitCode: number | null; stderr: string; hits: number }> {
   hits.count = 0;
   const args = [
     path.resolve('node_modules/tsx/dist/cli.mjs'),
@@ -99,15 +107,16 @@ function run(cwd: string, extra: string[]): Promise<{ exitCode: number | null; s
       cwd,
       env: {
         ...cleanEnv(),
-        HOME: homeDir,
-        USERPROFILE: homeDir,
-        CODEBUDDY_SESSIONS_DIR: path.join(homeDir, '.codebuddy', 'sessions'),
-        CODEBUDDY_RUNS_DIR: path.join(homeDir, '.codebuddy', 'runs'),
+        HOME: home,
+        USERPROFILE: home,
+        CODEBUDDY_SESSIONS_DIR: path.join(home, '.codebuddy', 'sessions'),
+        CODEBUDDY_RUNS_DIR: path.join(home, '.codebuddy', 'runs'),
         CODEBUDDY_DISABLE_MCP: 'true',
         CODEBUDDY_HEADLESS: 'true',
         CODEBUDDY_REQUEST_TIMEOUT_MS: '5000',
         LOG_LEVEL: 'error',
         NO_COLOR: '1',
+        ...env,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -187,5 +196,29 @@ describe('--resume / --continue depuis un autre projet', () => {
   it('--max-tool-rounds reste prioritaire sur le fichier de B', async () => {
     const forced = await run(dirA, ['--resume', sessionId(), '--max-tool-rounds', '2']);
     expect(forced.hits, forced.stderr).toBe(2);
+  }, 180_000);
+});
+
+describe('--continue depuis un autre projet : stratégie du projet de la session', () => {
+  it('la stratégie active de C (2 tours) s\'applique, pas les 8 tours du fichier de A', async () => {
+    const home = path.join(homeDir, 'maison-strategie');
+    const dirC = path.join(homeDir, 'projet-c');
+    fs.mkdirSync(path.join(home, '.codebuddy'), { recursive: true });
+    fs.mkdirSync(dirC, { recursive: true });
+    const store = new StrategyStore({ workDir: dirC });
+    store.save({
+      ...BASELINE_STRATEGY,
+      id: 'deux-tours',
+      version: 2,
+      scope: 'headless',
+      limits: { maxToolRounds: 2, maxCostUsd: 10 },
+      provenance: { source: 'manual', experienceIds: [], createdAt: '2026-09-24T00:00:00.000Z' },
+    });
+    store.activate('headless', 'deux-tours');
+    const env = { CODEBUDDY_SELF_IMPROVE_STRATEGIES: 'true' };
+    const first = await run(dirC, [], env, home);
+    expect(first.hits, first.stderr).toBe(2);
+    const continued = await run(dirA, ['--continue'], env, home);
+    expect(continued.hits, continued.stderr).toBe(2);
   }, 180_000);
 });

@@ -483,6 +483,10 @@ describe('middleware — le projet change après la construction', () => {
     const agent = spawn();
     expect(agent.maxToolRounds).toBe(11);
     expect(agent.sessionCostLimit).toBe(2);
+    // Pipeline construit AVANT le changement : ses seuils doivent suivre le projet.
+    await vi.waitFor(() => {
+      expect(agent.executor.getMiddlewarePipeline()?.getMiddlewareNames()).toContain('cost-limit');
+    }, { timeout: 10000 });
     switchTo(agent, dirB);
     expect({
       rounds: agent.maxToolRounds,
@@ -499,9 +503,6 @@ describe('middleware — le projet change après la construction', () => {
       costRatio: 0.4,
       compact: 4321,
     });
-    await vi.waitFor(() => {
-      expect(agent.executor.getMiddlewarePipeline()?.getMiddlewareNames()).toContain('cost-limit');
-    }, { timeout: 10000 });
     const pipeline = agent.executor.getMiddlewarePipeline();
     const turn = await pipeline?.runBeforeTurn(context({ toolRound: 5, maxToolRounds: 10 }));
     expect(turn?.message ?? '').toMatch(/Approaching tool round limit/);
