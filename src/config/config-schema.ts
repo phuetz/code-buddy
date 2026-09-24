@@ -374,25 +374,82 @@ export const envConfigSchema = z.object(envShape).passthrough();
 
 export type WritableTomlDocument = z.infer<typeof writableTomlSchema>;
 
+/** Un enregistrement accepterait n'importe quel segment : ces trois noms restent interdits. */
+const FORBIDDEN_CONFIG_SEGMENTS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
+
+export function configSegmentError(keyPath: string, segment: string): string | null {
+  if (!FORBIDDEN_CONFIG_SEGMENTS.has(segment)) return null;
+  return `Clé refusée « ${keyPath} ». Le segment « ${segment} » n'est pas une clé de configuration.`;
+}
+
+export interface OwnPathRead {
+  ok: boolean;
+  message: string;
+  value?: unknown;
+}
+
+/** Lecture : segment interdit ou propriété héritée, jamais la valeur du prototype. */
+export function readOwnPath(root: unknown, keyPath: string): OwnPathRead {
+  if (keyPath.trim() === '' || keyPath.split('.').some((part) => part.length === 0)) {
+    return { ok: false, message: 'Empty key path' };
+  }
+  const parts = keyPath.split('.');
+  let current: unknown = root;
+  for (const part of parts) {
+    const denied = configSegmentError(keyPath, part);
+    if (denied) return { ok: false, message: denied };
+    if (current === null || typeof current !== 'object' || Array.isArray(current)) {
+      return { ok: false, message: `Clé inconnue « ${keyPath} ».` };
+    }
+    const record = current as Record<string, unknown>;
+    if (!Object.hasOwn(record, part)) {
+      return { ok: false, message: `Clé inconnue « ${keyPath} ».` };
+    }
+    current = record[part];
+  }
+  return { ok: true, message: '', value: current };
+}
+
+function defRecord(schema: ZodTypeAny): Record<string, unknown> | null {
+  if (schema === null || schema === undefined || typeof schema !== 'object') return null;
+  const def = (schema as { _def?: unknown })._def;
+  if (!def || typeof def !== 'object') return null;
+  return def as Record<string, unknown>;
+}
+
 function typeName(schema: ZodTypeAny): string {
-  return String(schema._def.typeName);
+  const def = defRecord(schema);
+  if (!def || !Object.hasOwn(def, 'typeName')) return 'undefined';
+  const name = def.typeName;
+  return name === undefined || name === null ? 'undefined' : String(name);
 }
 
 function unwrap(schema: ZodTypeAny): ZodTypeAny {
   let current = schema;
   for (let guard = 0; guard < 8; guard += 1) {
     const name = typeName(current);
+    const def = defRecord(current);
+    if (!def) return current;
     if (name === 'ZodOptional' || name === 'ZodDefault' || name === 'ZodNullable') {
-      current = current._def.innerType as ZodTypeAny;
+      const inner = def.innerType;
+      if (!inner || typeof inner !== 'object') return current;
+      current = inner as ZodTypeAny;
       continue;
     }
     if (name === 'ZodEffects') {
-      current = current._def.schema as ZodTypeAny;
+      const inner = def.schema;
+      if (!inner || typeof inner !== 'object') return current;
+      current = inner as ZodTypeAny;
       continue;
     }
     return current;
   }
   return current;
+}
+
+function ownSchemaChild(shape: Record<string, ZodTypeAny>, part: string): ZodTypeAny | undefined {
+  if (FORBIDDEN_CONFIG_SEGMENTS.has(part) || !Object.hasOwn(shape, part)) return undefined;
+  return shape[part];
 }
 
 function descriptionOf(schema: ZodTypeAny | null): string | undefined {
@@ -435,11 +492,13 @@ export function classifyConfigPath(keyPath: string, schema: ZodTypeAny = writabl
   let node = schema;
   for (let index = 0; index < parts.length; index += 1) {
     const part = parts[index] ?? '';
+    const denied = configSegmentError(keyPath, part);
+    if (denied) return { ok: false, kind: 'unknown', message: denied };
     node = unwrap(node);
     const name = typeName(node);
     if (name === 'ZodObject') {
       const shape = node._def.shape() as Record<string, ZodTypeAny>;
-      const child = shape[part];
+      const child = ownSchemaChild(shape, part);
       if (!child) {
         if (part === 'model_id' && parts[0] === 'models') {
           return {
@@ -479,11 +538,12 @@ function schemaAt(keyPath: string, schema: ZodTypeAny = writableTomlSchema): Zod
   const parts = keyPath.split('.');
   let node = schema;
   for (const part of parts) {
+    if (configSegmentError(keyPath, part)) return null;
     node = unwrap(node);
     const name = typeName(node);
     if (name === 'ZodObject') {
       const shape = node._def.shape() as Record<string, ZodTypeAny>;
-      const child = shape[part];
+      const child = ownSchemaChild(shape, part);
       if (!child) return null;
       node = child;
       continue;

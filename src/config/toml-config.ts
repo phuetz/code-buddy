@@ -10,7 +10,7 @@ import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
 import { commitValidConfigText, writeRejectedConfig, ConfigWriteRejectedError } from './config-backup.js';
-import { USER_CONFIG_DELETE, validateOnDiskDocument } from './config-schema.js';
+import { USER_CONFIG_DELETE, configSegmentError, validateOnDiskDocument } from './config-schema.js';
 
 // ============================================================================
 // JSONC Utilities
@@ -1349,7 +1349,9 @@ function assignKeyPath(root: Record<string, unknown>, keyPath: string, value: un
   let current = root;
   for (let index = 0; index < parts.length - 1; index += 1) {
     const segment = parts[index] ?? '';
-    const next = current[segment];
+    const denied = configSegmentError(keyPath, segment);
+    if (denied) throw new Error(denied);
+    const next = Object.hasOwn(current, segment) ? current[segment] : undefined;
     if (!isPlainObject(next)) {
       const created: Record<string, unknown> = {};
       current[segment] = created;
@@ -1359,6 +1361,8 @@ function assignKeyPath(root: Record<string, unknown>, keyPath: string, value: un
     }
   }
   const leaf = parts[parts.length - 1] ?? '';
+  const deniedLeaf = configSegmentError(keyPath, leaf);
+  if (deniedLeaf) throw new Error(deniedLeaf);
   current[leaf] = value;
 }
 
@@ -1408,12 +1412,16 @@ function deleteKeyPath(root: Record<string, unknown>, keyPath: string): void {
   let current = root;
   for (let index = 0; index < parts.length - 1; index += 1) {
     const segment = parts[index] ?? '';
-    const next = current[segment];
+    const denied = configSegmentError(keyPath, segment);
+    if (denied) throw new Error(denied);
+    const next = Object.hasOwn(current, segment) ? current[segment] : undefined;
     if (!isPlainObject(next)) return;
     current = next;
   }
   const leaf = parts[parts.length - 1] ?? '';
-  delete current[leaf];
+  const deniedLeaf = configSegmentError(keyPath, leaf);
+  if (deniedLeaf) throw new Error(deniedLeaf);
+  if (Object.hasOwn(current, leaf)) delete current[leaf];
   pruneEmptyTables(root);
 }
 

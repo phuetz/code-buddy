@@ -16,6 +16,8 @@ import { resolveSecretRef } from './secret-ref.js';
 import {
   USER_CONFIG_DELETE,
   classifyConfigPath,
+  configSegmentError,
+  readOwnPath,
   validateConfigValue,
 } from './config-schema.js';
 
@@ -168,10 +170,12 @@ function navigateKeyPath(
     if (singleKey === undefined) {
       return { error: 'Empty key path' };
     }
+    const denied = configSegmentError(keyPath, singleKey);
+    if (denied) return { error: denied };
     return {
       parent: config,
       leafKey: singleKey,
-      currentValue: config[singleKey],
+      currentValue: Object.hasOwn(config, singleKey) ? config[singleKey] : undefined,
     };
   }
 
@@ -180,7 +184,9 @@ function navigateKeyPath(
   for (let i = 0; i < parts.length - 1; i++) {
     const segment = parts[i];
     if (segment === undefined) continue; // safe: i < parts.length - 1, but satisfy noUncheckedIndexedAccess
-    const next = current[segment];
+    const denied = configSegmentError(keyPath, segment);
+    if (denied) return { error: denied };
+    const next = Object.hasOwn(current, segment) ? current[segment] : undefined;
 
     if (next === undefined || next === null) {
       // Auto-create intermediate objects
@@ -197,10 +203,12 @@ function navigateKeyPath(
   if (leafKey === undefined) {
     return { error: 'Empty key path' };
   }
+  const deniedLeaf = configSegmentError(keyPath, leafKey);
+  if (deniedLeaf) return { error: deniedLeaf };
   return {
     parent: current,
     leafKey,
-    currentValue: current[leafKey],
+    currentValue: Object.hasOwn(current, leafKey) ? current[leafKey] : undefined,
   };
 }
 
@@ -246,21 +254,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function readAt(root: Record<string, unknown>, keyPath: string): unknown {
-  const parts = keyPath.split('.');
-  let current: unknown = root;
-  for (const part of parts) {
-    if (!isRecord(current)) return undefined;
-    current = current[part];
-  }
-  return current;
+  const read = readOwnPath(root, keyPath);
+  return read.ok ? read.value : undefined;
 }
 
 /** Feuilles d'un patch. `null` demande la suppression de cette feuille. */
+function ownKeys(value: Record<string, unknown>): string[] {
+  return Object.getOwnPropertyNames(value).filter((key) => Object.hasOwn(value, key));
+}
+
 function patchLeaves(prefix: string, value: unknown): Array<[string, unknown]> {
   if (isRecord(value)) {
-    const entries = Object.entries(value);
-    if (entries.length === 0) return [[prefix, value]];
-    return entries.flatMap(([key, child]) => patchLeaves(prefix ? `${prefix}.${key}` : key, child));
+    const keys = ownKeys(value);
+    if (keys.length === 0) return [[prefix, value]];
+    return keys.flatMap((key) => patchLeaves(prefix ? `${prefix}.${key}` : key, value[key]));
   }
   return [[prefix, value]];
 }
@@ -269,7 +276,9 @@ function mergePatch(base: unknown, patch: unknown): unknown {
   if (patch === null) return undefined;
   if (isRecord(base) && isRecord(patch)) {
     const merged: Record<string, unknown> = { ...base };
-    for (const [key, child] of Object.entries(patch)) {
+    for (const key of ownKeys(patch)) {
+      if (configSegmentError(key, key)) continue;
+      const child = patch[key];
       if (child === null) {
         delete merged[key];
         continue;

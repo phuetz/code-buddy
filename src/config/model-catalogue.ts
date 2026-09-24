@@ -894,6 +894,37 @@ function nonNegativeNumber(value: unknown, label: string): number {
 
 export const CATALOGUE_ENTRY_FIELDS = ENTRY_KEYS;
 
+/** Refus minimal : cible inconnue, ou chaîne qui revient sur un alias. Pas de résolution multi-sauts. */
+function aliasTargetsProblem(document: CatalogueDocument): string | null {
+  const table = new Map<string, { name: string; target: string }>();
+  for (const [name, target] of Object.entries(document.aliases)) {
+    table.set(name.toLowerCase(), { name, target: target.trim() });
+  }
+  for (const start of table.values()) {
+    const seen = new Set<string>();
+    const display: string[] = [];
+    let cursor: { name: string; target: string } | undefined = start;
+    while (cursor) {
+      const key = cursor.name.toLowerCase();
+      if (seen.has(key)) {
+        display.push(cursor.name);
+        return `l'alias « ${start.name} » est circulaire (${display.join(' → ')}). Une cible doit nommer un modèle connu, pas revenir sur un alias.`;
+      }
+      seen.add(key);
+      display.push(cursor.name);
+      const next = table.get(cursor.target.toLowerCase());
+      if (!next) {
+        if (!isConcreteModel(cursor.target, document)) {
+          return `l'alias « ${cursor.name} » désigne « ${cursor.target} », qui est inconnu du catalogue. Déclarez-le dans [models.<nom>], ou corrigez la cible.`;
+        }
+        break;
+      }
+      cursor = next;
+    }
+  }
+  return null;
+}
+
 registerCatalogueWriteCheck((text: string): string | null => {
   // model_id déjà présent est conservé par la réécriture. Il n'est pas une clé
   // d'écriture : le contrôle du reste du document ne doit pas bloquer une autre clé.
@@ -902,8 +933,8 @@ registerCatalogueWriteCheck((text: string): string | null => {
     .filter((line) => !/^\s*model_id\s*=/.test(line))
     .join('\n');
   try {
-    parseCatalogueConfig(withoutHistoricalModelId, 'écriture');
-    return null;
+    const document = parseCatalogueConfig(withoutHistoricalModelId, 'écriture');
+    return aliasTargetsProblem(document);
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
