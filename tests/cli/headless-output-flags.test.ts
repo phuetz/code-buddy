@@ -3,6 +3,15 @@ import http from 'node:http';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
+/** Temporary dirs stay inside the workspace but under the git-ignored `_qa/`, so a
+ * concurrent `git status` check never sees them. */
+function qaTmpBase(root: string): string {
+  const base = path.join(root, '_qa', 'tmp');
+  fs.mkdirSync(base, { recursive: true });
+  return base;
+}
+
+
 const CLI_TIMEOUT_MS = 45_000;
 
 interface CliResult {
@@ -136,7 +145,7 @@ describe('headless output file and schema flags', () => {
   let provider: http.Server | undefined;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), '.tmp-headless-output-flags-'));
+    tempDir = fs.mkdtempSync(path.join(qaTmpBase(process.cwd()), 'tmp-headless-output-flags-'));
   });
 
   afterEach(async () => {

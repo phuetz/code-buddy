@@ -942,10 +942,47 @@ function restrictMode(mode: number, checkId: string): number | null {
   return next;
 }
 
-function fdInside(fd: number, roots: string[]): boolean {
+function realRoots(roots: string[]): string[] {
+  const out = new Set<string>();
+  for (const root of roots) {
+    out.add(path.resolve(root));
+    try {
+      out.add(realpathSync(root));
+    } catch {
+      /* a root that cannot be resolved keeps only its stated form */
+    }
+  }
+  return [...out];
+}
+
+/**
+ * Is the OPEN file descriptor inside the audited roots? Linux answers through
+ * /proc/self/fd. macOS and the BSDs have no /proc: there the descriptor must be
+ * the very file `expected` names (same device + inode as the real path), and
+ * that real path must lie inside the roots. Roots are compared on both their
+ * stated and real forms, so an alias such as macOS /var → /private/var does
+ * not turn a legitimate fix into a refusal.
+ */
+export function fdInside(
+  fd: number,
+  roots: string[],
+  expected: string,
+  procFdDir = '/proc/self/fd',
+): boolean {
+  const allowed = realRoots(roots);
+  const within = (candidate: string): boolean =>
+    insideRoot(candidate, allowed) || allowed.some((root) => candidate === root);
   try {
-    const via = realpathSync(`/proc/self/fd/${fd}`);
-    return insideRoot(via, roots) || roots.some((root) => via === root);
+    const via = realpathSync(path.join(procFdDir, String(fd)));
+    return within(via);
+  } catch {
+    /* no /proc (macOS, BSD): fall back to identity */
+  }
+  try {
+    const real = realpathSync(expected);
+    const opened = fstatSync(fd);
+    const named = lstatSync(real);
+    return opened.dev === named.dev && opened.ino === named.ino && within(real);
   } catch {
     return false;
   }
@@ -1024,7 +1061,7 @@ function backupInRoot(
     };
   }
   try {
-    if (!fdInside(fd, [profile])) {
+    if (!fdInside(fd, [profile], manifestPath)) {
       return { ok: false, kind: 'refuse', message: 'manifest would have been written outside the profile' };
     }
     writeSync(fd, body);
@@ -1077,7 +1114,7 @@ function applyFixes(request: ConsolidatedAuditRequest, items: SecurityAuditFindi
       });
       continue;
     }
-    if (!fdInside(fd, [request.profileDir, request.projectDir])) {
+    if (!fdInside(fd, [request.profileDir, request.projectDir], abs)) {
       closeSync(fd);
       refused.push({ checkId: item.checkId, subject, ok: false, message: 'open file is outside the audited roots' });
       continue;
