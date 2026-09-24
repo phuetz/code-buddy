@@ -89,6 +89,26 @@ et le garde-fou des dossiers à la racine avait un angle mort.
   la fermeture du fichier ; ces tests l'attendent au lieu d'un délai fixe. `log-rotation`
   n'écrit plus à la racine du dépôt.
 
+## Après la fusion de la #228 dans main (même jour)
+
+La #228 (audit macOS et fuites des tests) a été fusionnée avant cette branche et traite une
+partie du même sujet. La fusion de `main` garde sa version partout où elle se recoupe :
+
+- **Section 1 remplacée par le correctif de main.** `fdInside()` de main lit d'abord
+  `/proc/self/fd`, puis, s'il est illisible, prouve l'identité (même périphérique et même
+  inœud que le chemin réel, chemin réel sous une racine). L'approche par plateforme décrite
+  en section 1 n'est plus dans le code, et Linux sans `/proc` n'est plus en échec fermé : la
+  preuve d'identité suffit, comme sous macOS. `consolidated-audit-sans-proc.test.ts` reste,
+  adapté : il vérifie de bout en bout que les deux appelants (fichier corrigé et manifeste de
+  sauvegarde) passent le bon chemin à `fdInside()`, ce que le test unitaire de main
+  (`consolidated-audit-fd-inside.test.ts`) ne voit pas.
+- **Dossiers de travail.** Les onze tests que la #228 a envoyés sous `os.tmpdir()` y restent.
+  Les trois qu'elle a mis sous `_qa/tmp` avec une copie locale de `qaTmpBase()` utilisent
+  `repoScratchRoot()`, pour un seul mécanisme.
+- **Propres à cette branche, conservés** : fermeture des journaux RunStore avant purge et
+  avant suppression, runner agentique et `Logger.close()`, `removeTestDir()`, garde-fou
+  `repo-scratch-dirs`, et les autres tests déplacés hors de la racine.
+
 ## Non traité ici
 
 - Windows, shard 5/6 : `C:\Users\runneradmin\.codebuddy\memory.md` créé par un test (garde
