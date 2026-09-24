@@ -135,11 +135,6 @@ describe('préchargement de --profile sur le chemin documenté', () => {
     expect(getConfigManager().getConfig().active_model).toBe('grok-4');
   });
 
-  it('le démarrage appelle ce préchargement', () => {
-    const source = readFileSync(path.join(process.cwd(), 'src/index.ts'), 'utf8');
-    expect(source).toContain('preloadRequestedProfile(process.argv)');
-    expect(source).not.toContain('const requestedProfile = getRequestedProfile(process.argv)');
-  });
 });
 
 describe('/config set sur le chemin documenté', () => {

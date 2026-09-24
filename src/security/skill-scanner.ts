@@ -29,6 +29,11 @@ export interface ScanResult {
   file: string;
   findings: ScanFinding[];
   scannedAt: number;
+  /**
+   * False when this call did not read regular-file text.
+   * An empty findings list is not an authorization unless this is true.
+   */
+  textRead?: boolean;
 }
 
 export type SkillFirewallCapability =
@@ -93,11 +98,119 @@ function isScannableSkillFile(fileName: string): boolean {
     || SCRIPT_EXTENSIONS.has(path.extname(lowerName));
 }
 
+const O_NOFOLLOW = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+
+/** lstat, then stat only to classify a symlink target. Neither call blocks on a fifo. */
+function followedFile(filePath: string): fs.Stats | null {
+  try {
+    const linked = fs.lstatSync(filePath);
+    if (!linked.isSymbolicLink()) return linked.isFile() ? linked : null;
+    const target = fs.statSync(filePath);
+    return target.isFile() ? target : null;
+  } catch {
+    return null;
+  }
+}
+
+function unreadFinding(filePath: string, kind: string): ScanResult {
+  return {
+    file: filePath,
+    findings: [{
+      severity: 'high',
+      pattern: 'special-file-not-read',
+      description: `Refused to read a ${kind}; the scan did not follow or block on it`,
+      file: filePath,
+      line: 0,
+      evidence: path.basename(filePath).slice(0, 120),
+    }],
+    scannedAt: Date.now(),
+    textRead: false,
+  };
+}
+
+/**
+ * A missing path stays an empty result. Every other unread path is an
+ * explicit refusal, never a clean scan.
+ */
+function refusalResult(filePath: string): ScanResult {
+  let linked: fs.Stats;
+  try {
+    linked = fs.lstatSync(filePath);
+  } catch {
+    return { file: filePath, findings: [], scannedAt: Date.now(), textRead: false };
+  }
+  if (linked.isSymbolicLink()) {
+    let targetIsFile = false;
+    try {
+      targetIsFile = fs.statSync(filePath).isFile();
+    } catch {
+      targetIsFile = false;
+    }
+    return unreadFinding(filePath, targetIsFile ? 'file' : 'symlink');
+  }
+  if (linked.isFile()) return unreadFinding(filePath, 'file');
+  return unreadFinding(filePath, 'special');
+}
+
+/** A scan that neither read text nor explained why is still a refusal. */
+function readOrRefuse(result: ScanResult): ScanResult {
+  if (result.textRead === true || result.findings.length > 0) return result;
+  return unreadFinding(result.file, 'file');
+}
+
+/**
+ * Read a regular file, or a symlink whose target is a regular file.
+ * A fifo, socket, or device is refused. O_NONBLOCK keeps a raced replacement
+ * from blocking; the open fd is checked again before any read.
+ */
+function readTextForScan(filePath: string): string | null {
+  let linked: fs.Stats;
+  try {
+    linked = fs.lstatSync(filePath);
+  } catch {
+    return null;
+  }
+  if (!followedFile(filePath)) return null;
+  const flags = fs.constants.O_RDONLY
+    | fs.constants.O_NONBLOCK
+    | (linked.isSymbolicLink() ? 0 : O_NOFOLLOW);
+  let fd: number;
+  try {
+    fd = fs.openSync(filePath, flags);
+  } catch {
+    return null;
+  }
+  try {
+    const opened = fs.fstatSync(fd);
+    if (!opened.isFile()) return null;
+    const buf = Buffer.alloc(opened.size);
+    let offset = 0;
+    while (offset < opened.size) {
+      const n = fs.readSync(fd, buf, offset, opened.size - offset, offset);
+      if (n === 0) break;
+      offset += n;
+    }
+    return buf.subarray(0, offset).toString('utf8');
+  } catch {
+    return null;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 function isExecutableOrShebang(filePath: string): boolean {
   try {
-    if ((fs.statSync(filePath).mode & 0o111) !== 0) return true;
-    const fd = fs.openSync(filePath, 'r');
+    const linked = fs.lstatSync(filePath);
+    const info = linked.isSymbolicLink() ? fs.statSync(filePath) : linked;
+    if (!info.isFile()) return false;
+    if ((info.mode & 0o111) !== 0) return true;
+    const flags = fs.constants.O_RDONLY
+      | fs.constants.O_NONBLOCK
+      | (linked.isSymbolicLink() ? 0 : O_NOFOLLOW);
+    const fd = fs.openSync(filePath, flags);
     try {
+      const opened = fs.fstatSync(fd);
+      if (!opened.isFile()) return false;
       const prefix = Buffer.alloc(2);
       return fs.readSync(fd, prefix, 0, prefix.length, 0) === 2 && prefix.toString() === '#!';
     } finally {
@@ -264,10 +377,10 @@ function getDangerousPatterns(): DangerousPattern[] {
  * Scan a single file for dangerous patterns.
  */
 export function scanFile(filePath: string): ScanResult {
-  const findings: ScanFinding[] = [];
-
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = readTextForScan(filePath);
+    if (content === null) return refusalResult(filePath);
+    const findings: ScanFinding[] = [];
     const lines = content.split('\n');
     const patterns = getDangerousPatterns();
 
@@ -299,15 +412,22 @@ export function scanFile(filePath: string): ScanResult {
     // override slipped through on 2026-09-03. Dotall matching here catches
     // both without re-enabling those comment false positives for eval/shell.
     findings.push(...collectPromptInjectionFindings(content, filePath, findings));
+    return { file: filePath, findings, scannedAt: Date.now(), textRead: true };
   } catch (error) {
     logger.debug(`Failed to scan file: ${filePath}`, { error });
+    return { file: filePath, findings: [], scannedAt: Date.now(), textRead: false };
   }
+}
 
-  return {
-    file: filePath,
-    findings,
-    scannedAt: Date.now(),
-  };
+/**
+ * True when this result must not authorize an install or a registration.
+ * Critical findings still block. A high finding that is not an unread file
+ * keeps the historical allow. An unread file never does.
+ */
+export function scanDeniesInstall(result: ScanResult): boolean {
+  if (result.textRead !== true) return true;
+  if (result.findings.some((finding) => finding.pattern === 'special-file-not-read')) return true;
+  return result.findings.some((finding) => finding.severity === 'critical');
 }
 
 /**
@@ -316,11 +436,36 @@ export function scanFile(filePath: string): ScanResult {
 export function scanDirectory(dirPath: string, withinScripts = false): ScanResult[] {
   const results: ScanResult[] = [];
 
-  if (!fs.existsSync(dirPath)) return results;
+  let dirInfo: fs.Stats;
+  try {
+    dirInfo = fs.lstatSync(dirPath);
+  } catch {
+    return results;
+  }
+  if (!dirInfo.isDirectory() || dirInfo.isSymbolicLink()) {
+    results.push(unreadFinding(dirPath, dirInfo.isSymbolicLink() ? 'symlink' : 'special'));
+    return results;
+  }
 
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
+
+    if (entry.isSymbolicLink()) {
+      let target: fs.Stats | undefined;
+      try {
+        target = fs.statSync(fullPath);
+      } catch {
+        target = undefined;
+      }
+      if (!target?.isFile()) {
+        results.push(unreadFinding(fullPath, 'symlink'));
+        continue;
+      }
+    } else if (entry.isFIFO() || entry.isSocket() || entry.isBlockDevice() || entry.isCharacterDevice()) {
+      results.push(unreadFinding(fullPath, 'special'));
+      continue;
+    }
 
     if (entry.isDirectory()) {
       results.push(...scanDirectory(fullPath, withinScripts || entry.name.toLowerCase() === 'scripts'));
@@ -330,7 +475,9 @@ export function scanDirectory(dirPath: string, withinScripts = false): ScanResul
       || isExecutableOrShebang(fullPath)
     ) {
       const result = scanFile(fullPath);
-      if (result.findings.length > 0) {
+      if (result.textRead !== true) {
+        results.push(result.findings.length > 0 ? result : unreadFinding(fullPath, 'file'));
+      } else if (result.findings.length > 0) {
         results.push(result);
       }
     }
@@ -366,9 +513,29 @@ export function scanAllSkills(projectRoot: string = process.cwd()): ScanResult[]
  */
 export function scanSkillFirewall(targetPath: string): SkillFirewallReport {
   const normalizedTarget = path.resolve(targetPath);
-  const results = fs.existsSync(normalizedTarget) && fs.statSync(normalizedTarget).isDirectory()
+  let info: fs.Stats | undefined;
+  try {
+    info = fs.lstatSync(normalizedTarget);
+  } catch {
+    info = undefined;
+  }
+  if (!info) return buildSkillFirewallReport(normalizedTarget, []);
+  if (info.isSymbolicLink()) {
+    let target: fs.Stats | undefined;
+    try {
+      target = fs.statSync(normalizedTarget);
+    } catch {
+      target = undefined;
+    }
+    if (!target?.isFile()) {
+      return buildSkillFirewallReport(normalizedTarget, [unreadFinding(normalizedTarget, 'symlink')]);
+    }
+  } else if (!info.isDirectory() && !info.isFile()) {
+    return buildSkillFirewallReport(normalizedTarget, [unreadFinding(normalizedTarget, 'special')]);
+  }
+  const results = info.isDirectory() && !info.isSymbolicLink()
     ? scanDirectory(normalizedTarget)
-    : [scanFile(normalizedTarget)];
+    : [readOrRefuse(scanFile(normalizedTarget))];
   return buildSkillFirewallReport(normalizedTarget, results);
 }
 

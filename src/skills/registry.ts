@@ -24,7 +24,7 @@ import {
   skillMdToUnified,
   type LegacySkill,
 } from './adapters/index.js';
-import { scanFile as scanSkillFile } from '../security/skill-scanner.js';
+import { scanDeniesInstall, scanFile as scanSkillFile } from '../security/skill-scanner.js';
 import { getSkillsHub } from './hub.js';
 import { logger } from '../utils/logger.js';
 
@@ -239,19 +239,27 @@ export class SkillRegistry extends EventEmitter {
    * Register a skill
    */
   private registerSkill(skill: Skill): void {
-    // Security scan: block skills with critical findings
+    // Block critical findings, and any scan that did not read a regular file.
     if (skill.sourcePath && !skill.sourcePath.startsWith('legacy://') && fs.existsSync(skill.sourcePath)) {
       try {
         const scanResult = scanSkillFile(skill.sourcePath);
-        const criticalFindings = scanResult.findings.filter(f => f.severity === 'critical');
-        if (criticalFindings.length > 0) {
+        if (scanDeniesInstall(scanResult)) {
+          const criticalFindings = scanResult.findings.filter(f => f.severity === 'critical');
+          const unread = scanResult.textRead !== true
+            || scanResult.findings.some(f => f.pattern === 'special-file-not-read');
+          const detail = unread
+            ? 'the scanner did not read a regular file'
+            : `${criticalFindings.length} critical finding(s) — ${criticalFindings.map(f => f.description).join('; ')}`;
           this.emit('skill:error', skill.sourcePath, new Error(
-            `Skill blocked by security scanner: ${criticalFindings.length} critical finding(s) — ${criticalFindings.map(f => f.description).join('; ')}`
+            `Skill blocked by security scanner: ${detail}`
           ));
           return;
         }
       } catch {
-        // Scanner not available — allow skill through
+        this.emit('skill:error', skill.sourcePath, new Error(
+          'Skill blocked by security scanner: the scanner did not read a regular file'
+        ));
+        return;
       }
     }
 
