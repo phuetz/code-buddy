@@ -466,12 +466,31 @@ turn_warning_threshold = 0.8
 
 # cle: model_aliases
 # défaut : absent
-# Alias vers un nom de modèle
+# Alias résolus avant le catalogue. Chaîne, ou table model, provider et base_url
 
 # cle: model_aliases.*
 # défaut : absent
+# Cible d'un alias
 [model_aliases]
 exemple = "exemple"
+
+# cle: model_aliases.*.base_url
+# défaut : absent
+# URL réellement utilisée par la session. Absente : celle du fournisseur, ou l'URL détectée
+[model_aliases.exemple]
+base_url = "https://example.invalid/v1"
+
+# cle: model_aliases.*.model
+# défaut : absent
+# Nom de modèle, ou un autre alias
+[model_aliases.exemple]
+model = "exemple"
+
+# cle: model_aliases.*.provider
+# défaut : absent
+# Fournisseur réellement utilisé par la session. Absent : le fournisseur détecté reste
+[model_aliases.exemple]
+provider = "exemple"
 
 # cle: model_pairs
 # défaut : absent
@@ -1252,12 +1271,31 @@ turn_warning_threshold = 0.8
 
 # cle: profiles.*.model_aliases
 # défaut : absent
-# Alias vers un nom de modèle
+# Alias résolus avant le catalogue. Chaîne, ou table model, provider et base_url
 
 # cle: profiles.*.model_aliases.*
 # défaut : absent
+# Cible d'un alias
 [profiles.exemple.model_aliases]
 exemple = "exemple"
+
+# cle: profiles.*.model_aliases.*.base_url
+# défaut : absent
+# URL réellement utilisée par la session. Absente : celle du fournisseur, ou l'URL détectée
+[profiles.exemple.model_aliases.exemple]
+base_url = "https://example.invalid/v1"
+
+# cle: profiles.*.model_aliases.*.model
+# défaut : absent
+# Nom de modèle, ou un autre alias
+[profiles.exemple.model_aliases.exemple]
+model = "exemple"
+
+# cle: profiles.*.model_aliases.*.provider
+# défaut : absent
+# Fournisseur réellement utilisé par la session. Absent : le fournisseur détecté reste
+[profiles.exemple.model_aliases.exemple]
+provider = "exemple"
 
 # cle: profiles.*.model_pairs
 # défaut : absent
