@@ -545,6 +545,18 @@ describe('middleware — le projet change après la construction', () => {
     expect(agent.maxToolRounds).toBe(11);
   });
 
+  it('le plafond du routage pair atteint l\'exécuteur et survit à /yolo et au changement de projet', () => {
+    const { dirB } = projects();
+    const agent = spawn() as AgentPeek & { applyPeerRouting(config: { maxToolRounds?: number }): void };
+    agent.applyPeerRouting({ maxToolRounds: 7 });
+    expect(agent.executor.config.maxToolRounds).toBe(7);
+    agent.setYoloMode(true);
+    agent.setWorkingDirectory(dirB);
+    expect(agent.maxToolRounds).toBe(7);
+    expect(agent.executor.config.maxToolRounds).toBe(7);
+    expect(agent.sessionCostLimit).toBe(0.0001);
+  });
+
   it('/yolo atteint l\'exécuteur, pas seulement le champ de l\'agent', () => {
     freshHome();
     const agent = spawn();
