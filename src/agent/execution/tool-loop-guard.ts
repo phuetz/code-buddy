@@ -20,13 +20,34 @@
  *   warning → `stop`.
  * - The guard is a validation, not a confirmation: nothing in the autonomy /
  *   YOLO configuration disables it. A new guard instance is created per task.
+ *
+ * Optional `[tool_loop_guardrails]` in config.toml (Hermes-shaped keys).
+ * Defaults reproduce the contract above. `exact_failure` and
+ * `same_tool_failure` stay off (0) until set, because the historical guard
+ * does not count a different error or different arguments as the same loop.
+ * `0` does not disable `idempotent_no_progress`: an explicit 0 keeps the
+ * default, and the value cannot fall below 2. `same_tool_failure` adds every
+ * failure of that tool in the turn, even when the arguments change, so a low
+ * threshold can stop a legitimate search. Setting both `warnings_enabled` and
+ * `hard_stop_enabled` to false turns the decisions off; that is an operator
+ * choice, not a guarantee that every loop is blocked. Tools marked
+ * `repeatSafe` are never counted. A result whose text changes does not trip
+ * the historical identical-result mode.
  */
 
 import { createHash } from 'node:crypto';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, statSync } from 'node:fs';
+import TOML from '@iarna/toml';
 import type { ToolResult } from '../../types/index.js';
 import { TOOL_METADATA } from '../../tools/metadata.js';
+import { getCodeBuddyPath } from '../../utils/codebuddy-home.js';
+import { logger } from '../../utils/logger.js';
 
-export type ToolLoopKind = 'repeated_call' | 'repeated_cycle';
+export type ToolLoopKind =
+  | 'repeated_call'
+  | 'repeated_cycle'
+  | 'exact_failure'
+  | 'same_tool_failure';
 
 export interface ToolLoopObservation {
   name: string;
@@ -39,6 +60,38 @@ export type ToolLoopDecision =
   | { action: 'none' }
   | { action: 'warn' | 'stop'; kind: ToolLoopKind; toolNames: string[]; repetitions: number; message: string };
 
+export interface ToolLoopFailureThresholds {
+  /** Same tool and same canonical arguments, failed, whatever the error text. 0 = off. */
+  exact_failure: number;
+  /** Same tool name failed, arguments may differ. 0 = off. A low value stops a search that changes arguments. */
+  same_tool_failure: number;
+  /** Historical identical-result guard. 0 keeps the default. Minimum 2. It cannot be turned off by writing 0. */
+  idempotent_no_progress: number;
+}
+
+export interface ToolLoopGuardrailsConfig {
+  warningsEnabled: boolean;
+  /** Historical guard stops. Hermes defaults this to off; Buddy already stops. */
+  hardStopEnabled: boolean;
+  warnAfter: ToolLoopFailureThresholds;
+  hardStopAfter: ToolLoopFailureThresholds;
+}
+
+export const DEFAULT_TOOL_LOOP_GUARDRAILS: ToolLoopGuardrailsConfig = {
+  warningsEnabled: true,
+  hardStopEnabled: true,
+  warnAfter: {
+    exact_failure: 0,
+    same_tool_failure: 0,
+    idempotent_no_progress: 5,
+  },
+  hardStopAfter: {
+    exact_failure: 0,
+    same_tool_failure: 0,
+    idempotent_no_progress: 8,
+  },
+};
+
 export interface ToolLoopGuardOptions {
   /** Identical no-progress observations (or cycle repetitions) before warning. Default 5. */
   threshold?: number;
@@ -48,6 +101,20 @@ export interface ToolLoopGuardOptions {
   maxCyclePeriod?: number;
   /** Override for tests; defaults to the `repeatSafe` flag in tool metadata. */
   isRepeatSafe?: (toolName: string) => boolean;
+  /**
+   * Partial `[tool_loop_guardrails]` section. Missing keys keep the defaults.
+   * Snake_case matches config.toml; camelCase is accepted from callers.
+   */
+  guardrails?: {
+    warningsEnabled?: boolean;
+    hardStopEnabled?: boolean;
+    warnings_enabled?: boolean;
+    hard_stop_enabled?: boolean;
+    warnAfter?: Partial<ToolLoopFailureThresholds>;
+    hardStopAfter?: Partial<ToolLoopFailureThresholds>;
+    warn_after?: Partial<ToolLoopFailureThresholds>;
+    hard_stop_after?: Partial<ToolLoopFailureThresholds>;
+  };
 }
 
 const REPEAT_SAFE_TOOLS = new Set(
@@ -125,21 +192,42 @@ interface Entry {
 export class ToolLoopGuard {
   private readonly threshold: number;
   private readonly stopAfterWarning: number;
+  private readonly idempotentHard: number;
   private readonly maxCyclePeriod: number;
   private readonly isRepeatSafe: (toolName: string) => boolean;
+  private readonly guardrails: ToolLoopGuardrailsConfig;
   private history: Entry[] = [];
   private warned = false;
   private stopped = false;
+  private readonly exactCounts = new Map<string, number>();
+  private readonly sameCounts = new Map<string, number>();
+  private readonly exactWarned = new Set<string>();
+  private readonly sameWarned = new Set<string>();
 
   constructor(options: ToolLoopGuardOptions = {}) {
-    this.threshold = Math.max(2, options.threshold ?? 5);
-    this.stopAfterWarning = Math.max(1, options.stopAfterWarning ?? 3);
+    this.guardrails = resolveToolLoopGuardrails(options.guardrails);
+    this.threshold = Math.max(2, options.threshold ?? this.guardrails.warnAfter.idempotent_no_progress);
     this.maxCyclePeriod = Math.max(2, options.maxCyclePeriod ?? 3);
     this.isRepeatSafe = options.isRepeatSafe ?? isRepeatSafeTool;
+    this.idempotentHard = Math.max(
+      this.threshold + 1,
+      this.guardrails.hardStopAfter.idempotent_no_progress,
+    );
+    const idempotentConfigured = options.guardrails?.warnAfter?.idempotent_no_progress !== undefined
+      || options.guardrails?.hardStopAfter?.idempotent_no_progress !== undefined;
+    const delta = options.stopAfterWarning !== undefined
+      ? options.stopAfterWarning
+      : (options.threshold !== undefined && !idempotentConfigured)
+        ? 3
+        : this.idempotentHard - this.threshold;
+    this.stopAfterWarning = this.guardrails.hardStopEnabled
+      ? Math.max(1, delta)
+      : Number.POSITIVE_INFINITY;
   }
 
+  /** True after any warning this task, including exact_failure and same_tool_failure. */
   get hasWarned(): boolean {
-    return this.warned;
+    return this.warned || this.exactWarned.size > 0 || this.sameWarned.size > 0;
   }
 
   get hasStopped(): boolean {
@@ -149,21 +237,115 @@ export class ToolLoopGuard {
   observe(observation: ToolLoopObservation): ToolLoopDecision {
     if (this.stopped || this.isRepeatSafe(observation.name)) return { action: 'none' };
     this.history.push({ signature: signatureOf(observation), name: observation.name });
-    const cap = this.threshold * this.maxCyclePeriod + this.stopAfterWarning * this.maxCyclePeriod;
+    const extra = Number.isFinite(this.stopAfterWarning) ? this.stopAfterWarning : this.threshold;
+    const cap = this.threshold * this.maxCyclePeriod + extra * this.maxCyclePeriod;
     if (this.history.length > cap) this.history.splice(0, this.history.length - cap);
 
-    const loop = this.detect(this.warned ? this.stopAfterWarning : this.threshold);
-    if (!loop) return { action: 'none' };
+    const mode = this.noteFailureModes(observation);
+    if (!this.guardrails.warningsEnabled) {
+      if (mode?.action === 'stop') {
+        this.stopped = true;
+        return mode;
+      }
+      if (!this.guardrails.hardStopEnabled) return { action: 'none' };
+      const hard = this.detect(this.idempotentHard);
+      if (!hard) return { action: 'none' };
+      this.stopped = true;
+      return { action: 'stop', ...hard, message: this.stopMessage(hard.kind, hard.toolNames) };
+    }
 
-    if (!this.warned) {
+    const loop = this.detect(this.warned ? this.stopAfterWarning : this.threshold);
+    if (mode?.action === 'stop') {
+      this.stopped = true;
+      return mode;
+    }
+    if (loop && !this.warned) {
       this.warned = true;
       // Restart the count so recidivism is measured from the warning onwards.
       this.history = [];
       return { action: 'warn', ...loop, message: this.warnMessage(loop.kind, loop.toolNames, loop.repetitions) };
     }
+    if (loop && this.warned) {
+      if (!this.guardrails.hardStopEnabled) return { action: 'none' };
+      this.stopped = true;
+      return { action: 'stop', ...loop, message: this.stopMessage(loop.kind, loop.toolNames) };
+    }
+    if (mode?.action === 'warn') return mode;
+    return { action: 'none' };
+  }
 
-    this.stopped = true;
-    return { action: 'stop', ...loop, message: this.stopMessage(loop.kind, loop.toolNames) };
+  /**
+   * Hermes-shaped counters. A success of the same signature clears
+   * `exact_failure`; any success of the tool clears `same_tool_failure`.
+   * Both stay idle while their thresholds are 0.
+   */
+  private noteFailureModes(observation: ToolLoopObservation): ToolLoopDecision | null {
+    const args = canonicalArguments(observation.argumentsJson);
+    const exactKey = `${observation.name}\u0000${args}`;
+    const failed = observation.result?.success === false;
+    const exactOn = this.guardrails.warnAfter.exact_failure > 0
+      || (this.guardrails.hardStopEnabled && this.guardrails.hardStopAfter.exact_failure > 0);
+    const sameOn = this.guardrails.warnAfter.same_tool_failure > 0
+      || (this.guardrails.hardStopEnabled && this.guardrails.hardStopAfter.same_tool_failure > 0);
+    if (!failed) {
+      if (exactOn) this.exactCounts.delete(exactKey);
+      if (sameOn) this.sameCounts.delete(observation.name);
+      return null;
+    }
+
+    const exactCount = exactOn ? (this.exactCounts.get(exactKey) ?? 0) + 1 : 0;
+    const sameCount = sameOn ? (this.sameCounts.get(observation.name) ?? 0) + 1 : 0;
+    if (exactOn) this.exactCounts.set(exactKey, exactCount);
+    if (sameOn) this.sameCounts.set(observation.name, sameCount);
+
+    const exactStop = this.guardrails.hardStopEnabled
+      && this.guardrails.hardStopAfter.exact_failure > 0
+      && exactCount >= this.guardrails.hardStopAfter.exact_failure;
+    const sameStop = this.guardrails.hardStopEnabled
+      && this.guardrails.hardStopAfter.same_tool_failure > 0
+      && sameCount >= this.guardrails.hardStopAfter.same_tool_failure;
+    if (exactStop || sameStop) {
+      const kind: ToolLoopKind = exactStop ? 'exact_failure' : 'same_tool_failure';
+      const repetitions = exactStop ? exactCount : sameCount;
+      return {
+        action: 'stop',
+        kind,
+        toolNames: [observation.name],
+        repetitions,
+        message: this.modeStopMessage(kind, observation.name, repetitions),
+      };
+    }
+
+    if (!this.guardrails.warningsEnabled) return null;
+    if (
+      this.guardrails.warnAfter.exact_failure > 0
+      && exactCount >= this.guardrails.warnAfter.exact_failure
+      && !this.exactWarned.has(exactKey)
+    ) {
+      this.exactWarned.add(exactKey);
+      return {
+        action: 'warn',
+        kind: 'exact_failure',
+        toolNames: [observation.name],
+        repetitions: exactCount,
+        message: `${observation.name} failed ${exactCount} times with the same arguments. Inspect the error and change arguments or approach instead of retrying it unchanged.`,
+      };
+    }
+    if (
+      this.guardrails.warnAfter.same_tool_failure > 0
+      && sameCount >= this.guardrails.warnAfter.same_tool_failure
+      && !this.sameWarned.has(observation.name)
+    ) {
+      this.sameWarned.add(observation.name);
+      return {
+        action: 'warn',
+        kind: 'same_tool_failure',
+        toolNames: [observation.name],
+        repetitions: sameCount,
+        message: `${observation.name} failed ${sameCount} times in this turn. Diagnose the latest error before calling that tool again.`,
+      };
+    }
+    return null;
   }
 
   /** Detect a repeated call or cycle repeated at least `repeats` times at the tail of history. */
@@ -197,7 +379,144 @@ export class ToolLoopGuard {
   }
 
   private stopMessage(kind: ToolLoopKind, toolNames: string[]): string {
-    const what = kind === 'repeated_call' ? `${toolNames[0]} kept returning the same result` : `the sequence ${toolNames.join(' → ')} kept repeating`;
+    const what = kind === 'repeated_cycle'
+      ? `the sequence ${toolNames.join(' → ')} kept repeating`
+      : `${toolNames[0]} kept returning the same result`;
     return `Stopped by the loop guard: ${what} after a warning, so no further progress was possible in this turn. Review the last results or rephrase the task.`;
+  }
+
+  private modeStopMessage(kind: ToolLoopKind, toolName: string, repetitions: number): string {
+    const what = kind === 'same_tool_failure'
+      ? `${toolName} failed ${repetitions} times in this turn`
+      : `${toolName} failed ${repetitions} times with the same arguments`;
+    return `Stopped by the loop guard: ${what}. Review the last error or rephrase the task.`;
+  }
+}
+
+function readCount(value: unknown, allowZero: boolean, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 10_000) return fallback;
+  if (value === 0) return allowZero ? 0 : fallback;
+  return value;
+}
+
+function readThresholds(
+  value: unknown,
+  fallback: ToolLoopFailureThresholds,
+): ToolLoopFailureThresholds {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    exact_failure: readCount(source.exact_failure, true, fallback.exact_failure),
+    same_tool_failure: readCount(source.same_tool_failure, true, fallback.same_tool_failure),
+    idempotent_no_progress: Math.max(
+      2,
+      readCount(source.idempotent_no_progress, false, fallback.idempotent_no_progress),
+    ),
+  };
+}
+
+/** Merge a partial config.toml `[tool_loop_guardrails]` section onto the historical defaults. */
+export function resolveToolLoopGuardrails(raw: unknown): ToolLoopGuardrailsConfig {
+  const defaults = DEFAULT_TOOL_LOOP_GUARDRAILS;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {
+      warningsEnabled: defaults.warningsEnabled,
+      hardStopEnabled: defaults.hardStopEnabled,
+      warnAfter: { ...defaults.warnAfter },
+      hardStopAfter: { ...defaults.hardStopAfter },
+    };
+  }
+  const data = raw as Record<string, unknown>;
+  const warnAfter = readThresholds(data.warnAfter ?? data.warn_after, defaults.warnAfter);
+  const hardStopAfter = readThresholds(data.hardStopAfter ?? data.hard_stop_after, defaults.hardStopAfter);
+  if (hardStopAfter.idempotent_no_progress <= warnAfter.idempotent_no_progress) {
+    hardStopAfter.idempotent_no_progress = warnAfter.idempotent_no_progress + 1;
+  }
+  return {
+    warningsEnabled: typeof data.warningsEnabled === 'boolean'
+      ? data.warningsEnabled
+      : typeof data.warnings_enabled === 'boolean'
+        ? data.warnings_enabled
+        : defaults.warningsEnabled,
+    hardStopEnabled: typeof data.hardStopEnabled === 'boolean'
+      ? data.hardStopEnabled
+      : typeof data.hard_stop_enabled === 'boolean'
+        ? data.hard_stop_enabled
+        : defaults.hardStopEnabled,
+    warnAfter,
+    hardStopAfter,
+  };
+}
+
+const TOOL_LOOP_CONFIG_MAX_BYTES = 512 * 1024;
+
+function readHomeConfigToml(): string | null {
+  const filePath = getCodeBuddyPath('config.toml');
+  try {
+    const linked = lstatSync(filePath);
+    const info = linked.isSymbolicLink() ? statSync(filePath) : linked;
+    if (!info.isFile()) {
+      logger.warn('tool loop guardrails: config.toml is not a regular file, historical thresholds kept');
+      return null;
+    }
+    if (info.size > TOOL_LOOP_CONFIG_MAX_BYTES) {
+      logger.warn('tool loop guardrails: config.toml exceeds the read bound, historical thresholds kept', {
+        bytes: info.size,
+      });
+      return null;
+    }
+    const flags = constants.O_RDONLY
+      | constants.O_NONBLOCK
+      | (linked.isSymbolicLink() ? 0 : (typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0));
+    const fd = openSync(filePath, flags);
+    try {
+      const opened = fstatSync(fd);
+      if (!opened.isFile() || opened.size > TOOL_LOOP_CONFIG_MAX_BYTES) {
+        logger.warn('tool loop guardrails: config.toml is not a bounded regular file, historical thresholds kept');
+        return null;
+      }
+      const buf = Buffer.alloc(opened.size);
+      let offset = 0;
+      while (offset < opened.size) {
+        const n = readSync(fd, buf, offset, opened.size - offset, offset);
+        if (n === 0) break;
+        offset += n;
+      }
+      return buf.subarray(0, offset).toString('utf8');
+    } finally {
+      closeSync(fd);
+    }
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: string }).code ?? '')
+      : '';
+    if (code === 'ENOENT') return null;
+    logger.warn('tool loop guardrails: config.toml unreadable, historical thresholds kept', { code });
+    return null;
+  }
+}
+
+/** Options for one task. Missing or unreadable config keeps the historical guard. */
+export function loadToolLoopGuardOptions(
+  readConfig: () => string | null = readHomeConfigToml,
+): ToolLoopGuardOptions {
+  let text: string | null;
+  try {
+    text = readConfig();
+  } catch (error) {
+    logger.warn('tool loop guardrails: config read failed, historical thresholds kept', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {};
+  }
+  if (!text || !text.trim()) return {};
+  try {
+    const parsed = TOML.parse(text) as Record<string, unknown>;
+    if (parsed.tool_loop_guardrails === undefined) return {};
+    return { guardrails: resolveToolLoopGuardrails(parsed.tool_loop_guardrails) };
+  } catch (error) {
+    logger.warn('tool loop guardrails: config.toml rejected, historical thresholds kept', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {};
   }
 }

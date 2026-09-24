@@ -8,6 +8,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { installCataloguePriceOverlays } from './model-pricing.js';
 import type { ModelStrength } from './model-strengths.js';
 
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -676,6 +677,26 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     contextWindow: 200000,
     maxOutputTokens: 64000,
     patchFormat: 'search_replace',
+  },
+
+  // GPT-6 family (astra, sol, luna) — served by the ChatGPT/Codex OAuth backend.
+  // Reasoning levels: the ones all three list in the catalogue (`ultra` is
+  // astra/sol only).
+  // The context window is the one that backend publishes in its `/models`
+  // catalogue (272 000, text + image, 2026-09-23); it is not an API figure.
+  // The catalogue does not publish an output ceiling: 128 000 follows the
+  // GPT-5.6 family and is an assumption, not a measurement.
+  {
+    model: 'gpt-6-*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 272_000,
+    maxOutputTokens: 128_000,
+    patchFormat: 'unified',
+    promptProfile: 'rich',
   },
 
   // GPT-5.6 Sol — public OpenAI API capabilities. Keep the official `gpt-5.6`
@@ -1350,6 +1371,49 @@ export function resetRuntimeModelContextCache(): void {
   resetModelStrengthsCache();
 }
 
+/** Champs qu'une surcharge de catalogue peut poser sur la fiche intégrée. */
+export interface ModelCatalogueCapabilityOverlay {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsReasoning?: boolean;
+  supportsVision?: boolean;
+  supportsToolCalls?: boolean;
+}
+
+const _catalogueOverlays = new Map<string, ModelCatalogueCapabilityOverlay>();
+
+function applyCatalogueOverlay(modelName: string, config: ModelToolConfig): ModelToolConfig {
+  const extra = _catalogueOverlays.get(modelCacheKey(modelName));
+  if (!extra) return config;
+  const next: ModelToolConfig = { ...config };
+  if (extra.contextWindow !== undefined) next.contextWindow = extra.contextWindow;
+  if (extra.maxOutputTokens !== undefined) next.maxOutputTokens = extra.maxOutputTokens;
+  if (extra.supportsReasoning !== undefined) next.supportsReasoning = extra.supportsReasoning;
+  if (extra.supportsVision !== undefined) next.supportsVision = extra.supportsVision;
+  if (extra.supportsToolCalls !== undefined) next.supportsToolCalls = extra.supportsToolCalls;
+  return next;
+}
+
+/** Pose les surcharges utilisateur. `null` retire tout. N'affecte pas le catalogue intégré. */
+export function installModelCatalogueOverlays(
+  entries: Record<string, ModelCatalogueCapabilityOverlay> | null,
+): void {
+  _catalogueOverlays.clear();
+  if (entries) {
+    for (const [modelName, overlay] of Object.entries(entries)) {
+      if (!modelName.trim()) continue;
+      _catalogueOverlays.set(modelCacheKey(modelName), overlay);
+    }
+  }
+  _configCache.clear();
+  resetModelStrengthsCache();
+}
+
+export function resetModelCatalogueOverlays(): void {
+  installModelCatalogueOverlays(null);
+  installCataloguePriceOverlays(null);
+}
+
 /**
  * Le motif qui couvre ce modèle, ou `null` s'il n'en existe aucun.
  *
@@ -1376,7 +1440,7 @@ export function getModelToolConfig(
 ): ModelToolConfig {
   // Use cache for default config lookups (hot path)
   if (!customConfigs && _configCache.has(modelName)) {
-    return applyEnvContextOverride(_configCache.get(modelName)!);
+    return applyEnvContextOverride(applyCatalogueOverlay(modelName, _configCache.get(modelName)!));
   }
 
   const configs = [...(customConfigs || []), ...DEFAULT_MODEL_CONFIGS];
@@ -1389,7 +1453,7 @@ export function getModelToolConfig(
     });
     const resolved = applyRuntimeContextWindow(modelName, match.config, match.byFamily);
     if (!customConfigs) _configCache.set(modelName, resolved);
-    return applyEnvContextOverride(resolved);
+    return applyEnvContextOverride(applyCatalogueOverlay(modelName, resolved));
   }
 
   // Permissive fallback
@@ -1404,7 +1468,7 @@ export function getModelToolConfig(
     patchFormat: 'search_replace',
   };
   if (!customConfigs) _configCache.set(modelName, fallback);
-  return applyEnvContextOverride(fallback);
+  return applyEnvContextOverride(applyCatalogueOverlay(modelName, fallback));
 }
 
 // ─── Model strengths (single source of truth) ───────────────────────
@@ -1428,7 +1492,7 @@ const NAME_LONG_CONTEXT_FALLBACK = /gemini|pro|opus|sonnet|long|1m|200k|128k/i;
 
 function matchModelConfig(modelName: string): { cfg: ModelToolConfig; matched: boolean } {
   const match = findConfigMatch(modelName, DEFAULT_MODEL_CONFIGS);
-  if (match) return { cfg: match.config, matched: true };
+  if (match) return { cfg: applyCatalogueOverlay(modelName, match.config), matched: true };
   return { cfg: getModelToolConfig(modelName), matched: false };
 }
 

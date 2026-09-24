@@ -15,7 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
-import { scanFile as scanSkillFile } from '../security/skill-scanner.js';
+import { scanDeniesInstall, scanFile as scanSkillFile } from '../security/skill-scanner.js';
 import { getSkillRegistry } from './registry.js';
 
 const SKILLS_DIR = '.codebuddy/skills';
@@ -153,20 +153,28 @@ export function generateSessionSkill(options: GenerateOptions): GeneratedSkill |
   fs.mkdirSync(skillDir, { recursive: true });
   fs.writeFileSync(filePath, markdown, { mode: 0o600 });
 
-  // Security scan before registration
+  // Security scan before registration. An unread file is not a clean skill.
   try {
     const scan = scanSkillFile(filePath);
-    const critical = scan.findings.filter((f) => f.severity === 'critical');
-    if (critical.length > 0) {
+    if (scanDeniesInstall(scan)) {
       logger.warn('Authored skill blocked by security scanner', {
         name,
-        findings: critical.map((f) => f.description),
+        findings: scan.findings.map((f) => f.description),
       });
       fs.rmSync(skillDir, { recursive: true, force: true });
       return null;
     }
   } catch {
-    // scanner unavailable — allow through
+    logger.warn('Authored skill blocked by security scanner', {
+      name,
+      findings: ['the scanner did not read a regular file'],
+    });
+    try {
+      fs.rmSync(skillDir, { recursive: true, force: true });
+    } catch {
+      // Removal failed. Registration is still refused by the null return.
+    }
+    return null;
   }
 
   if (options.register !== false) {

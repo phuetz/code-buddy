@@ -10,7 +10,7 @@ import type { Command } from 'commander';
 export function registerConfigCommand(program: Command): void {
   const config = program
     .command('config')
-    .description('Show environment variable configuration and validation');
+    .description('Show environment variables and the active TOML configuration');
 
   config
     .command('show')
@@ -37,35 +37,34 @@ export function registerConfigCommand(program: Command): void {
 
   config
     .command('validate')
-    .description('Validate current environment configuration')
+    .description('Validate environment variables and the active TOML file')
     .action(async () => {
-      const { validateEnv } = await import('../../config/env-schema.js');
-      const result = validateEnv();
+      const { runConfigValidate } = await import('../../config/config-cli.js');
+      const result = await runConfigValidate();
 
-      if (result.errors.length === 0 && result.warnings.length === 0) {
-        console.log('\nEnvironment configuration is valid.\n');
+      if (result.ok && result.envWarnings.length === 0) {
+        console.log('\nEnvironment and active TOML configuration are valid.\n');
         return;
       }
 
-      if (result.errors.length > 0) {
+      if (result.envErrors.length > 0 || result.tomlProblem) {
         console.log('\nErrors:');
-        for (const err of result.errors) {
+        for (const err of result.envErrors) {
           console.log(`  ! ${err}`);
         }
+        if (result.tomlProblem) console.log(`  ! ${result.tomlProblem}`);
       }
 
-      if (result.warnings.length > 0) {
+      if (result.envWarnings.length > 0) {
         console.log('\nWarnings:');
-        for (const warn of result.warnings) {
+        for (const warn of result.envWarnings) {
           console.log(`  ? ${warn}`);
         }
       }
 
       console.log('');
 
-      if (!result.valid) {
-        process.exit(1);
-      }
+      if (!result.ok) process.exitCode = 1;
     });
 
   config
@@ -103,5 +102,150 @@ export function registerConfigCommand(program: Command): void {
       }
 
       console.log('');
+    });
+
+  const bindMutation = (opts: { dryRun?: boolean; json?: boolean }): { dryRun: boolean; json: boolean } => ({
+    dryRun: opts.dryRun === true,
+    json: opts.json === true,
+  });
+
+  config
+    .command('set [key] [value]')
+    .description('Set a user config key outside a session. Unknown keys are refused.')
+    .option('--dry-run', 'Report the change without writing')
+    .option('--json', 'Print the structured report, or pass a JSON object of keys when value is omitted')
+    .action(async (key: string | undefined, value: string | undefined, opts: { dryRun?: boolean; json?: boolean }) => {
+      const flags = bindMutation(opts);
+      const { runConfigSet, formatConfigReport } = await import('../../config/config-cli.js');
+      let batch: Record<string, unknown> | undefined;
+      let singleKey = key;
+      let singleValue = value;
+      if (flags.json && key && value === undefined && key.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(key) as unknown;
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('le JSON doit être un objet de clés');
+          }
+          batch = parsed as Record<string, unknown>;
+          singleKey = undefined;
+          singleValue = undefined;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(message);
+          process.exitCode = 1;
+          return;
+        }
+      }
+      const report = await runConfigSet({
+        ...(singleKey ? { key: singleKey } : {}),
+        ...(singleValue !== undefined ? { value: singleValue } : {}),
+        ...(batch ? { batch } : {}),
+        dryRun: flags.dryRun,
+      });
+      process.stdout.write(formatConfigReport(report, flags.json));
+      if (!report.ok) process.exitCode = 1;
+    });
+
+  config
+    .command('patch <key> <value>')
+    .description('Merge an object into the user config. Null removes a key. Scalars replace.')
+    .option('--dry-run', 'Report the change without writing')
+    .option('--json', 'Print the structured report')
+    .action(async (key: string, value: string, opts: { dryRun?: boolean; json?: boolean }) => {
+      const flags = bindMutation(opts);
+      const { runConfigPatch, formatConfigReport } = await import('../../config/config-cli.js');
+      const report = await runConfigPatch({ key, value, dryRun: flags.dryRun });
+      process.stdout.write(formatConfigReport(report, flags.json));
+      if (!report.ok) process.exitCode = 1;
+    });
+
+  config
+    .command('unset <key>')
+    .description('Remove a key from the user config file')
+    .option('--dry-run', 'Report the change without writing')
+    .option('--json', 'Print the structured report')
+    .action(async (key: string, opts: { dryRun?: boolean; json?: boolean }) => {
+      const flags = bindMutation(opts);
+      const { runConfigUnset, formatConfigReport } = await import('../../config/config-cli.js');
+      const report = await runConfigUnset({ key, dryRun: flags.dryRun });
+      process.stdout.write(formatConfigReport(report, flags.json));
+      if (!report.ok) process.exitCode = 1;
+    });
+
+  config
+    .command('schema')
+    .description('Print the JSON Schema of the TOML config and the environment variables')
+    .action(async () => {
+      const { runConfigSchema } = await import('../../config/config-cli.js');
+      process.stdout.write(`${JSON.stringify(runConfigSchema(), null, 2)}\n`);
+    });
+
+  config
+    .allowUnknownOption(true)
+    .option('--section <name>', 'Assistant : model, gateway, channels, mcp, sandbox ou exec')
+    .option('--answers <file>', 'Réponses JSON. « - » lit l\'entrée standard')
+    .action(async (opts: { section?: string; answers?: string }) => {
+      const tokens = config.args;
+      const json = tokens.includes('--json');
+      const dryRun = tokens.includes('--dry-run');
+      if (!opts.section) {
+        config.outputHelp();
+        process.exitCode = 1;
+        return;
+      }
+      const { parseAnswersText, runConfigAssistant } = await import('../../config/config-assistant.js');
+      const { formatConfigReport } = await import('../../config/config-cli.js');
+      let text = '';
+      const answersPath = opts.answers;
+      const readStdin = !answersPath || answersPath === '-';
+      if (readStdin && !answersPath && process.stdin.isTTY) {
+        process.stdout.write(formatConfigReport({
+          ok: false,
+          operations: [],
+          checks: [
+            { name: 'known-key', ok: false },
+            { name: 'type', ok: true },
+            { name: 'document', ok: false },
+            { name: 'backup', ok: true, detail: 'non exécuté' },
+          ],
+          errors: ['Fournissez --answers <fichier>, ou un objet JSON sur l\'entrée standard.'],
+        }, json));
+        process.exitCode = 1;
+        return;
+      }
+      if (readStdin) {
+        text = await new Promise<string>((resolve, reject) => {
+          const chunks: Buffer[] = [];
+          process.stdin.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+          process.stdin.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+          process.stdin.on('error', reject);
+        });
+      } else {
+        const { readFileSync } = await import('node:fs');
+        text = readFileSync(answersPath ?? '', 'utf8');
+      }
+      const parsed = parseAnswersText(text);
+      if (!parsed.ok) {
+        process.stdout.write(formatConfigReport({
+          ok: false,
+          operations: [],
+          checks: [
+            { name: 'known-key', ok: false },
+            { name: 'type', ok: true },
+            { name: 'document', ok: false },
+            { name: 'backup', ok: true, detail: 'non exécuté' },
+          ],
+          errors: [parsed.error],
+        }, json));
+        process.exitCode = 1;
+        return;
+      }
+      const report = await runConfigAssistant({
+        section: opts.section,
+        answers: parsed.answers,
+        dryRun,
+      });
+      process.stdout.write(formatConfigReport(report, json));
+      if (!report.ok) process.exitCode = 1;
     });
 }

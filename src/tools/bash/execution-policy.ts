@@ -16,6 +16,7 @@ import {
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { checkDeclarativePermission } from '../../security/declarative-rules.js';
 import { getPermissionModeManager } from '../../security/permission-modes.js';
+import { getTurnOrigin } from '../../security/turn-origin.js';
 import { PolicyEngine } from '../../security/policy-engine.js';
 import { getFilteredEnv } from './command-validator.js';
 import { CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
@@ -207,6 +208,23 @@ export async function evaluateShellExecution(
       action: 'sandbox',
       reason: 'Declarative allow accepted; workspace sandbox remains enforced',
     };
+  }
+
+  // A voice turn runs on speech that was only HEARD (television, a guest, the
+  // robot's own voice) with nobody at a terminal. Under a cautious posture,
+  // anything beyond a read — workspace mutations, scripting, unknown commands,
+  // all classified `sandbox` — must be approved by a human, which a voice turn
+  // cannot do alone: `ask` is refused when no one can answer. An explicit
+  // dontAsk/bypassPermissions voice posture stays the user's own choice.
+  if (evaluation.action === 'sandbox' && getTurnOrigin() === 'voice') {
+    const posture = getPermissionModeManager().getMode();
+    if (posture !== 'dontAsk' && posture !== 'bypassPermissions') {
+      return {
+        ...evaluation,
+        action: 'ask',
+        reason: 'Voice turn: commands beyond reads need human approval',
+      };
+    }
   }
 
   // `allow` means "no approval needed", not "escape confinement". This is

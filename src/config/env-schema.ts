@@ -418,7 +418,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'CHATGPT_MODEL',
     type: 'string',
-    default: 'gpt-5.6-sol',
+    default: 'gpt-6-sol',
     description: 'Default model for ChatGPT OAuth / Codex Responses backend',
     category: 'provider',
   },

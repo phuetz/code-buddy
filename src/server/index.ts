@@ -209,7 +209,11 @@ function wantsStatusReport(query: Record<string, unknown>): boolean {
 /**
  * Create and configure the Express application
  */
-function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Application {
+function createApp(
+  config: ServerConfig,
+  cognitiveHub: CognitiveHub,
+  resolveListenPort: () => number = () => config.port,
+): Application {
   const app = express();
 
   // Trust proxy (for rate limiting behind reverse proxy)
@@ -888,7 +892,7 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
       },
       servers: [
         {
-          url: `http://${config.host}:${config.port}`,
+          url: `http://${config.host}:${resolveListenPort()}`,
           description: 'Local server',
         },
       ],
@@ -1171,7 +1175,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     cognitiveHub,
     createInternalCognitivePrincipal('embedded-cowork'),
   );
-  const app = createApp(config, cognitiveHub);
+  const advertisedPort = { current: config.port };
+  const app = createApp(config, cognitiveHub, () => advertisedPort.current);
   // Optional TLS: serve the API (including /api/mobile) over HTTPS when
   // CODEBUDDY_HTTPS / CODEBUDDY_MOBILE_TLS is set so the mobile-supervision
   // endpoint can be exposed off-device securely. Default (no env) is plain HTTP,
@@ -1334,6 +1339,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
 
   return new Promise((resolve, reject) => {
     server.listen(config.port, config.host, async () => {
+      const bound = server.address();
+      if (bound && typeof bound === 'object') advertisedPort.current = bound.port;
       const baseUrl = getServerBaseUrl(server, config);
 
       logger.info(`API Server started on ${baseUrl}`);
@@ -1682,18 +1689,21 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 context?: import('../sensory/voice-entrainment.js').VoiceTurnContext,
               ) => Promise<void> = reply;
               let reminderShortcut: ((t: string) => boolean) | undefined;
+              // Narrower than reminderShortcut: only what may skip the address gate.
+              let reminderGateBypass: ((t: string) => boolean) | undefined;
               let maisonShortcut: ((t: string) => boolean) | undefined;
               if (process.env.CODEBUDDY_REMINDERS === 'true') {
                 const rem = await import('../companion/reminders.js');
                 const { sayNow } = await import('../sensory/voice-loop.js');
-                // A reminder voice-ack OR a voice-creation both bypass the silence gate and
-                // short-circuit the normal reply (the robot confirms instead of chatting).
+                // Reminder phrases short-circuit the normal reply (the robot confirms instead
+                // of chatting). Only acks/snoozes/undos also bypass the silence gate.
                 reminderShortcut = (t: string) =>
                   rem.matchAck(t, Date.now()) !== null ||
                   rem.isSnoozeCommand(t, Date.now()) ||
                   rem.isUndoCommand(t, Date.now()) ||
                   rem.isReminderVoiceCommand(t) ||
                   rem.parseVoiceReminder(t) !== null;
+                reminderGateBypass = (t: string) => rem.bypassesAddressGate(t, Date.now());
                 onHeard = async (t, context) => {
                   const sayCanonical = createCanonicalVoiceReplySpeaker(
                     t,
@@ -1860,11 +1870,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               if (responsePolicy.gateEnabled) {
                 // Reuse the session decider shared with the vision greeting above, so a
                 // person-arrival greeting's open engagement window carries into this gate.
+                // Agenda requests and reminder creations are NOT bypasses: they must be
+                // addressed like any request, or ambient speech (the radio) triggers them.
                 wireOpts.shouldRespond = (t) =>
-                  reminderShortcut?.(t) || maisonShortcut?.(t)
+                  reminderGateBypass?.(t) || maisonShortcut?.(t)
                     ? Promise.resolve({
                         respond: true,
-                        reason: reminderShortcut?.(t) ? 'reminder' : 'maison',
+                        reason: reminderGateBypass?.(t) ? 'reminder' : 'maison',
                       })
                     : responseDecider.decide(t);
               }

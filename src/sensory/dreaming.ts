@@ -161,8 +161,27 @@ export async function runForgettingPass(): Promise<void> {
       logger.info(`[dreaming] forgetting pass: ${faded} memories faded (archived, recoverable)`);
     }
   } catch (err) {
-    logger.warn(`[dreaming] forgetting pass failed: ${err instanceof Error ? err.message : String(err)}`);
+    const message = err instanceof Error ? err.message : String(err);
+    // The pass runs every few beats: an unchanged failure used to be warned
+    // twice a minute (4 937 times in 36 h), drowning the journal. Warn once per
+    // hour per distinct message; repeats stay at debug level.
+    const now = Date.now();
+    const last = forgettingWarnedAt.get(message);
+    if (last === undefined || now - last >= FORGETTING_WARN_EVERY_MS) {
+      forgettingWarnedAt.set(message, now);
+      logger.warn(`[dreaming] forgetting pass failed: ${message} (repeats silenced for 1 h)`);
+    } else {
+      logger.debug(`[dreaming] forgetting pass failed again: ${message}`);
+    }
   }
+}
+
+const FORGETTING_WARN_EVERY_MS = 60 * 60_000;
+const forgettingWarnedAt = new Map<string, number>();
+
+/** Test seam: forget which failures were already warned. */
+export function resetForgettingWarningsForTests(): void {
+  forgettingWarnedAt.clear();
 }
 
 /**

@@ -86,10 +86,29 @@ function auth(): ChatGptAuth {
 
 describe('ChatGPT OAuth model policy', () => {
   it('canonicalizes the public API alias for the OAuth backend', () => {
-    expect(normalizeChatGptOAuthModel('gpt-5.6')).toBe(CHATGPT_OAUTH_DEFAULT_MODEL);
+    expect(normalizeChatGptOAuthModel('gpt-5.6')).toBe('gpt-5.6-sol');
+    expect(CHATGPT_OAUTH_DEFAULT_MODEL).toBe('gpt-6-sol');
     expect(isChatGptSubscriptionModel('gpt-5.6')).toBe(true);
     expect(isChatGptSubscriptionModel('gpt-5.6-luna')).toBe(true);
     expect(isChatGptSubscriptionModel('grok-code-fast-1')).toBe(false);
+  });
+
+  it('treats the GPT-6 family as served when the catalogue is unavailable', () => {
+    for (const model of ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
+      expect(isChatGptSubscriptionModel(model)).toBe(true);
+      expect(selectChatGptOAuthModel(model, null)).toBe(model);
+    }
+    expect(isChatGptSubscriptionModel('gpt-60')).toBe(false);
+  });
+
+  it('gives GPT-6 the catalogue defaults when the catalogue is unavailable', () => {
+    for (const model of ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']) {
+      expect(resolveChatGptReasoningEffort(undefined, model, null)).toBe('medium');
+      expect(resolveChatGptReasoningEffort('minimal', model, null)).toBe('low');
+      expect(modelUsesResponsesLite(model, null)).toBe(true);
+    }
+    expect(resolveChatGptReasoningEffort('ultra', 'gpt-6-astra', null)).toBe('ultra');
+    expect(resolveChatGptReasoningEffort('ultra', 'gpt-6-luna', null)).toBe('max');
   });
 
   it('filters hidden/unsupported entries and sorts list-visible API models by priority', () => {
@@ -137,6 +156,21 @@ describe('ChatGPT OAuth model policy', () => {
 });
 
 describe('ChatGptModelCatalogClient', () => {
+  // The backend filters /models by client_version: on 2026-09-23 the same
+  // account saw no GPT-6 model with 0.144.1, and all three with 0.155.1.
+  it.skipIf(Boolean(process.env.CODEBUDDY_CODEX_CLIENT_VERSION))(
+    'announces a client version recent enough to be offered GPT-6',
+    async () => {
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+        new Response(JSON.stringify(rawCatalog), { status: 200 }),
+      );
+      await new ChatGptModelCatalogClient({ fetchImpl: fetchMock, cacheTtlMs: 0 }).discover(auth());
+      const version = new URL(String(fetchMock.mock.calls[0]![0])).searchParams.get('client_version')!;
+      const [major, minor] = version.split('.').map(Number);
+      expect(major! > 0 || minor! >= 155).toBe(true);
+    },
+  );
+
   it('sends account auth, client_version, and revalidates with ETag', async () => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify(rawCatalog), {

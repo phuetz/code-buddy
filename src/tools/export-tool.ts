@@ -92,7 +92,7 @@ export class ExportTool {
       return {
         success: true,
         output: `📤 Exported conversation to ${outputPath}`,
-        data: { path: outputPath, format: options.format, size: content.length }
+        data: { path: outputPath, format: options.format, size: Buffer.byteLength(content, 'utf8') }
       };
     } catch (error: unknown) {
       return {

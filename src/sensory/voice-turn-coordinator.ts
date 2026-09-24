@@ -66,6 +66,8 @@ export interface VoiceTurnCounters {
   suppressed: number;
   interrupted: number;
   failed: number;
+  /** Turns closed by the watchdog because no caller ever finished them. */
+  abandoned?: number;
 }
 
 export interface VoiceTurnRuntimeSnapshot {
@@ -99,6 +101,16 @@ export function resolveVoiceRuntimeFile(env: NodeJS.ProcessEnv = process.env): s
   const configured = env[VOICE_RUNTIME_FILE_ENV]?.trim();
   return resolve(configured || join(homedir(), '.codebuddy', 'companion', 'voice-runtime.json'));
 }
+
+/**
+ * Watchdog, after Pipecat's `user_turn_stop_timeout`: a turn is closed by its
+ * caller, and every caller path that forgets one used to leave it "active"
+ * forever (≈ 6 500 in 36 h on the live robot, the published phase stuck on
+ * `listening`). The coordinator now expires them itself.
+ */
+const LISTENING_STALE_MS = 30_000;
+const ACTIVE_STALE_MS = 15 * 60_000;
+const MAX_ACTIVE_TURNS = 32;
 
 const PHASES = new Set<VoiceTurnPhase>([
   'idle', 'listening', 'transcribing', 'deciding', 'thinking', 'speaking',
@@ -223,7 +235,7 @@ export class VoiceTurnCoordinator {
   private sequence = 0;
   private phase: VoiceTurnPhase = 'idle';
   private activeTurnId: string | undefined;
-  private readonly activeTurns = new Map<string, VoiceTurnPhase>();
+  private readonly activeTurns = new Map<string, { phase: VoiceTurnPhase; at: number }>();
   private recent: VoiceTurnTransition[] = [];
   private attention: VoiceAttentionSnapshot | undefined;
   private counters: VoiceTurnCounters = {
@@ -233,6 +245,7 @@ export class VoiceTurnCoordinator {
     suppressed: 0,
     interrupted: 0,
     failed: 0,
+    abandoned: 0,
   };
 
   constructor(options: VoiceTurnCoordinatorOptions = {}) {
@@ -260,14 +273,15 @@ export class VoiceTurnCoordinator {
       item => item.turnId === normalizedTurnId && item.phase === phase,
     );
     const terminal = ['interrupted', 'suppressed', 'completed', 'failed', 'idle'].includes(phase);
+    this.expireStaleTurns(this.now(), normalizedTurnId, phase);
     if (terminal) {
       this.activeTurns.delete(normalizedTurnId);
       const nextActive = [...this.activeTurns.entries()].at(-1);
-      this.phase = nextActive?.[1] ?? phase;
+      this.phase = nextActive?.[1].phase ?? phase;
       this.activeTurnId = nextActive?.[0];
     } else {
       this.activeTurns.delete(normalizedTurnId);
-      this.activeTurns.set(normalizedTurnId, phase);
+      this.activeTurns.set(normalizedTurnId, { phase, at: this.now() });
       this.phase = phase;
       this.activeTurnId = normalizedTurnId;
     }
@@ -282,6 +296,30 @@ export class VoiceTurnCoordinator {
     const snapshot = this.snapshot();
     this.persist(snapshot);
     return snapshot;
+  }
+
+  /**
+   * Close turns nobody will close: a `listening` turn superseded by a new one
+   * or silent for 30 s, any turn active for 15 min, and the oldest beyond 32.
+   */
+  private expireStaleTurns(nowMs: number, currentTurnId: string, phase: VoiceTurnPhase): void {
+    const abandon = (turnId: string): void => {
+      this.activeTurns.delete(turnId);
+      this.counters.abandoned = (this.counters.abandoned ?? 0) + 1;
+    };
+    for (const [turnId, turn] of [...this.activeTurns.entries()]) {
+      if (turnId === currentTurnId) continue;
+      const age = nowMs - turn.at;
+      const superseded = phase === 'listening' && turn.phase === 'listening';
+      if (superseded || (turn.phase === 'listening' && age > LISTENING_STALE_MS) || age > ACTIVE_STALE_MS) {
+        abandon(turnId);
+      }
+    }
+    while (this.activeTurns.size >= MAX_ACTIVE_TURNS) {
+      const oldest = this.activeTurns.keys().next().value;
+      if (oldest === undefined || oldest === currentTurnId) break;
+      abandon(oldest);
+    }
   }
 
   snapshot(): VoiceTurnRuntimeSnapshot {
@@ -322,6 +360,7 @@ export class VoiceTurnCoordinator {
       suppressed: 0,
       interrupted: 0,
       failed: 0,
+      abandoned: 0,
     };
     this.persist(this.snapshot());
   }
