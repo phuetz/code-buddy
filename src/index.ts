@@ -29,7 +29,7 @@ import {
   installPermissionModeActionHook,
   parseCliPermissionMode,
 } from './cli/permission-mode-option.js';
-import { getRequestedProfile } from './cli/requested-profile.js';
+import { preloadRequestedProfile } from './cli/preload-profile.js';
 import { registerBackupCommand } from './commands/cli/backup-command.js';
 import { registerSensoryCommand } from './commands/cli/sensory-command.js';
 import { getConfigManager } from './config/toml-config.js';
@@ -642,18 +642,13 @@ async function saveCommandLineSettings(
 
 /** Providers served by a local OpenAI-compatible runtime (no cloud model catalog). */
 
-// Load model from detected provider or user settings
-async function loadModel(): Promise<string | undefined> {
+// Load model from detected provider or user settings.
+// Une seule chaîne : resolveStartupModel. Le `--model` de l'appelant y entre
+// en premier. Sans choix explicite, le active_model du fichier généré ne
+// masque pas le fournisseur détecté. Ollama garde sa sonde ensuite.
+async function loadModel(cliModel?: string): Promise<string | undefined> {
   await ensureEnvLoaded();
   const { isModelCompatibleWithProvider } = await import('./providers/model-provider-compat.js');
-
-  // 1. Explicit env var takes highest priority
-  if (process.env.GROK_MODEL) return process.env.GROK_MODEL;
-
-  // 2. Puis un profil explicite — même raison que dans loadBaseURL : un choix
-  //    nommé sur la ligne de commande passe avant une supposition.
-  const duProfil = profilActif().model;
-  if (duProfil) return duProfil;
 
   const detected = await getDetectedProvider();
 
@@ -665,6 +660,31 @@ async function loadModel(): Promise<string | undefined> {
     settingsModel = getSettingsManager().getCurrentModel() || undefined;
   } catch (_err) {
     logger.debug('Failed to load model from settings manager', { error: _err });
+  }
+
+  // Catalogue TOML. Une configuration illisible s'arrête ici : on ne continue
+  // pas avec un autre modèle.
+  try {
+    const catalogue = await import('./config/model-catalogue.js');
+    const decision = catalogue.resolveStartupModel({
+      argv: process.argv,
+      cli: cliModel,
+      env: process.env,
+      allowUserHome: true,
+      settingsModel: settingsModel ?? null,
+      detected: detected
+        ? { provider: detected.provider, defaultModel: detected.defaultModel }
+        : null,
+      isCompatible: (model, provider) => isModelCompatibleWithProvider(model, provider),
+    });
+    if (decision.model) return decision.model;
+  } catch (error) {
+    const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+    if (error instanceof CatalogueConfigError) {
+      cli.error(error.message);
+      process.exit(1);
+    }
+    throw error;
   }
 
   // 2. Local runtime (Ollama): resolve to a model that is ACTUALLY installed,
@@ -686,10 +706,17 @@ async function loadModel(): Promise<string | undefined> {
         ? settingsModel
         : undefined) ||
       detected.defaultModel;
+    const explicitOllamaModel = process.env.OLLAMA_MODEL?.trim();
     const resolution = await resolveInstalledOllamaModel({
       baseURL: detected.baseURL,
       requested,
+      strict: Boolean(explicitOllamaModel),
     });
+    if (explicitOllamaModel && resolution.substitutionRefused) {
+      const { strictModelRefusalMessage } = await import('./providers/local-model-resolver.js');
+      cli.error(strictModelRefusalMessage(explicitOllamaModel));
+      process.exit(1);
+    }
     if (resolution.model) return resolution.model;
     const hint = buildOllamaPullHint({
       baseURL: detected.baseURL,
@@ -2032,7 +2059,18 @@ program
         : null;
       let apiKey = options.apiKey || explicitProvider?.apiKey || await loadApiKey();
       let baseURL = options.baseUrl || explicitProvider?.baseURL || await loadBaseURL();
-      let model = options.model || explicitProvider?.model || await loadModel();  // let: can be overridden by --agent
+      try {
+        const catalogue = await import('./config/model-catalogue.js');
+        catalogue.loadAndActivateUserCatalogue(process.env, true);
+      } catch (error) {
+        const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+        if (error instanceof CatalogueConfigError) {
+          cli.error(error.message);
+          process.exit(1);
+        }
+        throw error;
+      }
+      let model = await loadModel(options.model || explicitProvider?.model);  // let: can be overridden by --agent
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2073,7 +2111,7 @@ program
             return {
               apiKey: nextApiKey,
               baseURL: options.baseUrl || await loadBaseURL(),
-              model: options.model || await loadModel(),
+              model: await loadModel(options.model),
             };
           },
           onLoginError: (err) => {
@@ -2695,7 +2733,7 @@ gitCommand
       // Get API key from options, environment, or user settings
       const apiKey = options.apiKey || await loadApiKey();
       const baseURL = options.baseUrl || await loadBaseURL();
-      const model = options.model || await loadModel();
+      const model = await loadModel(options.model);
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2764,6 +2802,16 @@ function addLazyCommand(
     await parent.parseAsync(process.argv);
   });
 }
+
+addLazyCommand(
+  program,
+  'models',
+  'Lister, afficher ou rafraîchir le catalogue de modèles',
+  async () => {
+    const { createModelsCommand } = await import('./commands/models-command.js');
+    return createModelsCommand();
+  },
+);
 
 addLazyCommand(
   program,
@@ -4382,33 +4430,7 @@ installPermissionModeActionHook(program, async (mode) => {
 // Apply the profile before parsing so it governs root chat, lazy subcommands,
 // slash-command menus, tool selection, and `buddy --help` consistently.
 process.argv = hoistPermissionModeOption(process.argv);
-const requestedProfile = getRequestedProfile(process.argv);
-if (requestedProfile.kind === 'missing') {
-  try {
-    getConfigManager().load();
-  } catch (_error) {
-    // Listing available names is best-effort; the missing-value error still stands.
-  }
-  let available = '(none defined)';
-  try {
-    const names = Object.keys(getConfigManager().getConfig().profiles ?? {});
-    if (names.length) available = names.join(', ');
-  } catch (_error) {
-    available = 'core, all';
-  }
-  process.stderr.write(
-    `error: option '--profile <name>' argument missing. Available profiles: ${available}\n`,
-  );
-  process.exitCode = 1;
-} else if (requestedProfile.kind === 'value') {
-  try {
-    getConfigManager().load();
-    getConfigManager().applyProfile(requestedProfile.name);
-  } catch (err) {
-    process.stderr.write(`Profile error: ${err instanceof Error ? err.message : String(err)}\n`);
-    process.exitCode = 1;
-  }
-}
+preloadRequestedProfile(process.argv);
 
 function isRootHelpRequest(argv: readonly string[]): boolean {
   const args = argv.slice(2);

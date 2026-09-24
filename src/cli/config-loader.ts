@@ -50,8 +50,9 @@ export function loadBaseURL(): string {
  * Load model from environment or user settings
  */
 export function loadModel(): string | undefined {
-  // First check environment variables
-  let model = process.env.GROK_MODEL;
+  // First check environment variables. CODEBUDDY_MODEL is the catalogue-wide
+  // name; GROK_MODEL stays the historical override.
+  let model = process.env.CODEBUDDY_MODEL || process.env.GROK_MODEL;
 
   if (!model) {
     // Use the unified model loading from settings manager

@@ -10,14 +10,36 @@
 
 import { getModelRegistry, type ModelPricing } from './model-registry.js';
 
-// ============================================================================
-// Primary API — per 1M tokens
-// ============================================================================
+export type { ModelPricing };
+
+const cataloguePrices = new Map<string, ModelPricing>();
+
+/**
+ * Prix écrits dans le TOML. `null` retire la surcharge.
+ * Sans surcharge, le registre intégré est inchangé.
+ */
+export function installCataloguePriceOverlays(
+  entries: Record<string, ModelPricing> | null,
+): void {
+  cataloguePrices.clear();
+  if (!entries) return;
+  for (const [name, price] of Object.entries(entries)) {
+    const key = name.trim().toLowerCase();
+    if (!key) continue;
+    cataloguePrices.set(key, {
+      inputPerMillion: price.inputPerMillion,
+      outputPerMillion: price.outputPerMillion,
+    });
+  }
+}
 
 /**
  * Get model pricing in "per 1M tokens" format.
+ * Un prix présent dans la configuration gagne sur le registre intégré.
  */
 export function getModelPricing(model: string): ModelPricing {
+  const overlay = cataloguePrices.get(model.trim().toLowerCase());
+  if (overlay) return { ...overlay };
   return getModelRegistry().getPricing(model);
 }
 

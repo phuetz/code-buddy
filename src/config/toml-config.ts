@@ -996,103 +996,433 @@ export function parseTOML(content: string): Record<string, unknown> {
   return result;
 }
 
+const MODEL_STANDARD_KEYS = new Set([
+  'provider',
+  'model_id',
+  'price_per_m_input',
+  'price_per_m_output',
+  'max_context_tokens',
+  'description',
+]);
+
+export interface PreservedUserConfig {
+  catalogue?: Record<string, unknown>;
+  modelRoles?: Record<string, unknown>;
+  modelAliases?: Record<string, unknown>;
+  profiles?: Record<string, unknown>;
+  modelExtras: Record<string, Record<string, unknown>>;
+  /** Document lu, sans les valeurs par défaut ajoutées en mémoire. */
+  source?: Record<string, unknown>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Sections que le sérialiseur historique ne sait pas réécrire, lues sur le fichier utilisateur. */
+export function extractPreservedUserConfig(parsed: Record<string, unknown>): PreservedUserConfig {
+  const source = structuredClone(parsed);
+  const preserved: PreservedUserConfig = { modelExtras: {}, source };
+  if (isPlainObject(source.catalogue)) preserved.catalogue = source.catalogue;
+  if (isPlainObject(source.model_roles)) preserved.modelRoles = source.model_roles;
+  if (isPlainObject(source.model_aliases)) preserved.modelAliases = source.model_aliases;
+  if (isPlainObject(source.profiles)) preserved.profiles = source.profiles;
+  if (isPlainObject(source.models)) {
+    for (const [name, raw] of Object.entries(source.models)) {
+      if (!isPlainObject(raw)) continue;
+      const extras: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(raw)) {
+        if (!MODEL_STANDARD_KEYS.has(key)) extras[key] = value;
+      }
+      if (Object.keys(extras).length > 0) preserved.modelExtras[name] = extras;
+    }
+  }
+  return preserved;
+}
+
+function escapeTomlString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function emitTomlValue(value: unknown): string | null {
+  if (typeof value === 'string') return `"${escapeTomlString(value)}"`;
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+    return `[${value.map((item) => `"${escapeTomlString(item)}"`).join(', ')}]`;
+  }
+  return null;
+}
+
+function valuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (left === undefined || right === undefined || left === null || right === null) return false;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 /**
- * Serialize config to TOML format
+ * Quoting historique du sérialiseur de configuration : pas d'échappement
+ * supplémentaire, pour que les motifs d'outils déjà écrits restent identiques.
+ * `undefined` et `null` ne produisent rien.
  */
-export function serializeTOML(config: CodeBuddyConfig): string {
+function formatConfigValue(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string') return `"${value}"`;
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+    return `[${value.map((item) => `"${item}"`).join(', ')}]`;
+  }
+  return null;
+}
+
+function appendConfigKey(
+  lines: string[],
+  key: string,
+  value: unknown,
+  presence: { rewriting: boolean; inSource: boolean; defaultValue: unknown },
+): void {
+  if (value === undefined || value === null) return;
+  if (typeof value === 'string' && value === '' && !presence.inSource) return;
+  if (presence.rewriting && !presence.inSource && valuesEqual(value, presence.defaultValue)) return;
+  const rendered = formatConfigValue(value);
+  if (rendered === null) return;
+  lines.push(`${key} = ${rendered}`);
+}
+
+function sourceTable(source: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
+  if (!source) return undefined;
+  const value = source[key];
+  return isPlainObject(value) ? value : undefined;
+}
+
+function emitTomlTable(
+  lines: string[],
+  header: string,
+  table: Record<string, unknown>,
+  render: (value: unknown) => string | null = emitTomlValue,
+): void {
+  const scalars: string[] = [];
+  const nested: Array<[string, Record<string, unknown>]> = [];
+  for (const [key, value] of Object.entries(table)) {
+    if (isPlainObject(value)) nested.push([key, value]);
+    else {
+      const rendered = render(value);
+      if (rendered !== null) scalars.push(`${key} = ${rendered}`);
+    }
+  }
+  if (scalars.length > 0 || nested.length === 0) {
+    lines.push(`[${header}]`);
+    lines.push(...scalars);
+    lines.push('');
+  }
+  for (const [key, value] of nested) {
+    emitTomlTable(lines, `${header}.${key}`, value, render);
+  }
+}
+
+function emitModelExtras(
+  lines: string[],
+  name: string,
+  model: ModelConfig,
+  preserved: PreservedUserConfig | null | undefined,
+  rewriting: boolean,
+  sourceModel: Record<string, unknown> | undefined,
+  defaults: Record<string, unknown> | undefined,
+): void {
+  const extras: Record<string, unknown> = { ...(preserved?.modelExtras[name] ?? {}) };
+  for (const [key, value] of Object.entries(model as unknown as Record<string, unknown>)) {
+    if (MODEL_STANDARD_KEYS.has(key) || key in extras) continue;
+    extras[key] = value;
+  }
+  const knownExtras = preserved?.modelExtras[name];
+  for (const [key, value] of Object.entries(extras)) {
+    appendConfigKey(lines, key, value, {
+      rewriting,
+      inSource: (!!sourceModel && Object.prototype.hasOwnProperty.call(sourceModel, key))
+        || (!!knownExtras && Object.prototype.hasOwnProperty.call(knownExtras, key)),
+      defaultValue: defaults?.[key],
+    });
+  }
+}
+
+function emitPreservedSections(lines: string[], preserved?: PreservedUserConfig | null): void {
+  if (!preserved) return;
+  if (preserved.catalogue && Object.keys(preserved.catalogue).length > 0) {
+    emitTomlTable(lines, 'catalogue', preserved.catalogue);
+  }
+  if (preserved.modelRoles && Object.keys(preserved.modelRoles).length > 0) {
+    emitTomlTable(lines, 'model_roles', preserved.modelRoles);
+  }
+  if (preserved.modelAliases && Object.keys(preserved.modelAliases).length > 0) {
+    emitTomlTable(lines, 'model_aliases', preserved.modelAliases);
+  }
+  if (preserved.profiles) {
+    for (const [name, raw] of Object.entries(preserved.profiles)) {
+      if (!isPlainObject(raw)) continue;
+      emitTomlTable(lines, `profiles.${name}`, raw);
+    }
+  }
+}
+
+/**
+ * Serialize config to TOML format.
+ * `preserved` réécrit les sections de catalogue et les profils du fichier
+ * utilisateur, que l'objet typé ne porte pas.
+ */
+function emitFlatSection(
+  lines: string[],
+  header: string,
+  live: Record<string, unknown>,
+  defaults: Record<string, unknown> | undefined,
+  source: Record<string, unknown> | undefined,
+  rewriting: boolean,
+  keys: readonly string[],
+): void {
+  const body: string[] = [];
+  for (const key of keys) {
+    appendConfigKey(body, key, live[key], {
+      rewriting,
+      inSource: !!source && Object.prototype.hasOwnProperty.call(source, key),
+      defaultValue: defaults?.[key],
+    });
+  }
+  const listed = source !== undefined;
+  if (body.length === 0 && !listed) return;
+  lines.push(`[${header}]`);
+  lines.push(...body);
+  lines.push('');
+}
+
+function emitNamedSections<T extends object>(
+  lines: string[],
+  headerPrefix: string,
+  liveMap: Record<string, T>,
+  defaultMap: Record<string, T> | undefined,
+  sourceMap: Record<string, unknown> | undefined,
+  rewriting: boolean,
+  fill: (
+    body: string[],
+    name: string,
+    live: T,
+    source: Record<string, unknown> | undefined,
+    defaults: Record<string, unknown> | undefined,
+  ) => void,
+): void {
+  for (const [name, live] of Object.entries(liveMap)) {
+    const listed = !!sourceMap && Object.prototype.hasOwnProperty.call(sourceMap, name);
+    const sourceRaw = listed ? sourceMap?.[name] : undefined;
+    const source = isPlainObject(sourceRaw) ? sourceRaw : undefined;
+    const defaultsRaw = defaultMap?.[name];
+    const defaults = defaultsRaw ? defaultsRaw as unknown as Record<string, unknown> : undefined;
+    if (rewriting && !listed && valuesEqual(live, defaultsRaw)) continue;
+    const body: string[] = [];
+    fill(body, name, live, source, defaults);
+    if (body.length === 0 && !listed) continue;
+    lines.push(`[${headerPrefix}.${name}]`);
+    lines.push(...body);
+    lines.push('');
+  }
+}
+
+export function serializeTOML(config: CodeBuddyConfig, preserved?: PreservedUserConfig | null): string {
   const lines: string[] = [
     '# Code Buddy Configuration',
     '# See https://github.com/phuetz/code-buddy for documentation',
     '',
   ];
-
-  // Root level
-  lines.push(`active_model = "${config.active_model}"`);
-  lines.push('');
-
-  // Providers
-  for (const [name, provider] of Object.entries(config.providers)) {
-    lines.push(`[providers.${name}]`);
-    if (provider.base_url) lines.push(`base_url = "${provider.base_url}"`);
-    lines.push(`api_key_env = "${provider.api_key_env}"`);
-    lines.push(`type = "${provider.type}"`);
-    if (provider.enabled !== undefined) lines.push(`enabled = ${provider.enabled}`);
+  const rewriting = preserved?.source !== undefined;
+  const source = preserved?.source;
+  const sourceHasActive = !!source && Object.prototype.hasOwnProperty.call(source, 'active_model');
+  if (!rewriting || sourceHasActive || config.active_model !== DEFAULT_CONFIG.active_model) {
+    lines.push(`active_model = "${config.active_model}"`);
     lines.push('');
   }
 
-  // Models
-  for (const [name, model] of Object.entries(config.models)) {
-    lines.push(`[models.${name}]`);
-    lines.push(`provider = "${model.provider}"`);
-    if (model.model_id) lines.push(`model_id = "${model.model_id}"`);
-    lines.push(`price_per_m_input = ${model.price_per_m_input}`);
-    lines.push(`price_per_m_output = ${model.price_per_m_output}`);
-    lines.push(`max_context_tokens = ${model.max_context_tokens}`);
-    if (model.description) lines.push(`description = "${model.description}"`);
-    lines.push('');
-  }
+  emitNamedSections(
+    lines,
+    'providers',
+    config.providers,
+    DEFAULT_CONFIG.providers,
+    sourceTable(source, 'providers'),
+    rewriting,
+    (body, _name, provider, providerSource, defaults) => {
+      const gate = (key: string, value: unknown) => appendConfigKey(body, key, value, {
+        rewriting,
+        inSource: !!providerSource && Object.prototype.hasOwnProperty.call(providerSource, key),
+        defaultValue: defaults?.[key],
+      });
+      gate('base_url', provider.base_url);
+      gate('api_key_env', provider.api_key_env);
+      gate('type', provider.type);
+      gate('enabled', provider.enabled);
+    },
+  );
 
-  // Tool config
-  for (const [name, tool] of Object.entries(config.tool_config)) {
-    lines.push(`[tool_config.${name}]`);
-    lines.push(`permission = "${tool.permission}"`);
-    if (tool.timeout) lines.push(`timeout = ${tool.timeout}`);
-    if (tool.allowlist?.length) {
-      lines.push(`allowlist = [${tool.allowlist.map(p => `"${p}"`).join(', ')}]`);
-    }
-    if (tool.denylist?.length) {
-      lines.push(`denylist = [${tool.denylist.map(p => `"${p}"`).join(', ')}]`);
-    }
-    lines.push('');
-  }
+  emitNamedSections(
+    lines,
+    'models',
+    config.models,
+    DEFAULT_CONFIG.models,
+    sourceTable(source, 'models'),
+    rewriting,
+    (body, name, model, modelSource, defaults) => {
+      const gate = (key: string, value: unknown) => appendConfigKey(body, key, value, {
+        rewriting,
+        inSource: !!modelSource && Object.prototype.hasOwnProperty.call(modelSource, key),
+        defaultValue: defaults?.[key],
+      });
+      gate('provider', model.provider);
+      gate('model_id', model.model_id);
+      gate('price_per_m_input', model.price_per_m_input);
+      gate('price_per_m_output', model.price_per_m_output);
+      gate('max_context_tokens', model.max_context_tokens);
+      gate('description', model.description);
+      emitModelExtras(body, name, model, preserved, rewriting, modelSource, defaults);
+    },
+  );
 
-  // Middleware
-  lines.push('[middleware]');
-  if (config.middleware.max_turns) lines.push(`max_turns = ${config.middleware.max_turns}`);
-  if (config.middleware.turn_warning_threshold) lines.push(`turn_warning_threshold = ${config.middleware.turn_warning_threshold}`);
-  if (config.middleware.max_cost) lines.push(`max_cost = ${config.middleware.max_cost}`);
-  if (config.middleware.cost_warning_threshold) lines.push(`cost_warning_threshold = ${config.middleware.cost_warning_threshold}`);
-  if (config.middleware.auto_compact_threshold) lines.push(`auto_compact_threshold = ${config.middleware.auto_compact_threshold}`);
-  if (config.middleware.context_warning_percentage) lines.push(`context_warning_percentage = ${config.middleware.context_warning_percentage}`);
-  lines.push('');
+  emitNamedSections(
+    lines,
+    'tool_config',
+    config.tool_config,
+    DEFAULT_CONFIG.tool_config,
+    sourceTable(source, 'tool_config'),
+    rewriting,
+    (body, _name, tool, toolSource, defaults) => {
+      const gate = (key: string, value: unknown) => appendConfigKey(body, key, value, {
+        rewriting,
+        inSource: !!toolSource && Object.prototype.hasOwnProperty.call(toolSource, key),
+        defaultValue: defaults?.[key],
+      });
+      gate('permission', tool.permission);
+      gate('timeout', tool.timeout);
+      gate('allowlist', tool.allowlist);
+      gate('denylist', tool.denylist);
+    },
+  );
 
-  // UI
-  lines.push('[ui]');
-  if (config.ui.vim_keybindings !== undefined) lines.push(`vim_keybindings = ${config.ui.vim_keybindings}`);
-  if (config.ui.theme) lines.push(`theme = "${config.ui.theme}"`);
-  if (config.ui.show_tokens !== undefined) lines.push(`show_tokens = ${config.ui.show_tokens}`);
-  if (config.ui.show_cost !== undefined) lines.push(`show_cost = ${config.ui.show_cost}`);
-  if (config.ui.streaming !== undefined) lines.push(`streaming = ${config.ui.streaming}`);
-  if (config.ui.sound_effects !== undefined) lines.push(`sound_effects = ${config.ui.sound_effects}`);
-  lines.push('');
-
-  // Agent
-  lines.push('[agent]');
-  if (config.agent.yolo_mode !== undefined) lines.push(`yolo_mode = ${config.agent.yolo_mode}`);
-  if (config.agent.parallel_tools !== undefined) lines.push(`parallel_tools = ${config.agent.parallel_tools}`);
-  if (config.agent.rag_tool_selection !== undefined) lines.push(`rag_tool_selection = ${config.agent.rag_tool_selection}`);
-  if (config.agent.self_healing !== undefined) lines.push(`self_healing = ${config.agent.self_healing}`);
-  if (config.agent.default_prompt) lines.push(`default_prompt = "${config.agent.default_prompt}"`);
-  lines.push('');
-
-  // Integrations
+  emitFlatSection(
+    lines,
+    'middleware',
+    config.middleware as unknown as Record<string, unknown>,
+    DEFAULT_CONFIG.middleware as unknown as Record<string, unknown>,
+    sourceTable(source, 'middleware'),
+    rewriting,
+    ['max_turns', 'turn_warning_threshold', 'max_cost', 'cost_warning_threshold', 'auto_compact_threshold', 'context_warning_percentage'],
+  );
+  emitFlatSection(
+    lines,
+    'ui',
+    config.ui as unknown as Record<string, unknown>,
+    DEFAULT_CONFIG.ui as unknown as Record<string, unknown>,
+    sourceTable(source, 'ui'),
+    rewriting,
+    ['vim_keybindings', 'theme', 'show_tokens', 'show_cost', 'streaming', 'sound_effects'],
+  );
+  emitFlatSection(
+    lines,
+    'agent',
+    config.agent as unknown as Record<string, unknown>,
+    DEFAULT_CONFIG.agent as unknown as Record<string, unknown>,
+    sourceTable(source, 'agent'),
+    rewriting,
+    ['yolo_mode', 'parallel_tools', 'rag_tool_selection', 'self_healing', 'default_prompt'],
+  );
   if (config.integrations) {
-    lines.push('[integrations]');
-    if (config.integrations.rtk_enabled !== undefined) lines.push(`rtk_enabled = ${config.integrations.rtk_enabled}`);
-    if (config.integrations.rtk_min_output_length !== undefined) lines.push(`rtk_min_output_length = ${config.integrations.rtk_min_output_length}`);
-    if (config.integrations.icm_enabled !== undefined) lines.push(`icm_enabled = ${config.integrations.icm_enabled}`);
-    lines.push('');
+    emitFlatSection(
+      lines,
+      'integrations',
+      config.integrations as unknown as Record<string, unknown>,
+      DEFAULT_CONFIG.integrations as unknown as Record<string, unknown>,
+      sourceTable(source, 'integrations'),
+      rewriting,
+      ['rtk_enabled', 'rtk_min_output_length', 'icm_enabled'],
+    );
   }
 
+  emitPreservedSections(lines, preserved);
   return lines.join('\n');
+}
+
+/**
+ * Réécrit un document utilisateur déjà parsé, sans y ajouter les défauts
+ * ni une autre couche. Le parseur de ce fichier ne déséchappe pas les
+ * chaînes : le rendu reprend donc le quoting historique.
+ */
+export function serializeUserDocument(document: Record<string, unknown>): string {
+  const lines: string[] = [
+    '# Code Buddy Configuration',
+    '# See https://github.com/phuetz/code-buddy for documentation',
+    '',
+  ];
+  let wroteScalar = false;
+  for (const [key, value] of Object.entries(document)) {
+    if (isPlainObject(value)) continue;
+    const rendered = formatConfigValue(value);
+    if (rendered === null) continue;
+    lines.push(`${key} = ${rendered}`);
+    wroteScalar = true;
+  }
+  if (wroteScalar) lines.push('');
+  for (const [key, value] of Object.entries(document)) {
+    if (!isPlainObject(value)) continue;
+    emitTomlTable(lines, key, value, formatConfigValue);
+  }
+  const text = lines.join('\n');
+  return text.endsWith('\n') ? text : `${text}\n`;
+}
+
+function assignKeyPath(root: Record<string, unknown>, keyPath: string, value: unknown): void {
+  const parts = keyPath.split('.');
+  if (parts.length === 0 || parts.some((part) => part.length === 0)) {
+    throw new Error(`chemin de configuration vide: ${keyPath}`);
+  }
+  let current = root;
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const segment = parts[index] ?? '';
+    const next = current[segment];
+    if (!isPlainObject(next)) {
+      const created: Record<string, unknown> = {};
+      current[segment] = created;
+      current = created;
+    } else {
+      current = next;
+    }
+  }
+  const leaf = parts[parts.length - 1] ?? '';
+  current[leaf] = value;
+}
+
+function readUserDocument(file: string): Record<string, unknown> {
+  if (!existsSync(file)) return {};
+  return parseTOML(readFileSync(file, 'utf-8'));
 }
 
 // ============================================================================
 // Configuration Manager
 // ============================================================================
 
-const CONFIG_DIR = join(homedir(), '.codebuddy');
-const CONFIG_FILE = join(CONFIG_DIR, 'config.toml');
+/**
+ * Fichier de configuration utilisateur. Une seule règle, documentée dans
+ * docs/catalogue-modeles.md : `CODEBUDDY_CONFIG`, sinon
+ * `$CODEBUDDY_HOME/.codebuddy/config.toml`, sinon `~/.codebuddy/config.toml`.
+ * Une valeur vide compte comme absente. L'existence n'est pas vérifiée.
+ */
+export function resolveUserConfigFile(
+  env: NodeJS.ProcessEnv = process.env,
+  homeDirectory: string = homedir(),
+): string {
+  const explicit = env.CODEBUDDY_CONFIG?.trim();
+  if (explicit) return explicit;
+  const home = env.CODEBUDDY_HOME?.trim() || homeDirectory;
+  return join(home, '.codebuddy', 'config.toml');
+}
+
+function configFile(): string {
+  return resolveUserConfigFile();
+}
+
 const PROJECT_CONFIG_FILE = '.codebuddy/config.toml';
 
 /**
@@ -1101,6 +1431,7 @@ const PROJECT_CONFIG_FILE = '.codebuddy/config.toml';
 class ConfigManager {
   private config: CodeBuddyConfig;
   private loaded = false;
+  private preservedUser: PreservedUserConfig | null = null;
 
   constructor() {
     this.config = { ...DEFAULT_CONFIG };
@@ -1115,12 +1446,15 @@ class ConfigManager {
 
     // Start with defaults
     this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+    this.preservedUser = null;
 
     // Load user config
-    if (existsSync(CONFIG_FILE)) {
+    const userFile = configFile();
+    if (existsSync(userFile)) {
       try {
-        const content = readFileSync(CONFIG_FILE, 'utf-8');
+        const content = readFileSync(userFile, 'utf-8');
         const userConfig = parseTOML(content) as Partial<CodeBuddyConfig>;
+        this.preservedUser = extractPreservedUserConfig(userConfig as Record<string, unknown>);
         this.mergeConfig(userConfig);
       } catch (error) {
         logger.warn(`Warning: Failed to parse user config: ${error}`, { source: 'ConfigManager' });
@@ -1167,7 +1501,19 @@ class ConfigManager {
       this.config.providers = { ...this.config.providers, ...partial.providers };
     }
     if (partial.models) {
-      this.config.models = { ...this.config.models, ...partial.models };
+      const merged: Record<string, ModelConfig> = { ...this.config.models };
+      for (const [name, raw] of Object.entries(partial.models)) {
+        if (!isPlainObject(raw)) continue;
+        // Ne pas remplacer la fiche par un objet à trous : seules les clés
+        // présentes sont copiées. Les champs absents ne sont pas inventés.
+        const base: Record<string, unknown> = merged[name] ? { ...merged[name] } : {};
+        for (const [key, value] of Object.entries(raw)) {
+          if (value === undefined || value === null) continue;
+          base[key] = value;
+        }
+        merged[name] = base as unknown as ModelConfig;
+      }
+      this.config.models = merged;
     }
     if (partial.tool_config) {
       for (const [name, toolConfig] of Object.entries(partial.tool_config)) {
@@ -1286,14 +1632,24 @@ class ConfigManager {
   }
 
   /**
-   * Save user config
+   * Réécrit le fichier utilisateur résolu. Le document est relu sur ce
+   * fichier, puis la clé demandée y est appliquée. `this.config` reste
+   * l'objet fusionné (projet compris) et n'est pas sérialisé ici.
    */
-  saveUserConfig(): void {
-    const dir = dirname(CONFIG_FILE);
+  saveUserConfig(keyPath?: string, value?: unknown): void {
+    const file = configFile();
+    const dir = dirname(file);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(CONFIG_FILE, serializeTOML(this.config));
+    const document = readUserDocument(file);
+    if (keyPath !== undefined && keyPath.length > 0) {
+      assignKeyPath(document, keyPath, value);
+    }
+    // Couche utilisateur relue. serializeTOML(this.config) réécrirait l'objet fusionné.
+    const serialized = serializeUserDocument(document);
+    writeFileSync(file, serialized);
+    this.preservedUser = extractPreservedUserConfig(document);
   }
 
   /**
@@ -1354,25 +1710,28 @@ class ConfigManager {
    * Get config file path
    */
   getConfigPath(): string {
-    return CONFIG_FILE;
+    return configFile();
   }
 
   /**
    * Check if config file exists
    */
   configExists(): boolean {
-    return existsSync(CONFIG_FILE);
+    return existsSync(configFile());
   }
 
   /**
-   * Initialize config file with defaults
+   * Crée le fichier utilisateur avec les défauts, seulement s'il est absent.
+   * N'écrit pas l'objet fusionné avec le projet.
    */
   initConfig(): void {
-    if (!existsSync(CONFIG_DIR)) {
-      mkdirSync(CONFIG_DIR, { recursive: true });
+    const file = configFile();
+    const dir = dirname(file);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
     }
-    if (!existsSync(CONFIG_FILE)) {
-      writeFileSync(CONFIG_FILE, serializeTOML(DEFAULT_CONFIG));
+    if (!existsSync(file)) {
+      writeFileSync(file, serializeTOML(DEFAULT_CONFIG));
     }
   }
 
