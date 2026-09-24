@@ -125,6 +125,20 @@ vi.mock('../../src/persistence/session-store.js', () => ({
     saveSession: hoisted.saveSession,
     // Same rule as the real store for the sessions these tests write: never encrypted.
     contentProtection: (session: { encrypted?: boolean } | null) => ({ encrypt: session?.encrypted === true }),
+    // Same contract as the real store, without a file lock: compare the bytes
+    // of this double with the archived ones, then save the emptied session.
+    clearSessionMessagesIfUnchanged: async (
+      key: string,
+      expected: Buffer,
+      options: { encrypt: boolean; beforeRead?: () => void },
+    ) => {
+      options.beforeRead?.();
+      const read = await hoisted.readSessionFileState(key);
+      if (read.state !== 'ok' || !Buffer.from(JSON.stringify(read.session)).equals(expected)) return 'changed';
+      if ((read.session.encrypted === true) !== options.encrypt) return 'protection-changed';
+      await hoisted.saveSession({ ...read.session, messages: [] });
+      return 'cleared';
+    },
   }),
 }));
 
