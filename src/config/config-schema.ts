@@ -308,7 +308,9 @@ function aliasValueSchema(): ZodTypeAny {
 function gatewayShape(): Record<string, ZodTypeAny> {
   return {
     bind: z.enum(['loopback', 'lan']).optional().describe('Écoute. lan est plus ouvert que loopback'),
-    port: z.number().int().min(1).max(65535).optional().describe('Port de la passerelle'),
+    port: z.number().int().min(1).max(65535).optional().describe(
+      'Port de la passerelle. DIAGNOSTIC NON APPLIQUÉ : la valeur peut être enregistrée, elle ne change pas l\'écoute',
+    ),
     auth_mode: z.enum(['token', 'none']).optional().describe('Authentification. none est plus ouvert que token'),
   };
 }
@@ -768,8 +770,24 @@ function sampleToml(path: string, schema: ZodTypeAny | null): string {
   if (path.endsWith('.port')) return '3000';
   if (path.endsWith('api_key_env')) return '"EXAMPLE_API_KEY"';
   if (path.endsWith('hidden_capabilities')) return '["film"]';
-  if (path.endsWith('input')) return '["text"]';
+  // « input » seul attraperait price_per_m_input et écrirait un tableau à la place d'un nombre.
+  if (path.endsWith('.input')) return '["text"]';
   if (path.endsWith('manualOrder')) return '["exemple"]';
+  // L'alias s'appelle « exemple ». La cible doit être un autre modèle, sinon la chaîne est circulaire.
+  if (/(^|\.)model_aliases\.\*\.model$/.test(path)) return '"grok-4"';
+  // Un fournisseur d'alias doit exister et accepter une clé, pas un nom inventé.
+  if (/(^|\.)model_aliases\.\*\.provider$/.test(path)) return '"openai"';
+  if (
+    path.endsWith('max_context_tokens')
+    || path.endsWith('context_window')
+    || path.endsWith('max_tokens')
+    || path.endsWith('max_output_tokens')
+  ) {
+    const sized = defaultOf(schema);
+    if (typeof sized === 'number' && sized > 0) return String(sized);
+    // Le catalogue refuse 0 pour ces tailles.
+    return '1';
+  }
   if (name === 'ZodArray') return '["exemple"]';
   if (name === 'ZodBoolean') {
     const fallback = defaultOf(schema);
@@ -795,9 +813,30 @@ function isBranch(schema: ZodTypeAny | null): boolean {
   return name === 'ZodObject' || name === 'ZodRecord';
 }
 
+function exampleComments(path: string, node: ZodTypeAny | null): string[] {
+  const fallback = defaultOf(node);
+  const lines = [
+    `# cle: ${path}`,
+    `# défaut : ${fallback === undefined ? 'absent' : String(fallback)}`,
+  ];
+  const description = descriptionOf(node);
+  if (description) lines.push(`# ${description}`);
+  return lines;
+}
+
+function concreteExamplePath(path: string): string {
+  return path.replace(/\.(\*)/g, '.exemple');
+}
+
+interface ExampleBlock {
+  comments: string[];
+  assignment?: { key: string; value: string };
+}
+
 /**
  * Exemple commenté. Chaque clé de `listWritableConfigPaths` a une ligne
- * `# cle: <chemin>`. Le défaut est sur la ligne suivante.
+ * `# cle: <chemin>`. Les feuilles d'une même table sont regroupées, et une
+ * clé qui est déjà le parent d'une autre feuille n'est pas écrite comme valeur.
  */
 export function renderTomlExample(): string {
   const lines = [
@@ -806,26 +845,68 @@ export function renderTomlExample(): string {
     '# Le défaut est indiqué en commentaire. Une clé absente du fichier réel n\'est pas inventée à l\'écriture.',
     '# Les adresses d\'exemple ne sont pas des services. Aucune clé secrète n\'est écrite ici.',
     '# model_id, mode replace, les rôles autres que primary et le cache de fenêtre ne sont pas des clés d\'écriture.',
+    '# Chaque table n\'est ouverte qu\'une fois. Une clé qui est déjà une table n\'est pas aussi une valeur.',
     '',
   ];
-  for (const path of listWritableConfigPaths()) {
-    const node = schemaAt(path);
-    lines.push(`# cle: ${path}`);
-    const fallback = defaultOf(node);
-    lines.push(`# défaut : ${fallback === undefined ? 'absent' : String(fallback)}`);
-    const description = descriptionOf(node);
-    if (description) lines.push(`# ${description}`);
-    if (!isBranch(node)) {
-      const concrete = path.replace(/\.(\*)/g, '.exemple');
-      const parts = concrete.split('.');
-      const key = parts[parts.length - 1] ?? concrete;
-      const header = parts.slice(0, -1).join('.');
-      if (header) lines.push(`[${header}]`);
-      lines.push(`${key} = ${sampleToml(path, node)}`);
+  const paths = listWritableConfigPaths();
+  const leaves = paths
+    .filter((path) => !isBranch(schemaAt(path)))
+    .map((path) => concreteExamplePath(path));
+  const groups: Array<{ table: string; blocks: ExampleBlock[] }> = [];
+  const groupIndex = new Map<string, number>();
+  const groupFor = (table: string): { table: string; blocks: ExampleBlock[] } => {
+    const found = groupIndex.get(table);
+    if (found !== undefined) {
+      const existing = groups[found];
+      if (existing) return existing;
     }
-    lines.push('');
+    const created = { table, blocks: [] as ExampleBlock[] };
+    groupIndex.set(table, groups.length);
+    groups.push(created);
+    return created;
+  };
+  const parentOfAnotherLeaf = (concrete: string): boolean => (
+    leaves.some((other) => other.startsWith(`${concrete}.`))
+  );
+
+  for (const path of paths) {
+    const node = schemaAt(path);
+    const comments = exampleComments(path, node);
+    const concrete = concreteExamplePath(path);
+    if (isBranch(node) || parentOfAnotherLeaf(concrete)) {
+      groupFor(concrete).blocks.push({ comments });
+      continue;
+    }
+    const parts = concrete.split('.');
+    const key = parts[parts.length - 1] ?? concrete;
+    const table = parts.slice(0, -1).join('.');
+    groupFor(table).blocks.push({
+      comments,
+      assignment: { key, value: sampleToml(path, node) },
+    });
+  }
+
+  for (const group of groups) {
+    let opened = false;
+    for (const block of group.blocks) {
+      if (block.assignment && group.table && !opened) {
+        lines.push(`[${group.table}]`);
+        opened = true;
+      }
+      lines.push(...block.comments);
+      if (block.assignment) lines.push(`${block.assignment.key} = ${block.assignment.value}`);
+      lines.push('');
+    }
   }
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n')}`;
+}
+
+/** Texte du schéma quand la clé enregistrée ne change pas l'écoute. `null` sinon. */
+export function nonAppliedDiagnosticNote(keyPath: string): string | null {
+  if (!/(?:^|\.)gateway\.port$/.test(keyPath)) return null;
+  const description = descriptionOf(schemaAt('gateway.port'));
+  if (!description || !description.includes('DIAGNOSTIC NON APPLIQUÉ')) return null;
+  return description;
 }
 
 export interface JsonSchemaDocument {

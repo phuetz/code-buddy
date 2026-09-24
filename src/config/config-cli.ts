@@ -11,7 +11,11 @@ import {
   unsetConfigValue,
   type ConfigSetResult,
 } from './config-mutator.js';
-import { exportConfigSchema, type JsonSchemaDocument } from './config-schema.js';
+import {
+  exportConfigSchema,
+  nonAppliedDiagnosticNote,
+  type JsonSchemaDocument,
+} from './config-schema.js';
 
 export interface ConfigOperation {
   op: 'set' | 'patch' | 'unset';
@@ -32,6 +36,7 @@ export interface ConfigCliReport {
   operations: ConfigOperation[];
   checks: ConfigCheck[];
   errors: string[];
+  notes?: string[];
 }
 
 function errorText(result: ConfigSetResult): string | null {
@@ -54,12 +59,22 @@ function checksFor(results: ConfigSetResult[], dryRun: boolean): ConfigCheck[] {
   ];
 }
 
+function notesFor(results: ConfigSetResult[]): string[] {
+  const notes: string[] = [];
+  for (const result of results) {
+    const note = nonAppliedDiagnosticNote(result.key);
+    if (note && !notes.includes(note)) notes.push(note);
+  }
+  return notes;
+}
+
 export function reportFromResults(
   op: ConfigOperation['op'],
   results: ConfigSetResult[],
   dryRun: boolean,
 ): ConfigCliReport {
   const errors = results.map(errorText).filter((item): item is string => item !== null);
+  const notes = notesFor(results);
   return {
     ok: errors.length === 0,
     operations: results.map((result) => ({
@@ -71,6 +86,7 @@ export function reportFromResults(
     })),
     checks: checksFor(results, dryRun),
     errors,
+    ...(notes.length > 0 ? { notes } : {}),
   };
 }
 
@@ -205,6 +221,7 @@ export async function runConfigValidate(): Promise<{
 export function formatConfigReport(report: ConfigCliReport, json: boolean): string {
   if (json) return `${JSON.stringify(report, null, 2)}\n`;
   const lines = [`ok: ${report.ok ? 'true' : 'false'}`];
+  for (const note of report.notes ?? []) lines.push(`note: ${note}`);
   for (const operation of report.operations) {
     lines.push(`${operation.op} ${operation.key} dryRun=${operation.dryRun ? 'true' : 'false'}`);
   }

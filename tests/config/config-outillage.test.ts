@@ -11,7 +11,13 @@ import { Command } from 'commander';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { registerConfigCommand } from '../../src/commands/cli/config-command.js';
-import { runConfigPatch, runConfigSet, runConfigUnset } from '../../src/config/config-cli.js';
+import {
+  formatConfigReport,
+  runConfigPatch,
+  runConfigSet,
+  runConfigUnset,
+  runConfigValidate,
+} from '../../src/config/config-cli.js';
 import { configBackupPath, configLastGoodPath } from '../../src/config/config-backup.js';
 import {
   exportConfigSchema,
@@ -336,14 +342,72 @@ describe('buddy config schema', () => {
   });
 });
 
+function deliveredExample(): string {
+  return readFileSync(path.join(process.cwd(), 'docs', 'config.toml.example'), 'utf8');
+}
+
 describe('exemple commenté', () => {
   it('chaque clé du schéma apparaît dans l\'exemple, et l\'exemple est celui du générateur', () => {
-    const examplePath = path.join(process.cwd(), 'docs', 'config.toml.example');
-    const example = readFileSync(examplePath, 'utf8');
+    const example = deliveredExample();
     const generated = renderTomlExample();
     expect(example).toBe(generated);
     const missing = listWritableConfigPaths().filter((key) => !example.includes(`# cle: ${key}\n`));
     expect(missing, missing.join(', ')).toEqual([]);
+  });
+
+  it('l\'exemple livré se parse, s\'évalue et passe config validate', async () => {
+    const example = deliveredExample();
+    let parseError = '';
+    try {
+      parseTOML(example);
+    } catch (error) {
+      parseError = error instanceof Error ? error.message : String(error);
+    }
+    expect(parseError, parseError).toBe('');
+    expect(assessUserConfigText(example)).toBeNull();
+    const previousGrok = process.env.GROK_API_KEY;
+    process.env.GROK_API_KEY = 'exemple-non-secret';
+    try {
+      prepare('config', example);
+      const report = await runConfigValidate();
+      expect(report.tomlProblem).toBeNull();
+      expect(report.envErrors, report.envErrors.join('\n')).toEqual([]);
+      expect(report.ok).toBe(true);
+    } finally {
+      if (previousGrok === undefined) delete process.env.GROK_API_KEY;
+      else process.env.GROK_API_KEY = previousGrok;
+    }
+  });
+
+  it('chaque table de l\'exemple livré n\'est ouverte qu\'une fois', () => {
+    const headers = deliveredExample()
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => /^\[[^\]]+\]$/.test(line));
+    const duplicates = [...new Set(headers.filter((header, index) => headers.indexOf(header) !== index))];
+    expect(duplicates, duplicates.join(', ')).toEqual([]);
+  });
+});
+
+describe('gateway.port diagnostique', () => {
+  it('le schéma et la sortie disent que le port n\'est pas appliqué', async () => {
+    const document = exportConfigSchema();
+    const toml = document.toml as {
+      properties: {
+        gateway: { properties: { port: { description?: string } } };
+      };
+    };
+    const description = toml.properties.gateway.properties.port.description ?? '';
+    expect(description).toContain('DIAGNOSTIC NON APPLIQUÉ');
+    expect(renderTomlExample()).toContain('DIAGNOSTIC NON APPLIQUÉ');
+    expect(deliveredExample()).toContain('DIAGNOSTIC NON APPLIQUÉ');
+    const { file } = prepare('home', USER);
+    const report = await runConfigSet({ key: 'gateway.port', value: '34567' });
+    expect(report.ok, report.errors.join('\n')).toBe(true);
+    expect(report.notes?.join('\n') ?? '').toContain('DIAGNOSTIC NON APPLIQUÉ');
+    expect(formatConfigReport(report, false)).toContain('DIAGNOSTIC NON APPLIQUÉ');
+    expect(formatConfigReport(report, true)).toContain('DIAGNOSTIC NON APPLIQUÉ');
+    expect(readFileSync(file, 'utf8')).toMatch(/port = 34567/);
   });
 });
 
