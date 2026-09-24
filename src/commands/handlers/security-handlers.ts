@@ -8,9 +8,11 @@ import { getIdentityLinker } from "../../channels/identity-links.js";
 import { getElevatedMode } from "../../elevated-mode/index.js";
 import type { ChannelType } from "../../channels/index.js";
 import { PolicyEngine } from "../../security/policy-engine.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
+  failed?: boolean;
   entry?: ChatEntry;
   passToAI?: boolean;
   prompt?: string;
@@ -67,6 +69,7 @@ Modes:
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -130,6 +133,7 @@ Or use --dry-run flag when starting the CLI.`;
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -166,6 +170,9 @@ export async function handleGuardian(args: string[]): Promise<CommandHandlerResu
       guardian.setMode(newMode);
       return {
         handled: true,
+...failureFlag(`🛡️ Code Guardian - Mode: ${newMode}
+
+Les modifications sont ${newMode === 'ANALYZE_ONLY' ? 'désactivées' : 'possibles'}.`),
         entry: {
           type: "assistant",
           content: `🛡️ Code Guardian - Mode: ${newMode}
@@ -193,6 +200,30 @@ Les modifications sont ${newMode === 'ANALYZE_ONLY' ? 'désactivées' : 'possibl
     const currentMode = guardian.getMode();
     return {
       handled: true,
+...failureFlag(`🛡️ CodeBuddynette - Code Guardian
+═══════════════════════════════════════════════════
+
+Mode actuel: ${currentMode}
+
+📋 Actions disponibles:
+  /guardian analyze [path]     - Analyse complète du code
+  /guardian security [path]    - Audit de sécurité
+  /guardian review <file>      - Revue d'un fichier
+  /guardian refactor [path]    - Suggestions de refactoring
+  /guardian architecture       - Revue d'architecture
+  /guardian deps [path]        - Carte des dépendances
+  /guardian explain <file>     - Explication du code
+
+⚙️ Modes:
+  /guardian mode analyze-only  - Lecture seule
+  /guardian mode suggest       - Analyse + suggestions
+  /guardian mode plan          - Plans de modification
+  /guardian mode diff          - Génération de diffs
+
+🔒 Règles de sécurité:
+  • Validation humaine requise pour les modifications
+  • Pas de suppression massive
+  • Rollback toujours disponible`),
       entry: {
         type: "assistant",
         content: `🛡️ CodeBuddynette - Code Guardian
@@ -242,6 +273,7 @@ Mode actuel: ${currentMode}
     if (result.success) {
       return {
         handled: true,
+...failureFlag(result.output || JSON.stringify(result.data, null, 2)),
         entry: {
           type: "assistant",
           content: result.output || JSON.stringify(result.data, null, 2),
@@ -251,6 +283,9 @@ Mode actuel: ${currentMode}
     } else {
       return {
         handled: true,
+...failureFlag(`❌ Code Guardian - Erreur
+
+${result.error || 'Une erreur inconnue s\'est produite'}`),
         entry: {
           type: "assistant",
           content: `❌ Code Guardian - Erreur
@@ -263,6 +298,9 @@ ${result.error || 'Une erreur inconnue s\'est produite'}`,
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`❌ Code Guardian - Erreur
+
+${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: "assistant",
         content: `❌ Code Guardian - Erreur
@@ -301,6 +339,7 @@ export async function handleSecurityReview(args: string[]): Promise<CommandHandl
   if (args.length === 0) {
     return {
       handled: true,
+...failureFlag('Usage: /security-review <path> [--quick] [--format <text|json|sarif|markdown>]\n\nUse /security-review help for detailed commands.'),
       entry: {
         type: "assistant",
         content: 'Usage: /security-review <path> [--quick] [--format <text|json|sarif|markdown>]\n\nUse /security-review help for detailed commands.',
@@ -347,6 +386,35 @@ export async function handleSecurityReview(args: string[]): Promise<CommandHandl
   if (action === 'help') {
     return {
       handled: true,
+...failureFlag(`🔒 Security Review - Comprehensive Security Analysis
+══════════════════════════════════════════════════════
+
+📋 Commands:
+  /security-review scan [path]       - Full security scan
+  /security-review quick [path]      - Quick vulnerability check
+  /security-review deps [path]       - Dependency vulnerability audit
+  /security-review secrets [path]    - Secret/credential detection
+  /security-review permissions       - File permission audit
+  /security-review network [file]    - Network security analysis
+  /security-review injection [file]  - SQL/Command injection check
+  /security-review xss [file]        - XSS vulnerability check
+  /security-review auth [path]       - Authentication flow review
+  /security-review report [format]   - Generate security report
+
+🎯 Scan Types:
+  • OWASP Top 10 vulnerabilities
+  • Hardcoded credentials/secrets
+  • Insecure dependencies (CVEs)
+  • Injection vulnerabilities (SQL, XSS, Command)
+  • Authentication/authorization issues
+  • Insecure file permissions
+  • Network security misconfigurations
+
+📊 Report Formats:
+  • text (default) - Human-readable
+  • json           - Machine-parseable
+  • sarif          - SARIF format for CI integration
+  • markdown       - Documentation-friendly`),
       entry: {
         type: "assistant",
         content: `🔒 Security Review - Comprehensive Security Analysis
@@ -386,6 +454,7 @@ export async function handleSecurityReview(args: string[]): Promise<CommandHandl
   if (action !== 'report' && !target) {
     return {
       handled: true,
+...failureFlag('Usage: /security-review <path> [--quick] [--format <text|json|sarif|markdown>]'),
       entry: {
         type: "assistant",
         content: 'Usage: /security-review <path> [--quick] [--format <text|json|sarif|markdown>]',
@@ -458,6 +527,7 @@ export async function handleSecurityReview(args: string[]): Promise<CommandHandl
     if (result.success) {
       return {
         handled: true,
+...failureFlag(result.output || formatSecurityResult(result)),
         entry: {
           type: "assistant",
           content: result.output || formatSecurityResult(result),
@@ -467,6 +537,9 @@ export async function handleSecurityReview(args: string[]): Promise<CommandHandl
     } else {
       return {
         handled: true,
+...failureFlag(`❌ Security Review - Error
+
+${result.error || 'An unknown error occurred'}`),
         entry: {
           type: "assistant",
           content: `❌ Security Review - Error
@@ -479,6 +552,9 @@ ${result.error || 'An unknown error occurred'}`,
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`❌ Security Review - Error
+
+${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: "assistant",
         content: `❌ Security Review - Error
@@ -715,6 +791,7 @@ Supported channels: ${VALID_PAIRING_CHANNELS.join(', ')}`;
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -809,6 +886,7 @@ Commands:
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -947,6 +1025,7 @@ Valid channels: ${VALID_IDENTITY_CHANNELS.join(', ')}`;
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -988,6 +1067,7 @@ export function handlePolicy(args: string[]): CommandHandlerResult {
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: 'assistant',
       content,

@@ -11,6 +11,7 @@
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 export async function handleSuggest(args: string[]): Promise<CommandHandlerResult> {
   const category = args[0]?.toLowerCase() || 'all';
@@ -100,6 +101,7 @@ function matchesCategory(type: string, category: string): boolean {
 function result(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

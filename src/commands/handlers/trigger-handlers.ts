@@ -101,20 +101,20 @@ async function handleTriggerAdd(args: string[]): Promise<CommandHandlerResult> {
   const name = parsed.flags['name'] || parsed.flags['n'];
 
   if (!source) {
-    return result('Error: --source is required (github, gitlab, slack, linear, pagerduty, generic)');
+    return result('Error: --source is required (github, gitlab, slack, linear, pagerduty, generic)', true);
   }
 
   const validSources = ['github', 'gitlab', 'slack', 'linear', 'pagerduty', 'generic'];
   if (!validSources.includes(source)) {
-    return result(`Error: Invalid source "${source}". Must be one of: ${validSources.join(', ')}`);
+    return result(`Error: Invalid source "${source}". Must be one of: ${validSources.join(', ')}`, true);
   }
 
   if (!eventsStr) {
-    return result('Error: --events is required (comma-separated, e.g. "pull_request.opened,issues.created")');
+    return result('Error: --events is required (comma-separated, e.g. "pull_request.opened,issues.created")', true);
   }
 
   if (!action) {
-    return result('Error: --action is required (prompt template, e.g. "Review: {{event.title}}")');
+    return result('Error: --action is required (prompt template, e.g. "Review: {{event.title}}")', true);
   }
 
   const events = eventsStr.split(',').map(e => e.trim()).filter(Boolean);
@@ -170,7 +170,7 @@ async function handleTriggerAdd(args: string[]): Promise<CommandHandlerResult> {
 async function handleTriggerRemove(args: string[]): Promise<CommandHandlerResult> {
   const id = args[0];
   if (!id) {
-    return result('Error: Trigger ID is required. Use `/trigger list` to see IDs.');
+    return result('Error: Trigger ID is required. Use `/trigger list` to see IDs.', true);
   }
 
   const { getWebhookTriggerManager } = await import('../../triggers/webhook-trigger.js');
@@ -182,7 +182,7 @@ async function handleTriggerRemove(args: string[]): Promise<CommandHandlerResult
   const match = triggers.find(t => t.id === id || t.id.startsWith(id));
 
   if (!match) {
-    return result(`Error: Trigger not found: ${id}`);
+    return result(`Error: Trigger not found: ${id}`, true);
   }
 
   manager.removeTrigger(match.id);
@@ -208,7 +208,7 @@ async function handleTriggerTest(args: string[]): Promise<CommandHandlerResult> 
     const triggers = manager.listTriggers();
     const match = triggers.find(t => t.id === id || t.id.startsWith(id));
     if (!match) {
-      return result(`Error: Trigger not found: ${id}`);
+      return result(`Error: Trigger not found: ${id}`, true);
     }
 
     // Build sample event based on source
@@ -217,7 +217,7 @@ async function handleTriggerTest(args: string[]): Promise<CommandHandlerResult> 
       try {
         sampleBody = JSON.parse(sampleEventStr);
       } catch {
-        return result('Error: Invalid JSON for --sample-event');
+        return result('Error: Invalid JSON for --sample-event', true);
       }
     } else {
       sampleBody = buildSampleEvent(match.source, match.events[0] || '*');
@@ -232,11 +232,12 @@ async function handleTriggerTest(args: string[]): Promise<CommandHandlerResult> 
       `  Event type: ${testResult.eventType || 'n/a'}\n` +
       (testResult.prompt ? `  Resolved prompt:\n    ${testResult.prompt}\n` : '') +
       (testResult.error ? `  Error: ${testResult.error}\n` : '') +
-      '\n(Test only - no agent action dispatched)'
+      '\n(Test only - no agent action dispatched)',
+      Boolean(testResult.error),
     );
   }
 
-  return result('Error: Trigger ID is required. Use `/trigger list` to see IDs.');
+  return result('Error: Trigger ID is required. Use `/trigger list` to see IDs.', true);
 }
 
 // ============================================================================
@@ -404,9 +405,10 @@ function parseFlags(args: string[]): ParsedFlags {
 // Helpers
 // ============================================================================
 
-function result(content: string): CommandHandlerResult {
+function result(content: string, failed = false): CommandHandlerResult {
   return {
     handled: true,
+    ...(failed ? { failed: true } : {}),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

@@ -28,6 +28,8 @@ import {
   selectChatGptOAuthModel,
 } from '../../providers/chatgpt-models.js';
 
+import { announcesSlashFailure, failureFlag } from '../slash-failure.js';
+
 function makeEntry(content: string): ChatEntry {
   return {
     type: 'assistant',
@@ -63,11 +65,13 @@ async function appendModelStatus(
 export async function handleLogin(args: string[]): Promise<CommandHandlerResult> {
   const provider = describeProvider(args);
   const lines: string[] = [];
+  let loginFailed = false;
 
   if (provider !== 'chatgpt') {
     lines.push(`Unknown provider: "${args[0]}". Only \`chatgpt\` is supported.`);
     lines.push('Other providers (Gemini, Anthropic, Grok) authenticate via API key env vars.');
-    return { handled: true, entry: makeEntry(lines.join('\n')) };
+    const text = lines.join('\n');
+    return { handled: true, ...failureFlag(text), entry: makeEntry(text) };
   }
 
   lines.push('🔐 ChatGPT login');
@@ -87,13 +91,19 @@ export async function handleLogin(args: string[]): Promise<CommandHandlerResult>
     lines.push(`Tokens stored at: ${getCodexAuthFilePath()}`);
     lines.push(`Use ${CHATGPT_OAUTH_DEFAULT_MODEL} or another model exposed by your ChatGPT account.`);
   } catch (err) {
+    loginFailed = true;
     lines.push('❌ Login failed');
     lines.push(`   ${err instanceof Error ? err.message : String(err)}`);
     lines.push('');
     lines.push('Run `/login chatgpt` again to retry.');
   }
 
-  return { handled: true, entry: makeEntry(lines.join('\n')) };
+  const text = lines.join('\n');
+  return {
+    handled: true,
+    ...(loginFailed || announcesSlashFailure(text) ? { failed: true } : {}),
+    entry: makeEntry(text),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -106,12 +116,14 @@ export async function handleLogout(args: string[]): Promise<CommandHandlerResult
 
   if (provider !== 'chatgpt') {
     lines.push(`Unknown provider: "${args[0]}". Only \`chatgpt\` is supported.`);
-    return { handled: true, entry: makeEntry(lines.join('\n')) };
+    return { handled: true,
+    ...failureFlag(lines.join('\n')), entry: makeEntry(lines.join('\n')) };
   }
 
   if (!hasCodexCredentials()) {
     lines.push('No ChatGPT credentials on disk — already logged out.');
-    return { handled: true, entry: makeEntry(lines.join('\n')) };
+    return { handled: true,
+    ...failureFlag(lines.join('\n')), entry: makeEntry(lines.join('\n')) };
   }
 
   clearCodexCredentials();
@@ -119,7 +131,8 @@ export async function handleLogout(args: string[]): Promise<CommandHandlerResult
   lines.push(`   Removed: ${getCodexAuthFilePath()}`);
   lines.push('Run `/login chatgpt` to authenticate again.');
 
-  return { handled: true, entry: makeEntry(lines.join('\n')) };
+  return { handled: true,
+  ...failureFlag(lines.join('\n')), entry: makeEntry(lines.join('\n')) };
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -133,7 +146,8 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
 
   if (!hasCodexCredentials()) {
     lines.push('ChatGPT: not connected (run `/login chatgpt`)');
-    return { handled: true, entry: makeEntry(lines.join('\n')) };
+    return { handled: true,
+    ...failureFlag(lines.join('\n')), entry: makeEntry(lines.join('\n')) };
   }
 
   try {
@@ -141,7 +155,8 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
     if (!auth) {
       lines.push('ChatGPT: token unreadable (file present but no access_token).');
       lines.push('  Try `/logout chatgpt` then `/login chatgpt`.');
-      return { handled: true, entry: makeEntry(lines.join('\n')) };
+      const unreadable = lines.join('\n');
+      return { handled: true, failed: true, entry: makeEntry(unreadable) };
     }
     lines.push('ChatGPT: ✅ connected');
     if (auth.email) lines.push(`  Account: ${auth.email}`);
@@ -151,7 +166,10 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
   } catch (err) {
     lines.push('ChatGPT: ⚠️  error reading credentials');
     lines.push(`  ${err instanceof Error ? err.message : String(err)}`);
+    const text = lines.join('\n');
+    return { handled: true, failed: true, entry: makeEntry(text) };
   }
 
-  return { handled: true, entry: makeEntry(lines.join('\n')) };
+  const text = lines.join('\n');
+  return { handled: true, ...failureFlag(text), entry: makeEntry(text) };
 }

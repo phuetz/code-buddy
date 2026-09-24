@@ -18,6 +18,8 @@ import { getHooksManager } from '../../hooks/lifecycle-hooks.js';
 import { getPromptCacheManager } from '../../optimization/prompt-cache.js';
 import { getModelRouter, getCostComparison, GROK_MODELS } from '../../optimization/model-routing.js';
 
+import { failureFlag } from '../slash-failure.js';
+
 /**
  * Helper to create a response entry
  */
@@ -39,6 +41,7 @@ export function handleTDD(args: string[]): CommandHandlerResult {
   if (!action || action === 'status') {
     return {
       handled: true,
+...failureFlag(manager.formatStatus()),
       entry: createEntry(manager.formatStatus()),
     };
   }
@@ -49,6 +52,7 @@ export function handleTDD(args: string[]): CommandHandlerResult {
       if (!requirements) {
         return {
           handled: true,
+...failureFlag('❌ Please provide requirements: /tdd start <requirements>'),
           entry: createEntry('❌ Please provide requirements: /tdd start <requirements>'),
         };
       }
@@ -56,11 +60,13 @@ export function handleTDD(args: string[]): CommandHandlerResult {
         manager.startCycle(requirements);
         return {
           handled: true,
+...failureFlag(`🧪 TDD Mode Started\n\nRequirements: ${requirements}\n\nNext step: Generate tests for these requirements.`),
           entry: createEntry(`🧪 TDD Mode Started\n\nRequirements: ${requirements}\n\nNext step: Generate tests for these requirements.`),
         };
       } catch (error) {
         return {
           handled: true,
+...failureFlag(`❌ ${error instanceof Error ? error.message : 'Failed to start TDD cycle'}`),
           entry: createEntry(`❌ ${error instanceof Error ? error.message : 'Failed to start TDD cycle'}`),
         };
       }
@@ -71,11 +77,13 @@ export function handleTDD(args: string[]): CommandHandlerResult {
         manager.approveTests();
         return {
           handled: true,
+...failureFlag('✅ Tests approved! Now implementing code to make tests pass.'),
           entry: createEntry('✅ Tests approved! Now implementing code to make tests pass.'),
         };
       } catch (error) {
         return {
           handled: true,
+...failureFlag(`❌ ${error instanceof Error ? error.message : 'Failed to approve tests'}`),
           entry: createEntry(`❌ ${error instanceof Error ? error.message : 'Failed to approve tests'}`),
         };
       }
@@ -85,6 +93,7 @@ export function handleTDD(args: string[]): CommandHandlerResult {
       manager.cancelCycle();
       return {
         handled: true,
+...failureFlag('🛑 TDD cycle cancelled.'),
         entry: createEntry('🛑 TDD cycle cancelled.'),
       };
     }
@@ -93,6 +102,7 @@ export function handleTDD(args: string[]): CommandHandlerResult {
       manager.reset();
       return {
         handled: true,
+...failureFlag('🔄 TDD mode reset to idle state.'),
         entry: createEntry('🔄 TDD mode reset to idle state.'),
       };
     }
@@ -100,6 +110,14 @@ export function handleTDD(args: string[]): CommandHandlerResult {
     default:
       return {
         handled: true,
+...failureFlag(`📚 TDD Mode Commands:
+  /tdd                  - Show current TDD status
+  /tdd start <req>      - Start TDD cycle with requirements
+  /tdd approve          - Approve generated tests
+  /tdd cancel           - Cancel current cycle
+  /tdd reset            - Reset to idle state
+
+TDD improves code accuracy by 45% (ICSE 2024 research).`),
         entry: createEntry(`📚 TDD Mode Commands:
   /tdd                  - Show current TDD status
   /tdd start <req>      - Start TDD cycle with requirements
@@ -122,6 +140,7 @@ export function handleWorkflow(args: string[]): CommandHandlerResult {
   if (!action || action === 'status') {
     return {
       handled: true,
+...failureFlag(manager.formatStatus()),
       entry: createEntry(manager.formatStatus()),
     };
   }
@@ -132,6 +151,7 @@ export function handleWorkflow(args: string[]): CommandHandlerResult {
       if (workflows.length === 0) {
         return {
           handled: true,
+...failureFlag('📋 No workflows detected in this project.'),
           entry: createEntry('📋 No workflows detected in this project.'),
         };
       }
@@ -144,6 +164,7 @@ export function handleWorkflow(args: string[]): CommandHandlerResult {
       }
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: createEntry(lines.join('\n')),
       };
     }
@@ -152,6 +173,7 @@ export function handleWorkflow(args: string[]): CommandHandlerResult {
       const templates = manager.getTemplates();
       return {
         handled: true,
+...failureFlag(`📚 Available Workflow Templates:\n\n${templates.map(t => `  • ${t}`).join('\n')}\n\nUsage: /workflow create <template>`),
         entry: createEntry(`📚 Available Workflow Templates:\n\n${templates.map(t => `  • ${t}`).join('\n')}\n\nUsage: /workflow create <template>`),
       };
     }
@@ -162,6 +184,7 @@ export function handleWorkflow(args: string[]): CommandHandlerResult {
         const templates = manager.getTemplates();
         return {
           handled: true,
+...failureFlag(`Please specify a template:\n\n${templates.map(t => `  • ${t}`).join('\n')}\n\nUsage: /workflow create <template>`),
           entry: createEntry(`Please specify a template:\n\n${templates.map(t => `  • ${t}`).join('\n')}\n\nUsage: /workflow create <template>`),
         };
       }
@@ -178,6 +201,7 @@ export function handleWorkflow(args: string[]): CommandHandlerResult {
       if (!file) {
         return {
           handled: true,
+...failureFlag('❌ Please specify a workflow file: /workflow validate <file>'),
           entry: createEntry('❌ Please specify a workflow file: /workflow validate <file>'),
         };
       }
@@ -194,11 +218,13 @@ export function handleWorkflow(args: string[]): CommandHandlerResult {
       if (suggestion) {
         return {
           handled: true,
+...failureFlag(`💡 Suggested workflow template: ${suggestion}\n\nRun /workflow create ${suggestion} to create it.`),
           entry: createEntry(`💡 Suggested workflow template: ${suggestion}\n\nRun /workflow create ${suggestion} to create it.`),
         };
       }
       return {
         handled: true,
+...failureFlag('🤔 No specific workflow suggestion for this project type.'),
         entry: createEntry('🤔 No specific workflow suggestion for this project type.'),
       };
     }
@@ -206,6 +232,15 @@ export function handleWorkflow(args: string[]): CommandHandlerResult {
     default:
       return {
         handled: true,
+...failureFlag(`📚 CI/CD Workflow Commands:
+  /workflow             - Show workflow status
+  /workflow list        - List detected workflows
+  /workflow templates   - Show available templates
+  /workflow create <t>  - Create workflow from template
+  /workflow validate <f>- Validate workflow file
+  /workflow suggest     - Suggest a workflow template
+
+Supported: GitHub Actions, GitLab CI, CircleCI, Jenkins, Azure Pipelines`),
         entry: createEntry(`📚 CI/CD Workflow Commands:
   /workflow             - Show workflow status
   /workflow list        - List detected workflows
@@ -229,6 +264,7 @@ export function handleHooks(args: string[]): CommandHandlerResult {
   if (!action || action === 'status') {
     return {
       handled: true,
+...failureFlag(manager.formatStatus()),
       entry: createEntry(manager.formatStatus()),
     };
   }
@@ -255,6 +291,7 @@ export function handleHooks(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: createEntry(lines.join('\n')),
       };
     }
@@ -264,6 +301,7 @@ export function handleHooks(args: string[]): CommandHandlerResult {
       if (!name) {
         return {
           handled: true,
+...failureFlag('❌ Please specify a hook name: /hooks enable <name>'),
           entry: createEntry('❌ Please specify a hook name: /hooks enable <name>'),
         };
       }
@@ -271,11 +309,13 @@ export function handleHooks(args: string[]): CommandHandlerResult {
       if (success) {
         return {
           handled: true,
+...failureFlag(`✅ Hook "${name}" enabled.`),
           entry: createEntry(`✅ Hook "${name}" enabled.`),
         };
       }
       return {
         handled: true,
+...failureFlag(`❌ Hook "${name}" not found.`),
         entry: createEntry(`❌ Hook "${name}" not found.`),
       };
     }
@@ -285,6 +325,7 @@ export function handleHooks(args: string[]): CommandHandlerResult {
       if (!name) {
         return {
           handled: true,
+...failureFlag('❌ Please specify a hook name: /hooks disable <name>'),
           entry: createEntry('❌ Please specify a hook name: /hooks disable <name>'),
         };
       }
@@ -292,11 +333,13 @@ export function handleHooks(args: string[]): CommandHandlerResult {
       if (success) {
         return {
           handled: true,
+...failureFlag(`✅ Hook "${name}" disabled.`),
           entry: createEntry(`✅ Hook "${name}" disabled.`),
         };
       }
       return {
         handled: true,
+...failureFlag(`❌ Hook "${name}" not found.`),
         entry: createEntry(`❌ Hook "${name}" not found.`),
       };
     }
@@ -319,6 +362,20 @@ Then create the hook configuration and save it.`,
     default:
       return {
         handled: true,
+...failureFlag(`📚 Lifecycle Hooks Commands:
+  /hooks              - Show hooks status
+  /hooks list         - List all registered hooks
+  /hooks enable <n>   - Enable a hook
+  /hooks disable <n>  - Disable a hook
+  /hooks add          - Create a custom hook (AI-assisted)
+
+Hook Types:
+  • pre-edit / post-edit     - Before/after file edits
+  • pre-bash / post-bash     - Before/after bash commands
+  • pre-commit / post-commit - Before/after git commits
+  • pre-prompt / post-response - LLM request lifecycle
+
+73.8% of AI review comments are resolved (industrial study).`),
         entry: createEntry(`📚 Lifecycle Hooks Commands:
   /hooks              - Show hooks status
   /hooks list         - List all registered hooks
@@ -347,6 +404,7 @@ export function handlePromptCache(args: string[]): CommandHandlerResult {
   if (!action || action === 'status') {
     return {
       handled: true,
+...failureFlag(manager.formatStats()),
       entry: createEntry(manager.formatStats()),
     };
   }
@@ -356,15 +414,18 @@ export function handlePromptCache(args: string[]): CommandHandlerResult {
       manager.updateConfig({ enabled: true });
       return {
         handled: true,
+...failureFlag('✅ Prompt caching enabled. Reduces API costs by caching repeated prompts.'),
         entry: createEntry('✅ Prompt caching enabled. Reduces API costs by caching repeated prompts.'),
       };
     }
 
     case 'off': {
       manager.updateConfig({ enabled: false });
+      // ❌ indique l'état désactivé, pas un échec : ne pas passer par failureFlag.
+      const disabled = '❌ Prompt caching disabled.';
       return {
         handled: true,
-        entry: createEntry('❌ Prompt caching disabled.'),
+        entry: createEntry(disabled),
       };
     }
 
@@ -372,6 +433,7 @@ export function handlePromptCache(args: string[]): CommandHandlerResult {
       manager.clear();
       return {
         handled: true,
+...failureFlag('🗑️ Prompt cache cleared.'),
         entry: createEntry('🗑️ Prompt cache cleared.'),
       };
     }
@@ -381,6 +443,7 @@ export function handlePromptCache(args: string[]): CommandHandlerResult {
       manager.warmCache({});
       return {
         handled: true,
+...failureFlag('🔥 Cache warmed with system prompts.'),
         entry: createEntry('🔥 Cache warmed with system prompts.'),
       };
     }
@@ -389,6 +452,14 @@ export function handlePromptCache(args: string[]): CommandHandlerResult {
       const stats = manager.getStats();
       return {
         handled: true,
+...failureFlag(`📊 Prompt Cache Statistics:
+
+  Entries: ${stats.entries}
+  Hit Rate: ${(stats.hitRate * 100).toFixed(1)}%
+  Hits: ${stats.hits}
+  Misses: ${stats.misses}
+  Tokens Saved: ${stats.totalTokensSaved.toLocaleString()}
+  Est. Cost Saved: $${stats.estimatedCostSaved.toFixed(4)}`),
         entry: createEntry(`📊 Prompt Cache Statistics:
 
   Entries: ${stats.entries}
@@ -403,6 +474,15 @@ export function handlePromptCache(args: string[]): CommandHandlerResult {
     default:
       return {
         handled: true,
+...failureFlag(`📚 Prompt Cache Commands:
+  /prompt-cache          - Show cache statistics
+  /prompt-cache status   - Show detailed status
+  /prompt-cache on       - Enable prompt caching
+  /prompt-cache off      - Disable prompt caching
+  /prompt-cache clear    - Clear the cache
+  /prompt-cache warm     - Pre-warm cache with common prompts
+
+Prompt caching can reduce API costs by up to 90%.`),
         entry: createEntry(`📚 Prompt Cache Commands:
   /prompt-cache          - Show cache statistics
   /prompt-cache status   - Show detailed status
@@ -439,6 +519,7 @@ export function handleModelRouter(args: string[]): CommandHandlerResult {
     ];
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: createEntry(lines.join('\n')),
     };
   }
@@ -448,15 +529,18 @@ export function handleModelRouter(args: string[]): CommandHandlerResult {
       router.updateConfig({ enabled: true });
       return {
         handled: true,
+...failureFlag('✅ Model routing enabled. Requests will be routed to optimal models based on task complexity.'),
         entry: createEntry('✅ Model routing enabled. Requests will be routed to optimal models based on task complexity.'),
       };
     }
 
     case 'off': {
       router.updateConfig({ enabled: false });
+      // ❌ indique l'état désactivé, pas un échec : ne pas passer par failureFlag.
+      const disabled = '❌ Model routing disabled. All requests will use the default model.';
       return {
         handled: true,
-        entry: createEntry('❌ Model routing disabled. All requests will use the default model.'),
+        entry: createEntry(disabled),
       };
     }
 
@@ -471,6 +555,7 @@ export function handleModelRouter(args: string[]): CommandHandlerResult {
       }
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: createEntry(lines.join('\n')),
       };
     }
@@ -484,6 +569,7 @@ export function handleModelRouter(args: string[]): CommandHandlerResult {
       }
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: createEntry(lines.join('\n')),
       };
     }
@@ -493,12 +579,14 @@ export function handleModelRouter(args: string[]): CommandHandlerResult {
       if (!level || !['low', 'medium', 'high'].includes(level)) {
         return {
           handled: true,
+...failureFlag('❌ Please specify sensitivity level: /model-router sensitivity <low|medium|high>'),
           entry: createEntry('❌ Please specify sensitivity level: /model-router sensitivity <low|medium|high>'),
         };
       }
       router.updateConfig({ costSensitivity: level });
       return {
         handled: true,
+...failureFlag(`✅ Cost sensitivity set to ${level}. ${level === 'high' ? 'Will prefer cheaper models.' : level === 'low' ? 'Will prefer quality models.' : 'Balanced approach.'}`),
         entry: createEntry(`✅ Cost sensitivity set to ${level}. ${level === 'high' ? 'Will prefer cheaper models.' : level === 'low' ? 'Will prefer quality models.' : 'Balanced approach.'}`),
       };
     }
@@ -524,6 +612,7 @@ export function handleModelRouter(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: createEntry(lines.join('\n')),
       };
     }
@@ -531,6 +620,16 @@ export function handleModelRouter(args: string[]): CommandHandlerResult {
     default:
       return {
         handled: true,
+...failureFlag(`📚 Model Router Commands:
+  /model-router             - Show router status
+  /model-router on          - Enable model routing
+  /model-router off         - Disable model routing
+  /model-router models      - List available models
+  /model-router compare [n] - Compare costs for n tokens
+  /model-router sensitivity - Set cost sensitivity (low/medium/high)
+  /model-router stats       - Show usage statistics
+
+Model routing can reduce costs by 30-70% (FrugalGPT research).`),
         entry: createEntry(`📚 Model Router Commands:
   /model-router             - Show router status
   /model-router on          - Enable model routing

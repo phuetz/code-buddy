@@ -9,6 +9,7 @@
 import type { CommandHandlerResult } from './extra-handlers.js';
 import { getStarterPacks, resolveStarterAlias, findStarterPack } from '../../skills/starter-packs.js';
 import { getSkillRegistry } from '../../skills/registry.js';
+import { failureFlag } from '../slash-failure.js';
 
 /** Language family grouping for display */
 const LANGUAGE_FAMILIES: Record<string, string[]> = {
@@ -85,6 +86,7 @@ export async function handleStarter(args: string[]): Promise<CommandHandlerResul
   if (args.length === 0) {
     return {
       handled: true,
+...failureFlag(formatStarterList()),
       entry: {
         type: 'assistant',
         content: formatStarterList(),
@@ -97,6 +99,7 @@ export async function handleStarter(args: string[]): Promise<CommandHandlerResul
   if (first === undefined) {
     return {
       handled: true,
+...failureFlag(formatStarterList()),
       entry: {
         type: 'assistant',
         content: formatStarterList(),
@@ -110,6 +113,7 @@ export async function handleStarter(args: string[]): Promise<CommandHandlerResul
   if (action === 'list' && args.length === 1) {
     return {
       handled: true,
+...failureFlag(formatStarterList()),
       entry: {
         type: 'assistant',
         content: formatStarterList(),
@@ -121,6 +125,7 @@ export async function handleStarter(args: string[]): Promise<CommandHandlerResul
   if (action === 'search' && args.length === 1) {
     return {
       handled: true,
+...failureFlag('Usage: /starter search <query>'),
       entry: {
         type: 'assistant',
         content: 'Usage: /starter search <query>',
@@ -136,6 +141,7 @@ export async function handleStarter(args: string[]): Promise<CommandHandlerResul
     if (!match) {
       return {
         handled: true,
+...failureFlag(`No starter pack found for "${query}". Try /starter to see all available packs.`),
         entry: {
           type: 'assistant',
           content: `No starter pack found for "${query}". Try /starter to see all available packs.`,
@@ -145,6 +151,7 @@ export async function handleStarter(args: string[]): Promise<CommandHandlerResul
     }
     return {
       handled: true,
+...failureFlag(`Best match: **${match.skill.metadata.name}** (${(match.confidence * 100).toFixed(0)}% confidence)\n${match.skill.metadata.description}\n\nActivate with: /starter ${match.skill.metadata.name}`),
       entry: {
         type: 'assistant',
         content: `Best match: **${match.skill.metadata.name}** (${(match.confidence * 100).toFixed(0)}% confidence)\n${match.skill.metadata.description}\n\nActivate with: /starter ${match.skill.metadata.name}`,
@@ -180,6 +187,7 @@ export async function handleStarter(args: string[]): Promise<CommandHandlerResul
   if (!skill) {
     return {
       handled: true,
+...failureFlag(`Starter pack "${args.join(' ')}" not found. Try /starter to see all available packs.`),
       entry: {
         type: 'assistant',
         content: `Starter pack "${args.join(' ')}" not found. Try /starter to see all available packs.`,
@@ -192,6 +200,7 @@ export async function handleStarter(args: string[]): Promise<CommandHandlerResul
   const prompt = skill.content.rawMarkdown;
   return {
     handled: true,
+...failureFlag(`Activated starter pack: **${skill.metadata.name}**\n${skill.metadata.description}\n\nI'll use this as guidance for setting up your project.`),
     passToAI: true,
     prompt: `[Starter Pack: ${skill.metadata.name}]\n\nThe user wants to scaffold a new project. Use the following starter pack as guidance:\n\n${prompt}`,
     entry: {

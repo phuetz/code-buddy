@@ -60,6 +60,8 @@ export interface HeadlessSlashResult {
   compactionRequested?: boolean;
   /** True when the token is recognized but intentionally gated for this surface. */
   denied?: boolean;
+  /** True when the command failed. The headless CLI exits 1; the TUI ignores it. */
+  failed?: boolean;
   /** Human-readable reason, set when denied or when a handler throws. */
   reason?: string;
 }
@@ -67,6 +69,11 @@ export interface HeadlessSlashResult {
 /** True for `__TOKEN__`-style special command markers. */
 export function isSpecialCommandToken(value: string): boolean {
   return value.length > 4 && value.startsWith("__") && value.endsWith("__");
+}
+
+function commandFailed(result: { failed?: boolean; error?: unknown }): boolean {
+  return result.failed === true
+    || (typeof result.error === 'string' && result.error.trim().length > 0);
 }
 
 /**
@@ -93,6 +100,7 @@ export async function dispatchSlashPrompt(
   if (!parsed.success) {
     return {
       handled: true,
+      failed: true,
       output: parsed.error || `Unknown command: ${trimmed.split(/\s+/)[0]}`,
       reason: parsed.error,
     };
@@ -109,6 +117,7 @@ export async function dispatchSlashPrompt(
   }
   return {
     handled: true,
+    failed: true,
     output: `Command ${trimmed.split(/\s+/)[0]} produced no handler output.`,
   };
 }
@@ -148,6 +157,7 @@ export async function executeHeadlessSlashToken(
         prompt: result.prompt,
         passToAI: result.passToAI,
         compactionRequested: result.compactionRequested,
+        ...(commandFailed(result) ? { failed: true } : {}),
       };
     }
 
@@ -163,10 +173,12 @@ export async function executeHeadlessSlashToken(
       prompt: result.prompt,
       passToAI: result.passToAI,
       compactionRequested: result.compactionRequested,
+      ...(commandFailed(result) ? { failed: true } : {}),
     };
   } catch (error: unknown) {
     return {
       handled: true,
+      failed: true,
       reason: error instanceof Error ? error.message : String(error),
     };
   }

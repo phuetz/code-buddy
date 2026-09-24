@@ -5,6 +5,7 @@
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 let watcherInstance: import('../../agent/file-watcher-trigger.js').FileWatcherTrigger | null = null;
 
@@ -76,6 +77,7 @@ export async function handleWatch(args: string[]): Promise<CommandHandlerResult>
 function result(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

@@ -14,6 +14,7 @@
 
 import { CommandHandlerResult } from './branch-handlers.js';
 import { logger } from '../../utils/logger.js';
+import { failureFlag } from '../slash-failure.js';
 
 /**
  * Handle the /dev slash command.
@@ -39,6 +40,20 @@ export async function handleDev(args: string[]): Promise<CommandHandlerResult> {
     default:
       return {
         handled: true,
+...failureFlag(`/dev — Golden-path developer workflows
+
+Usage:
+  /dev plan <objective>   Create a development plan from requirements
+  /dev run <objective>    Execute a plan autonomously (plan + implement + test)
+  /dev pr <objective>     Run workflow then create a PR
+  /dev fix-ci             Analyze and fix CI failures
+  /dev status             Show current dev workflow status
+
+Examples:
+  /dev plan add user authentication with JWT
+  /dev run implement retry logic for API calls
+  /dev pr refactor database connection pooling
+  /dev fix-ci`),
         entry: {
           type: 'assistant',
           content: `/dev — Golden-path developer workflows
@@ -65,6 +80,7 @@ async function handleDevPlan(objective: string): Promise<CommandHandlerResult> {
   if (!objective) {
     return {
       handled: true,
+...failureFlag('Usage: /dev plan <objective>\n\nExample: /dev plan add user authentication with JWT'),
       entry: {
         type: 'assistant',
         content: 'Usage: /dev plan <objective>\n\nExample: /dev plan add user authentication with JWT',
@@ -76,6 +92,7 @@ async function handleDevPlan(objective: string): Promise<CommandHandlerResult> {
   // Return as passToAI so the agent executes it
   return {
     handled: true,
+...failureFlag(`Planning: ${objective}...`),
     passToAI: true,
     prompt: `[DEV WORKFLOW: PLAN]
 
@@ -105,6 +122,7 @@ async function handleDevRun(objective: string): Promise<CommandHandlerResult> {
   if (!objective) {
     return {
       handled: true,
+...failureFlag('Usage: /dev run <objective>\n\nExample: /dev run implement retry logic for API calls'),
       entry: {
         type: 'assistant',
         content: 'Usage: /dev run <objective>\n\nExample: /dev run implement retry logic for API calls',
@@ -115,6 +133,7 @@ async function handleDevRun(objective: string): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(`Executing dev workflow: ${objective}...`),
     passToAI: true,
     prompt: `[DEV WORKFLOW: RUN]
 
@@ -145,6 +164,7 @@ async function handleDevPR(objective: string): Promise<CommandHandlerResult> {
   if (!objective) {
     return {
       handled: true,
+...failureFlag('Usage: /dev pr <objective>\n\nExample: /dev pr refactor database connection pooling'),
       entry: {
         type: 'assistant',
         content: 'Usage: /dev pr <objective>\n\nExample: /dev pr refactor database connection pooling',
@@ -155,6 +175,7 @@ async function handleDevPR(objective: string): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(`Dev workflow with PR: ${objective}...`),
     passToAI: true,
     prompt: `[DEV WORKFLOW: PR]
 
@@ -182,6 +203,7 @@ Use bash to run: git status, git add, git commit, and then create the PR.`,
 async function handleDevFixCI(_args: string): Promise<CommandHandlerResult> {
   return {
     handled: true,
+...failureFlag('Analyzing and fixing CI failures...'),
     passToAI: true,
     prompt: `[DEV WORKFLOW: FIX-CI]
 
@@ -252,6 +274,7 @@ async function handleDevStatus(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(status.trim()),
     entry: {
       type: 'assistant',
       content: status.trim(),

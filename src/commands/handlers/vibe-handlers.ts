@@ -11,6 +11,7 @@
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 // ============================================================================
 // /reload - Reload Configuration
@@ -65,6 +66,7 @@ export async function handleReload(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -82,6 +84,7 @@ export async function handleLog(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(formatLogInfo()),
     entry: {
       type: 'assistant',
       content: formatLogInfo(),
@@ -107,6 +110,7 @@ export async function handleCompact(
     lines.push('No conversation history to compact.');
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -135,6 +139,7 @@ export async function handleCompact(
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     compactionRequested: true,
     entry: {
       type: 'assistant',
@@ -288,6 +293,7 @@ export async function handleTools(args: string[]): Promise<CommandHandlerResult>
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -353,6 +359,7 @@ export async function handleVimMode(args: string[]): Promise<CommandHandlerResul
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -365,9 +372,14 @@ export async function handleVimMode(args: string[]): Promise<CommandHandlerResul
 // /config - Configuration Validation
 // ============================================================================
 
+function isConfigBatch(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleConfig(args: string[]): Promise<CommandHandlerResult> {
   const action = args[0]?.toLowerCase() || 'validate';
   const lines: string[] = [];
+  let failed = false;
 
   try {
     const {
@@ -380,8 +392,10 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
       case 'validate': {
         // Run full validation
         const report = await handleConfigValidateCommand();
+        const validationFailed = report.includes('[ERROR] Configuration validation failed');
         return {
           handled: true,
+          ...(validationFailed ? { failed: true } : {}),
           entry: {
             type: 'assistant',
             content: report,
@@ -452,6 +466,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
         const cleanArgs = setArgs.filter(a => a !== '--dry-run' && a !== '--json');
 
         if (cleanArgs.length === 0) {
+          failed = true;
           lines.push('Usage: /config set [--dry-run] [--json] <key> <value>');
           lines.push('');
           lines.push('Set a TOML config value by dot-notation key path.');
@@ -479,7 +494,12 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
         if (isJson && cleanArgs.length === 1) {
           const batchJson = cleanArgs[0] ?? '';
           try {
-            const batch = JSON.parse(batchJson) as Record<string, unknown>;
+            const batch: unknown = JSON.parse(batchJson);
+            if (!isConfigBatch(batch) || Object.keys(batch).length === 0) {
+              failed = true;
+              lines.push('Error: batch JSON must be a non-empty object of dot-notation keys');
+              break;
+            }
             const results = await setConfigBatch(batch, { dryRun: isDryRun, json: isJson });
 
             lines.push(isDryRun ? 'Config Set (Dry Run)' : 'Config Set (Batch)');
@@ -498,9 +518,11 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
             }
 
             const successCount = results.filter(r => r.success).length;
+            if (successCount < results.length) failed = true;
             lines.push('');
             lines.push(`${successCount}/${results.length} values ${isDryRun ? 'would be ' : ''}set successfully.`);
           } catch (parseErr) {
+            failed = true;
             lines.push(`Error: Invalid JSON — ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
           }
           break;
@@ -508,6 +530,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
 
         // Single key-value: /config set <key> <value>
         if (cleanArgs.length < 2) {
+          failed = true;
           lines.push('Error: /config set requires <key> <value>');
           lines.push('');
           lines.push('Example: /config set middleware.max_turns 200');
@@ -516,6 +539,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
 
         const keyPath = cleanArgs[0];
         if (keyPath === undefined) {
+          failed = true;
           lines.push('Error: /config set requires <key> <value>');
           lines.push('');
           lines.push('Example: /config set middleware.max_turns 200');
@@ -535,6 +559,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
         }
 
         const result = await setConfigValue(keyPath, parsedValue, { dryRun: isDryRun, json: isJson });
+        if (!result.success) failed = true;
 
         if (isJson) {
           lines.push(JSON.stringify(result, null, 2));
@@ -575,6 +600,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
           lines.push('');
           lines.push(JSON.stringify(defaults, null, 2));
         } else {
+          failed = true;
           lines.push(`Unknown schema: ${schemaName}`);
           lines.push('');
           lines.push('Available schemas:');
@@ -609,6 +635,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
       }
 
       default:
+        failed = true;
         lines.push('Configuration Management');
         lines.push('='.repeat(50));
         lines.push('');
@@ -634,6 +661,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
     }
 
   } catch (error) {
+    failed = true;
     lines.push('Configuration Error');
     lines.push('='.repeat(50));
     lines.push(`Error: ${error instanceof Error ? error.message : String(error)}`);
@@ -641,6 +669,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
 
   return {
     handled: true,
+    ...(failed ? { failed: true } : {}),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),

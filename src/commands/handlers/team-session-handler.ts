@@ -41,6 +41,7 @@
 
 import { CommandHandlerResult } from './branch-handlers.js';
 import { logger } from '../../utils/logger.js';
+import { failureFlag } from '../slash-failure.js';
 
 const VALID_ACTIONS = new Set([
   'enable', 'disable', 'status', 'create', 'join', 'list', 'leave', 'help', '',
@@ -108,6 +109,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
   if (!VALID_ACTIONS.has(action)) {
     return {
       handled: true,
+...failureFlag(`Unknown share action: ${args[0]}\n\n${HELP_TEXT}`),
       entry: {
         type: 'assistant',
         content: `Unknown share action: ${args[0]}\n\n${HELP_TEXT}`,
@@ -119,6 +121,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
   if (action === 'help' || action === '') {
     return {
       handled: true,
+...failureFlag(HELP_TEXT),
       entry: { type: 'assistant', content: HELP_TEXT, timestamp: new Date() },
     };
   }
@@ -144,6 +147,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     if (!isInstantiated()) {
       return {
         handled: true,
+...failureFlag('Team session manager is not enabled.'),
         entry: { type: 'assistant', content: 'Team session manager is not enabled.', timestamp: new Date() },
       };
     }
@@ -152,6 +156,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     logger.info('Team session manager disabled via slash command');
     return {
       handled: true,
+...failureFlag('Team session manager stopped.'),
       entry: { type: 'assistant', content: 'Team session manager stopped.', timestamp: new Date() },
     };
   }
@@ -162,6 +167,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
       const text = formatStatusLines(false, cfg.server_url, cfg.enable_encryption ?? true, 'No active session.');
       return {
         handled: true,
+...failureFlag(text),
         entry: { type: 'assistant', content: text, timestamp: new Date() },
       };
     }
@@ -180,6 +186,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     );
     return {
       handled: true,
+...failureFlag(text),
       entry: { type: 'assistant', content: text, timestamp: new Date() },
     };
   }
@@ -213,6 +220,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     if (wasEnabled) {
       return {
         handled: true,
+...failureFlag('Team session manager already enabled. Use /share status to see active session.'),
         entry: {
           type: 'assistant',
           content: 'Team session manager already enabled. Use /share status to see active session.',
@@ -223,6 +231,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     logger.info('Team session manager enabled via slash command');
     return {
       handled: true,
+...failureFlag('Team session manager started (local-first mode — V0.1).\nUse /share create <name> to start a session.'),
       entry: {
         type: 'assistant',
         content: 'Team session manager started (local-first mode — V0.1).\nUse /share create <name> to start a session.',
@@ -236,6 +245,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     if (!name) {
       return {
         handled: true,
+...failureFlag('Usage: /share create <name>'),
         entry: { type: 'assistant', content: 'Usage: /share create <name>', timestamp: new Date() },
       };
     }
@@ -243,6 +253,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
       const session = await mgr.createSession(name);
       return {
         handled: true,
+...failureFlag(`Session created: ${session.name}\nID: ${session.id}\nOwner: ${internals.currentMember?.name ?? '(unknown)'}\nStorage: ~/.codebuddy/shares/${session.id}.json`),
         entry: {
           type: 'assistant',
           content: `Session created: ${session.name}\nID: ${session.id}\nOwner: ${internals.currentMember?.name ?? '(unknown)'}\nStorage: ~/.codebuddy/shares/${session.id}.json`,
@@ -252,6 +263,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     } catch (err) {
       return {
         handled: true,
+...failureFlag(`Could not create session: ${err instanceof Error ? err.message : String(err)}`),
         entry: {
           type: 'assistant',
           content: `Could not create session: ${err instanceof Error ? err.message : String(err)}`,
@@ -266,6 +278,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     if (!sessionId) {
       return {
         handled: true,
+...failureFlag('Usage: /share join <sessionId>'),
         entry: { type: 'assistant', content: 'Usage: /share join <sessionId>', timestamp: new Date() },
       };
     }
@@ -274,6 +287,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
       if (!session) {
         return {
           handled: true,
+...failureFlag(`Session not found: ${sessionId}\nUse /share list to see available sessions.`),
           entry: {
             type: 'assistant',
             content: `Session not found: ${sessionId}\nUse /share list to see available sessions.`,
@@ -283,6 +297,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
       }
       return {
         handled: true,
+...failureFlag(`Joined session: ${session.name} (${session.members.length} member${session.members.length === 1 ? '' : 's'})`),
         entry: {
           type: 'assistant',
           content: `Joined session: ${session.name} (${session.members.length} member${session.members.length === 1 ? '' : 's'})`,
@@ -292,6 +307,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     } catch (err) {
       return {
         handled: true,
+...failureFlag(`Could not join session: ${err instanceof Error ? err.message : String(err)}`),
         entry: {
           type: 'assistant',
           content: `Could not join session: ${err instanceof Error ? err.message : String(err)}`,
@@ -306,6 +322,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     if (sessions.length === 0) {
       return {
         handled: true,
+...failureFlag('No sessions on disk.'),
         entry: { type: 'assistant', content: 'No sessions on disk.', timestamp: new Date() },
       };
     }
@@ -314,6 +331,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     );
     return {
       handled: true,
+...failureFlag(`Found ${sessions.length} session(s):\n${lines.join('\n')}`),
       entry: {
         type: 'assistant',
         content: `Found ${sessions.length} session(s):\n${lines.join('\n')}`,
@@ -327,12 +345,14 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
     if (!current) {
       return {
         handled: true,
+...failureFlag('No active session to leave.'),
         entry: { type: 'assistant', content: 'No active session to leave.', timestamp: new Date() },
       };
     }
     await mgr.leaveSession();
     return {
       handled: true,
+...failureFlag(`Left session: ${current.name}`),
       entry: {
         type: 'assistant',
         content: `Left session: ${current.name}`,
@@ -346,6 +366,7 @@ export async function handleShare(args: string[]): Promise<CommandHandlerResult>
   // typing on the function return type stays satisfied.
   return {
     handled: true,
+...failureFlag(HELP_TEXT),
     entry: { type: 'assistant', content: HELP_TEXT, timestamp: new Date() },
   };
 }

@@ -8,6 +8,7 @@
 
 import type { CommandHandlerResult } from './branch-handlers.js';
 import type { KnowledgeGraph } from '../../knowledge/knowledge-graph.js';
+import { failureFlag } from '../slash-failure.js';
 
 /** Ensure the graph is loaded from disk cache then populated if still empty */
 async function ensureGraphLoaded(graph: KnowledgeGraph): Promise<void> {
@@ -34,6 +35,15 @@ export async function handleImpact(args: string[]): Promise<CommandHandlerResult
   if (args.length === 0) {
     return {
       handled: true,
+...failureFlag('Impact Analysis Commands:\n\n' +
+          '  /impact <symbol>                    — Analyze blast radius (both directions)\n' +
+          '  /impact <symbol> --direction up      — Show only callers (upstream)\n' +
+          '  /impact <symbol> --direction down     — Show only callees (downstream)\n' +
+          '  /impact <symbol> --depth 3            — Limit traversal depth\n' +
+          '\nExamples:\n' +
+          '  /impact handleLogin\n' +
+          '  /impact CodeBuddyAgent --direction up\n' +
+          '  /impact executeTool --depth 2'),
       entry: {
         type: 'assistant',
         content: 'Impact Analysis Commands:\n\n' +
@@ -59,6 +69,7 @@ export async function handleImpact(args: string[]): Promise<CommandHandlerResult
   if (graph.getStats().tripleCount === 0) {
     return {
       handled: true,
+...failureFlag('Code graph is empty. Run /docs-generate or use the codebase_map tool first.'),
       entry: {
         type: 'assistant',
         content: 'Code graph is empty. Run /docs-generate or use the codebase_map tool first.',
@@ -92,6 +103,7 @@ export async function handleImpact(args: string[]): Promise<CommandHandlerResult
   if (!target) {
     return {
       handled: true,
+...failureFlag('Usage: /impact <symbol> [--direction up|down|both] [--depth N]'),
       entry: {
         type: 'assistant',
         content: 'Usage: /impact <symbol> [--direction up|down|both] [--depth N]',
@@ -114,6 +126,7 @@ export async function handleImpact(args: string[]): Promise<CommandHandlerResult
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -135,6 +148,7 @@ export async function handleProcesses(args: string[]): Promise<CommandHandlerRes
   if (graph.getStats().tripleCount === 0) {
     return {
       handled: true,
+...failureFlag('Code graph is empty. Run /docs-generate or use the codebase_map tool first.'),
       entry: {
         type: 'assistant',
         content: 'Code graph is empty. Run /docs-generate or use the codebase_map tool first.',
@@ -163,6 +177,9 @@ export async function handleProcesses(args: string[]): Promise<CommandHandlerRes
   if (processes.length === 0) {
     return {
       handled: true,
+...failureFlag(entryPoint
+          ? `No processes found from entry point "${entryPoint}" with at least ${minSteps} steps.`
+          : `No processes detected with at least ${minSteps} steps.`),
       entry: {
         type: 'assistant',
         content: entryPoint
@@ -194,6 +211,7 @@ export async function handleProcesses(args: string[]): Promise<CommandHandlerRes
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: { type: 'assistant', content: lines.join('\n'), timestamp: new Date() },
   };
 }
@@ -211,6 +229,7 @@ export async function handleCommunities(args: string[]): Promise<CommandHandlerR
   if (graph.getStats().tripleCount === 0) {
     return {
       handled: true,
+...failureFlag('Code graph is empty. Run /docs-generate or use the codebase_map tool first.'),
       entry: {
         type: 'assistant',
         content: 'Code graph is empty. Run /docs-generate or use the codebase_map tool first.',
@@ -236,6 +255,7 @@ export async function handleCommunities(args: string[]): Promise<CommandHandlerR
   if (communities.length === 0) {
     return {
       handled: true,
+...failureFlag(`No communities detected with at least ${minSize} symbols.`),
       entry: {
         type: 'assistant',
         content: `No communities detected with at least ${minSize} symbols.`,
@@ -267,6 +287,7 @@ export async function handleCommunities(args: string[]): Promise<CommandHandlerR
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: { type: 'assistant', content: lines.join('\n'), timestamp: new Date() },
   };
 }

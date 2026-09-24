@@ -5,10 +5,12 @@ import { getPermissionModeManager } from '../../security/permission-modes.js';
 import { ApprovalPatternTracker } from '../../utils/approval-pattern-tracker.js';
 import { SessionTimeline } from '../../sessions/timeline.js';
 import { getCollectiveKnowledgeGraph } from '../../memory/collective-knowledge-graph.js';
+import { failureFlag } from '../slash-failure.js';
 
 function result(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

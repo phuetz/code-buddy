@@ -138,7 +138,8 @@ describe('VERIFIX1: CLI headless slash routing', () => {
       .slice(requestsBefore)
       .filter((body) => body.includes('/batch'));
 
-    expect(result.exitCode).toBe(0);
+    // /batch sans instruction est une erreur d'usage : le dispatcher répond, code 1.
+    expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain('Usage: /batch');
     expect(result.stdout).not.toContain('CLI_ROUTE_LLM_SENTINEL');
     expect(promptRequests).toEqual([]);

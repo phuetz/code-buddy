@@ -5,6 +5,7 @@
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 /** Singleton pipeline instance (lazy-loaded) */
 let pipeline: { isActive: () => boolean; start: () => Promise<void>; stop: () => Promise<void> } | null = null;
@@ -21,11 +22,13 @@ export async function handleVoiceCode(args: string[]): Promise<CommandHandlerRes
       await pipeline.start();
       return {
         handled: true,
+...failureFlag('Voice-to-code pipeline started. Speak commands or dictate code.'),
         entry: { type: 'assistant', content: 'Voice-to-code pipeline started. Speak commands or dictate code.', timestamp: new Date() },
       };
     } catch (err) {
       return {
         handled: true,
+...failureFlag(`Failed to start voice-to-code: ${err instanceof Error ? err.message : String(err)}`),
         entry: { type: 'assistant', content: `Failed to start voice-to-code: ${err instanceof Error ? err.message : String(err)}`, timestamp: new Date() },
       };
     }
@@ -37,6 +40,7 @@ export async function handleVoiceCode(args: string[]): Promise<CommandHandlerRes
     }
     return {
       handled: true,
+...failureFlag('Voice-to-code pipeline stopped.'),
       entry: { type: 'assistant', content: 'Voice-to-code pipeline stopped.', timestamp: new Date() },
     };
   }
@@ -45,6 +49,7 @@ export async function handleVoiceCode(args: string[]): Promise<CommandHandlerRes
   const active = pipeline?.isActive() ?? false;
   return {
     handled: true,
+...failureFlag(`Voice-to-code pipeline: ${active ? 'active' : 'inactive'}`),
     entry: { type: 'assistant', content: `Voice-to-code pipeline: ${active ? 'active' : 'inactive'}`, timestamp: new Date() },
   };
 }
