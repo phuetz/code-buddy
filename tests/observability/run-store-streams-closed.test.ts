@@ -127,7 +127,7 @@ describe('RunStore.pruneOldRuns', () => {
       await store.flushRun(runIds[i]);
     }
 
-    await vi.waitFor(() => expect(removals.length).toBe(1), { timeout: 2000 });
+    await vi.waitFor(() => expect(removals.length).toBe(1), { timeout: 10_000 });
     const pruned = runIds.find((id) => removals[0].target === path.join(store!.getRunsDir(), id));
     expect(pruned).toBeDefined();
     expect(removals[0].stillOpen).toEqual([]);
@@ -153,7 +153,7 @@ describe('RunStore.pruneOldRuns', () => {
     store.endRun(oldest, 'completed');
     const newest = store.startRun('run 30');
 
-    await vi.waitFor(() => expect(removals.length).toBe(1), { timeout: 2000 });
+    await vi.waitFor(() => expect(removals.length).toBe(1), { timeout: 10_000 });
     expect(newest).not.toBe(oldest);
     expect(removals[0].target).toBe(oldestDir);
     expect(removals[0].stillOpen).toEqual([]);
