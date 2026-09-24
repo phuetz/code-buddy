@@ -58,11 +58,12 @@ describe.skipIf(process.platform !== 'linux')('RunStore.whenStreamsClosed', () =
   });
 });
 
-// pruneOldRuns() destroys the journal of the oldest run past MAX_RUNS (30) and
-// removes its folder. It used to remove it after a fixed 20 ms, whatever the
-// state of the close; Windows then refuses (ENOTEMPTY) and the error was
-// swallowed, so the folder was never pruned. Closes are slowed down here so a
-// removal that does not wait for the close is seen on every platform.
+// pruneOldRuns() removes the folder of the oldest run past MAX_RUNS (30). It
+// used to remove it after a fixed 20 ms, whatever the state of its journal;
+// Windows then refuses (ENOTEMPTY) and the error was swallowed, so the folder
+// was never pruned. Closes are slowed down here and every descriptor opened by
+// fs.open is followed until its close completes, so a removal that does not
+// wait for the journal is seen on every platform.
 describe('RunStore.pruneOldRuns', () => {
   let dir: string;
   let store: RunStore | undefined;
@@ -83,24 +84,41 @@ describe('RunStore.pruneOldRuns', () => {
     removeTestDir(dir);
   });
 
-  it('removes a pruned run folder only once its journal is closed', async () => {
+  /** Slows every fs.close and records, at each fs.rmSync, the files still open below its target. */
+  function watchDescriptors(): Array<{ target: string; stillOpen: string[] }> {
+    const open = new Map<number, string>();
+    const realOpen = fs.open;
+    vi.spyOn(fs, 'open').mockImplementation(((file: fs.PathLike, ...rest: unknown[]) => {
+      const callback = rest.pop() as (err: NodeJS.ErrnoException | null, fd: number) => void;
+      (realOpen as (...args: unknown[]) => void)(file, ...rest, (err: NodeJS.ErrnoException | null, fd: number) => {
+        if (!err) open.set(fd, path.resolve(String(file)));
+        callback(err, fd);
+      });
+    }) as typeof fs.open);
     const realClose = fs.close;
-    let pendingCloses = 0;
     vi.spyOn(fs, 'close').mockImplementation(((fd: number, callback?: (err: NodeJS.ErrnoException | null) => void) => {
-      pendingCloses += 1;
       setTimeout(() => {
         realClose(fd, (err) => {
-          pendingCloses -= 1;
+          open.delete(fd);
           callback?.(err);
         });
       }, 100);
     }) as typeof fs.close);
     const realRmSync = fs.rmSync;
-    const removals: Array<{ target: string; pendingCloses: number }> = [];
+    const removals: Array<{ target: string; stillOpen: string[] }> = [];
     vi.spyOn(fs, 'rmSync').mockImplementation(((target: fs.PathLike, options?: fs.RmOptions) => {
-      removals.push({ target: String(target), pendingCloses });
+      const root = path.resolve(String(target)) + path.sep;
+      removals.push({
+        target: String(target),
+        stillOpen: [...open.values()].filter((file) => file.startsWith(root)),
+      });
       realRmSync(target, options);
     }) as typeof fs.rmSync);
+    return removals;
+  }
+
+  it('removes a pruned run folder only once its journal is closed', async () => {
+    const removals = watchDescriptors();
 
     store = new RunStore(path.join(dir, 'runs'));
     const runIds: string[] = [];
@@ -112,7 +130,33 @@ describe('RunStore.pruneOldRuns', () => {
     await vi.waitFor(() => expect(removals.length).toBe(1), { timeout: 2000 });
     const pruned = runIds.find((id) => removals[0].target === path.join(store!.getRunsDir(), id));
     expect(pruned).toBeDefined();
-    expect(removals[0].pendingCloses).toBe(0);
+    expect(removals[0].stillOpen).toEqual([]);
     expect(fs.existsSync(removals[0].target)).toBe(false);
+  });
+
+  // endRun() hands the journal to its close and forgets it at once; a run
+  // started in the same turn then prunes that run while the file is still open.
+  it('waits for the journal of an ended run that is still closing', async () => {
+    const removals = watchDescriptors();
+
+    store = new RunStore(path.join(dir, 'runs'));
+    const oldest = store.startRun('oldest');
+    await store.flushRun(oldest);
+    // Strictly the oldest: the next runs start in a later millisecond.
+    const startedAt = store.getRun(oldest)!.summary.startedAt;
+    await vi.waitFor(() => expect(Date.now()).toBeGreaterThan(startedAt), { timeout: 2000 });
+    for (let i = 1; i < 30; i += 1) {
+      await store.flushRun(store.startRun(`run ${i}`));
+    }
+    const oldestDir = path.join(store.getRunsDir(), oldest);
+
+    store.endRun(oldest, 'completed');
+    const newest = store.startRun('run 30');
+
+    await vi.waitFor(() => expect(removals.length).toBe(1), { timeout: 2000 });
+    expect(newest).not.toBe(oldest);
+    expect(removals[0].target).toBe(oldestDir);
+    expect(removals[0].stillOpen).toEqual([]);
+    expect(fs.existsSync(oldestDir)).toBe(false);
   });
 });
