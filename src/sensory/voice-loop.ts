@@ -287,7 +287,12 @@ export type SpokenPrefixFn = (heard: string, opts?: VoiceStepOptions) => Promise
 /** Synthesize: turn reply text into a playable WAV file, return its path. */
 export type SynthFn = (text: string, opts?: VoiceStepOptions) => Promise<string>;
 /** Speak: play a WAV file to the speakers (blocking until done). */
-export type PlayFn = (wav: string, opts?: VoiceStepOptions) => Promise<void>;
+/**
+ * Plays a WAV. Resolves `false` when nothing was played (no player, spawn
+ * error, non-zero exit, timeout): callers must not record such a line as said.
+ * Resolving `void`/`true` means it played, fully or until an interruption.
+ */
+export type PlayFn = (wav: string, opts?: VoiceStepOptions) => Promise<void | boolean>;
 /** Options for Pocket's native chunked WAV → player path. */
 export interface StreamSpeakOptions extends VoiceStepOptions {
   /** Fired when the first PCM-bearing chunk has been accepted by the player. */
@@ -3186,10 +3191,10 @@ async function defaultPlay(
   wav: string,
   opts: VoiceStepOptions = {},
   playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer()
-): Promise<void> {
+): Promise<boolean> {
   const signal = opts.signal;
   // Already interrupted before we even start → don't spawn anything.
-  if (signal?.aborted) return;
+  if (signal?.aborted) return false;
   if (!opts.alreadyNormalized) await normalizeWavFile(wav, process.env);
   try {
     const source = await readFile(wav);
@@ -3203,7 +3208,7 @@ async function defaultPlay(
   const player = await playerPromise;
   if (!player) {
     logger.warn('[voice] no audio player available (aplay/ffplay) — staying silent');
-    return;
+    return false;
   }
   // A player that blocks instead of exiting (malformed WAV with a huge declared duration, an ALSA
   // device that hangs) would never resolve this promise. Under withSpeakingGuard that latches
@@ -3211,15 +3216,19 @@ async function defaultPlay(
   // permanently deaf. A generous timeout (far beyond any real spoken line) kills the child and
   // recovers.
   const playTimeoutMs = Number(process.env.CODEBUDDY_VOICE_PLAY_TIMEOUT_MS) || 60_000;
-  await new Promise<void>((resolve) => {
+  return new Promise<boolean>((resolve) => {
     const child = spawn(player.cmd, player.fileArgs(wav), { stdio: 'ignore' });
     let settled = false;
-    const finish = (): void => {
+    // `played`: the player ran to completion (exit 0), or was cut by a barge-in
+    // after it started — the listener heard part of it. A spawn error, a
+    // non-zero exit (busy ALSA device…) or the timeout played nothing reliable.
+    const finish = (played: boolean): void => {
       if (settled) return;
       settled = true;
       clearTimeout(killTimer);
       signal?.removeEventListener('abort', onAbort);
-      resolve();
+      if (!played) logger.warn(`[voice] player ${player.cmd} did not play the line`);
+      resolve(played);
     };
     const killTimer = setTimeout(() => {
       logger.warn(
@@ -3230,7 +3239,7 @@ async function defaultPlay(
       } catch {
         /* already gone */
       }
-      finish();
+      finish(false);
     }, playTimeoutMs);
     // Barge-in: the same SIGKILL, but on demand instead of only on timeout.
     const onAbort = (): void => {
@@ -3240,11 +3249,11 @@ async function defaultPlay(
       } catch {
         /* already gone */
       }
-      finish();
+      finish(true);
     };
     signal?.addEventListener('abort', onAbort, { once: true });
-    child.on('error', finish);
-    child.on('close', finish);
+    child.on('error', () => finish(false));
+    child.on('close', (code) => finish(code === 0));
   });
 }
 
@@ -3310,14 +3319,13 @@ export async function sayNow(
     });
     if (wav) {
       // Half-duplex: mute the ear while speaking. The signal lets barge-in kill this player too.
-      await withSpeakingGuard(() => {
+      await withSpeakingGuard(async () => {
         noteSpokenText(t);
-        return play(wav, {
+        played = (await play(wav, {
           signal: options.signal,
           alreadyNormalized: options.synth === undefined,
-        });
+        })) !== false;
       });
-      played = true;
       try {
         const { unlink } = await import('fs/promises');
         await unlink(wav);
@@ -3765,7 +3773,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         firstContentAudioMs = Date.now() - startedAt;
       }
       try {
-        await play(wav, {
+        return await play(wav, {
           ...(opts ?? {}),
           delivery,
           alreadyNormalized: options.synth === undefined,
@@ -4229,13 +4237,16 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // Interrupted during synth → don't start playback.
       if (signal.aborted) return;
       const playStart = Date.now();
-      await withSpeakingGuard(() => {
+      const blocking = { played: true };
+      await withSpeakingGuard(async () => {
         noteSpokenText(reply);
-        return timedPlay(wav, { signal, delivery });
+        blocking.played = (await timedPlay(wav, { signal, delivery })) !== false;
       }); // half-duplex + interruptible
       playMs = Date.now() - playStart;
       // A barge-in kills the player early; don't claim we "spoke" the whole line.
       if (signal.aborted) return;
+      // The player failed: nothing was heard, so nothing is recorded as said.
+      if (!blocking.played) return;
       if (!emptyReplyRecovery) mode = 'blocking';
       spoke = true;
       const correction = await speakSemanticCorrection();

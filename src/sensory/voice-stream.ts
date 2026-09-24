@@ -622,19 +622,25 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
           await unlink(item.wav);
           break;
         }
+        let segmentPlayed = true;
         try {
-          await params.play(item.wav, {
+          segmentPlayed = (await params.play(item.wav, {
             ...(signal ? { signal } : {}),
             ...(segmentIndex > 0 ? { prependInterSentenceSilence: true } : {}),
             alreadyNormalized: true,
-          });
+          })) !== false;
         } catch (err) {
+          segmentPlayed = false;
           logger.warn(`[voice] stream play failed: ${errMsg(err)}`);
         }
         await unlink(item.wav);
         if (stop()) break;
-        played = true;
-        spoken.push(item.text);
+        // A segment the player failed on was never heard: it is neither
+        // "played" nor part of what the robot said.
+        if (segmentPlayed) {
+          played = true;
+          spoken.push(item.text);
+        }
         segmentIndex += 1;
         item = await wavQ.shift(stop);
       }

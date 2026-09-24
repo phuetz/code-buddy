@@ -26,6 +26,7 @@ import { checkDomainPolicy } from '../../src/doctor/domain-policy-check.js';
 import { runDoctorChecks } from '../../src/doctor/index.js';
 
 const previousHome = process.env.HOME;
+const previousUserProfile = process.env.USERPROFILE;
 const previousCodebuddyHome = process.env.CODEBUDDY_HOME;
 const previousConfig = process.env.CODEBUDDY_CONFIG;
 const previousCwd = process.cwd();
@@ -38,6 +39,8 @@ afterEach(() => {
   process.exitCode = previousExit;
   if (previousHome === undefined) delete process.env.HOME;
   else process.env.HOME = previousHome;
+  if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = previousUserProfile;
   if (previousCodebuddyHome === undefined) delete process.env.CODEBUDDY_HOME;
   else process.env.CODEBUDDY_HOME = previousCodebuddyHome;
   if (previousConfig === undefined) delete process.env.CODEBUDDY_CONFIG;
@@ -57,6 +60,8 @@ function isolate(configText = ''): { home: string; configFile: string; policyFil
   const policyFile = path.join(directory, 'managed-settings.json');
   if (configText) writeFileSync(configFile, configText.endsWith('\n') ? configText : `${configText}\n`);
   process.env.HOME = home;
+  // Windows : os.homedir() lit USERPROFILE, pas HOME.
+  process.env.USERPROFILE = home;
   process.env.CODEBUDDY_HOME = home;
   process.env.CODEBUDDY_CONFIG = configFile;
   process.chdir(home);
