@@ -180,4 +180,73 @@ export function registerConfigCommand(program: Command): void {
       const { runConfigSchema } = await import('../../config/config-cli.js');
       process.stdout.write(`${JSON.stringify(runConfigSchema(), null, 2)}\n`);
     });
+
+  config
+    .allowUnknownOption(true)
+    .option('--section <name>', 'Assistant : model, gateway, channels, mcp, sandbox ou exec')
+    .option('--answers <file>', 'Réponses JSON. « - » lit l\'entrée standard')
+    .action(async (opts: { section?: string; answers?: string }) => {
+      const tokens = config.args;
+      const json = tokens.includes('--json');
+      const dryRun = tokens.includes('--dry-run');
+      if (!opts.section) {
+        config.outputHelp();
+        process.exitCode = 1;
+        return;
+      }
+      const { parseAnswersText, runConfigAssistant } = await import('../../config/config-assistant.js');
+      const { formatConfigReport } = await import('../../config/config-cli.js');
+      let text = '';
+      const answersPath = opts.answers;
+      const readStdin = !answersPath || answersPath === '-';
+      if (readStdin && !answersPath && process.stdin.isTTY) {
+        process.stdout.write(formatConfigReport({
+          ok: false,
+          operations: [],
+          checks: [
+            { name: 'known-key', ok: false },
+            { name: 'type', ok: true },
+            { name: 'document', ok: false },
+            { name: 'backup', ok: true, detail: 'non exécuté' },
+          ],
+          errors: ['Fournissez --answers <fichier>, ou un objet JSON sur l\'entrée standard.'],
+        }, json));
+        process.exitCode = 1;
+        return;
+      }
+      if (readStdin) {
+        text = await new Promise<string>((resolve, reject) => {
+          const chunks: Buffer[] = [];
+          process.stdin.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+          process.stdin.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+          process.stdin.on('error', reject);
+        });
+      } else {
+        const { readFileSync } = await import('node:fs');
+        text = readFileSync(answersPath ?? '', 'utf8');
+      }
+      const parsed = parseAnswersText(text);
+      if (!parsed.ok) {
+        process.stdout.write(formatConfigReport({
+          ok: false,
+          operations: [],
+          checks: [
+            { name: 'known-key', ok: false },
+            { name: 'type', ok: true },
+            { name: 'document', ok: false },
+            { name: 'backup', ok: true, detail: 'non exécuté' },
+          ],
+          errors: [parsed.error],
+        }, json));
+        process.exitCode = 1;
+        return;
+      }
+      const report = await runConfigAssistant({
+        section: opts.section,
+        answers: parsed.answers,
+        dryRun,
+      });
+      process.stdout.write(formatConfigReport(report, json));
+      if (!report.ok) process.exitCode = 1;
+    });
 }
