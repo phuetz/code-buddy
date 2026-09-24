@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { SkillRegistry } from '../../src/skills/registry.js';
 import { requireSkillWatchers } from './watch-health.js';
+import { tmpdir as osTmpdirForTests } from 'node:os';
+import { realpathSync as fsRealpathForTmp } from 'node:fs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const registries: SkillRegistry[] = [];
@@ -60,7 +62,7 @@ afterEach(async () => {
 
 describe('SkillRegistry watcher directory races', () => {
   it('watches the root and each first-level directory with error handlers', async () => {
-    const skillsRoot = mkdtempSync(path.join(repoRoot, '.r32-skills-watch-'));
+    const skillsRoot = fsRealpathForTmp(mkdtempSync(path.join(osTmpdirForTests(), 'r32-skills-watch-')));
     tempRoots.push(skillsRoot);
     mkdirSync(path.join(skillsRoot, 'existing-skill'));
 
@@ -92,7 +94,7 @@ describe('SkillRegistry watcher directory races', () => {
   });
 
   it('survives transient first-level directories and still loads a later skill', async () => {
-    const skillsRoot = mkdtempSync(path.join(repoRoot, '.r32-skills-watch-'));
+    const skillsRoot = fsRealpathForTmp(mkdtempSync(path.join(osTmpdirForTests(), 'r32-skills-watch-')));
     tempRoots.push(skillsRoot);
 
     const registry = new SkillRegistry({

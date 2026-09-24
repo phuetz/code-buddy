@@ -10,11 +10,13 @@ import {
   tryAcquireExtractionLock,
 } from '../../src/memory/background-extractor.js';
 import { getGlobalEventBus, resetEventBus } from '../../src/events/event-bus.js';
+import { tmpdir as osTmpdirForTests } from 'node:os';
+import { realpathSync as fsRealpathForTmp } from 'node:fs';
 
 const testDirectories: string[] = [];
 
 function makeDirectory(): string {
-  const directory = fs.mkdtempSync(path.join(process.cwd(), '.memextract1-test-'));
+  const directory = fsRealpathForTmp(fs.mkdtempSync(path.join(osTmpdirForTests(), 'memextract1-test-')));
   testDirectories.push(directory);
   return directory;
 }
