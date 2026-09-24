@@ -17,8 +17,9 @@
  *   sur l'emplacement par défaut de l'appelant avant la bascule.
  * - Garde : avant chaque test, `os.homedir()` ne doit ni valoir le HOME appelant (ou
  *   celui du compte) ni tomber dans son `.codebuddy` ; sinon le test échoue avec un
- *   message explicite. Les chemins sont comparés après `realpath` natif (liens macOS,
- *   noms courts 8.3 Windows) et sans casse sous Windows.
+ *   message explicite. Les chemins sont comparés après `realpath` natif de l'ancêtre
+ *   existant le plus proche (liens macOS, noms courts 8.3 Windows) et sans casse sous
+ *   Windows (fonctions pures dans `home-isolation-paths.ts`).
  * - Les HOME jetables vivent sous un parent créé et supprimé par
  *   `tests/setup/home-isolation-global.ts`, après l'arrêt des workers.
  *
@@ -32,6 +33,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { beforeEach } from 'vitest';
+import { callerPlaywrightBrowsersPath, canonicalPath, isSameOrInside, isolatedHomeEnv } from './home-isolation-paths.js';
+
+export { callerPlaywrightBrowsersPath, canonicalPath, isSameOrInside, isolatedHomeEnv };
 
 /** HOME du processus qui a lancé Vitest, mémorisé une fois pour tous les fichiers. */
 export const CALLER_HOME_ENV = 'CODEBUDDY_VITEST_CALLER_HOME';
@@ -40,59 +44,6 @@ const OWNED_PROFILE_ENV = 'CODEBUDDY_VITEST_OWNS_CODEBUDDY_HOME';
 
 // Référence capturée avant tout `vi.spyOn(os, 'homedir')` d'un test.
 const realHomedir = os.homedir.bind(os);
-
-export function canonicalPath(p: string, platform: NodeJS.Platform = process.platform): string {
-  let resolved: string;
-  try {
-    resolved = fs.realpathSync.native(p);
-  } catch {
-    try {
-      resolved = fs.realpathSync(p);
-    } catch {
-      resolved = path.resolve(p);
-    }
-  }
-  return platform === 'win32' ? resolved.toLowerCase() : resolved;
-}
-
-/** `a` vaut `b` ou se trouve dessous (comparaison canonique). */
-export function isSameOrInside(a: string, b: string, platform: NodeJS.Platform = process.platform): boolean {
-  const ca = canonicalPath(a, platform);
-  const cb = canonicalPath(b, platform);
-  const sep = platform === 'win32' ? '\\' : path.sep;
-  return ca === cb || ca.startsWith(cb.endsWith(sep) ? cb : cb + sep);
-}
-
-/** Variables d'environnement qui font de `home` le HOME du processus et de ses enfants. */
-export function isolatedHomeEnv(home: string, platform: NodeJS.Platform = process.platform): Record<string, string> {
-  const env: Record<string, string> = {
-    HOME: home,
-    USERPROFILE: home,
-    XDG_CONFIG_HOME: path.join(home, '.config'),
-    XDG_DATA_HOME: path.join(home, '.local', 'share'),
-    XDG_STATE_HOME: path.join(home, '.local', 'state'),
-    XDG_CACHE_HOME: path.join(home, '.cache'),
-  };
-  if (platform === 'win32') {
-    const parsed = path.win32.parse(home);
-    env.HOMEDRIVE = parsed.root.replace(/[\\/]+$/, '');
-    env.HOMEPATH = home.slice(env.HOMEDRIVE.length) || '\\';
-    env.APPDATA = path.win32.join(home, 'AppData', 'Roaming');
-  }
-  return env;
-}
-
-/** Emplacement par défaut des navigateurs Playwright pour l'appelant (avant bascule). */
-export function callerPlaywrightBrowsersPath(
-  env: NodeJS.ProcessEnv,
-  callerHome: string,
-  platform: NodeJS.Platform = process.platform,
-): string | undefined {
-  if (env.PLAYWRIGHT_BROWSERS_PATH) return undefined;
-  if (platform === 'win32') return undefined; // %LOCALAPPDATA%\ms-playwright : LOCALAPPDATA n'est pas basculé.
-  if (platform === 'darwin') return path.join(callerHome, 'Library', 'Caches', 'ms-playwright');
-  return path.join(env.XDG_CACHE_HOME || path.join(callerHome, '.cache'), 'ms-playwright');
-}
 
 function accountHome(): string | undefined {
   try {
