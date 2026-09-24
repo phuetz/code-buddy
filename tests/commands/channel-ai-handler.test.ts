@@ -117,6 +117,8 @@ vi.mock('../../src/persistence/session-store.js', () => ({
     loadSession: hoisted.loadSession,
     readSessionFileState: hoisted.readSessionFileState,
     saveSession: hoisted.saveSession,
+    // Same rule as the real store for the sessions these tests write: never encrypted.
+    contentProtection: (session: { encrypted?: boolean } | null) => ({ encrypt: session?.encrypted === true }),
   }),
 }));
 
