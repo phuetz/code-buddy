@@ -52,6 +52,28 @@ enfants une seule fois, puis ne relance que le `rmdir` final (`_rmdirSync` de
   suppression) a relevé, sur toute la suite sous Linux, 24 sites de démontage tenus ; les
   démontages sont passés par ces aides. Les sites restants sont des étapes de scénario.
 
+## Reprise après revue (même jour)
+
+La revue indépendante a refusé la première version : la classe ENOTEMPTY n'était pas refermée,
+et le garde-fou des dossiers à la racine avait un angle mort.
+
+- **Sonde déterministe** : un préchargement ralentit `fs.close()` (fermeture lente, comme sous
+  un runner Windows chargé) et fait échouer en ENOTEMPTY, comme Windows, tout `rm` récursif
+  d'un dossier dont le processus tient encore un fichier. Éprouvée d'abord sur le cas connu :
+  l'ancien `tool-handler-filter` tombe à chaque tirage, avec le même `run_…/events.jsonl` que la
+  CI ; la version corrigée passe.
+- Sur toute la suite, elle trouve quatorze fichiers au démontage RunStore fautif (la revue en
+  citait huit). Tous attendent maintenant `whenStreamsClosed()` puis `removeTestDir()`.
+- **Défaut produit** trouvé au passage : `RunStore.pruneOldRuns()` supprimait le dossier d'un
+  run purgé 20 ms après `destroy()`, en avalant l'erreur ; sous Windows ce dossier n'était
+  jamais purgé. La suppression attend maintenant la fermeture du journal.
+- `repo-scratch-dirs.test.ts` voit aussi `join(process.cwd(), '.x-')` avec `join` importé
+  seul ; les sept sites de `tests/tools/video` passent par `repoScratchRoot()`.
+- Vus par la sonde mais hors du motif RunStore, non traités : fichiers servis par un serveur
+  HTTP de test (`mobile-pwa`, `gpu-media-worker-server`, `peer-tool-bridge`,
+  `fleet-loopback-smoke`), `mcp-server-approval`, `logging:56`, et l'étape volontaire de
+  `skill-import-command-lifecycle:248`.
+
 ## Non traité ici
 
 - Windows, shard 5/6 : `C:\Users\runneradmin\.codebuddy\memory.md` créé par un test (garde
