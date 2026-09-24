@@ -1019,18 +1019,6 @@ async function finalizeHeadlessRun(code: number): Promise<void> {
     // Ignore identity manager shutdown errors.
   }
   try {
-    const { resetHotReloadManager } = await import('./config/hot-reload/index.js');
-    resetHotReloadManager();
-  } catch (_error) {
-    // Ignore hot reload shutdown errors.
-  }
-  try {
-    const { resetConfigWatcher } = await import('./config/hot-reload/watcher.js');
-    resetConfigWatcher();
-  } catch (_error) {
-    // Ignore config watcher shutdown errors.
-  }
-  try {
     const { resetSettingsHierarchy } = await import('./config/settings-hierarchy.js');
     resetSettingsHierarchy();
   } catch (_error) {
@@ -1190,21 +1178,24 @@ async function processPromptHeadless(
     const customAgentConfig = await loadCustomAgentForCli(agentName, false);
     const modelToUse = customAgentConfig?.model ?? model;
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
-    // Evolved execution strategy (opt-in CODEBUDDY_SELF_IMPROVE_STRATEGIES): fills only what
-    // the user left unset — an explicit --max-tool-rounds always wins. Off ⇒ empty overlay.
+    // Stratégie opt-in : elle ne comble que l'absence de --max-tool-rounds et de
+    // [middleware].max_turns. Désactivée, l'overlay est vide.
     const { resolveStrategyOverlay, applyStrategyCostCap } = await import('./agent/self-improvement/strategy-runtime.js');
     const strategy = resolveStrategyOverlay('headless', { maxToolRounds });
+    const { loadExplicitMiddlewareLimits } = await import('./config/middleware-limits.js');
+    const tomlLimits = loadExplicitMiddlewareLimits();
+    const rounds = maxToolRounds ?? tomlLimits.maxTurns ?? strategy.maxToolRounds;
     if (strategy.strategyId && strategy.strategyId !== 'baseline') {
       const cost = applyStrategyCostCap(strategy);
       logger.info(
-        `Execution strategy ${strategy.strategyId} in force (rounds ${strategy.maxToolRounds ?? maxToolRounds ?? 'explicit'}, cost cap ${cost.maxCostUsd !== undefined ? `$${cost.maxCostUsd}` : 'explicit'}, ${strategy.systemPromptAppend ? 'with' : 'no'} directives)`,
+        `Execution strategy ${strategy.strategyId} in force (rounds ${rounds ?? 'historical'}, cost cap ${cost.maxCostUsd !== undefined ? `$${cost.maxCostUsd}` : 'explicit'}, ${strategy.systemPromptAppend ? 'with' : 'no'} directives)`,
       );
     }
     agent = new CodeBuddyAgent(
       apiKey,
       baseURL,
       modelToUse,
-      maxToolRounds ?? strategy.maxToolRounds,
+      rounds,
       true,
       undefined,
       undefined,

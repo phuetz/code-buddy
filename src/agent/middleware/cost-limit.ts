@@ -13,11 +13,17 @@ export class CostLimitMiddleware implements ConversationMiddleware {
   readonly priority = 20;
 
   private isSessionCostLimitReached: () => boolean;
+  private readonly warningRatio: number;
 
   constructor(deps: {
     isSessionCostLimitReached: () => boolean;
+    warningRatio?: number;
   }) {
     this.isSessionCostLimitReached = deps.isSessionCostLimitReached;
+    const ratio = deps.warningRatio;
+    this.warningRatio = typeof ratio === 'number' && Number.isFinite(ratio) && ratio > 0 && ratio <= 1
+      ? ratio
+      : 0.8;
   }
 
   afterTurn(context: MiddlewareContext): MiddlewareResult {
@@ -28,8 +34,7 @@ export class CostLimitMiddleware implements ConversationMiddleware {
       };
     }
 
-    // Warn at 80% of cost limit
-    const warnThreshold = context.sessionCostLimit * 0.8;
+    const warnThreshold = context.sessionCostLimit * this.warningRatio;
     if (context.sessionCost >= warnThreshold) {
       return {
         action: 'warn',

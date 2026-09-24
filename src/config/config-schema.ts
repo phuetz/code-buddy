@@ -64,12 +64,21 @@ function toolShape(): Record<string, ZodTypeAny> {
 
 function middlewareShape(): Record<string, ZodTypeAny> {
   return {
-    max_turns: z.number().default(100).describe('Tours maximum'),
-    turn_warning_threshold: z.number().default(0.8).describe('Seuil d\'avertissement des tours, entre 0 et 1'),
-    max_cost: z.number().default(10).describe('Plafond de coût de session'),
-    cost_warning_threshold: z.number().default(0.8).describe('Seuil d\'avertissement du coût, entre 0 et 1'),
-    auto_compact_threshold: z.number().default(80000).describe('Seuil de compactage automatique, en jetons'),
-    context_warning_percentage: z.number().default(0.7).describe('Seuil d\'avertissement du contexte, entre 0 et 1'),
+    max_turns: z.number().positive().default(50).describe(
+      'Tours d\'outils maximum. Absent : 50, ou 400 en mode YOLO. --max-tool-rounds gagne sur le fichier.',
+    ),
+    turn_warning_threshold: z.number().gt(0).lte(1).default(0.8).describe(
+      'Fraction du plafond de tours qui déclenche l\'avertissement. Absent : 0,8.',
+    ),
+    max_cost: z.number().nonnegative().default(10).describe(
+      'Plafond de coût de session en dollars. Absent : 10, ou 100 en mode YOLO, jamais au-dessus de 1000. --max-price gagne sur le fichier.',
+    ),
+    cost_warning_threshold: z.number().gt(0).lte(1).default(0.8).describe(
+      'Fraction du plafond de coût qui déclenche l\'avertissement. Absent : 0,8.',
+    ),
+    auto_compact_threshold: z.number().positive().optional().describe(
+      'Seuil de compactage en jetons, seulement s\'il est écrit. Absent : minimum entre 200000 et la fenêtre. CODEBUDDY_AUTOCOMPACT_PCT, s\'il est posé, gagne.',
+    ),
   };
 }
 
@@ -564,6 +573,16 @@ export function classifyConfigPath(keyPath: string, schema: ZodTypeAny = writabl
     const part = parts[index] ?? '';
     const denied = configSegmentError(keyPath, part);
     if (denied) return { ok: false, kind: 'unknown', message: denied };
+    if (part === 'context_warning_percentage') {
+      const parent = parts.slice(0, index).join('.');
+      if (parent === 'middleware' || parent.endsWith('.middleware')) {
+        return {
+          ok: false,
+          kind: 'unknown',
+          message: `Clé refusée « ${keyPath} ». Les avertissements de contexte restent à 50 %, 75 % et 90 %. Une seule fraction ne peut pas remplacer cette échelle. Retirez la clé.`,
+        };
+      }
+    }
     node = unwrap(node);
     if (typeName(node) === 'ZodUnion') {
       const branch = unionObject(node);
@@ -768,6 +787,7 @@ function sampleToml(path: string, schema: ZodTypeAny | null): string {
   const name = node ? typeName(node) : '';
   if (path.endsWith('base_url') || path.endsWith('server_url')) return '"https://example.invalid/v1"';
   if (path.endsWith('.port')) return '3000';
+  if (path.endsWith('auto_compact_threshold')) return '120000';
   if (path.endsWith('api_key_env')) return '"EXAMPLE_API_KEY"';
   if (path.endsWith('hidden_capabilities')) return '["film"]';
   // « input » seul attraperait price_per_m_input et écrirait un tableau à la place d'un nombre.

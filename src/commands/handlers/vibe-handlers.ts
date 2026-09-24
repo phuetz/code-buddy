@@ -46,6 +46,7 @@ export async function handleReload(): Promise<CommandHandlerResult> {
 
     // Note about themes
     lines.push('  [--] Themes (restart required for changes)');
+    lines.push('  [--] Session limits from config.toml apply at startup, not during this session');
 
     // Reset tool filter
     try {

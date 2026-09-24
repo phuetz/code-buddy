@@ -11,6 +11,14 @@ import { ConversationMiddleware, MiddlewareContext, MiddlewareResult } from './t
 export class TurnLimitMiddleware implements ConversationMiddleware {
   readonly name = 'turn-limit';
   readonly priority = 10;
+  private readonly warningRatio: number;
+
+  constructor(options?: { warningRatio?: number }) {
+    const ratio = options?.warningRatio;
+    this.warningRatio = typeof ratio === 'number' && Number.isFinite(ratio) && ratio > 0 && ratio <= 1
+      ? ratio
+      : 0.8;
+  }
 
   beforeTurn(context: MiddlewareContext): MiddlewareResult {
     if (context.toolRound >= context.maxToolRounds) {
@@ -20,8 +28,7 @@ export class TurnLimitMiddleware implements ConversationMiddleware {
       };
     }
 
-    // Warn at 80% of limit
-    const threshold = Math.floor(context.maxToolRounds * 0.8);
+    const threshold = Math.floor(context.maxToolRounds * this.warningRatio);
     if (context.toolRound === threshold) {
       return {
         action: 'warn',

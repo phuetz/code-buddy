@@ -35,8 +35,13 @@ import { isFeatureEnabled } from "../config/feature-flags.js";
 import { getActiveRunStore } from "../observability/run-store.js";
 import { recordSkillActivity } from "../skills/skill-usage-store.js";
 import { resetIdentityManager } from "../identity/identity-manager.js";
-import { resetHotReloadManager } from "../config/hot-reload/index.js";
-import { resetConfigWatcher } from "../config/hot-reload/watcher.js";
+import {
+  HISTORICAL_COST_WARNING_RATIO,
+  HISTORICAL_TURN_WARNING_RATIO,
+  loadExplicitMiddlewareLimits,
+  readCliFlagValue,
+  resolveSessionLimits,
+} from "../config/middleware-limits.js";
 import { resetPersonaManager } from "../personas/persona-manager.js";
 import { resetEnhancedMemory } from "../memory/enhanced-memory.js";
 import { resetPluginMarketplace } from "../plugins/marketplace.js";
@@ -78,6 +83,11 @@ export class CodeBuddyAgent extends BaseAgent {
    * cron/headless/sub-agent constructions so they never trigger a review.
    */
   private backgroundReviewEnabled = false;
+  /** Tours demandés par l'appelant (--max-tool-rounds ou budget interne). */
+  private callerMaxToolRounds: number | undefined;
+  private turnWarningRatio = HISTORICAL_TURN_WARNING_RATIO;
+  private costWarningRatio = HISTORICAL_COST_WARNING_RATIO;
+  private explicitAutoCompactTokens: number | undefined;
   private visionGroundingModel: string | undefined;
   private streamingHandler: StreamingHandler;
   private executor: AgentExecutor;
@@ -151,19 +161,12 @@ export class CodeBuddyAgent extends BaseAgent {
       this.yoloMode = configYoloMode;
     }
 
-    this.maxToolRounds = maxToolRounds || (this.yoloMode ? 400 : 50);
-
-    // Session cost limit with YOLO mode handling
-    const YOLO_HARD_LIMIT = 100;
-    const maxCostEnv = process.env.MAX_COST ? parseFloat(process.env.MAX_COST) : null;
-
+    this.callerMaxToolRounds = typeof maxToolRounds === 'number' && Number.isFinite(maxToolRounds) && maxToolRounds > 0
+      ? maxToolRounds
+      : undefined;
+    this.applySessionLimits(this.yoloMode);
     if (this.yoloMode) {
-      this.sessionCostLimit = maxCostEnv !== null
-        ? Math.min(maxCostEnv, YOLO_HARD_LIMIT * 10)
-        : YOLO_HARD_LIMIT;
       logger.warn(`YOLO MODE ACTIVE - Cost limit: $${this.sessionCostLimit}, Max rounds: ${this.maxToolRounds}`);
-    } else {
-      this.sessionCostLimit = maxCostEnv !== null ? maxCostEnv : 10;
     }
 
     // Detect max context from environment
@@ -183,6 +186,9 @@ export class CodeBuddyAgent extends BaseAgent {
     // This is safe because the singletons returned by getters are the concrete implementations
     this.tokenCounter = this.infrastructure.tokenCounter;
     this.contextManager = this.infrastructure.contextManager;
+    if (this.explicitAutoCompactTokens !== undefined) {
+      this.contextManager.updateConfig({ autoCompactThreshold: this.explicitAutoCompactTokens });
+    }
     // WS3-T2 — periodic memory snapshot for very long sessions. Interval from
     // CODEBUDDY_SNAPSHOT_INTERVAL_MIN (default 45 min, 0 disables); the timer
     // is unref'd so it never keeps a finished process alive. Optional call:
@@ -393,7 +399,7 @@ export class CodeBuddyAgent extends BaseAgent {
         // Turn limit middleware (priority 10) — enforces max turns per session
         try {
           const { TurnLimitMiddleware } = await import('./middleware/turn-limit.js');
-          pipeline.use(new TurnLimitMiddleware());
+          pipeline.use(new TurnLimitMiddleware({ warningRatio: this.turnWarningRatio }));
           logger.debug('TurnLimitMiddleware registered in pipeline (priority 10)');
         } catch (err) {
           logger.debug('Failed to register TurnLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
@@ -403,6 +409,7 @@ export class CodeBuddyAgent extends BaseAgent {
           const { CostLimitMiddleware } = await import('./middleware/cost-limit.js');
           pipeline.use(new CostLimitMiddleware({
             isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
+            warningRatio: this.costWarningRatio,
           }));
           logger.debug('CostLimitMiddleware registered in pipeline (priority 20)');
         } catch (err) {
@@ -760,11 +767,18 @@ Look at the screenshot and find the element matching the user's intent. Output o
       if (Number.isFinite(envMaxContext) && envMaxContext > 0) return;
       const contextWindow = getModelToolConfig(modelName).contextWindow;
       if (!contextWindow) return;
-      this.contextManager.updateConfig({
+      const contextPatch: {
+        maxContextTokens: number;
+        responseReserveTokens: number;
+        autoCompactThreshold?: number;
+      } = {
         maxContextTokens: contextWindow,
         responseReserveTokens: Math.floor(contextWindow * 0.125),
-        autoCompactThreshold: Math.min(200_000, contextWindow),
-      });
+      };
+      if (this.explicitAutoCompactTokens === undefined) {
+        contextPatch.autoCompactThreshold = Math.min(200_000, contextWindow);
+      }
+      this.contextManager.updateConfig(contextPatch);
     } catch (error) {
       // Discovery must never turn an offline local workstation into a startup
       // failure. Keep the context manager and config cache exactly as built.
@@ -2020,19 +2034,35 @@ Look at the screenshot and find the element matching the user's intent. Output o
    *
    * @param enabled - Whether to enable YOLO mode
    */
+  /**
+   * Applique [middleware] sans prendre les défauts du schéma pour des choix.
+   * L'argument du constructeur et --max-price passent avant le fichier.
+   */
+  private applySessionLimits(yolo: boolean): void {
+    const cliPrice = readCliFlagValue(process.argv, '--max-price');
+    const cliMaxCost = cliPrice === undefined ? undefined : Number(cliPrice);
+    const envText = process.env.MAX_COST;
+    const envMaxCost = envText === undefined || envText.trim() === '' ? undefined : Number(envText);
+    const resolved = resolveSessionLimits({
+      cliMaxToolRounds: this.callerMaxToolRounds,
+      cliMaxCost: cliMaxCost !== undefined && Number.isFinite(cliMaxCost) ? cliMaxCost : undefined,
+      envMaxCost: envMaxCost !== undefined && Number.isFinite(envMaxCost) ? envMaxCost : undefined,
+      toml: loadExplicitMiddlewareLimits(),
+      yolo,
+    });
+    this.maxToolRounds = resolved.maxToolRounds;
+    this.sessionCostLimit = resolved.sessionCostUsd;
+    this.turnWarningRatio = resolved.turnWarningRatio;
+    this.costWarningRatio = resolved.costWarningRatio;
+    this.explicitAutoCompactTokens = resolved.autoCompactTokens;
+    if (this.explicitAutoCompactTokens !== undefined && this.contextManager) {
+      this.contextManager.updateConfig({ autoCompactThreshold: this.explicitAutoCompactTokens });
+    }
+  }
+
   setYoloMode(enabled: boolean): void {
     this.yoloMode = enabled;
-    const YOLO_HARD_LIMIT = 100;
-    const maxCostEnv = process.env.MAX_COST ? parseFloat(process.env.MAX_COST) : null;
-    if (enabled) {
-      this.sessionCostLimit = maxCostEnv !== null
-        ? Math.min(maxCostEnv, YOLO_HARD_LIMIT * 10)
-        : YOLO_HARD_LIMIT;
-      this.maxToolRounds = 400;
-    } else {
-      this.sessionCostLimit = maxCostEnv !== null ? maxCostEnv : 10;
-      this.maxToolRounds = 50;
-    }
+    this.applySessionLimits(enabled);
 
     // Update prompt builder config
     this.promptBuilder.updateConfig({ yoloMode: enabled });
@@ -2487,8 +2517,6 @@ function cleanupHeadlessSingletonWatchers(): void {
   for (const cleanup of [
     resetSkillRegistry,
     resetIdentityManager,
-    resetHotReloadManager,
-    resetConfigWatcher,
     resetPersonaManager,
     resetEnhancedMemory,
     resetPluginMarketplace,
