@@ -255,7 +255,10 @@ rtk_enabled = false
 # A failed read is not an empty archive: the reset is cancelled.
 # A failed archive, or a failed companion-history wipe, cancels the clear.
 # CODEBUDDY_SESSION_RESET_ARCHIVE_DIR relocates the archive directory.
-# A symlink or a non-directory at that path is refused.
+# It must be absolute; a symlink or a non-directory at that path is refused.
+# A config file that is present but unreadable or unparseable cancels the reset.
+# So does a session_reset the files no longer describe since the config was
+# loaded (another current directory, an edit): restart to apply the new one.
 [session_reset]
 mode = "none"
 idle_minutes = 1440
