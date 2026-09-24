@@ -6,7 +6,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { handleLogin } from '../../src/commands/handlers/auth-handlers.js';
+import { handleLogin, handleLogout } from '../../src/commands/handlers/auth-handlers.js';
+import { handleBtw } from '../../src/commands/handlers/btw-handler.js';
+import { handleSubagent } from '../../src/commands/handlers/subagent-handler.js';
 import { handleAgent } from '../../src/commands/handlers/agent-handlers.js';
 import { handleAgents } from '../../src/commands/handlers/agents-handler.js';
 import { handleBug } from '../../src/commands/handlers/bug-handler.js';
@@ -152,6 +154,21 @@ const cases: FailureCase[] = [
     handler: 'handleMerge',
     run: () => handleMerge([]),
     needle: 'Usage: /merge',
+  },
+  {
+    handler: 'handleLogout',
+    run: () => handleLogout(['nope']),
+    needle: 'Unknown provider:',
+  },
+  {
+    handler: 'handleBtw',
+    run: () => handleBtw([]),
+    needle: 'Usage: /btw',
+  },
+  {
+    handler: 'handleSubagent',
+    run: () => handleSubagent(['info', 'no-such-subagent']),
+    needle: 'not found',
   },
 ];
 
