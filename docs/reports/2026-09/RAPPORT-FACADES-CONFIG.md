@@ -1,6 +1,6 @@
 # Façades de configuration — `[middleware]` et rechargement à chaud
 
-Branche `fix/config-facades-2026-09-24`, départ `7076ab7af`. Commit local, pas de push, pas de fusion. Le profil réel n'a pas été modifié. La voix n'a pas été touchée.
+Branche `fix/config-facades-2026-09-24`, départ `7076ab7af`, correctif `e298252ca`. Pas de push, pas de fusion. Le profil réel n'a pas été modifié. La voix n'a pas été touchée.
 
 ## Clés
 
