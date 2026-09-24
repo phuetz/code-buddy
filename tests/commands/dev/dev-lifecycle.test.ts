@@ -4,6 +4,15 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 
+/** Temporary dirs stay inside the workspace but under the git-ignored `_qa/`, so a
+ * concurrent `git status` check never sees them. */
+function qaTmpBase(root: string): string {
+  const base = path.join(root, '_qa', 'tmp');
+  fs.mkdirSync(base, { recursive: true });
+  return base;
+}
+
+
 interface ChildResult {
   exitCode: number | null;
   stderr: string;
@@ -117,7 +126,7 @@ function seedToyCwd(root: string): string {
 
 describe('buddy dev plan lifecycle', () => {
   it('returns after a plan has been streamed from a fake provider and writes PLAN.md', async () => {
-    const root = fs.mkdtempSync(path.join(repoRoot, '.r17-dev-plan-'));
+    const root = fs.mkdtempSync(path.join(qaTmpBase(repoRoot), 'r17-dev-plan-'));
     roots.push(root);
     const home = path.join(root, 'home');
     const cwd = seedToyCwd(root);
@@ -144,7 +153,7 @@ describe('buddy dev plan lifecycle', () => {
   });
 
   it('exits 1 and does not write PLAN.md when the model returns an empty plan', async () => {
-    const root = fs.mkdtempSync(path.join(repoRoot, '.r17-dev-plan-'));
+    const root = fs.mkdtempSync(path.join(qaTmpBase(repoRoot), 'r17-dev-plan-'));
     roots.push(root);
     const home = path.join(root, 'home');
     const cwd = seedToyCwd(root);

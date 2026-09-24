@@ -6,6 +6,8 @@ import { DefaultContextEngine } from '../../src/context/default-context-engine.j
 import { getGlobalEventBus, resetEventBus } from '../../src/events/event-bus.js';
 import { logger } from '../../src/utils/logger.js';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client.js';
+import { tmpdir as osTmpdirForTests } from 'node:os';
+import { realpathSync as fsRealpathForTmp } from 'node:fs';
 
 function makeMessages(): CodeBuddyMessage[] {
   const messages: CodeBuddyMessage[] = [{ role: 'system', content: 'Base system prompt.' }];
@@ -89,7 +91,7 @@ describe('COMPACT1 — global compaction events and preservation hooks', () => {
   });
 
   it('injects a command hook preserve response into the compaction summary', () => {
-    const workDir = fs.mkdtempSync(path.join(process.cwd(), '.compact1-test-'));
+    const workDir = fsRealpathForTmp(fs.mkdtempSync(path.join(osTmpdirForTests(), 'compact1-test-')));
     try {
       const script = path.join(workDir, 'preserve-hook.cjs');
       fs.writeFileSync(script, [
@@ -119,7 +121,7 @@ describe('COMPACT1 — global compaction events and preservation hooks', () => {
   });
 
   it('ignores a failing or timed-out hook and still compacts', () => {
-    const workDir = fs.mkdtempSync(path.join(process.cwd(), '.compact1-test-'));
+    const workDir = fsRealpathForTmp(fs.mkdtempSync(path.join(osTmpdirForTests(), 'compact1-test-')));
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     try {
       const script = path.join(workDir, 'timeout-hook.cjs');

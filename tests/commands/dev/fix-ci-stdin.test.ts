@@ -4,6 +4,8 @@ import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Readable } from 'node:stream';
 import { readStdinIfPiped } from '../../../src/commands/dev/golden-path.js';
+import { tmpdir as osTmpdirForTests } from 'node:os';
+import { realpathSync as fsRealpathForTmp } from 'node:fs';
 
 const repoRoot = process.cwd();
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
@@ -47,7 +49,7 @@ describe('CI auto-fix staging', () => {
 
 describe('buddy dev fix-ci stdin', () => {
   it('exits 1 quickly when stdin is an open pipe with no data (does not hang)', async () => {
-    const root = fs.mkdtempSync(path.join(repoRoot, '.gk18-fixci-'));
+    const root = fsRealpathForTmp(fs.mkdtempSync(path.join(osTmpdirForTests(), 'gk18-fixci-')));
     roots.push(root);
     const cwd = path.join(root, 'toy');
     const home = path.join(root, 'home');
