@@ -1378,22 +1378,29 @@ export class RunStore {
       this.eventCounts.delete(s.runId);
       this.eventBuffers.delete(s.runId);
 
-      // Destroy handle immediately (force close, no flush needed for pruned runs)
-      const ws = this.handles.get(s.runId);
-      if (ws) {
-        ws.destroy();
-        this.handles.delete(s.runId);
-      this.eventWriters.delete(s.runId);
-      }
-
-      // Remove directory after a short delay to let the stream fully close
-      setTimeout(() => {
+      const removeRunDir = (): void => {
         try {
           fs.rmSync(runDir, { recursive: true, force: true });
         } catch {
           // Ignore
         }
-      }, 20);
+      };
+
+      // Destroy handle immediately (force close, no flush needed for pruned runs),
+      // and remove the directory only once its journal is closed: Windows refuses
+      // to remove a directory holding an open file (a fixed delay raced the close).
+      const ws = this.handles.get(s.runId);
+      if (ws && !ws.closed) {
+        this.trackClose(ws);
+        ws.once('close', removeRunDir);
+        ws.destroy();
+        this.handles.delete(s.runId);
+        this.eventWriters.delete(s.runId);
+      } else {
+        this.handles.delete(s.runId);
+        this.eventWriters.delete(s.runId);
+        removeRunDir();
+      }
     }
   }
 }
