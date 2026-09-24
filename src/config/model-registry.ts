@@ -121,7 +121,7 @@ export class ModelRegistry {
    */
   getPricing(model: string): ModelPricing {
     // 1. Check snapshot cost fields
-    const entry = this.snapshot[model];
+    const entry = Object.hasOwn(this.snapshot, model) ? this.snapshot[model] : undefined;
     if (entry) {
       const inputCost = entry.input_cost_per_token ?? entry.inputCostPerToken;
       const outputCost = entry.output_cost_per_token ?? entry.outputCostPerToken;
@@ -134,8 +134,9 @@ export class ModelRegistry {
     }
 
     // 2. Exact match in built-in pricing
-    if (BUILTIN_PRICING[model]) {
-      return { ...BUILTIN_PRICING[model] };
+    const builtin = Object.hasOwn(BUILTIN_PRICING, model) ? BUILTIN_PRICING[model] : undefined;
+    if (builtin) {
+      return { ...builtin };
     }
 
     // 3. Prefix match in built-in pricing (longest prefix wins)

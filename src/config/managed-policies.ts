@@ -137,8 +137,8 @@ export class ManagedPoliciesManager {
   }
 
   /**
-   * Posture effective. Les clauses de politique plus ouvertes que la
-   * configuration restent dans les constats et ne modifient pas le résultat.
+   * Posture calculée. Les clauses plus ouvertes restent dans les constats.
+   * Ce résultat n'est pas lu par les exécuteurs.
    */
   assessDomain(posture: DomainPosture): DomainAssessment {
     const applied = applyDomainPolicy(posture, this.policies.domains ?? null);

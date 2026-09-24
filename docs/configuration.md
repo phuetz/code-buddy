@@ -2,7 +2,19 @@
 
 ## Fichier TOML
 
-`buddy config set`, `buddy config patch` et `buddy config unset` modifient le fichier utilisateur hors session. `--dry-run --json` imprime un rapport `ok`, `operations`, `checks`, `errors`. Une clé inconnue est refusée. `buddy config schema` imprime le schéma JSON du TOML et des variables d'environnement. L'exemple commenté, généré depuis ce schéma, est `docs/config.toml.example`. Chaque écriture valide tourne `.bak`, `.bak.1` et `.last-good`. Une écriture refusée laisse le fichier actif en place et dépose `.rejected.*`. `buddy doctor --fix` restaure `.last-good` quand le fichier actif est illisible ou refusé.
+`buddy config set`, `buddy config patch` et `buddy config unset` modifient le fichier utilisateur hors session. `--dry-run --json` imprime un rapport `ok`, `operations`, `checks`, `errors` et passe par les mêmes contrôles que l'écriture. Une clé inconnue est refusée. `buddy config validate` vérifie les variables d'environnement et le TOML actif. `buddy config schema` imprime le schéma JSON du TOML et des variables d'environnement. L'exemple commenté, généré depuis ce schéma, est `docs/config.toml.example`. Une référence `${env:NOM}` est enregistrée telle quelle et résolue seulement à l'usage. Chaque écriture valide tourne `.bak`, `.bak.1` et `.last-good`. Une écriture refusée laisse le fichier actif en place et dépose `.rejected.*`. `buddy doctor --fix` restaure `.last-good` quand le fichier actif est illisible ou refusé.
+
+## Politiques par domaine
+
+`buddy policy check`, `buddy policy repair` et le constat `Domain policy` de `buddy doctor` comparent la configuration à un fichier de politique. Le résultat est un DIAGNOSTIC NON APPLIQUÉ : il ne change ni la passerelle, ni les canaux, ni l'écriture MCP, ni le bac à sable, ni les approbations. Réparer n'écrit que des clés ; ces clés ne sont pas lues par les exécuteurs.
+
+| Domaine | Statut |
+| --- | --- |
+| gateway | diagnostic |
+| channels | diagnostic |
+| mcp | diagnostic |
+| sandbox | diagnostic |
+| exec | diagnostic |
 
 ## Environment Variables
 

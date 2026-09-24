@@ -11,12 +11,14 @@ import { runConfigSet, runConfigUnset } from './config-cli.js';
 import {
   applyDomainPolicy,
   domainPolicyFromManagedFile,
+  POLICY_DOMAIN_STATUS,
   postureFromDocument,
   type DomainPolicy,
   type DomainPosture,
   type PolicyFinding,
   type PolicyRepair,
 } from './domain-policy.js';
+import { parseTOML, resolveUserConfigFile } from './toml-config.js';
 
 export interface PolicyCycleReport {
   ok: boolean;
@@ -24,7 +26,10 @@ export interface PolicyCycleReport {
   policy: DomainPolicy | null;
   findings: PolicyFinding[];
   repairs: PolicyRepair[];
+  /** Posture calculée, non branchée aux exécuteurs. */
   effective: DomainPosture;
+  application: 'DIAGNOSTIC NON APPLIQUÉ';
+  domains: typeof POLICY_DOMAIN_STATUS;
   errors: string[];
 }
 
@@ -95,6 +100,8 @@ export function assessPolicy(input: {
     findings,
     repairs,
     effective: applied.effective,
+    application: 'DIAGNOSTIC NON APPLIQUÉ',
+    domains: POLICY_DOMAIN_STATUS,
     errors: loaded.error ? [loaded.error] : [],
   };
 }
@@ -116,6 +123,11 @@ export async function repairPolicy(input: {
       report.errors.push(...result.errors);
       break;
     }
+  }
+  if (!dryRun && report.errors.length === 0 && report.repairs.length > 0) {
+    const file = resolveUserConfigFile();
+    const userConfig = existsSync(file) ? parseTOML(readFileSync(file, 'utf8')) : {};
+    return assessPolicy({ ...input, userConfig });
   }
   return report;
 }

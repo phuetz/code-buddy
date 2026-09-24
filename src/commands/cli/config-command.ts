@@ -10,7 +10,7 @@ import type { Command } from 'commander';
 export function registerConfigCommand(program: Command): void {
   const config = program
     .command('config')
-    .description('Show environment variable configuration and validation');
+    .description('Show environment variables and the active TOML configuration');
 
   config
     .command('show')
@@ -37,35 +37,34 @@ export function registerConfigCommand(program: Command): void {
 
   config
     .command('validate')
-    .description('Validate current environment configuration')
+    .description('Validate environment variables and the active TOML file')
     .action(async () => {
-      const { validateEnv } = await import('../../config/env-schema.js');
-      const result = validateEnv();
+      const { runConfigValidate } = await import('../../config/config-cli.js');
+      const result = await runConfigValidate();
 
-      if (result.errors.length === 0 && result.warnings.length === 0) {
-        console.log('\nEnvironment configuration is valid.\n');
+      if (result.ok && result.envWarnings.length === 0) {
+        console.log('\nEnvironment and active TOML configuration are valid.\n');
         return;
       }
 
-      if (result.errors.length > 0) {
+      if (result.envErrors.length > 0 || result.tomlProblem) {
         console.log('\nErrors:');
-        for (const err of result.errors) {
+        for (const err of result.envErrors) {
           console.log(`  ! ${err}`);
         }
+        if (result.tomlProblem) console.log(`  ! ${result.tomlProblem}`);
       }
 
-      if (result.warnings.length > 0) {
+      if (result.envWarnings.length > 0) {
         console.log('\nWarnings:');
-        for (const warn of result.warnings) {
+        for (const warn of result.envWarnings) {
           console.log(`  ? ${warn}`);
         }
       }
 
       console.log('');
 
-      if (!result.valid) {
-        process.exit(1);
-      }
+      if (!result.ok) process.exitCode = 1;
     });
 
   config

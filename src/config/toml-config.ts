@@ -10,6 +10,8 @@ import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
 import { commitValidConfigText, writeRejectedConfig, ConfigWriteRejectedError } from './config-backup.js';
+import { ownValue } from './own-lookup.js';
+import { resolveSecretRefs } from './secret-ref.js';
 import { USER_CONFIG_DELETE, configSegmentError, validateOnDiskDocument } from './config-schema.js';
 
 // ============================================================================
@@ -1528,7 +1530,8 @@ class ConfigManager {
         if (!isPlainObject(raw)) continue;
         // Ne pas remplacer la fiche par un objet à trous : seules les clés
         // présentes sont copiées. Les champs absents ne sont pas inventés.
-        const base: Record<string, unknown> = merged[name] ? { ...merged[name] } : {};
+        const previous = ownValue<ModelConfig>(merged, name);
+        const base: Record<string, unknown> = previous ? { ...previous } : {};
         for (const [key, value] of Object.entries(raw)) {
           if (value === undefined || value === null) continue;
           base[key] = value;
@@ -1539,8 +1542,9 @@ class ConfigManager {
     }
     if (partial.tool_config) {
       for (const [name, toolConfig] of Object.entries(partial.tool_config)) {
+        const previous = ownValue<ToolConfig>(this.config.tool_config, name);
         this.config.tool_config[name] = {
-          ...this.config.tool_config[name],
+          ...previous,
           ...toolConfig,
         };
       }
@@ -1584,7 +1588,7 @@ class ConfigManager {
    */
   getActiveModel(): ModelConfig & { name: string } {
     const config = this.getConfig();
-    const model = config.models[config.active_model];
+    const model = ownValue<ModelConfig>(config.models, config.active_model);
     if (!model) {
       throw new Error(`Model "${config.active_model}" not found in config`);
     }
@@ -1596,11 +1600,11 @@ class ConfigManager {
    */
   getProviderForModel(modelName: string): ProviderConfig & { name: string } {
     const config = this.getConfig();
-    const model = config.models[modelName];
+    const model = ownValue<ModelConfig>(config.models, modelName);
     if (!model) {
       throw new Error(`Model "${modelName}" not found in config`);
     }
-    const provider = config.providers[model.provider];
+    const provider = ownValue<ProviderConfig>(config.providers, model.provider);
     if (!provider) {
       throw new Error(`Provider "${model.provider}" not found in config`);
     }
@@ -1611,7 +1615,7 @@ class ConfigManager {
    * Get tool config
    */
   getToolConfig(toolName: string): ToolConfig | undefined {
-    return this.getConfig().tool_config[toolName];
+    return ownValue<ToolConfig>(this.getConfig().tool_config, toolName);
   }
 
   /**
@@ -1690,7 +1694,7 @@ class ConfigManager {
    * Set active model
    */
   setActiveModel(modelName: string): void {
-    if (!this.config.models[modelName]) {
+    if (!ownValue(this.config.models, modelName)) {
       throw new Error(`Model "${modelName}" not found`);
     }
     this.config.active_model = modelName;
@@ -1703,8 +1707,8 @@ class ConfigManager {
    */
   applyProfile(profileName: string): void {
     const cfg = this.getConfig();
-    const profile = cfg.profiles?.[profileName];
-    if (!profile) {
+    const profile = ownValue<Partial<CodeBuddyConfig>>(cfg.profiles, profileName);
+    if (!profile || !isPlainObject(profile)) {
       throw new Error(
         `Profile "${profileName}" not found. ` +
         `Available profiles: ${Object.keys(cfg.profiles ?? {}).join(', ') || '(none defined)'}`
@@ -1720,6 +1724,25 @@ class ConfigManager {
   reload(): CodeBuddyConfig {
     this.loaded = false;
     return this.load();
+  }
+
+  /**
+   * Copie résolue pour l'usage. Le fichier et l'objet stocké gardent les références.
+   */
+  async getConfigForUse(): Promise<CodeBuddyConfig> {
+    const stored = this.getConfig();
+    const copy = JSON.parse(JSON.stringify(stored)) as Record<string, unknown>;
+    return await resolveSecretRefs(copy) as unknown as CodeBuddyConfig;
+  }
+
+  /**
+   * Même contrôle que l'écriture, sans sauvegarde ni fichier refusé.
+   */
+  previewUserWrite(keyPath: string, value: unknown): string | null {
+    const staged = JSON.parse(JSON.stringify(readUserDocument(configFile()))) as Record<string, unknown>;
+    if (value === USER_CONFIG_DELETE) deleteKeyPath(staged, keyPath);
+    else assignKeyPath(staged, keyPath, value);
+    return assessUserConfigText(serializeUserDocument(staged));
   }
 
   /**

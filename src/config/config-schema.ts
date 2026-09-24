@@ -300,7 +300,7 @@ function aliasValueSchema(): ZodTypeAny {
     z.object({
       model: z.string().describe('Nom de modèle, ou un autre alias'),
       provider: z.string().optional().describe('Fournisseur réellement utilisé par la session. Absent : le fournisseur détecté reste'),
-      base_url: z.string().optional().describe('URL réellement utilisée par la session. Absente : celle du fournisseur, ou l\'URL détectée'),
+      base_url: z.string().optional().describe('URL réellement utilisée par la session. Absente : l\'URL du fournisseur nommé par l\'alias, sinon l\'URL déjà choisie'),
     }).strict().describe('Alias avec modèle, fournisseur et URL'),
   ]).describe('Cible d\'un alias');
 }

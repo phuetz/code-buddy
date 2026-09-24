@@ -6,13 +6,12 @@
  * - Type validation at the destination
  * - Dry-run mode (preview without writing)
  * - JSON mode (structured result output)
- * - SecretRef resolution (`${env:...}`, `${file:...}`)
+ * - SecretRef stockée telle quelle (`${env:...}`, `${file:...}`), résolue à l'usage
  * - Batch JSON updates
  */
 
 import { logger } from '../utils/logger.js';
 import type { CodeBuddyConfig } from './toml-config.js';
-import { resolveSecretRef } from './secret-ref.js';
 import {
   USER_CONFIG_DELETE,
   classifyConfigPath,
@@ -90,7 +89,14 @@ function validateValueType(currentValue: unknown, newValue: unknown): string | n
 /**
  * Coerce a string value to match the expected type.
  */
+function isSecretReference(value: unknown): value is string {
+  return typeof value === 'string' && (
+    /\$\{[a-z][\w-]*:[^}]+\}/.test(value) || value.startsWith('op://')
+  );
+}
+
 function coerceValue(currentValue: unknown, rawValue: unknown): unknown {
+  if (isSecretReference(rawValue)) return rawValue;
   if (currentValue === undefined || currentValue === null) {
     return rawValue;
   }
@@ -106,13 +112,6 @@ function coerceValue(currentValue: unknown, rawValue: unknown): unknown {
   }
 
   return rawValue;
-}
-
-/**
- * Check if a string value contains SecretRef patterns.
- */
-function containsSecretRef(value: unknown): boolean {
-  return typeof value === 'string' && /\$\{(env|file|exec):[^}]+\}/.test(value);
 }
 
 /**
@@ -321,42 +320,41 @@ export async function setConfigValue(
   }
 
   const { parent, leafKey, currentValue } = nav;
-  let resolvedValue = value;
+  let storedValue = value;
   let warning: string | undefined;
 
-  // Handle SecretRef resolution
-  if (containsSecretRef(value)) {
-    const secretWarning = await validateSecretRef(value as string);
-    if (secretWarning) {
-      warning = secretWarning;
-    }
-    // Resolve the SecretRef for the actual stored value
-    resolvedValue = await resolveSecretRef(value as string);
+  // La référence reste littérale. La résolution se fait à la lecture d'usage.
+  if (isSecretReference(value)) {
+    const secretWarning = await validateSecretRef(value);
+    if (secretWarning) warning = secretWarning;
   }
 
   // Type validation
-  const typeError = validateValueType(currentValue, resolvedValue);
+  const typeError = validateValueType(currentValue, storedValue);
   if (typeError) {
     const message = `Type mismatch for "${keyPath}": ${typeError}`;
     await noteRejection(keyPath, message, dryRun);
-    return failure(keyPath, resolvedValue, dryRun, message, currentValue);
+    return failure(keyPath, storedValue, dryRun, message, currentValue);
   }
 
   // Coerce the value to the expected type
-  resolvedValue = coerceValue(currentValue, resolvedValue);
-  const schemaError = validateConfigValue(keyPath, resolvedValue);
+  storedValue = coerceValue(currentValue, storedValue);
+  const schemaError = validateConfigValue(keyPath, storedValue);
   if (schemaError) {
     await noteRejection(keyPath, schemaError, dryRun);
-    return failure(keyPath, resolvedValue, dryRun, schemaError, currentValue);
+    return failure(keyPath, storedValue, dryRun, schemaError, currentValue);
   }
 
-  // Dry-run: return preview without modifying
+  const preview = (configManager as { previewUserWrite?: (key: string, next: unknown) => string | null })
+    .previewUserWrite;
   if (dryRun) {
+    const problem = preview?.call(configManager, keyPath, storedValue) ?? null;
+    if (problem) return failure(keyPath, storedValue, true, problem, currentValue);
     const result: ConfigSetResult = {
       success: true,
       key: keyPath,
       oldValue: currentValue,
-      newValue: resolvedValue,
+      newValue: storedValue,
       dryRun: true,
     };
     if (warning) result.warning = warning;
@@ -364,25 +362,26 @@ export async function setConfigValue(
   }
 
   // Apply the change
-  parent[leafKey] = resolvedValue;
+  parent[leafKey] = storedValue;
 
   // Persist. Une écriture refusée ne reste ni en mémoire ni sur le fichier actif.
   try {
-    configManager.saveUserConfig(keyPath, resolvedValue);
+    configManager.saveUserConfig(keyPath, storedValue);
   } catch (err) {
     parent[leafKey] = currentValue;
     const message = err instanceof Error ? err.message : String(err);
     logger.warn(`Failed to save config after setting "${keyPath}": ${message}`, { source: 'ConfigMutator' });
-    return failure(keyPath, resolvedValue, dryRun, message, currentValue);
+    return failure(keyPath, storedValue, dryRun, message, currentValue);
   }
 
-  logger.info(`Config set: ${keyPath} = ${JSON.stringify(resolvedValue)}`, { source: 'ConfigMutator' });
+  const visible = isSecretReference(storedValue) ? '"[référence]"' : JSON.stringify(storedValue);
+  logger.info(`Config set: ${keyPath} = ${visible}`, { source: 'ConfigMutator' });
 
   const result: ConfigSetResult = {
     success: true,
     key: keyPath,
     oldValue: currentValue,
-    newValue: resolvedValue,
+    newValue: storedValue,
     dryRun: false,
   };
   if (warning) result.warning = warning;
@@ -450,11 +449,14 @@ export async function patchConfigValue(
     readUserConfigDocument?: () => Record<string, unknown>;
     saveUserConfig: (keyPath?: string, value?: unknown) => void;
     getConfig: () => CodeBuddyConfig;
+    previewUserWrite?: (keyPath: string, value: unknown) => string | null;
   };
   const userDocument = configManager.readUserConfigDocument?.() ?? {};
   const oldValue = readAt(userDocument, keyPath);
   const merged = mergePatch(oldValue, value);
   if (dryRun) {
+    const problem = configManager.previewUserWrite?.(keyPath, merged) ?? null;
+    if (problem) return failure(keyPath, value, true, problem, oldValue);
     return {
       success: true,
       key: keyPath,

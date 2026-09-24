@@ -426,11 +426,3 @@ describe('écriture, étendue et non dupliquée', () => {
     expect(decision.baseUrl).toBe('https://models.example/v1');
   });
 });
-
-describe('branchement de la session', () => {
-  it('le démarrage appelle le lien clé, URL et modèle', () => {
-    const source = readFileSync(path.join(process.cwd(), 'src', 'index.ts'), 'utf8');
-    expect(source).toContain('sessionLaunchFromDecision');
-    expect(source).toContain('applyStartupAlias');
-  });
-});

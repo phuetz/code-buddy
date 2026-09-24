@@ -68,6 +68,15 @@ export interface PolicyRepair {
   value: unknown;
 }
 
+/** Aucun de ces domaines n'est lu par un exécuteur. Le calcul reste un diagnostic. */
+export const POLICY_DOMAIN_STATUS = [
+  { domain: 'gateway', application: 'DIAGNOSTIC NON APPLIQUÉ' },
+  { domain: 'channels', application: 'DIAGNOSTIC NON APPLIQUÉ' },
+  { domain: 'mcp', application: 'DIAGNOSTIC NON APPLIQUÉ' },
+  { domain: 'sandbox', application: 'DIAGNOSTIC NON APPLIQUÉ' },
+  { domain: 'exec', application: 'DIAGNOSTIC NON APPLIQUÉ' },
+] as const;
+
 export type PolicyFindingKind = 'config-exceeds-policy' | 'policy-widens' | 'policy-invalid';
 
 export interface PolicyFinding {
@@ -493,7 +502,8 @@ export function applyDomainPolicy(posture: DomainPosture, policy: DomainPolicy |
   }
   if (policy.channels?.enabled) {
     for (const id of safeIds(policy.channels.enabled)) {
-      if (posture.channels[id]?.enabled === true) continue;
+      const current = Object.hasOwn(posture.channels, id) ? posture.channels[id] : undefined;
+      if (current?.enabled === true) continue;
       findings.push({
         id: `channels.${id}.enabled.widens`,
         domain: 'channels',

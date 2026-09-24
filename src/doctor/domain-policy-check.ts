@@ -35,7 +35,7 @@ export function checkDomainPolicy(paths: DomainPolicyCheckPaths = {}): DoctorChe
       return {
         name: 'Domain policy',
         status: 'ok',
-        message: 'no domain policy',
+        message: 'DIAGNOSTIC NON APPLIQUÉ — no domain policy',
       };
     }
     const userConfig = readUserDocument(configFile);
@@ -44,7 +44,9 @@ export function checkDomainPolicy(paths: DomainPolicyCheckPaths = {}): DoctorChe
       return {
         name: 'Domain policy',
         status: 'ok',
-        message: report.source ? `matches ${report.source}` : 'no domain policy',
+        message: report.source
+          ? `DIAGNOSTIC NON APPLIQUÉ — matches ${report.source}`
+          : 'DIAGNOSTIC NON APPLIQUÉ — no domain policy',
       };
     }
     const repairable = report.repairs.length;
@@ -52,7 +54,7 @@ export function checkDomainPolicy(paths: DomainPolicyCheckPaths = {}): DoctorChe
     const check: DoctorCheck = {
       name: 'Domain policy',
       status: 'warn',
-      message: `${report.findings.length} finding(s), ${repairable} repairable, first ${first}`,
+      message: `DIAGNOSTIC NON APPLIQUÉ — ${report.findings.length} finding(s), ${repairable} repairable, first ${first}`,
       ...(repairable > 0 ? { fixable: true } : {}),
     };
     if (repairable > 0) {

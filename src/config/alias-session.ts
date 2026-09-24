@@ -5,7 +5,7 @@
  * Une clé ou une URL déjà posées sur la ligne de commande restent prioritaires.
  */
 
-import { resolveProviderFromCatalog } from '../providers/provider-catalog.js';
+import { findRuntimeProvider, resolveProviderFromCatalog } from '../providers/provider-catalog.js';
 import { CatalogueConfigError, type StartupModelDecision } from './model-catalogue.js';
 
 type EnvLike = Record<string, string | undefined>;
@@ -32,20 +32,27 @@ export function sessionLaunchFromDecision(
   let apiKey = cliKey || current.apiKey;
   let baseURL = cliUrl || current.baseURL;
 
-  if (decision.provider && !cliKey) {
+  if (decision.provider) {
     const resolved = resolveProviderFromCatalog({
       env,
       providerOverride: decision.provider,
-      requireConfigured: true,
+      requireConfigured: cliKey.length === 0,
       hasChatGptOAuth: false,
     });
-    if (!resolved?.apiKey.trim()) {
-      throw new CatalogueConfigError(
-        `l'alias vers « ${model} » demande le fournisseur « ${decision.provider} », mais aucune clé n'est disponible pour lui. La session ne change pas de fournisseur en silence.`,
-      );
+    if (!cliKey) {
+      if (!resolved?.apiKey.trim()) {
+        throw new CatalogueConfigError(
+          `l'alias vers « ${model} » demande le fournisseur « ${decision.provider} », mais aucune clé n'est disponible pour lui. La session ne change pas de fournisseur en silence.`,
+        );
+      }
+      apiKey = resolved.apiKey;
     }
-    apiKey = resolved.apiKey;
-    if (!decision.baseUrl && !cliUrl) baseURL = resolved.baseURL;
+    if (!decision.baseUrl && !cliUrl) {
+      const providerUrl = resolved?.baseURL?.trim()
+        || findRuntimeProvider(decision.provider)?.defaultBaseURL?.trim()
+        || '';
+      if (providerUrl) baseURL = providerUrl;
+    }
   }
 
   if (decision.baseUrl && !cliUrl) baseURL = decision.baseUrl;

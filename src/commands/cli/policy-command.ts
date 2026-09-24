@@ -20,13 +20,21 @@ function emit(report: PolicyCycleReport, json: boolean): void {
     process.stdout.write(`${JSON.stringify({
       ok: report.ok,
       source: report.source,
+      application: report.application,
+      domains: report.domains,
       findings: report.findings,
       repairs: report.repairs,
       errors: report.errors,
     }, null, 2)}\n`);
     return;
   }
-  const lines = [`ok: ${report.ok ? 'true' : 'false'}`];
+  const lines = [
+    `ok: ${report.ok ? 'true' : 'false'}`,
+    `application: ${report.application}`,
+  ];
+  for (const domain of report.domains) {
+    lines.push(`domaine ${domain.domain}: ${domain.application}`);
+  }
   if (report.source) lines.push(`source: ${report.source}`);
   for (const finding of report.findings) lines.push(`${finding.kind} ${finding.id}: ${finding.message}`);
   for (const repair of report.repairs) lines.push(`repair ${repair.key}`);

@@ -180,6 +180,28 @@ export function runConfigSchema(): JsonSchemaDocument {
   return exportConfigSchema();
 }
 
+/** Variables d'environnement et TOML actif. Un fichier absent n'est pas une erreur. */
+export async function runConfigValidate(): Promise<{
+  ok: boolean;
+  envErrors: string[];
+  envWarnings: string[];
+  tomlProblem: string | null;
+}> {
+  await ensureCatalogueCheck();
+  const { validateEnv } = await import('./env-schema.js');
+  const { assessUserConfigText, resolveUserConfigFile } = await import('./toml-config.js');
+  const { existsSync, readFileSync } = await import('node:fs');
+  const envResult = validateEnv();
+  const file = resolveUserConfigFile();
+  const tomlProblem = existsSync(file) ? assessUserConfigText(readFileSync(file, 'utf8')) : null;
+  return {
+    ok: envResult.valid && tomlProblem == null,
+    envErrors: envResult.errors,
+    envWarnings: envResult.warnings,
+    tomlProblem,
+  };
+}
+
 export function formatConfigReport(report: ConfigCliReport, json: boolean): string {
   if (json) return `${JSON.stringify(report, null, 2)}\n`;
   const lines = [`ok: ${report.ok ? 'true' : 'false'}`];

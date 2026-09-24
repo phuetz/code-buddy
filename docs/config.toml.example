@@ -561,7 +561,7 @@ exemple = "exemple"
 
 # cle: model_aliases.*.base_url
 # défaut : absent
-# URL réellement utilisée par la session. Absente : celle du fournisseur, ou l'URL détectée
+# URL réellement utilisée par la session. Absente : l'URL du fournisseur nommé par l'alias, sinon l'URL déjà choisie
 [model_aliases.exemple]
 base_url = "https://example.invalid/v1"
 
@@ -1451,7 +1451,7 @@ exemple = "exemple"
 
 # cle: profiles.*.model_aliases.*.base_url
 # défaut : absent
-# URL réellement utilisée par la session. Absente : celle du fournisseur, ou l'URL détectée
+# URL réellement utilisée par la session. Absente : l'URL du fournisseur nommé par l'alias, sinon l'URL déjà choisie
 [profiles.exemple.model_aliases.exemple]
 base_url = "https://example.invalid/v1"
 

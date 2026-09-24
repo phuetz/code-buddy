@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import { findRuntimeProvider } from '../providers/provider-catalog.js';
 import { installCataloguePriceOverlays, type ModelPricing } from './model-pricing.js';
 import { findModelToolConfig, installModelCatalogueOverlays } from './model-tools.js';
+import { ownValue } from './own-lookup.js';
 import { getModelRegistry } from './model-registry.js';
 import { DEFAULT_CONFIG, parseTOML, registerCatalogueWriteCheck, resolveUserConfigFile } from './toml-config.js';
 
@@ -161,7 +162,7 @@ export function mergeCatalogue(
 ): Record<string, CatalogueEntry> {
   const merged: Record<string, CatalogueEntry> = { ...builtin };
   for (const [id, patch] of Object.entries(document.models)) {
-    const base = builtin[id] ?? findBuiltinByModelId(builtin, id);
+    const base = ownValue<CatalogueEntry>(builtin, id) ?? findBuiltinByModelId(builtin, id);
     merged[id] = mergeCatalogueEntry(base, patch);
   }
   return merged;
@@ -178,7 +179,7 @@ export function mergeCatalogueDocuments(
 ): CatalogueDocument {
   const models: Record<string, CataloguePatch> = { ...base.models };
   for (const [id, patch] of Object.entries(over.models)) {
-    const previous = models[id];
+    const previous = ownValue<CataloguePatch>(models, id);
     if (!previous) {
       models[id] = patch;
       continue;
@@ -191,7 +192,8 @@ export function mergeCatalogueDocuments(
   }
   const profiles = { ...base.profiles };
   for (const [name, profile] of Object.entries(over.profiles)) {
-    profiles[name] = { ...profiles[name], ...profile };
+    const previous = ownValue<CatalogueDocument['profiles'][string]>(profiles, name);
+    profiles[name] = { ...previous, ...profile };
   }
   const roles: CatalogueRoles = { ...base.roles };
   if (over.roles.primary) roles.primary = over.roles.primary;
@@ -863,7 +865,8 @@ function isConcreteModel(model: string, document: CatalogueDocument): boolean {
   const needle = model.trim().toLowerCase();
   if (!needle) return false;
   if (findEntry(builtinCatalogueEntries(), model)) return true;
-  if (document.models[model] || Object.keys(document.models).some((id) => id.toLowerCase() === needle)) {
+  const declared = ownValue<CataloguePatch>(document.models, model);
+  if (declared || Object.keys(document.models).some((id) => id.toLowerCase() === needle)) {
     return true;
   }
   for (const patch of Object.values(document.models)) {
@@ -885,17 +888,17 @@ function lookupProfile(
   name: string | null,
 ): { activeModel: string | null } {
   if (!name) return { activeModel: null };
-  const fromDoc = document?.profiles[name];
+  const fromDoc = ownValue<{ activeModel?: string }>(document?.profiles, name);
   if (fromDoc) return { activeModel: fromDoc.activeModel ?? null };
-  const builtin = DEFAULT_CONFIG.profiles?.[name] as { active_model?: string } | undefined;
+  const builtin = ownValue<{ active_model?: string }>(DEFAULT_CONFIG.profiles, name);
   if (builtin) return { activeModel: builtin.active_model?.trim() || null };
   return { activeModel: null };
 }
 
 function assertProfileSelectable(document: CatalogueDocument | null, profileName: string | null): void {
   if (!profileName) return;
-  if (document?.profiles[profileName]) return;
-  if (DEFAULT_CONFIG.profiles?.[profileName]) return;
+  if (ownValue(document?.profiles, profileName)) return;
+  if (ownValue(DEFAULT_CONFIG.profiles, profileName)) return;
   const builtins = Object.keys(DEFAULT_CONFIG.profiles ?? {}).join(', ') || 'aucun';
   throw new CatalogueConfigError(
     `le profil « ${profileName} » n'existe pas. Profils intégrés : ${builtins}. Les autres se déclarent dans [profiles.${profileName}].`,
@@ -903,7 +906,8 @@ function assertProfileSelectable(document: CatalogueDocument | null, profileName
 }
 
 function findEntry(entries: Record<string, CatalogueEntry>, model: string): CatalogueEntry | null {
-  if (entries[model]) return entries[model];
+  const exact = ownValue<CatalogueEntry>(entries, model);
+  if (exact) return exact;
   const needle = model.trim().toLowerCase();
   for (const entry of Object.values(entries)) {
     if (entry.id.toLowerCase() === needle) return entry;
