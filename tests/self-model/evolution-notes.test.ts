@@ -6,6 +6,7 @@ import {
   queryEvolutionNotes,
   readEvolutionNotes,
 } from '../../src/self-model/evolution-notes.js';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 const fixture = `## [2.0.0] (2026-08-26)
 
@@ -52,7 +53,7 @@ describe('evolution notes self-model', () => {
   });
 
   it('caches under the project config directory and rebuilds when the source changes', async () => {
-    const workDir = await fs.mkdtemp(path.join(process.cwd(), '.evo1-test-'));
+    const workDir = await fs.mkdtemp(path.join(repoScratchRoot(process.cwd()), '.evo1-test-'));
     temporaryDirectories.push(workDir);
     const changelogPath = path.join(workDir, 'CHANGELOG.md');
     await fs.writeFile(changelogPath, fixture, 'utf8');

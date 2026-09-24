@@ -29,6 +29,22 @@ export function makeTmpDir(prefix: string, baseDir: string = os.tmpdir()): strin
   return fs.realpathSync.native(created);
 }
 
+/**
+ * Parent for scratch directories that must live inside the repository (tsconfig
+ * and node_modules lookup, or a bash cwd hidden by bubblewrap's /tmp tmpfs).
+ *
+ * It is the gitignored `tmp/` folder, never the repository root: a dot-dir
+ * created at the root shows up in `git status` for every test running
+ * concurrently in another worker (catalogue-routes-http-b.test.ts saw a
+ * sibling's `.gk18-pr-*` on Windows CI, 2026-09-24), and stays there for good
+ * when a Windows cleanup is skipped.
+ */
+export function repoScratchRoot(repoRoot: string): string {
+  const base = path.join(repoRoot, 'tmp');
+  fs.mkdirSync(base, { recursive: true });
+  return base;
+}
+
 export function removeTmpDir(target: string | undefined | null): void {
   if (!target) return;
   try {

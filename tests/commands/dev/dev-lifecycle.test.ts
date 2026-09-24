@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
+import { repoScratchRoot } from '../../helpers/tmp.js';
 
 interface ChildResult {
   exitCode: number | null;
@@ -117,7 +118,7 @@ function seedToyCwd(root: string): string {
 
 describe('buddy dev plan lifecycle', () => {
   it('returns after a plan has been streamed from a fake provider and writes PLAN.md', async () => {
-    const root = fs.mkdtempSync(path.join(repoRoot, '.r17-dev-plan-'));
+    const root = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r17-dev-plan-'));
     roots.push(root);
     const home = path.join(root, 'home');
     const cwd = seedToyCwd(root);
@@ -144,7 +145,7 @@ describe('buddy dev plan lifecycle', () => {
   });
 
   it('exits 1 and does not write PLAN.md when the model returns an empty plan', async () => {
-    const root = fs.mkdtempSync(path.join(repoRoot, '.r17-dev-plan-'));
+    const root = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r17-dev-plan-'));
     roots.push(root);
     const home = path.join(root, 'home');
     const cwd = seedToyCwd(root);

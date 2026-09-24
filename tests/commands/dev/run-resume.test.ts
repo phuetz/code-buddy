@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
+import { repoScratchRoot } from '../../helpers/tmp.js';
 
 const repoRoot = process.cwd();
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
@@ -53,7 +54,7 @@ afterEach(() => {
 
 describe('buddy dev run resume', () => {
   it('exits 1 without contacting a provider when no objective and no PLAN.md', async () => {
-    const root = fs.mkdtempSync(path.join(repoRoot, '.gk18-run-'));
+    const root = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.gk18-run-'));
     roots.push(root);
     const cwd = path.join(root, 'toy');
     const home = path.join(root, 'home');

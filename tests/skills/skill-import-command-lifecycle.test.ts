@@ -13,6 +13,7 @@ import {
   resetSkillRegistry,
 } from '../../src/skills/registry.js';
 import { requireSkillWatchersAtLeast } from './watch-health.js';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
@@ -33,7 +34,7 @@ afterEach(async () => {
 
 describe('skills import CLI lifecycle', () => {
   it('returns after applying an import instead of leaving registry watchers alive', () => {
-    const testRoot = fs.mkdtempSync(path.join(repoRoot, '.r16-import-cli-'));
+    const testRoot = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r16-import-cli-'));
     tempDirs.push(testRoot);
     const home = path.join(testRoot, 'home');
     const source = path.join(testRoot, 'source');
@@ -87,7 +88,7 @@ describe('skills import CLI lifecycle', () => {
   });
 
   it('has no filesystem watchers in active resources when the command returns', async () => {
-    const testRoot = fs.mkdtempSync(path.join(repoRoot, '.r16-import-probe-'));
+    const testRoot = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r16-import-probe-'));
     tempDirs.push(testRoot);
     const home = path.join(testRoot, 'home');
     const source = path.join(testRoot, 'source');
@@ -134,7 +135,7 @@ describe('skills import CLI lifecycle', () => {
   });
 
   it('registers an imported skill for list and delete round-trips', async () => {
-    const testRoot = fs.mkdtempSync(path.join(repoRoot, '.r16-import-roundtrip-'));
+    const testRoot = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r16-import-roundtrip-'));
     tempDirs.push(testRoot);
     const home = path.join(testRoot, 'home');
     const source = path.join(testRoot, 'source');
@@ -213,7 +214,7 @@ describe('skills import CLI lifecycle', () => {
   });
 
   it.each([false, true])('closes real watcher handles before removal and restores them (failure=%s)', async (fail) => {
-    const testRoot = fs.mkdtempSync(path.join(repoRoot, '.r16-uninstall-watch-'));
+    const testRoot = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r16-uninstall-watch-'));
     tempDirs.push(testRoot);
     const skillDir = path.join(testRoot, 'skills', 'watched-helper');
     fs.mkdirSync(skillDir, { recursive: true });
@@ -267,7 +268,7 @@ describe('skills import CLI lifecycle', () => {
   });
 
   it('returns exit 1 when hub uninstall cannot find a skill', () => {
-    const testRoot = fs.mkdtempSync(path.join(repoRoot, '.r16-uninstall-missing-'));
+    const testRoot = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r16-uninstall-missing-'));
     tempDirs.push(testRoot);
     const home = path.join(testRoot, 'home');
     const result = spawnSync(process.execPath, [

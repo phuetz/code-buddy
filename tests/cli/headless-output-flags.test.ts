@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 const CLI_TIMEOUT_MS = 45_000;
 
@@ -136,7 +137,7 @@ describe('headless output file and schema flags', () => {
   let provider: http.Server | undefined;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), '.tmp-headless-output-flags-'));
+    tempDir = fs.mkdtempSync(path.join(repoScratchRoot(process.cwd()), '.tmp-headless-output-flags-'));
   });
 
   afterEach(async () => {

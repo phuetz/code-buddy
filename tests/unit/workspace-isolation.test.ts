@@ -13,6 +13,7 @@ import {
   validateWorkspacePath,
   isPathInWorkspace,
 } from '../../src/workspace/workspace-isolation';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 describe('WorkspaceIsolation', () => {
   const testWorkspace = '/home/user/project';
@@ -126,7 +127,7 @@ describe('WorkspaceIsolation', () => {
     });
 
     it('should scope an embedded actor workspace to its async turn', async () => {
-      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-scoped-workspace-'));
+      const parent = mkdtempSync(path.join(repoScratchRoot(process.cwd()), '.codebuddy-scoped-workspace-'));
       const voiceRoot = path.join(parent, 'voice-repo');
       mkdirSync(voiceRoot);
       const target = path.join(voiceRoot, 'package.json');
@@ -144,7 +145,7 @@ describe('WorkspaceIsolation', () => {
     });
 
     it('should keep canonical containment for a symlinked scoped workspace', async () => {
-      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-symlink-workspace-'));
+      const parent = mkdtempSync(path.join(repoScratchRoot(process.cwd()), '.codebuddy-symlink-workspace-'));
       const realRoot = path.join(parent, 'real');
       const linkedRoot = path.join(parent, 'linked');
       mkdirSync(realRoot);
@@ -160,7 +161,7 @@ describe('WorkspaceIsolation', () => {
     });
 
     it('should reject a symlink escape below a scoped workspace', async () => {
-      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-symlink-escape-'));
+      const parent = mkdtempSync(path.join(repoScratchRoot(process.cwd()), '.codebuddy-symlink-escape-'));
       const voiceRoot = path.join(parent, 'voice');
       const outsideRoot = path.join(parent, 'outside');
       mkdirSync(voiceRoot);
@@ -179,7 +180,7 @@ describe('WorkspaceIsolation', () => {
     });
 
     it('should reject creating a missing file through a symlinked parent', () => {
-      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-create-symlink-escape-'));
+      const parent = mkdtempSync(path.join(repoScratchRoot(process.cwd()), '.codebuddy-create-symlink-escape-'));
       const workspace = path.join(parent, 'workspace');
       const outside = path.join(parent, 'outside');
       mkdirSync(workspace);
@@ -198,7 +199,7 @@ describe('WorkspaceIsolation', () => {
     });
 
     it('should keep the global bot workspace blocked while a voice turn is active', async () => {
-      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-concurrent-workspace-'));
+      const parent = mkdtempSync(path.join(repoScratchRoot(process.cwd()), '.codebuddy-concurrent-workspace-'));
       const voiceRoot = path.join(parent, 'code-buddy');
       mkdirSync(voiceRoot);
       const voiceFile = path.join(voiceRoot, 'package.json');

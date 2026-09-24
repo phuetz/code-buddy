@@ -15,12 +15,13 @@ import { wireSemanticVisionReaction } from '../../src/sensory/semantic-vision-re
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
 import { HomeModeStore } from '../../src/life-rhythm/home-mode-store.js';
 import { CompanionConductor } from '../../src/companion/orchestrator.js';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 describe('Mission GT2 — contrats anti-régression des 5 gardes de la nuit', () => {
   let tmpDir: string;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(path.join(process.cwd(), '.gt2-mutation-'));
+    tmpDir = await mkdtemp(path.join(repoScratchRoot(process.cwd()), '.gt2-mutation-'));
     _resetVoiceActivityForTests();
   });
 

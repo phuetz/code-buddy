@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillRegistry } from '../../src/skills/registry.js';
 import { logger } from '../../src/utils/logger.js';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const registries: SkillRegistry[] = [];
@@ -48,7 +49,7 @@ describe('SkillRegistry when the kernel refuses observers', () => {
   it.each(['ENOSPC', 'EMFILE'] as const)(
     'does not crash on %s, warns once, and rereads skills on demand',
     async code => {
-      const skillsRoot = mkdtempSync(path.join(repoRoot, '.r32-skills-nowatch-'));
+      const skillsRoot = mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r32-skills-nowatch-'));
       tempRoots.push(skillsRoot);
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
@@ -90,7 +91,7 @@ describe('SkillRegistry when the kernel refuses observers', () => {
   );
 
   it('loads a skill that already existed when the child observer is refused', async () => {
-    const skillsRoot = mkdtempSync(path.join(repoRoot, '.r32-skills-nowatch-'));
+    const skillsRoot = mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r32-skills-nowatch-'));
     tempRoots.push(skillsRoot);
     writeSkill(skillsRoot, 'preexisting-skill');
     vi.spyOn(logger, 'warn').mockImplementation(() => {});

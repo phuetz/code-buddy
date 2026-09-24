@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { exportSkill } from '../../src/skills/skill-exchange.js';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 const repoRoot = process.cwd();
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
@@ -16,7 +17,7 @@ afterEach(() => {
 
 describe('skills exchange install CLI lifecycle', () => {
   it('returns after installing a trusted package', () => {
-    const root = fs.mkdtempSync(path.join(repoRoot, '.r17-exchange-cli-'));
+    const root = fs.mkdtempSync(path.join(repoScratchRoot(repoRoot), '.r17-exchange-cli-'));
     roots.push(root);
     const home = path.join(root, 'home');
     const source = path.join(root, '.codebuddy', 'skills', 'authored-lifecycle-demo');

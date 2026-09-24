@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SELF_EVOLUTION_TOOL } from '../../src/codebuddy/tool-definitions/self-evolution-tools.js';
 import { SelfEvolutionTool } from '../../src/tools/registry/self-evolution-tools.js';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 const roots: string[] = [];
 
@@ -27,7 +28,7 @@ describe('self_evolution', () => {
   });
 
   it('answers from local notes with date and subject filters', async () => {
-    const root = await fs.mkdtemp(path.join(process.cwd(), '.evo1-test-'));
+    const root = await fs.mkdtemp(path.join(repoScratchRoot(process.cwd()), '.evo1-test-'));
     roots.push(root);
     await fs.writeFile(
       path.join(root, 'CHANGELOG.md'),
