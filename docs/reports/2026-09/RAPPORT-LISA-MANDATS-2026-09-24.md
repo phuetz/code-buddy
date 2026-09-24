@@ -17,4 +17,16 @@ l'étude indépendante L3 (conduite en parallèle par la flotte).
 
 ## Déroulé
 
-(complété au fil de la mission)
+1. Cœur écrit : schéma strict, chargeur fermé en cas de doute, `decideAutonomousAction` pure (13 tests).
+   Faille vue à l'écriture : les cibles étaient comparées par chemin déclaré, un lien symbolique posé
+   dans un dossier autorisé et pointant vers `~/.codebuddy/lisa` passait. Comparaison par chemin
+   réel ; contre-essai : l'ancienne comparaison fait tomber exactement le test du lien piégé.
+2. Contre-revue adversariale (Nemotron 3 Ultra). Retenus et corrigés : mots interdits contournés par
+   un caractère invisible (normalisation par `deobfuscateSafeForScan`, appliquée aussi aux mots) ;
+   mandat sans `chemins` = autonomie partout (désormais obligatoire) ; action réversible sans cible
+   absolue (désormais demandée) ; dossier parent du fichier de mandats en lien symbolique (refusé) ;
+   chemins protégés fournis par l'appelant (la liste par défaut est toujours imposée). Reporté au
+   branchement : échange de lien entre la décision et l'exécution (l'outil devra ouvrir sans suivre
+   les liens et revérifier). Écarté : fuseau de l'expiration (Lisa et son propriétaire partagent la
+   même horloge locale).
+

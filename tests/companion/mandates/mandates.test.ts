@@ -116,6 +116,26 @@ describe('decideAutonomousAction — the charter, in order', () => {
     }
   });
 
+  it('an invisible character or odd spacing cannot smuggle a forbidden word', () => {
+    const home = sandboxHome();
+    for (const command of ['rm\u200b -rf x', 'RM  -RF x', 'rm\u00a0-rf x']) {
+      expect(decideAutonomousAction(move(home, { command }), context(home)).decision, JSON.stringify(command)).toBe('ask');
+    }
+  });
+
+  it('a reversible action must name absolute targets', () => {
+    const home = sandboxHome();
+    expect(decideAutonomousAction(move(home, { targets: ['Téléchargements/rangé/x.pdf'] }), context(home)).decision).toBe('ask');
+    expect(decideAutonomousAction(move(home, { targets: undefined }), context(home)).decision).toBe('ask');
+  });
+
+  it('the default guardrails hold even when the caller passes none', () => {
+    const home = sandboxHome();
+    const own = { ...RANGER, chemins: ['~'] };
+    const request = move(home, { targets: [path.join(home, '.codebuddy', 'lisa', 'mandats.toml')] });
+    expect(decideAutonomousAction(request, { ...context(home, [own]), protectedPaths: [] }).decision).toBe('deny');
+  });
+
   it('Lisa never writes her own guardrails, even inside a mandated folder', () => {
     const home = sandboxHome();
     const own = { ...RANGER, chemins: ['~'] };
@@ -173,6 +193,20 @@ expire = "2026-12-31"
       expect(loaded.mandates).toEqual([]);
       expect(loaded.problems).toHaveLength(1);
     }
+  });
+
+  it('a mandate without roots is rejected', () => {
+    const loaded = loadMandates(write(VALID.replace('chemins = ["~/Téléchargements"]\n', '')));
+    expect(loaded.mandates).toEqual([]);
+  });
+
+  it.skipIf(process.platform === 'win32')('refuses a file reached through a symlinked directory', () => {
+    const real = write(VALID);
+    const aliasDir = path.join(path.dirname(path.dirname(real)), `alias-${path.basename(path.dirname(real))}`);
+    symlinkSync(path.dirname(real), aliasDir);
+    dirs.push(aliasDir);
+    expect(loadMandates(path.join(aliasDir, 'mandats.toml')).mandates).toEqual([]);
+    expect(loadMandates(real).mandates).toHaveLength(1);
   });
 
   it.skipIf(process.platform === 'win32')('refuses a symlinked or group-writable file', () => {

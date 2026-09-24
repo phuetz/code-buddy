@@ -28,6 +28,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import TOML from '@iarna/toml';
 import { z } from 'zod';
+import { deobfuscateSafeForScan } from '../../security/text-deobfuscation.js';
 import { logger } from '../../utils/logger.js';
 
 export type ToolEffect = 'read' | 'reversible' | 'emission';
@@ -47,8 +48,9 @@ export const mandateSchema = z
     outils: z.array(z.string().regex(toolRe)).min(1).max(20),
     /** Only read/reversible: an emission can never be mandated away. */
     effets: z.array(z.enum(['read', 'reversible'])).min(1).max(2),
-    /** Optional roots the action's targets must stay under (`~` expands to the home directory). */
-    chemins: z.array(z.string().min(1).max(300)).max(10).optional(),
+    /** Roots the action's targets must stay under (`~` expands to the home directory). Required:
+     * a mandate without roots would grant its tools everywhere. */
+    chemins: z.array(z.string().min(1).max(300)).min(1).max(10),
     /** Substrings that make a command or target refused under this mandate. */
     interdits: z.array(z.string().min(1).max(100)).max(30).optional(),
     plafond_par_jour: z.number().int().min(1).max(200),
@@ -87,6 +89,14 @@ export function loadMandates(file: string = mandatesFilePath()): LoadedMandates 
     return { mandates: [], problems: [] };
   }
   if (stat.isSymbolicLink()) return refuse(`mandate file is a symlink, ignored: ${file}`);
+  // A symlinked PARENT (e.g. ~/.codebuddy pointing elsewhere) is invisible to lstat on the file.
+  try {
+    if (realpathSync(file) !== path.resolve(file)) {
+      return refuse(`mandate file is reached through a symlinked directory, ignored: ${file}`);
+    }
+  } catch {
+    return refuse(`mandate file path cannot be resolved, ignored: ${file}`);
+  }
   if (!stat.isFile()) return refuse(`mandate file is not a regular file, ignored: ${file}`);
   if (process.platform !== 'win32' && (stat.mode & 0o022) !== 0) {
     return refuse(`mandate file is writable by group or others, ignored: ${file}`);
@@ -200,7 +210,9 @@ export function decideAutonomousAction(request: ActionRequest, context: Decision
 
   const home = context.home ?? homedir();
   const targets = request.targets ?? [];
-  const guarded = targets.find((t) => context.protectedPaths.some((p) => isUnder(t, p)));
+  // The default guardrails are ALWAYS enforced; a caller can only add to them.
+  const protectedPaths = [...defaultProtectedPaths(home), ...context.protectedPaths];
+  const guarded = targets.find((t) => protectedPaths.some((p) => isUnder(t, p)));
   if (guarded && request.effect !== 'read') {
     return { decision: 'deny', reason: `Lisa never writes her own guardrails (${guarded})` };
   }
@@ -211,19 +223,25 @@ export function decideAutonomousAction(request: ActionRequest, context: Decision
     return { decision: 'ask', reason: 'an emission towards the world is always asked' };
   }
 
+  // A reversible action must say what it touches, in absolute paths; otherwise it is asked.
+  if (targets.length === 0 || targets.some((t) => !path.isAbsolute(t))) {
+    return { decision: 'ask', reason: 'a reversible action must name its absolute targets' };
+  }
   const today = localDate(context.now);
+  // Invisible characters, homoglyphs and odd spacing must not smuggle a forbidden word through.
+  const haystack = deobfuscateSafeForScan([request.command ?? '', ...targets].join('\n'))
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
   let supervised: Mandate | undefined;
   for (const mandate of context.mandates) {
     if (!mandate.origines.includes(request.origin)) continue;
     if (!mandate.outils.includes(request.tool)) continue;
     if (!mandate.effets.includes('reversible')) continue;
     if (mandate.expire < today) continue;
-    const haystack = [request.command ?? '', ...targets].join('\n').toLowerCase();
-    if ((mandate.interdits ?? []).some((word) => haystack.includes(word.toLowerCase()))) continue;
-    if (mandate.chemins?.length) {
-      const roots = mandate.chemins.map((c) => expandHome(c, home));
-      if (targets.length === 0 || !targets.every((t) => roots.some((r) => isUnder(t, r)))) continue;
-    }
+    const forbidden = (mandate.interdits ?? []).map((w) => deobfuscateSafeForScan(w).toLowerCase().replace(/\s+/g, ' '));
+    if (forbidden.some((word) => haystack.includes(word))) continue;
+    const roots = mandate.chemins.map((c) => expandHome(c, home));
+    if (!targets.every((t) => roots.some((r) => isUnder(t, r)))) continue;
     if (context.usedToday(mandate.id) >= mandate.plafond_par_jour) continue;
     if (mandate.confiance !== 'autonome') {
       supervised ??= mandate;
