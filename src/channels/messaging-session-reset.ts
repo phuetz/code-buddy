@@ -4,8 +4,10 @@
  * Modes follow the Hermes session_reset policy (both, idle, daily, none).
  * The default is none: an absent or invalid section keeps today's behavior.
  * A reset is applied only after a memory archive has been written and read
- * back. A failed save leaves the session untouched. When the session is
- * encrypted at rest, every archived store is sealed with the same key.
+ * back. A failed save leaves the session untouched. The session file itself
+ * is archived as a verbatim copy of its bytes, so the copy has the file's
+ * at-rest state by construction. When the session is encrypted at rest, every
+ * other archived store is sealed with the same key.
  *
  * The clock is injected. This module never sleeps.
  *
@@ -15,6 +17,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { decryptSessionContent, hasEncryptedSessionContent } from '../persistence/session-content.js';
+import type { SessionMessage } from '../persistence/session-store.js';
 import { readJsonAtomicSyncReadOnly, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type MessagingSessionResetMode = 'both' | 'idle' | 'daily' | 'none';
@@ -108,6 +112,12 @@ export interface MessagingMemoryPart {
   /** Sealed form of `transcript`. When present, only this form is written. */
   sealed?: string;
   /**
+   * Exact bytes of the store's file, read once. When present, these bytes are
+   * the archive: never decoded, sealed or rewritten. `transcript` is what they
+   * decode to, for the caller's own checks only.
+   */
+  raw?: Uint8Array;
+  /**
    * Omitted or `ok`: the transcript was read, even when it is empty.
    * `failed`: the store could not be read. Nothing may be archived or erased.
    */
@@ -115,6 +125,16 @@ export interface MessagingMemoryPart {
 }
 
 const ARCHIVE_EPOCH = /^[0-9a-z]{8,80}$/;
+/** Suffix of a verbatim session file copy, next to the JSON archive records. */
+const VERBATIM_SUFFIX = '.session.json';
+
+/** The text form of session messages that archives and reset checks compare. */
+export function sessionMessagesTranscript(messages: ReadonlyArray<{ type: string; content: string }>): string {
+  return messages
+    .map((message) => `${message.type}: ${message.content}`)
+    .filter((line) => line.trim().length > 2)
+    .join('\n');
+}
 
 /**
  * Throws on a relative configured directory: it would resolve against
@@ -222,15 +242,28 @@ export function readMessagingMemoryArchive(
     .join('\n');
 }
 
+function openVerbatimSessionCopy(file: string, open: ((sealed: string) => string) | undefined, keyPath?: string): string {
+  const data: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const messages = (data as { messages?: unknown } | null)?.messages;
+  if (!Array.isArray(messages)) throw new Error('memory archive invalid');
+  const stored = messages as SessionMessage[];
+  if (!hasEncryptedSessionContent(stored)) return sessionMessagesTranscript(stored);
+  if (!open) throw new Error('memory archive is sealed');
+  return sessionMessagesTranscript(decryptSessionContent(stored, keyPath));
+}
+
 /**
  * Restore the transcripts archived for one session source, oldest first.
  * A sealed archive needs `open`; without it, or with a wrong key, this throws.
+ * A verbatim session copy holding the encrypted envelope is opened with the
+ * session key at `keyPath` (the default key when omitted), and needs `open` too.
  */
 export function openMessagingMemoryArchive(
   archiveDir: string,
   sessionKey: string,
   source: MessagingMemorySource,
   open?: (sealed: string) => string,
+  keyPath?: string,
 ): string[] {
   const raw = readMessagingMemoryArchive(archiveDir, sessionKey, source);
   if (!raw) return [];
@@ -240,6 +273,7 @@ export function openMessagingMemoryArchive(
     .filter((name) => name.startsWith(`${stem}.`) && name.endsWith('.json'))
     .sort()
     .map((name) => {
+      if (name.endsWith(VERBATIM_SUFFIX)) return openVerbatimSessionCopy(path.join(directory, name), open, keyPath);
       const read = readJsonAtomicSyncReadOnly<MemoryArchiveRecord>(path.join(directory, name), isArchiveRecord);
       if (read.status !== 'ok') throw new Error(`memory archive ${read.status}`);
       if (!('sealed' in read.value)) return read.value.transcript;
@@ -332,21 +366,31 @@ export function proveMessagingMemorySave(input: {
    * again to prove the archive can be restored.
    */
   sealed?: { payload: string; open: (sealed: string) => string };
+  /**
+   * Exact bytes of the store file. When set, the archive is these bytes and
+   * nothing else, written once and compared byte for byte on read-back.
+   */
+  raw?: Uint8Array;
 }): MemorySaveResult {
   const sealed = input.sealed;
+  const raw = input.raw;
+  if (sealed && raw) return { ok: false, error: 'memory archive is both sealed and verbatim' };
   if (sealed && input.transcript.length > 0 && sealed.payload.includes(input.transcript)) {
     return { ok: false, error: 'memory archive sealing left plaintext' };
   }
-  const digest = digestTranscript(sealed ? sealed.payload : input.transcript);
+  const digest = raw
+    ? createHash('sha256').update(raw).digest('hex')
+    : digestTranscript(sealed ? sealed.payload : input.transcript);
+  const suffix = raw ? VERBATIM_SUFFIX : '.json';
   try {
     let directory = input.archiveDir;
     if (input.source) directory = prepareSourceDirectory(input.archiveDir, input.source);
     else prepareRealDirectory(input.archiveDir, 'memory archive directory');
     let epoch = allocateArchiveEpoch(input.now);
-    let filePath = path.join(directory, `${sessionStem(input.sessionKey)}.${epoch}.json`);
+    let filePath = path.join(directory, `${sessionStem(input.sessionKey)}.${epoch}${suffix}`);
     for (let attempt = 0; attempt < 5 && fs.existsSync(filePath); attempt += 1) {
       epoch = allocateArchiveEpoch(input.now + attempt + 1);
-      filePath = path.join(directory, `${sessionStem(input.sessionKey)}.${epoch}.json`);
+      filePath = path.join(directory, `${sessionStem(input.sessionKey)}.${epoch}${suffix}`);
     }
     if (fs.existsSync(filePath)) return { ok: false, error: 'memory archive path collision' };
     const existing = (() => {
@@ -358,6 +402,20 @@ export function proveMessagingMemorySave(input: {
       }
     })();
     if (existing) return { ok: false, error: 'memory archive path collision' };
+    if (raw) {
+      // 'wx': never follows or replaces an existing path. No decode, no rewrite.
+      const fd = fs.openSync(filePath, 'wx', 0o600);
+      try {
+        fs.writeFileSync(fd, raw);
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+      if (!fs.readFileSync(filePath).equals(Buffer.from(raw))) {
+        return { ok: false, error: 'memory archive read-back mismatch' };
+      }
+      return { ok: true, receipt: digest };
+    }
     const savedAt = new Date(input.now).toISOString();
     const record: MemoryArchiveRecord = sealed
       ? { schemaVersion: 1, savedAt, reason: input.reason, encrypted: true, sealed: sealed.payload, digest, epoch }
@@ -407,8 +465,10 @@ export function proveMessagingMemoryParts(input: {
       return { ok: false, error: `memory read failed: ${part.source}` };
     }
   }
-  const sealedCount = input.parts.filter((part) => part.sealed !== undefined).length;
-  if (sealedCount > 0 && (sealedCount !== input.parts.length || !input.open)) {
+  // A verbatim part keeps its file's own at-rest state; the rule covers the others.
+  const copied = input.parts.filter((part) => part.raw === undefined);
+  const sealedCount = copied.filter((part) => part.sealed !== undefined).length;
+  if (sealedCount > 0 && (sealedCount !== copied.length || !input.open)) {
     return { ok: false, error: 'memory archive partly sealed' };
   }
   const open = input.open;
@@ -421,6 +481,7 @@ export function proveMessagingMemoryParts(input: {
       now: input.now,
       reason: input.reason,
       source: part.source,
+      ...(part.raw !== undefined ? { raw: part.raw } : {}),
       ...(part.sealed !== undefined && open ? { sealed: { payload: part.sealed, open } } : {}),
     });
     if (!saved.ok) return saved;
@@ -478,7 +539,8 @@ export async function applyChannelMessagingSessionReset(input: {
   parts?: readonly MessagingMemoryPart[];
   /**
    * Set when the session is encrypted at rest. Every archived part is then
-   * sealed, including the stores that may repeat the same turns. A sealing
+   * sealed, including the stores that may repeat the same turns, except a
+   * verbatim part (`raw`), already in its file's at-rest form. A sealing
    * failure cancels the reset before anything is written.
    */
   sealer?: MessagingArchiveSealer;
@@ -496,7 +558,9 @@ export async function applyChannelMessagingSessionReset(input: {
         let parts: readonly MessagingMemoryPart[] = input.parts;
         if (sealer) {
           const sealedParts: MessagingMemoryPart[] = [];
-          for (const part of input.parts) sealedParts.push({ ...part, sealed: await sealer.seal(part.transcript) });
+          for (const part of input.parts) {
+            sealedParts.push(part.raw !== undefined ? part : { ...part, sealed: await sealer.seal(part.transcript) });
+          }
           parts = sealedParts;
         }
         return proveMessagingMemoryParts({

@@ -104,6 +104,16 @@ export type SessionFileRead =
   | { state: 'unreadable'; reason: 'io' | 'invalid'; error: string }
   | { state: 'ok'; session: Session };
 
+/**
+ * The bytes of one session file, read once, and the session decoded from those
+ * same bytes. A copy written from `bytes` keeps the file's at-rest state: an
+ * encrypted file gives an encrypted copy, whatever happens after the read.
+ */
+export type SessionFileCopy =
+  | { state: 'absent' }
+  | { state: 'unreadable'; reason: 'io' | 'invalid'; error: string }
+  | { state: 'ok'; bytes: Buffer; session: Session; sealedAtRest: boolean };
+
 function nodeErrorCode(error: unknown): string | undefined {
   if (typeof error === 'object' && error !== null && 'code' in error) {
     const code = (error as { code?: unknown }).code;
@@ -338,6 +348,37 @@ export class SessionStore {
         error: error instanceof Error ? error.message : 'unreadable',
       };
     }
+    return this.decodeSessionFile(raw);
+  }
+
+  /**
+   * Read one session file's bytes under the session lock, for a verbatim copy.
+   * The session is decoded from the bytes returned, never from a second read.
+   * A lock held by another process throws. ENOENT is `absent`, without a lock.
+   */
+  async readSessionFileCopy(sessionId: string): Promise<SessionFileCopy> {
+    const filePath = this.getSessionFilePath(sessionId);
+    const readBytes = async (): Promise<Buffer | SessionFileCopy> => {
+      try {
+        return await fsPromises.readFile(filePath);
+      } catch (error) {
+        if (nodeErrorCode(error) === 'ENOENT') return { state: 'absent' };
+        return { state: 'unreadable', reason: 'io', error: error instanceof Error ? error.message : 'unreadable' };
+      }
+    };
+    const first = await readBytes();
+    if (!Buffer.isBuffer(first)) return first;
+    return withSessionLock(filePath, async () => {
+      const bytes = await readBytes();
+      if (!Buffer.isBuffer(bytes)) return bytes;
+      const read = this.decodeSessionFile(bytes.toString('utf8'));
+      if (read.state !== 'ok') return read;
+      // decodeContent marks a session encrypted exactly when the file holds the envelope.
+      return { state: 'ok', bytes, session: read.session, sealedAtRest: read.session.encrypted === true };
+    });
+  }
+
+  private decodeSessionFile(raw: string): SessionFileRead {
     let data: unknown;
     try {
       data = JSON.parse(raw);

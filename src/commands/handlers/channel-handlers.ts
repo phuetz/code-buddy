@@ -19,6 +19,7 @@ import {
 import { shouldRunSemanticResponseGate } from '../../conversation/semantic-response-gate.js';
 import type { ConversationTurn } from '../../conversation/types.js';
 import type { MessagingArchiveSealer, MessagingSessionResetPolicy } from '../../channels/messaging-session-reset.js';
+import type { SessionFileCopy } from '../../persistence/session-store.js';
 import {
   MODEL_NAME_PATTERN,
   clearSessionModelOverride,
@@ -1352,13 +1353,6 @@ function readFailure(source: MessagingSnapshotPart['source'], err: unknown): {
   };
 }
 
-function sessionStoreTranscript(session: { messages: Array<{ type: string; content: string }> }): string {
-  return session.messages
-    .map((message) => `${message.type}: ${message.content}`)
-    .filter((line) => line.trim().length > 2)
-    .join('\n');
-}
-
 async function loadMessagingSessionSnapshot(
   sessionKey: string,
 ): Promise<
@@ -1367,8 +1361,6 @@ async function loadMessagingSessionSnapshot(
     lastActivityAt: number | null;
     transcript: string;
     parts: MessagingSnapshotPart[];
-    /** The session store's at-rest rule for this session; archives follow it. */
-    protection: { encrypt: boolean; keyPath?: string };
   }
   | { ok: false; source: MessagingSnapshotPart['source']; error: string }
 > {
@@ -1400,20 +1392,19 @@ async function loadMessagingSessionSnapshot(
   }
 
   let storeText = '';
-  let protection: { encrypt: boolean; keyPath?: string };
   try {
     const { getSessionStore } = await import('../../persistence/session-store.js');
+    const { sessionMessagesTranscript } = await import('../../channels/messaging-session-reset.js');
     const store = getSessionStore();
     const read = await store.readSessionFileState(sessionKey);
     if (read.state === 'unreadable') {
       return readFailure('session-store', new Error(read.error));
     }
-    protection = store.contentProtection(read.state === 'ok' ? read.session : null);
     if (read.state === 'ok' && read.session.messages.length > 0) {
       const at = read.session.lastAccessedAt instanceof Date
         ? read.session.lastAccessedAt.getTime()
         : Date.parse(String(read.session.lastAccessedAt));
-      storeText = sessionStoreTranscript(read.session);
+      storeText = sessionMessagesTranscript(read.session.messages);
       consider(Number.isFinite(at) ? at : null, storeText);
     }
   } catch (err) {
@@ -1453,7 +1444,6 @@ async function loadMessagingSessionSnapshot(
     lastActivityAt,
     transcript: parts.map((part) => part.transcript).filter((text) => text.length > 0).join('\n\n'),
     parts,
-    protection,
   };
 }
 
@@ -1467,13 +1457,17 @@ async function loadMessagingSessionSnapshot(
  * reset would clear is archived first. A failed archive of any one of them
  * cancels the clear and every store stays in place. The policy is read again
  * right before the archive and before each erase; a change stops the reset
- * at that step.
+ * at that step. The session file is archived as the bytes it holds right
+ * then, read once under its lock: an encrypted file gives an encrypted copy,
+ * whatever changed since the snapshot. The other stores follow the at-rest
+ * rule of those bytes, and the erase only runs on these same bytes.
  */
 async function maybeResetInboundMessagingSession(sessionKey: string): Promise<void> {
   const {
     applyChannelMessagingSessionReset,
     resolveMessagingSessionResetArchiveDir,
     resolveSessionResetPolicy,
+    sessionMessagesTranscript,
   } = await import('../../channels/messaging-session-reset.js');
   const { messagingResetSessionConfig } = await import('../../config/toml-config.js');
   const os = await import('node:os');
@@ -1532,29 +1526,63 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     });
     return;
   }
+  // The session file is archived as it is on disk now: its bytes, read once
+  // under the session lock, never decoded and written again. Whatever wrote
+  // the file since the snapshot, the copy keeps the file's at-rest state.
+  const { getSessionStore } = await import('../../persistence/session-store.js');
+  const store = getSessionStore();
+  const provedStore = (snapshot.parts.find((part) => part.source === 'session-store')?.transcript ?? '').trim();
+  let copy: SessionFileCopy;
+  try {
+    copy = await store.readSessionFileCopy(sessionKey);
+  } catch (err) {
+    logger.warn('messaging session reset could not copy the session, keeping it', {
+      sessionHash: hashForLog(sessionKey),
+      error: err instanceof Error ? err.message : 'copy failed',
+    });
+    return;
+  }
+  const keep = (reason: string): void => {
+    logger.warn('messaging session reset cancelled before archive, keeping the session', {
+      sessionHash: hashForLog(sessionKey),
+      reason,
+    });
+  };
+  if (copy.state === 'unreadable') return keep('session file unreadable');
+  const copied = copy.state === 'ok' ? sessionMessagesTranscript(copy.session.messages).trim() : '';
+  if (copied !== provedStore) return keep('session contents changed before archive');
+  // The rule is read from the copied bytes, not from the snapshot.
+  const protection = store.contentProtection(copy.state === 'ok' ? copy.session : null);
+  if (protection.encrypt && copy.state === 'ok' && !copy.sealedAtRest && copy.session.messages.length > 0) {
+    // Encryption is required but the file still holds its messages in clear:
+    // a verbatim copy would be a new plaintext file. The next save seals it.
+    return keep('session not yet encrypted at rest');
+  }
   // The four stores may repeat the same turns: all are sealed, not only the session.
   let sealer: MessagingArchiveSealer | undefined;
-  if (snapshot.protection.encrypt) {
+  if (protection.encrypt) {
     const { openSessionText, sealSessionText } = await import('../../persistence/session-content.js');
-    const keyPath = snapshot.protection.keyPath;
+    const keyPath = protection.keyPath;
     sealer = {
       seal: (transcript) => sealSessionText(transcript, keyPath),
       open: (sealed) => openSessionText(sealed, keyPath),
     };
   }
+  const archivedBytes = copy.state === 'ok' ? copy.bytes : null;
+  const parts = snapshot.parts.map((part) =>
+    part.source === 'session-store' && archivedBytes ? { ...part, raw: archivedBytes } : part,
+  );
   const outcome = await applyChannelMessagingSessionReset({
     sessionKey,
     now,
     policy,
     snapshot,
-    parts: snapshot.parts,
+    parts,
     archiveDir,
     ...(sealer ? { sealer } : {}),
     resetSession: async () => {
       runMessagingResetStepHookForTests('erase');
-      const { getSessionStore } = await import('../../persistence/session-store.js');
-      const store = getSessionStore();
-      const sessionRead = await store.readSessionFileState(sessionKey);
+      const sessionRead = await store.readSessionFileCopy(sessionKey);
       if (sessionRead.state === 'unreadable') {
         throw new Error(sessionRead.error);
       }
@@ -1562,10 +1590,16 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
       if (companionRead.state === 'unreadable') {
         throw new Error(companionRead.error);
       }
-      const provedStore = snapshot.parts.find((part) => part.source === 'session-store')?.transcript ?? '';
-      const againStore = sessionRead.state === 'ok' ? sessionStoreTranscript(sessionRead.session).trim() : '';
-      if (againStore !== provedStore.trim()) {
+      // Only the bytes that were archived may be erased.
+      const sameFile = sessionRead.state === 'ok'
+        ? archivedBytes !== null && sessionRead.bytes.equals(archivedBytes)
+        : archivedBytes === null;
+      if (!sameFile) {
         throw new Error('session contents changed before erase');
+      }
+      const protectionNow = store.contentProtection(sessionRead.state === 'ok' ? sessionRead.session : null);
+      if (protectionNow.encrypt !== protection.encrypt) {
+        throw new Error('session protection changed before erase');
       }
       const provedCompanion = snapshot.parts.find((part) => part.source === 'companion-history')?.transcript ?? '';
       const againCompanion = companionRead.state === 'ok' ? companionRead.transcript.trim() : '';
