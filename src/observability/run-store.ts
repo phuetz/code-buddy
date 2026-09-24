@@ -252,6 +252,8 @@ export class RunStore {
   private artifactIndexUnavailable = false;
   /** Set by dispose(): the artifact index must never be lazily reopened afterwards. */
   private disposed = false;
+  /** Journal streams ended or destroyed here whose file is not released yet. */
+  private closingStreams: Set<Promise<void>> = new Set();
 
    constructor(runsDir?: string) {
     this.runsDir =
@@ -286,10 +288,29 @@ export class RunStore {
     return this._currentRunId;
   }
 
+  /**
+   * Resolves once every journal stream this store ended (endRun) or destroyed
+   * (dispose) has closed its file. `ws.end()` returns before the descriptor is
+   * released; on Windows a directory holding it cannot be removed yet.
+   */
+  async whenStreamsClosed(): Promise<void> {
+    await Promise.all([...this.closingStreams]);
+  }
+
+  private trackClose(ws: fs.WriteStream): void {
+    if (ws.closed) return;
+    const closed = new Promise<void>((resolve) => {
+      ws.once('close', () => resolve());
+    });
+    this.closingStreams.add(closed);
+    void closed.then(() => this.closingStreams.delete(closed));
+  }
+
   dispose(): void {
     this.disposed = true;
     for (const ws of this.handles.values()) {
       try {
+        this.trackClose(ws);
         ws.destroy();
       } catch {
         // Ignore dispose-time stream errors.
@@ -549,6 +570,7 @@ export class RunStore {
     // Close write stream before post-run analyzers read events.jsonl.
     const ws = this.handles.get(runId);
     if (ws) {
+      this.trackClose(ws);
       ws.end(afterStreamClosed);
       this.handles.delete(runId);
     } else {

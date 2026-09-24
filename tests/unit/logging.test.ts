@@ -20,6 +20,7 @@ import { Logger, debug, getLogger, logger, resetLogger } from '../../src/utils/l
 // transformed by vitest and works on every Node version. The hoisted os mock below
 // still applies.
 import * as interactionLoggerModule from '../../src/logging/interaction-logger.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 // ============================================================================
 // Logger (src/utils/logger.ts) Tests
@@ -759,7 +760,7 @@ describe('Interaction Logger', () => {
 
   afterEach(() => {
     if (existsSync(MOCK_HOME)) {
-      rmSync(MOCK_HOME, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTestDir(MOCK_HOME);
     }
   });
 

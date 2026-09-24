@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setSandboxCapabilityProbe } from '../../src/sandbox/os-sandbox.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 const disposables: string[] = [];
 
@@ -19,7 +20,7 @@ describe('escalade shell hors du serveur MCP', () => {
   afterEach(() => {
     setSandboxCapabilityProbe(null);
     delete process.env.CODEBUDDY_AUTO_CONFIRM;
-    for (const dir of disposables.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+    for (const dir of disposables.splice(0)) removeTestDir(dir);
   });
 
   it('la boucle agent hors MCP accorde encore l escalade sans bac a sable', async () => {

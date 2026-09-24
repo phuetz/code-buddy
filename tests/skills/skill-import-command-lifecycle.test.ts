@@ -13,7 +13,7 @@ import {
   resetSkillRegistry,
 } from '../../src/skills/registry.js';
 import { requireSkillWatchersAtLeast } from './watch-health.js';
-import { repoScratchRoot } from '../helpers/tmp.js';
+import { repoScratchRoot, removeTestDirAsync } from '../helpers/tmp.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
@@ -28,7 +28,7 @@ afterEach(async () => {
   // that race: wait for the handles, then remove asynchronously.
   await awaitSkillRegistryWatchersClosed();
   for (const dir of tempDirs.splice(0)) {
-    await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await removeTestDirAsync(dir);
   }
 });
 

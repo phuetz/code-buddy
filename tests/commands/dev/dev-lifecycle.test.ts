@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { repoScratchRoot } from '../../helpers/tmp.js';
+import { repoScratchRoot, removeTestDir } from '../../helpers/tmp.js';
 
 interface ChildResult {
   exitCode: number | null;
@@ -79,7 +79,7 @@ function runDevPlan(
 
 afterEach(() => {
   for (const root of roots.splice(0)) {
-    fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTestDir(root);
   }
 });
 

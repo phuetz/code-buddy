@@ -8,6 +8,7 @@ import {
   isComputerControlMutating,
 } from '../../src/tools/computer-control-harness.js';
 import { RunStore } from '../../src/observability/run-store.js';
+import { removeTestDirAsync } from '../helpers/tmp.js';
 
 vi.mock('../../src/desktop-automation/index.js', () => ({
   getDesktopAutomation: vi.fn().mockReturnValue({
@@ -45,8 +46,9 @@ describe('computer control harness', () => {
 
   afterEach(async () => {
     store?.dispose();
+    await store?.whenStreamsClosed();
     store = null;
-    await fs.remove(tempDir);
+    await removeTestDirAsync(tempDir);
   });
 
   it('classifies read and mutating desktop actions', () => {
