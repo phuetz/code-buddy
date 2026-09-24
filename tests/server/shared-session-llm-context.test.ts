@@ -31,6 +31,7 @@ import {
 import {
   continueResumeSession,
   persistResumeTurnUnlocked,
+  drainSessionTurnQueueForTests,
   resetSessionTurnQueueForTests,
   setResumeSessionStoreFactoryForTests,
   setResumeTurnRunnerForTests,
@@ -124,6 +125,8 @@ describe('shared session LLM context', () => {
   });
 
   afterEach(async () => {
+    // Let queued session writes settle before the directory is removed.
+    await drainSessionTurnQueueForTests();
     setResumeTurnRunnerForTests(null);
     setResumeSessionStoreFactoryForTests(null);
     resetSessionTurnQueueForTests();

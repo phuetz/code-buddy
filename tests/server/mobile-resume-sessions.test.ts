@@ -10,6 +10,7 @@ import { SessionStore } from '../../src/persistence/session-store.js';
 import { mobilePwaRouter } from '../../src/server/mobile/index.js';
 import {
   canAccessResumeSession,
+  drainSessionTurnQueueForTests,
   resetSessionTurnQueueForTests,
   setResumeSessionStoreFactoryForTests,
   setResumeTurnRunnerForTests,
@@ -47,6 +48,8 @@ describe('mobile resume sessions API', () => {
   });
 
   afterEach(async () => {
+    // Let queued session writes settle before the directory is removed.
+    await drainSessionTurnQueueForTests();
     setResumeTurnRunnerForTests(null);
     setResumeSessionStoreFactoryForTests(null);
     resetSessionTurnQueueForTests();

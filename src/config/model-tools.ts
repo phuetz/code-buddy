@@ -679,6 +679,26 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
   },
 
+  // GPT-6 family (astra, sol, luna) — served by the ChatGPT/Codex OAuth backend.
+  // Reasoning levels: the ones all three list in the catalogue (`ultra` is
+  // astra/sol only).
+  // The context window is the one that backend publishes in its `/models`
+  // catalogue (272 000, text + image, 2026-09-23); it is not an API figure.
+  // The catalogue does not publish an output ceiling: 128 000 follows the
+  // GPT-5.6 family and is an assumption, not a measurement.
+  {
+    model: 'gpt-6-*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 272_000,
+    maxOutputTokens: 128_000,
+    patchFormat: 'unified',
+    promptProfile: 'rich',
+  },
+
   // GPT-5.6 Sol — public OpenAI API capabilities. Keep the official `gpt-5.6`
   // alias exact so it cannot absorb sibling ChatGPT subscription slugs such as
   // `gpt-5.6-terra` or `gpt-5.6-luna`. Versioned Sol snapshots may still use
