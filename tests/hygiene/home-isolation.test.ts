@@ -63,7 +63,7 @@ describe('HOME jetable posé avant les imports', () => {
     expect(path.basename(path.dirname(os.homedir()))).toMatch(/^codebuddy-vitest-/);
     expect(process.env.USERPROFILE).toBe(process.env.HOME);
     for (const key of ['XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME']) {
-      expect(isSameOrInside(process.env[key] ?? '/', os.homedir())).toBe(true);
+      expect(isSameOrInside(process.env[key] ?? '', os.homedir()), key).toBe(true);
     }
   });
 
