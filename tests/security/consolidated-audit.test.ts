@@ -39,7 +39,7 @@ describe('buddy security audit', () => {
       sandbox: sandboxReady,
       env: {},
     });
-    expect(report.passed).toBe(true);
+    expect(report.passed, JSON.stringify({ findings: report.findings.map((f) => [f.checkId, f.severity, f.detail]), fixes: report.fixes })).toBe(true);
     expect(report.findings).toEqual([]);
     expect(report.summary.total).toBe(0);
   });
@@ -118,7 +118,7 @@ describe('buddy security audit', () => {
       'profile.file.loose_permissions',
     ]);
     expect(report.summary.high).toBe(0);
-    expect(report.passed).toBe(true);
+    expect(report.passed, JSON.stringify({ findings: report.findings.map((f) => [f.checkId, f.severity, f.detail]), fixes: report.fixes })).toBe(true);
   });
 
   itPosix('tightens only loose modes, after a backup, and leaves file contents unchanged', () => {
@@ -148,10 +148,10 @@ describe('buddy security audit', () => {
       fix: true,
       now: new Date('2026-09-23T12:00:00.000Z'),
     });
-    expect(fixed.passed).toBe(true);
+    expect(fixed.passed, JSON.stringify({ findings: fixed.findings.map((f) => [f.checkId, f.severity, f.detail]), fixes: fixed.fixes })).toBe(true);
     expect(fixed.findings.map((item) => item.checkId)).not.toContain('profile.file.loose_permissions');
     expect(fixed.findings.map((item) => item.checkId)).not.toContain('profile.directory.world_writable');
-    expect(fixed.fixes.every((item) => item.ok)).toBe(true);
+    expect(fixed.fixes.every((item) => item.ok), JSON.stringify(fixed.fixes)).toBe(true);
     expect(readFileSync(path.join(profile, 'config.toml'), 'utf8')).toBe(body);
     const manifest = readFileSync(path.join(profile, 'security-audit-backups', '2026-09-23T12-00-00-000Z', 'manifest.json'), 'utf8');
     expect(manifest).toContain('"modeBefore": "707"');
