@@ -11,6 +11,7 @@
 
 import { CommandHandlerResult } from './branch-handlers.js';
 import { logger } from '../../utils/logger.js';
+import { failureFlag } from '../slash-failure.js';
 
 /**
  * Handle the /replace slash command.
@@ -61,6 +62,22 @@ export async function handleReplace(args: string[]): Promise<CommandHandlerResul
   if (positional.length < 2) {
     return {
       handled: true,
+...failureFlag(`/replace — Codebase-wide find & replace
+
+Usage:
+  /replace <search> <replacement> [options]
+
+Options:
+  --dry-run, -n     Preview changes without modifying files
+  --regex, -r       Treat search as regex pattern
+  --glob, -g <pat>  File glob pattern (default: **/*.*)
+  --max-files <n>   Max files to modify (default: 50)
+
+Examples:
+  /replace "oldFunction" "newFunction"
+  /replace --dry-run "console.log" "logger.info"
+  /replace --regex "import\\s*\\{" "import type {" --glob "*.ts"
+  /replace "OldClass" "NewClass" --glob "src/**/*.ts"`),
       entry: {
         type: 'assistant',
         content: `/replace — Codebase-wide find & replace
@@ -90,6 +107,7 @@ Examples:
     // Unreachable given the positional.length < 2 guard above; kept for type-safety.
     return {
       handled: true,
+...failureFlag('/replace — search and replacement arguments are required.'),
       entry: {
         type: 'assistant',
         content: '/replace — search and replacement arguments are required.',
@@ -114,6 +132,7 @@ Examples:
 
     return {
       handled: true,
+...failureFlag(output),
       entry: {
         type: 'assistant',
         content: output,
@@ -125,6 +144,7 @@ Examples:
     logger.error('/replace error', { error: msg });
     return {
       handled: true,
+...failureFlag(`/replace error: ${msg}`),
       entry: {
         type: 'assistant',
         content: `/replace error: ${msg}`,

@@ -1,6 +1,7 @@
 import { CommandHandlerResult } from './branch-handlers.js';
 import { CodeBuddyClient } from '../../codebuddy/client.js';
 import { logger } from '../../utils/logger.js';
+import { failureFlag } from '../slash-failure.js';
 
 /** Singleton client reference — set from enhanced-command-handler */
 let clientRef: CodeBuddyClient | null = null;
@@ -25,6 +26,7 @@ export async function handleBtw(args: string[]): Promise<CommandHandlerResult> {
   if (!question) {
     return {
       handled: true,
+...failureFlag('Usage: /btw <question>\n\nAsk a quick side question without modifying the conversation context.\nExample: /btw what is CORS?'),
       entry: {
         type: 'assistant',
         content: 'Usage: /btw <question>\n\nAsk a quick side question without modifying the conversation context.\nExample: /btw what is CORS?',
@@ -36,6 +38,7 @@ export async function handleBtw(args: string[]): Promise<CommandHandlerResult> {
   if (!clientRef) {
     return {
       handled: true,
+...failureFlag('Cannot process /btw: LLM client not available.'),
       entry: {
         type: 'assistant',
         content: 'Cannot process /btw: LLM client not available.',
@@ -54,6 +57,7 @@ export async function handleBtw(args: string[]): Promise<CommandHandlerResult> {
 
     return {
       handled: true,
+...failureFlag(`**[/btw]** ${answer}`),
       entry: {
         type: 'assistant',
         content: `**[/btw]** ${answer}`,
@@ -66,6 +70,7 @@ export async function handleBtw(args: string[]): Promise<CommandHandlerResult> {
     logger.error('/btw error', { error: msg });
     return {
       handled: true,
+...failureFlag(`/btw error: ${msg}`),
       entry: {
         type: 'assistant',
         content: `/btw error: ${msg}`,

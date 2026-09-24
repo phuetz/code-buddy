@@ -8,6 +8,7 @@ import { existsSync, readFileSync, readdirSync, statSync, unlinkSync, rmdirSync 
 import { join } from 'path';
 import { homedir } from 'os';
 import { ChatEntry } from '../../agent/codebuddy-agent.js';
+import { failureFlag } from '../slash-failure.js';
 import {
   InteractionLogger,
   SessionData,
@@ -261,6 +262,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(content + footer),
         entry: {
           type: 'assistant',
           content: content + footer,
@@ -273,6 +275,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       if (!param) {
         return {
           handled: true,
+...failureFlag('Usage: /sessions show <session-id>'),
           entry: {
             type: 'assistant',
             content: 'Usage: /sessions show <session-id>',
@@ -285,6 +288,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       if (!session) {
         return {
           handled: true,
+...failureFlag(`Session not found: ${param}`),
           entry: {
             type: 'assistant',
             content: `Session not found: ${param}`,
@@ -295,6 +299,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(InteractionLogger.formatSession(session)),
         entry: {
           type: 'assistant',
           content: InteractionLogger.formatSession(session),
@@ -307,6 +312,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       if (!param) {
         return {
           handled: true,
+...failureFlag('Usage: /sessions replay <session-id>'),
           entry: {
             type: 'assistant',
             content: 'Usage: /sessions replay <session-id>',
@@ -319,6 +325,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       if (!session) {
         return {
           handled: true,
+...failureFlag(`Session not found: ${param}`),
           entry: {
             type: 'assistant',
             content: `Session not found: ${param}`,
@@ -329,6 +336,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(formatSessionForReplay(session)),
         entry: {
           type: 'assistant',
           content: formatSessionForReplay(session),
@@ -341,6 +349,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       if (!param) {
         return {
           handled: true,
+...failureFlag('Usage: /sessions delete <session-id>'),
           entry: {
             type: 'assistant',
             content: 'Usage: /sessions delete <session-id>',
@@ -352,6 +361,9 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       const deleted = InteractionLogger.deleteSession(param);
       return {
         handled: true,
+...failureFlag(deleted
+            ? `Session ${param} deleted.`
+            : `Session not found: ${param}`),
         entry: {
           type: 'assistant',
           content: deleted
@@ -367,6 +379,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       if (!session) {
         return {
           handled: true,
+...failureFlag('No sessions found.'),
           entry: {
             type: 'assistant',
             content: 'No sessions found.',
@@ -377,6 +390,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(InteractionLogger.formatSession(session)),
         entry: {
           type: 'assistant',
           content: InteractionLogger.formatSession(session),
@@ -389,6 +403,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       if (!param) {
         return {
           handled: true,
+...failureFlag('Usage: /sessions search <partial-id>'),
           entry: {
             type: 'assistant',
             content: 'Usage: /sessions search <partial-id>',
@@ -401,6 +416,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       if (sessions.length === 0) {
         return {
           handled: true,
+...failureFlag(`No sessions found matching: ${param}`),
           entry: {
             type: 'assistant',
             content: `No sessions found matching: ${param}`,
@@ -411,6 +427,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(formatSessionList(sessions.map(s => s.metadata))),
         entry: {
           type: 'assistant',
           content: formatSessionList(sessions.map(s => s.metadata)),
@@ -434,6 +451,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
           if (isNaN(days) || days < 1) {
             return {
               handled: true,
+...failureFlag('Invalid --days value. Must be a positive integer.'),
               entry: {
                 type: 'assistant',
                 content: 'Invalid --days value. Must be a positive integer.',
@@ -447,6 +465,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
           if (isNaN(keep) || keep < 0) {
             return {
               handled: true,
+...failureFlag('Invalid --keep value. Must be a non-negative integer.'),
               entry: {
                 type: 'assistant',
                 content: 'Invalid --keep value. Must be a non-negative integer.',
@@ -466,6 +485,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
       if (result.deletedCount === 0) {
         return {
           handled: true,
+...failureFlag('No sessions to clean up.'),
           entry: {
             type: 'assistant',
             content: 'No sessions to clean up.',
@@ -491,6 +511,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: {
           type: 'assistant',
           content: lines.join('\n'),
@@ -502,6 +523,7 @@ export function handleSessions(args: string[]): CommandHandlerResult {
     default:
       return {
         handled: true,
+...failureFlag(`Unknown action: ${action}\n\nAvailable actions:\n  list [n]       - List recent sessions (default: 10)\n  show <id>      - Show session details\n  replay <id>    - Format session for AI context\n  delete <id>    - Delete a session\n  latest         - Show the most recent session\n  search <text>  - Search sessions by partial ID\n  cleanup        - Delete old sessions (--days N, --keep N, --dry-run)`),
         entry: {
           type: 'assistant',
           content: `Unknown action: ${action}\n\nAvailable actions:\n  list [n]       - List recent sessions (default: 10)\n  show <id>      - Show session details\n  replay <id>    - Format session for AI context\n  delete <id>    - Delete a session\n  latest         - Show the most recent session\n  search <text>  - Search sessions by partial ID\n  cleanup        - Delete old sessions (--days N, --keep N, --dry-run)`,

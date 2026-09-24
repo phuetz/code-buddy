@@ -7,6 +7,7 @@
 
 import { ChatEntry } from '../../agent/codebuddy-agent.js';
 import { getHistoryManager } from '../../utils/history-manager.js';
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -30,6 +31,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(content + '\n\nTip: Use Ctrl+R for interactive reverse search (like bash)'),
         entry: {
           type: 'assistant',
           content: content + '\n\nTip: Use Ctrl+R for interactive reverse search (like bash)',
@@ -42,6 +44,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
       if (!param) {
         return {
           handled: true,
+...failureFlag('Usage: /history search <pattern>\n\nSearches command history for entries containing the pattern.'),
           entry: {
             type: 'assistant',
             content: 'Usage: /history search <pattern>\n\nSearches command history for entries containing the pattern.',
@@ -55,6 +58,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
       if (results.length === 0) {
         return {
           handled: true,
+...failureFlag(`No history entries found matching: "${param}"`),
           entry: {
             type: 'assistant',
             content: `No history entries found matching: "${param}"`,
@@ -75,6 +79,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: {
           type: 'assistant',
           content: lines.join('\n'),
@@ -89,6 +94,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(`Cleared ${count} entries from command history.`),
         entry: {
           type: 'assistant',
           content: `Cleared ${count} entries from command history.`,
@@ -128,6 +134,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: {
           type: 'assistant',
           content: lines.join('\n'),
@@ -142,6 +149,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
       if (!param) {
         return {
           handled: true,
+...failureFlag(`Current history limit: ${historyManager.getMaxEntries()} entries\n\nUsage: /history limit <number>`),
           entry: {
             type: 'assistant',
             content: `Current history limit: ${historyManager.getMaxEntries()} entries\n\nUsage: /history limit <number>`,
@@ -153,6 +161,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
       if (isNaN(newLimit) || newLimit < 10 || newLimit > 10000) {
         return {
           handled: true,
+...failureFlag('Invalid limit. Please specify a number between 10 and 10000.'),
           entry: {
             type: 'assistant',
             content: 'Invalid limit. Please specify a number between 10 and 10000.',
@@ -166,6 +175,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(`History limit changed from ${oldLimit} to ${newLimit} entries.`),
         entry: {
           type: 'assistant',
           content: `History limit changed from ${oldLimit} to ${newLimit} entries.`,
@@ -181,6 +191,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
       if (frequent.length === 0) {
         return {
           handled: true,
+...failureFlag('No command history yet.'),
           entry: {
             type: 'assistant',
             content: 'No command history yet.',
@@ -196,6 +207,7 @@ export function handleHistory(args: string[]): CommandHandlerResult {
 
       return {
         handled: true,
+...failureFlag(lines.join('\n')),
         entry: {
           type: 'assistant',
           content: lines.join('\n'),
@@ -207,6 +219,19 @@ export function handleHistory(args: string[]): CommandHandlerResult {
     default:
       return {
         handled: true,
+...failureFlag(`Unknown action: ${action}
+
+Available actions:
+  list [n]           - List recent commands (default: 20)
+  search <pattern>   - Search history for pattern
+  clear              - Clear all history
+  stats              - Show history statistics
+  limit <n>          - Set max history entries (10-10000)
+  frequent [n]       - Show most used commands
+
+Keyboard shortcuts:
+  Ctrl+R             - Reverse search (like bash)
+  Up/Down arrows     - Navigate history`),
         entry: {
           type: 'assistant',
           content: `Unknown action: ${action}

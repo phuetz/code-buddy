@@ -35,6 +35,7 @@ import {
 import { ThreadTaskRunner } from '../../agent/delegation/thread-task-runner.js';
 import type { ThreadDelegationEvent } from '../../agent/delegation/thread-delegation.js';
 import type { AgentExecutionResult } from '../../agent/multi-agent/types.js';
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -82,6 +83,7 @@ Related slashes:
 function textResult(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

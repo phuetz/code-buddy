@@ -11,6 +11,7 @@
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 // ============================================================================
 // /reload - Reload Configuration
@@ -65,6 +66,7 @@ export async function handleReload(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -82,6 +84,7 @@ export async function handleLog(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(formatLogInfo()),
     entry: {
       type: 'assistant',
       content: formatLogInfo(),
@@ -107,6 +110,7 @@ export async function handleCompact(
     lines.push('No conversation history to compact.');
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -135,6 +139,7 @@ export async function handleCompact(
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     compactionRequested: true,
     entry: {
       type: 'assistant',
@@ -288,6 +293,7 @@ export async function handleTools(args: string[]): Promise<CommandHandlerResult>
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -353,6 +359,7 @@ export async function handleVimMode(args: string[]): Promise<CommandHandlerResul
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),

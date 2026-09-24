@@ -11,6 +11,7 @@ import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { executeFCS, executeFCSFile, parseFCS, initScriptRegistry } from "../../scripting/index.js";
 import { runScriptForExitCode } from "./script-handlers.js";
 import type { FCSConfig as _FCSConfig } from "../../scripting/index.js"; // Type-only import for documentation
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -64,6 +65,7 @@ export function handleFCS(args: string[]): CommandHandlerResult | Promise<Comman
 
   return {
     handled: true,
+    ...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -118,6 +120,7 @@ Examples:
 
   return {
     handled: true,
+...failureFlag(`Running FCS script: ${path.basename(fullPath)}...`),
     entry: {
       type: "assistant",
       content: `Running FCS script: ${path.basename(fullPath)}...`,
@@ -242,6 +245,16 @@ function handleFCSRepl(): CommandHandlerResult {
   // For now, just print instructions
   return {
     handled: true,
+...failureFlag(`FCS REPL Mode
+
+Enter FCS code directly in the chat. The code will be executed and results displayed.
+
+Examples:
+  print("Hello from FCS!")
+  let x = 10 + 20; print(x)
+  for i in range(5) { print(i) }
+
+Exit REPL with: /fcs exit`),
     entry: {
       type: "assistant",
       content: `FCS REPL Mode
@@ -314,6 +327,7 @@ function handleFCSTemplates(search?: string): CommandHandlerResult {
 
   return {
     handled: true,
+...failureFlag("Loading FCS templates..."),
     entry: {
       type: "assistant",
       content: "Loading FCS templates...",

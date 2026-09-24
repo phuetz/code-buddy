@@ -20,6 +20,8 @@ import { join, basename, dirname, resolve, relative, isAbsolute, sep, win32 } fr
 import { homedir } from 'os';
 import { createHash } from 'crypto';
 
+import { failureFlag } from '../slash-failure.js';
+
 export interface CommandHandlerResult {
   handled: boolean;
   failed?: boolean;
@@ -248,6 +250,7 @@ export async function handleBackup(
     default:
       return {
         handled: true,
+...failureFlag(`Unknown backup subcommand: ${subcommand}\nUsage: backup create|verify|list|restore [--home] [--scope home|project|both] [--dry-run]`),
         exitCode: 1,
         response: `Unknown backup subcommand: ${subcommand}\nUsage: backup create|verify|list|restore [--home] [--scope home|project|both] [--dry-run]`,
       };
@@ -279,6 +282,7 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
   if (scope && !['home', 'project', 'both'].includes(scope)) {
     return {
       handled: true,
+...failureFlag(`Invalid scope: ${scope}. Must be one of: home, project, both`),
       exitCode: 1,
       response: `Invalid scope: ${scope}. Must be one of: home, project, both`,
     };
@@ -305,6 +309,9 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
   if (sources.length === 0) {
     return {
       handled: true,
+...failureFlag(scope === 'home' 
+        ? `No home profile directory found at ${homeProfileDir}.`
+        : `No .codebuddy/ directory found at ${join(process.cwd(), '.codebuddy')}. Create one with \`buddy --init\` first.`),
       exitCode: 1,
       response: scope === 'home' 
         ? `No home profile directory found at ${homeProfileDir}.`
@@ -321,6 +328,7 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
   } catch (err) {
     return {
       handled: true,
+...failureFlag(describeBackupIoError(err, `create the backup directory ${backupDir}`)),
       exitCode: 1,
       response: describeBackupIoError(err, `create the backup directory ${backupDir}`),
     };
@@ -363,6 +371,8 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
     const sourceList = sourceDescriptions.join(', ');
     return {
       handled: true,
+...failureFlag(`No files to back up in ${sourceList}. ` +
+        `The directories are empty, or every file was skipped.` + (dryRun ? ' (dry run)' : '')),
       exitCode: 1,
       response:
         `No files to back up in ${sourceList}. ` +
@@ -375,6 +385,7 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
   if (totalSize > DEFAULT_MAX_TOTAL_SIZE) {
     return {
       handled: true,
+...failureFlag(`Total backup size (${formatBackupSize(totalSize)}) exceeds maximum allowed size of ${formatBackupSize(DEFAULT_MAX_TOTAL_SIZE)}`),
       exitCode: 1,
       response: `Total backup size (${formatBackupSize(totalSize)}) exceeds maximum allowed size of ${formatBackupSize(DEFAULT_MAX_TOTAL_SIZE)}`,
     };
@@ -415,6 +426,16 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
 
     return {
       handled: true,
+...failureFlag([
+        `[DRY RUN] Would create backup: ${backupPath}`,
+        `Source: ${sourceList}`,
+        `Files: ${allFiles.length}${fileList}`,
+        `Size: ${formatBackupSize(totalSize)}`,
+        skippedLine,
+        onlyConfig ? '(config only)' : '',
+        noWorkspace ? '(workspace excluded)' : '',
+        `Actual scope: ${scope}`,
+      ].filter(Boolean).join('\n')),
       response: [
         `[DRY RUN] Would create backup: ${backupPath}`,
         `Source: ${sourceList}`,
@@ -441,6 +462,7 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
   } catch (err) {
     return {
       handled: true,
+...failureFlag(describeBackupIoError(err, `write backup ${backupPath}`)),
       exitCode: 1,
       response: describeBackupIoError(err, `write backup ${backupPath}`),
     };
@@ -455,6 +477,16 @@ async function handleBackupCreate(flags: string[], profileOpts?: ProfileBackupOp
 
   return {
     handled: true,
+...failureFlag([
+      `Backup created: ${backupPath}`,
+      `Source: ${sourceDescriptions.join(', ')}`,
+      `Files: ${allFiles.length}${fileList}`,
+      `Size: ${formatBackupSize(totalSize)}`,
+      skippedLine,
+      onlyConfig ? '(config only)' : '',
+      noWorkspace ? '(workspace excluded)' : '',
+      doProfileBackup ? `(profile backup: scope=${scope})` : '',
+    ].filter(Boolean).join('\n')),
     response: [
       `Backup created: ${backupPath}`,
       `Source: ${sourceDescriptions.join(', ')}`,
@@ -476,6 +508,7 @@ async function handleBackupVerify(args: string[], _profileOpts?: ProfileBackupOp
   if (!filePath) {
     return {
       handled: true,
+...failureFlag('Usage: backup verify <file>'),
       exitCode: 1,
       response: 'Usage: backup verify <file>',
     };
@@ -485,6 +518,7 @@ async function handleBackupVerify(args: string[], _profileOpts?: ProfileBackupOp
   if (!existsSync(fullPath)) {
     return {
       handled: true,
+...failureFlag(`Backup file not found: ${fullPath}`),
       exitCode: 1,
       response: `Backup file not found: ${fullPath}`,
     };
@@ -497,6 +531,7 @@ async function handleBackupVerify(args: string[], _profileOpts?: ProfileBackupOp
     if (!manifest || !manifest.version || !Array.isArray(manifest.files)) {
       return {
         handled: true,
+...failureFlag(`Invalid backup ${fullPath}: missing or corrupt manifest`),
         exitCode: 1,
         response: `Invalid backup ${fullPath}: missing or corrupt manifest`,
       };
@@ -504,6 +539,7 @@ async function handleBackupVerify(args: string[], _profileOpts?: ProfileBackupOp
     if (!isSupportedBackupVersion(manifest.version)) {
       return {
         handled: true,
+...failureFlag(`Invalid backup ${fullPath}: unsupported backup format (need version 1.x or 2.x), got ${manifest.version}`),
         exitCode: 1,
         response:
           `Invalid backup ${fullPath}: unsupported backup format (need version 1.x or 2.x), got ${manifest.version}`,
@@ -514,6 +550,7 @@ async function handleBackupVerify(args: string[], _profileOpts?: ProfileBackupOp
       if (isBlacklisted(basename(file.path))) {
         return {
           handled: true,
+...failureFlag(`Invalid backup ${fullPath}: secret file in archive is forbidden: ${file.path}`),
           exitCode: 1,
           response: `Invalid backup ${fullPath}: secret file in archive is forbidden: ${file.path}`,
         };
@@ -524,6 +561,7 @@ async function handleBackupVerify(args: string[], _profileOpts?: ProfileBackupOp
     if (payloadError) {
       return {
         handled: true,
+...failureFlag(`Invalid backup ${fullPath}: ${payloadError}`),
         exitCode: 1,
         response: `Invalid backup ${fullPath}: ${payloadError}`,
       };
@@ -531,6 +569,14 @@ async function handleBackupVerify(args: string[], _profileOpts?: ProfileBackupOp
 
     return {
       handled: true,
+...failureFlag([
+        `Backup valid: ${basename(fullPath)}`,
+        `Version: ${manifest.version}`,
+        `Created: ${manifest.createdAt}`,
+        `Files: ${manifest.files.length}`,
+        `Config only: ${manifest.flags.onlyConfig ? 'yes' : 'no'}`,
+        `Workspace included: ${manifest.flags.includeWorkspace ? 'yes' : 'no'}`,
+      ].join('\n')),
       response: [
         `Backup valid: ${basename(fullPath)}`,
         `Version: ${manifest.version}`,
@@ -543,6 +589,7 @@ async function handleBackupVerify(args: string[], _profileOpts?: ProfileBackupOp
   } catch (err) {
     return {
       handled: true,
+...failureFlag(describeUnreadableBackup(fullPath, err)),
       exitCode: 1,
       response: describeUnreadableBackup(fullPath, err),
     };
@@ -562,6 +609,7 @@ async function handleBackupList(args: string[] = []): Promise<CommandHandlerResu
   if (!existsSync(backupDir)) {
     return {
       handled: true,
+...failureFlag('No backups found.'),
       response: 'No backups found.',
     };
   }
@@ -574,6 +622,7 @@ async function handleBackupList(args: string[] = []): Promise<CommandHandlerResu
   if (files.length === 0) {
     return {
       handled: true,
+...failureFlag('No backups found.'),
       response: 'No backups found.',
     };
   }
@@ -586,6 +635,7 @@ async function handleBackupList(args: string[] = []): Promise<CommandHandlerResu
 
   return {
     handled: true,
+...failureFlag(`Backups in ${backupDir}:\n${lines.join('\n')}`),
     response: `Backups in ${backupDir}:\n${lines.join('\n')}`,
   };
 }
@@ -599,6 +649,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
   if (!filePath) {
     return {
       handled: true,
+...failureFlag('Usage: backup restore <file> [--confirm] [--home] [--scope home|project|both]'),
       exitCode: 1,
       response: 'Usage: backup restore <file> [--confirm] [--home] [--scope home|project|both]',
     };
@@ -608,6 +659,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
   if (!existsSync(fullPath)) {
     return {
       handled: true,
+...failureFlag(`Backup file not found: ${fullPath}`),
       exitCode: 1,
       response: `Backup file not found: ${fullPath}`,
     };
@@ -623,6 +675,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
     if (!manifest || !Array.isArray(manifest.files)) {
       return {
         handled: true,
+...failureFlag(`Invalid backup ${fullPath}: missing or corrupt manifest`),
         exitCode: 1,
         response: `Invalid backup ${fullPath}: missing or corrupt manifest`,
       };
@@ -631,6 +684,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
     if (!isSupportedBackupVersion(manifest.version) && manifest.version !== '2.0.0') {
       return {
         handled: true,
+...failureFlag(`Invalid backup ${fullPath}: unsupported backup format (need version 1.x or 2.x), got ${String(manifest.version)}`),
         exitCode: 1,
         response:
           `Invalid backup ${fullPath}: unsupported backup format (need version 1.x or 2.x), got ${String(manifest.version)}`,
@@ -672,6 +726,15 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
     if (!confirm) {
       return {
         handled: true,
+...failureFlag([
+          `Ready to restore backup: ${basename(fullPath)}`,
+          `Created: ${manifest.createdAt}`,
+          `Files: ${manifest.files.length}`,
+          '',
+          `This merges into ${destRoot}: archive files are overwritten, extra files are left in place.`,
+          formatExtraFilesLine(extras) || 'No extra files are present.',
+          'To confirm, run: backup restore <file> --confirm',
+        ].join('\n')),
         response: [
           `Ready to restore backup: ${basename(fullPath)}`,
           `Created: ${manifest.createdAt}`,
@@ -688,6 +751,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
       if (isBlacklisted(basename(manifestFile.path))) {
         return {
           handled: true,
+...failureFlag(`Cannot restore ${fullPath}: secret file in archive is forbidden: ${manifestFile.path}`),
           exitCode: 1,
           response: `Cannot restore ${fullPath}: secret file in archive is forbidden: ${manifestFile.path}`,
         };
@@ -698,6 +762,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
     if (payloadError) {
       return {
         handled: true,
+...failureFlag(`Cannot restore ${fullPath}: ${payloadError}`),
         exitCode: 1,
         response: `Cannot restore ${fullPath}: ${payloadError}`,
       };
@@ -714,6 +779,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
         if (!dest) {
           return {
             handled: true,
+...failureFlag(`Cannot restore ${fullPath}: path escapes destination: ${manifestFile.path}`),
             exitCode: 1,
             response: `Cannot restore ${fullPath}: path escapes destination: ${manifestFile.path}`,
           };
@@ -726,6 +792,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
         if (safetyError) {
           return {
             handled: true,
+...failureFlag(`Cannot restore ${fullPath}: unsafe destination for ${archivePath}: ${safetyError}`),
             exitCode: 1,
             response: `Cannot restore ${fullPath}: unsafe destination for ${archivePath}: ${safetyError}`,
           };
@@ -738,6 +805,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
         if (!archiveFile) {
           return {
             handled: true,
+...failureFlag(`Cannot restore ${fullPath}: archive payload is missing ${manifestFile.path}`),
             exitCode: 1,
             response: `Cannot restore ${fullPath}: archive payload is missing ${manifestFile.path}`,
           };
@@ -749,6 +817,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
         if (safetyError) {
           return {
             handled: true,
+...failureFlag(`Cannot restore ${fullPath}: unsafe destination for ${manifestFile.path}: ${safetyError}`),
             exitCode: 1,
             response: `Cannot restore ${fullPath}: unsafe destination for ${manifestFile.path}: ${safetyError}`,
           };
@@ -776,6 +845,14 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
 
       return {
         handled: true,
+...failureFlag([
+          `Restored backup: ${basename(fullPath)}`,
+          `Files: ${restored.length}`,
+          `Verified: sha256 match for ${restored.length} file(s)`,
+          extras.length === 0
+            ? 'Merged: no extra files were present in .codebuddy/.'
+            : `Merged: ${formatExtraFilesLine(extras)}`,
+        ].join('\n')),
         response: [
           `Restored backup: ${basename(fullPath)}`,
           `Files: ${restored.length}`,
@@ -788,6 +865,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
     } catch (err) {
       return {
         handled: true,
+...failureFlag(describeBackupIoError(err, `write restored files from ${fullPath}`)),
         exitCode: 1,
         response: describeBackupIoError(err, `write restored files from ${fullPath}`),
       };
@@ -795,6 +873,7 @@ async function handleBackupRestore(args: string[], profileOpts?: ProfileBackupOp
   } catch (err) {
     return {
       handled: true,
+...failureFlag(describeUnreadableBackup(fullPath, err)),
       exitCode: 1,
       response: describeUnreadableBackup(fullPath, err),
     };

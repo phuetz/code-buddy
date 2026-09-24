@@ -1,6 +1,7 @@
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { getContextLoader, ContextLoader } from "../../context/context-loader.js";
 import { getWorkspaceDetector } from "../../utils/workspace-detector.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -19,6 +20,16 @@ export async function handleAddContext(args: string[]): Promise<CommandHandlerRe
   if (!pattern) {
     return {
       handled: true,
+...failureFlag(`📁 Add Files to Context
+
+Usage: /add <pattern>
+
+Examples:
+  /add src/utils.ts           - Add single file
+  /add src/**/*.ts            - Add all TypeScript files in src/
+  /add src/**/*.ts,!**/*.test.ts  - Add TS files except tests
+
+Files will be loaded and available for the AI to reference.`),
       entry: {
         type: "assistant",
         content: `📁 Add Files to Context
@@ -49,6 +60,9 @@ Files will be loaded and available for the AI to reference.`,
     if (files.length === 0) {
       return {
         handled: true,
+...failureFlag(`❌ No files matched pattern: ${pattern}
+
+Check your glob pattern and try again.`),
         entry: {
           type: "assistant",
           content: `❌ No files matched pattern: ${pattern}
@@ -65,6 +79,14 @@ Check your glob pattern and try again.`,
 
     return {
       handled: true,
+...failureFlag(`✅ Added ${files.length} file(s) to context
+
+${summary}
+
+Files:
+${fileList}${moreFiles}
+
+These files are now available for reference.`),
       entry: {
         type: "assistant",
         content: `✅ Added ${files.length} file(s) to context
@@ -81,6 +103,7 @@ These files are now available for reference.`,
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`❌ Error loading files: ${error instanceof Error ? error.message : 'Unknown error'}`),
       entry: {
         type: "assistant",
         content: `❌ Error loading files: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -134,6 +157,7 @@ Use /add <pattern> to add files, or use --context flag when starting.`;
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -153,6 +177,7 @@ export async function handleWorkspace(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,

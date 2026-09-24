@@ -16,6 +16,7 @@
 
 import { ChatEntry } from '../../agent/codebuddy-agent.js';
 import { PREDEFINED_SUBAGENTS, type SubagentConfig } from '../../agent/subagents.js';
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -139,6 +140,7 @@ export function handleSubagent(args: string[]): CommandHandlerResult {
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: 'assistant',
       content,

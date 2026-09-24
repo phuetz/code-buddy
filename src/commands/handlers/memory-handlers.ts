@@ -3,6 +3,7 @@ import { getEnhancedMemory, getMemoryManager } from "../../memory/index.js";
 import { getCommentWatcher } from "../../tools/comment-watcher.js";
 import { getErrorMessage } from "../../errors/index.js";
 import type { MemoryWriteResult } from "../../memory/persistent-memory.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface MemoryCommandContext {
   cwd?: string;
@@ -346,6 +347,7 @@ export async function handleMemory(args: string[], context?: MemoryCommandContex
 
     return {
       handled: true,
+...failureFlag(content),
       entry: {
         type: "assistant",
         content,
@@ -356,6 +358,7 @@ export async function handleMemory(args: string[], context?: MemoryCommandContex
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error accessing memory: ${getErrorMessage(error)}`),
       entry: {
         type: "assistant",
         content: `Error accessing memory: ${getErrorMessage(error)}`,
@@ -372,6 +375,7 @@ export async function handleRemember(args: string[], context?: MemoryCommandCont
   if (args.length < 2) {
     return {
       handled: true,
+...failureFlag(`Usage: /remember <key> <value> [project|user]`),
       entry: {
         type: "assistant",
         content: `Usage: /remember <key> <value> [project|user]`,
@@ -384,6 +388,7 @@ export async function handleRemember(args: string[], context?: MemoryCommandCont
   if (key === undefined) {
     return {
       handled: true,
+...failureFlag(`Usage: /remember <key> <value> [project|user]`),
       entry: {
         type: "assistant",
         content: `Usage: /remember <key> <value> [project|user]`,
@@ -411,6 +416,7 @@ export async function handleRemember(args: string[], context?: MemoryCommandCont
 
     return {
       handled: true,
+...failureFlag(content),
       entry: {
         type: "assistant",
         content,
@@ -420,6 +426,7 @@ export async function handleRemember(args: string[], context?: MemoryCommandCont
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error storing memory: ${getErrorMessage(error)}`),
       entry: {
         type: "assistant",
         content: `Error storing memory: ${getErrorMessage(error)}`,
@@ -440,6 +447,7 @@ export async function handleScanTodos(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -460,6 +468,9 @@ export async function handleAddressTodo(
   if (isNaN(index)) {
     return {
       handled: true,
+...failureFlag(`Usage: /address-todo <index>
+
+Run /scan-todos first to see available items`),
       entry: {
         type: "assistant",
         content: `Usage: /address-todo <index>
@@ -475,6 +486,7 @@ Run /scan-todos first to see available items`,
   if (index < 1 || index > comments.length) {
     return {
       handled: true,
+...failureFlag(`❌ Invalid index. Available: 1-${comments.length}`),
       entry: {
         type: "assistant",
         content: `❌ Invalid index. Available: 1-${comments.length}`,
@@ -487,6 +499,7 @@ Run /scan-todos first to see available items`,
   if (comment === undefined) {
     return {
       handled: true,
+...failureFlag(`❌ Invalid index. Available: 1-${comments.length}`),
       entry: {
         type: "assistant",
         content: `❌ Invalid index. Available: 1-${comments.length}`,

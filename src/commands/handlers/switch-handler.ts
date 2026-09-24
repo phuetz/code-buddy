@@ -8,6 +8,7 @@
  */
 
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 /**
  * Provider for model routing state.
@@ -70,6 +71,20 @@ async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
       if (!modelName) {
         return {
           handled: true,
+...failureFlag([
+              'Model Switching',
+              '='.repeat(40),
+              '',
+              `Current Model: ${config.active_model}`,
+              `Override: none`,
+              '',
+              'Available Models:',
+              ...models.map(m => `  - ${m}${m === config.active_model ? ' (active)' : ''}`),
+              '',
+              'Usage:',
+              '  /switch <model>  — switch model for this session',
+              '  /switch auto     — return to default model',
+            ].join('\n')),
           entry: {
             type: 'assistant',
             content: [
@@ -94,6 +109,7 @@ async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
       // No provider but we can still show info
       return {
         handled: true,
+...failureFlag('Model switching requires an active agent session. Start a conversation first.'),
         entry: {
           type: 'assistant',
           content: 'Model switching requires an active agent session. Start a conversation first.',
@@ -103,6 +119,7 @@ async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
     } catch {
       return {
         handled: true,
+...failureFlag('Model switching is not available. No agent or config loaded.'),
         entry: {
           type: 'assistant',
           content: 'Model switching is not available. No agent or config loaded.',
@@ -143,6 +160,7 @@ async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
 
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -156,6 +174,11 @@ async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
     providerRef.setSwitchedModel(null);
     return {
       handled: true,
+...failureFlag([
+          'Model override cleared. Returning to default/auto-routing.',
+          '',
+          `Active model: ${providerRef.getCurrentModel()}`,
+        ].join('\n')),
       entry: {
         type: 'assistant',
         content: [
@@ -181,6 +204,7 @@ async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
       providerRef.setSwitchedModel(sole);
       return {
         handled: true,
+...failureFlag(`Model switched to: ${sole}\n\nSubsequent messages will use this model. Use /switch auto to revert.`),
         entry: {
           type: 'assistant',
           content: `Model switched to: ${sole}\n\nSubsequent messages will use this model. Use /switch auto to revert.`,
@@ -192,6 +216,10 @@ async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
     if (prefixMatches.length > 1) {
       return {
         handled: true,
+...failureFlag([
+            `Ambiguous model name "${modelName}". Did you mean:`,
+            ...prefixMatches.map(m => `  - ${m}`),
+          ].join('\n')),
         entry: {
           type: 'assistant',
           content: [
@@ -207,6 +235,12 @@ async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
     providerRef.setSwitchedModel(modelName);
     return {
       handled: true,
+...failureFlag([
+          `Model switched to: ${modelName}`,
+          '',
+          'Note: This model is not in the configured list. It will work if your provider supports it.',
+          'Use /switch auto to revert.',
+        ].join('\n')),
       entry: {
         type: 'assistant',
         content: [
@@ -223,6 +257,7 @@ async function runSwitch(args: string[]): Promise<CommandHandlerResult> {
   providerRef.setSwitchedModel(exactMatch);
   return {
     handled: true,
+...failureFlag(`Model switched to: ${exactMatch}\n\nSubsequent messages will use this model. Use /switch auto to revert.`),
     entry: {
       type: 'assistant',
       content: `Model switched to: ${exactMatch}\n\nSubsequent messages will use this model. Use /switch auto to revert.`,

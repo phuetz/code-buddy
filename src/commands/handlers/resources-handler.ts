@@ -9,13 +9,14 @@
 import fs from 'node:fs';
 import type { CommandHandlerResult } from './branch-handlers.js';
 import { publicResourceStatus, ResourceCatalog, type PublicResourceStatus } from '../../fleet/resource-catalog.js';
+import { failureFlag } from '../slash-failure.js';
 
 export const RESOURCES_EMPTY_HINT =
   'No resource catalog yet. Declare one with `buddy resources add <file.json>` (fields: `buddy resources schema`), '
   + 'then refresh its health explicitly with `buddy resources probe <id>`.';
 
 function textResult(content: string): CommandHandlerResult {
-  return { handled: true, entry: { type: 'assistant', content, timestamp: new Date() } };
+  return { handled: true, ...failureFlag(content), entry: { type: 'assistant', content, timestamp: new Date() } };
 }
 
 function age(from: number | null, now: number): string {

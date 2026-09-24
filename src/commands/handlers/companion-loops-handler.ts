@@ -1,4 +1,5 @@
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 import {
   isCompanionAlwaysOnLoopsRunning,
   startCompanionAlwaysOnLoops,
@@ -8,6 +9,7 @@ import {
 function entry(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

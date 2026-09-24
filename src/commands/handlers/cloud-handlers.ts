@@ -10,9 +10,11 @@
 
 import { logger } from '../../utils/logger.js';
 import type { CommandHandlerResult } from './branch-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 function textResult(text: string): CommandHandlerResult {
-  return { handled: true, entry: { type: 'assistant', content: text, timestamp: new Date() } };
+  return { handled: true,
+  ...failureFlag(text), entry: { type: 'assistant', content: text, timestamp: new Date() } };
 }
 
 /**
@@ -56,6 +58,7 @@ async function handleCloudSubmit(args: string[]): Promise<CommandHandlerResult> 
   if (!goal) {
     return {
       handled: true,
+...failureFlag('Usage: cloud submit "<goal>"\nExample: cloud submit "Add unit tests for the auth module"'),
       entry: { type: 'assistant' as const, content: 'Usage: cloud submit "<goal>"\nExample: cloud submit "Add unit tests for the auth module"', timestamp: new Date() },
     };
   }
@@ -86,6 +89,7 @@ async function handleCloudStatus(args: string[]): Promise<CommandHandlerResult> 
   if (!taskId) {
     return {
       handled: true,
+...failureFlag('Usage: cloud status <taskId>\nOmit taskId to list all: cloud list'),
       entry: { type: 'assistant' as const, content: 'Usage: cloud status <taskId>\nOmit taskId to list all: cloud list', timestamp: new Date() },
     };
   }
@@ -135,6 +139,7 @@ async function handleCloudStatus(args: string[]): Promise<CommandHandlerResult> 
   } catch (err) {
     return {
       handled: true,
+...failureFlag(`Task not found: ${err instanceof Error ? err.message : String(err)}`),
       entry: { type: 'assistant' as const, content: `Task not found: ${err instanceof Error ? err.message : String(err)}`, timestamp: new Date() },
     };
   }
@@ -173,6 +178,7 @@ async function handleCloudList(_args: string[]): Promise<CommandHandlerResult> {
   } catch (err) {
     return {
       handled: true,
+...failureFlag(`Failed to list tasks: ${err instanceof Error ? err.message : String(err)}`),
       entry: { type: 'assistant' as const, content: `Failed to list tasks: ${err instanceof Error ? err.message : String(err)}`, timestamp: new Date() },
     };
   }
@@ -197,6 +203,7 @@ async function handleCloudCancel(args: string[]): Promise<CommandHandlerResult> 
   } catch (err) {
     return {
       handled: true,
+...failureFlag(`Failed to cancel: ${err instanceof Error ? err.message : String(err)}`),
       entry: { type: 'assistant' as const, content: `Failed to cancel: ${err instanceof Error ? err.message : String(err)}`, timestamp: new Date() },
     };
   }
@@ -217,6 +224,7 @@ async function handleCloudLogs(args: string[]): Promise<CommandHandlerResult> {
   } catch (err) {
     return {
       handled: true,
+...failureFlag(`Failed to get logs: ${err instanceof Error ? err.message : String(err)}`),
       entry: { type: 'assistant' as const, content: `Failed to get logs: ${err instanceof Error ? err.message : String(err)}`, timestamp: new Date() },
     };
   }
@@ -237,6 +245,7 @@ async function handleCloudDelete(args: string[]): Promise<CommandHandlerResult> 
   } catch (err) {
     return {
       handled: true,
+...failureFlag(`Failed to delete: ${err instanceof Error ? err.message : String(err)}`),
       entry: { type: 'assistant' as const, content: `Failed to delete: ${err instanceof Error ? err.message : String(err)}`, timestamp: new Date() },
     };
   }

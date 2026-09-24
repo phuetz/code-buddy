@@ -3,6 +3,7 @@ import { getCostTracker } from "../../utils/cost-tracker.js";
 import { getPerformanceManager } from "../../performance/index.js";
 import { getResponseCache } from "../../utils/response-cache.js";
 import { getSelfHealingEngine } from "../../utils/self-healing.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -60,6 +61,7 @@ export function handleCost(args: string[]): CommandHandlerResult {
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -147,6 +149,7 @@ Current Concurrency: ${stats.currentConcurrency}`;
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -195,6 +198,7 @@ ${stats.newestEntry ? `Newest: ${stats.newestEntry.toLocaleDateString()}` : ''}`
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -257,6 +261,7 @@ Commands:
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,

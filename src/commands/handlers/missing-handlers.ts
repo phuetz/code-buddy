@@ -16,6 +16,7 @@
 
 import type { CommandHandlerResult } from './branch-handlers.js';
 import { handleColabCommand } from './colab-handler.js';
+import { failureFlag } from '../slash-failure.js';
 
 // ============================================================================
 // /model - Change Model
@@ -82,6 +83,7 @@ export async function handleChangeModel(args: string[], activeModel?: string): P
 
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -100,6 +102,9 @@ export async function handleChangeModel(args: string[], activeModel?: string): P
       router.updateConfig({ enabled: false });
       return {
         handled: true,
+...failureFlag(`Auto model routing disabled.
+
+All requests will use the current model. Use /model <name> to switch manually.`),
         entry: {
           type: 'assistant',
           content: `Auto model routing disabled.
@@ -115,6 +120,20 @@ All requests will use the current model. Use /model <name> to switch manually.`,
     const config = router.getConfig();
     return {
       handled: true,
+...failureFlag(`Auto model routing enabled.
+
+Models will be selected automatically based on task complexity:
+  simple          -> grok-3-mini (fast, low cost)
+  moderate        -> grok-3 (balanced)
+  complex         -> grok-3 (standard reasoning)
+  reasoning-heavy -> grok-3-reasoning (extended reasoning)
+  vision tasks    -> grok-2-vision
+
+Default Model: ${config.defaultModel}
+Cost Sensitivity: ${config.costSensitivity}
+Min Confidence: ${(config.minConfidence * 100).toFixed(0)}%
+
+Use /model auto off to disable, or /model <name> to switch to a specific model.`),
       entry: {
         type: 'assistant',
         content: `Auto model routing enabled.
@@ -146,6 +165,13 @@ Use /model auto off to disable, or /model <name> to switch to a specific model.`
 
     return {
       handled: true,
+...failureFlag(`Model changed to: ${modelName}
+
+Note: This model is not in the supported list. It may work if:
+- You have a custom GROK_BASE_URL set
+- The model is available on your provider
+
+Use /model list to see supported models.`),
       entry: {
         type: 'assistant',
         content: `Model changed to: ${modelName}
@@ -172,6 +198,12 @@ Use /model list to see supported models.`,
 
     return {
       handled: true,
+...failureFlag(`Model changed to: ${targetModel}
+
+Provider: ${modelInfo.provider}
+Max Tokens: ${modelInfo.maxTokens.toLocaleString()}
+
+The new model will be used for subsequent requests.`),
       entry: {
         type: 'assistant',
         content: `Model changed to: ${targetModel}
@@ -188,6 +220,11 @@ The new model will be used for subsequent requests.`,
   // Multiple suggestions - show them
   return {
     handled: true,
+...failureFlag(`Multiple models match "${modelName}":
+
+${suggestions.map(s => `  - ${s}`).join('\n')}
+
+Please specify the exact model name.`),
     entry: {
       type: 'assistant',
       content: `Multiple models match "${modelName}":
@@ -242,6 +279,7 @@ export async function handleChangeMode(args: string[]): Promise<CommandHandlerRe
 
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -259,6 +297,11 @@ export async function handleChangeMode(args: string[]): Promise<CommandHandlerRe
   if (!validModes.includes(normalizedMode)) {
     return {
       handled: true,
+...failureFlag(`Unknown mode: ${targetMode}
+
+Valid modes: ${validModes.join(', ')}
+
+Use /mode to see descriptions of each mode.`),
       entry: {
         type: 'assistant',
         content: `Unknown mode: ${targetMode}
@@ -278,6 +321,11 @@ Use /mode to see descriptions of each mode.`,
 
   return {
     handled: true,
+...failureFlag(`${modeManager.formatModeStatus()}
+
+Tools: ${config.allowedTools === 'all' ? 'All enabled' : config.allowedTools === 'none' ? 'Disabled' : (config.allowedTools as string[]).join(', ')}
+Max Tool Rounds: ${config.maxToolRounds}
+Extended Thinking: ${config.enableExtendedThinking ? 'Enabled' : 'Disabled'}`),
     entry: {
       type: 'assistant',
       content: `${modeManager.formatModeStatus()}
@@ -298,6 +346,7 @@ export function handleClearChat(): CommandHandlerResult {
   // This returns a special marker that the chat interface should handle
   return {
     handled: true,
+...failureFlag('Chat history cleared. Starting fresh conversation.'),
     entry: {
       type: 'assistant',
       content: 'Chat history cleared. Starting fresh conversation.',
@@ -317,6 +366,7 @@ export async function handleColab(args: string[]): Promise<CommandHandlerResult>
 
   return {
     handled: true,
+...failureFlag(result.output),
     entry: {
       type: 'assistant',
       content: result.output,
@@ -338,6 +388,12 @@ export async function handleDiffCheckpoints(args: string[]): Promise<CommandHand
   if (checkpoints.length < 2) {
     return {
       handled: true,
+...failureFlag(`Diff Checkpoints
+
+Not enough checkpoints to compare. Need at least 2 checkpoints.
+Current checkpoints: ${checkpoints.length}
+
+Create checkpoints with file operations or use /checkpoints to see available ones.`),
       entry: {
         type: 'assistant',
         content: `Diff Checkpoints
@@ -361,6 +417,12 @@ Create checkpoints with file operations or use /checkpoints to see available one
   if (secondLast === undefined || last === undefined) {
     return {
       handled: true,
+...failureFlag(`Diff Checkpoints
+
+Not enough checkpoints to compare. Need at least 2 checkpoints.
+Current checkpoints: ${checkpoints.length}
+
+Create checkpoints with file operations or use /checkpoints to see available ones.`),
       entry: {
         type: 'assistant',
         content: `Diff Checkpoints
@@ -394,6 +456,9 @@ Create checkpoints with file operations or use /checkpoints to see available one
     if (changes.length === 0) {
       return {
         handled: true,
+...failureFlag(`Diff: ${fromId} -> ${toId}
+
+No differences found between these checkpoints.`),
         entry: {
           type: 'assistant',
           content: `Diff: ${fromId} -> ${toId}
@@ -432,6 +497,7 @@ No differences found between these checkpoints.`,
 
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -441,6 +507,9 @@ No differences found between these checkpoints.`,
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error comparing checkpoints: ${error instanceof Error ? error.message : String(error)}
+
+Use /checkpoints to see available checkpoint IDs.`),
       entry: {
         type: 'assistant',
         content: `Error comparing checkpoints: ${error instanceof Error ? error.message : String(error)}
@@ -522,6 +591,7 @@ Use /help to see all available commands.
 
   return {
     handled: true,
+...failureFlag(features),
     entry: {
       type: 'assistant',
       content: features,
@@ -544,6 +614,16 @@ export async function handleListCheckpoints(_args: string[]): Promise<CommandHan
   if (checkpoints.length === 0) {
     return {
       handled: true,
+...failureFlag(`Checkpoints
+
+No checkpoints found.
+
+Checkpoints are created automatically when you:
+- Edit files
+- Run potentially destructive commands
+- Use /checkpoint create <name>
+
+Use /restore to restore to a previous state.`),
       entry: {
         type: 'assistant',
         content: `Checkpoints
@@ -599,6 +679,7 @@ Use /restore to restore to a previous state.`,
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -620,6 +701,9 @@ export async function handleRestoreCheckpoint(args: string[]): Promise<CommandHa
   if (checkpoints.length === 0) {
     return {
       handled: true,
+...failureFlag(`No checkpoints available to restore.
+
+Create checkpoints by making file changes or running /checkpoint create <name>.`),
       entry: {
         type: 'assistant',
         content: `No checkpoints available to restore.
@@ -656,6 +740,7 @@ Create checkpoints by making file changes or running /checkpoint create <name>.`
 
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -682,6 +767,9 @@ Create checkpoints by making file changes or running /checkpoint create <name>.`
   if (!targetCheckpoint) {
     return {
       handled: true,
+...failureFlag(`Checkpoint not found: ${checkpointIdOrNumber}
+
+Use /checkpoints to see available checkpoints.`),
       entry: {
         type: 'assistant',
         content: `Checkpoint not found: ${checkpointIdOrNumber}
@@ -726,6 +814,7 @@ Use /checkpoints to see available checkpoints.`,
 
     return {
       handled: true,
+...failureFlag(lines.join('\n')),
       entry: {
         type: 'assistant',
         content: lines.join('\n'),
@@ -735,6 +824,7 @@ Use /checkpoints to see available checkpoints.`,
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Failed to restore checkpoint: ${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: 'assistant',
         content: `Failed to restore checkpoint: ${error instanceof Error ? error.message : String(error)}`,
@@ -761,6 +851,7 @@ export async function handleInitGrok(args: string[] = []): Promise<CommandHandle
       // --fast: deterministic template only (the legacy behavior).
       return {
         handled: true,
+...failureFlag(formatInitResult(initResult)),
         entry: { type: 'assistant', content: formatInitResult(initResult), timestamp: new Date() },
       };
     }
@@ -778,6 +869,7 @@ export async function handleInitGrok(args: string[] = []): Promise<CommandHandle
 
     return {
       handled: true,
+...failureFlag(`${formatInitResult(initResult)}\n\nNow analyzing the repository to write a tailored \`AGENTS.md\`… (run \`/init --fast\` for the deterministic template only)`),
       entry: {
         type: 'assistant',
         content: `${formatInitResult(initResult)}\n\nNow analyzing the repository to write a tailored \`AGENTS.md\`… (run \`/init --fast\` for the deterministic template only)`,
@@ -789,6 +881,7 @@ export async function handleInitGrok(args: string[] = []): Promise<CommandHandle
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error initializing project: ${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: 'assistant',
         content: `Error initializing project: ${error instanceof Error ? error.message : String(error)}`,
@@ -861,11 +954,13 @@ export async function handleReinitGrok(): Promise<CommandHandlerResult> {
 
     return {
       handled: true,
+...failureFlag(output),
       entry: { type: 'assistant', content: output, timestamp: new Date() },
     };
   } catch (error) {
     return {
       handled: true,
+...failureFlag(`Error re-initializing: ${error instanceof Error ? error.message : String(error)}`),
       entry: {
         type: 'assistant',
         content: `Error re-initializing: ${error instanceof Error ? error.message : String(error)}`,
@@ -1004,6 +1099,7 @@ export async function handleStatus(activeModel?: string): Promise<CommandHandler
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: 'assistant',
       content: lines.join('\n'),
@@ -1033,6 +1129,7 @@ export async function handleNew(args: string[]): Promise<CommandHandlerResult> {
 
     return {
       handled: true,
+...failureFlag(`New conversation started with model: ${modelArg}\nChat history cleared.`),
       entry: {
         type: 'assistant',
         content: `New conversation started with model: ${modelArg}\nChat history cleared.`,
@@ -1045,6 +1142,7 @@ export async function handleNew(args: string[]): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag('New conversation started. Chat history cleared.'),
     entry: {
       type: 'assistant',
       content: 'New conversation started. Chat history cleared.',

@@ -10,6 +10,7 @@
 
 import { execFileSync, spawnSync } from 'child_process';
 import { logger } from '../../utils/logger.js';
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -169,6 +170,7 @@ export async function handlePR(args: string[]): Promise<CommandHandlerResult> {
   } catch {
     return {
       handled: true,
+...failureFlag('Not inside a git repository. Navigate to a git project first.'),
       entry: {
         type: 'assistant',
         content: 'Not inside a git repository. Navigate to a git project first.',
@@ -182,6 +184,7 @@ export async function handlePR(args: string[]): Promise<CommandHandlerResult> {
   if (!currentBranch) {
     return {
       handled: true,
+...failureFlag('Could not determine the current branch.'),
       entry: {
         type: 'assistant',
         content: 'Could not determine the current branch.',
@@ -197,6 +200,7 @@ export async function handlePR(args: string[]): Promise<CommandHandlerResult> {
   if (currentBranch === baseBranch) {
     return {
       handled: true,
+...failureFlag(`Cannot create PR: you are on the base branch (${baseBranch}). Switch to a feature branch first.\n\nUsage: git checkout -b my-feature`),
       entry: {
         type: 'assistant',
         content: `Cannot create PR: you are on the base branch (${baseBranch}). Switch to a feature branch first.\n\nUsage: git checkout -b my-feature`,
@@ -228,6 +232,25 @@ export async function handlePR(args: string[]): Promise<CommandHandlerResult> {
 
     return {
       handled: true,
+...failureFlag([
+          'Neither `gh` (GitHub CLI) nor `glab` (GitLab CLI) was found.',
+          '',
+          'Install one of:',
+          '  GitHub: https://cli.github.com/',
+          '  GitLab: https://gitlab.com/gitlab-org/cli',
+          '',
+          'Then run manually:',
+          '',
+          '**GitHub:**',
+          '```',
+          ghCmd,
+          '```',
+          '',
+          '**GitLab:**',
+          '```',
+          glabCmd,
+          '```',
+        ].join('\n')),
       entry: {
         type: 'assistant',
         content: [
@@ -284,6 +307,18 @@ export async function handlePR(args: string[]): Promise<CommandHandlerResult> {
 
     return {
       handled: true,
+...failureFlag([
+          `${typeLabel} created${draftLabel}!`,
+          '',
+          `  Branch: ${currentBranch} -> ${baseBranch}`,
+          `  Title:  ${title}`,
+          prUrl ? `  URL:    ${prUrl}` : '',
+          '',
+          'Output:',
+          '```',
+          result,
+          '```',
+        ].filter(Boolean).join('\n')),
       entry: {
         type: 'assistant',
         content: [

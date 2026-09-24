@@ -1,5 +1,6 @@
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { getThemeManager } from "../../themes/theme-manager.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -141,6 +142,7 @@ export function handleAvatar(args: string[]): CommandHandlerResult {
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,

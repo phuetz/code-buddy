@@ -9,6 +9,7 @@
 import type { CommandHandlerResult } from './session-handlers.js';
 import type { ChatEntry } from '../../agent/codebuddy-agent.js';
 import { copyToClipboard, isClipboardAvailable } from '../../utils/clipboard.js';
+import { failureFlag } from '../slash-failure.js';
 
 /**
  * Extract the last code block from a text string.
@@ -53,6 +54,7 @@ export function handleCopy(
   if (!isClipboardAvailable()) {
     return {
       handled: true,
+...failureFlag('Clipboard is not available on this system. On Linux, install xclip, xsel, or wl-copy.'),
       entry: {
         type: 'assistant',
         content: 'Clipboard is not available on this system. On Linux, install xclip, xsel, or wl-copy.',
@@ -70,6 +72,7 @@ export function handleCopy(
     if (!lastMessage) {
       return {
         handled: true,
+...failureFlag('No assistant response found to copy.'),
         entry: {
           type: 'assistant',
           content: 'No assistant response found to copy.',
@@ -82,6 +85,7 @@ export function handleCopy(
     if (!codeBlock) {
       return {
         handled: true,
+...failureFlag('No code block found in the last response.'),
         entry: {
           type: 'assistant',
           content: 'No code block found in the last response.',
@@ -93,6 +97,9 @@ export function handleCopy(
     const success = copyToClipboard(codeBlock);
     return {
       handled: true,
+...failureFlag(success
+          ? `Copied code block to clipboard (${codeBlock.length} chars).`
+          : 'Failed to copy to clipboard.'),
       entry: {
         type: 'assistant',
         content: success
@@ -108,6 +115,9 @@ export function handleCopy(
     const success = copyToClipboard(fullArgs);
     return {
       handled: true,
+...failureFlag(success
+          ? `Copied to clipboard (${fullArgs.length} chars).`
+          : 'Failed to copy to clipboard.'),
       entry: {
         type: 'assistant',
         content: success
@@ -123,6 +133,7 @@ export function handleCopy(
   if (!lastMessage) {
     return {
       handled: true,
+...failureFlag('No assistant response found to copy.'),
       entry: {
         type: 'assistant',
         content: 'No assistant response found to copy.',
@@ -134,6 +145,9 @@ export function handleCopy(
   const success = copyToClipboard(lastMessage);
   return {
     handled: true,
+...failureFlag(success
+        ? `Copied last response to clipboard (${lastMessage.length} chars).`
+        : 'Failed to copy to clipboard.'),
     entry: {
       type: 'assistant',
       content: success

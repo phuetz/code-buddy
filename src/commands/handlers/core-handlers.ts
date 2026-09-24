@@ -3,6 +3,7 @@ import { getAutonomyManager, SAFE_MODE_PATHS, type AutonomyLevel } from "../../u
 import { getSlashCommandManager } from "../slash-commands.js";
 import { getSkillManager } from "../../skills/skill-manager.js";
 import { getConversationExporter } from "../../utils/conversation-export.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -102,6 +103,7 @@ export async function handleHelp(): Promise<CommandHandlerResult> {
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     entry: {
       type: "assistant",
       content: lines.join('\n'),
@@ -245,6 +247,7 @@ Manual approval is now required for operations.`;
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -273,6 +276,9 @@ export function handleAutonomy(args: string[]): CommandHandlerResult {
 
     return {
       handled: true,
+...failureFlag(`🎚️ Autonomy Level: ${level.toUpperCase()}
+
+${descriptions[level]}`),
       entry: {
         type: "assistant",
         content: `🎚️ Autonomy Level: ${level.toUpperCase()}
@@ -286,6 +292,18 @@ ${descriptions[level]}`,
   const current = autonomyManager.getLevel();
   return {
     handled: true,
+...failureFlag(`🎚️ Autonomy Settings
+
+Current: ${current.toUpperCase()}
+
+Levels:
+  suggest  - Suggests changes, you approve each
+  confirm  - Confirms important operations
+  auto     - Auto-approves safe operations
+  full     - Auto-approves everything
+  yolo     - No confirmations at all
+
+Usage: /autonomy <level>`),
     entry: {
       type: "assistant",
       content: `🎚️ Autonomy Settings
@@ -337,6 +355,7 @@ Example: /pipeline feature-dev "Add a new endpoint to the API"`;
 
     return {
       handled: true,
+...failureFlag(content),
       entry: {
         type: "assistant",
         content,
@@ -416,7 +435,8 @@ export async function handleParallel(args: string[]): Promise<CommandHandlerResu
   
   if (action === 'explore') {
     const task = args.slice(1).join(' ');
-    if (!task) return { handled: true, entry: { type: 'assistant', content: 'Usage: /parallel explore <task>', timestamp: new Date() } };
+    if (!task) return { handled: true,
+    ...failureFlag('Usage: /parallel explore <task>'), entry: { type: 'assistant', content: 'Usage: /parallel explore <task>', timestamp: new Date() } };
     
     return {
       handled: true,
@@ -431,7 +451,8 @@ Use the spawn_parallel_agents tool to launch them concurrently.`,
 
   if (action === 'research') {
     const topic = args.slice(1).join(' ');
-    if (!topic) return { handled: true, entry: { type: 'assistant', content: 'Usage: /parallel research <topic>', timestamp: new Date() } };
+    if (!topic) return { handled: true,
+    ...failureFlag('Usage: /parallel research <topic>'), entry: { type: 'assistant', content: 'Usage: /parallel research <topic>', timestamp: new Date() } };
     
     // Lazy-load wide research
     const { runWideResearch } = await import('../../agent/wide-research.js');
@@ -440,6 +461,7 @@ Use the spawn_parallel_agents tool to launch them concurrently.`,
     if (!apiKey) {
       return {
         handled: true,
+...failureFlag('❌ API key missing for research.'),
         entry: { type: 'assistant', content: '❌ API key missing for research.', timestamp: new Date() },
       };
     }
@@ -460,6 +482,14 @@ Use the spawn_parallel_agents tool to launch them concurrently.`,
   if (!task || action === 'help') {
     return {
       handled: true,
+...failureFlag(`🔀 Parallel Subagent Runner
+
+Usage:
+  /parallel <task description>   - Let AI decide how to parallelize
+  /parallel explore <task>       - Use explorer, reviewer, and documenter agents
+  /parallel research <topic>     - Multi-agent deep research (Manus AI-style)
+
+Example: /parallel analyze all TypeScript files in src/`),
       entry: {
         type: "assistant",
         content: `🔀 Parallel Subagent Runner
@@ -542,6 +572,7 @@ Commands:
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -598,6 +629,7 @@ Commands:
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -626,6 +658,11 @@ export function handleSaveConversation(
   if (result.success) {
     return {
       handled: true,
+...failureFlag(`✅ Conversation saved!
+
+📄 File: ${result.filePath}
+
+The conversation has been exported in Markdown format.`),
       entry: {
         type: "assistant",
         content: `✅ Conversation saved!
@@ -640,6 +677,7 @@ The conversation has been exported in Markdown format.`,
 
   return {
     handled: true,
+...failureFlag(`❌ Failed to save conversation: ${result.error}`),
     entry: {
       type: "assistant",
       content: `❌ Failed to save conversation: ${result.error}`,
@@ -724,6 +762,7 @@ export function handleShortcuts(): CommandHandlerResult {
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -785,6 +824,7 @@ export async function handleToolAnalytics(args: string[]): Promise<CommandHandle
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: 'assistant',
       content,

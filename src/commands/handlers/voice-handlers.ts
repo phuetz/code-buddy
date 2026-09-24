@@ -1,6 +1,7 @@
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { getVoiceInputManager } from "../../input/voice-input-enhanced.js";
 import { getTTSManager } from "../../input/text-to-speech.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -98,6 +99,7 @@ Configuration file: ~/.codebuddy/voice-config.json`;
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,
@@ -117,6 +119,7 @@ export async function handleSpeak(args: string[]): Promise<CommandHandlerResult>
     ttsManager.stop();
     return {
       handled: true,
+...failureFlag(`🔇 Speech stopped.`),
       entry: {
         type: "assistant",
         content: `🔇 Speech stopped.`,
@@ -129,6 +132,9 @@ export async function handleSpeak(args: string[]): Promise<CommandHandlerResult>
   if (!availability.available) {
     return {
       handled: true,
+...failureFlag(`❌ TTS not available: ${availability.reason}
+
+Install with: pip3 install edge-tts`),
       entry: {
         type: "assistant",
         content: `❌ TTS not available: ${availability.reason}
@@ -146,6 +152,7 @@ Install with: pip3 install edge-tts`,
 
   return {
     handled: true,
+...failureFlag(`🔊 Speaking: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`),
     entry: {
       type: "assistant",
       content: `🔊 Speaking: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`,
@@ -221,6 +228,7 @@ Use /tts voices to list available voices.`;
 
   return {
     handled: true,
+...failureFlag(content),
     entry: {
       type: "assistant",
       content,

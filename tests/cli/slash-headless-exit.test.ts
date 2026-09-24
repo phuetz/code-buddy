@@ -315,6 +315,14 @@ describe('headless slash exit code', () => {
     expect(result.exitCode, detail(result)).toBe(1);
   }, 180_000);
 
+  it('/fcs validate fichier absent : code 1 et Script not found', async () => {
+    const prompt = '/fcs validate missing.fcs';
+    const result = await runCli({ name: 'fcs-validate-absent', prompt });
+    assertNoLlm(result, prompt);
+    expect(result.stdout, detail(result)).toContain('Script not found:');
+    expect(result.exitCode, detail(result)).toBe(1);
+  }, 180_000);
+
   it('le gestionnaire /config set ne termine pas le processus', async () => {
     const exitAvant = process.exitCode;
     const { handleConfig } = await import('../../src/commands/handlers/vibe-handlers.js');

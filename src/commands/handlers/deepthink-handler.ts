@@ -1,6 +1,7 @@
 import { getExtendedThinking } from '../../agent/extended-thinking.js';
 import type { CommandHandlerResult } from './branch-handlers.js';
 import { handleChangeMode } from './missing-handlers.js';
+import { failureFlag } from '../slash-failure.js';
 
 const USAGE = `Usage: /deepthink <question>
 
@@ -12,6 +13,7 @@ export async function handleDeepthink(args: string[]): Promise<CommandHandlerRes
   if (!question) {
     return {
       handled: true,
+...failureFlag(USAGE),
       entry: {
         type: 'assistant',
         content: USAGE,

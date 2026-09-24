@@ -11,6 +11,8 @@
 import { getCustomAgentLoader } from '../../agent/custom/custom-agent-loader.js';
 import { setActiveCustomAgentRuntime } from '../../agent/custom/custom-agent-runtime.js';
 
+import { failureFlag } from '../slash-failure.js';
+
 export interface CommandHandlerResult {
   handled: boolean;
   failed?: boolean;
@@ -33,6 +35,7 @@ export function handleAgent(args: string[]): CommandHandlerResult {
   if (args.length === 0 || (subcommand === 'list' && args.length === 1)) {
     return {
       handled: true,
+...failureFlag(loader.formatAgentList()),
       output: loader.formatAgentList(),
     };
   }
@@ -53,6 +56,7 @@ export function handleAgent(args: string[]): CommandHandlerResult {
     const agents = loader.listAgents();
     return {
       handled: true,
+...failureFlag(`Reloaded ${agents.length} custom agent(s).`),
       output: `Reloaded ${agents.length} custom agent(s).`,
     };
   }
@@ -68,6 +72,16 @@ function handleAgentCreate(args: string[]): CommandHandlerResult {
   if (args.length === 0) {
     return {
       handled: true,
+...failureFlag(`Usage: /agent create <name>
+
+This will create a new agent configuration file.
+
+Example:
+  /agent create code-reviewer
+  /agent create "Security Analyst"
+
+The agent will be created in ~/.codebuddy/agents/ with a default template.
+You can then edit the .toml file to customize the system prompt and settings.`),
       output: `Usage: /agent create <name>
 
 This will create a new agent configuration file.
@@ -93,6 +107,17 @@ You can then edit the .toml file to customize the system prompt and settings.`,
 
     return {
       handled: true,
+...failureFlag(`Created agent "${name}"
+
+Configuration file: ${filePath}
+
+Edit this file to customize:
+- systemPrompt: The agent's personality and instructions
+- triggers: Words that auto-activate this agent
+- tools: Which tools the agent can use
+- temperature: Response creativity (0-2)
+
+Then use /agent ${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')} to activate it.`),
       output: `Created agent "${name}"
 
 Configuration file: ${filePath}
@@ -108,6 +133,7 @@ Then use /agent ${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')} to activate it
   } catch (error) {
     return {
       handled: true,
+      failed: true,
       error: `Failed to create agent: ${error}`,
     };
   }
@@ -120,6 +146,7 @@ function handleAgentInfo(args: string[]): CommandHandlerResult {
   if (args.length === 0) {
     return {
       handled: true,
+...failureFlag('Usage: /agent info <agent-id>'),
       output: 'Usage: /agent info <agent-id>',
     };
   }
@@ -128,6 +155,7 @@ function handleAgentInfo(args: string[]): CommandHandlerResult {
   if (id === undefined) {
     return {
       handled: true,
+...failureFlag('Usage: /agent info <agent-id>'),
       output: 'Usage: /agent info <agent-id>',
     };
   }
@@ -142,6 +170,7 @@ function handleAgentInfo(args: string[]): CommandHandlerResult {
 
     return {
       handled: true,
+      failed: true,
       error: `Agent "${id}" not found.${suggestions.length ? `\n\nDid you mean: ${suggestions.join(', ')}?` : ''}`,
     };
   }
@@ -177,6 +206,7 @@ function handleAgentInfo(args: string[]): CommandHandlerResult {
 
   return {
     handled: true,
+...failureFlag(lines.join('\n')),
     output: lines.join('\n'),
   };
 }
@@ -197,6 +227,7 @@ function handleAgentActivate(args: string[]): CommandHandlerResult {
 
     return {
       handled: true,
+      failed: true,
       error: `Agent "${id}" not found.${suggestions.length ? `\n\nDid you mean: ${suggestions.join(', ')}?` : ''}
 
 Use /agent to list available agents.`,
@@ -210,6 +241,7 @@ Use /agent to list available agents.`,
 
   return {
     handled: true,
+...failureFlag(`Activated agent: ${agent.name}`),
     output: `Activated agent: ${agent.name}`,
     passToAI: true,
     systemPrompt: agent.systemPrompt,

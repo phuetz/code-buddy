@@ -1,5 +1,6 @@
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { getBranchManager } from "../../persistence/conversation-branches.js";
+import { failureFlag } from '../slash-failure.js';
 
 export interface CommandHandlerResult {
   handled: boolean;
@@ -38,6 +39,7 @@ function resolveBranch(idOrName: string): string | null {
 function makeResult(content: string): CommandHandlerResult {
   return {
     handled: true,
+    ...failureFlag(content),
     entry: { type: "assistant", content, timestamp: new Date() },
   };
 }
