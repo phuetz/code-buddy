@@ -16,6 +16,7 @@ import {
   computeFramedLayout,
   renderScene,
 } from '../../../src/tools/video/scene-render.js';
+import { repoScratchRoot } from '../../helpers/tmp.js';
 
 describe('pure builders', () => {
   it('escapes subtitles path special chars', () => {
@@ -201,7 +202,7 @@ describe.runIf(hasFfmpeg)('renderScene — real', () => {
 
 describe('renderScene — injected artifact guards', () => {
   it('fails when ffmpeg exits 0 without creating the scene clip', async () => {
-    const dir = await mkdtemp(join(process.cwd(), '.scene-render-'));
+    const dir = await mkdtemp(join(repoScratchRoot(process.cwd()), '.scene-render-'));
     try {
       const fakeSpawn = ((_cmd: string) => {
         const child = new EventEmitter() as unknown as {
@@ -235,7 +236,7 @@ describe('renderScene — injected artifact guards', () => {
   });
 
   it('fails when requested subtitles cannot be written', async () => {
-    const dir = await mkdtemp(join(process.cwd(), '.scene-subtitles-'));
+    const dir = await mkdtemp(join(repoScratchRoot(process.cwd()), '.scene-subtitles-'));
     try {
       await mkdir(join(dir, 'captions.ass'));
       const seen: string[][] = [];

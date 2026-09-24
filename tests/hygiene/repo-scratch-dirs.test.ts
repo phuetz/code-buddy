@@ -18,8 +18,9 @@ const repoRoot = path.resolve(path.dirname(selfPath), '..', '..');
 const testsRoot = path.join(repoRoot, 'tests');
 
 // mkdtemp / mkdtempSync directly under the repository root, outside the
-// gitignored `tmp/` and `_qa/` folders.
-const ROOT_SCRATCH = /mkdtemp(?:Sync)?\(\s*path\.(?:join|resolve)\(\s*(?:repoRoot|REPO_ROOT|process\.cwd\(\))\s*,\s*['"`](?!(?:tmp|_qa)['"`/])[^'"`/\\]/g;
+// gitignored `tmp/` and `_qa/` folders; `join`/`resolve` qualified by `path.`
+// or imported bare (tests/tools/video missed that way, review of 2026-09-24).
+const ROOT_SCRATCH = /mkdtemp(?:Sync)?\(\s*(?:path\.)?(?:join|resolve)\(\s*(?:repoRoot|REPO_ROOT|process\.cwd\(\))\s*,\s*['"`](?!(?:tmp|_qa)['"`/])[^'"`/\\]/g;
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -52,10 +53,12 @@ describe('test scratch directories', () => {
   it('recognises the pattern it forbids', () => {
     const sample = [
       "fs.mkdtempSync(path.join(repoRoot, '.gk18-pr-'));",
+      "await mkdtemp(join(process.cwd(), '.scene-render-'));",
       "mkdtempSync(path.join(repoScratchRoot(repoRoot), '.ok-'));",
+      "await mkdtemp(join(repoScratchRoot(process.cwd()), '.ok-'));",
       "mkdtempSync(path.join(repoRoot, 'tmp', 'ok-'));",
       "mkdtempSync(path.join(process.cwd(), '_qa/ok-'));",
     ].join('\n');
-    expect([...sample.matchAll(ROOT_SCRATCH)]).toHaveLength(1);
+    expect([...sample.matchAll(ROOT_SCRATCH)]).toHaveLength(2);
   });
 });
