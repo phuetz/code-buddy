@@ -13,9 +13,15 @@ from watch import (
     VisionSample,
     classify_presence_transitions,
     detector_evidence_for,
+    estimate_spatial,
+    head_yaw_pitch,
+    horizontal_fov_deg,
     normalized_box,
+    safe_detection,
     select_drowsy_track,
 )
+import math
+from types import SimpleNamespace
 
 
 def detection(x, y=0.2, width=0.2, height=0.5, confidence=0.9, **extra):
@@ -34,6 +40,86 @@ class NormalizedBoxTests(unittest.TestCase):
         )
         self.assertIsNone(normalized_box(10, 10, 10, 20, 100, 100))
         self.assertIsNone(normalized_box(0, 0, 10, 10, 0, 100))
+
+
+def face_landmarks(right_iris, left_iris):
+    points = [SimpleNamespace(x=0.5, y=0.5) for _ in range(478)]
+    points[468] = SimpleNamespace(x=right_iris[0], y=right_iris[1])
+    points[473] = SimpleNamespace(x=left_iris[0], y=left_iris[1])
+    return points
+
+
+def yaw_matrix(yaw_deg):
+    angle = math.radians(yaw_deg)
+    return [
+        [math.cos(angle), 0.0, math.sin(angle), 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [-math.sin(angle), 0.0, math.cos(angle), 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+
+
+class SpatialEstimateTests(unittest.TestCase):
+    def test_horizontal_fov_is_derived_from_the_diagonal(self):
+        # 90 deg diagonal on 4:3 -> 2*atan(tan(45 deg) * 0.8) = 77.3 deg.
+        self.assertAlmostEqual(horizontal_fov_deg(640, 480), 77.32, places=1)
+
+    def test_centered_face_at_one_metre(self):
+        # focal = 320 / tan(38.66 deg) = 400 px; 63 mm at 1 m -> 25.2 px.
+        ipd = 25.2 / 640
+        spatial = estimate_spatial(face_landmarks((0.5 - ipd / 2, 0.5), (0.5 + ipd / 2, 0.5)), 640, 480)
+        self.assertEqual(spatial["basis"], "estimate-ipd-v1")
+        self.assertAlmostEqual(spatial["distanceM"], 1.0, delta=0.02)
+        self.assertAlmostEqual(spatial["azimuthDeg"], 0.0, delta=0.2)
+        self.assertNotIn("facing", spatial)
+
+    def test_bearing_sign_follows_the_image_side(self):
+        right = estimate_spatial(face_landmarks((0.80, 0.5), (0.84, 0.5)), 640, 480)
+        left = estimate_spatial(face_landmarks((0.16, 0.5), (0.20, 0.5)), 640, 480)
+        high = estimate_spatial(face_landmarks((0.48, 0.1), (0.52, 0.1)), 640, 480)
+        self.assertGreater(right["azimuthDeg"], 20)
+        self.assertLess(left["azimuthDeg"], -20)
+        self.assertGreater(high["elevationDeg"], 20)
+
+    def test_turned_head_is_not_read_as_a_closer_face(self):
+        ipd = 25.2 / 640
+        straight = estimate_spatial(face_landmarks((0.5 - ipd / 2, 0.5), (0.5 + ipd / 2, 0.5)), 640, 480, (0.0, 0.0))
+        half = ipd * math.cos(math.radians(40))
+        turned = estimate_spatial(face_landmarks((0.5 - half / 2, 0.5), (0.5 + half / 2, 0.5)), 640, 480, (40.0, 0.0))
+        self.assertAlmostEqual(turned["distanceM"], straight["distanceM"], delta=0.03)
+
+    def test_facing_means_the_head_points_back_at_the_camera(self):
+        side = face_landmarks((0.80, 0.5), (0.84, 0.5))
+        azimuth = estimate_spatial(side, 640, 480)["azimuthDeg"]
+        self.assertTrue(estimate_spatial(side, 640, 480, (-azimuth, 0.0))["facing"])
+        self.assertFalse(estimate_spatial(side, 640, 480, (azimuth, 0.0))["facing"])
+        high = face_landmarks((0.48, 0.1), (0.52, 0.1))
+        elevation = estimate_spatial(high, 640, 480)["elevationDeg"]
+        self.assertTrue(estimate_spatial(high, 640, 480, (0.0, elevation))["facing"])
+        self.assertFalse(estimate_spatial(high, 640, 480, (0.0, -elevation))["facing"])
+
+    def test_missing_iris_landmarks_give_no_estimate(self):
+        self.assertIsNone(estimate_spatial([SimpleNamespace(x=0.5, y=0.5)] * 468, 640, 480))
+
+    def test_head_yaw_reads_the_pose_matrix(self):
+        yaw, pitch = head_yaw_pitch(yaw_matrix(30))
+        self.assertAlmostEqual(yaw, 30.0, places=3)
+        self.assertAlmostEqual(pitch, 0.0, places=3)
+        self.assertIsNone(head_yaw_pitch([[float("nan")] * 4] * 4))
+
+    def test_tracker_keeps_only_a_bounded_labelled_estimate(self):
+        spatial = {"basis": "estimate-ipd-v1", "azimuthDeg": 12.0, "elevationDeg": 3.0,
+                   "distanceM": 1.4, "headYawDeg": -10.0, "headPitchDeg": 2.0, "facing": True}
+        kept = safe_detection(detection(0.2, spatial=spatial))
+        self.assertEqual(kept["spatial"], spatial)
+        for bad in (
+            {**spatial, "basis": "metric"},
+            {**spatial, "distanceM": float("inf")},
+            {**spatial, "azimuthDeg": 400.0},
+        ):
+            self.assertNotIn("spatial", safe_detection(detection(0.2, spatial=bad)))
+        smuggled = safe_detection(detection(0.2, spatial={**spatial, "landmarks": [1, 2]}))
+        self.assertNotIn("landmarks", smuggled["spatial"])
 
 
 class PersonStateTests(unittest.TestCase):

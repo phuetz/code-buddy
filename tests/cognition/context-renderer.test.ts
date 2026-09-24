@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CognitiveContextProjector } from '../../src/cognition/context-renderer.js';
+import { CognitiveContextProjector, renderSpatialEstimate } from '../../src/cognition/context-renderer.js';
 import { GlobalWorkspace } from '../../src/cognition/global-workspace.js';
 
 function seed(workspace: GlobalWorkspace): void {
@@ -138,5 +138,50 @@ describe('CognitiveContextProjector', () => {
     expect(lease.evidence).not.toContain('NE_DOIT_PAS_SORTIR');
     expect(lease.evidence).not.toContain('depth');
     expect(lease.evidence).not.toContain('z=');
+  });
+
+  it('says where the person is relative to the robot, as a rounded estimate', () => {
+    const workspace = new GlobalWorkspace();
+    workspace.publish({
+      kind: 'fact',
+      producerId: 'world-model',
+      correlationId: 'world:track',
+      salience: 1,
+      confidence: 0.9,
+      privacy: 'local-only',
+      provenance: { source: 'deterministic-world-reducer' },
+      ttlMs: 60_000,
+      payload: {
+        id: 'person-track:brio:x',
+        type: 'person-track',
+        visibility: 'visible',
+        attributes: { count: 1 },
+        observation2d: {
+          space: 'image-normalized-v1',
+          x: 0.7,
+          y: 0.3,
+          width: 0.1,
+          height: 0.2,
+          spatial: { basis: 'estimate-ipd-v1', azimuthDeg: 21, elevationDeg: 5, distanceM: 1.38, facing: true },
+        },
+      },
+    });
+    const lease = new CognitiveContextProjector(workspace).begin({
+      consumerId: 'local-voice',
+      privacyClearance: 'local-only',
+    });
+    expect(lease.evidence).toContain('estimation caméra: à droite du robot, à environ 1,5 m, regarde le robot');
+  });
+
+  it('words the spatial estimate without overclaiming', () => {
+    const base = { basis: 'estimate-ipd-v1', elevationDeg: 0 };
+    expect(renderSpatialEstimate({ ...base, azimuthDeg: -30, distanceM: 0.9, facing: false }))
+      .toBe('estimation caméra: à gauche du robot, à environ 1 m, ne regarde pas le robot');
+    expect(renderSpatialEstimate({ ...base, azimuthDeg: 3, distanceM: 0.2 }))
+      .toBe('estimation caméra: face au robot, à environ 0,5 m');
+    expect(renderSpatialEstimate({ ...base, azimuthDeg: 3, distanceM: 4.4 }))
+      .toBe('estimation caméra: face au robot, à environ 4 m');
+    expect(renderSpatialEstimate({ ...base, basis: 'metric', azimuthDeg: 3, distanceM: 1 })).toBeNull();
+    expect(renderSpatialEstimate({ ...base, azimuthDeg: Number.NaN, distanceM: 1 })).toBeNull();
   });
 });
