@@ -5,7 +5,7 @@
  * Supports providers, models, tool configs, and user preferences.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
@@ -995,6 +995,22 @@ export function parseTOML(content: string): Record<string, unknown> {
 }
 
 /**
+ * Line the messaging-reset loader would skip. A skipped line can hide the
+ * mode that should have kept the transcript, so the reset must not guess.
+ */
+export function messagingResetConfigSyntaxError(content: string): string | null {
+  const lines = content.split('\n');
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = (lines[index] ?? '').trim();
+    if (line.length === 0 || line.startsWith('#')) continue;
+    if (/^\[([^\]]+)\]$/.test(line)) continue;
+    if (/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/.test(line)) continue;
+    return `unparseable line ${index + 1}`;
+  }
+  return null;
+}
+
+/**
  * Serialize config to TOML format
  */
 export function serializeTOML(config: CodeBuddyConfig): string {
@@ -1106,6 +1122,67 @@ export function serializeTOML(config: CodeBuddyConfig): string {
 const CONFIG_DIR = join(homedir(), '.codebuddy');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.toml');
 const PROJECT_CONFIG_FILE = '.codebuddy/config.toml';
+
+export type MessagingResetConfigRead =
+  | { kind: 'absent' }
+  | { kind: 'ok' }
+  | { kind: 'unreadable'; error: string }
+  | { kind: 'unparseable'; error: string };
+
+/** User config, then project config: the same two paths `load` reads. */
+export function messagingResetConfigPaths(): readonly [string, string] {
+  return [CONFIG_FILE, join(process.cwd(), PROJECT_CONFIG_FILE)];
+}
+
+/**
+ * Absent (`ENOENT`) is not a failure. A present file that is not a regular
+ * file, cannot be read, or contains a line `parseTOML` would drop is.
+ */
+export function classifyMessagingResetConfigFile(filePath: string): MessagingResetConfigRead {
+  let isFile = false;
+  try {
+    isFile = statSync(filePath).isFile();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { kind: 'absent' };
+    return { kind: 'unreadable', error: code ?? 'stat failed' };
+  }
+  if (!isFile) return { kind: 'unreadable', error: 'not a file' };
+  let content: string;
+  try {
+    content = readFileSync(filePath, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return { kind: 'unreadable', error: code ?? 'read failed' };
+  }
+  const syntax = messagingResetConfigSyntaxError(content);
+  if (syntax) return { kind: 'unparseable', error: syntax };
+  return { kind: 'ok' };
+}
+
+export class MessagingResetConfigError extends Error {
+  readonly kind: 'unreadable' | 'unparseable';
+
+  constructor(kind: 'unreadable' | 'unparseable') {
+    super(
+      kind === 'unparseable'
+        ? 'messaging reset config unparseable'
+        : 'messaging reset config unreadable',
+    );
+    this.name = 'MessagingResetConfigError';
+    this.kind = kind;
+  }
+}
+
+/** Throws when any reset-path config file is present but unreadable or unparseable. */
+export function assertMessagingResetConfigsReadable(): void {
+  for (const filePath of messagingResetConfigPaths()) {
+    const verdict = classifyMessagingResetConfigFile(filePath);
+    if (verdict.kind === 'unreadable' || verdict.kind === 'unparseable') {
+      throw new MessagingResetConfigError(verdict.kind);
+    }
+  }
+}
 
 /**
  * Configuration manager singleton

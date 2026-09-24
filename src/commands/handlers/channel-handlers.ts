@@ -1316,16 +1316,6 @@ function readFailure(source: MessagingSnapshotPart['source'], err: unknown): {
   };
 }
 
-function pathReadState(filePath: string): 'absent' | 'present' | 'unreadable' {
-  try {
-    fs.statSync(filePath);
-    return 'present';
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    return code === 'ENOENT' ? 'absent' : 'unreadable';
-  }
-}
-
 function sessionStoreTranscript(session: { messages: Array<{ type: string; content: string }> }): string {
   return session.messages
     .map((message) => `${message.type}: ${message.content}`)
@@ -1427,9 +1417,10 @@ async function loadMessagingSessionSnapshot(
 
 /**
  * Before a channel turn continues, apply the configured messaging reset.
- * mode none returns before any session read. Each store the reset would
- * clear is archived first. A failed archive of any one of them cancels
- * the clear and every store stays in place.
+ * mode none returns before any session read. A present config file that
+ * cannot be read or parsed cancels before any session read. Each store the
+ * reset would clear is archived first. A failed archive of any one of them
+ * cancels the clear and every store stays in place.
  */
 async function maybeResetInboundMessagingSession(sessionKey: string): Promise<void> {
   const {
@@ -1437,21 +1428,13 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     resolveMessagingSessionResetArchiveDir,
     resolveSessionResetPolicy,
   } = await import('../../channels/messaging-session-reset.js');
-  const { getConfigManager } = await import('../../config/toml-config.js');
+  const { assertMessagingResetConfigsReadable, getConfigManager } = await import(
+    '../../config/toml-config.js'
+  );
   const os = await import('node:os');
-  for (const configFile of [
-    path.join(os.homedir(), '.codebuddy', 'config.toml'),
-    path.join(process.cwd(), '.codebuddy', 'config.toml'),
-  ]) {
-    if (pathReadState(configFile) === 'unreadable') {
-      logger.warn('messaging session reset cancelled because config is unreadable', {
-        sessionHash: hashForLog(sessionKey),
-      });
-      return;
-    }
-  }
   let policy = resolveSessionResetPolicy(undefined);
   try {
+    assertMessagingResetConfigsReadable();
     policy = resolveSessionResetPolicy(getConfigManager().getConfig().session_reset);
   } catch (err) {
     logger.warn('messaging session reset policy unreadable, keeping the session', {
