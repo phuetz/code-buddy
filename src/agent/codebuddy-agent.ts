@@ -43,6 +43,7 @@ import {
   readCliFlagValue,
   resolveSessionLimits,
 } from "../config/middleware-limits.js";
+import { resolve as resolvePath } from "node:path";
 import { resetPersonaManager } from "../personas/persona-manager.js";
 import { resetEnhancedMemory } from "../memory/enhanced-memory.js";
 import { resetPluginMarketplace } from "../plugins/marketplace.js";
@@ -94,6 +95,8 @@ export class CodeBuddyAgent extends BaseAgent {
    * (Cowork ouvre un projet distinct du cwd du processus). /yolo le réutilise.
    */
   private fileMiddlewareLimits: ExplicitMiddlewareLimits = {};
+  /** Projet dont fileMiddlewareLimits vient. Un changement de projet le relit. */
+  private limitsDirectory = '';
   private visionGroundingModel: string | undefined;
   private streamingHandler: StreamingHandler;
   private executor: AgentExecutor;
@@ -170,7 +173,8 @@ export class CodeBuddyAgent extends BaseAgent {
     this.callerMaxToolRounds = typeof maxToolRounds === 'number' && Number.isFinite(maxToolRounds) && maxToolRounds > 0
       ? maxToolRounds
       : undefined;
-    this.fileMiddlewareLimits = loadExplicitMiddlewareLimits({ cwd: initialWorkingDirectory });
+    this.limitsDirectory = resolvePath(initialWorkingDirectory);
+    this.fileMiddlewareLimits = loadExplicitMiddlewareLimits({ cwd: this.limitsDirectory });
     this.applySessionLimits(this.yoloMode);
     if (this.yoloMode) {
       logger.warn(`YOLO MODE ACTIVE - Cost limit: $${this.sessionCostLimit}, Max rounds: ${this.maxToolRounds}`);
@@ -298,6 +302,9 @@ export class CodeBuddyAgent extends BaseAgent {
 
     // Initialize Executor
     const timelineEnabled = process.env.CODEBUDDY_TIMELINE === 'true';
+    // Lu à chaque tour : /yolo, un changement de projet ou le routage pair
+    // changent le plafond après la construction de l'exécuteur.
+    const readMaxToolRounds = (): number => this.maxToolRounds;
     this.executor = new AgentExecutor({
       client: this.codebuddyClient,
       toolHandler: this.toolHandler,
@@ -373,7 +380,9 @@ export class CodeBuddyAgent extends BaseAgent {
         }
       },
     }, {
-      maxToolRounds: this.maxToolRounds,
+      get maxToolRounds(): number {
+        return readMaxToolRounds();
+      },
       isGrokModel: this.isGrokModel.bind(this),
       recordSessionCost: this.recordSessionCost.bind(this),
       recordTurnProviderUsage: (usage) => {
@@ -406,7 +415,7 @@ export class CodeBuddyAgent extends BaseAgent {
         // Turn limit middleware (priority 10) — enforces max turns per session
         try {
           const { TurnLimitMiddleware } = await import('./middleware/turn-limit.js');
-          pipeline.use(new TurnLimitMiddleware({ warningRatio: this.turnWarningRatio }));
+          pipeline.use(new TurnLimitMiddleware({ warningRatio: () => this.turnWarningRatio }));
           logger.debug('TurnLimitMiddleware registered in pipeline (priority 10)');
         } catch (err) {
           logger.debug('Failed to register TurnLimitMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
@@ -416,7 +425,7 @@ export class CodeBuddyAgent extends BaseAgent {
           const { CostLimitMiddleware } = await import('./middleware/cost-limit.js');
           pipeline.use(new CostLimitMiddleware({
             isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
-            warningRatio: this.costWarningRatio,
+            warningRatio: () => this.costWarningRatio,
           }));
           logger.debug('CostLimitMiddleware registered in pipeline (priority 20)');
         } catch (err) {
@@ -1609,6 +1618,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     this.routingFacade.setSessionCost(cloned.routingSessionCost);
     this.contextManager.importConversationState(cloned.contextManagerState);
     this.toolHandler.restoreWorkingDirectory(cloned.workingDirectory);
+    this.rebindProjectLimits(cloned.workingDirectory);
     this.promptBuilder.updateConfig({ cwd: cloned.workingDirectory });
     this.promptBuilder.setPersistentMemory(getMemoryManager(undefined, this.memoryBotId, cloned.workingDirectory));
   }
@@ -1626,8 +1636,23 @@ Look at the screenshot and find the element matching the user's intent. Output o
    */
   setWorkingDirectory(dir: string | undefined): void {
     this.toolHandler.setWorkingDirectory(dir);
+    this.rebindProjectLimits(dir || process.cwd());
     this.promptBuilder.updateConfig({ cwd: dir || process.cwd() });
     this.promptBuilder.setPersistentMemory(getMemoryManager(undefined, this.memoryBotId, dir));
+  }
+
+  /**
+   * Le projet de la session change (reprise, Cowork, restauration HTTP) :
+   * [middleware] est relu dans ce projet, une fois par projet. Le même
+   * projet n'est pas relu, un fichier modifié en cours de session reste
+   * donc sans effet.
+   */
+  private rebindProjectLimits(dir: string): void {
+    const next = resolvePath(dir);
+    if (next === this.limitsDirectory) return;
+    this.limitsDirectory = next;
+    this.fileMiddlewareLimits = loadExplicitMiddlewareLimits({ cwd: next });
+    this.applySessionLimits(this.yoloMode);
   }
 
   /** Rehydrate chat and LLM history from a persisted session (headless --resume). */
@@ -2066,9 +2091,15 @@ Look at the screenshot and find the element matching the user's intent. Output o
     this.sessionCostLimit = resolved.sessionCostUsd;
     this.turnWarningRatio = resolved.turnWarningRatio;
     this.costWarningRatio = resolved.costWarningRatio;
+    const hadExplicitCompact = this.explicitAutoCompactTokens !== undefined;
     this.explicitAutoCompactTokens = resolved.autoCompactTokens;
-    if (this.explicitAutoCompactTokens !== undefined && this.contextManager) {
+    if (!this.contextManager) return;
+    if (this.explicitAutoCompactTokens !== undefined) {
       this.contextManager.updateConfig({ autoCompactThreshold: this.explicitAutoCompactTokens });
+    } else if (hadExplicitCompact) {
+      // Le nouveau projet n'écrit plus de seuil : retour au seuil historique.
+      const window = this.contextManager.getConfig().maxContextTokens;
+      this.contextManager.updateConfig({ autoCompactThreshold: Math.min(200_000, window) });
     }
   }
 
@@ -2291,6 +2322,10 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // Apply max tool rounds
     if (config.maxToolRounds !== undefined) {
       this.maxToolRounds = config.maxToolRounds;
+      // Rang d'une option de construction : /yolo ou un changement de projet ne l'effacent pas.
+      if (Number.isFinite(config.maxToolRounds) && config.maxToolRounds > 0) {
+        this.callerMaxToolRounds = config.maxToolRounds;
+      }
       logger.debug(`Peer routing: max tool rounds set to ${config.maxToolRounds}`);
     }
 

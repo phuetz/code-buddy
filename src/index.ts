@@ -1178,12 +1178,22 @@ async function processPromptHeadless(
     const customAgentConfig = await loadCustomAgentForCli(agentName, false);
     const modelToUse = customAgentConfig?.model ?? model;
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
+    // --resume / --continue : le projet de la session reprise fait foi pour
+    // [middleware] et la stratégie, pas le répertoire d'où la commande part.
+    const { getSessionStore: getHeadlessSessionStore } = await import('./persistence/session-store.js');
+    const resumeStore = getHeadlessSessionStore();
+    const resumeId = resumeStore.isEphemeral() ? null : resumeStore.getCurrentSessionId();
+    const resumeSession = resumeId ? await resumeStore.loadSession(resumeId) : null;
+    const projectDir = resumeSession?.workingDirectory || process.cwd();
     // Stratégie opt-in : elle ne comble que l'absence de --max-tool-rounds et de
     // [middleware].max_turns. Désactivée, l'overlay est vide.
     const { resolveStrategyOverlay, applyStrategyCostCap } = await import('./agent/self-improvement/strategy-runtime.js');
-    const strategy = resolveStrategyOverlay('headless', { maxToolRounds });
+    const strategy = resolveStrategyOverlay('headless', { maxToolRounds }, { workDir: projectDir });
     const { loadExplicitMiddlewareLimits } = await import('./config/middleware-limits.js');
-    const tomlLimits = loadExplicitMiddlewareLimits();
+    const tomlLimits = loadExplicitMiddlewareLimits({ cwd: projectDir });
+    // Seul --max-tool-rounds (ou la stratégie, faute de fichier) passe au
+    // constructeur : max_turns du fichier reste au rang du fichier.
+    const callerRounds = maxToolRounds ?? (tomlLimits.maxTurns === undefined ? strategy.maxToolRounds : undefined);
     const rounds = maxToolRounds ?? tomlLimits.maxTurns ?? strategy.maxToolRounds;
     if (strategy.strategyId && strategy.strategyId !== 'baseline') {
       const cost = applyStrategyCostCap(strategy);
@@ -1195,10 +1205,11 @@ async function processPromptHeadless(
       apiKey,
       baseURL,
       modelToUse,
-      rounds,
+      callerRounds,
       true,
       undefined,
-      undefined,
+      // Nouvelle session : undefined, comme avant (cwd du processus).
+      resumeSession?.workingDirectory || undefined,
       strategy.systemPromptAppend,
     );
     await applyActiveLlmFailover(agent);

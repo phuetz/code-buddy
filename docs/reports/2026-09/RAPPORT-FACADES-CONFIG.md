@@ -23,6 +23,17 @@ Le module `src/config/hot-reload` est retiré. Il n'était jamais démarré. Il 
 
 Contre-revue : l'agent lisait `.codebuddy/config.toml` dans le répertoire du processus, pas dans le `workingDirectory` passé au constructeur. Cowork, lancé depuis A et ouvrant le projet B, appliquait donc les plafonds de A. `/yolo` relisait aussi le fichier et pouvait changer le plafond sans changer les seuils déjà donnés aux middlewares. Correctif : `[middleware]` est lu une seule fois, à la construction, dans le répertoire de travail de l'agent ; `/yolo` réutilise cette lecture. Tests : valeurs de B avec `cwd = A` (et après `/yolo`), tour réel par `CodeBuddyEngineAdapter` (3 appels pour `max_turns = 3` de B, 1 appel pour `max_cost = 0.0001` de B), fichier modifié puis `/yolo` sans effet. Rouge 4/22, vert 22/22, mutant « cwd du processus » 3/22, mutant « relecture à `/yolo` » 1/22.
 
+## Projet qui change après la construction, profil hors ligne de commande
+
+Seconde contre-revue : le cliché de la construction survivait à tout changement de projet. Classe corrigée, pas seulement le cas :
+
+- **Changement de projet** — les trois points d'entrée (`hydratePersistedSession` pour `--resume`/`--continue`, `setWorkingDirectory` pour Cowork, `importConversationState` pour une session HTTP) relisent `[middleware]` dans le nouveau projet, une fois par projet. Un projet sans `[middleware]` rend les constantes historiques, seuil de compactage compris.
+- **Consommateurs vivants** — l'exécuteur lisait `maxToolRounds` copié à sa construction : `/yolo on` en cours de session ne donnait jamais 400 tours. Il le relit à chaque tour ; les seuils des middlewares aussi. Le plafond du routage pair prend le rang d'une option de construction.
+- **Headless** — `--resume`/`--continue` : l'agent naît dans le projet de la session reprise (limites et stratégie). `max_turns` du fichier n'est plus passé au constructeur comme `--max-tool-rounds`.
+- **Profils** — `ConfigManager` mémorise les profils appliqués (`--profile` ou profil actif de Cowork) ; les limites les lisent. Les sous-tables `[profiles.nom.x]`, aplaties par le parseur, sont repliées par `applyProfile` (middleware, ui, agent…) et par le catalogue ; `nom.x` n'est plus listé comme un profil. Un chargement oublie les profils appliqués.
+
+Tests : trois points d'entrée × deux cas, `/yolo` jusqu'à l'exécuteur, tours réels (reprise, Cowork réutilisé, profil Cowork), CLI réel `--resume`/`--continue` depuis A sur une session de B.
+
 ## Vérification
 
 Barrière Docker sans réseau, racine en lecture seule, profil factice. Rouge 13 échecs sur 16 avant le correctif. Vert 16 sur 16 après. Mutants : tours, coût, deux seuils, compactage, refus, module retiré — chacun refait échouer le test qui le protège. `tests/config` : 36 fichiers, 524 tests. `tsc` : seulement les deux `TS2307` de `@phuetz/companion-core`. Lint ciblé : 0. Confidentialité du diff : 0.

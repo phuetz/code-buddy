@@ -2,7 +2,7 @@
  * Façades [middleware] : une clé documentée est branchée, ou refusée
  * à l'écriture avec un remède. Aucun profil réel.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -10,7 +10,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { classifyConfigPath, validateConfigValue } from '../../src/config/config-schema.js';
 import { setConfigValue } from '../../src/config/config-mutator.js';
-import { DEFAULT_CONFIG, parseTOML, resetConfigManager, serializeTOML } from '../../src/config/toml-config.js';
+import { parseCatalogueConfig, selectionFromDocument } from '../../src/config/model-catalogue.js';
+import {
+  DEFAULT_CONFIG,
+  getConfigManager,
+  parseTOML,
+  resetConfigManager,
+  serializeTOML,
+} from '../../src/config/toml-config.js';
 
 const previousHome = process.env.CODEBUDDY_HOME;
 const previousConfig = process.env.CODEBUDDY_CONFIG;
@@ -84,5 +91,56 @@ describe('middleware — clés refusées à l\'écriture', () => {
     expect(validateConfigValue('middleware.turn_warning_threshold', 1.5)).toMatch(/refusée|Expected|invalide|mismatch/i);
     expect(validateConfigValue('middleware.cost_warning_threshold', 0)).toMatch(/refusée|Expected|invalide|mismatch/i);
     expect(validateConfigValue('middleware.auto_compact_threshold', 0)).toMatch(/refusée|Expected|invalide|mismatch/i);
+  });
+});
+
+/**
+ * Classe : le parseur historique range [profiles.nom.x] sous la clé plate
+ * « nom.x ». applyProfile doit replier chaque sous-table documentée dans le
+ * profil, et ne pas présenter « nom.x » comme un profil.
+ */
+describe('profils — sous-tables [profiles.nom.x]', () => {
+  function userConfig(body: string): void {
+    scratch = mkdtempSync(path.join(tmpdir(), 'mw-profile-'));
+    mkdirSync(path.join(scratch, '.codebuddy'), { recursive: true });
+    writeFileSync(path.join(scratch, '.codebuddy', 'config.toml'), body);
+    process.env.CODEBUDDY_HOME = scratch;
+    delete process.env.CODEBUDDY_CONFIG;
+    resetConfigManager();
+  }
+
+  it.each([
+    ['middleware', 'max_turns = 7', (c: typeof DEFAULT_CONFIG) => c.middleware.max_turns, 7],
+    ['ui', 'vim_keybindings = true', (c: typeof DEFAULT_CONFIG) => c.ui.vim_keybindings, true],
+    ['agent', 'yolo_mode = true', (c: typeof DEFAULT_CONFIG) => c.agent.yolo_mode, true],
+  ] as const)('[profiles.serre.%s] est appliquée par applyProfile', (section, line, read, expected) => {
+    userConfig(`[profiles.serre]\nactive_model = "grok-3-latest"\n\n[profiles.serre.${section}]\n${line}\n`);
+    const manager = getConfigManager();
+    expect(read(manager.getConfig() as typeof DEFAULT_CONFIG)).not.toBe(expected);
+    manager.applyProfile('serre');
+    expect(read(manager.getConfig() as typeof DEFAULT_CONFIG)).toBe(expected);
+    expect(manager.getAppliedProfiles()).toEqual(['serre']);
+  });
+
+  it('un profil fait seulement de sous-tables existe, et « serre.middleware » n\'est pas un profil', () => {
+    userConfig('[profiles.serre.middleware]\nmax_turns = 7\n');
+    const manager = getConfigManager();
+    manager.applyProfile('serre');
+    expect(manager.getConfig().middleware.max_turns).toBe(7);
+    let message = '';
+    try {
+      manager.applyProfile('absent');
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toMatch(/Available profiles: .*\bserre\b/);
+    expect(message).not.toContain('serre.middleware');
+    expect(() => manager.applyProfile('serre.middleware')).toThrow(/not found/);
+  });
+
+  it('le catalogue des modèles connaît aussi un profil fait seulement de sous-tables', () => {
+    const document = parseCatalogueConfig('[profiles.serre.middleware]\nmax_turns = 7\n');
+    expect(Object.keys(document.profiles)).toEqual(['serre']);
+    expect(() => selectionFromDocument(document, { profileName: 'serre', detected: 'modele-detecte' })).not.toThrow();
   });
 });

@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { getRequestedProfile } from '../cli/requested-profile.js';
-import { parseTOML, resolveUserConfigFile } from './toml-config.js';
+import { getConfigManager, parseTOML, resolveProfileEntry, resolveUserConfigFile } from './toml-config.js';
 
 /** Tours d'outils hors YOLO, quand rien n'est écrit. */
 export const HISTORICAL_MAX_TOOL_ROUNDS = 50;
@@ -98,14 +98,19 @@ function readDocument(file: string): Record<string, unknown> | undefined {
 }
 
 function profileTable(document: Record<string, unknown> | undefined, name: string): unknown {
-  if (!document) return undefined;
-  const profiles = isRecord(document.profiles) ? document.profiles : undefined;
-  if (!profiles) return undefined;
-  // Le parseur historique aplatit [profiles.nom.middleware] en une seule clé.
-  const flat = profiles[`${name}.middleware`];
-  if (isRecord(flat)) return flat;
-  const entry = isRecord(profiles[name]) ? profiles[name] : undefined;
-  return isRecord(entry) ? entry.middleware : undefined;
+  // Même repli des sous-tables aplaties que ConfigManager.applyProfile.
+  return resolveProfileEntry(document?.profiles, name)?.middleware;
+}
+
+/**
+ * Profils en vigueur : ceux que ConfigManager a appliqués (--profile au
+ * préchargement, profil actif de Cowork), puis --profile s'il ne l'a pas été.
+ */
+function activeProfileNames(argv: readonly string[]): string[] {
+  const names = [...getConfigManager().getAppliedProfiles()];
+  const requested = getRequestedProfile(argv);
+  if (requested.kind === 'value' && !names.includes(requested.name)) names.push(requested.name);
+  return names;
 }
 
 function allowUserFile(env: NodeJS.ProcessEnv): boolean {
@@ -118,11 +123,13 @@ export interface LoadMiddlewareOptions {
   env?: NodeJS.ProcessEnv;
   cwd?: string;
   argv?: readonly string[];
+  /** Profils à superposer ; par défaut ceux en vigueur dans le processus. */
+  profiles?: readonly string[];
 }
 
 /**
  * Clés présentes dans les fichiers, pas les défauts du schéma.
- * Le projet recouvre l'utilisateur, le profil demandé recouvre les deux.
+ * Le projet recouvre l'utilisateur, les profils en vigueur recouvrent les deux.
  */
 export function loadExplicitMiddlewareLimits(
   options: LoadMiddlewareOptions = {},
@@ -137,10 +144,9 @@ export function loadExplicitMiddlewareLimits(
   const projectDoc = readDocument(projectFile);
   overlay(limits, userDoc?.middleware);
   overlay(limits, projectDoc?.middleware);
-  const requested = getRequestedProfile(argv);
-  if (requested.kind === 'value') {
-    overlay(limits, profileTable(userDoc, requested.name));
-    overlay(limits, profileTable(projectDoc, requested.name));
+  for (const name of options.profiles ?? activeProfileNames(argv)) {
+    overlay(limits, profileTable(userDoc, name));
+    overlay(limits, profileTable(projectDoc, name));
   }
   return limits;
 }

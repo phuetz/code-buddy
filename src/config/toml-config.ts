@@ -1020,6 +1020,51 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+const UNSAFE_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Noms des profils déclarés. Le parseur historique range [profiles.nom.x]
+ * sous la clé plate « nom.x » : le nom du profil est le premier segment.
+ */
+export function profileNamesOf(profiles: unknown): string[] {
+  if (!isPlainObject(profiles)) return [];
+  const names = new Set<string>();
+  for (const key of Object.keys(profiles)) {
+    const name = key.split('.')[0];
+    if (name) names.add(name);
+  }
+  return [...names];
+}
+
+/**
+ * Profil « nom » avec ses sous-tables [profiles.nom.x] repliées, ou undefined
+ * s'il n'existe ni table ni sous-table. Un nom pointé n'est pas un profil.
+ */
+export function resolveProfileEntry(profiles: unknown, name: string): Record<string, unknown> | undefined {
+  if (!isPlainObject(profiles) || !name || name.includes('.')) return undefined;
+  const base = ownValue<unknown>(profiles, name);
+  let found = isPlainObject(base);
+  const entry: Record<string, unknown> = isPlainObject(base) ? { ...base } : {};
+  const prefix = `${name}.`;
+  for (const [key, value] of Object.entries(profiles)) {
+    if (!key.startsWith(prefix) || !isPlainObject(value)) continue;
+    const path = key.slice(prefix.length).split('.');
+    if (path.some((segment) => !segment || UNSAFE_SEGMENTS.has(segment))) continue;
+    found = true;
+    let cursor = entry;
+    for (const segment of path.slice(0, -1)) {
+      const next = ownValue<unknown>(cursor, segment);
+      const copy: Record<string, unknown> = isPlainObject(next) ? { ...next } : {};
+      cursor[segment] = copy;
+      cursor = copy;
+    }
+    const leaf = path[path.length - 1] as string;
+    const previous = ownValue<unknown>(cursor, leaf);
+    cursor[leaf] = isPlainObject(previous) ? { ...previous, ...value } : { ...value };
+  }
+  return found ? entry : undefined;
+}
+
 /** Sections que le sérialiseur historique ne sait pas réécrire, lues sur le fichier utilisateur. */
 export function extractPreservedUserConfig(parsed: Record<string, unknown>): PreservedUserConfig {
   const source = structuredClone(parsed);
@@ -1501,6 +1546,8 @@ class ConfigManager {
   private config: CodeBuddyConfig;
   private loaded = false;
   private preservedUser: PreservedUserConfig | null = null;
+  /** Profils appliqués depuis le dernier chargement, dans l'ordre (CLI ou Cowork). */
+  private appliedProfiles: string[] = [];
 
   constructor() {
     this.config = { ...DEFAULT_CONFIG };
@@ -1516,6 +1563,8 @@ class ConfigManager {
     // Start with defaults
     this.config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
     this.preservedUser = null;
+    // Un chargement repart des fichiers : aucun profil n'y est réappliqué.
+    this.appliedProfiles = [];
 
     // Load user config
     const userFile = configFile();
@@ -1752,11 +1801,12 @@ class ConfigManager {
    */
   applyProfile(profileName: string): void {
     const cfg = this.getConfig();
-    const profile = ownValue<Partial<CodeBuddyConfig>>(cfg.profiles, profileName);
-    if (!profile || !isPlainObject(profile)) {
+    // [profiles.nom.middleware] et les autres sous-tables sont repliées ici.
+    const profile = resolveProfileEntry(cfg.profiles, profileName) as Partial<CodeBuddyConfig> | undefined;
+    if (!profile) {
       throw new Error(
         `Profile "${profileName}" not found. ` +
-        `Available profiles: ${Object.keys(cfg.profiles ?? {}).join(', ') || '(none defined)'}`
+        `Available profiles: ${profileNamesOf(cfg.profiles).join(', ') || '(none defined)'}`
       );
     }
     // Une clé inconnue dans un profil ne fait rien, et ne disait rien.
@@ -1778,7 +1828,13 @@ class ConfigManager {
       );
     }
     this.mergeConfig(profile);
+    if (!this.appliedProfiles.includes(profileName)) this.appliedProfiles.push(profileName);
     logger.debug(`Applied config profile: ${profileName}`, { source: 'ConfigManager' });
+  }
+
+  /** Profils en vigueur. Les limites [middleware] les relisent dans les fichiers. */
+  getAppliedProfiles(): readonly string[] {
+    return [...this.appliedProfiles];
   }
 
   /**

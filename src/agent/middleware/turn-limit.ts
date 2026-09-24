@@ -8,16 +8,22 @@
 
 import { ConversationMiddleware, MiddlewareContext, MiddlewareResult } from './types.js';
 
+function usableRatio(ratio: number | undefined): number {
+  return typeof ratio === 'number' && Number.isFinite(ratio) && ratio > 0 && ratio <= 1 ? ratio : 0.8;
+}
+
 export class TurnLimitMiddleware implements ConversationMiddleware {
   readonly name = 'turn-limit';
   readonly priority = 10;
-  private readonly warningRatio: number;
+  private readonly ratioSource: number | (() => number) | undefined;
 
-  constructor(options?: { warningRatio?: number }) {
-    const ratio = options?.warningRatio;
-    this.warningRatio = typeof ratio === 'number' && Number.isFinite(ratio) && ratio > 0 && ratio <= 1
-      ? ratio
-      : 0.8;
+  /** Une fonction est relue à chaque tour : l'agent peut changer de projet. */
+  constructor(options?: { warningRatio?: number | (() => number) }) {
+    this.ratioSource = options?.warningRatio;
+  }
+
+  private get warningRatio(): number {
+    return usableRatio(typeof this.ratioSource === 'function' ? this.ratioSource() : this.ratioSource);
   }
 
   beforeTurn(context: MiddlewareContext): MiddlewareResult {

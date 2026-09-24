@@ -20,6 +20,7 @@ vi.mock('../../src/memory/persistent-memory.js', async (importOriginal) => {
 });
 
 import { CodeBuddyAgent } from '../../src/agent/codebuddy-agent.js';
+import { getConfigManager, resetConfigManager } from '../../src/config/toml-config.js';
 
 const previous = {
   home: process.env.HOME,
@@ -94,13 +95,18 @@ function toolStream(hit: number): string {
   return `${pieces.map((piece) => `data: ${JSON.stringify(piece)}\n\n`).join('')}data: [DONE]\n\n`;
 }
 
-function listen(hits: { count: number }): Promise<number> {
+/** count : toutes les requêtes ; toolTurns : celles qui portent des outils (tours de la boucle). */
+function listen(hits: { count: number; toolTurns?: number }): Promise<number> {
   server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
       if (req.method === 'POST' && (req.url ?? '').includes('/chat/completions')) {
         hits.count += 1;
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { tools?: unknown[] };
+          if ((body.tools?.length ?? 0) > 0) hits.toolTurns = (hits.toolTurns ?? 0) + 1;
+        } catch { /* corps illisible : pas un tour d'outils */ }
         res.writeHead(200, { 'content-type': 'text/event-stream' });
         res.end(toolStream(hits.count));
         return;
@@ -207,6 +213,7 @@ afterEach(async () => {
     await new Promise<void>((resolve) => closing.close(() => resolve()));
   }
   restoreEnv();
+  resetConfigManager();
   if (scratch) rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   scratch = undefined;
 });
@@ -245,5 +252,145 @@ describe('middleware — Cowork ouvre un projet distinct du cwd', () => {
     );
     expect(result.hits).toBe(1);
     expect(result.text).toContain('Session cost limit reached');
+  }, 180000);
+});
+
+/** Deux projets A et B, un profil utilisateur, le processus lancé depuis A. */
+async function twoProjects(
+  processToml: string,
+  projectToml: string,
+  userToml?: string,
+): Promise<{ processDir: string; projectDir: string; port: number; hits: { count: number; toolTurns?: number } }> {
+  scratch = mkdtempSync(path.join(tmpdir(), 'mw-loop-switch-'));
+  const processDir = path.join(scratch, 'processus-a');
+  const projectDir = path.join(scratch, 'projet-b');
+  const profileDir = path.join(scratch, 'profil');
+  for (const [dir, body] of [[processDir, processToml], [projectDir, projectToml]] as const) {
+    mkdirSync(path.join(dir, '.codebuddy'), { recursive: true });
+    writeFileSync(path.join(dir, '.codebuddy', 'config.toml'), body);
+  }
+  mkdirSync(path.join(profileDir, '.codebuddy'), { recursive: true });
+  if (userToml !== undefined) writeFileSync(path.join(profileDir, '.codebuddy', 'config.toml'), userToml);
+  process.env.HOME = profileDir;
+  process.env.CODEBUDDY_HOME = profileDir;
+  delete process.env.CODEBUDDY_CONFIG;
+  delete process.env.MAX_COST;
+  delete process.env.YOLO_MODE;
+  delete process.env.CODEBUDDY_PROVIDER_FALLBACK;
+  process.argv = ['node', 'buddy'];
+  process.chdir(processDir);
+  resetConfigManager();
+  const hits: { count: number; toolTurns?: number } = { count: 0, toolTurns: 0 };
+  const port = await listen(hits);
+  return { processDir, projectDir, port, hits };
+}
+
+async function drain(agent: CodeBuddyAgent): Promise<string> {
+  const parts: string[] = [];
+  for await (const event of agent.processUserMessageStream('continue jusqu\'au plafond')) {
+    if (event.type === 'content' && typeof event.content === 'string') parts.push(event.content);
+  }
+  return parts.join('\n');
+}
+
+describe('middleware — le projet change après la construction (tour réel)', () => {
+  it('reprise : session de B hydratée dans un agent né dans A → 3 appels, pas 8', async () => {
+    const { projectDir, port, hits } = await twoProjects(
+      '[middleware]\nmax_turns = 8\nmax_cost = 50\n',
+      '[middleware]\nmax_turns = 3\nmax_cost = 50\n',
+    );
+    const agent = new CodeBuddyAgent('test-api-key', `http://127.0.0.1:${port}/v1`, 'grok-3-latest', undefined, false);
+    agents.push(agent);
+    agent.hydratePersistedSession({
+      id: 'mw-reprise-b',
+      name: 'reprise',
+      workingDirectory: projectDir,
+      model: 'grok-3-latest',
+      messages: [],
+      createdAt: new Date(),
+      lastAccessedAt: new Date(),
+    });
+    const text = await drain(agent);
+    expect(hits.count).toBe(3);
+    expect(text).toContain('Maximum tool execution rounds reached.');
+  }, 180000);
+
+  it('reprise : max_cost = 0.0001 de B coupe au premier appel', async () => {
+    const { projectDir, port, hits } = await twoProjects(
+      '[middleware]\nmax_turns = 4\nmax_cost = 50\n',
+      '[middleware]\nmax_turns = 4\nmax_cost = 0.0001\n',
+    );
+    const agent = new CodeBuddyAgent('test-api-key', `http://127.0.0.1:${port}/v1`, 'grok-3-latest', undefined, false);
+    agents.push(agent);
+    agent.hydratePersistedSession({
+      id: 'mw-reprise-b-cout',
+      name: 'reprise',
+      workingDirectory: projectDir,
+      model: 'grok-3-latest',
+      messages: [],
+      createdAt: new Date(),
+      lastAccessedAt: new Date(),
+    });
+    const text = await drain(agent);
+    expect(hits.count).toBe(1);
+    expect(text).toContain('Session cost limit reached');
+  }, 180000);
+
+  it('Cowork : agent réutilisé, second tour dans le projet B → 3 appels', async () => {
+    const { processDir, projectDir, port, hits } = await twoProjects(
+      '[middleware]\nmax_turns = 5\nmax_cost = 50\n',
+      '[middleware]\nmax_turns = 3\nmax_cost = 50\n',
+    );
+    const { CodeBuddyEngineAdapter } = await import('../../src/desktop/codebuddy-engine-adapter.js');
+    const adapter = new CodeBuddyEngineAdapter({
+      apiKey: 'test-api-key',
+      baseURL: `http://127.0.0.1:${port}/v1`,
+      model: 'grok-3-latest',
+      workingDirectory: processDir,
+    });
+    adapters.push(adapter);
+    const first = { role: 'user' as const, content: 'continue jusqu\'au plafond' };
+    await adapter.runSession('mw-cowork-reuse', [first], () => undefined);
+    expect(hits.toolTurns).toBe(5);
+    hits.toolTurns = 0;
+    // L'identité Cowork inclut le projet : l'agent de A est éliminé et son
+    // transcript résumé par deux requêtes sans outils. Seuls les tours comptent.
+    await adapter.runSession(
+      'mw-cowork-reuse',
+      [first, { role: 'assistant', content: 'plafond' }, { role: 'user', content: 'encore' }],
+      () => undefined,
+      { workingDirectory: projectDir },
+    );
+    expect(hits.toolTurns).toBe(3);
+  }, 180000);
+
+  it('Cowork : profil actif appliqué par applyProfile, sans --profile → 3 appels', async () => {
+    const { projectDir, port, hits } = await twoProjects(
+      '[middleware]\nmax_cost = 50\n',
+      '[middleware]\nmax_cost = 50\n',
+      [
+        '[middleware]',
+        'max_turns = 8',
+        '',
+        '[profiles.serre]',
+        'active_model = "grok-3-latest"',
+        '',
+        '[profiles.serre.middleware]',
+        'max_turns = 3',
+        '',
+      ].join('\n'),
+    );
+    process.argv = ['electron', 'cowork'];
+    getConfigManager().applyProfile('serre');
+    const { CodeBuddyEngineAdapter } = await import('../../src/desktop/codebuddy-engine-adapter.js');
+    const adapter = new CodeBuddyEngineAdapter({
+      apiKey: 'test-api-key',
+      baseURL: `http://127.0.0.1:${port}/v1`,
+      model: 'grok-3-latest',
+      workingDirectory: projectDir,
+    });
+    adapters.push(adapter);
+    await adapter.runSession('mw-cowork-profil', [{ role: 'user', content: 'continue jusqu\'au plafond' }], () => undefined);
+    expect(hits.count).toBe(3);
   }, 180000);
 });
