@@ -15,6 +15,7 @@ import { WebChatChannel } from '../../src/channels/webchat/index.js';
 import type { WebChatConfig } from '../../src/channels/webchat/index.js';
 import type { OutboundMessage } from '../../src/channels/index.js';
 import http from 'http';
+import { driveWebChatPage } from './webchat-page-drive.js';
 
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
@@ -201,6 +202,87 @@ function simulateConnection(
 // Tests
 // ---------------------------------------------------------------------------
 
+describe('page WebChat', () => {
+  it('sans authToken, la saisie envoie un message dès l\'ouverture', () => {
+    const channel = new WebChatChannel(createConfig());
+    const page = driveWebChatPage((channel as unknown as { getChatHtml: () => string }).getChatHtml());
+    expect(page.inputDisabled()).toBe(false);
+    page.sendText('bonjour');
+    expect(page.frames).toEqual([{ type: 'message', content: 'bonjour' }]);
+  });
+
+  it('avec authToken, la page n\'active pas la saisie et envoie d\'abord auth', () => {
+    const channel = new WebChatChannel(createConfig({ authToken: 'secret123', title: 'Catalogue WebChat' }));
+    const html = (channel as unknown as { getChatHtml: () => string }).getChatHtml();
+    expect(html, 'le jeton ne doit pas être dans la page').not.toContain('secret123');
+    const page = driveWebChatPage(html);
+    expect(page.inputDisabled(), 'champ activé sans auth').toBe(true);
+    page.sendText('bonjour');
+    expect(page.frames.some((frame) => frame.type === 'message'), 'message sans trame auth').toBe(false);
+    page.submitToken('secret123');
+    expect(page.frames, 'aucune trame auth').toContainEqual({ type: 'auth', token: 'secret123' });
+    page.deliver({
+      type: 'system',
+      content: 'Welcome to Catalogue WebChat! You are connected as User.',
+    });
+    expect(page.inputDisabled(), 'champ encore bloqué après auth').toBe(false);
+    page.sendText('bonjour');
+    expect(page.frames.at(-1)).toEqual({ type: 'message', content: 'bonjour' });
+  });
+
+  it('après un refus, le jeton saisi pendant la reconnexion remplace l\'ancien', () => {
+    const channel = new WebChatChannel(createConfig({ authToken: 'bon-jeton', title: 'Catalogue WebChat' }));
+    const html = (channel as unknown as { getChatHtml: () => string }).getChatHtml();
+    expect(html, 'le jeton ne doit pas être dans la page').not.toContain('bon-jeton');
+    const page = driveWebChatPage(html);
+    page.submitToken('mauvais');
+    expect(page.frames, 'le mauvais jeton n\'est pas parti').toEqual([{ type: 'auth', token: 'mauvais' }]);
+    page.deliver({ type: 'system', content: 'Authentication failed' });
+    page.closeSocket();
+    page.submitToken('bon-jeton');
+    page.reconnect();
+    const authFrames = page.frames.filter((frame) => frame.type === 'auth');
+    expect(authFrames, 'jeton corrigé ignoré pendant la reconnexion').toEqual([
+      { type: 'auth', token: 'mauvais' },
+      { type: 'auth', token: 'bon-jeton' },
+    ]);
+    page.deliver({
+      type: 'system',
+      content: 'Welcome to Catalogue WebChat! You are connected as User.',
+    });
+    expect(page.inputDisabled(), 'champ encore bloqué après le jeton corrigé').toBe(false);
+  });
+
+  it('un jeton refusé n\'est pas renvoyé quand aucun nouveau jeton n\'est saisi', () => {
+    const channel = new WebChatChannel(createConfig({ authToken: 'bon-jeton', title: 'Catalogue WebChat' }));
+    const page = driveWebChatPage((channel as unknown as { getChatHtml: () => string }).getChatHtml());
+    page.submitToken('mauvais');
+    page.deliver({ type: 'system', content: 'Authentication failed' });
+    page.closeSocket();
+    page.reconnect();
+    const authFrames = page.frames.filter((frame) => frame.type === 'auth');
+    expect(authFrames, 'jeton refusé réutilisé').toEqual([{ type: 'auth', token: 'mauvais' }]);
+  });
+
+  it('une coupure sans refus renvoie le jeton déjà accepté', () => {
+    const channel = new WebChatChannel(createConfig({ authToken: 'secret123', title: 'Catalogue WebChat' }));
+    const page = driveWebChatPage((channel as unknown as { getChatHtml: () => string }).getChatHtml());
+    page.submitToken('secret123');
+    page.deliver({
+      type: 'system',
+      content: 'Welcome to Catalogue WebChat! You are connected as User.',
+    });
+    expect(page.inputDisabled(), 'accueil ignoré').toBe(false);
+    page.closeSocket();
+    page.reconnect();
+    const authFrames = page.frames.filter((frame) => frame.type === 'auth');
+    expect(authFrames.map((frame) => frame.token), 'jeton accepté perdu après une coupure').toEqual([
+      'secret123',
+      'secret123',
+    ]);
+  });
+});
+
 describe('WebChatChannel', () => {
   let channel: WebChatChannel;
 
@@ -322,6 +404,18 @@ describe('WebChatChannel', () => {
       const status = channel.getStatus();
       expect(status.connected).toBe(true);
       expect(status.authenticated).toBe(true);
+    });
+
+    it('annonce le port lié plutôt que le port demandé 0', async () => {
+      (mockServerInstance as { address?: () => { port: number } }).address = () => ({ port: 4321 });
+      try {
+        channel = new WebChatChannel(createConfig({ port: 0, host: '127.0.0.1' }));
+        await channel.connect();
+        expect(channel.getStatus().info?.port, 'webchat annonce le port 0').toBe(4321);
+        expect(channel.getStatus().info?.url).toBe('http://127.0.0.1:4321');
+      } finally {
+        delete (mockServerInstance as { address?: () => { port: number } }).address;
+      }
     });
 
     it('should set status.info with port/host/url', async () => {
@@ -978,6 +1072,33 @@ describe('WebChatChannel', () => {
 
       const body = JSON.parse(res._body);
       expect(body.clients).toBe(2);
+    });
+
+    it('refuse l\'historique HTTP sans jeton quand authToken est défini', async () => {
+      channel = new WebChatChannel(createConfig({ authToken: 'secret123' }));
+      await channel.connect();
+      (channel as any).addToHistory({
+        id: '1',
+        content: 'CONFIDENTIEL',
+        user: { id: 'u' },
+        timestamp: '2026-09-24T00:00:00Z',
+      });
+
+      const handler = getHttpHandler();
+      const anonymous = fakeRes();
+      handler(fakeReq('/api/history', 'GET', { origin: 'https://attacker.example' }), anonymous);
+      expect(anonymous._status, 'historique anonyme malgré authToken').toBe(401);
+      expect(anonymous._body, 'fuite du message sans jeton').not.toContain('CONFIDENTIEL');
+
+      const wrong = fakeRes();
+      handler(fakeReq('/api/history', 'GET', { authorization: 'Bearer mauvais' }), wrong);
+      expect(wrong._status, 'mauvais jeton accepté').toBe(401);
+      expect(wrong._body, 'fuite du message avec un mauvais jeton').not.toContain('CONFIDENTIEL');
+
+      const allowed = fakeRes();
+      handler(fakeReq('/api/history', 'GET', { authorization: 'Bearer secret123' }), allowed);
+      expect(allowed._status).toBe(200);
+      expect(JSON.parse(allowed._body).messages[0].content).toBe('CONFIDENTIEL');
     });
 
     it('should serve history endpoint', async () => {
