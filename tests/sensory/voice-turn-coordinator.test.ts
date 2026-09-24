@@ -29,6 +29,7 @@ describe('VoiceTurnCoordinator', () => {
       suppressed: 0,
       interrupted: 0,
       failed: 0,
+      abandoned: 0,
     });
     expect(JSON.stringify(snapshot)).not.toContain('raw speech');
   });
@@ -56,5 +57,48 @@ describe('VoiceTurnCoordinator', () => {
 
     expect(snapshot.phase).toBe('listening');
     expect(snapshot.activeTurnId).toBe('turn_2');
+  });
+
+  // Audit 2026-09-24, B1: every caller path that never closes a turn used to
+  // leave it active forever (≈ 6 500 in 36 h), the phase stuck on `listening`.
+  it('does not let never-closed listening turns pile up or pin the phase', () => {
+    let now = 1_700_000_000_000;
+    const coordinator = new VoiceTurnCoordinator({ persist: false, now: () => now++ });
+    for (let index = 0; index < 1000; index++) {
+      coordinator.transition(`echo_${index}`, 'listening');
+    }
+    coordinator.transition('real', 'listening');
+    coordinator.transition('real', 'thinking');
+    const snapshot = coordinator.transition('real', 'completed', { spoke: true });
+
+    expect(snapshot.phase).toBe('completed');
+    expect(snapshot.activeTurnId).toBeUndefined();
+    expect(snapshot.counters.abandoned).toBe(1000);
+  });
+
+  it('expires a listening turn that stays silent for 30 s', () => {
+    let now = 1_700_000_000_000;
+    const coordinator = new VoiceTurnCoordinator({ persist: false, now: () => now });
+    coordinator.transition('ghost', 'listening');
+    now += 31_000;
+    coordinator.transition('other', 'thinking');
+    const snapshot = coordinator.transition('other', 'completed');
+
+    expect(snapshot.phase).toBe('completed');
+    expect(snapshot.activeTurnId).toBeUndefined();
+    expect(snapshot.counters.abandoned).toBe(1);
+  });
+
+  it('keeps a long agent turn active while it is still under 15 minutes', () => {
+    let now = 1_700_000_000_000;
+    const coordinator = new VoiceTurnCoordinator({ persist: false, now: () => now });
+    coordinator.transition('agent', 'thinking');
+    now += 10 * 60_000;
+    coordinator.transition('ping', 'listening');
+    const snapshot = coordinator.transition('ping', 'suppressed');
+
+    expect(snapshot.phase).toBe('thinking');
+    expect(snapshot.activeTurnId).toBe('agent');
+    expect(snapshot.counters.abandoned).toBe(0);
   });
 });

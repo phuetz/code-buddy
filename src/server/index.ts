@@ -1689,18 +1689,21 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 context?: import('../sensory/voice-entrainment.js').VoiceTurnContext,
               ) => Promise<void> = reply;
               let reminderShortcut: ((t: string) => boolean) | undefined;
+              // Narrower than reminderShortcut: only what may skip the address gate.
+              let reminderGateBypass: ((t: string) => boolean) | undefined;
               let maisonShortcut: ((t: string) => boolean) | undefined;
               if (process.env.CODEBUDDY_REMINDERS === 'true') {
                 const rem = await import('../companion/reminders.js');
                 const { sayNow } = await import('../sensory/voice-loop.js');
-                // A reminder voice-ack OR a voice-creation both bypass the silence gate and
-                // short-circuit the normal reply (the robot confirms instead of chatting).
+                // Reminder phrases short-circuit the normal reply (the robot confirms instead
+                // of chatting). Only acks/snoozes/undos also bypass the silence gate.
                 reminderShortcut = (t: string) =>
                   rem.matchAck(t, Date.now()) !== null ||
                   rem.isSnoozeCommand(t, Date.now()) ||
                   rem.isUndoCommand(t, Date.now()) ||
                   rem.isReminderVoiceCommand(t) ||
                   rem.parseVoiceReminder(t) !== null;
+                reminderGateBypass = (t: string) => rem.bypassesAddressGate(t, Date.now());
                 onHeard = async (t, context) => {
                   const sayCanonical = createCanonicalVoiceReplySpeaker(
                     t,
@@ -1867,11 +1870,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               if (responsePolicy.gateEnabled) {
                 // Reuse the session decider shared with the vision greeting above, so a
                 // person-arrival greeting's open engagement window carries into this gate.
+                // Agenda requests and reminder creations are NOT bypasses: they must be
+                // addressed like any request, or ambient speech (the radio) triggers them.
                 wireOpts.shouldRespond = (t) =>
-                  reminderShortcut?.(t) || maisonShortcut?.(t)
+                  reminderGateBypass?.(t) || maisonShortcut?.(t)
                     ? Promise.resolve({
                         respond: true,
-                        reason: reminderShortcut?.(t) ? 'reminder' : 'maison',
+                        reason: reminderGateBypass?.(t) ? 'reminder' : 'maison',
                       })
                     : responseDecider.decide(t);
               }

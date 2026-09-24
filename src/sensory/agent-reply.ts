@@ -660,14 +660,20 @@ export function makeAgentReply(options: AgentReplyOptions = {}): AgentReplyHandl
       { getPermissionModeManager },
       { getOperatingModeManager },
       { getWorkspaceIsolation },
+      { withTurnOriginAsync },
     ] = await Promise.all([
       import('../security/permission-modes.js'),
       import('../agent/operating-modes.js'),
       import('../workspace/workspace-isolation.js'),
+      import('../security/turn-origin.js'),
     ]);
-    return getWorkspaceIsolation().withWorkspaceRootAsync(cwd, () =>
-      getOperatingModeManager().withModeAsync('balanced', () =>
-        getPermissionModeManager().withModeAsync(mode, fn)
+    // The turn is marked as voice-originated so the shell policy never runs a
+    // mutation on heard speech without a human approval (see execution-policy).
+    return withTurnOriginAsync('voice', () =>
+      getWorkspaceIsolation().withWorkspaceRootAsync(cwd, () =>
+        getOperatingModeManager().withModeAsync('balanced', () =>
+          getPermissionModeManager().withModeAsync(mode, fn)
+        )
       )
     );
   }

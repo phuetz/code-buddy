@@ -126,9 +126,10 @@ export class TodoTool {
     return stats;
   }
 
-  formatTodoList(): string {
-    if (this.todos.length === 0) {
-      return 'No todos created yet';
+  formatTodoList(only?: TodoItem['status']): string {
+    const source = only ? this.todos.filter((todo) => todo.status === only) : this.todos;
+    if (source.length === 0) {
+      return only ? 'No todos matching filter' : 'No todos created yet';
     }
 
     const reset = '\x1b[0m';
@@ -137,7 +138,7 @@ export class TodoTool {
     let output = '';
 
     // Sort todos by status and priority
-    const sortedTodos = this.sortTodos(this.todos);
+    const sortedTodos = this.sortTodos(source);
 
     // Group by status for better visualization
     const groups: Record<TodoItem['status'], TodoItem[]> = {
@@ -320,10 +321,10 @@ export class TodoTool {
     }
   }
 
-  async viewTodoList(): Promise<ToolResult> {
+  async viewTodoList(only?: TodoItem['status']): Promise<ToolResult> {
     return {
       success: true,
-      output: this.formatTodoList(),
+      output: this.formatTodoList(only),
     };
   }
 }

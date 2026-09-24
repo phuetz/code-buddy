@@ -58,6 +58,8 @@ describe('Application Factory', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
+    delete process.env.CODEBUDDY_MODEL;
+    delete process.env.GROK_MODEL;
   });
 
   afterEach(() => {
@@ -107,6 +109,13 @@ describe('Application Factory', () => {
       const model = loadModel();
 
       expect(model).toBe('env-model');
+    });
+
+    it('préfère CODEBUDDY_MODEL à GROK_MODEL', () => {
+      process.env.CODEBUDDY_MODEL = 'depuis-catalogue';
+      process.env.GROK_MODEL = 'depuis-grok';
+
+      expect(loadModel()).toBe('depuis-catalogue');
     });
 
     it('should fall back to settings when no env var', () => {

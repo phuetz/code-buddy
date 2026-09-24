@@ -86,6 +86,7 @@ import { createUserToken } from '../../src/server/auth/jwt.js';
 import { SessionStore } from '../../src/persistence/session-store.js';
 import { mobilePwaRouter } from '../../src/server/mobile/index.js';
 import {
+  drainSessionTurnQueueForTests,
   resetSessionTurnQueueForTests,
   setResumeSessionStoreFactoryForTests,
   setResumeTurnRunnerForTests,
@@ -183,6 +184,9 @@ describe('shared session — HTTP + two WebSocket clients', () => {
 
   afterEach(async () => {
     closeAllConnections();
+    // A turn answers before it persists: wait for that write (and its .lock)
+    // to finish, or the directory removal below races it.
+    await drainSessionTurnQueueForTests();
     setResumeTurnRunnerForTests(null);
     setResumeSessionStoreFactoryForTests(null);
     resetSessionTurnQueueForTests();

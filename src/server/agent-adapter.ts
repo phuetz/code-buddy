@@ -108,7 +108,7 @@ export function listServerModels(): ServerModelInfo[] {
   if (detected?.provider === 'chatgpt') {
     return [
       {
-        id: configuredModel || 'gpt-5.6-sol',
+        id: configuredModel || 'gpt-6-sol',
         object: 'model',
         created,
         owned_by: 'chatgpt',

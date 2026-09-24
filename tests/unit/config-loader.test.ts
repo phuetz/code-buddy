@@ -42,6 +42,7 @@ describe('config-loader', () => {
     process.env = { ...originalEnv };
     delete process.env.GROK_API_KEY;
     delete process.env.GROK_MODEL;
+    delete process.env.CODEBUDDY_MODEL;
     delete process.env.GROK_BASE_URL;
   });
 
@@ -119,6 +120,14 @@ describe('config-loader', () => {
 
       expect(result).toBe('grok-env-model');
       // Settings manager should not be called when env var is set
+      expect(mockManager.getCurrentModel).not.toHaveBeenCalled();
+    });
+
+    it('préfère CODEBUDDY_MODEL à GROK_MODEL', () => {
+      process.env.CODEBUDDY_MODEL = 'depuis-catalogue';
+      process.env.GROK_MODEL = 'depuis-grok';
+
+      expect(loadModel()).toBe('depuis-catalogue');
       expect(mockManager.getCurrentModel).not.toHaveBeenCalled();
     });
 
