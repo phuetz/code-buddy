@@ -383,12 +383,22 @@ export class SessionStore {
    * bytes a caller copied out. Check and write run in one section under the
    * session lock, so no writer that takes the lock can land between them: a
    * turn added since the copy leaves the file as it is and returns `changed`.
-   * `beforeRead` runs first inside that section; a throw leaves the file as is.
+   * The SQLite index rows of the session are deleted in the same section,
+   * after the comparison and before the file is renamed: a turn is written
+   * to both under this lock, so neither can gain a turn in between.
+   * `beforeRead` runs first inside that section, `beforeIndexPurge` after the
+   * comparison, `beforeWrite` right before the rename; a throw from any of
+   * them stops there, and what was not yet purged stays as it is.
    */
   async clearSessionMessagesIfUnchanged(
     sessionId: string,
     expected: Buffer,
-    options: { encrypt: boolean; beforeRead?: () => void },
+    options: {
+      encrypt: boolean;
+      beforeRead?: () => void;
+      beforeIndexPurge?: () => void;
+      beforeWrite?: () => void;
+    },
   ): Promise<'cleared' | 'changed' | 'protection-changed'> {
     const filePath = this.getSessionFilePath(sessionId);
     return withSessionLock(filePath, async () => {
@@ -404,6 +414,10 @@ export class SessionStore {
       const read = this.decodeSessionFile(bytes.toString('utf8'));
       if (read.state !== 'ok') return 'changed';
       if (this.shouldEncrypt(read.session) !== options.encrypt) return 'protection-changed';
+      options.beforeIndexPurge?.();
+      const dbRepository = await this.ensureDatabaseRepository();
+      dbRepository?.deleteMessages(sessionId);
+      options.beforeWrite?.();
       await this.writeSessionUnlocked({ ...read.session, messages: [] });
       return 'cleared';
     });

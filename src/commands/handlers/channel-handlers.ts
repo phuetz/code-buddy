@@ -731,7 +731,15 @@ export function __seedLocalCompanionHistoryForTests(sessionKey: string, content:
  * reset policy, then by the write or erase it names. `session-save` runs
  * inside the session lock, before the file is read again and emptied.
  */
-export type MessagingResetStep = 'archive' | 'erase' | 'companion-clear' | 'session-save' | 'memory-evict';
+export type MessagingResetStep =
+  | 'archive'
+  | 'erase'
+  | 'companion-clear'
+  | 'companion-rename'
+  | 'session-save'
+  | 'index-purge'
+  | 'session-rename'
+  | 'memory-evict';
 
 const beforeMessagingResetStepForTests = new Map<MessagingResetStep, () => void>();
 
@@ -1463,7 +1471,10 @@ async function loadMessagingSessionSnapshot(
  * whatever changed since the snapshot. The other stores follow the at-rest
  * rule of those bytes, and the erase only runs on these same bytes: it reads
  * the file again, compares and empties it in one section under the session
- * lock, so a turn written after the archive is never emptied with it.
+ * lock, so a turn written after the archive is never emptied with it. The
+ * session's SQLite index rows are deleted inside that same section, and the
+ * companion history is compared and emptied the same way under the file lock
+ * its turn writes take.
  */
 async function maybeResetInboundMessagingSession(sessionKey: string): Promise<void> {
   const {
@@ -1508,9 +1519,7 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     return;
   }
 
-  const { clearCompanionChannelHistory, readCompanionHistoryForReset } = await import(
-    '../../companion/channel-history.js'
-  );
+  const { clearCompanionChannelHistoryIfUnchanged } = await import('../../companion/channel-history.js');
   const now = Date.now();
   const snapshot = await loadMessagingSessionSnapshot(sessionKey);
   if (!snapshot.ok) {
@@ -1600,18 +1609,13 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
       if (protectionNow.encrypt !== protection.encrypt) {
         throw new Error('session protection changed before erase');
       }
-      // Companion history: read, compared and cleared with no await between.
+      // Companion history: read, compared and renamed under the history file
+      // lock that every companion turn write takes.
       confirmPolicy('companion-clear');
-      const companionRead = readCompanionHistoryForReset(sessionKey, process.env);
-      if (companionRead.state === 'unreadable') {
-        throw new Error(companionRead.error);
-      }
       const provedCompanion = snapshot.parts.find((part) => part.source === 'companion-history')?.transcript ?? '';
-      const againCompanion = companionRead.state === 'ok' ? companionRead.transcript.trim() : '';
-      if (againCompanion !== provedCompanion.trim()) {
-        throw new Error('companion history changed before erase');
-      }
-      const cleared = clearCompanionChannelHistory(sessionKey, process.env, now);
+      const cleared = clearCompanionChannelHistoryIfUnchanged(sessionKey, provedCompanion, process.env, now, {
+        beforeWrite: () => confirmPolicy('companion-rename'),
+      });
       if (!cleared.ok) {
         throw new Error(cleared.error);
       }
@@ -1621,6 +1625,8 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
         const outcome = await store.clearSessionMessagesIfUnchanged(sessionKey, archivedBytes, {
           encrypt: protection.encrypt,
           beforeRead: () => confirmPolicy('session-save'),
+          beforeIndexPurge: () => confirmPolicy('index-purge'),
+          beforeWrite: () => confirmPolicy('session-rename'),
         });
         if (outcome === 'changed') throw new Error('session contents changed before erase');
         if (outcome === 'protection-changed') throw new Error('session protection changed before erase');
