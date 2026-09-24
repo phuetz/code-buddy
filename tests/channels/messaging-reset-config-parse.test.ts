@@ -309,6 +309,17 @@ describe('politique chargee differente de celle des fichiers au moment de la rem
     });
   });
 
+  it('un projet qui allonge idle_minutes apres chargement annule la remise a zero', async () => {
+    // Même mode, autre paramètre : la politique relue au moment de l'effacement garde la session.
+    await exercise({
+      id: 'projet-edite-delai',
+      secret: 'PROJET_EDITE_DELAI',
+      project: IDLE,
+      afterLoad: (files) => writeFileSync(files.projectFile, '[session_reset]\nmode = "idle"\nidle_minutes = 100000\n'),
+      keep: true,
+    });
+  });
+
   it('un projet none cree apres chargement annule la remise a zero', async () => {
     await exercise({
       id: 'projet-cree-none',
