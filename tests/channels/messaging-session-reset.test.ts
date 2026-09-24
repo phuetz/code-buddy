@@ -25,7 +25,14 @@ import {
   readCompanionChannelHistory,
   rememberCompanionChannelTurn,
 } from '../../src/companion/channel-history.js';
-import { assignSessionReset, parseTOML, serializeTOML, DEFAULT_CONFIG } from '../../src/config/toml-config.js';
+import { assignSessionReset, getConfigManager, parseTOML, serializeTOML, DEFAULT_CONFIG } from '../../src/config/toml-config.js';
+import { resetSessionStore } from '../../src/persistence/session-store.js';
+import {
+  __beforeMessagingResetEraseForTests,
+  __resetChannelAIHandlerForTests,
+  __resetInboundMessagingSessionForTests,
+  __seedLocalCompanionHistoryForTests,
+} from '../../src/commands/handlers/channel-handlers.js';
 
 const dirs: string[] = [];
 
@@ -608,4 +615,182 @@ at_hour = 7
     expect(inspectCompanionChannelHistory('telegram:conversation', env)).toBeNull();
     expect(readCompanionChannelHistory('telegram:conversation', env, Date.now())).toEqual([]);
   });
+
+  it('P7 une session absente reste une lecture prouvee et la remise a zero peut suivre', async () => {
+    const sessionsDir = tempDir();
+    const archiveDir = tempDir();
+    const sessionKey = 'probe-absent';
+    const previousSessions = process.env.CODEBUDDY_SESSIONS_DIR;
+    const previousArchive = process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+    const previousHistory = process.env.CODEBUDDY_CHANNEL_HISTORY;
+    process.env.CODEBUDDY_SESSIONS_DIR = sessionsDir;
+    process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = archiveDir;
+    process.env.CODEBUDDY_CHANNEL_HISTORY = 'false';
+    resetSessionStore();
+    __resetChannelAIHandlerForTests();
+    __seedLocalCompanionHistoryForTests(sessionKey, 'AGENT_OLD', Date.now() - 3_600_000);
+    const cfg = getConfigManager().getConfig() as { session_reset?: { mode?: string; idle_minutes?: number } };
+    const previousPolicy = cfg.session_reset;
+    cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
+    try {
+      await __resetInboundMessagingSessionForTests(sessionKey);
+      expect(readMessagingMemoryArchive(archiveDir, sessionKey, 'local-map'), 'P7 archive absente').toContain('AGENT_OLD');
+      expect(readMessagingMemoryArchive(archiveDir, sessionKey, 'session-store'), 'P7 session absente archivee').toContain('"transcript": ""');
+    } finally {
+      cfg.session_reset = previousPolicy;
+      __beforeMessagingResetEraseForTests(undefined);
+      __resetChannelAIHandlerForTests();
+      resetSessionStore();
+      if (previousSessions === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR;
+      else process.env.CODEBUDDY_SESSIONS_DIR = previousSessions;
+      if (previousArchive === undefined) delete process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+      else process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = previousArchive;
+      if (previousHistory === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY;
+      else process.env.CODEBUDDY_CHANNEL_HISTORY = previousHistory;
+    }
+  });
+
+  it.runIf(process.platform !== 'win32')(
+    'P7 une session illisible puis relisible n est pas archivee vide ni effacee',
+    async () => {
+      const sessionsDir = tempDir();
+      const archiveDir = tempDir();
+      const sessionKey = 'probe-store';
+      const sessionFile = path.join(sessionsDir, `${sessionKey}.json`);
+      const previousSessions = process.env.CODEBUDDY_SESSIONS_DIR;
+      const previousArchive = process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+      const previousHistory = process.env.CODEBUDDY_CHANNEL_HISTORY;
+      process.env.CODEBUDDY_SESSIONS_DIR = sessionsDir;
+      process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = archiveDir;
+      process.env.CODEBUDDY_CHANNEL_HISTORY = 'false';
+      resetSessionStore();
+      __resetChannelAIHandlerForTests();
+      const now = new Date().toISOString();
+      writeFileSync(sessionFile, JSON.stringify({
+        id: sessionKey,
+        name: 'probe',
+        workingDirectory: sessionsDir,
+        model: 'probe',
+        messages: [{ type: 'user', content: 'STORE_SECRET', timestamp: now }],
+        createdAt: now,
+        lastAccessedAt: now,
+      }));
+      chmodSync(sessionFile, 0o000);
+      __seedLocalCompanionHistoryForTests(sessionKey, 'AGENT_OLD', Date.now() - 3_600_000);
+      __beforeMessagingResetEraseForTests(() => {
+        chmodSync(sessionFile, 0o600);
+      });
+      const cfg = getConfigManager().getConfig() as { session_reset?: { mode?: string; idle_minutes?: number } };
+      const previousPolicy = cfg.session_reset;
+      cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
+      try {
+        await __resetInboundMessagingSessionForTests(sessionKey);
+        chmodSync(sessionFile, 0o600);
+        const raw = readFileSync(sessionFile, 'utf8');
+        expect(raw, 'P7 secret session conserve').toContain('STORE_SECRET');
+        expect(raw.includes('"messages":[]') || raw.includes('"messages": []'), 'P7 messages effaces').toBe(false);
+        const archived = readMessagingMemoryArchive(archiveDir, sessionKey, 'session-store');
+        expect(archived, 'P7 archive vide du secret').not.toContain('STORE_SECRET');
+        expect(archived.includes('"transcript": ""') || archived.includes('"transcript":""'), 'P7 archive session vide').toBe(false);
+      } finally {
+        try { chmodSync(sessionFile, 0o600); } catch { /* deja lisible */ }
+        cfg.session_reset = previousPolicy;
+        __beforeMessagingResetEraseForTests(undefined);
+        __resetChannelAIHandlerForTests();
+        resetSessionStore();
+        if (previousSessions === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR;
+        else process.env.CODEBUDDY_SESSIONS_DIR = previousSessions;
+        if (previousArchive === undefined) delete process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+        else process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = previousArchive;
+        if (previousHistory === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY;
+        else process.env.CODEBUDDY_CHANNEL_HISTORY = previousHistory;
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
+    'P7 un historique compagnon illisible et un cache vide ne sont pas effaces',
+    async () => {
+      const historyDir = tempDir();
+      const archiveDir = tempDir();
+      const sessionsDir = tempDir();
+      const sessionKey = 'probe-companion';
+      const env = {
+        CODEBUDDY_CHANNEL_HISTORY: 'true',
+        CODEBUDDY_CHANNEL_HISTORY_DIR: historyDir,
+      };
+      const previousSessions = process.env.CODEBUDDY_SESSIONS_DIR;
+      const previousArchive = process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+      const previousHistory = process.env.CODEBUDDY_CHANNEL_HISTORY;
+      const previousHistoryDir = process.env.CODEBUDDY_CHANNEL_HISTORY_DIR;
+      process.env.CODEBUDDY_SESSIONS_DIR = sessionsDir;
+      process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = archiveDir;
+      process.env.CODEBUDDY_CHANNEL_HISTORY = 'true';
+      process.env.CODEBUDDY_CHANNEL_HISTORY_DIR = historyDir;
+      resetSessionStore();
+      __resetChannelAIHandlerForTests();
+      clearCompanionChannelHistoriesForTests();
+      rememberCompanionChannelTurn(sessionKey, 'bonjour', 'HISTORY_SECRET', env, Date.now() - 1000);
+      const historyFile = path.join(historyDir, readdirSync(historyDir).find((name) => name.endsWith('.json')) ?? '');
+      clearCompanionChannelHistoriesForTests();
+      chmodSync(historyFile, 0o000);
+      __seedLocalCompanionHistoryForTests(sessionKey, 'AGENT_OLD', Date.now() - 3_600_000);
+      const cfg = getConfigManager().getConfig() as { session_reset?: { mode?: string; idle_minutes?: number } };
+      const previousPolicy = cfg.session_reset;
+      cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
+      try {
+        await __resetInboundMessagingSessionForTests(sessionKey);
+        chmodSync(historyFile, 0o600);
+        const raw = readFileSync(historyFile, 'utf8');
+        expect(raw, 'P7 secret compagnon conserve').toContain('HISTORY_SECRET');
+        const archived = readMessagingMemoryArchive(archiveDir, sessionKey, 'companion-history');
+        expect(archived, 'P7 archive compagnon du secret').not.toContain('HISTORY_SECRET');
+        expect(
+          archived.includes('"transcript": ""') || archived.includes('"transcript":""'),
+          'P7 archive compagnon vide',
+        ).toBe(false);
+      } finally {
+        try { chmodSync(historyFile, 0o600); } catch { /* deja lisible */ }
+        cfg.session_reset = previousPolicy;
+        __beforeMessagingResetEraseForTests(undefined);
+        __resetChannelAIHandlerForTests();
+        clearCompanionChannelHistoriesForTests();
+        resetSessionStore();
+        if (previousSessions === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR;
+        else process.env.CODEBUDDY_SESSIONS_DIR = previousSessions;
+        if (previousArchive === undefined) delete process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+        else process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = previousArchive;
+        if (previousHistory === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY;
+        else process.env.CODEBUDDY_CHANNEL_HISTORY = previousHistory;
+        if (previousHistoryDir === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY_DIR;
+        else process.env.CODEBUDDY_CHANNEL_HISTORY_DIR = previousHistoryDir;
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
+    'P7 le vidage compagnon ne remplace pas un fichier illisible',
+    () => {
+      const historyDir = tempDir();
+      const sessionKey = 'probe-clear';
+      const env = {
+        CODEBUDDY_CHANNEL_HISTORY: 'true',
+        CODEBUDDY_CHANNEL_HISTORY_DIR: historyDir,
+      };
+      clearCompanionChannelHistoriesForTests();
+      rememberCompanionChannelTurn(sessionKey, 'bonjour', 'HISTORY_SECRET', env, Date.now() - 1000);
+      const historyFile = path.join(historyDir, readdirSync(historyDir).find((name) => name.endsWith('.json')) ?? '');
+      clearCompanionChannelHistoriesForTests();
+      chmodSync(historyFile, 0o000);
+      try {
+        const cleared = clearCompanionChannelHistory(sessionKey, env, Date.now());
+        expect(cleared.ok, 'P7 vidage illisible accepte').toBe(false);
+        chmodSync(historyFile, 0o600);
+        expect(readFileSync(historyFile, 'utf8'), 'P7 secret apres vidage refuse').toContain('HISTORY_SECRET');
+      } finally {
+        try { chmodSync(historyFile, 0o600); } catch { /* deja lisible */ }
+        clearCompanionChannelHistoriesForTests();
+      }
+    },
+  );
 });

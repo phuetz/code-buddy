@@ -23,6 +23,7 @@ const hoisted = vi.hoisted(() => {
     setMessages: vi.fn(),
     sessions: new Map<string, any>(),
     loadSession: vi.fn(),
+    readSessionFileState: vi.fn(),
     saveSession: vi.fn(),
     resumeSession: vi.fn(),
     convertMessagesToChatEntries: vi.fn(),
@@ -110,7 +111,11 @@ vi.mock('../../src/fleet/peer-chat-client-factory.js', () => ({
 }));
 
 vi.mock('../../src/persistence/session-store.js', () => ({
-  getSessionStore: () => ({ loadSession: hoisted.loadSession, saveSession: hoisted.saveSession }),
+  getSessionStore: () => ({
+    loadSession: hoisted.loadSession,
+    readSessionFileState: hoisted.readSessionFileState,
+    saveSession: hoisted.saveSession,
+  }),
 }));
 
 vi.mock('../../src/conversation/companion-model-routing.js', () => ({
@@ -200,6 +205,11 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     hoisted.getDMPairing.mockReturnValue({ getPairingMessage: () => 'Reply with code 123456 to pair.' });
     hoisted.processUserMessage.mockResolvedValue([{ role: 'assistant', content: 'Here is your answer.' }]);
     hoisted.loadSession.mockImplementation(async (key: string) => hoisted.sessions.get(key) ?? null);
+    // This double is memory, not a disk. A missing key is proved absent.
+    hoisted.readSessionFileState.mockImplementation(async (key: string) => {
+      const session = hoisted.sessions.get(key);
+      return session ? { state: 'ok', session } : { state: 'absent' };
+    });
     hoisted.saveSession.mockImplementation(async (s: any) => { hoisted.sessions.set(s.id, s); });
     hoisted.resumeSession.mockResolvedValue(undefined);
     hoisted.convertMessagesToChatEntries.mockImplementation((msgs: any[]) => msgs.map((m) => ({ ...m, chat: true })));

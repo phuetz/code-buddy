@@ -648,6 +648,7 @@ export function __resetChannelAIHandlerForTests(): void {
   companionChannelHistories.clear();
   companionChannelActivityAt.clear();
   recentLisaSelfieSessions.clear();
+  beforeMessagingResetEraseForTests = undefined;
   __resetSessionModelOverridesForTests();
 }
 
@@ -695,6 +696,27 @@ export function __ageChannelAgentForTests(sessionKey: string, lastUsed: number):
   if (!cached) return false;
   cached.lastUsed = lastUsed;
   return true;
+}
+
+/**
+ * Test-only. Seeds the handler-local map so an idle reset can be required
+ * without an agent. Production resets do not call this.
+ */
+export function __seedLocalCompanionHistoryForTests(sessionKey: string, content: string, at: number): void {
+  companionChannelHistories.set(sessionKey, [{ role: 'user', content }]);
+  companionChannelActivityAt.set(sessionKey, at);
+}
+
+let beforeMessagingResetEraseForTests: (() => void) | undefined;
+
+/** Test-only. Runs once, at the start of the erase callback, then clears itself. */
+export function __beforeMessagingResetEraseForTests(hook?: () => void): void {
+  beforeMessagingResetEraseForTests = hook;
+}
+
+/** Test-only entry to the same reset the inbound receiver uses. */
+export async function __resetInboundMessagingSessionForTests(sessionKey: string): Promise<void> {
+  await maybeResetInboundMessagingSession(sessionKey);
 }
 const CHANNEL_AGENT_IDLE_MS = 2 * 60 * 60 * 1000; // evict after 2h idle
 const CHANNEL_AGENT_MAX = 50;
@@ -1294,12 +1316,25 @@ function readFailure(source: MessagingSnapshotPart['source'], err: unknown): {
   };
 }
 
+function pathReadState(filePath: string): 'absent' | 'present' | 'unreadable' {
+  try {
+    fs.statSync(filePath);
+    return 'present';
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' ? 'absent' : 'unreadable';
+  }
+}
+
+function sessionStoreTranscript(session: { messages: Array<{ type: string; content: string }> }): string {
+  return session.messages
+    .map((message) => `${message.type}: ${message.content}`)
+    .filter((line) => line.trim().length > 2)
+    .join('\n');
+}
+
 async function loadMessagingSessionSnapshot(
   sessionKey: string,
-  inspectCompanion: (
-    key: string,
-    env?: NodeJS.ProcessEnv,
-  ) => { updatedAtMs: number; transcript: string } | null,
 ): Promise<
   | {
     ok: true;
@@ -1339,15 +1374,15 @@ async function loadMessagingSessionSnapshot(
   let storeText = '';
   try {
     const { getSessionStore } = await import('../../persistence/session-store.js');
-    const session = await getSessionStore().loadSession(sessionKey);
-    if (session?.messages?.length) {
-      const at = session.lastAccessedAt instanceof Date
-        ? session.lastAccessedAt.getTime()
-        : Date.parse(String(session.lastAccessedAt));
-      storeText = session.messages
-        .map((message) => `${message.type}: ${message.content}`)
-        .filter((line) => line.trim().length > 2)
-        .join('\n');
+    const read = await getSessionStore().readSessionFileState(sessionKey);
+    if (read.state === 'unreadable') {
+      return readFailure('session-store', new Error(read.error));
+    }
+    if (read.state === 'ok' && read.session.messages.length > 0) {
+      const at = read.session.lastAccessedAt instanceof Date
+        ? read.session.lastAccessedAt.getTime()
+        : Date.parse(String(read.session.lastAccessedAt));
+      storeText = sessionStoreTranscript(read.session);
       consider(Number.isFinite(at) ? at : null, storeText);
     }
   } catch (err) {
@@ -1356,10 +1391,14 @@ async function loadMessagingSessionSnapshot(
 
   let companionText = '';
   try {
-    const inspected = inspectCompanion(sessionKey, process.env);
-    if (inspected) {
-      companionText = inspected.transcript;
-      consider(inspected.updatedAtMs, companionText);
+    const { readCompanionHistoryForReset } = await import('../../companion/channel-history.js');
+    const read = readCompanionHistoryForReset(sessionKey, process.env);
+    if (read.state === 'unreadable') {
+      return readFailure('companion-history', new Error(read.error));
+    }
+    if (read.state === 'ok') {
+      companionText = read.transcript;
+      consider(read.updatedAtMs, companionText);
     }
   } catch (err) {
     return readFailure('companion-history', err);
@@ -1399,6 +1438,18 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     resolveSessionResetPolicy,
   } = await import('../../channels/messaging-session-reset.js');
   const { getConfigManager } = await import('../../config/toml-config.js');
+  const os = await import('node:os');
+  for (const configFile of [
+    path.join(os.homedir(), '.codebuddy', 'config.toml'),
+    path.join(process.cwd(), '.codebuddy', 'config.toml'),
+  ]) {
+    if (pathReadState(configFile) === 'unreadable') {
+      logger.warn('messaging session reset cancelled because config is unreadable', {
+        sessionHash: hashForLog(sessionKey),
+      });
+      return;
+    }
+  }
   let policy = resolveSessionResetPolicy(undefined);
   try {
     policy = resolveSessionResetPolicy(getConfigManager().getConfig().session_reset);
@@ -1410,12 +1461,11 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
   }
   if (policy.mode === 'none') return;
 
-  const { inspectCompanionChannelHistory, clearCompanionChannelHistory } = await import(
+  const { clearCompanionChannelHistory, readCompanionHistoryForReset } = await import(
     '../../companion/channel-history.js'
   );
-  const os = await import('node:os');
   const now = Date.now();
-  const snapshot = await loadMessagingSessionSnapshot(sessionKey, inspectCompanionChannelHistory);
+  const snapshot = await loadMessagingSessionSnapshot(sessionKey);
   if (!snapshot.ok) {
     logger.warn('messaging session reset cancelled because a memory read failed', {
       sessionHash: hashForLog(sessionKey),
@@ -1431,15 +1481,35 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     parts: snapshot.parts,
     archiveDir: resolveMessagingSessionResetArchiveDir(process.env, os.homedir()),
     resetSession: async () => {
+      const beforeErase = beforeMessagingResetEraseForTests;
+      beforeMessagingResetEraseForTests = undefined;
+      beforeErase?.();
+      const { getSessionStore } = await import('../../persistence/session-store.js');
+      const store = getSessionStore();
+      const sessionRead = await store.readSessionFileState(sessionKey);
+      if (sessionRead.state === 'unreadable') {
+        throw new Error(sessionRead.error);
+      }
+      const companionRead = readCompanionHistoryForReset(sessionKey, process.env);
+      if (companionRead.state === 'unreadable') {
+        throw new Error(companionRead.error);
+      }
+      const provedStore = snapshot.parts.find((part) => part.source === 'session-store')?.transcript ?? '';
+      const againStore = sessionRead.state === 'ok' ? sessionStoreTranscript(sessionRead.session).trim() : '';
+      if (againStore !== provedStore.trim()) {
+        throw new Error('session contents changed before erase');
+      }
+      const provedCompanion = snapshot.parts.find((part) => part.source === 'companion-history')?.transcript ?? '';
+      const againCompanion = companionRead.state === 'ok' ? companionRead.transcript.trim() : '';
+      if (againCompanion !== provedCompanion.trim()) {
+        throw new Error('companion history changed before erase');
+      }
       const cleared = clearCompanionChannelHistory(sessionKey, process.env, now);
       if (!cleared.ok) {
         throw new Error(cleared.error);
       }
-      const { getSessionStore } = await import('../../persistence/session-store.js');
-      const store = getSessionStore();
-      const existing = await store.loadSession(sessionKey);
-      if (existing && existing.messages.length > 0) {
-        await store.saveSession({ ...existing, messages: [] });
+      if (sessionRead.state === 'ok' && sessionRead.session.messages.length > 0) {
+        await store.saveSession({ ...sessionRead.session, messages: [] });
       }
       companionChannelHistories.delete(sessionKey);
       companionChannelActivityAt.delete(sessionKey);

@@ -20,7 +20,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { readJsonAtomicSync, readJsonAtomicSyncReadOnly, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { logger } from '../utils/logger.js';
 import type { ConversationTurn } from '../conversation/types.js';
 
@@ -217,41 +217,68 @@ function turnsOf(record: CompanionChannelHistoryRecord): ConversationTurn[] {
     .filter((turn): turn is ConversationTurn => turn !== null);
 }
 
+export type CompanionHistoryRead =
+  | { state: 'absent' }
+  | { state: 'unreadable'; error: string }
+  | { state: 'ok'; updatedAtMs: number; transcript: string };
+
 /**
  * Read stored companion turns without the idle expiry used by the prompt.
- * Empty cache entries are ignored so a freshness wipe cannot hide the file.
+ * ENOENT (and a valid file with no turns) is `absent`. A permission error
+ * or a file that is present but not valid JSON is `unreadable`, even when
+ * the memory cache is empty — that must not look like a missing history.
+ * The read does not recover or rewrite anything.
  */
-export function inspectCompanionChannelHistory(
+export function readCompanionHistoryForReset(
   sessionKey: string,
   env: NodeJS.ProcessEnv = process.env,
-): { updatedAtMs: number; transcript: string } | null {
+): CompanionHistoryRead {
   const key = personKeyFromSession(sessionKey);
   const candidates: CompanionChannelHistoryRecord[] = [];
   const cached = memory.get(key);
   if (cached && isRecord(cached)) candidates.push(cached);
   if (isChannelHistoryPersistenceEnabled(env)) {
-    const stored = readJsonAtomicSync<CompanionChannelHistoryRecord | null>(
+    const outcome = readJsonAtomicSyncReadOnly<CompanionChannelHistoryRecord>(
       resolveChannelHistoryFile(sessionKey, env),
-      null,
-      {
-        mode: 0o600,
-        isValid: (value): value is CompanionChannelHistoryRecord => isRecord(value),
-      },
+      isRecord,
     );
-    if (stored) candidates.push(stored);
+    if (outcome.status === 'unreadable' || outcome.status === 'corrupt') {
+      return { state: 'unreadable', error: outcome.status };
+    }
+    if (outcome.status === 'ok') candidates.push(outcome.value);
   }
   const withTurns = candidates
     .map((record) => ({ record, turns: turnsOf(record) }))
     .filter((entry) => entry.turns.length > 0)
     .sort((a, b) => Date.parse(b.record.updatedAt) - Date.parse(a.record.updatedAt));
   const best = withTurns[0];
-  if (!best) return null;
+  if (!best) return { state: 'absent' };
   const updatedAtMs = Date.parse(best.record.updatedAt);
-  if (!Number.isFinite(updatedAtMs)) return null;
+  if (!Number.isFinite(updatedAtMs)) {
+    return { state: 'unreadable', error: 'invalid timestamp' };
+  }
   return {
+    state: 'ok',
     updatedAtMs,
     transcript: best.turns.map((turn) => `${turn.role}: ${turn.content}`).join('\n'),
   };
+}
+
+/**
+ * Read stored companion turns without the idle expiry used by the prompt.
+ * Empty cache entries are ignored so a freshness wipe cannot hide the file.
+ * An unreadable file throws; only a proved absence returns null.
+ */
+export function inspectCompanionChannelHistory(
+  sessionKey: string,
+  env: NodeJS.ProcessEnv = process.env,
+): { updatedAtMs: number; transcript: string } | null {
+  const read = readCompanionHistoryForReset(sessionKey, env);
+  if (read.state === 'unreadable') {
+    throw new Error(`companion history unreadable: ${read.error}`);
+  }
+  if (read.state === 'absent') return null;
+  return { updatedAtMs: read.updatedAtMs, transcript: read.transcript };
 }
 
 export type CompanionHistoryClearResult =
@@ -278,6 +305,13 @@ export function clearCompanionChannelHistory(
     return { ok: true };
   }
   const file = resolveChannelHistoryFile(sessionKey, env);
+  const existing = readJsonAtomicSyncReadOnly<CompanionChannelHistoryRecord>(file, isRecord);
+  if (existing.status === 'unreadable' || existing.status === 'corrupt') {
+    logger.warn('[channel-history] refused to replace an unreadable companion history', {
+      error: existing.status,
+    });
+    return { ok: false, error: `companion history ${existing.status}` };
+  }
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     writeJsonAtomicSync(file, next, { mode: 0o600 });

@@ -40,4 +40,12 @@ describe('garde Windows des essais POSIX de remise à zéro', () => {
       GARDE,
     );
   });
+
+  it('P7 le fichier de session illisible ne s execute pas sous Windows', () => {
+    expect(registration(reset, 'chmodSync(sessionFile, 0o000)'), 'P7 session garde Windows').toBe(GARDE);
+  });
+
+  it('P7 le fichier compagnon illisible ne s execute pas sous Windows', () => {
+    expect(registration(reset, 'chmodSync(historyFile, 0o000)'), 'P7 compagnon garde Windows').toBe(GARDE);
+  });
 });

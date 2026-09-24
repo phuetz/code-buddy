@@ -14,7 +14,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { readJsonAtomicSyncReadOnly, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type MessagingSessionResetMode = 'both' | 'idle' | 'daily' | 'none';
 export type MessagingSessionResetReason = 'idle' | 'daily';
@@ -291,12 +291,10 @@ export function proveMessagingMemorySave(input: {
       epoch,
     };
     writeJsonAtomicSync(filePath, record, { mode: 0o600 });
-    const readBack = readJsonAtomicSync<MemoryArchiveRecord | null>(filePath, null, {
-      mode: 0o600,
-      isValid: isArchiveRecord,
-    });
-    if (!readBack) return { ok: false, error: 'memory archive read-back failed' };
-    if (readBack.transcript !== input.transcript || readBack.digest !== digest || readBack.epoch !== epoch) {
+    const readBack = readJsonAtomicSyncReadOnly<MemoryArchiveRecord>(filePath, isArchiveRecord);
+    if (readBack.status === 'missing') return { ok: false, error: 'memory archive read-back missing' };
+    if (readBack.status !== 'ok') return { ok: false, error: `memory archive read-back ${readBack.status}` };
+    if (readBack.value.transcript !== input.transcript || readBack.value.digest !== digest || readBack.value.epoch !== epoch) {
       return { ok: false, error: 'memory archive read-back mismatch' };
     }
     const onDisk = fs.readFileSync(filePath, 'utf8');

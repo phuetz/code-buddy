@@ -12,7 +12,7 @@ import {
 } from '../database/optional-sqlite.js';
 import { withSessionLock } from './session-lock.js';
 import { logger } from '../utils/logger.js';
-import { readJsonAtomic, readJsonAtomicSync, writeJsonAtomic } from '../utils/atomic-write.js';
+import { readJsonAtomicSync, writeJsonAtomic } from '../utils/atomic-write.js';
 
 /** Metadata for chat sessions */
 export interface SessionMetadata {
@@ -92,6 +92,25 @@ type PersistedSession = Omit<Session, 'createdAt' | 'lastAccessedAt'> & {
   createdAt: string;
   lastAccessedAt: string;
 };
+
+/**
+ * Disk read of one session file.
+ * `absent` is only ENOENT. Any other I/O error, or a file that is present but
+ * not a valid session, is `unreadable` — callers that erase memory must not
+ * treat that as an empty session.
+ */
+export type SessionFileRead =
+  | { state: 'absent' }
+  | { state: 'unreadable'; reason: 'io' | 'invalid'; error: string }
+  | { state: 'ok'; session: Session };
+
+function nodeErrorCode(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
 
 const DEFAULT_SESSIONS_DIR = path.join(os.homedir(), '.codebuddy', 'sessions');
 const FALLBACK_SESSIONS_DIR = path.join(os.tmpdir(), 'codebuddy', 'sessions');
@@ -288,55 +307,73 @@ export class SessionStore {
   }
 
   /**
-   * Load a session from disk.
-   *
-   * Validates the parsed JSON shape before returning (F32). The previous
-   * implementation blindly spread `data` into the return value, so a
-   * corrupted file with `messages: undefined` or a missing `createdAt`
-   * produced a Session whose dates were `Invalid Date` and whose
-   * messages iterator threw later in unrelated code paths. We now
-   * return `null` (and log a warning) for any shape we don't recognise,
-   * matching the "missing file" behaviour so callers keep working.
+   * Read one session file without collapsing an access error into "missing".
+   * Does not recover from `.bak` and does not write. ENOENT is `absent`.
+   * A permission error, an empty file, or JSON that is not a session is
+   * `unreadable`. A bad shape used to be returned as null from `loadSession`
+   * (F32) so ordinary callers could continue; that null is not an absence.
    */
-  async loadSession(sessionId: string): Promise<Session | null> {
+  async readSessionFileState(sessionId: string): Promise<SessionFileRead> {
     const filePath = this.getSessionFilePath(sessionId);
-
+    let raw: string;
     try {
-      await fsPromises.access(filePath);
-      const data = await readJsonAtomic<Record<string, unknown> | null>(filePath, null, {
-        mode: 0o600,
-        isValid: (value): value is Record<string, unknown> => Boolean(
-          value && typeof value === 'object' && !Array.isArray(value),
-        ),
-      });
-      if (!data) return null;
-
-      if (typeof data !== 'object' || data === null) {
-        logger.warn(`[session-store] invalid session file (not an object): ${sessionId}`);
-        return null;
-      }
-      if (!Array.isArray(data.messages)) {
-        logger.warn(`[session-store] invalid session file (messages is not an array): ${sessionId}`);
-        return null;
-      }
-      const persisted = data as unknown as PersistedSession;
-      const createdAt = new Date(persisted.createdAt);
-      const lastAccessedAt = new Date(persisted.lastAccessedAt);
-      if (isNaN(createdAt.getTime()) || isNaN(lastAccessedAt.getTime())) {
-        logger.warn(`[session-store] invalid session file (bad timestamps): ${sessionId}`);
-        return null;
-      }
-
+      raw = await fsPromises.readFile(filePath, 'utf8');
+    } catch (error) {
+      if (nodeErrorCode(error) === 'ENOENT') return { state: 'absent' };
       return {
-        ...persisted,
-        ...this.decodeContent(persisted),
-        createdAt,
-        lastAccessedAt,
+        state: 'unreadable',
+        reason: 'io',
+        error: error instanceof Error ? error.message : 'unreadable',
       };
-    } catch (_error) {
-      if (_error instanceof SessionDecryptionError) throw _error;
-      return null;
     }
+    let data: unknown;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return { state: 'unreadable', reason: 'invalid', error: 'invalid JSON' };
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return { state: 'unreadable', reason: 'invalid', error: 'session file is not an object' };
+    }
+    const record = data as Record<string, unknown>;
+    if (!Array.isArray(record.messages)) {
+      return { state: 'unreadable', reason: 'invalid', error: 'session messages are not an array' };
+    }
+    const persisted = record as unknown as PersistedSession;
+    const createdAt = new Date(persisted.createdAt);
+    const lastAccessedAt = new Date(persisted.lastAccessedAt);
+    if (Number.isNaN(createdAt.getTime()) || Number.isNaN(lastAccessedAt.getTime())) {
+      return { state: 'unreadable', reason: 'invalid', error: 'session timestamps are invalid' };
+    }
+    try {
+      return {
+        state: 'ok',
+        session: {
+          ...persisted,
+          ...this.decodeContent(persisted),
+          createdAt,
+          lastAccessedAt,
+        },
+      };
+    } catch (error) {
+      if (error instanceof SessionDecryptionError) throw error;
+      return {
+        state: 'unreadable',
+        reason: 'invalid',
+        error: error instanceof Error ? error.message : 'unreadable',
+      };
+    }
+  }
+
+  async loadSession(sessionId: string): Promise<Session | null> {
+    const read = await this.readSessionFileState(sessionId);
+    if (read.state === 'ok') return read.session;
+    if (read.state === 'absent') return null;
+    if (read.reason === 'io') {
+      throw new Error(read.error);
+    }
+    logger.warn(`[session-store] invalid session file (${read.error}): ${sessionId}`);
+    return null;
   }
 
   /**
