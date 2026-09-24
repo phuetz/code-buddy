@@ -2,7 +2,7 @@
 
 **Mission** : L1-IDENTITE-PRESENCE-2026-09-24  
 **Date** : 2026-09-24  
-**Clone** : /home/patrice/DEV/cb-lane-identite-2026-09-24  
+**Clone** : <chemin local>  
 **Statut** : TERMINÉ  
 
 ---
