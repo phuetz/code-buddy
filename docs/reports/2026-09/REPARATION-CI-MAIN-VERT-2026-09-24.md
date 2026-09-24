@@ -74,6 +74,21 @@ et le garde-fou des dossiers à la racine avait un angle mort.
   `fleet-loopback-smoke`), `mcp-server-approval`, `logging:56`, et l'étape volontaire de
   `skill-import-command-lifecycle:248`.
 
+## Seconde reprise, après contre-revue (même jour)
+
+- **Purge d'un run terminé** : `endRun()` retire le journal de `handles` dès `ws.end()`, avant
+  que le fichier ne soit relâché ; un `startRun()` dans le même tour purgeait alors ce run sans
+  attendre (la version précédente de ce correctif avait supprimé les 20 ms de marge). Les
+  fermetures sont suivies par run et `pruneOldRuns()` attend celle du run qu'il retire, actif
+  ou terminé. Test dédié dans `run-store-streams-closed.test.ts`, qui suit chaque descripteur
+  ouvert jusqu'à la fin réelle de sa fermeture.
+- **Même classe dans les démontages** : sous fermeture lente de 3 s, 58 tests du runner
+  agentique échouaient en ENOTEMPTY sur `events.jsonl`, l'`afterAll` de `logging.test.ts` sur
+  ses journaux, et `policy-evals` laissait ses dossiers. `runAgenticCodingCell` attend la
+  fermeture du journal du RunStore qu'il possède ; `Logger.close()` rend une promesse résolue à
+  la fermeture du fichier ; ces tests l'attendent au lieu d'un délai fixe. `log-rotation`
+  n'écrit plus à la racine du dépôt.
+
 ## Non traité ici
 
 - Windows, shard 5/6 : `C:\Users\runneradmin\.codebuddy\memory.md` créé par un test (garde
