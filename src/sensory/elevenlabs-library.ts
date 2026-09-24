@@ -258,17 +258,20 @@ function withIndexLock(lockPath: string, fn: () => void): boolean {
   } catch {
     return false;
   } finally {
+    // Only the holder releases the lock. Unlinking it after a refused attempt
+    // deleted ANOTHER writer's live lock and broke the mutual exclusion between
+    // the robot, Telegram and the phone app (audit 2026-09-24, B7).
     if (fd !== undefined) {
       try {
         fs.closeSync(fd);
       } catch {
         /* already closed */
       }
-    }
-    try {
-      fs.unlinkSync(lockPath);
-    } catch {
-      /* someone else cleaned it */
+      try {
+        fs.unlinkSync(lockPath);
+      } catch {
+        /* someone else cleaned it */
+      }
     }
   }
 }

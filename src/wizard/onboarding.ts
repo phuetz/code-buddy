@@ -76,7 +76,7 @@ export const PROVIDER_ENV_MAP: Record<string, string> = {
 };
 
 export const PROVIDER_DEFAULT_MODEL: Record<string, string> = {
-  chatgpt: 'gpt-5.6-sol',
+  chatgpt: 'gpt-6-sol',
   grok: 'grok-3',
   claude: 'claude-sonnet-4-20250514',
   gemini: 'gemini-2.0-flash',
@@ -103,7 +103,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'ChatGPT subscription — recommended (OAuth, no API key, $0 marginal cost)',
     authMode: 'oauth',
     envVar: '',
-    defaultModel: 'gpt-5.6-sol',
+    defaultModel: 'gpt-6-sol',
     setupCommand: 'buddy login',
     verifyCommand: 'buddy whoami',
     help: 'One browser login unlocks the ChatGPT-backed Codex route; no OPENAI_API_KEY is required.',
@@ -360,7 +360,7 @@ export function getProviderGuide(provider: string): OnboardingProviderGuide {
       label: 'ChatGPT subscription (OAuth)',
       authMode: 'oauth',
       envVar: '',
-      defaultModel: 'gpt-5.6-sol',
+      defaultModel: 'gpt-6-sol',
       setupCommand: 'buddy login',
       verifyCommand: 'buddy whoami',
       help: 'Use ChatGPT OAuth.',

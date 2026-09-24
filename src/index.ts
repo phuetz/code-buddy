@@ -29,7 +29,7 @@ import {
   installPermissionModeActionHook,
   parseCliPermissionMode,
 } from './cli/permission-mode-option.js';
-import { getRequestedProfile } from './cli/requested-profile.js';
+import { preloadRequestedProfile } from './cli/preload-profile.js';
 import { registerBackupCommand } from './commands/cli/backup-command.js';
 import { registerSensoryCommand } from './commands/cli/sensory-command.js';
 import { getConfigManager } from './config/toml-config.js';
@@ -358,7 +358,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
             provider: 'chatgpt',
             apiKey: 'oauth-chatgpt', // sentinel consumed by CodeBuddyClient
             baseURL: 'https://chatgpt.com/backend-api/codex',
-            defaultModel: process.env.CHATGPT_MODEL || 'gpt-5.6-sol',
+            defaultModel: process.env.CHATGPT_MODEL || 'gpt-6-sol',
           };
         }
       }
@@ -532,9 +532,24 @@ async function detectOnboardedLocalProvider(): Promise<DetectedProvider | null> 
 async function loadApiKey(): Promise<string | undefined> {
   await ensureEnvLoaded();
 
-  // Check environment-detected provider first
+  // Un profil qui désigne une URL ne doit pas hériter de la clé d'un autre.
+  //
+  // La détection pose une clé sentinelle quand une session ChatGPT existe, et
+  // le client bascule alors sur le backend Codex sur la seule foi de cette
+  // sentinelle — `this.isChatGptProvider = apiKey === CHATGPT_OAUTH_SENTINEL ||
+  // …`. Résultat mesuré : `--profile openrouter` transmettait bien son URL et
+  // son modèle, et l'appel partait quand même chez ChatGPT, qui répondait
+  // « ce modèle n'est pas servi par le backend Codex ».
+  //
+  // On rend donc la main à l'environnement et aux réglages dès qu'un profil
+  // nomme une URL : c'est un choix explicite, il prime sur une supposition.
+  const urlDuProfil = profilActif().baseURL;
   const detected = await getDetectedProvider();
-  if (detected) return detected.apiKey;
+  if (detected && !urlDuProfil) return detected.apiKey;
+  if (detected && urlDuProfil && detected.baseURL === urlDuProfil) {
+    // Même destination : la clé détectée est la bonne.
+    return detected.apiKey;
+  }
 
   // Priority: secure credential storage > legacy settings file
   const getCredentialManager = await lazyImport.credentialManager();
@@ -552,8 +567,30 @@ async function loadApiKey(): Promise<string | undefined> {
 }
 
 // Load base URL from detected provider or user settings
+/**
+ * Ce qu'un `--profile` explicite impose, s'il impose quelque chose.
+ *
+ * Un profil nommé sur la ligne de commande est un choix de l'utilisateur ; une
+ * détection d'environnement est une supposition. Le choix doit gagner. Il
+ * perdait : `loadBaseURL()` consultait `getDetectedProvider()` en premier, si
+ * bien qu'une session ChatGPT présente dans l'environnement écrasait un
+ * `--profile openrouter` sans un mot.
+ */
+function profilActif(): { baseURL?: string; model?: string } {
+  try {
+    const cfg = getConfigManager().getConfig() as { baseURL?: string; model?: string };
+    return { baseURL: cfg.baseURL, model: cfg.model };
+  } catch (_err) {
+    return {};
+  }
+}
+
 async function loadBaseURL(): Promise<string> {
   await ensureEnvLoaded();
+
+  // Un profil explicite prime sur toute détection.
+  const duProfil = profilActif().baseURL;
+  if (duProfil) return duProfil;
 
   // Check environment-detected provider first
   const detected = await getDetectedProvider();
@@ -605,13 +642,13 @@ async function saveCommandLineSettings(
 
 /** Providers served by a local OpenAI-compatible runtime (no cloud model catalog). */
 
-// Load model from detected provider or user settings
-async function loadModel(): Promise<string | undefined> {
+// Load model from detected provider or user settings.
+// Une seule chaîne : resolveStartupModel. Le `--model` de l'appelant y entre
+// en premier. Sans choix explicite, le active_model du fichier généré ne
+// masque pas le fournisseur détecté. Ollama garde sa sonde ensuite.
+async function loadModel(cliModel?: string): Promise<string | undefined> {
   await ensureEnvLoaded();
   const { isModelCompatibleWithProvider } = await import('./providers/model-provider-compat.js');
-
-  // 1. Explicit env var takes highest priority
-  if (process.env.GROK_MODEL) return process.env.GROK_MODEL;
 
   const detected = await getDetectedProvider();
 
@@ -623,6 +660,31 @@ async function loadModel(): Promise<string | undefined> {
     settingsModel = getSettingsManager().getCurrentModel() || undefined;
   } catch (_err) {
     logger.debug('Failed to load model from settings manager', { error: _err });
+  }
+
+  // Catalogue TOML. Une configuration illisible s'arrête ici : on ne continue
+  // pas avec un autre modèle.
+  try {
+    const catalogue = await import('./config/model-catalogue.js');
+    const decision = catalogue.resolveStartupModel({
+      argv: process.argv,
+      cli: cliModel,
+      env: process.env,
+      allowUserHome: true,
+      settingsModel: settingsModel ?? null,
+      detected: detected
+        ? { provider: detected.provider, defaultModel: detected.defaultModel }
+        : null,
+      isCompatible: (model, provider) => isModelCompatibleWithProvider(model, provider),
+    });
+    if (decision.model) return decision.model;
+  } catch (error) {
+    const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+    if (error instanceof CatalogueConfigError) {
+      cli.error(error.message);
+      process.exit(1);
+    }
+    throw error;
   }
 
   // 2. Local runtime (Ollama): resolve to a model that is ACTUALLY installed,
@@ -644,10 +706,17 @@ async function loadModel(): Promise<string | undefined> {
         ? settingsModel
         : undefined) ||
       detected.defaultModel;
+    const explicitOllamaModel = process.env.OLLAMA_MODEL?.trim();
     const resolution = await resolveInstalledOllamaModel({
       baseURL: detected.baseURL,
       requested,
+      strict: Boolean(explicitOllamaModel),
     });
+    if (explicitOllamaModel && resolution.substitutionRefused) {
+      const { strictModelRefusalMessage } = await import('./providers/local-model-resolver.js');
+      cli.error(strictModelRefusalMessage(explicitOllamaModel));
+      process.exit(1);
+    }
     if (resolution.model) return resolution.model;
     const hint = buildOllamaPullHint({
       baseURL: detected.baseURL,
@@ -1571,6 +1640,10 @@ program
     "disable self-healing auto-correction"
   )
   .option(
+    "--compact",
+    "headless: smallest possible prompt and tool set (any provider, not just local runtimes)"
+  )
+  .option(
     "--force-tools",
     "enable tools/function calling for local models (LM Studio)"
   )
@@ -1986,7 +2059,18 @@ program
         : null;
       let apiKey = options.apiKey || explicitProvider?.apiKey || await loadApiKey();
       let baseURL = options.baseUrl || explicitProvider?.baseURL || await loadBaseURL();
-      let model = options.model || explicitProvider?.model || await loadModel();  // let: can be overridden by --agent
+      try {
+        const catalogue = await import('./config/model-catalogue.js');
+        catalogue.loadAndActivateUserCatalogue(process.env, true);
+      } catch (error) {
+        const { CatalogueConfigError } = await import('./config/model-catalogue.js');
+        if (error instanceof CatalogueConfigError) {
+          cli.error(error.message);
+          process.exit(1);
+        }
+        throw error;
+      }
+      let model = await loadModel(options.model || explicitProvider?.model);  // let: can be overridden by --agent
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2027,7 +2111,7 @@ program
             return {
               apiKey: nextApiKey,
               baseURL: options.baseUrl || await loadBaseURL(),
-              model: options.model || await loadModel(),
+              model: await loadModel(options.model),
             };
           },
           onLoginError: (err) => {
@@ -2192,6 +2276,19 @@ program
 
       // Headless mode: process prompt and exit (if prompt, message, or piped input provided)
       if (combinedPrompt && (promptArg || pipedInput)) {
+        // `--compact` asks for the shortest possible prompt, whatever the
+        // provider. The mode already existed but was only reachable against a
+        // local runtime. Measured on a one-sentence question against a remote
+        // provider: 5 991 input tokens by default, and still 4 660 after
+        // replacing the entire system prompt and disabling every tool — the
+        // agent surface is what costs, not the wording.
+        if (options.compact) {
+          // false / 0 / off already in the environment keep the last word.
+          // Overwriting them made `--compact` turn the mode on against the
+          // refusal this flag is documented to respect.
+          const { applyHeadlessCompactRequest } = await import('./config/headless-local-prompt.js');
+          applyHeadlessCompactRequest(process.env, true);
+        }
         const { resolveHeadlessOutputFormat } = await import('./cli/headless-options.js');
         const headlessExitCode = await processPromptHeadless(
           combinedPrompt,
@@ -2636,7 +2733,7 @@ gitCommand
       // Get API key from options, environment, or user settings
       const apiKey = options.apiKey || await loadApiKey();
       const baseURL = options.baseUrl || await loadBaseURL();
-      const model = options.model || await loadModel();
+      const model = await loadModel(options.model);
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2705,6 +2802,16 @@ function addLazyCommand(
     await parent.parseAsync(process.argv);
   });
 }
+
+addLazyCommand(
+  program,
+  'models',
+  'Lister, afficher ou rafraîchir le catalogue de modèles',
+  async () => {
+    const { createModelsCommand } = await import('./commands/models-command.js');
+    return createModelsCommand();
+  },
+);
 
 addLazyCommand(
   program,
@@ -4328,33 +4435,7 @@ installPermissionModeActionHook(program, async (mode) => {
 // Apply the profile before parsing so it governs root chat, lazy subcommands,
 // slash-command menus, tool selection, and `buddy --help` consistently.
 process.argv = hoistPermissionModeOption(process.argv);
-const requestedProfile = getRequestedProfile(process.argv);
-if (requestedProfile.kind === 'missing') {
-  try {
-    getConfigManager().load();
-  } catch (_error) {
-    // Listing available names is best-effort; the missing-value error still stands.
-  }
-  let available = '(none defined)';
-  try {
-    const names = Object.keys(getConfigManager().getConfig().profiles ?? {});
-    if (names.length) available = names.join(', ');
-  } catch (_error) {
-    available = 'core, all';
-  }
-  process.stderr.write(
-    `error: option '--profile <name>' argument missing. Available profiles: ${available}\n`,
-  );
-  process.exitCode = 1;
-} else if (requestedProfile.kind === 'value') {
-  try {
-    getConfigManager().load();
-    getConfigManager().applyProfile(requestedProfile.name);
-  } catch (err) {
-    process.stderr.write(`Profile error: ${err instanceof Error ? err.message : String(err)}\n`);
-    process.exitCode = 1;
-  }
-}
+preloadRequestedProfile(process.argv);
 
 function isRootHelpRequest(argv: readonly string[]): boolean {
   const args = argv.slice(2);

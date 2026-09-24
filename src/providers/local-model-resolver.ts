@@ -103,6 +103,8 @@ export interface OllamaModelResolution {
   reachable: boolean;
   /** Number of installed models seen (0 when unreachable). */
   installedCount: number;
+  /** Présent seulement si `strict` a refusé de remplacer le modèle demandé. */
+  substitutionRefused?: boolean;
 }
 
 /**
@@ -114,6 +116,12 @@ export async function resolveInstalledOllamaModel(options: {
   requested?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /**
+   * Quand c'est vrai, un modèle demandé qui n'est pas installé n'est jamais
+   * remplacé par un autre tag. Le choix historique (sans ce drapeau) reste
+   * celui de l'accueil local.
+   */
+  strict?: boolean;
 }): Promise<OllamaModelResolution> {
   const tags = await fetchOllamaTags(options.baseURL, {
     fetchImpl: options.fetchImpl,
@@ -122,11 +130,20 @@ export async function resolveInstalledOllamaModel(options: {
   if (tags === null) {
     return { model: null, reachable: false, installedCount: 0 };
   }
+  const chosen = chooseInstalledOllamaModel(tags, options.requested);
+  const requested = options.requested?.trim();
+  if (options.strict && requested && chosen && chosen.toLowerCase() !== requested.toLowerCase()) {
+    return { model: null, reachable: true, installedCount: tags.length, substitutionRefused: true };
+  }
   return {
-    model: chooseInstalledOllamaModel(tags, options.requested),
+    model: chosen,
     reachable: true,
     installedCount: tags.length,
   };
+}
+
+export function strictModelRefusalMessage(requested: string): string {
+  return `Configuration de modèle invalide : « ${requested} » est demandé mais n'est pas disponible. Aucun autre modèle n'est utilisé à sa place.`;
 }
 
 /**

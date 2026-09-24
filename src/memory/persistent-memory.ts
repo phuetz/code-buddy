@@ -2,6 +2,7 @@ import fs from "fs-extra";
 import * as path from "path";
 import * as os from "os";
 import { EventEmitter } from "events";
+import { createHash } from "crypto";
 import { getHooksManager } from "../hooks/lifecycle-hooks.js";
 import { Fact, FactCategory, FactsExtractionError } from "./facts-memory.js";
 import { logger } from "../utils/logger.js";
@@ -265,6 +266,51 @@ function mergeMemoryMaps(
   return merged;
 }
 
+/**
+ * Stable key for a hand-written bullet (`- text`, no `**key**:`). Derived from
+ * the text so a reload finds the same key; the next save rewrites the entry in
+ * the canonical `- **key**: value` form.
+ */
+function bareBulletKey(text: string): string {
+  const slug = text
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .split("-")
+    .slice(0, 5)
+    .join("-");
+  return `note-${slug || "entree"}-${createHash("sha256").update(text).digest("hex").slice(0, 6)}`;
+}
+
+/** Lines that carry no memory: template prose, headings, comments, footer. */
+const MEMORY_SCAFFOLD_TEXT = new Set([
+  "# Code Buddy Memory",
+  "This file stores persistent memory for the Code Buddy agent.",
+  "It is automatically managed but can be manually edited.",
+  "---",
+]);
+
+function isMemoryScaffoldLine(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    trimmed === "" ||
+    MEMORY_SCAFFOLD_TEXT.has(trimmed) ||
+    /^#{1,2} /.test(trimmed) ||
+    /^<!--.*-->$/.test(trimmed) ||
+    /^\*Last updated: .*\*$/.test(trimmed)
+  );
+}
+
+interface ParsedMemoryFile {
+  memories: Memory[];
+  /** Hand-written `- text` bullets recovered as entries. */
+  recoveredBare: number;
+  /** Non-empty lines the parser could not account for (lost on the next save). */
+  unrecognized: string[];
+}
+
 const MEMORY_TEMPLATE = `# Code Buddy Memory
 
 This file stores persistent memory for the Code Buddy agent.
@@ -385,12 +431,11 @@ export class PersistentMemoryManager extends EventEmitter {
 
     try {
       const content = await fs.readFile(filePath, "utf-8");
-      const parsed = this.parseMemoryFile(content);
+      const detailed = this.parseMemoryFileDetailed(content);
       // Un fichier vide (0 octet ou blancs) n'a rien à protéger : magasin neuf,
       // pas magasin corrompu (garde R28, alignée le 2026-09-02).
-      if (parsed.length === 0 && content.trim() !== '' && !this.isCanonicalEmptyMemoryFile(content)) {
-        throw new Error('non-canonical memory markdown contains no recoverable entries');
-      }
+      this.assertRecoverableMemoryFile(content, detailed);
+      const parsed = detailed.memories;
 
       memories.clear();
       for (const memory of parsed) {
@@ -449,7 +494,35 @@ export class PersistentMemoryManager extends EventEmitter {
   }
 
   private parseMemoryFile(content: string): Memory[] {
+    return this.parseMemoryFileDetailed(content).memories;
+  }
+
+  /**
+   * One rule for "can this file be loaded and later rewritten safely?".
+   * Without hand-written bullets the historical guard is unchanged. With them,
+   * the bullets are recovered, unless other unrecognized lines sit beside them:
+   * a save would then silently drop those lines, so the file stays blocked.
+   */
+  private assertRecoverableMemoryFile(content: string, parsed: ParsedMemoryFile): void {
+    if (parsed.recoveredBare > 0 && parsed.unrecognized.length > 0) {
+      throw new Error(
+        `non-canonical memory markdown: ${parsed.unrecognized.length} unrecognized line(s) would be lost on save (first: ${JSON.stringify(parsed.unrecognized[0]!.slice(0, 80))})`,
+      );
+    }
+    if (parsed.memories.length === 0 && content.trim() !== '' && !this.isCanonicalEmptyMemoryFile(content)) {
+      throw new Error('non-canonical memory markdown contains no recoverable entries');
+    }
+    if (parsed.recoveredBare > 0) {
+      logger.warn(
+        `[persistent-memory] recovered ${parsed.recoveredBare} hand-written bullet(s); the next save rewrites them as \`- **key**: value\``,
+      );
+    }
+  }
+
+  private parseMemoryFileDetailed(content: string): ParsedMemoryFile {
     const memories: Memory[] = [];
+    let recoveredBare = 0;
+    const unrecognized: string[] = [];
     const categoryMap: Record<string, MemoryCategory> = {
       "Project Context": "project",
       "User Preferences": "preferences",
@@ -499,6 +572,19 @@ export class PersistentMemoryManager extends EventEmitter {
         continue;
       }
 
+      // Hand-written bullet without a key (`- text`). Canonical continuation
+      // lines always start with two spaces, so a column-0 bullet is never one.
+      const bareMatch = line.match(/^-\s+(\S.*)$/);
+      if (bareMatch) {
+        pushCurrent();
+        const text = (bareMatch[1] ?? "").trim();
+        currentKey = bareBulletKey(text);
+        currentValue = text;
+        inMemoryBlock = true;
+        recoveredBare += 1;
+        continue;
+      }
+
       // Metadata comment (written by saveMemories; absent in older files).
       // Must be checked BEFORE the multi-line continuation branch or it would
       // be folded into the value.
@@ -537,13 +623,15 @@ export class PersistentMemoryManager extends EventEmitter {
         // End of memory block
         pushCurrent();
         inMemoryBlock = false;
+      } else if (!isMemoryScaffoldLine(line)) {
+        unrecognized.push(line);
       }
     }
 
     // Don't forget last memory
     pushCurrent();
 
-    return memories;
+    return { memories, recoveredBare, unrecognized };
   }
 
   private createMemory(key: string, value: string, category: MemoryCategory, meta?: MemoryMeta, tags?: string[]): Memory {
@@ -1381,15 +1469,9 @@ export class PersistentMemoryManager extends EventEmitter {
       const diskMemories = new Map<string, Memory>();
       try {
         const diskContent = await fs.readFile(filePath, "utf-8");
-        const parsed = this.parseMemoryFile(diskContent);
-        if (
-          parsed.length === 0 &&
-          diskContent.trim() !== '' &&
-          !this.isCanonicalEmptyMemoryFile(diskContent)
-        ) {
-          throw new Error('non-canonical memory markdown contains no recoverable entries');
-        }
-        for (const memory of parsed) diskMemories.set(memory.key, memory);
+        const detailed = this.parseMemoryFileDetailed(diskContent);
+        this.assertRecoverableMemoryFile(diskContent, detailed);
+        for (const memory of detailed.memories) diskMemories.set(memory.key, memory);
       } catch (error) {
         if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
           throw new MemoryPersistenceError(

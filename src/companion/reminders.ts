@@ -1002,6 +1002,26 @@ export async function snoozePending(
   return { id: target.id, label: target.label, delayMs };
 }
 
+/**
+ * May this utterance skip the "am I being addressed?" gate? Only replies to
+ * something the robot just did qualify, each already bounded by its window:
+ * an acknowledgement or a snooze of a reminder that just fired, an undo of a
+ * reminder just created. A spoken question is never an acknowledgement.
+ *
+ * Agenda requests and reminder creations are NOT here: they must go through the
+ * normal gate, otherwise the radio creates reminders or recites the agenda
+ * ("…l'intelligence à venir" on France Inter did, 2026-09-22/23). When the robot
+ * is addressed, the voice handler still serves them.
+ */
+export function bypassesAddressGate(text: string, nowMs: number): boolean {
+  const isQuestion = /\?\s*$/.test(text.trim());
+  return (
+    (!isQuestion && matchAck(text, nowMs) !== null) ||
+    isSnoozeCommand(text, nowMs) ||
+    isUndoCommand(text, nowMs)
+  );
+}
+
 /** True when the utterance is a snooze AND a reminder is pending (for the voice shortcut gate). */
 export function isSnoozeCommand(text: string, nowMs: number): boolean {
   return parseSnooze(text) != null && pendingAcks(nowMs).length > 0;

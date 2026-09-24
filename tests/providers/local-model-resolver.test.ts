@@ -14,6 +14,7 @@ import {
   ollamaTagsUrl,
   fetchOllamaTags,
   resolveInstalledOllamaModel,
+  strictModelRefusalMessage,
   buildOllamaPullHint,
   DEFAULT_OLLAMA_MODEL,
 } from '../../src/providers/local-model-resolver.js';
@@ -118,6 +119,19 @@ describe('resolveInstalledOllamaModel', () => {
       fetchImpl,
     });
     expect(res).toEqual({ model: null, reachable: true, installedCount: 0 });
+  });
+
+  it('en mode strict, ne remplace pas le modèle demandé par un autre tag', async () => {
+    const fetchImpl = fakeFetch({ models: INSTALLED.map((name) => ({ name })) });
+    const res = await resolveInstalledOllamaModel({
+      baseURL: 'http://127.0.0.1:11434/v1',
+      requested: 'modele-demande',
+      fetchImpl,
+      strict: true,
+    });
+    expect(res.substitutionRefused).toBe(true);
+    expect(res.model).toBeNull();
+    expect(strictModelRefusalMessage('modele-demande')).toContain('Aucun autre modèle');
   });
 
   it('reports unreachable when the server is down', async () => {
