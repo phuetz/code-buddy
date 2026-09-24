@@ -1795,8 +1795,13 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // Update token counter for new model
     this.tokenCounter.dispose();
     this.tokenCounter = createTokenCounter(model);
-    // Update context manager for new model limits
-    this.contextManager.updateConfig({ model });
+    // A model change refreshes the window. An explicit file threshold stays:
+    // updateConfig would otherwise replace it with min(200000, window).
+    const contextPatch: { model: string; autoCompactThreshold?: number } = { model };
+    if (this.explicitAutoCompactTokens !== undefined) {
+      contextPatch.autoCompactThreshold = this.explicitAutoCompactTokens;
+    }
+    this.contextManager.updateConfig(contextPatch);
   }
 
   /**

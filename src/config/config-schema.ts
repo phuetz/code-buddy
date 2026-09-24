@@ -82,6 +82,44 @@ function middlewareShape(): Record<string, ZodTypeAny> {
   };
 }
 
+/** Clés de [middleware] proposées à l'écriture. La clé refusée n'y figure pas. */
+export function middlewareConfigKeys(): readonly string[] {
+  return Object.keys(middlewareShape());
+}
+
+/**
+ * Défauts émis pour [middleware]. Ils sortent du schéma, pas d'une seconde
+ * table. Le compactage n'a pas de défaut : seul un nombre écrit compte.
+ */
+export function defaultMiddlewareConfig(): {
+  max_turns: number;
+  turn_warning_threshold: number;
+  max_cost: number;
+  cost_warning_threshold: number;
+} {
+  const parsed = z.object(middlewareShape()).parse({}) as Record<string, unknown>;
+  const maxTurns = parsed.max_turns;
+  const turnWarning = parsed.turn_warning_threshold;
+  const maxCost = parsed.max_cost;
+  const costWarning = parsed.cost_warning_threshold;
+  if (
+    typeof maxTurns !== 'number'
+    || typeof turnWarning !== 'number'
+    || typeof maxCost !== 'number'
+    || typeof costWarning !== 'number'
+    || Object.prototype.hasOwnProperty.call(parsed, 'context_warning_percentage')
+    || Object.prototype.hasOwnProperty.call(parsed, 'auto_compact_threshold')
+  ) {
+    throw new Error('défauts [middleware] illisibles');
+  }
+  return {
+    max_turns: maxTurns,
+    turn_warning_threshold: turnWarning,
+    max_cost: maxCost,
+    cost_warning_threshold: costWarning,
+  };
+}
+
 function uiShape(): Record<string, ZodTypeAny> {
   return {
     vim_keybindings: z.boolean().default(false).describe('Raccourcis vim'),

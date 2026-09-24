@@ -304,8 +304,10 @@ denylist = ["rm -rf /", "sudo .*"]
       it('should serialize middleware settings', () => {
         const toml = serializeTOML(DEFAULT_CONFIG);
 
-        expect(toml).toContain('max_turns = 100');
+        expect(toml).toContain('max_turns = 50');
         expect(toml).toContain('max_cost = 10');
+        expect(toml).not.toContain('context_warning_percentage');
+        expect(toml).not.toContain('auto_compact_threshold');
       });
 
       it('should serialize UI settings', () => {
@@ -491,22 +493,22 @@ denylist = ["rm -rf /", "sudo .*"]
     });
 
     describe('Middleware defaults', () => {
-      it('should have max_turns of 100', () => {
-        expect(DEFAULT_CONFIG.middleware.max_turns).toBe(100);
+      it('should have max_turns of 50', () => {
+        expect(DEFAULT_CONFIG.middleware.max_turns).toBe(50);
       });
 
       it('should have max_cost of 10.0', () => {
         expect(DEFAULT_CONFIG.middleware.max_cost).toBe(10.0);
       });
 
-      it('should have auto_compact_threshold of 80000', () => {
-        expect(DEFAULT_CONFIG.middleware.auto_compact_threshold).toBe(80000);
+      it('should omit auto_compact_threshold until the file writes it', () => {
+        expect(DEFAULT_CONFIG.middleware.auto_compact_threshold).toBeUndefined();
       });
 
       it('should have warning thresholds set', () => {
         expect(DEFAULT_CONFIG.middleware.turn_warning_threshold).toBe(0.8);
         expect(DEFAULT_CONFIG.middleware.cost_warning_threshold).toBe(0.8);
-        expect(DEFAULT_CONFIG.middleware.context_warning_percentage).toBe(0.7);
+        expect(DEFAULT_CONFIG.middleware).not.toHaveProperty('context_warning_percentage');
       });
     });
 

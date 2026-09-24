@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { classifyConfigPath, validateConfigValue } from '../../src/config/config-schema.js';
 import { setConfigValue } from '../../src/config/config-mutator.js';
-import { resetConfigManager } from '../../src/config/toml-config.js';
+import { DEFAULT_CONFIG, parseTOML, resetConfigManager, serializeTOML } from '../../src/config/toml-config.js';
 
 const previousHome = process.env.CODEBUDDY_HOME;
 const previousConfig = process.env.CODEBUDDY_CONFIG;
@@ -24,6 +24,31 @@ afterEach(() => {
   else process.env.CODEBUDDY_HOME = previousHome;
   if (previousConfig === undefined) delete process.env.CODEBUDDY_CONFIG;
   else process.env.CODEBUDDY_CONFIG = previousConfig;
+});
+
+describe('middleware — une seule source de défauts', () => {
+  it('le sérialiseur des défauts suit le câblage et omet la clé refusée', () => {
+    const toml = serializeTOML(DEFAULT_CONFIG);
+    const middleware = parseTOML(toml).middleware as Record<string, unknown>;
+    expect(middleware.max_turns).toBe(50);
+    expect(middleware.max_cost).toBe(10);
+    expect(middleware.turn_warning_threshold).toBe(0.8);
+    expect(middleware.cost_warning_threshold).toBe(0.8);
+    expect(middleware).not.toHaveProperty('auto_compact_threshold');
+    expect(middleware).not.toHaveProperty('context_warning_percentage');
+    expect(toml).not.toContain('context_warning_percentage');
+
+    const live = {
+      ...DEFAULT_CONFIG.middleware,
+      max_turns: 80,
+      auto_compact_threshold: 12345,
+      context_warning_percentage: 0.7,
+    } as typeof DEFAULT_CONFIG.middleware;
+    const explicit = serializeTOML({ ...DEFAULT_CONFIG, middleware: live });
+    expect(explicit).toContain('auto_compact_threshold = 12345');
+    expect(explicit).toContain('max_turns = 80');
+    expect(explicit).not.toContain('context_warning_percentage');
+  });
 });
 
 describe('middleware — clés refusées à l\'écriture', () => {

@@ -12,7 +12,13 @@ import { logger } from '../utils/logger.js';
 import { commitValidConfigText, writeRejectedConfig, ConfigWriteRejectedError } from './config-backup.js';
 import { ownValue } from './own-lookup.js';
 import { resolveSecretRefs } from './secret-ref.js';
-import { USER_CONFIG_DELETE, configSegmentError, validateOnDiskDocument } from './config-schema.js';
+import {
+  USER_CONFIG_DELETE,
+  configSegmentError,
+  defaultMiddlewareConfig,
+  middlewareConfigKeys,
+  validateOnDiskDocument,
+} from './config-schema.js';
 
 // ============================================================================
 // JSONC Utilities
@@ -140,10 +146,8 @@ export interface MiddlewareConfigOptions {
   max_cost?: number;
   /** Cost warning threshold (percentage) */
   cost_warning_threshold?: number;
-  /** Auto-compact token threshold */
+  /** Auto-compact token threshold, only when the file writes it */
   auto_compact_threshold?: number;
-  /** Context warning percentage */
-  context_warning_percentage?: number;
 }
 
 /**
@@ -861,14 +865,7 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
     },
   },
 
-  middleware: {
-    max_turns: 100,
-    turn_warning_threshold: 0.8,
-    max_cost: 10.0,
-    cost_warning_threshold: 0.8,
-    auto_compact_threshold: 80000,
-    context_warning_percentage: 0.7,
-  },
+  middleware: defaultMiddlewareConfig(),
 
   ui: {
     vim_keybindings: false,
@@ -1313,7 +1310,7 @@ export function serializeTOML(config: CodeBuddyConfig, preserved?: PreservedUser
     DEFAULT_CONFIG.middleware as unknown as Record<string, unknown>,
     sourceTable(source, 'middleware'),
     rewriting,
-    ['max_turns', 'turn_warning_threshold', 'max_cost', 'cost_warning_threshold', 'auto_compact_threshold', 'context_warning_percentage'],
+    middlewareConfigKeys(),
   );
   emitFlatSection(
     lines,

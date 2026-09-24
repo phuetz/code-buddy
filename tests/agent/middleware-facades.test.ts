@@ -40,6 +40,7 @@ interface AgentPeek {
   };
   contextManager: { updateConfig(config: { autoCompactThreshold?: number }): void };
   dispose(): void;
+  setModel(model: string): void;
   setYoloMode(enabled: boolean): void;
 }
 
@@ -306,6 +307,32 @@ describe('middleware — consommateurs des seuils', () => {
     });
     expect(cost.afterTurn(context({ sessionCost: 5, sessionCostLimit: 10 })).action).toBe('warn');
     expect(cost.afterTurn(context({ sessionCost: 4, sessionCostLimit: 10 })).action).toBe('continue');
+  });
+});
+
+describe('middleware — seuil de compactage après setModel', () => {
+  function threshold(agent: AgentPeek): number | undefined {
+    const manager = agent.contextManager as unknown as {
+      config?: { autoCompactThreshold?: number };
+    };
+    return manager.config?.autoCompactThreshold;
+  }
+
+  it('conserve 12345 écrit dans le fichier après un changement de modèle', () => {
+    const home = freshHome();
+    writeToml(home, '.codebuddy/config.toml', '[middleware]\nauto_compact_threshold = 12345\n');
+    const agent = spawn();
+    expect(threshold(agent)).toBe(12345);
+    agent.setModel('llama3');
+    expect(threshold(agent)).toBe(12345);
+  });
+
+  it('sans clé dans le fichier, setModel recalcule encore le seuil sur la fenêtre', () => {
+    freshHome();
+    const agent = spawn();
+    expect(threshold(agent)).toBe(200000);
+    agent.setModel('llama3');
+    expect(threshold(agent)).toBe(8192);
   });
 });
 
