@@ -180,3 +180,23 @@ it('does not allow a local imperative to override an uncertain semantic judgment
   await gate.decide('Lisa, aide-moi');
   expect(await gate.decide('Paul, choisis la deuxième pour toi')).toEqual({ respond: false, reason: 'jev-uncertain' });
 });
+
+
+it('answers a confident direct address the local name match missed', async () => {
+  const gate = createResponseDecider({ robotName: 'Lisa', now: () => 1000,
+    qualifyAmbiguous: async () => ({ outcome: 'direct_address', durationMs: 0, confidence: 0.93,
+      probabilities: { direct_address: 0.93, continuation: 0.05, ambient: 0.01, uncertain: 0.01 } }) });
+  await gate.decide('Lisa, aide-moi');
+  expect(await gate.decide('Elissa, tu sais où est le chargeur de la voiture')).toMatchObject({
+    respond: true, reason: 'jev-direct-address',
+  });
+});
+
+
+it('keeps a low-confidence direct address silent', async () => {
+  const gate = createResponseDecider({ robotName: 'Lisa', now: () => 1000,
+    qualifyAmbiguous: async () => ({ outcome: 'direct_address', durationMs: 0, confidence: 0.5,
+      probabilities: { direct_address: 0.5, continuation: 0.2, ambient: 0.2, uncertain: 0.1 } }) });
+  await gate.decide('Lisa, aide-moi');
+  expect((await gate.decide('Elissa, tu sais où est le chargeur de la voiture')).respond).toBe(false);
+});

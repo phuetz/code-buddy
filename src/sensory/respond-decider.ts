@@ -693,6 +693,15 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
               if (conversationMode) markEngaged('addressed');
               return { respond: true, reason: 'jev-continuation', conversationAction: 'continue' };
             }
+            // This block only runs when the local name match FAILED (e.g. the
+            // transcript heard "Isa" for "Lisa"). A confident "addresses the
+            // assistant" verdict is exactly the rescue Jev is here for: answer.
+            // It used to fall into the silent branch below (audit 2026-09-24, A3).
+            if (judgment?.outcome === 'direct_address' && (judgment.confidence ?? 0) >= 0.7
+              && (judgment.probabilities?.direct_address ?? 0) >= 0.85) {
+              markEngaged('addressed');
+              return { respond: true, reason: 'jev-direct-address' };
+            }
             if (judgment && ['continuation', 'direct_address', 'ambient', 'uncertain'].includes(judgment.outcome)) {
               return staySilent(judgment.outcome === 'ambient' ? 'jev-ambient' : 'jev-uncertain');
             }
