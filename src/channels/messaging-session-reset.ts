@@ -4,7 +4,8 @@
  * Modes follow the Hermes session_reset policy (both, idle, daily, none).
  * The default is none: an absent or invalid section keeps today's behavior.
  * A reset is applied only after a memory archive has been written and read
- * back. A failed save leaves the session untouched.
+ * back. A failed save leaves the session untouched. When the session is
+ * encrypted at rest, every archived store is sealed with the same key.
  *
  * The clock is injected. This module never sleeps.
  *
@@ -49,13 +50,40 @@ export type MessagingSessionResetOutcome =
   | { action: 'reset'; reason: MessagingSessionResetReason; receipt: string }
   | { action: 'cancelled'; reason: MessagingSessionResetReason; error: string };
 
-interface MemoryArchiveRecord {
+interface PlainMemoryArchiveRecord {
   schemaVersion: 1;
   savedAt: string;
   reason: MessagingSessionResetReason;
   transcript: string;
   digest: string;
   epoch: string;
+}
+
+/**
+ * Archive of a session whose messages are encrypted at rest. The transcript
+ * is stored only sealed, and the digest covers the sealed payload so no hash
+ * of the plaintext lands on disk either.
+ */
+interface SealedMemoryArchiveRecord {
+  schemaVersion: 1;
+  savedAt: string;
+  reason: MessagingSessionResetReason;
+  encrypted: true;
+  sealed: string;
+  digest: string;
+  epoch: string;
+}
+
+type MemoryArchiveRecord = PlainMemoryArchiveRecord | SealedMemoryArchiveRecord;
+
+/**
+ * Encryption of an archive, the same one the session store applies to the
+ * messages it archives. `seal` must never return the text it was given.
+ */
+export interface MessagingArchiveSealer {
+  seal(transcript: string): Promise<string>;
+  /** Throws when the payload cannot be opened with the current key. */
+  open(sealed: string): string;
 }
 
 const MODES = new Set<MessagingSessionResetMode>(['both', 'idle', 'daily', 'none']);
@@ -77,6 +105,8 @@ export type MessagingMemorySource = (typeof MESSAGING_MEMORY_SOURCES)[number];
 export interface MessagingMemoryPart {
   source: MessagingMemorySource;
   transcript: string;
+  /** Sealed form of `transcript`. When present, only this form is written. */
+  sealed?: string;
   /**
    * Omitted or `ok`: the transcript was read, even when it is empty.
    * `failed`: the store could not be read. Nothing may be archived or erased.
@@ -192,6 +222,32 @@ export function readMessagingMemoryArchive(
     .join('\n');
 }
 
+/**
+ * Restore the transcripts archived for one session source, oldest first.
+ * A sealed archive needs `open`; without it, or with a wrong key, this throws.
+ */
+export function openMessagingMemoryArchive(
+  archiveDir: string,
+  sessionKey: string,
+  source: MessagingMemorySource,
+  open?: (sealed: string) => string,
+): string[] {
+  const raw = readMessagingMemoryArchive(archiveDir, sessionKey, source);
+  if (!raw) return [];
+  const directory = path.join(archiveDir, source);
+  const stem = sessionStem(sessionKey);
+  return fs.readdirSync(directory)
+    .filter((name) => name.startsWith(`${stem}.`) && name.endsWith('.json'))
+    .sort()
+    .map((name) => {
+      const read = readJsonAtomicSyncReadOnly<MemoryArchiveRecord>(path.join(directory, name), isArchiveRecord);
+      if (read.status !== 'ok') throw new Error(`memory archive ${read.status}`);
+      if (!('sealed' in read.value)) return read.value.transcript;
+      if (!open) throw new Error('memory archive is sealed');
+      return open(read.value.sealed);
+    });
+}
+
 export function isDigestReceipt(receipt: string): boolean {
   return DIGEST_RECEIPT.test(receipt);
 }
@@ -253,12 +309,14 @@ export function decideMessagingSessionReset(
 
 function isArchiveRecord(value: unknown): value is MemoryArchiveRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const candidate = value as Partial<MemoryArchiveRecord>;
-  return candidate.schemaVersion === 1
-    && typeof candidate.transcript === 'string'
+  const candidate = value as Partial<PlainMemoryArchiveRecord> & Partial<SealedMemoryArchiveRecord>;
+  const common = candidate.schemaVersion === 1
     && typeof candidate.digest === 'string'
     && typeof candidate.epoch === 'string'
     && (candidate.reason === 'idle' || candidate.reason === 'daily');
+  if (!common) return false;
+  if (candidate.encrypted === true) return typeof candidate.sealed === 'string' && !('transcript' in candidate);
+  return typeof candidate.transcript === 'string' && !('sealed' in candidate);
 }
 
 export function proveMessagingMemorySave(input: {
@@ -268,8 +326,18 @@ export function proveMessagingMemorySave(input: {
   now: number;
   reason: MessagingSessionResetReason;
   source?: MessagingMemorySource;
+  /**
+   * Sealed form of the transcript and its opener. When set, the transcript
+   * never reaches the file: only the sealed payload is written, then opened
+   * again to prove the archive can be restored.
+   */
+  sealed?: { payload: string; open: (sealed: string) => string };
 }): MemorySaveResult {
-  const digest = digestTranscript(input.transcript);
+  const sealed = input.sealed;
+  if (sealed && input.transcript.length > 0 && sealed.payload.includes(input.transcript)) {
+    return { ok: false, error: 'memory archive sealing left plaintext' };
+  }
+  const digest = digestTranscript(sealed ? sealed.payload : input.transcript);
   try {
     let directory = input.archiveDir;
     if (input.source) directory = prepareSourceDirectory(input.archiveDir, input.source);
@@ -290,19 +358,25 @@ export function proveMessagingMemorySave(input: {
       }
     })();
     if (existing) return { ok: false, error: 'memory archive path collision' };
-    const record: MemoryArchiveRecord = {
-      schemaVersion: 1,
-      savedAt: new Date(input.now).toISOString(),
-      reason: input.reason,
-      transcript: input.transcript,
-      digest,
-      epoch,
-    };
+    const savedAt = new Date(input.now).toISOString();
+    const record: MemoryArchiveRecord = sealed
+      ? { schemaVersion: 1, savedAt, reason: input.reason, encrypted: true, sealed: sealed.payload, digest, epoch }
+      : { schemaVersion: 1, savedAt, reason: input.reason, transcript: input.transcript, digest, epoch };
     writeJsonAtomicSync(filePath, record, { mode: 0o600 });
     const readBack = readJsonAtomicSyncReadOnly<MemoryArchiveRecord>(filePath, isArchiveRecord);
     if (readBack.status === 'missing') return { ok: false, error: 'memory archive read-back missing' };
     if (readBack.status !== 'ok') return { ok: false, error: `memory archive read-back ${readBack.status}` };
-    if (readBack.value.transcript !== input.transcript || readBack.value.digest !== digest || readBack.value.epoch !== epoch) {
+    if (readBack.value.digest !== digest || readBack.value.epoch !== epoch) {
+      return { ok: false, error: 'memory archive read-back mismatch' };
+    }
+    if (sealed) {
+      if (!('sealed' in readBack.value) || readBack.value.sealed !== sealed.payload) {
+        return { ok: false, error: 'memory archive read-back mismatch' };
+      }
+      if (sealed.open(readBack.value.sealed) !== input.transcript) {
+        return { ok: false, error: 'memory archive cannot be opened' };
+      }
+    } else if (!('transcript' in readBack.value) || readBack.value.transcript !== input.transcript) {
       return { ok: false, error: 'memory archive read-back mismatch' };
     }
     const onDisk = fs.readFileSync(filePath, 'utf8');
@@ -325,12 +399,19 @@ export function proveMessagingMemoryParts(input: {
   parts: readonly MessagingMemoryPart[];
   now: number;
   reason: MessagingSessionResetReason;
+  /** Required as soon as one part is sealed; then every part must be. */
+  open?: (sealed: string) => string;
 }): MemorySaveResult {
   for (const part of input.parts) {
     if (part.readState === 'failed') {
       return { ok: false, error: `memory read failed: ${part.source}` };
     }
   }
+  const sealedCount = input.parts.filter((part) => part.sealed !== undefined).length;
+  if (sealedCount > 0 && (sealedCount !== input.parts.length || !input.open)) {
+    return { ok: false, error: 'memory archive partly sealed' };
+  }
+  const open = input.open;
   const proved: string[] = [];
   for (const part of input.parts) {
     const saved = proveMessagingMemorySave({
@@ -340,6 +421,7 @@ export function proveMessagingMemoryParts(input: {
       now: input.now,
       reason: input.reason,
       source: part.source,
+      ...(part.sealed !== undefined && open ? { sealed: { payload: part.sealed, open } } : {}),
     });
     if (!saved.ok) return saved;
     proved.push(`${part.source}:${saved.receipt}`);
@@ -394,29 +476,49 @@ export async function applyChannelMessagingSessionReset(input: {
   archiveDir: string;
   /** When set, each part is proved. Any failure cancels the reset. */
   parts?: readonly MessagingMemoryPart[];
+  /**
+   * Set when the session is encrypted at rest. Every archived part is then
+   * sealed, including the stores that may repeat the same turns. A sealing
+   * failure cancels the reset before anything is written.
+   */
+  sealer?: MessagingArchiveSealer;
   resetSession: () => Promise<void>;
 }): Promise<MessagingSessionResetOutcome> {
+  const sealer = input.sealer;
   return enforceMessagingSessionReset({
     policy: input.policy,
     now: input.now,
     snapshot: input.snapshot,
-    saveMemory: (transcript, reason) => Promise.resolve(
-      input.parts && input.parts.length > 0
-        ? proveMessagingMemoryParts({
-            archiveDir: input.archiveDir,
-            sessionKey: input.sessionKey,
-            parts: input.parts,
-            now: input.now,
-            reason,
-          })
-        : proveMessagingMemorySave({
-            archiveDir: input.archiveDir,
-            sessionKey: input.sessionKey,
-            transcript,
-            now: input.now,
-            reason,
-          }),
-    ),
+    saveMemory: async (transcript, reason) => {
+      if (input.parts && input.parts.length > 0) {
+        // One at a time: a first seal may create the key, and parallel
+        // creations can each write a different one.
+        let parts: readonly MessagingMemoryPart[] = input.parts;
+        if (sealer) {
+          const sealedParts: MessagingMemoryPart[] = [];
+          for (const part of input.parts) sealedParts.push({ ...part, sealed: await sealer.seal(part.transcript) });
+          parts = sealedParts;
+        }
+        return proveMessagingMemoryParts({
+          archiveDir: input.archiveDir,
+          sessionKey: input.sessionKey,
+          parts,
+          now: input.now,
+          reason,
+          ...(sealer ? { open: (payload: string) => sealer.open(payload) } : {}),
+        });
+      }
+      return proveMessagingMemorySave({
+        archiveDir: input.archiveDir,
+        sessionKey: input.sessionKey,
+        transcript,
+        now: input.now,
+        reason,
+        ...(sealer
+          ? { sealed: { payload: await sealer.seal(transcript), open: (payload: string) => sealer.open(payload) } }
+          : {}),
+      });
+    },
     resetSession: input.resetSession,
   });
 }

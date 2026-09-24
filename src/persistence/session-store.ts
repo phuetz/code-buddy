@@ -293,7 +293,19 @@ export class SessionStore {
     await writeJsonAtomic(filePath, data, { mode: 0o600 });
   }
 
-  private shouldEncrypt(session: Session): boolean {
+  /**
+   * How this store keeps message content at rest. A copy of a session's
+   * messages written elsewhere (a reset archive) must follow the same rule.
+   * Without a session, only the process-wide setting applies.
+   */
+  contentProtection(session: Pick<Session, 'messages' | 'encrypted'> | null): { encrypt: boolean; keyPath?: string } {
+    const encrypt = session
+      ? this.shouldEncrypt(session)
+      : process.env.SESSION_ENCRYPTION === 'true';
+    return { encrypt, ...(this.config.encryptionKeyPath ? { keyPath: this.config.encryptionKeyPath } : {}) };
+  }
+
+  private shouldEncrypt(session: Pick<Session, 'messages' | 'encrypted'>): boolean {
     return session.encrypted === true || process.env.SESSION_ENCRYPTION === 'true' || hasEncryptedSessionContent(session.messages);
   }
 

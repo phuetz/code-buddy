@@ -18,7 +18,7 @@ import {
 } from '../../conversation/argument-obligations.js';
 import { shouldRunSemanticResponseGate } from '../../conversation/semantic-response-gate.js';
 import type { ConversationTurn } from '../../conversation/types.js';
-import type { MessagingSessionResetPolicy } from '../../channels/messaging-session-reset.js';
+import type { MessagingArchiveSealer, MessagingSessionResetPolicy } from '../../channels/messaging-session-reset.js';
 import {
   MODEL_NAME_PATTERN,
   clearSessionModelOverride,
@@ -700,6 +700,22 @@ export function __ageChannelAgentForTests(sessionKey: string, lastUsed: number):
 }
 
 /**
+ * Test-only. Puts an object with the agent's history reader in the cache, so a
+ * reset archives what a cached agent holds. Production code never calls this.
+ */
+export function __seedChannelAgentForTests(
+  sessionKey: string,
+  agent: Pick<import('../../agent/codebuddy-agent.js').CodeBuddyAgent, 'getChatHistory' | 'dispose'>,
+  lastUsed: number,
+): void {
+  channelAgentCache.set(sessionKey, {
+    agent: agent as import('../../agent/codebuddy-agent.js').CodeBuddyAgent,
+    lastUsed,
+    runtimeIdentity: 'test',
+  });
+}
+
+/**
  * Test-only. Seeds the handler-local map so an idle reset can be required
  * without an agent. Production resets do not call this.
  */
@@ -1351,6 +1367,8 @@ async function loadMessagingSessionSnapshot(
     lastActivityAt: number | null;
     transcript: string;
     parts: MessagingSnapshotPart[];
+    /** The session store's at-rest rule for this session; archives follow it. */
+    protection: { encrypt: boolean; keyPath?: string };
   }
   | { ok: false; source: MessagingSnapshotPart['source']; error: string }
 > {
@@ -1382,12 +1400,15 @@ async function loadMessagingSessionSnapshot(
   }
 
   let storeText = '';
+  let protection: { encrypt: boolean; keyPath?: string };
   try {
     const { getSessionStore } = await import('../../persistence/session-store.js');
-    const read = await getSessionStore().readSessionFileState(sessionKey);
+    const store = getSessionStore();
+    const read = await store.readSessionFileState(sessionKey);
     if (read.state === 'unreadable') {
       return readFailure('session-store', new Error(read.error));
     }
+    protection = store.contentProtection(read.state === 'ok' ? read.session : null);
     if (read.state === 'ok' && read.session.messages.length > 0) {
       const at = read.session.lastAccessedAt instanceof Date
         ? read.session.lastAccessedAt.getTime()
@@ -1432,6 +1453,7 @@ async function loadMessagingSessionSnapshot(
     lastActivityAt,
     transcript: parts.map((part) => part.transcript).filter((text) => text.length > 0).join('\n\n'),
     parts,
+    protection,
   };
 }
 
@@ -1510,6 +1532,16 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     });
     return;
   }
+  // The four stores may repeat the same turns: all are sealed, not only the session.
+  let sealer: MessagingArchiveSealer | undefined;
+  if (snapshot.protection.encrypt) {
+    const { openSessionText, sealSessionText } = await import('../../persistence/session-content.js');
+    const keyPath = snapshot.protection.keyPath;
+    sealer = {
+      seal: (transcript) => sealSessionText(transcript, keyPath),
+      open: (sealed) => openSessionText(sealed, keyPath),
+    };
+  }
   const outcome = await applyChannelMessagingSessionReset({
     sessionKey,
     now,
@@ -1517,6 +1549,7 @@ async function maybeResetInboundMessagingSession(sessionKey: string): Promise<vo
     snapshot,
     parts: snapshot.parts,
     archiveDir,
+    ...(sealer ? { sealer } : {}),
     resetSession: async () => {
       runMessagingResetStepHookForTests('erase');
       const { getSessionStore } = await import('../../persistence/session-store.js');
