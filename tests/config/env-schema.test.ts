@@ -160,10 +160,10 @@ describe('getEnvDef', () => {
     expect(getEnvDef('TOTALLY_FAKE_VAR')).toBeUndefined();
   });
 
-  it('defaults ChatGPT OAuth to GPT-5.6 Sol', () => {
+  it('defaults ChatGPT OAuth to GPT-6 Sol', () => {
     expect(getEnvDef('CHATGPT_MODEL')).toMatchObject({
       type: 'string',
-      default: 'gpt-5.6-sol',
+      default: 'gpt-6-sol',
     });
   });
 
