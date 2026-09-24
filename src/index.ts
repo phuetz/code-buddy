@@ -532,9 +532,24 @@ async function detectOnboardedLocalProvider(): Promise<DetectedProvider | null> 
 async function loadApiKey(): Promise<string | undefined> {
   await ensureEnvLoaded();
 
-  // Check environment-detected provider first
+  // Un profil qui désigne une URL ne doit pas hériter de la clé d'un autre.
+  //
+  // La détection pose une clé sentinelle quand une session ChatGPT existe, et
+  // le client bascule alors sur le backend Codex sur la seule foi de cette
+  // sentinelle — `this.isChatGptProvider = apiKey === CHATGPT_OAUTH_SENTINEL ||
+  // …`. Résultat mesuré : `--profile openrouter` transmettait bien son URL et
+  // son modèle, et l'appel partait quand même chez ChatGPT, qui répondait
+  // « ce modèle n'est pas servi par le backend Codex ».
+  //
+  // On rend donc la main à l'environnement et aux réglages dès qu'un profil
+  // nomme une URL : c'est un choix explicite, il prime sur une supposition.
+  const urlDuProfil = profilActif().baseURL;
   const detected = await getDetectedProvider();
-  if (detected) return detected.apiKey;
+  if (detected && !urlDuProfil) return detected.apiKey;
+  if (detected && urlDuProfil && detected.baseURL === urlDuProfil) {
+    // Même destination : la clé détectée est la bonne.
+    return detected.apiKey;
+  }
 
   // Priority: secure credential storage > legacy settings file
   const getCredentialManager = await lazyImport.credentialManager();
@@ -552,8 +567,30 @@ async function loadApiKey(): Promise<string | undefined> {
 }
 
 // Load base URL from detected provider or user settings
+/**
+ * Ce qu'un `--profile` explicite impose, s'il impose quelque chose.
+ *
+ * Un profil nommé sur la ligne de commande est un choix de l'utilisateur ; une
+ * détection d'environnement est une supposition. Le choix doit gagner. Il
+ * perdait : `loadBaseURL()` consultait `getDetectedProvider()` en premier, si
+ * bien qu'une session ChatGPT présente dans l'environnement écrasait un
+ * `--profile openrouter` sans un mot.
+ */
+function profilActif(): { baseURL?: string; model?: string } {
+  try {
+    const cfg = getConfigManager().getConfig() as { baseURL?: string; model?: string };
+    return { baseURL: cfg.baseURL, model: cfg.model };
+  } catch (_err) {
+    return {};
+  }
+}
+
 async function loadBaseURL(): Promise<string> {
   await ensureEnvLoaded();
+
+  // Un profil explicite prime sur toute détection.
+  const duProfil = profilActif().baseURL;
+  if (duProfil) return duProfil;
 
   // Check environment-detected provider first
   const detected = await getDetectedProvider();
@@ -612,6 +649,11 @@ async function loadModel(): Promise<string | undefined> {
 
   // 1. Explicit env var takes highest priority
   if (process.env.GROK_MODEL) return process.env.GROK_MODEL;
+
+  // 2. Puis un profil explicite — même raison que dans loadBaseURL : un choix
+  //    nommé sur la ligne de commande passe avant une supposition.
+  const duProfil = profilActif().model;
+  if (duProfil) return duProfil;
 
   const detected = await getDetectedProvider();
 
@@ -1571,6 +1613,10 @@ program
     "disable self-healing auto-correction"
   )
   .option(
+    "--compact",
+    "headless: smallest possible prompt and tool set (any provider, not just local runtimes)"
+  )
+  .option(
     "--force-tools",
     "enable tools/function calling for local models (LM Studio)"
   )
@@ -2192,6 +2238,19 @@ program
 
       // Headless mode: process prompt and exit (if prompt, message, or piped input provided)
       if (combinedPrompt && (promptArg || pipedInput)) {
+        // `--compact` asks for the shortest possible prompt, whatever the
+        // provider. The mode already existed but was only reachable against a
+        // local runtime. Measured on a one-sentence question against a remote
+        // provider: 5 991 input tokens by default, and still 4 660 after
+        // replacing the entire system prompt and disabling every tool — the
+        // agent surface is what costs, not the wording.
+        if (options.compact) {
+          // false / 0 / off already in the environment keep the last word.
+          // Overwriting them made `--compact` turn the mode on against the
+          // refusal this flag is documented to respect.
+          const { applyHeadlessCompactRequest } = await import('./config/headless-local-prompt.js');
+          applyHeadlessCompactRequest(process.env, true);
+        }
         const { resolveHeadlessOutputFormat } = await import('./cli/headless-options.js');
         const headlessExitCode = await processPromptHeadless(
           combinedPrompt,

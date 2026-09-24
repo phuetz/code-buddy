@@ -16,6 +16,7 @@ import { startHeadlessPromptProgress } from "../../cli/headless-prompt-progress.
 import {
   HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE,
   HEADLESS_LOCAL_COMPACT_MAX_TOOLS,
+  capCompactToolList,
   isHeadlessLocalPromptCompact,
 } from "../../config/headless-local-prompt.js";
 import { ChatEntry, StreamingChunk } from "../types.js";
@@ -1581,6 +1582,22 @@ export class AgentExecutor {
         let tools = codeResearch
           ? selectionResult.tools.filter(tool => tool.function.name === 'self_describe')
           : selectionResult.tools;
+        if (!codeResearch && isHeadlessLocalPromptCompact()) {
+          // maxTools is not a hard cap: the selector adds up to five extra
+          // schemas past alwaysInclude when maxTools > 5. Compact mode asks
+          // for eight schemas sent, restore_context included.
+          const beforeCount = tools.length;
+          const beforeNames = tools.map((tool) => tool.function.name);
+          tools = capCompactToolList(tools);
+          if (tools.length < beforeCount) {
+            const kept = new Set(tools.map((tool) => tool.function.name));
+            const dropped = beforeNames.filter((name) => !kept.has(name));
+            logger.info(
+              `compact tool ceiling: ${beforeCount} schemas → ${tools.length} ` +
+              `(max ${HEADLESS_LOCAL_COMPACT_MAX_TOOLS}); dropped ${dropped.join(', ')}`,
+            );
+          }
+        }
         let forcedChatOnlyToolRunModel: string | null = null;
         if (toolRounds === 0) {
           this.deps.toolSelectionStrategy.cacheTools(tools, activeModelName);
