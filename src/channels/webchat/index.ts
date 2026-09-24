@@ -773,8 +773,9 @@ export class WebChatChannel extends BaseChannel {
   }
 
   function sendAuth(token) {
-    if (!token || !ws || ws.readyState !== 1) return;
+    if (!token) return;
     heldToken = token;
+    if (!ws || ws.readyState !== 1) return;
     ws.send(JSON.stringify({ type: 'auth', token: token }));
   }
 
@@ -819,6 +820,9 @@ export class WebChatChannel extends BaseChannel {
           addMessage(msg.content, msg.user, msg.timestamp);
           scrollBottom();
         } else if (msg.type === 'system') {
+          if (msg.content === 'Authentication failed') {
+            heldToken = '';
+          }
           if (msg.content === 'Authentication failed' || msg.content === 'Please authenticate first') {
             lockChat();
             if (authArea) authArea.style.display = 'flex';

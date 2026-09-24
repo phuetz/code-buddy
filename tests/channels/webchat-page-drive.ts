@@ -24,6 +24,10 @@ export interface WebChatPageDrive {
   submitToken: (token: string) => void;
   sendText: (text: string) => void;
   deliver: (message: unknown) => void;
+  /** Ferme la socket courante (readyState 3) et laisse la page programmer la reconnexion. */
+  closeSocket: () => void;
+  /** Déclenche la reconnexion programmée, sans attendre le délai de la page. */
+  reconnect: () => void;
 }
 
 function makeElement(): FakeElement {
@@ -66,10 +70,26 @@ export function driveWebChatPage(html: string): WebChatPageDrive {
   }
 
   const frames: Array<Record<string, unknown>> = [];
+  const timers: Array<{ id: number; fn: () => void; ms: number }> = [];
+  let nextTimerId = 1;
   let socket: {
+    readyState: number;
     onopen?: () => void;
     onmessage?: (event: { data: string }) => void;
+    onclose?: () => void;
   } | null = null;
+
+  function fakeSetTimeout(fn: () => void, ms?: number): number {
+    const id = nextTimerId;
+    nextTimerId += 1;
+    timers.push({ id, fn, ms: ms ?? 0 });
+    return id;
+  }
+
+  function fakeClearTimeout(id: number): void {
+    const index = timers.findIndex((timer) => timer.id === id);
+    if (index >= 0) timers.splice(index, 1);
+  }
 
   function FakeWebSocket(url: string): {
     url: string;
@@ -104,8 +124,8 @@ export function driveWebChatPage(html: string): WebChatPageDrive {
       },
       location: { protocol: 'http:', host: '127.0.0.1:9', hash: '', pathname: '/', search: '' },
       WebSocket: FakeWebSocket,
-      setTimeout,
-      clearTimeout,
+      setTimeout: fakeSetTimeout,
+      clearTimeout: fakeClearTimeout,
       JSON,
       Date,
       decodeURIComponent,
@@ -136,6 +156,23 @@ export function driveWebChatPage(html: string): WebChatPageDrive {
     },
     deliver: (message: unknown) => {
       socket?.onmessage?.({ data: JSON.stringify(message) });
+    },
+    closeSocket: () => {
+      if (!socket?.onclose) throw new Error('onclose absent');
+      socket.readyState = 3;
+      socket.onclose();
+    },
+    reconnect: () => {
+      const pending = timers.filter((timer) => timer.ms >= 1000);
+      for (const timer of pending) {
+        const index = timers.indexOf(timer);
+        if (index >= 0) timers.splice(index, 1);
+      }
+      if (pending.length === 0) throw new Error('aucune reconnexion programmée');
+      for (const timer of pending) timer.fn();
+      if (!socket?.onopen) throw new Error('onopen absent');
+      socket.readyState = 1;
+      socket.onopen();
     },
   };
 }

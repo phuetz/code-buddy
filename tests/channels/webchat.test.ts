@@ -229,6 +229,58 @@ describe('page WebChat', () => {
     page.sendText('bonjour');
     expect(page.frames.at(-1)).toEqual({ type: 'message', content: 'bonjour' });
   });
+
+  it('après un refus, le jeton saisi pendant la reconnexion remplace l\'ancien', () => {
+    const channel = new WebChatChannel(createConfig({ authToken: 'bon-jeton', title: 'Catalogue WebChat' }));
+    const html = (channel as unknown as { getChatHtml: () => string }).getChatHtml();
+    expect(html, 'le jeton ne doit pas être dans la page').not.toContain('bon-jeton');
+    const page = driveWebChatPage(html);
+    page.submitToken('mauvais');
+    expect(page.frames, 'le mauvais jeton n\'est pas parti').toEqual([{ type: 'auth', token: 'mauvais' }]);
+    page.deliver({ type: 'system', content: 'Authentication failed' });
+    page.closeSocket();
+    page.submitToken('bon-jeton');
+    page.reconnect();
+    const authFrames = page.frames.filter((frame) => frame.type === 'auth');
+    expect(authFrames, 'jeton corrigé ignoré pendant la reconnexion').toEqual([
+      { type: 'auth', token: 'mauvais' },
+      { type: 'auth', token: 'bon-jeton' },
+    ]);
+    page.deliver({
+      type: 'system',
+      content: 'Welcome to Catalogue WebChat! You are connected as User.',
+    });
+    expect(page.inputDisabled(), 'champ encore bloqué après le jeton corrigé').toBe(false);
+  });
+
+  it('un jeton refusé n\'est pas renvoyé quand aucun nouveau jeton n\'est saisi', () => {
+    const channel = new WebChatChannel(createConfig({ authToken: 'bon-jeton', title: 'Catalogue WebChat' }));
+    const page = driveWebChatPage((channel as unknown as { getChatHtml: () => string }).getChatHtml());
+    page.submitToken('mauvais');
+    page.deliver({ type: 'system', content: 'Authentication failed' });
+    page.closeSocket();
+    page.reconnect();
+    const authFrames = page.frames.filter((frame) => frame.type === 'auth');
+    expect(authFrames, 'jeton refusé réutilisé').toEqual([{ type: 'auth', token: 'mauvais' }]);
+  });
+
+  it('une coupure sans refus renvoie le jeton déjà accepté', () => {
+    const channel = new WebChatChannel(createConfig({ authToken: 'secret123', title: 'Catalogue WebChat' }));
+    const page = driveWebChatPage((channel as unknown as { getChatHtml: () => string }).getChatHtml());
+    page.submitToken('secret123');
+    page.deliver({
+      type: 'system',
+      content: 'Welcome to Catalogue WebChat! You are connected as User.',
+    });
+    expect(page.inputDisabled(), 'accueil ignoré').toBe(false);
+    page.closeSocket();
+    page.reconnect();
+    const authFrames = page.frames.filter((frame) => frame.type === 'auth');
+    expect(authFrames.map((frame) => frame.token), 'jeton accepté perdu après une coupure').toEqual([
+      'secret123',
+      'secret123',
+    ]);
+  });
 });
 
 describe('WebChatChannel', () => {

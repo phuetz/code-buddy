@@ -239,6 +239,7 @@ const ALLOWED_DIRTY = [
   'tests/server/catalogue-routes-http-isolation.test.ts',
   'src/channels/webchat/index.ts',
   'src/server/index.ts',
+  'docs/reports/2026-09/REPARATION-WEBCHAT-JETON-RECONNEXION.md',
 ];
 
 export function unexpectedRepoDirtyPaths(repoRoot: string): string[] {
