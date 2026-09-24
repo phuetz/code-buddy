@@ -706,6 +706,58 @@ at_hour = 7
     }
   });
 
+  it('P8 un historique compagnon modifie entre l archive et l effacement n est pas efface', async () => {
+    const historyDir = tempDir();
+    const archiveDir = tempDir();
+    const sessionsDir = tempDir();
+    const sessionKey = 'probe-companion-changed';
+    const env = {
+      CODEBUDDY_CHANNEL_HISTORY: 'true',
+      CODEBUDDY_CHANNEL_HISTORY_DIR: historyDir,
+    };
+    const previousSessions = process.env.CODEBUDDY_SESSIONS_DIR;
+    const previousArchive = process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+    const previousHistory = process.env.CODEBUDDY_CHANNEL_HISTORY;
+    const previousHistoryDir = process.env.CODEBUDDY_CHANNEL_HISTORY_DIR;
+    process.env.CODEBUDDY_SESSIONS_DIR = sessionsDir;
+    process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = archiveDir;
+    process.env.CODEBUDDY_CHANNEL_HISTORY = 'true';
+    process.env.CODEBUDDY_CHANNEL_HISTORY_DIR = historyDir;
+    resetSessionStore();
+    __resetChannelAIHandlerForTests();
+    clearCompanionChannelHistoriesForTests();
+    rememberCompanionChannelTurn(sessionKey, 'bonjour', 'HISTORY_ARCHIVED', env, Date.now() - 3_600_000);
+    const historyFile = path.join(historyDir, readdirSync(historyDir).find((name) => name.endsWith('.json')) ?? '');
+    __seedLocalCompanionHistoryForTests(sessionKey, 'AGENT_OLD', Date.now() - 3_600_000);
+    __beforeMessagingResetEraseForTests(() => {
+      rememberCompanionChannelTurn(sessionKey, 'encore', 'HISTORY_LATE', env, Date.now());
+    });
+    const cfg = getConfigManager().getConfig() as { session_reset?: { mode?: string; idle_minutes?: number } };
+    const previousPolicy = cfg.session_reset;
+    cfg.session_reset = { mode: 'idle', idle_minutes: 1 };
+    try {
+      await __resetInboundMessagingSessionForTests(sessionKey);
+      const archived = readMessagingMemoryArchive(archiveDir, sessionKey, 'companion-history');
+      expect(archived, 'P8 archive compagnon ecrite avant la modification').toContain('HISTORY_ARCHIVED');
+      expect(archived, 'P8 le tour compagnon tardif n est pas archive').not.toContain('HISTORY_LATE');
+      expect(readFileSync(historyFile, 'utf8'), 'P8 tour compagnon tardif efface sans archive').toContain('HISTORY_LATE');
+    } finally {
+      cfg.session_reset = previousPolicy;
+      __beforeMessagingResetEraseForTests(undefined);
+      __resetChannelAIHandlerForTests();
+      clearCompanionChannelHistoriesForTests();
+      resetSessionStore();
+      if (previousSessions === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR;
+      else process.env.CODEBUDDY_SESSIONS_DIR = previousSessions;
+      if (previousArchive === undefined) delete process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR;
+      else process.env.CODEBUDDY_SESSION_RESET_ARCHIVE_DIR = previousArchive;
+      if (previousHistory === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY;
+      else process.env.CODEBUDDY_CHANNEL_HISTORY = previousHistory;
+      if (previousHistoryDir === undefined) delete process.env.CODEBUDDY_CHANNEL_HISTORY_DIR;
+      else process.env.CODEBUDDY_CHANNEL_HISTORY_DIR = previousHistoryDir;
+    }
+  });
+
   it.runIf(process.platform !== 'win32')(
     'P7 une session illisible puis relisible n est pas archivee vide ni effacee',
     async () => {
