@@ -117,6 +117,14 @@ const DEFAULT_CONFIG: OSSandboxConfig = {
 let cachedCapabilities: SandboxCapabilities | null = null;
 
 /**
+ * Deadline for every capability probe (bwrap, docker version). A probe that
+ * never exits used to pin the caller, including a test module's top-level
+ * await, where no test timeout applies. Five seconds is enough for a live
+ * daemon and short enough that a stuck one is reported unavailable.
+ */
+export const CAPABILITY_PROBE_TIMEOUT_MS = 5_000;
+
+/**
  * Test seam. Production leaves this unset, so detection is unchanged.
  * A probe replaces the host scan for the current process only; it is not a
  * mutable flag read by the agent loop.
@@ -194,9 +202,14 @@ export async function detectCapabilities(): Promise<SandboxCapabilities> {
     const result = await execSimple('docker', ['version', '--format', '{{.Server.Os}}']);
     if (result.exitCode === 0) {
       capabilities.docker = result.stdout.trim().toLowerCase() !== 'windows';
-    } else {
+    } else if (!result.stderr.includes('probe timed out')) {
+      // A format the daemon does not understand (docker→podman shims) still
+      // gets the historical probe. A probe that already hit its deadline must
+      // not be started a second time.
       const fallback = await execSimple('docker', ['version', '--format', '{{.Server.Version}}']);
       capabilities.docker = fallback.exitCode === 0;
+    } else {
+      capabilities.docker = false;
     }
   } catch {
     capabilities.docker = false;
@@ -1214,12 +1227,41 @@ export class OSSandbox extends EventEmitter implements SandboxBackendInterface {
 /**
  * Simple exec wrapper
  */
-function execSimple(command: string, args: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+function execSimple(
+  command: string,
+  args: string[],
+  timeoutMs: number = CAPABILITY_PROBE_TIMEOUT_MS,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    const proc = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    // A new process group lets the deadline kill the probe and the children
+    // it spawned (a shell waiting on sleep, a stuck docker helper). Windows
+    // has no POSIX group; the direct kill below is the fallback there.
+    const detached = process.platform !== 'win32';
+    const proc = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], detached });
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    let timedOut = false;
+
+    const finish = (exitCode: number, out: string, err: string): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ exitCode, stdout: out, stderr: err });
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      const pid = proc.pid;
+      if (detached && typeof pid === 'number' && pid > 0) {
+        try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ }
+      }
+      try { proc.kill('SIGKILL'); } catch { /* already gone */ }
+      // A probe stuck in uninterruptible sleep must not keep the process alive.
+      proc.unref();
+      finish(1, stdout, 'probe timed out');
+    }, timeoutMs);
 
     proc.stdout?.on('data', (data: Buffer) => {
       stdout += data.toString();
@@ -1230,11 +1272,11 @@ function execSimple(command: string, args: string[]): Promise<{ exitCode: number
     });
 
     proc.on('close', (code) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
+      finish(code ?? 1, stdout, timedOut ? 'probe timed out' : stderr);
     });
 
     proc.on('error', () => {
-      resolve({ exitCode: 1, stdout: '', stderr: 'Command not found' });
+      finish(1, '', 'Command not found');
     });
   });
 }
