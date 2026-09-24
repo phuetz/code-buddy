@@ -139,7 +139,7 @@ let mouthChain: Promise<void> = Promise.resolve();
  * half-duplex guard for exactly its own playback. The guard's echo tail bridges the gap between
  * queued plays, so the ear stays muted across the whole spoken sequence.
  */
-export async function withSpeakingGuard(play: () => Promise<void>): Promise<void> {
+export async function withSpeakingGuard(play: () => Promise<unknown>): Promise<void> {
   const run = mouthChain.then(async () => {
     beginSpeaking();
     try {
