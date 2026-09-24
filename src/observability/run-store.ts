@@ -254,6 +254,8 @@ export class RunStore {
   private disposed = false;
   /** Journal streams ended or destroyed here whose file is not released yet. */
   private closingStreams: Set<Promise<void>> = new Set();
+  /** The same closes by run: endRun() forgets the stream before its file is released. */
+  private closingRuns: Map<string, Promise<void>> = new Map();
 
    constructor(runsDir?: string) {
     this.runsDir =
@@ -297,20 +299,24 @@ export class RunStore {
     await Promise.all([...this.closingStreams]);
   }
 
-  private trackClose(ws: fs.WriteStream): void {
+  private trackClose(ws: fs.WriteStream, runId: string): void {
     if (ws.closed) return;
     const closed = new Promise<void>((resolve) => {
       ws.once('close', () => resolve());
     });
     this.closingStreams.add(closed);
-    void closed.then(() => this.closingStreams.delete(closed));
+    this.closingRuns.set(runId, closed);
+    void closed.then(() => {
+      this.closingStreams.delete(closed);
+      if (this.closingRuns.get(runId) === closed) this.closingRuns.delete(runId);
+    });
   }
 
   dispose(): void {
     this.disposed = true;
-    for (const ws of this.handles.values()) {
+    for (const [runId, ws] of this.handles) {
       try {
-        this.trackClose(ws);
+        this.trackClose(ws, runId);
         ws.destroy();
       } catch {
         // Ignore dispose-time stream errors.
@@ -570,7 +576,7 @@ export class RunStore {
     // Close write stream before post-run analyzers read events.jsonl.
     const ws = this.handles.get(runId);
     if (ws) {
-      this.trackClose(ws);
+      this.trackClose(ws, runId);
       ws.end(afterStreamClosed);
       this.handles.delete(runId);
     } else {
@@ -1386,19 +1392,21 @@ export class RunStore {
         }
       };
 
-      // Destroy handle immediately (force close, no flush needed for pruned runs),
-      // and remove the directory only once its journal is closed: Windows refuses
-      // to remove a directory holding an open file (a fixed delay raced the close).
+      // Destroy a live handle (force close, no flush needed for pruned runs), then
+      // remove the directory only once its journal is closed — including one that
+      // endRun() already handed to its close: Windows refuses to remove a
+      // directory holding an open file (a fixed delay raced the close).
       const ws = this.handles.get(s.runId);
-      if (ws && !ws.closed) {
-        this.trackClose(ws);
-        ws.once('close', removeRunDir);
+      if (ws) {
+        this.trackClose(ws, s.runId);
         ws.destroy();
-        this.handles.delete(s.runId);
-        this.eventWriters.delete(s.runId);
+      }
+      this.handles.delete(s.runId);
+      this.eventWriters.delete(s.runId);
+      const closing = this.closingRuns.get(s.runId);
+      if (closing) {
+        void closing.then(removeRunDir);
       } else {
-        this.handles.delete(s.runId);
-        this.eventWriters.delete(s.runId);
         removeRunDir();
       }
     }
