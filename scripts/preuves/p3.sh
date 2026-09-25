@@ -4,6 +4,24 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 mkdir -p .qa-p3/home .qa-p3/dream-project .qa-p3/images .qa-p3/out
+export HOME="$ROOT/.qa-p3/home" USERPROFILE="$ROOT/.qa-p3/home"
+
+case "${1:-all}" in
+  nervous|all)
+    if [[ -z "${CARGO_HOME:-}" || -z "${RUSTUP_HOME:-}" ]]; then
+      echo 'Fournir CARGO_HOME et RUSTUP_HOME pour le rejeu Rust isolé.' >&2
+      exit 2
+    fi
+    ;;
+esac
+case "${1:-all}" in
+  vision-train|all)
+    if [[ -z "${P3_YOLO_PYTHON:-}" || -z "${P3_YOLO_MODEL:-}" ]]; then
+      echo 'Fournir P3_YOLO_PYTHON et P3_YOLO_MODEL pour le rejeu YOLO isolé.' >&2
+      exit 2
+    fi
+    ;;
+esac
 
 prepare() { python3 scripts/preuves/p3-prepare.py; }
 case "${1:-all}" in
@@ -32,8 +50,8 @@ case "${1:-all}" in
     ;;
   vision-train)
     prepare
-    YOLO_PYTHON="${P3_YOLO_PYTHON:-$HOME/vision_tests/venv/bin/python}"
-    YOLO_MODEL="${P3_YOLO_MODEL:-$HOME/vision_tests/yolov8n.pt}"
+    YOLO_PYTHON="$P3_YOLO_PYTHON"
+    YOLO_MODEL="$P3_YOLO_MODEL"
     start_ms="$(date +%s%3N)"
     env -i PATH="$PATH" HOME="$ROOT/.qa-p3/home" USERPROFILE="$ROOT/.qa-p3/home" CODEBUDDY_HOME="$ROOT/.qa-p3/home" \
       CODEBUDDY_VISION_TRAIN=true CODEBUDDY_YOLO_PYTHON="$YOLO_PYTHON" CODEBUDDY_YOLO_MODEL="$YOLO_MODEL" \

@@ -24,6 +24,7 @@ P1_XDG="$P1_RUN_DIR/xdg"
 P1_WORK="$P1_RUN_DIR/work"
 P1_LOGS="$P1_RUN_DIR/traces"
 P1_FAILURES=0
+P1_LAST_STATUS=0
 mkdir -p "$P1_HOME" "$P1_CODEBUDDY_HOME" "$P1_XDG" "$P1_WORK" "$P1_LOGS"
 printf 'La couleur du phare est indigo.\n' > "$P1_WORK/indice.txt"
 echo "Traces : $P1_LOGS"
@@ -49,6 +50,7 @@ run() {
   local started=$SECONDS
   "${P1_ENV[@]}" "$@" 2>&1 | tee "$P1_LOGS/$label.log"
   local status=${PIPESTATUS[0]}
+  P1_LAST_STATUS=$status
   echo "MESURE : statut=$status durée=$((SECONDS - started))s octets=$(wc -c < "$P1_LOGS/$label.log")"
   if [[ "$status" -ne 0 ]]; then
     P1_FAILURES=$((P1_FAILURES + 1))
@@ -76,7 +78,9 @@ run conseil timeout 240 npx --no-install tsx src/index.ts council \
   --count 2 --models ollama/qwen3:4b-instruct,ollama/qwen2.5:7b-instruct \
   --judge ollama/qwen3:4b-instruct --no-synthesis
 if [[ -f "$P1_LOGS/conseil.log" ]]; then
-  if rg -q 'Apprentissage council ignoré|Pas de verdict fiable' "$P1_LOGS/conseil.log"; then
+  if [[ "$P1_LAST_STATUS" -ne 0 ]]; then
+    echo 'ASSERTION conseil avec arbitrage et apprentissage : NON VÉRIFIÉE (commande en échec)' | tee -a "$P1_LOGS/conseil.log"
+  elif rg -q 'Apprentissage council ignoré|Pas de verdict fiable' "$P1_LOGS/conseil.log"; then
     echo 'ASSERTION conseil avec arbitrage et apprentissage : ÉCHEC' | tee -a "$P1_LOGS/conseil.log"
     P1_FAILURES=$((P1_FAILURES + 1))
   else

@@ -43,7 +43,9 @@ while (Date.now() < deadline) {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) });
     if (response.ok) { health = await response.json(); break; }
-  } catch {}
+  } catch {
+    // Le serveur peut être encore en démarrage pendant cette sonde bornée.
+  }
   await new Promise((resolve) => setTimeout(resolve, 200));
 }
 if (!health) throw new Error(`server health did not become ready: ${serverOutput.slice(-1200)}`);
