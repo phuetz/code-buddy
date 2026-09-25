@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
 import { getErrorMessage } from '../types/index.js';
+import { LisaActionStore, lisaUnifiedCheckpointsEnabled } from './lisa-action-store.js';
 
 export interface FileSnapshot {
   path: string;
@@ -52,6 +53,9 @@ export class CheckpointManager extends EventEmitter {
 
     if (files && files.length > 0) {
       checkpoint.files = this.snapshotFiles(files);
+      if (lisaUnifiedCheckpointsEnabled()) {
+        new LisaActionStore(this.workingDirectory).prepare(checkpoint.id, description, 'checkpoint-manager', files);
+      }
     }
 
     this.checkpoints.push(checkpoint);

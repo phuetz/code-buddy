@@ -113,6 +113,11 @@ export function saveEventFollowUps(items: EventFollowUp[], statePath = defaultSt
 /** Add a captured event to the store, returning the persisted follow-up. */
 export function addFollowUp(candidate: EventCandidate, nowMs: number, statePath = defaultStatePath()): EventFollowUp {
   const items = loadEventFollowUps(statePath);
+  if (process.env.CODEBUDDY_LISA_PULSE === 'true') {
+    const { localDate } = resolveFollowUpDate(nowMs);
+    const todayCount = items.filter(item => resolveFollowUpDate(item.createdAt).localDate === localDate).length;
+    if (todayCount >= 3) throw new Error('Lisa follow-up daily cap reached');
+  }
   const followUp: EventFollowUp = {
     id: randomBytes(6).toString('hex'),
     event: candidate.event,
@@ -126,6 +131,25 @@ export function addFollowUp(candidate: EventCandidate, nowMs: number, statePath 
     throw new Error(`[event-followups] could not persist ${statePath}`);
   }
   return followUp;
+}
+
+function resolveFollowUpDate(nowMs: number): { localDate: string } {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: process.env.CODEBUDDY_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const parts = formatter.formatToParts(new Date(nowMs));
+  const part = (type: string) => parts.find(item => item.type === type)?.value ?? '';
+  return { localDate: `${part('year')}-${part('month')}-${part('day')}` };
+}
+
+/** Owner rejection retires a proposed follow-up without asking it later. */
+export function rejectEventFollowUp(id: string, nowMs = Date.now(), statePath = defaultStatePath()): boolean {
+  const items = loadEventFollowUps(statePath);
+  const item = items.find(candidate => candidate.id === id && candidate.firedAt == null);
+  if (!item) return false;
+  item.firedAt = nowMs;
+  return saveEventFollowUps(items, statePath);
 }
 
 /**

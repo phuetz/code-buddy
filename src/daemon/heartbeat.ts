@@ -170,6 +170,23 @@ export class HeartbeatEngine extends EventEmitter {
     });
     const merged = mergeHeartbeatChecklists(sources);
     const checklistContent = filterDueHeartbeatChecklist(merged);
+    if (process.env.CODEBUDDY_LISA_PULSE === 'true' &&
+        process.env.CODEBUDDY_LISA_UNIFIED_CHECKPOINTS === 'true' &&
+        process.env.CODEBUDDY_LISA_JOURNAL === 'true') {
+      const { runConfiguredLisaPulse } = await import('../companion/lisa-pulse.js');
+      await runConfiguredLisaPulse(checklistContent);
+      this.lastRunTime = new Date();
+      this.lastResult = this.config.suppressionKeyword;
+      this.totalSuppressions++;
+      return {
+        timestamp: this.lastRunTime,
+        skipped: false,
+        suppressed: true,
+        agentResponse: this.config.suppressionKeyword,
+        checklistContent,
+        duration: Date.now() - startTime,
+      };
+    }
     if (!merged.trim()) {
       const result: HeartbeatTickResult = {
         timestamp: new Date(),

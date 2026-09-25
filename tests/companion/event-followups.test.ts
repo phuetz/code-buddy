@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +10,7 @@ import {
   markFired,
   captureEventFollowUp,
   confirmationLine,
+  rejectEventFollowUp,
   FOLLOWUP_GRACE_DAYS,
   CAPTURE_HORIZON_DAYS,
   type EventExtractor,
@@ -24,7 +25,10 @@ beforeEach(() => {
   dir = mkdtempSync(path.join(os.tmpdir(), 'ef-'));
   p = path.join(dir, 'event-followups.json');
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+afterEach(() => {
+  vi.unstubAllEnvs();
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+});
 
 describe('hasFutureCue', () => {
   it('fires on future-time words, not on plain statements', () => {
@@ -119,5 +123,17 @@ describe('confirmationLine', () => {
     const line = confirmationLine(fu, NOW);
     expect(line).toContain('le déploiement');
     expect(line).toMatch(/demain|redemander/i);
+  });
+});
+
+describe('Lisa opt-in follow-up limits', () => {
+  it('caps conversational follow-ups at three per local day and lets the owner reject one', () => {
+    vi.stubEnv('CODEBUDDY_LISA_PULSE', 'true');
+    vi.stubEnv('CODEBUDDY_TIMEZONE', 'UTC');
+    const candidate = { event: 'déploiement', eventDayAt: NOW + DAY, followUp: 'Comment ça va ?' };
+    const ids = [0, 1, 2].map(() => addFollowUp(candidate, NOW, p).id);
+    expect(() => addFollowUp(candidate, NOW, p)).toThrow('daily cap');
+    expect(rejectEventFollowUp(ids[0]!, NOW, p)).toBe(true);
+    expect(dueFollowUp(NOW + 2 * DAY, p)?.id).toBe(ids[1]);
   });
 });

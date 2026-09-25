@@ -1905,6 +1905,21 @@ export async function defaultReply(
   history: VoiceHistoryTurn[] = [],
   replyOpts?: VoiceStepOptions
 ): Promise<string> {
+  if (process.env.CODEBUDDY_LISA_JOURNAL === 'true') {
+    const { isLisaJournalQuestion, summarizeLisaDay } = await import('../companion/lisa-journal.js');
+    if (isLisaJournalQuestion(heard)) {
+      try {
+        const { readPresenceContext } = await import('../memory/presence-injector.js');
+        const { hasConfirmedPresence } = await import('../companion/presence-loop.js');
+        const named = await resolveVoiceRobotNamed(heard, replyOpts);
+        const present = hasConfirmedPresence(await readPresenceContext());
+        if (named && present) return summarizeLisaDay();
+      } catch {
+        // A broken identity sensor must never expose the journal.
+      }
+      return 'Je ne peux pas lire le journal sans présence confirmée et sans être appelée par mon nom.';
+    }
+  }
   const fast = fastCompanionReply(heard);
   if (fast) {
     if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);
