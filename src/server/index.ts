@@ -1435,10 +1435,18 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             // Semantic vision events (person_entered/lost, drowsy) from the vision sidecar.
             if (shouldWireVisionReaction({ camera: process.env.CODEBUDDY_SENSORY_CAMERA, token: sensoryToken })) {
               const { wireSemanticVisionReaction } = await import('../sensory/semantic-vision-reaction.js');
+              // The SHARED instance: a private one would record the face in an object nobody can read.
+              const { getFaceIdentityState } = await import('../sensory/face-identity-state.js');
+              const faceIdentityState = getFaceIdentityState();
               sensoryTeardown.push(
-                wireSemanticVisionReaction({ onEngage: () => responseDecider.markEngaged('arrival') }),
+                wireSemanticVisionReaction({
+                  onEngage: () => responseDecider.markEngaged('arrival'),
+                  onIdentityChange: (recognizedUserPresent: boolean) => {
+                    faceIdentityState.setRecognized(recognizedUserPresent);
+                  },
+                }),
               );
-              logger.info('Sensory semantic-vision reaction: Enabled (person/drowsy → alert + greet→engage)');
+              logger.info('Sensory semantic-vision reaction: Enabled (person/drowsy → alert + greet→engage + identity tracking)');
             }
             // Event→action rules engine (a camera event triggers code) — opt-in + token-gated,
             // since rules can run shell. Safety lives in sensory-action-executor (env-only context,
