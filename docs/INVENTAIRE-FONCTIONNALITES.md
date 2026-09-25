@@ -43,7 +43,7 @@ Le modèle décrit par Anthropic en septembre 2026. **Les cinq existent ici.**
 |---|---|---|
 | **Travail** — ce qu'il voit | `ContextManagerV2`, compression par fenêtre glissante | 🧪 |
 | **Travail étendue** — compaction réversible | Un segment compacté se redéplie (`context_expand`) au lieu d'être perdu | 🧪 activé le 21/09 |
-| **Épisodique** — ce qui s'est passé | Journal des épisodes, chronologie par tour, rejouable | 🧪 actif sur Lisa |
+| **Épisodique** — ce qui s'est passé | Chronologie par tour, rejouable ; journal des épisodes Lisa non couvert ici | 🧪 rejeu / ❓ journal Lisa |
 | **Sémantique** — ce qu'il sait | Graphe de connaissances collectif : nœuds typés, supersede bi-temporel, corroboration entre agents, moteur Rust + index HNSW | ✅ **4 119 entrées, rappel pertinent mesuré** |
 | **Procédurale** — comment faire | L'agent écrit ses propres outils et savoir-faire, sous garde empirique | ✅ **189 améliorations validées, Δ=138, couverture 15/15, mode `propose-only`** |
 | **Oubli** | Courbe d'Ebbinghaus, le rappel renforce, archivage avant suppression, restaurable | 🧪 actif sur Lisa |
