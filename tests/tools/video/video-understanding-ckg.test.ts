@@ -33,12 +33,10 @@ describe('understandVideo — CKG ingestion gate', () => {
 
   beforeEach(async () => {
     outDir = await mkdtemp(join(tmpdir(), 'buddy-understand-ckg-'));
-    // Les cas « gate ON » appellent understandVideo SANS ckgBridge injecté pour obtenir
-    // la valeur de référence : la résolution `deps.ckgBridge ?? getDefaultVideoCkgBridge()`
-    // atteint alors le VRAI ledger et écrit la vidéo de test dans la mémoire collective de
-    // l'utilisateur (constaté : un nœud `discovery:collective:https-youtu-be-…` remontait
-    // en tête de rappels sérieux). Rediriger le home rend le fichier entier hermétique,
-    // y compris pour les chemins d'écriture qu'on n'aurait pas prévus.
+    // Un appel porte ouverte SANS ckgBridge injecté résout `getDefaultVideoCkgBridge()` et
+    // atteint le VRAI ledger (constaté : un nœud `discovery:collective:https-youtu-be-…`
+    // remontait en tête de rappels sérieux). Plus aucun cas ne le fait ; rediriger le home
+    // reste le filet pour les chemins d'écriture qu'on n'aurait pas prévus.
     homeDir = await mkdtemp(join(tmpdir(), 'buddy-ckg-home-'));
     process.env.CODEBUDDY_HOME = homeDir;
     delete process.env.CODEBUDDY_COLLECTIVE_MEMORY;
@@ -66,10 +64,13 @@ describe('understandVideo — CKG ingestion gate', () => {
   });
 
   it('gate ON: ingests one bounded discovery node and does NOT alter the return value', async () => {
+    // Référence prise porte FERMÉE : aucune ingestion n'a lieu. La prendre porte ouverte sans
+    // pont injecté atteignait le vrai pont, qui calcule un embedding avec un modèle de 130 Mo ;
+    // en CI (`npm ci`, cache vide) il se téléchargeait pendant le test et dépassait les 20 s.
+    const bare = await understandVideo({ source: 'https://youtu.be/dQw4w9WgXcQ' }, { outDir, fetchCaptions });
+
     process.env.CODEBUDDY_COLLECTIVE_MEMORY = 'true';
     const bridge = fakeBridge();
-
-    const bare = await understandVideo({ source: 'https://youtu.be/dQw4w9WgXcQ' }, { outDir, fetchCaptions });
     const withBridge = await understandVideo(
       { source: 'https://youtu.be/dQw4w9WgXcQ' },
       { outDir, fetchCaptions, ckgBridge: bridge },
