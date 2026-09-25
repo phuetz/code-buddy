@@ -1,6 +1,7 @@
 /** Opt-in initiative gate. A cheap observation precedes every model wake. */
 import os from 'node:os';
 import path from 'node:path';
+import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { inAwayWindow, isAwayPaused, loadAwayState, resolveAwayClock } from './away-mode.js';
@@ -66,8 +67,24 @@ function readState(file: string): PulseState {
 function command(commandName: string, args: string[], cwd: string): string | null {
   const result = spawnSync(commandName, args, {
     cwd, encoding: 'utf8', timeout: 5000, maxBuffer: 64 * 1024,
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
   });
   return result.status === 0 ? result.stdout.trim().slice(0, 4096) : null;
+}
+
+function countSnapshot(file: string | undefined, source: string): LisaSignal | null {
+  if (!file) return null;
+  try {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.size > 64 * 1024) return null;
+    const raw = fs.readFileSync(file, 'utf8');
+    const data = JSON.parse(raw) as unknown;
+    const count = typeof data === 'number' ? data
+      : Array.isArray(data) ? data.length
+        : data && typeof data === 'object' && 'count' in data ? (data as { count: unknown }).count : null;
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) return null;
+    return { source, fingerprint: createHash('sha256').update(raw).digest('hex'), summary: `${source} count: ${count}` };
+  } catch { return null; }
 }
 
 /** No model, no tools with write effects, and no worktree mutation. */
@@ -94,13 +111,39 @@ export async function observeLisaSignals(workspace = process.cwd()): Promise<Lis
     }
   }
   try {
-    const { loadReminders } = await import('./reminders.js');
-    const reminders = (await loadReminders()).filter(item => item.enabled)
-      .map(item => ({ id: item.id, time: item.time, date: item.date, done: item.lastDoneAt }));
-    signals.push({ source: 'reminders', fingerprint: JSON.stringify(reminders), summary: `Enabled reminders: ${reminders.length}` });
-  } catch {
-    // Missing optional source does not wake a model.
+    const file = process.env.CODEBUDDY_REMINDERS_FILE || path.join(os.homedir(), '.codebuddy', 'reminders.json');
+    const stat = fs.lstatSync(file);
+    if (stat.isFile() && stat.size <= 256 * 1024) {
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as unknown;
+      const list = Array.isArray(parsed) ? parsed
+        : parsed && typeof parsed === 'object' && 'reminders' in parsed ? (parsed as { reminders: unknown }).reminders : [];
+      const rows: unknown[] = Array.isArray(list) ? list : [];
+      const reminders = rows
+        .filter((item): item is { id: string; enabled: boolean; time?: string; date?: string; lastDoneAt?: string } =>
+          Boolean(item && typeof item === 'object' && 'id' in item && typeof item.id === 'string' &&
+            'enabled' in item && item.enabled === true))
+        .map(item => ({ id: item.id, time: item.time, date: item.date, done: item.lastDoneAt }));
+      signals.push({ source: 'reminders', fingerprint: JSON.stringify(reminders), summary: `Enabled reminders: ${reminders.length}` });
+    }
+  } catch { /* unavailable optional reminders */ }
+  if (process.env.CODEBUDDY_FLEET_COLAB_DIR) {
+    try {
+      const file = path.join(process.env.CODEBUDDY_FLEET_COLAB_DIR, 'colab-tasks.json');
+      const stat = fs.lstatSync(file);
+      if (stat.isFile() && stat.size <= 256 * 1024) {
+        const raw = fs.readFileSync(file, 'utf8');
+        const parsed = JSON.parse(raw) as { tasks?: Array<{ id?: string; status?: string; priority?: string; claimedAt?: string }> };
+        const tasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
+        const compact = tasks.map(task => ({ id: task.id, status: task.status, priority: task.priority, claimedAt: task.claimedAt }));
+        signals.push({ source: 'fleet', fingerprint: JSON.stringify(compact),
+          summary: `Fleet queue: ${tasks.filter(task => task.status === 'open').length} open, ${tasks.filter(task => task.status === 'blocked').length} blocked` });
+      }
+    } catch { /* unavailable optional queue */ }
   }
+  const agenda = countSnapshot(process.env.CODEBUDDY_LISA_PULSE_AGENDA_SNAPSHOT, 'agenda');
+  if (agenda) signals.push(agenda);
+  const mail = countSnapshot(process.env.CODEBUDDY_LISA_PULSE_MAIL_COUNT_SNAPSHOT, 'mail');
+  if (mail) signals.push(mail);
   return signals;
 }
 

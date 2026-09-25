@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { lisaPulseEnabled, runLisaPulse, type LisaDecision, type LisaSignal } from '../../src/companion/lisa-pulse.js';
+import { lisaPulseEnabled, observeLisaSignals, runLisaPulse, type LisaDecision, type LisaSignal } from '../../src/companion/lisa-pulse.js';
 
 const roots: string[] = [];
 function setup() {
@@ -11,6 +11,7 @@ function setup() {
   vi.stubEnv('CODEBUDDY_LISA_PULSE', 'true');
   vi.stubEnv('CODEBUDDY_LISA_UNIFIED_CHECKPOINTS', 'true');
   vi.stubEnv('CODEBUDDY_LISA_JOURNAL', 'true');
+  vi.stubEnv('CODEBUDDY_LISA_PULSE_GH', 'false');
   vi.stubEnv('CODEBUDDY_COMPANION_AWAY_HOURS', '00:00-23:59');
   vi.stubEnv('CODEBUDDY_COMPANION_AWAY_STATE_FILE', path.join(root, 'away.json'));
   return { root, statePath: path.join(root, 'pulse.json'), now: () => Date.UTC(2026, 8, 25, 12) };
@@ -110,5 +111,26 @@ describe('Lisa pulse', () => {
     expect((await runLisaPulse('', deps)).reason).toBe('Action target and checkpoint target differ');
     expect(deps.authorizeAction).not.toHaveBeenCalled();
     expect(executeAction).not.toHaveBeenCalled();
+  });
+
+  it('reads fleet, reminder, agenda and mail counts without changing their snapshots', async () => {
+    const fixture = setup();
+    const fleet = path.join(fixture.root, 'colab-tasks.json');
+    const reminders = path.join(fixture.root, 'reminders.json');
+    const agenda = path.join(fixture.root, 'agenda.json');
+    const mail = path.join(fixture.root, 'mail.json');
+    fs.writeFileSync(fleet, JSON.stringify({ tasks: [{ id: 'a', status: 'open' }, { id: 'b', status: 'blocked' }] }));
+    fs.writeFileSync(reminders, JSON.stringify([{ id: 'r', enabled: true, time: '12:00' }]));
+    fs.writeFileSync(agenda, JSON.stringify([{ id: 'today' }]));
+    fs.writeFileSync(mail, JSON.stringify({ count: 2 }));
+    vi.stubEnv('CODEBUDDY_FLEET_COLAB_DIR', fixture.root);
+    vi.stubEnv('CODEBUDDY_REMINDERS_FILE', reminders);
+    vi.stubEnv('CODEBUDDY_LISA_PULSE_AGENDA_SNAPSHOT', agenda);
+    vi.stubEnv('CODEBUDDY_LISA_PULSE_MAIL_COUNT_SNAPSHOT', mail);
+    const before = [fleet, reminders, agenda, mail].map(file => fs.readFileSync(file, 'utf8'));
+    const signals = await observeLisaSignals(fixture.root);
+    expect(signals.map(signal => signal.source)).toEqual(expect.arrayContaining(['fleet', 'reminders', 'agenda', 'mail']));
+    expect(signals.find(signal => signal.source === 'fleet')?.summary).toContain('1 open, 1 blocked');
+    expect([fleet, reminders, agenda, mail].map(file => fs.readFileSync(file, 'utf8'))).toEqual(before);
   });
 });
