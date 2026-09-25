@@ -29,7 +29,7 @@ export function registerRucheCommand(program: Command): void {
     .action((lane: string, options: { ttlMs: string }) => output(() => withLocalRuche((state) => {
       const ttlMs = Number(options.ttlMs);
       const event = state.agent.append('heartbeat', { lane, expiresAt: Date.now() + ttlMs });
-      state.authority.journal.ingest(event);
+      if (state.authority.journal !== state.agent) state.authority.journal.ingest(event);
       state.persist();
       return event;
     })));
@@ -40,7 +40,7 @@ export function registerRucheCommand(program: Command): void {
       const ttlMs = Number(options.ttlMs);
       const request = state.agent.append('lease.request', { work, ttlMs });
       if (options.requestOnly) {
-        state.authority.journal.ingest(request);
+        if (state.authority.journal !== state.agent) state.authority.journal.ingest(request);
         state.persist();
         return request;
       }
@@ -53,7 +53,7 @@ export function registerRucheCommand(program: Command): void {
     .action((work: string, rawToken: string, options: { requestOnly?: boolean }) => output(() => withLocalRuche((state) => {
       const request = state.agent.append('lease.release.request', { work, token: Number(rawToken) });
       if (options.requestOnly) {
-        state.authority.journal.ingest(request);
+        if (state.authority.journal !== state.agent) state.authority.journal.ingest(request);
         state.persist();
         return request;
       }
@@ -67,7 +67,7 @@ export function registerRucheCommand(program: Command): void {
     .action((work: string, rawToken: string, options: { ttlMs: string; requestOnly?: boolean }) => output(() => withLocalRuche((state) => {
       const request = state.agent.append('lease.renew.request', { work, token: Number(rawToken), ttlMs: Number(options.ttlMs) });
       if (options.requestOnly) {
-        state.authority.journal.ingest(request);
+        if (state.authority.journal !== state.agent) state.authority.journal.ingest(request);
         state.persist();
         return request;
       }
@@ -85,7 +85,7 @@ export function registerRucheCommand(program: Command): void {
         logHash: createHash('sha256').update(log).digest('hex'),
         report, reportHash: createHash('sha256').update(report).digest('hex'),
       });
-      state.authority.journal.ingest(event);
+      if (state.authority.journal !== state.agent) state.authority.journal.ingest(event);
       state.persist();
       return event;
     })));

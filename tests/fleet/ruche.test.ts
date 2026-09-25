@@ -164,6 +164,27 @@ describe('Ruche prototype', () => {
     expect(laneStatuses(remote, f.clock())).toEqual([{ lane: 'lane-1', active: false }]);
   });
 
+  it('rejects heartbeat deadlines outside the one-minute window', () => {
+    const f = fixture();
+    expect(() => f.ja.append('heartbeat', { lane: 'lane-a', expiresAt: f.clock() }))
+      .toThrow('RUCHE_INVALID_DEADLINE');
+    expect(() => f.ja.append('heartbeat', { lane: 'lane-a', expiresAt: f.clock() + 60_001 }))
+      .toThrow('RUCHE_INVALID_DEADLINE');
+    expect(f.ja.append('heartbeat', { lane: 'lane-a', expiresAt: f.clock() + 60_000 }).type)
+      .toBe('heartbeat');
+  });
+
+  it('rejects approval deadlines outside the five-minute window', () => {
+    const f = fixture();
+    const payload = { effectId: 'effect-a', effect: { action: 'publish', target: 'artifact' }, revision: 'a'.repeat(40) };
+    expect(() => f.ja.append('approval.request', { ...payload, expiresAt: f.clock() }))
+      .toThrow('RUCHE_INVALID_DEADLINE');
+    expect(() => f.ja.append('approval.request', { ...payload, expiresAt: f.clock() + 300_001 }))
+      .toThrow('RUCHE_INVALID_DEADLINE');
+    expect(f.ja.append('approval.request', { ...payload, expiresAt: f.clock() + 300_000 }).type)
+      .toBe('approval.request');
+  });
+
   it('does not run an outbound effect if approval consumption cannot be persisted', async () => {
     const f = fixture();
     const revision = 'a'.repeat(40);
