@@ -6,17 +6,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { RunStore } from '../../src/observability/run-store.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'run-store-test-'));
-}
-
-function cleanDir(dir: string): void {
-  try {
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-  } catch {
-    // Ignore
-  }
 }
 
 describe('RunStore', () => {
@@ -36,9 +29,9 @@ describe('RunStore', () => {
       try { store.endRun(runId, 'cancelled'); } catch { /* ignore */ }
     }
     store.dispose();
-    // Give streams time to flush and close
-    await new Promise(r => setTimeout(r, 80));
-    cleanDir(tmpDir);
+    // endRun()/dispose() return before the journal files are closed.
+    await store.whenStreamsClosed();
+    removeTestDir(tmpDir);
     // Reset singleton
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
   });
@@ -484,14 +477,14 @@ describe('RunStore', () => {
       store.saveArtifact(runId, 'gone.md', '# Gone\nThis run folder will disappear.');
       store.endRun(runId, 'completed');
       activeRunIds = activeRunIds.filter(id => id !== runId);
-      await new Promise(r => setTimeout(r, 30));
+      await store.whenStreamsClosed();
 
       const before = store.checkArtifactIndexHealth();
       if (before.unavailable) return;
       expect(before.staleRows).toBe(0);
 
       // Simulate a pruned/moved run folder while the index keeps the row.
-      fs.rmSync(path.join(tmpDir, runId), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTestDir(path.join(tmpDir, runId));
 
       const after = store.checkArtifactIndexHealth();
       expect(after.staleRows).toBe(1);
@@ -530,12 +523,12 @@ describe('RunStore', () => {
       store.endRun(orphanRunId, 'completed');
 
       activeRunIds = activeRunIds.filter(id => id !== staleRunId && id !== orphanRunId);
-      await new Promise(r => setTimeout(r, 30));
+      await store.whenStreamsClosed();
 
       const baseline = store.checkArtifactIndexHealth();
       if (baseline.unavailable) return;
 
-      fs.rmSync(path.join(tmpDir, staleRunId), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTestDir(path.join(tmpDir, staleRunId));
       fs.rmSync(path.join(tmpDir, orphanRunId, 'artifacts', 'orphan.md'), { force: true });
 
       // Default repair removes only the stale (missing-run) row.

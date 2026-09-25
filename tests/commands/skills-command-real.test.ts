@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registerSkillsCommands } from '../../src/commands/skills-cli/index.js';
 import { getSkillsHub, resetSkillsHub } from '../../src/skills/hub.js';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 let tempHome: string;
 let originalHome: string | undefined;
@@ -646,7 +647,7 @@ describe('buddy skills command with real SkillsHub state', () => {
     );
     await fs.rm(staleTemp.path, { force: true });
 
-    const nonTempRoot = await fs.mkdtemp(path.join(repoRoot, '.tmp-codebuddy-skills-command-'));
+    const nonTempRoot = await fs.mkdtemp(path.join(repoScratchRoot(repoRoot), '.tmp-codebuddy-skills-command-'));
     repoTempDirs.push(nonTempRoot);
     const nonTempSkillPath = path.join(nonTempRoot, 'non-temp-helper', 'SKILL.md');
     await fs.mkdir(path.dirname(nonTempSkillPath), { recursive: true });

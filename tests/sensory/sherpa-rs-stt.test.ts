@@ -11,6 +11,7 @@ import {
 } from '../../src/sensory/speech-reaction.js';
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
 import { logger } from '../../src/utils/logger.js';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 const ENV_KEYS = [
   'CODEBUDDY_SPEECH_ENGINE',
@@ -161,7 +162,7 @@ describe('sherpa-rs STT end-to-end (real binary)', () => {
       CODEBUDDY_SPEECH_STT_THREADS: '4',
       BUDDY_SENSE_STT_MODEL_DIR: modelDir,
     });
-    const runtime = await mkdtemp(path.join(repoRoot, '.conv4-e2e-'));
+    const runtime = await mkdtemp(path.join(repoScratchRoot(repoRoot), '.conv4-e2e-'));
     let unwire = () => {};
     try {
       const heard = new Promise<string>((resolve, reject) => {

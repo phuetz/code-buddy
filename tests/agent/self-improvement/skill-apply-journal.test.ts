@@ -10,6 +10,7 @@ import { ensureFrontmatter, LiveSkillMutator, type SkillMutatorPort } from '../.
 import { StaticSkillProposer } from '../../../src/agent/self-improvement/skill-proposer.js';
 import type { SkillBenchmarkScenario, SkillProposal, SkillSpec } from '../../../src/agent/self-improvement/skill-types.js';
 import { resetSkillRegistry } from '../../../src/skills/registry.js';
+import { removeTestDir } from '../../helpers/tmp.js';
 
 const QA_HOME = path.join(process.cwd(), '_qa', 'home');
 const PASS_BEHAVIOR = {
@@ -26,7 +27,7 @@ function occupyAsDirectory(target: string): void {
 }
 
 function releaseOccupied(target: string): void {
-  fs.rmSync(target, { recursive: true, force: true });
+  removeTestDir(target);
 }
 
 function wrappingMutator(inner: LiveSkillMutator, create: SkillMutatorPort['create']): SkillMutatorPort {

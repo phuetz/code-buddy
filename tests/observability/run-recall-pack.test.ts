@@ -8,6 +8,7 @@ import {
   buildRunRecallPackAsync,
 } from '../../src/observability/run-recall-pack.js';
 import { RunStore } from '../../src/observability/run-store.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 describe('buildRunRecallPack', () => {
   let tempDir: string;
@@ -29,8 +30,8 @@ describe('buildRunRecallPack', () => {
       }
     }
     store.dispose();
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await store.whenStreamsClosed();
+    removeTestDir(tempDir);
   });
 
   function startRun(objective: string, metadata?: Parameters<RunStore['startRun']>[1]): string {

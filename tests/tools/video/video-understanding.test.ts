@@ -45,6 +45,7 @@ import {
 } from '../../../src/tools/video/video-understanding.js';
 import { createMultimodalTools } from '../../../src/tools/registry/multimodal-tools.js';
 import { MULTIMODAL_TOOLS } from '../../../src/codebuddy/tool-definitions/multimodal-tools.js';
+import { repoScratchRoot } from '../../helpers/tmp.js';
 
 function hasBinary(bin: string): boolean {
   try {
@@ -196,7 +197,7 @@ describe('media-fetch', () => {
   });
 
   it('downloadAudioWav spawns yt-dlp with the correct command and resolves the wav path', async () => {
-    const outDir = await mkdtemp(join(process.cwd(), '.video-fetch-audio-'));
+    const outDir = await mkdtemp(join(repoScratchRoot(process.cwd()), '.video-fetch-audio-'));
     const spawnSpy = vi.fn((_cmd: string, args: string[]) =>
       makeFakeChild({ code: 0, stdout: '', stderr: '', artifactPath: outputFromYtdlpArgs(args) }),
     );
@@ -295,7 +296,7 @@ describe('media-fetch YouTube player-client fallbacks', () => {
   });
 
   it('retries the video download with player_client=android after a 403', async () => {
-    const outDir = await mkdtemp(join(process.cwd(), '.video-fetch-video-'));
+    const outDir = await mkdtemp(join(repoScratchRoot(process.cwd()), '.video-fetch-video-'));
     const spawnSpy = vi.fn((_cmd: string, args: string[]) =>
       spawnSpy.mock.calls.length === 1
         ? makeFakeChild({ code: 1, stderr: 'ERROR: unable to download video data: HTTP Error 403: Forbidden' })

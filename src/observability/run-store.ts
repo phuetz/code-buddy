@@ -252,6 +252,10 @@ export class RunStore {
   private artifactIndexUnavailable = false;
   /** Set by dispose(): the artifact index must never be lazily reopened afterwards. */
   private disposed = false;
+  /** Journal streams ended or destroyed here whose file is not released yet. */
+  private closingStreams: Set<Promise<void>> = new Set();
+  /** The same closes by run: endRun() forgets the stream before its file is released. */
+  private closingRuns: Map<string, Promise<void>> = new Map();
 
    constructor(runsDir?: string) {
     this.runsDir =
@@ -286,10 +290,33 @@ export class RunStore {
     return this._currentRunId;
   }
 
+  /**
+   * Resolves once every journal stream this store ended (endRun) or destroyed
+   * (dispose) has closed its file. `ws.end()` returns before the descriptor is
+   * released; on Windows a directory holding it cannot be removed yet.
+   */
+  async whenStreamsClosed(): Promise<void> {
+    await Promise.all([...this.closingStreams]);
+  }
+
+  private trackClose(ws: fs.WriteStream, runId: string): void {
+    if (ws.closed) return;
+    const closed = new Promise<void>((resolve) => {
+      ws.once('close', () => resolve());
+    });
+    this.closingStreams.add(closed);
+    this.closingRuns.set(runId, closed);
+    void closed.then(() => {
+      this.closingStreams.delete(closed);
+      if (this.closingRuns.get(runId) === closed) this.closingRuns.delete(runId);
+    });
+  }
+
   dispose(): void {
     this.disposed = true;
-    for (const ws of this.handles.values()) {
+    for (const [runId, ws] of this.handles) {
       try {
+        this.trackClose(ws, runId);
         ws.destroy();
       } catch {
         // Ignore dispose-time stream errors.
@@ -549,6 +576,7 @@ export class RunStore {
     // Close write stream before post-run analyzers read events.jsonl.
     const ws = this.handles.get(runId);
     if (ws) {
+      this.trackClose(ws, runId);
       ws.end(afterStreamClosed);
       this.handles.delete(runId);
     } else {
@@ -1356,22 +1384,31 @@ export class RunStore {
       this.eventCounts.delete(s.runId);
       this.eventBuffers.delete(s.runId);
 
-      // Destroy handle immediately (force close, no flush needed for pruned runs)
-      const ws = this.handles.get(s.runId);
-      if (ws) {
-        ws.destroy();
-        this.handles.delete(s.runId);
-      this.eventWriters.delete(s.runId);
-      }
-
-      // Remove directory after a short delay to let the stream fully close
-      setTimeout(() => {
+      const removeRunDir = (): void => {
         try {
           fs.rmSync(runDir, { recursive: true, force: true });
         } catch {
           // Ignore
         }
-      }, 20);
+      };
+
+      // Destroy a live handle (force close, no flush needed for pruned runs), then
+      // remove the directory only once its journal is closed — including one that
+      // endRun() already handed to its close: Windows refuses to remove a
+      // directory holding an open file (a fixed delay raced the close).
+      const ws = this.handles.get(s.runId);
+      if (ws) {
+        this.trackClose(ws, s.runId);
+        ws.destroy();
+      }
+      this.handles.delete(s.runId);
+      this.eventWriters.delete(s.runId);
+      const closing = this.closingRuns.get(s.runId);
+      if (closing) {
+        void closing.then(removeRunDir);
+      } else {
+        removeRunDir();
+      }
     }
   }
 }

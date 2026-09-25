@@ -4,11 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { RunEventWriter } from '../../src/observability/run-event-writer.js';
 import { RunStore } from '../../src/observability/run-store.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 async function fixture(action: (file: string) => Promise<void>) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-journal-'));
   try { await action(path.join(dir, 'events.jsonl')); }
-  finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
+  finally { removeTestDir(dir); }
 }
 
 async function closeStream(stream: fs.WriteStream): Promise<void> {
@@ -59,6 +60,6 @@ describe('run journal acknowledgement', () => {
       store.emit(id, { type: 'tool_call', data: { tool: 'read' } });
       expect((await store.flushRun(id)).state).toBe('flushed');
       expect(store.getPersistenceStatus(id)).toMatchObject({ received: 2, written: 2 });
-    } finally { store.dispose(); await new Promise(resolve => setTimeout(resolve, 30)); }
+    } finally { store.dispose(); await store.whenStreamsClosed(); }
   }));
 });

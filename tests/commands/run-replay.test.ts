@@ -5,6 +5,7 @@ import path from 'path';
 
 import { replayRun } from '../../src/observability/run-viewer.js';
 import { RunStore } from '../../src/observability/run-store.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 describe('buddy run replay', () => {
   let tempDir: string;
@@ -22,7 +23,8 @@ describe('buddy run replay', () => {
     consoleLogSpy.mockRestore();
     store.dispose();
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
-    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await store.whenStreamsClosed();
+    removeTestDir(tempDir);
   });
 
   it('re-reads recorded view_file events instead of no-opping with "No test steps"', async () => {
