@@ -14,7 +14,7 @@
  * @module agent/self-improvement/evolution/research-weakness-source
  */
 import { logger } from '../../../utils/logger.js';
-import { articleIdentity, bibliographicIds, readArticleLinks, upsertArticleLinks, type ArticleLink } from '../../../catalog/article-links.js';
+import { articleIdentity, bibliographicIds, readArticleLinks, samePublication, upsertArticleLinks, type ArticleLink, type BibliographicId } from '../../../catalog/article-links.js';
 import type { Weakness } from './evolution-engine.js';
 import { getFeatureMap, type FeatureArea, type FeatureEnrichment } from './feature-map.js';
 
@@ -102,11 +102,10 @@ export function toArticleLink(match: FeatureMatch, query: string, now = new Date
 export function excludeHumanRejected(candidates: FeatureMatch[], file?: string): FeatureMatch[] {
   const rejected = readArticleLinks(file).filter((row) => row.humanStatus === 'rejected');
   return candidates.filter((candidate) => {
-    const identity = scholarlyIdentity(candidate.hit);
-    if (!identity) return true;
-    const title = candidate.hit.text.split(/[.!?]\s/)[0]!.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!scholarlyIdentity(candidate.hit)) return true;
+    const ids = bibliographicIds(candidate.hit.name ?? '', candidate.hit.text)!;
     return !rejected.some((row) => row.featureId === candidate.feature.id &&
-      (articleIdentity(row.article) === identity || row.article.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() === title));
+      samePublication(row.article, ids));
   });
 }
 
@@ -126,14 +125,12 @@ export function filterResearchHits(
     Number.isFinite(c.score) && c.score >= DEFAULT_MIN_SCORE && !isContradicted(c.hit));
   kept.sort((a, b) => b.score - a.score || a.feature.id.localeCompare(b.feature.id) ||
     scholarlyIdentity(a.hit)!.localeCompare(scholarlyIdentity(b.hit)!));
-  const seen = new Set<string>();
+  const seen: BibliographicId[] = [];
   const out: FeatureMatch[] = [];
   for (const match of kept) {
-    const identity = scholarlyIdentity(match.hit)!;
-    const title = match.hit.text.split(/[.!?]\s/)[0]!.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    if (seen.has(identity) || (title && seen.has(`title:${title}`))) continue;
-    seen.add(identity);
-    if (title) seen.add(`title:${title}`);
+    const ids = bibliographicIds(match.hit.name ?? '', match.hit.text)!;
+    if (seen.some((previous) => samePublication(previous, ids))) continue;
+    seen.push(ids);
     out.push(match);
     if (opts.limit && out.length >= opts.limit) break;
   }

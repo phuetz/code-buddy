@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import { articleIdentity, auditArticleLinks, bibliographicIds, exportArticleLinks, readArticleLinks, upsertArticleLinks, type ArticleLink } from '../../src/catalog/article-links.js';
 import { registerCatalogCommand } from '../../src/commands/cli/catalog-command.js';
-import { excludeHumanRejected, fetchResearchGoals, selectMatches, type FeatureMatch } from '../../src/agent/self-improvement/evolution/research-weakness-source.js';
+import { excludeHumanRejected, fetchResearchGoals, filterResearchHits, selectMatches, type FeatureMatch } from '../../src/agent/self-improvement/evolution/research-weakness-source.js';
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -30,14 +30,16 @@ describe('persisted DGM article links', () => {
     expect(articleIdentity(bibliographicIds('MED:42363493')!)).toBe('pmid:42363493');
     upsertArticleLinks([row()], file);
     expect(readArticleLinks(file)).toEqual([row()]);
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 
-  it('deduplicates the same title across arXiv and Europe PMC and preserves human review and first capture date', () => {
+  it('deduplicates a shared DOI across arXiv and Europe PMC and preserves human review and first capture date', () => {
     const file = tempFile();
-    upsertArticleLinks([row({ humanStatus: 'approved' })], file);
+    upsertArticleLinks([row({ humanStatus: 'approved', article: {
+      arxiv: '2605.01664', doi: '10.1234/shared', ckgId: 'ckg-1', source: 'arxiv', title: 'Hybrid retrieval and reranking',
+    } })], file);
     const second = row({
-      article: { pmid: '42363493', ckgId: 'ckg-2', source: 'europepmc', title: 'Hybrid retrieval and reranking' },
+      article: { pmid: '42363493', doi: '10.1234/shared', ckgId: 'ckg-2', source: 'europepmc', title: 'Hybrid retrieval and reranking' },
       capturedAt: '2026-09-26T00:00:00.000Z', humanStatus: 'unreviewed',
     });
     upsertArticleLinks([second], file);
@@ -50,6 +52,15 @@ describe('persisted DGM article links', () => {
     const snapshot = readFileSync(file, 'utf8');
     upsertArticleLinks([second], file);
     expect(readFileSync(file, 'utf8')).toBe(snapshot);
+  });
+
+  it('keeps distinct publications with the same title and feature separate', () => {
+    const file = tempFile();
+    const other = row({ article: { arxiv: '2607.05441', ckgId: 'ckg-2', source: 'arxiv', title: 'Hybrid retrieval and reranking' } });
+    upsertArticleLinks([row({ humanStatus: 'rejected' }), other], file);
+    expect(readArticleLinks(file).map((link) => [articleIdentity(link.article), link.humanStatus])).toEqual([
+      ['arxiv:2605.01664', 'rejected'], ['arxiv:2607.05441', 'unreviewed'],
+    ]);
   });
 
   it('exports stable JSON, quoted CSV and escaped Markdown', () => {
@@ -121,5 +132,18 @@ describe('research relevance guard', () => {
     const match = candidate('arxiv:2605.01664v4', 'arxiv', 0.9, 0.72);
     match.hit.text = 'Hybrid retrieval and reranking. A new abstract.';
     expect(excludeHumanRejected([match], file)).toEqual([]);
+  });
+
+  it('does not apply a human rejection to a different publication with the same title', () => {
+    const file = tempFile();
+    upsertArticleLinks([row({ humanStatus: 'rejected' })], file);
+    const distinct = candidate('arxiv:2607.05441', 'arxiv', 0.9, 0.72);
+    expect(excludeHumanRejected([distinct], file)).toEqual([distinct]);
+  });
+
+  it('does not collapse different publications with the same title in recall', () => {
+    const first = candidate('arxiv:2605.01664', 'arxiv', 0.9, 0.72);
+    const second = candidate('arxiv:2607.05441', 'arxiv', 0.8, 0.64);
+    expect(filterResearchHits([first, second])).toEqual([first, second]);
   });
 });

@@ -37,6 +37,13 @@ export function articleIdentity(ids: BibliographicId): string {
   return ids.doi ? `doi:${ids.doi}` : ids.arxiv ? `arxiv:${ids.arxiv}` : ids.pmid ? `pmid:${ids.pmid}` : '';
 }
 
+/** Two records refer to one publication only when an identifier of the same kind agrees. */
+export function samePublication(a: BibliographicId, b: BibliographicId): boolean {
+  return Boolean((a.doi && b.doi && a.doi.toLowerCase() === b.doi.toLowerCase()) ||
+    (a.arxiv && b.arxiv && a.arxiv.toLowerCase() === b.arxiv.toLowerCase()) ||
+    (a.pmid && b.pmid && a.pmid === b.pmid));
+}
+
 export function readArticleLinks(file = defaultArticleLinksPath()): ArticleLink[] {
   if (!existsSync(file)) return [];
   const rows = readFileSync(file, 'utf8').split('\n').filter(Boolean).map((line, index) => {
@@ -68,28 +75,26 @@ function compareLinks(a: ArticleLink, b: ArticleLink): number {
   return a.featureId.localeCompare(b.featureId) || articleIdentity(a.article).localeCompare(articleIdentity(b.article));
 }
 
-function linkKey(row: ArticleLink): string {
-  const title = row.article.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  return `${row.featureId}\0${title || articleIdentity(row.article)}`;
-}
-
 /** Atomic snapshot: one current row per domain and publication, preserving human decisions. */
 export function upsertArticleLinks(incoming: ArticleLink[], file = defaultArticleLinksPath()): void {
   if (!incoming.length) return;
-  const rows = new Map<string, ArticleLink>();
-  for (const row of readArticleLinks(file)) rows.set(linkKey(row), row);
+  const rows = readArticleLinks(file);
   for (const row of incoming) {
     if (!validLink(row)) throw new Error('Article link requires a valid feature, publication and provenance');
-    const previous = rows.get(linkKey(row));
-    rows.set(linkKey(row), previous ? {
+    const index = rows.findIndex((previous) => previous.featureId === row.featureId &&
+      samePublication(previous.article, row.article));
+    const previous = rows[index];
+    const updated = previous ? {
       ...row,
       article: { ...previous.article, ...row.article, doi: row.article.doi ?? previous.article.doi,
         arxiv: row.article.arxiv ?? previous.article.arxiv, pmid: row.article.pmid ?? previous.article.pmid },
       capturedAt: previous.capturedAt,
       humanStatus: previous.humanStatus,
-    } : row);
+    } : row;
+    if (index < 0) rows.push(updated);
+    else rows[index] = updated;
   }
-  const sorted = [...rows.values()].sort(compareLinks);
+  const sorted = rows.sort(compareLinks);
   if (existsSync(file) && readFileSync(file, 'utf8') === sorted.map((row) => JSON.stringify(row)).join('\n') + '\n') return;
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temp = `${file}.${process.pid}.tmp`;
