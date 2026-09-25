@@ -1,0 +1,18 @@
+{
+  "model": "qwen2.5:7b-instruct",
+  "rawBody": "```markdown\nPour retrouver le premier commit fautif avec `git bisect`, suivez ces étapes :\n\n1. **Définir les commits \"good\" et \"bad\"** :\n   ```sh\n   git bisect good <commit-hash-good>\n   git bisect bad <commit-hash-bad>\n   ```\n\n2. **Exécuter la recherche du commit fautif** :\n   ```sh\n   git bisect run <script-pour-déterminer-la-bonne-sauvegarde>\n   ```\n   Remplacez `<script-pour-déterminer-la-bonne-sauvegarde>` par le script ou la commande qui détermine si l'état actuel est bon ou mauvais.\n\n3. **Vérifier le résultat** :\n   ```sh\n   git bisect good  # Si vous avez trouvé le commit fautif\n   git bisect bad   # Si le commit actuel n'est pas le fautif\n   ```\n\n4. **Retour à l'état initial** :\n   ```sh\n   git bisect reset\n   ```\n```",
+  "created": {
+    "success": true,
+    "output": "Created skill `authored-p2-bisect`; it is loaded and available for matching immediately.",
+    "data": {
+      "artifactKind": "skill",
+      "name": "authored-p2-bisect",
+      "createdSkills": [
+        "authored-p2-bisect"
+      ],
+      "path": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/work/.codebuddy/skills/authored-p2-bisect/SKILL.md"
+    }
+  },
+  "registered": true,
+  "savedBytes": 1022
+}

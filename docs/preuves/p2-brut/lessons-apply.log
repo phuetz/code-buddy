@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "kind": "self_improvement_cycle",
+  "startedAt": "2026-09-25T17:01:22.983Z",
+  "autonomy": "auto-apply",
+  "scoreBefore": {
+    "total": 15,
+    "covered": 0,
+    "ratio": 0,
+    "results": [
+      {
+        "scenarioId": "npm-test-path-filter",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "esm-js-extension-imports",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "logger-not-console",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "atomic-write-state",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "git-add-named-files",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "subproc-bounded-timeout",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "no-secrets-in-repo",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "isolated-home-tests",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "str-replace-omission-block",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "verify-before-finishing",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "report-before-inspection",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "tests-live-in-tests-only",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "self-improvement-never-touch-src",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "peer-tool-fails-closed",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "batch-anti-tautology-guard",
+        "covered": false,
+        "matchedLessonIds": []
+      }
+    ]
+  },
+  "selectedScenarioId": "npm-test-path-filter",
+  "proposalId": "prop-npm-test-path-filter",
+  "gate": {
+    "accepted": true,
+    "proposalId": "prop-npm-test-path-filter",
+    "scoreBefore": 0,
+    "scoreAfter": 1,
+    "delta": 1,
+    "regressions": [],
+    "rolledBack": false,
+    "notes": [
+      "accepted and kept (auto-apply): empirically validated, no regression"
+    ]
+  },
+  "scoreAfter": {
+    "total": 15,
+    "covered": 1,
+    "ratio": 0.06666666666666667,
+    "results": [
+      {
+        "scenarioId": "npm-test-path-filter",
+        "covered": true,
+        "matchedLessonIds": [
+          "muh7jq94tmd"
+        ]
+      },
+      {
+        "scenarioId": "esm-js-extension-imports",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "logger-not-console",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "atomic-write-state",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "git-add-named-files",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "subproc-bounded-timeout",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "no-secrets-in-repo",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "isolated-home-tests",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "str-replace-omission-block",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "verify-before-finishing",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "report-before-inspection",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "tests-live-in-tests-only",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "self-improvement-never-touch-src",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "peer-tool-fails-closed",
+        "covered": false,
+        "matchedLessonIds": []
+      },
+      {
+        "scenarioId": "batch-anti-tautology-guard",
+        "covered": false,
+        "matchedLessonIds": []
+      }
+    ]
+  },
+  "applied": true,
+  "notes": [
+    "accepted and kept (auto-apply): empirically validated, no regression"
+  ]
+}

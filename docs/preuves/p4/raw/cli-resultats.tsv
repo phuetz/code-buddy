@@ -1,0 +1,117 @@
+command	args	help_exit	action_exit	action_duration_ms	stdout_bytes	stderr_bytes
+git	(aucune sous-commande sûre retenue)	0			0	0
+models	list	0	0	659	534	0
+try	(aucune sous-commande sûre retenue)	0			0	0
+import	(aucune sous-commande sûre retenue)	0			0	0
+explain	(aucune sous-commande sûre retenue)	0			0	0
+changelog		0	0	867	26103	0
+ws	search p4-proof	0	1	682	65	0
+provider	inventory	0	0	1516	4263	0
+mcp	list	0	0	988	752	118
+campaign	status	0	0	938	529	1416
+influencer	list	0	0	691	6567	0
+maison	status	0	0	827	155	0
+pipeline	status	0	0	639	267	0
+channels	list	0	0	799	198	0
+server	(aucune sous-commande sûre retenue)	0			0	0
+voice	(aucune sous-commande sûre retenue)	0			0	0
+remind	list	0	0	583	70	0
+rules	list	0	0	1282	88	0
+gui	(aucune sous-commande sûre retenue)	0			0	0
+desktop	(aucune sous-commande sûre retenue)	0			0	0
+install-gui	(aucune sous-commande sûre retenue)	0			0	0
+login	(aucune sous-commande sûre retenue)	0			0	0
+logout	(aucune sous-commande sûre retenue)	0			0	0
+whoami		0	0	630	59	0
+llm		0	0	1455	314	97
+council	(aucune sous-commande sûre retenue)	0			0	0
+mcp-server	(aucune sous-commande sûre retenue)	0			0	0
+daemon	status	0	0	662	16	0
+trigger	list	0	0	715	67	0
+speak	(aucune sous-commande sûre retenue)	0			0	0
+assistant	show	0	0	1821	2746	0
+self	evolution	0	0	850	3181	0
+widgets	list	0	0	603	0	488
+security	audit --json	0	1	650	2536	0
+doctor	--offline --json	0	1	1942	9437	0
+security-audit	--json	0	1	1411	2070	0
+onboard	(aucune sous-commande sûre retenue)	0			0	0
+webhook	list	0	0	628	24	0
+ollama	status	0	0	682	271	0
+heartbeat	status	0	0	629	100	0
+hub	list	0	0	848	139	0
+curator	latest	0	1	668	0	54
+triage	(aucune sous-commande sûre retenue)	0			0	0
+gateway-pairing	list	0	0	699	91	0
+screen	(aucune sous-commande sûre retenue)	0			0	0
+autonomy	status	0	0	649	161	0
+colab	(aucune sous-commande sûre retenue)	0			0	0
+device	list	0	0	612	55	0
+identity	show	0	0	596	105	0
+companion	status	0	0	959	987	118
+groups	status	0	0	688	133	0
+auth-profile	list	0	0	748	67	0
+token	(aucune sous-commande sûre retenue)	0			0	0
+pair	(aucune sous-commande sûre retenue)	0			0	0
+devices	list	0	0	620	43	0
+fleet	status	0	0	748	80	0
+code-explorer	(aucune sous-commande sûre retenue)	0			0	0
+hermes	status	0	0	1321	3126	118
+acp	(aucune sous-commande sûre retenue)	0			0	0
+tools	catalog --json	0	0	1172	51174	0
+autonomous-code	(aucune sous-commande sûre retenue)	0			0	0
+session	search p4-proof	0	0	753	37	415
+sessions	(aucune sous-commande sûre retenue)	0			0	0
+config	show	0	0	670	34685	0
+policy	check	0	0	786	251	0
+dev	(aucune sous-commande sûre retenue)	0			0	0
+run	list	0	0	699	15	0
+cron	list	0	0	683	50	0
+skills	list	0	0	819	1718	0
+pairing	status	0	0	588	225	0
+shadow	status	0	0	628	255	0
+knowledge	list	0	0	620	555	0
+research	stats	0	0	762	147	0
+meeting	(aucune sous-commande sûre retenue)	0			0	0
+scrape	(aucune sous-commande sûre retenue)	0			0	0
+papers	(aucune sous-commande sûre retenue)	0			0	0
+science	(aucune sous-commande sûre retenue)	0			0	0
+gpu-worker	(aucune sous-commande sûre retenue)	0			0	0
+vision-train	(aucune sous-commande sûre retenue)	0			0	0
+lora	(aucune sous-commande sûre retenue)	0			0	0
+flow	(aucune sous-commande sûre retenue)	0			0	0
+film	status p4-proof	0	1	730	0	173
+figma	(aucune sous-commande sûre retenue)	0			0	0
+goal	(aucune sous-commande sûre retenue)	0			0	0
+loop	(aucune sous-commande sûre retenue)	0			0	0
+intent		0	0	669	71	0
+intents	list	0	1	585	0	197
+replay	(aucune sous-commande sûre retenue)	0			0	0
+share	(aucune sous-commande sûre retenue)	0			0	0
+cost	--last	0	0	735	55	0
+forge	(aucune sous-commande sûre retenue)	0			0	0
+exchange	constitution	0	1	650	0	594
+capsule	list	0	1	629	0	61
+todo	context	0	0	645	40	0
+execpolicy	list	0	0	657	1336	0
+lessons	stats	0	0	660	58	0
+resources	schema	0	0	778	571	0
+spec	list	0	0	796	65	0
+user-model	show	0	0	873	45	0
+update	(aucune sous-commande sûre retenue)	0			0	0
+tunnel	(aucune sous-commande sûre retenue)	0			0	0
+nodes	list	0	0	648	70	0
+secrets	list	0	1	665	0	681
+approvals	list	0	0	609	28	0
+insights	summary	0	0	662	493	0
+bundles	list	0	0	719	77	0
+improve	status	0	0	661	518	0
+evolve	list	0	0	681	0	111
+lsp	status	0	0	719	762	0
+proxy	(aucune sous-commande sûre retenue)	0			0	0
+deploy	platforms	0	0	844	671	0
+provision	db-auth --target local --dir /tmp/codebuddy-p4-profile.xjvBNr/workspace --json	0	0	891	0	5742
+backup	list	0	0	699	18	0
+sensory	status	0	0	1166	299	0
+cloud	(aucune sous-commande sûre retenue)	0			0	0
+completions	bash	0	0	1537	2202	0

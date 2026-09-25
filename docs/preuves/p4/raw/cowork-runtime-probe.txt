@@ -1,0 +1,5 @@
+electron: missing
+electron/package.json: missing
+main-built=missing
+electron-bin=missing
+cowork_runtime=unavailable (Electron executable or compiled main entry missing)

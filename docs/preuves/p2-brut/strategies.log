@@ -1,0 +1,64 @@
+{
+  "kind": "self_improvement_strategies",
+  "cycle": {
+    "kind": "strategy_improvement_cycle",
+    "startedAt": "2026-09-25T17:02:23.223Z",
+    "autonomy": "propose-only",
+    "scope": "headless",
+    "parentId": "baseline",
+    "proposalId": "proposal:strat-headless-v2-489b5c",
+    "candidate": {
+      "schemaVersion": 1,
+      "id": "strat-headless-v2-489b5c",
+      "version": 2,
+      "scope": "headless",
+      "directives": [],
+      "limits": {
+        "maxToolRounds": 75,
+        "maxCostUsd": 10
+      },
+      "reasoning": "medium",
+      "verification": {
+        "testsForTouchedFiles": false,
+        "commitPerStep": false
+      },
+      "provenance": {
+        "source": "heuristic",
+        "experienceIds": [
+          "fixture-run-0",
+          "fixture-run-1",
+          "fixture-run-2",
+          "fixture-run-3",
+          "fixture-run-4",
+          "fixture-run-5"
+        ],
+        "createdAt": "2026-09-25T17:02:23.224Z",
+        "operator": "raise-max-tool-rounds"
+      },
+      "parentId": "baseline"
+    },
+    "rationale": "runs ended on the tool-round ceiling before finishing (6 run(s) with failure=max-rounds)",
+    "gate": {
+      "proposalId": "proposal:strat-headless-v2-489b5c",
+      "parentId": "baseline",
+      "accepted": true,
+      "reasons": [
+        "replay evidence: wins=6 losses=0 ties=0 P(improve)=0.992, cost ratio 1.00",
+        "accepted (propose-only) — not installed"
+      ],
+      "paired": {
+        "wins": 6,
+        "losses": 0,
+        "ties": 0,
+        "pImprove": 0.9921874999999994,
+        "evidence": "replay"
+      },
+      "costRatio": 1
+    },
+    "applied": false,
+    "notes": [
+      "replay evidence: wins=6 losses=0 ties=0 P(improve)=0.992, cost ratio 1.00",
+      "accepted (propose-only) — not installed"
+    ]
+  }
+}

@@ -1,0 +1,195 @@
+Pour commencer — 6 démos qui montrent le cœur agent de code :
+  1. buddy try
+     Crée FizzBuzz, écrit son test et l’exécute dans un bac à sable.
+  2. /loop "Corrige les tests en échec"              (dans une session buddy)
+  3. buddy research "Cartographie ce dépôt"
+  4. buddy dev pr "Ajoute une petite fonctionnalité"
+  5. /think deep "Propose le refactoring le plus sûr" (dans une session buddy)
+  6. /share create demo                              (dans une session buddy)
+
+
+Usage: buddy [options] [command] [message...]
+
+A conversational AI CLI tool powered by AI with text editor capabilities
+
+Arguments:
+  message                                  Initial message to send to Code Buddy
+
+Options:
+  -V, --version                            output the version number
+  -d, --directory <dir>                    set working directory (default: "/data/patrice/DEV/cb-preuves-p4-2026-09-25")
+  -k, --api-key <key>                      CodeBuddy API key (or set GROK_API_KEY env var)
+  -u, --base-url <url>                     CodeBuddy API base URL (or set GROK_BASE_URL env var)
+  -m, --model <model>                      AI model to use (e.g., grok-code-fast-1, grok-4-latest) (or set GROK_MODEL env var)
+  -p, --prompt <prompt>                    process a single prompt and exit (headless mode, alias: --print)
+  --print <prompt>                         alias for --prompt: process a single prompt and exit (headless mode)
+  -b, --browser                            launch browser UI instead of terminal interface
+  --max-tool-rounds <rounds>               maximum number of tool execution rounds (default: 50) (400 in YOLO mode)
+  -s, --security-mode <mode>               security mode: suggest (default), auto-edit, or full-auto
+  --output-format <format>                 output format for headless mode: json, stream-json, text, markdown
+  -o, --output-last-message <file>         write the agent's final text response directly and atomically to a file
+  --init                                   initialize .codebuddy directory with templates and exit
+  --dry-run                                preview changes without applying them (simulation mode)
+  -c, --context <patterns>                 load specific files into context using glob patterns (e.g., 'src/**/*.ts,!**/*.test.ts')
+  --no-cache                               disable response caching
+  --no-self-heal                           disable self-healing auto-correction
+  --compact                                headless: smallest possible prompt and tool set (any provider, not just local runtimes)
+  --force-tools                            enable tools/function calling for local models (LM Studio)
+  --probe-tools                            auto-detect tool support by testing the model at startup
+  --plain                                  use plain text output (minimal formatting)
+  --no-color                               disable colored output
+  --no-emoji                               disable emoji in output
+  --list-models                            list available models from the API endpoint and exit
+  --continue                               continue from the most recent saved session (like mistral-vibe)
+  --resume [sessionId]                     resume a specific session by ID (supports partial matching); without an ID, pick a recent session
+  --search-sessions <query>                search saved sessions by content
+  --max-price <dollars>                    maximum cost in dollars before stopping (like mistral-vibe) (default: "10.0")
+  --auto-approve                           automatically approve all tool executions (like mistral-vibe)
+  --system-prompt <id>                     system prompt to use: default, minimal, secure, code-reviewer, architect (or custom from ~/.codebuddy/prompts/)
+  --list-prompts                           list available system prompts and exit
+  --agent <name>                           use a custom agent configuration from ~/.codebuddy/agents/ (like mistral-vibe)
+  --list-agents                            list available custom agents and exit
+  --enabled-tools <patterns>               only enable tools matching patterns (comma-separated, supports glob: bash,*file*,search)
+  --disabled-tools <patterns>              disable tools matching patterns (comma-separated, supports glob: bash,web_*)
+  --setup                                  run interactive setup wizard for API key and configuration
+  --vim                                    enable Vim keybindings for input
+  --permission-mode <mode>                 permission mode: default, plan, acceptEdits, dontAsk, bypassPermissions
+  --dangerously-skip-permissions           bypass all permission checks (use in trusted containers without network access)
+  --allowed-tools <patterns>               only enable tools matching patterns (natively --allowedTools)
+  --disallowed-tools <patterns>            block tools matching patterns (natively --disallowedTools)
+  --mcp-debug                              enable MCP debugging output
+  --allow-outside                          allow file operations outside the workspace directory (disables workspace isolation)
+  --output-schema <file>                   path to a JSON Schema file to validate the final response shape against
+  --add-dir <paths...>                     grant additional writable directories (repeatable)
+  --no-alt-screen                          disable alternate screen buffer for Ink UI
+  --ephemeral                              skip session persistence (do not save session to disk)
+  --system-prompt-override <text>          replace the entire system prompt with this text
+  --system-prompt-file <path>              replace the entire system prompt with contents of a file
+  --append-system-prompt <text>            append text to the default system prompt
+  --append-system-prompt-file <path>       append file contents to the default system prompt
+  --fallback-model <model>                 auto-fallback model when default is overloaded
+  --profile <name>                         apply a built-in or configured profile (core, all, or [profiles.<name>])
+  --from-pr <pr>                           link session to a GitHub pull request (number or URL)
+  --yolo                                   enable YOLO mode (full autonomy with guardrails, $100 cost cap)
+  --quiet                                  suppress informational logs (only show errors and responses)
+  --verbose                                enable verbose/debug output
+  --speak                                  enable automatic speech synthesis of agent responses using Text-to-Speech
+  --tts-provider <provider>                TTS provider (edge-tts, espeak, say, piper, audioreader)
+  --channel <name>                         Start with a messaging channel (telegram, discord, slack, …)
+  -h, --help                               display help for command
+
+Commands:
+  git                                      Git operations with AI assistance
+  models                                   Lister, afficher ou rafraîchir le catalogue de modèles
+  try                                      Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)
+  import                                   Import project rules and MCP servers from Cursor, Cline, Copilot, or Claude Code
+  explain                                  Explain an unfamiliar repository in one Markdown or self-contained HTML artifact
+  changelog                                Generate grouped release notes from Conventional Commits
+  ws                                       Manage and search the opt-in multi-repository workspace
+  provider                                 Manage AI providers (Claude, ChatGPT, Grok, Gemini)
+  mcp                                      Manage MCP servers or expose Code Buddy with `buddy mcp serve`
+  campaign                                 Native editorial, book-promotion and PubCommander campaign workspace
+  influencer                               Influencer & book-trailer media pipeline (scripts/influencer)
+  maison                                   Household rhythm, holidays, quiet modes and private meal safety
+  pipeline                                 Manage and run pipeline workflows
+  channels [options] [action]              Manage channel connections (Telegram, Discord, Slack, etc.)
+  server [options]                         Start the Code Buddy HTTP/WebSocket API server
+  voice [options]                          Push-to-talk voice commands — speak an instruction, the agent acts, the reply is spoken
+  remind [options] [action] [args...]      Reminders — the robot reminds you (meds…) and you flag them done (add|list|agenda|done|rm)
+  rules [options] [action] [args...]       Administer sensory rules (event→action) — list|templates|enable|disable|rm|runs|validate|add
+  gui [options]                            Launch the Code Buddy desktop GUI (Electron)
+  desktop [options]                        Alias for 'buddy gui'
+  install-gui                              Install Electron and build the desktop GUI
+  login [options] [provider]               Authenticate with a provider (chatgpt | xai — uses your subscription, no API key)
+  logout [provider]                        Clear stored credentials for a provider (chatgpt | xai)
+  whoami                                   Show current authentication status (email, plan, OAuth model)
+  llm [options] [action] [prompt...]       List active LLMs, or run several together: llm ensemble|consensus|race <prompt>
+  council [options] [task...]              Ask a capability-routed AI council with conductor roles, judge + reconcile the answers, and learn winners per task type
+  mcp-server [options]                     Legacy alias for `buddy mcp serve`
+  daemon                                   Manage the Code Buddy daemon (background process)
+  trigger                                  Manage event triggers for automated agent responses
+  speak                                    Synthesize speech using AudioReader TTS
+  assistant                                Manage the voice assistant (Lisa): improvement loop, voice
+  self                                     Inspect Code Buddy’s documented self-model and evolution
+  widgets                                  Inline conversation widgets: list, preview, generate (authored)
+  security                                 Consolidated security audit of the local profile and project
+  doctor                                   Diagnose Code Buddy environment, dependencies, and configuration
+  security-audit                           Run a security audit of your Code Buddy environment
+  onboard                                  Interactive setup wizard for Code Buddy
+  webhook                                  Manage webhook triggers
+  ollama                                   Inspect or update the local Ollama runtime
+  heartbeat                                Manage the heartbeat engine (periodic agent wake)
+  hub                                      Skills marketplace (search, install, publish)
+  curator                                  Propose-only maintenance report (memory, skills, CKG, lessons, costs)
+  triage                                   Write a local redacted support bundle and prompt (no network, launches nothing)
+  gateway-pairing                          Operator approval for gateway device pairing
+  screen                                   Capture, record, or watch the screen / a window (real-time machine context)
+  autonomy|colab                           Autonomous fleet loop (claim + run colab tasks on local-first models)
+  device                                   Manage paired device nodes (SSH, ADB, local)
+  identity                                 Manage agent identity files (SOUL.md, USER.md, etc.)
+  companion                                Configure Buddy as a ChatGPT-backed voice companion
+  groups                                   Manage group chat security
+  auth-profile                             Manage authentication profiles (API key rotation)
+  token                                    Mint a signed JWT for the API and the mobile PWA
+  pair                                     Pair an Android authenticator with a local one-time code
+  devices                                  Manage Android authentication devices
+  fleet                                    Inspect Fleet routing and dispatch policy decisions
+  code-explorer                            Interact with CodeExplorer for code understanding and session syncing
+  hermes                                   Inspect the native Hermes-inspired Code Buddy agent profile
+  acp                                      Run Code Buddy as an ACP (Agent Client Protocol) agent over stdio for editor integration
+  tools                                    Inspect tool profiles and effective tool availability
+  autonomous-code                          Run a guarded Agentic Coding Cell task contract
+  session|sessions                         Manage saved sessions
+  config                                   Show environment variable configuration and validation
+  policy                                   Constats et réparation des politiques par domaine
+  dev                                      Golden-path developer workflows (plan, run, pr, fix-ci, explain)
+  run                                      Inspect and replay agent runs (observability)
+  cron                                     Author and manage scheduled cron jobs
+  skills                                   Browse and manage installed skill packages
+  pairing                                  Manage DM pairing security (allowlist for messaging channel senders)
+  shadow                                   Inspect or run speculative validation in the persistent shadow worktree
+  knowledge                                Manage agent knowledge bases (Knowledge.md files injected as context)
+  research                                 Wide Research: spawn parallel agent workers to research a topic (Manus AI-inspired)
+  meeting                                  Create grounded meeting notes from a local transcript, audio, or video file
+  scrape                                   Scrape a web page locally with Scrapling (with web_fetch fallback)
+  papers                                   Paper QA: ask a question over a corpus of scientific PDFs and get a grounded, cited answer
+  science                                  AI-Scientist-lite (EXPERIMENTAL, opt-in CODEBUDDY_AI_SCIENTIST=true): human-gated, sandboxed experiment — single pass or bounded best-first discovery loop (--loop)
+  gpu-worker                               Run the authenticated PanoWorld/LongCat GPU job worker
+  vision-train                             Synthetic perception-training loop (EXPERIMENTAL, opt-in CODEBUDDY_VISION_TRAIN=true): score the robot vision (YOLO) on labeled generated/real scenes → a weakness benchmark
+  lora                                     Krea 2 LoRA pipeline: init dataset, train cloud (fal, opt-in CODEBUDDY_LORA_TRAIN=true) or local plan, install into ComfyUI
+  flow                                     Execute a multi-agent planning flow (OpenManus-compatible): plan → execute → synthesize
+  film                                     Produce a long-form film from a scene plan: generate a clip per scene → montage with transitions + music → quality gate (resumable). Subcommands: generate|assemble|status
+  figma                                    Import a Figma REST JSON export (or file key + token at call time) into React screens
+  goal                                     Run the agent toward a standing goal until a judge model confirms it is done (Ralph loop)
+  loop                                     Autonomous development loop (plan → execute → verify → judge → decide) until proven done or budget exhausted
+  intent                                   Inspect the current Intent Graph and secret-redacted Proof Ledger
+  intents                                  Manage replayable intent specifications (EXPERIMENTAL, opt-in CODEBUDDY_INTENTS=true)
+  replay                                   Inspect, restore, or fork a time-travel session timeline
+  share                                    Export a saved session as a self-contained, shareable HTML replay
+  cost                                     Aggregate saved-session cost and token usage by model, provider, or day
+  forge                                    Counterfactual Forge: compare competing strategies against one proof contract
+  exchange                                 Sovereign execution market: constitution, multi-LLM bids, Shadow Twin and proof-gated award
+  capsule                                  Compile proven outcomes into proof-backed, multi-runtime portable workflows
+  todo                                     Manage persistent task list (todo.md) — injected at end of every agent turn for focus
+  execpolicy                               Manage execution policy rules (allow/deny/ask/sandbox) for shell commands
+  lessons                                  Manage lessons learned — self-improvement loop for recurring patterns (injected every turn)
+  resources                                Explicit network resource inventory and read-only health selection
+  spec                                     Spec-driven, review-gated work pipeline (durable stories; approve before implementing)
+  user-model                               Manage the local user model — working preferences, propose/review (no silent write)
+  update                                   Update Code Buddy (switch channels: stable, beta, dev)
+  tunnel                                   Manage ngrok tunnels for the Code Buddy remote gateway
+  nodes                                    Manage companion app nodes (macOS, iOS, Android)
+  secrets                                  Manage API keys and credentials (encrypted vault)
+  approvals                                Manage tool/action approval requests
+  insights                                 Token, cost, and activity analytics (read-only)
+  bundles                                  Group skills under a single named slash-command bundle
+  improve                                  Recursive self-improvement: empirically validate and apply reversible learning improvements
+  evolve                                   Git-versioned evolutionary self-improvement: evaluate code variants, keep the best (human-gated)
+  lsp                                      Language Server Protocol diagnostics
+  proxy                                    Start an OpenAI-compatible HTTP proxy in front of Code Buddy (for third-party clients)
+  deploy                                   One-click web publish (Cloudflare Pages, Netlify; dry-run by default) and cloud config generators
+  provision                                Provision database and authentication onto a generated web project (simulation by default)
+  backup [options] [subcommand] [args...]  Manage backups of .codebuddy/ directories (archives default to ~/.codebuddy/backups; use --home for home profile)
+  sensory [options] [action]               Inspect event-driven surveillance (read-only) — status
+  cloud [subcommand] [args...]             Manage cloud background agent tasks (submit, status, list, cancel, logs)
+  completions                              Generate or install shell completion scripts (bash, zsh, fish, powershell)

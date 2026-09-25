@@ -1,25 +1,35 @@
 # Code Buddy — inventaire des fonctionnalités
 
-> Document de travail interne, établi le 21/09/2026 à partir du code, pas de mémoire.
-> **La colonne « Preuve » est la seule qui compte** : elle dit ce qui a été vérifié
-> par exécution, ce qui n'est couvert que par des tests, et ce qui n'a jamais été
-> éprouvé en usage réel. Rien ne doit être communiqué avant d'être passé en ✅.
+> État établi le 25/09/2026 à partir des exécutions consignées dans `docs/preuves/`.
+> Chaque preuve ci-dessous indique son fichier, sa date et le commit de code testé.
 >
-> Légende — ✅ prouvé par exécution, avec la mesure · 🧪 couvert par des tests
-> automatisés · ❓ jamais éprouvé en usage réel · 💤 présent mais éteint par défaut
+> Légende — ✅ exécuté réellement avec une mesure · ❌ défaut observé · ⛔ non prouvable dans cette campagne. Une réussite de tests seule ne vaut pas preuve d’usage.
+
+## Ce qui est prouvé au 25/09/2026
+
+- L’agent a lu un fichier avec `view_file` et répondu « indigo » ; la bascule après panne du fournisseur principal a abouti sur Ollama. Les cinq modes d’autorisation et le refus d’écriture en mode `plan` ont été exercés. Bubblewrap a permis l’écriture interne et bloqué la sortie de l’espace. [P1](preuves/p1.md)
+- Le contexte a été réduit de 13 à 7 messages, et un segment compacté a été restauré exactement. La mémoire épisodique a consolidé trois tours ; l’oubli a archivé puis restauré un souvenir. [P1](preuves/p1.md)
+- La flotte a répondu par `peer.chat`, exécuté une lecture distante et refusé trois accès non autorisés ; un fait a été transféré et intégré. L’équipe, les délégations et l’essaim ont terminé sur les cas de recette mesurés. [P1](preuves/p1.md)
+- Le Verifier a rendu `CONFIRMED` sur un oracle exécuté. Le cycle de leçons a mesuré un gain puis annulé la proposition en mode `propose-only`. Un outil créé par l’agent a passé quatre cas et a été invoqué. [P2](preuves/p2.md)
+- Sur les cas exercés, le pare-feu a mis une compétence injectée en quarantaine, le validateur a refusé `mkfs`, la garde de déploiement a bloqué `fly deploy`, le nettoyeur a préservé le texte visible malgré des marqueurs injectés, et la reprise de session a réparé un transcript puis répondu `P2_OK`. [P2](preuves/p2.md)
+- Le daemon sensoriel Rust a livré six événements en 932 ms via le pont loopback ; le rêve a consolidé 23 percepts ; une règle a refusé `rm -rf /` puis exécuté une action locale autorisée avec audit. [P3](preuves/p3.md)
+- Le serveur MCP a répondu à `initialize` et `tools/list` en stdio : 64 outils annoncés, tous marqués lecture seule. Le CLI a aussi exécuté les aides de 116 noms et 73 lectures sûres ; cela ne prouve pas le TUI interactif ni les commandes restées à l’aide seule. [P4](preuves/p4.md)
+
+Ces résultats sont limités aux scénarios, systèmes et configurations décrits par les preuves liées. Ils ne prouvent pas les fournisseurs externes, les systèmes d’exploitation non exécutés, ni les fonctions non rejouées.
 
 ## L'ampleur, en chiffres
 
-| | |
-|---|---|
-| Lignes de TypeScript (hors tests) | **876 917** |
-| Commandes CLI | **105** |
-| Outils exposés à l'agent | **230** |
-| Fournisseurs LLM | **15** + Gemini natif |
-| Variables d'environnement documentées | **122** |
-| Fichiers de test | **1 839** (~27 000 tests) |
-| Composants Rust | 2 (`buddy-sense`, `buddy-memory`) |
-| Sidecar Python | 1 (`buddy-vision`) |
+La commande demandée `npx tsx src/index.ts catalog generate --json` échoue sur cette révision (`error: unknown option '--json'`). Le relevé de repli vient de l’aide runtime et des sondes réellement exécutées :
+
+| Mesure runtime | Valeur | Source |
+|---|---:|---|
+| Enregistrements de commandes CLI à la racine | **114** | `--help` runtime |
+| Noms CLI en comptant les alias | **116** | 116 invocations `--help` réussies |
+| Lectures sûres CLI supplémentaires | **73** (63 code 0, 10 code 1) | balayage P4 |
+| Outils d’agent exposés et uniques | **226** | sonde P1 ; l’assertion attendait 230 et a échoué |
+| Entrées directes du catalogue fournisseur | **61** | sonde P1 ; seul Ollama a été appelé réellement |
+
+Les autres totaux précédemment affichés (lignes de code, variables d’environnement, fichiers/tests, composants) ne sont pas fournis par ce générateur absent et ne sont pas recalculés ici. [P1](preuves/p1.md) · [P4](preuves/p4.md)
 
 ---
 
@@ -27,129 +37,108 @@
 
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
-| Boucle agentique | Le modèle appelle des outils en autonomie, jusqu'à 50 tours (400 en YOLO) | 🧪 |
-| 230 outils | Fichiers, shell, navigateur, recherche, médias, mémoire… | 🧪 |
-| 15 fournisseurs | Grok, Claude, GPT, Gemini, Ollama, LM Studio, Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral | 🧪 |
-| Sélection d'outils par RAG | Les outils sont filtrés par embeddings pour réduire le prompt | 🧪 |
-| Bascule de fournisseur | Sur quota épuisé ou panne, passage au suivant sans perdre la session | 🧪 💤 |
-| Modes d'autorisation | `default`, `plan`, `acceptEdits`, `dontAsk`, `bypassPermissions` | 🧪 |
-| Bac à sable noyau | Bubblewrap, Landlock ou seatbelt pour `bash`, **fermeture en cas d'échec** | 🧪 💤 |
+| Boucle agentique | Le modèle appelle un outil et utilise son résultat | ✅ `view_file` a rendu « indigo », repris dans la réponse. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| 230 outils | Nombre d’outils exposés à l’agent | ❌ 226 définitions uniques ; assertion 230 échouée. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| 15 fournisseurs | Fournisseurs compatibles et Gemini natif | ⛔ 61 entrées catalogue ne prouvent pas 15 fournisseurs exécutables ; seul Ollama a été appelé. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Sélection d’outils par RAG | Filtrage par embeddings du prompt | ⛔ 19 outils et 55 721 → 3 814 jetons mesurés par TF-IDF ; le chemin embeddings n’a pas été prouvé. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Bascule de fournisseur | Reprise sur un fournisseur secondaire après panne | ✅ port primaire fermé → événement `unreachable` → réponse Ollama « indigo ». [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Modes d’autorisation | Modes `default`, `plan`, `acceptEdits`, `dontAsk`, `bypassPermissions` | ✅ 5 modes × 3 outils ; `plan` refuse l’écriture. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Bac à sable noyau | Isolation de commandes par Bubblewrap, Landlock ou seatbelt | ✅ Bubblewrap autorise une écriture interne et bloque l’écriture hors espace. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 
 ## 2. Mémoire — les cinq couches
 
-Le modèle décrit par Anthropic en septembre 2026. **Les cinq existent ici.**
-
 | Couche | Chez nous | Preuve |
 |---|---|---|
-| **Travail** — ce qu'il voit | `ContextManagerV2`, compression par fenêtre glissante | 🧪 |
-| **Travail étendue** — compaction réversible | Un segment compacté se redéplie (`context_expand`) au lieu d'être perdu | ❓ activé le 21/09 |
-| **Épisodique** — ce qui s'est passé | Journal des épisodes, chronologie par tour, rejouable | ❓ actif sur Lisa |
-| **Sémantique** — ce qu'il sait | Graphe de connaissances collectif : nœuds typés, supersede bi-temporel, corroboration entre agents, moteur Rust + index HNSW | ✅ **4 119 entrées, rappel pertinent mesuré** |
-| **Procédurale** — comment faire | L'agent écrit ses propres outils et savoir-faire, sous garde empirique | ✅ **189 améliorations validées, Δ=138, couverture 15/15, mode `propose-only`** |
-| **Oubli** | Courbe d'Ebbinghaus, le rappel renforce, archivage avant suppression, restaurable | 🧪 actif sur Lisa |
+| Travail — ce qu’il voit | Compression du contexte | ✅ 13 → 7 messages et 1 804 → 912 jetons. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Travail étendue — compaction réversible | Déploiement d’un segment compacté | ✅ 2 segments ; restauration exacte du marqueur `unique-0`, 5 863 caractères. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Épisodique — ce qui s’est passé | Consolidation d’épisodes et promotion en mémoire | ✅ 3 tours, 1 ligne JSONL, 6 sujets, 1 point ouvert et promotion. Le rejeu de chronologie reste non vérifié. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Sémantique — ce qu’il sait | Graphe collectif et rappel pertinent | ⛔ Le rapport P1 précise que cette fonction déjà marquée prouvée n’a pas été réexécutée dans la campagne. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Procédurale — comment faire | Création d’outils et savoir-faire sous garde empirique | ⛔ L’outil créé est prouvé en section 5 ; les 189 améliorations historiques n’ont pas été rejouées ici. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Oubli | Archivage et restauration d’un souvenir | ✅ un souvenir archivé après avance contrôlée de 90 jours, puis restauré. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 
 ## 3. Vérification — ne pas se croire sur parole
 
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
-| Verifier indépendant | Un agent à contexte neuf juge le travail : CONFIRMÉ / À REVOIR | 🧪 |
-| Porte de preuves sur les buts | Un « c'est fait » sans preuve est rétrogradé en « continue » | ✅ **réparé le 21/09** |
-| `buddy loop` | plan → exécute → **vérifie** → juge, jusqu'à preuve ou budget épuisé | ✅ **prouvé le 21/09 sur un cas réel, $0,0000.** Le juge a refusé DEUX fois un travail que le Verifier confirmait, faute de preuve d'exécution. Et l'agent a refusé de fabriquer une réparation inutile en constatant que le test passait déjà — honnêteté acceptée comme aboutissement |
-| Porte de revue de diff | Toute écriture passe par une revue ; un diff non revu est **refusé**, jamais appliqué en silence | ✅ |
-| Espace de travail fantôme | Les écritures sont validées dans un clone avant de toucher les fichiers | ✅ **falsifié dans les deux sens le 21/09 : erreur de type refusée en 16 s avec le message exact, changement sain accepté** |
-| Registre d'intentions | Des spécifications falsifiables, avec détection de dérive | ✅ **vérification et génération prouvées le 21/09.** Le critère est réellement exécuté (`exit 4 ≠ 0` → FAIL motivé, code de sortie 1). La génération partait dans le décor — un `pytest` sur un fichier inexistant — jusqu'à ce que le contexte du dépôt lui soit injecté : même demande, elle produit désormais `npx vitest run` sur un fichier réel |
+| Verifier indépendant | Un agent séparé juge le travail | ✅ vrai `node --test`, 1 oracle, verdict `CONFIRMED`. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Porte de preuves sur les buts | Un résultat sans preuve est rétrogradé | ⛔ Non exercée par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| `buddy loop` | Plan, exécution, vérification et jugement | ⛔ Non exercé par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Porte de revue de diff | Refus d’écritures non revues | ⛔ Non exercée par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Espace de travail fantôme | Validation dans un clone avant écriture | ⛔ Non exercé par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Registre d’intentions | Spécifications falsifiables et détection de dérive | ⛔ Non exercé par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 
 ## 4. Plusieurs cerveaux
 
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
-| Flotte (`peer.chat`) | Des instances s'observent et s'appellent en direct, par WebSocket | 🧪 |
-| Outils distants | Un pair exécute un outil **en lecture seule**, derrière trois barrières | 🧪 |
-| Conseil de modèles | Plusieurs modèles délibèrent, un juge arbitre, un tableau de bord entraîne le routage | 🧪 💤 |
-| `/batch`, `/swarm`, `/team` | Décomposition en sous-agents parallèles | 🧪 |
-| Fédération de graphes | Un pair tire les leçons d'un autre, en lecture seule | ❓ 💤 |
+| Flotte (`peer.chat`) | Appel d’un pair par WebSocket | ✅ réponse Ollama réelle, 74 jetons, serveur local éphémère arrêté après le test. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Outils distants | Outil lecture seule soumis aux barrières du pair | ✅ `view_file` distant en 2 ms ; refus allowlist, `fleetSafe` et espace de travail. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Conseil de modèles | Délibération et arbitrage pour le routage | ⛔ Deux modèles ont répondu, mais juge non neutre et apprentissage refusé. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| `/batch`, `/swarm`, `/team` | Décomposition et délégation | ✅ équipe créée, 2 délégations terminées / 44 événements ; essaim réussi en 38 s. [P1](preuves/p1.md) — 2026-09-25, correctif `a8dc11fb2` |
+| Fédération de graphes | Tirage et intégration de faits entre pairs | ✅ un fait reçu et intégré via WebSocket réel. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 
-## 5. Auto-amélioration — bornée par l'expérience
+## 5. Auto-amélioration — bornée par l’expérience
 
-Quatre surfaces apprenables. **Jamais `src/`** : c'est un invariant scanné.
+Quatre surfaces apprenables. L’invariant « jamais `src/` » n’est pas revalidé par ces preuves.
 
 | Surface | Ce que c'est | Preuve |
 |---|---|---|
-| Leçons | Score sur un banc → propose → **valide empiriquement** → garde ou annule | 🧪 💤 |
-| Outils | L'agent écrit un outil, qui passe un scan statique, des cas visibles, puis des **cas cachés** — la défense contre le bachotage | 🧪 💤 |
-| Savoir-faire | Il rédige ses propres SKILL.md, filtrés par un pare-feu anti-injection | 🧪 💤 |
-| Stratégies | Comment exécuter : plafonds, niveau de raisonnement — **aucun champ ne peut désactiver un garde-fou, par construction** | 🧪 💤 |
+| Leçons | Score, proposition, validation empirique puis conservation ou annulation | ✅ couverture 0/15 → 1/15 ; application en mode `propose-only` annulée, puis cas appliqué conservé dans l’essai séparé. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Outils | Création d’outil, cas visibles et cachés, invocation | ✅ 2/2 cas fonctionnels et 2/2 robustesse ; outil invoqué. Le cycle CLI séparé a refusé un brouillon 0/2. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Savoir-faire | Rédaction de `SKILL.md` et filtre anti-injection | ⛔ Le candidat de compétence a été refusé au cycle ; le brouillon direct était fautif. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Stratégies | Apprentissage borné des plafonds et du raisonnement | ⛔ Rejeu synthétique de 6 gains, mais expériences synthétiques seulement. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 
 ## 6. Perception — le robot
 
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
-| Système nerveux (Rust) | Cinq sens sur canaux bornés, thalamus qui coalesce, diffusion | 🧪 20 tests Rust |
-| Yeux (Python/MediaPipe) | Détecteurs à états : une seule alerte par transition, pas de spam | ✅ en service 24/7 |
-| Voix | Parole → transcription → pensée → parole, avec interruption possible | ✅ en usage quotidien |
-| Rêve | Consolide le tampon court terme en journal, promeut le saillant en mémoire | 🧪 actif |
-| Rappels | Annoncés à voix haute et par Telegram, acquittés à la voix | ✅ en usage |
-| Règles sensorielles | Des règles déclenchent des actions ; une action dangereuse est **refusée à l'écriture** | 🧪 💤 |
+| Système nerveux (Rust) | Canaux sensoriels, thalamus et diffusion | ✅ 42 tests Rust puis 6 événements réels via WAV fixture et pont loopback en 932 ms. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Yeux (Python/MediaPipe) | Détecteurs à états | ⛔ Aucun parcours caméra/MediaPipe exercé. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Voix | Parole, transcription, réponse parlée et interruption | ⛔ Microphone, voix et transcription réelle non exercés. Le WAV de recette ne prouve pas ce parcours. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Rêve | Consolidation du tampon court terme et promotion du saillant | ✅ 23 percepts, journal de 375 octets, mémoire de 806 octets avec `dream:recent`. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Rappels | Annonce vocale/Telegram et acquittement vocal | ⛔ Non exercés par P1–P4. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Règles sensorielles | Refus d’actions dangereuses et exécution d’actions autorisées | ✅ `rm -rf /` refusé ; action locale autorisée exécutée et auditée. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 
 ## 7. Médias
 
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
-| Film long | Enchaîne des clips avec transitions, musique duckée, narration Piper, porte de qualité | ✅ films produits |
-| Prompt → vidéo | Un sujet, un plan de scènes, des clips 1080p avec sous-titres karaoké | ✅ |
-| Images | ComfyUI local ou fournisseurs cloud, avec repli | ✅ |
-| Entraînement de la perception | Scènes étiquetées → YOLO → points faibles classés | 🧪 |
+| Film long | Clips, transitions, musique, narration et contrôle qualité | ⛔ Aucun rendu film long dans P1–P4. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Prompt → vidéo | Scènes, clips, sous-titres | ⛔ Aucun parcours de génération vidéo dans P1–P4. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Images | ComfyUI local ou fournisseurs cloud | ⛔ Aucune génération d’image dans P1–P4. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Entraînement de la perception | Évaluation YOLO de scènes annotées | ⛔ Un cas vide a été exécuté, sans objet positif ; il ne prouve ni détection utile ni classement des faiblesses. [P3](preuves/p3.md) — 2026-09-25, correctif de rapport `3faa23973` |
 
 ## 8. Interfaces
 
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
-| CLI (Ink/React) | 105 commandes, complétion, thèmes | ✅ usage quotidien |
-| Cowork | Application de bureau Electron, ateliers visuels | 🧪 |
-| PWA mobile | Compagnon sur téléphone, historique persistant, album photo | ✅ en usage |
-| Serveur HTTP | Un port, API compatible OpenAI, A2A Google, WebSocket | ✅ |
-| Serveur MCP | Code Buddy s'expose comme serveur MCP | ❓ |
+| CLI Ink/React | Aides et commandes CLI, complétion, thèmes | ✅ 116 noms ont répondu à `--help` et 73 lectures sûres ont été tentées (63 réussites, 10 refus/préconditions). Le TUI interactif et 43 aides seules ne sont pas prouvés. [P4](preuves/p4.md) — 2026-09-25, commit `e197572ac` |
+| Cowork | Application de bureau Electron | ⛔ Runtime Electron et main compilé absents ; application non lancée. [P4](preuves/p4.md) — 2026-09-25, commit `e197572ac` |
+| PWA mobile | Compagnon mobile et historique | ⛔ Non rejouée dans la campagne ; l’ancien ✅ n’est pas reconduit ici. [P4](preuves/p4.md) — 2026-09-25, commit `e197572ac` |
+| Serveur HTTP | API, A2A et WebSocket | ⛔ Aucune route HTTP testée dans P4 ; les ports visés étaient occupés. [P4](preuves/p4.md) — 2026-09-25, commit `e197572ac` |
+| Serveur MCP | Exposition des outils par protocole MCP | ✅ échange stdio `initialize` → `tools/list` ; 64 outils et 64 annotations lecture seule, alias vérifié aussi. [P4](preuves/p4.md) — 2026-09-25, commit `e197572ac` |
 
 ## 9. Garde-fous
 
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
-| Pare-feu de compétences | Scan anti-injection avec dé-obfuscation (zéro-largeur, homoglyphes, bidi) | 🧪 |
-| Validateur de commandes | Analyse statique du shell avant exécution | 🧪 |
-| Garde des secrets | Aucun secret en clair dans les fichiers suivis | 🧪 |
-| Garde de déploiement | Les opérations sensibles exigent une confirmation | 🧪 |
-| Nettoyage de sortie | Retire les fuites de modèle (`<think>`, `[INST]`, caractères invisibles) | 🧪 |
-| Réparation de transcript | Répare les paires d'appels d'outils perdues à la compaction | 🧪 |
+| Pare-feu de compétences | Scan anti-injection avec dé-obfuscation | ✅ compétence propre admise et échantillon injecté par caractère zéro-largeur mis en quarantaine. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Validateur de commandes | Analyse du shell avant exécution | ✅ `mkfs /dev/p2-fixture` refusé avant exécution. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Garde des secrets | Détection de secrets dans les fichiers suivis | ⛔ Une clé factice est masquée ; l’absence universelle de secrets n’a pas été établie. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Garde de déploiement | Confirmation avant opération sensible | ✅ `fly deploy` refusé sans approbation, faux binaire non exécuté ; test rouge, vert et mutant rouge. [P2](preuves/p2.md) — 2026-09-25, correctif `98e2cb0c2` |
+| Nettoyage de sortie | Retrait des marqueurs internes des réponses | ✅ un relais local a injecté les marqueurs ; sortie égale au texte original sans marqueurs. [P2](preuves/p2.md) — 2026-09-25, correctif `98e2cb0c2` |
+| Réparation de transcript | Réparation des appels d’outils après compaction | ✅ reprise CLI a injecté un résultat synthétique et répondu `P2_OK`. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 
 ---
 
 ## Ce qu'il reste à prouver
 
-Par ordre de valeur pour la communication :
+- Les fournisseurs externes et Gemini natif ; les 15 fournisseurs ne sont pas établis par le catalogue d’entrées.
+- La sélection d’outils réellement fondée sur les embeddings et un juge neutre pour le conseil de modèles.
+- Les expériences réelles pour stratégies et savoir-faire, ainsi que l’absence universelle de secrets.
+- Les parcours caméra, voix, rappels, génération média, PWA, HTTP, Cowork et TUI interactif.
+- La commande `catalog generate --json`, absente de cette révision, et les 43 commandes pour lesquelles seule l’aide a été lancée.
 
-1. **Les quatre couches de mémoire activées le 21/09** — la sémantique est prouvée ;
-   il reste l'épisodique, la procédurale et la compaction réversible.
-2. ~~`buddy loop`~~ — **prouvé le 21/09**. Le garde-fou fonctionne : deux « done »
-   du Verifier rétrogradés par le juge pour absence de preuve d'exécution.
-3. ~~La porte de revue de diff~~ — **prouvée le 21/09**, falsifiée dans les deux
-   sens : un fichier introduisant une clé AWS est refusé et rien n'est écrit, un
-   fichier anodin passe, et le journal `.codebuddy/diff-reviews.jsonl` porte les deux
-   verdicts. Mode `static`, donc $0.
-4. ~~L'espace de travail fantôme~~ — **prouvé le 21/09**, dans les deux sens.
-5. ~~Les surfaces d'auto-amélioration~~ — **prouvées le 21/09** : 189 améliorations
-   validées empiriquement, archive et store git à l'appui.
-6. ~~Le registre d'intentions~~ — **prouvé le 21/09**, après correction du
-   générateur qui ignorait le contexte du projet.
+## Provenance des artefacts
 
-### Découvert en chemin
-
-Les **23 échecs** de la suite complète ne sont pas des bugs : les tests passent
-isolément et n'échouent qu'ensemble. Ce sont des **interactions entre tests**,
-un tout autre chantier — et un bon candidat pour la prochaine lane.
-
-## Règle pour la suite
-
-**Rien ne passe en communication tant que la ligne n'est pas en ✅.** Une
-fonctionnalité annoncée qui ne tient pas est pire que pas d'annonce du tout : c'est
-la façade qu'on refuse dans le produit, et elle n'est pas plus acceptable dans le
-discours.
+Les fichiers P1–P4 proviennent des branches correspondantes : le commit de preuves P4 `ed425fe32` est apparu pendant ce travail après le premier relevé de l’arbre. Les journaux bruts P2 inclus sous `docs/preuves/p2-brut/` sont les fichiers cités par `p2.md`.

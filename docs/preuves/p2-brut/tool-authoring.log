@@ -1,0 +1,21 @@
+{
+  "model": "qwen2.5:7b-instruct",
+  "rawDraft": "{\n  \"code\": \"const input = JSON.parse(process.env.CODEBUDDY_TOOL_INPUT);\\nconst text = input.text.toLowerCase().replace(/\\\\s+/g, '-');\\nconsole.log(text);\"\n}",
+  "created": {
+    "success": true,
+    "output": "Created tool `authored__p2_slugify`; passed 2/2 functional and 2/2 robustness cases. It is callable immediately.",
+    "data": {
+      "artifactKind": "tool",
+      "name": "authored__p2_slugify",
+      "createdTools": [
+        "authored__p2_slugify"
+      ],
+      "visiblePassed": 2,
+      "robustnessPassed": 2
+    }
+  },
+  "invoked": {
+    "success": true,
+    "output": "encore-un-test\n"
+  }
+}
