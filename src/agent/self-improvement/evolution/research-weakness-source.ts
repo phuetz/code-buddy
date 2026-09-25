@@ -160,7 +160,7 @@ function makeDefaultChat(model?: string): SynthChat {
  */
 export async function fetchResearchGoals(args: FetchResearchGoalsArgs = {}): Promise<Weakness[]> {
   try {
-    const features = args.features ?? (await getFeatureMap(args.enrich ? { enrich: args.enrich } : {}));
+    const features = args.features ?? (await getFeatureMap({ ...(args.enrich ? { enrich: args.enrich } : {}), catalog: 'generate' }));
     const recall = args.recall ?? makeDefaultRecall();
     const chat = args.chat ?? makeDefaultChat(args.model);
     const perFeature = args.perFeature ?? 3;

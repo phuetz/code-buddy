@@ -11,6 +11,8 @@
  * @module agent/self-improvement/evolution/feature-map
  */
 import { logger } from '../../../utils/logger.js';
+import { buildCatalogCoverage } from '../../../catalog/coverage.js';
+import type { Catalog } from '../../../catalog/generate.js';
 
 export interface FeatureArea {
   id: string;
@@ -19,6 +21,8 @@ export interface FeatureArea {
   description: string;
   /** Representative source paths (handed to the goal so the mutator knows where to work). */
   paths: string[];
+  /** Stable catalogue IDs attached by deterministic rules when source is available. */
+  catalogIds?: string[];
 }
 
 /** The legible base map. Hand-maintained (~one entry per real subsystem). */
@@ -85,7 +89,7 @@ export async function defaultCodeExplorerEnrichment(repo?: string): Promise<Feat
 }
 
 /** The feature map: curated base + best-effort enrichment (injectable). */
-export async function getFeatureMap(opts: { enrich?: FeatureEnrichment; repo?: string } = {}): Promise<FeatureArea[]> {
+export async function getFeatureMap(opts: { enrich?: FeatureEnrichment; repo?: string; catalog?: Catalog | 'generate' } = {}): Promise<FeatureArea[]> {
   const enrich = opts.enrich ?? defaultCodeExplorerEnrichment;
   let extra: FeatureArea[] = [];
   try {
@@ -93,5 +97,27 @@ export async function getFeatureMap(opts: { enrich?: FeatureEnrichment; repo?: s
   } catch {
     extra = [];
   }
-  return mergeFeatures(CURATED_FEATURES, extra);
+  const areas = mergeFeatures(CURATED_FEATURES, extra);
+  if (!opts.catalog) return areas;
+  try {
+    const catalog = opts.catalog === 'generate'
+      ? (await import('../../../catalog/generate.js')).generateCatalog(opts.repo ?? process.cwd())
+      : opts.catalog;
+    return attachCatalogToFeatureMap(catalog, areas);
+  } catch (err) {
+    logger.debug(`[evolve] Source catalogue unavailable: ${err instanceof Error ? err.message : String(err)}`);
+    return areas;
+  }
+}
+
+/** Attach IDs only to the 21 curated domains; Code Explorer additions remain optional. */
+export function attachCatalogToFeatureMap(catalog: Catalog, areas: FeatureArea[] = CURATED_FEATURES): FeatureArea[] {
+  const coverage = buildCatalogCoverage(catalog, CURATED_FEATURES);
+  const idsByDomain = new Map(CURATED_FEATURES.map((area) => [area.id, [] as string[]]));
+  for (const assignment of coverage.assignments) {
+    if (assignment.domainId) idsByDomain.get(assignment.domainId)?.push(assignment.id);
+  }
+  return areas.map((area) => idsByDomain.has(area.id)
+    ? { ...area, catalogIds: idsByDomain.get(area.id) }
+    : area);
 }
