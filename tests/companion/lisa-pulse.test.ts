@@ -80,6 +80,27 @@ describe('Lisa pulse', () => {
     expect(fs.readFileSync(target, 'utf8')).toBe('after');
   });
 
+  it('refuses a reversible action when the mandate says allow without a return point', async () => {
+    const fixture = setup();
+    const target = path.join(fixture.root, 'note.txt');
+    fs.writeFileSync(target, 'before');
+    let signal = 'one';
+    const executeAction = vi.fn(async () => ({ success: true, detail: 'edited' }));
+    const deps = { ...fixture, workspace: fixture.root,
+      observe: async () => [{ source: 'git', fingerprint: signal, summary: signal }],
+      decide: async (): Promise<LisaDecision> => ({ kind: 'act', reason: 'edit', action: {
+        tool: 'write_file', args: { path: target }, effect: 'reversible', files: [target],
+      } }),
+      authorizeAction: async () => ({ decision: 'allow' as const, mandateId: 'm-1' }),
+      executeAction,
+    };
+    await runLisaPulse('', deps);
+    signal = 'two';
+    expect((await runLisaPulse('', deps)).reason).toBe('Reversible action lacks a return point');
+    expect(executeAction).not.toHaveBeenCalled();
+    expect(fs.readFileSync(target, 'utf8')).toBe('before');
+  });
+
   it('enforces the daily wake cap and a 24-hour owner stop', async () => {
     const fixture = setup();
     let signal = 0;
