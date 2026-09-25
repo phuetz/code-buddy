@@ -183,13 +183,16 @@ function levenshtein(a: string, b: string): number {
 /** True if word `a` is within a small edit distance of target `b` (tol scales with `b`). */
 function fuzzyWordMatch(a: string, b: string): boolean {
   if (a === b) return true;
+  // A one-letter change at the start of a short name can turn another ordinary
+  // word into an address ("Visa" → "Lisa"). Keep internal STT substitutions.
+  if (b.length <= 4 && a[0] !== b[0]) return false;
   const tol = b.length <= 4 ? 1 : 2;
   return Math.abs(a.length - b.length) <= tol && levenshtein(a, b) <= tol;
 }
 
-/** Default fuzzy matcher: any word within a small edit distance of the name counts as
- *  addressed (STT turns "Buddy" into "buddy"/"body"/"buddha"). Errs toward catching the
- *  address — ignoring someone talking straight to you is the worse failure.
+/** Default fuzzy matcher: a word within a small edit distance of the name counts as
+ *  addressed (STT turns "Buddy" into "buddy"/"body"/"buddha"). Short names keep
+ *  their initial letter so an unrelated word cannot become an address so easily.
  *
  *  Multi-word names ("Code Buddy") are matched too: a per-word tokenizer can never bring a
  *  single word within edit distance of a two-word name, so we also try (a) a run of consecutive

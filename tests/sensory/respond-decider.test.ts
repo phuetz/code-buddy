@@ -100,6 +100,16 @@ describe('sensory response policy resolution', () => {
 });
 
 describe('fuzzyNameMatch', () => {
+  it('does not treat Visa as Lisa while keeping plausible short-name STT variants', async () => {
+    expect(fuzzyNameMatch('Visa, donne la météo', 'Lisa')).toBe(false);
+    expect(isVocativeAddress('Visa, donne la météo', 'Lisa')).toBe(false);
+    const decider = createResponseDecider({ robotName: 'Lisa', now: () => 1_000 });
+    expect((await decider.decide('Visa, donne la météo')).reason).not.toBe('addressed');
+    expect(fuzzyNameMatch('Lisa, donne la météo', 'Lisa')).toBe(true);
+    expect(fuzzyNameMatch('Liza, donne la météo', 'Lisa')).toBe(true);
+    expect(fuzzyNameMatch('Lissa, donne la météo', 'Lisa')).toBe(true);
+  });
+
   it('matches the name despite STT mangling, rejects unrelated words', () => {
     expect(fuzzyNameMatch('Buddy, quelle heure ?', 'Buddy')).toBe(true);
     expect(fuzzyNameMatch('hey buddy', 'Buddy')).toBe(true);
