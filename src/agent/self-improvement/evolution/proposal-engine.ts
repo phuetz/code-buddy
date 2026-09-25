@@ -17,6 +17,8 @@ import {
 } from './research-weakness-source.js';
 import { planVariant, type VariantPlan } from './variant-planner.js';
 import type { Weakness } from './evolution-engine.js';
+import type { VariantRecord } from './code-variant-store.js';
+import { dreamExplorationPolicy, worldsFromVariants } from './dream-replay.js';
 
 export type ProposalStop =
   | 'NO_RECALL'
@@ -28,10 +30,13 @@ export type ProposalStop =
   | 'GOAL_LLM_UNAVAILABLE'
   | 'GOAL_REJECTED'
   | 'PLAN_UNAVAILABLE'
-  | 'ARCHIVE_FAILED';
+  | 'ARCHIVE_FAILED'
+  | 'DREAM_ARCHIVE_INSUFFICIENT'
+  | 'DREAM_POLICY_UNSUPPORTED'
+  | 'DREAM_WEAKNESS_UNMAPPED';
 
 export interface ProposalEvent {
-  stage: 'source' | 'recall' | 'filter' | 'provider' | 'goal' | 'plan' | 'archive';
+  stage: 'source' | 'recall' | 'filter' | 'provider' | 'dream' | 'goal' | 'plan' | 'archive';
   status: 'ok' | 'stopped';
   code: string;
   detail: string;
@@ -45,6 +50,7 @@ export interface ProposalRecord {
   feature: { id: string; name: string; catalogIds: string[] };
   article: { id?: string; source?: string; text: string; similarity: number };
   plan: VariantPlan;
+  dream?: { policyId: string; weaknessId: string; parentId: string; replayObjective: number; evidence: 'replay'; pairedDecision: string };
   events: ProposalEvent[];
 }
 
@@ -61,6 +67,10 @@ export interface ProposeOptions {
   minSimilarity?: number;
   archiveRoot?: string;
   now?: () => Date;
+  /** Opt-in override; otherwise only CODEBUDDY_DREAM_RSI=true enables replay. */
+  dreamEnabled?: boolean;
+  /** Injectable historical archive for offline tests; production reads CodeVariantStore only. */
+  dreamRecords?: VariantRecord[];
 }
 
 function stop(events: ProposalEvent[], stage: ProposalEvent['stage'], reason: ProposalStop, detail: string): ProposalResult {
@@ -105,7 +115,7 @@ function archiveProposal(root: string, record: ProposalRecord): string {
   return target;
 }
 
-/** No mutator, worktree, branch, baseline scorer or variant store is called here. */
+/** No mutator, worktree, branch or baseline scorer is called; optional replay only reads the variant store. */
 export async function proposeResearchImprovement(options: ProposeOptions = {}): Promise<ProposalResult> {
   const events: ProposalEvent[] = [{ stage: 'source', status: 'ok', code: 'RESEARCH_SELECTED', detail: 'Research discovery source selected.' }];
   let providerAvailable: boolean;
@@ -118,10 +128,38 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
   events.push({ stage: 'provider', status: 'ok', code: 'PROVIDER_AVAILABLE', detail: options.chat ? 'Injected LLM call available.' : 'Configured LLM provider detected.' });
 
   const features = options.features ?? await getFeatureMap({ enrich: async () => [], catalog: 'generate' });
+  const dreamEnabled = options.dreamEnabled ?? process.env.CODEBUDDY_DREAM_RSI === 'true';
+  let selectedDream: Extract<ReturnType<typeof dreamExplorationPolicy>, { status: 'selected' }> | undefined;
+  let dreamArchiveRecords: VariantRecord[] = [];
+  let sourceFeatures = features;
+  if (dreamEnabled) {
+    if (options.dreamRecords) dreamArchiveRecords = options.dreamRecords;
+    else {
+      const { CodeVariantStore } = await import('./code-variant-store.js');
+      dreamArchiveRecords = new CodeVariantStore().list();
+    }
+    const result = dreamExplorationPolicy(worldsFromVariants(dreamArchiveRecords));
+    if (result.status !== 'selected') {
+      return stop(events, 'dream', result.reason === 'ARCHIVE_INSUFFICIENT'
+        ? 'DREAM_ARCHIVE_INSUFFICIENT' : 'DREAM_POLICY_UNSUPPORTED', result.reason);
+    }
+    const selectedFeature = features.find((feature) => {
+      const prefix = `research-${feature.id}`;
+      const suffix = result.selection.weaknessId.slice(prefix.length);
+      return result.selection.weaknessId.startsWith(prefix) && (suffix === '' || /^-\d+$/.test(suffix));
+    });
+    if (!selectedFeature) return stop(events, 'dream', 'DREAM_WEAKNESS_UNMAPPED', `No feature matches ${result.selection.weaknessId}.`);
+    selectedDream = result;
+    sourceFeatures = [selectedFeature];
+    events.push({
+      stage: 'dream', status: 'ok', code: 'DREAM_POLICY_SELECTED',
+      detail: `Replay policy ${result.best.policy.id}; weakness ${result.selection.weaknessId}; parent ${result.selection.parentId}; paired ${result.paired.decision} (replay only).`,
+    });
+  }
   const recall = options.recall ?? defaultProposalRecall();
   const candidates: FeatureMatch[] = [];
   let recallErrors = 0;
-  for (const feature of features) {
+  for (const feature of sourceFeatures) {
     let hits: Awaited<ReturnType<ResearchRecall>>;
     try {
       hits = await recall(feature.description, { types: ['discovery'], limit: 5 });
@@ -131,8 +169,8 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
     }
     for (const hit of hits) if (hit?.text) candidates.push({ feature, hit, score: matchScore(hit) });
   }
-  if (candidates.length === 0 && recallErrors > 0) return stop(events, 'recall', 'RECALL_ERROR', `Recall failed for ${recallErrors} of ${features.length} domains; no discovery available.`);
-  if (candidates.length === 0) return stop(events, 'recall', 'NO_RECALL', `No discovery recalled across ${features.length} domains.`);
+  if (candidates.length === 0 && recallErrors > 0) return stop(events, 'recall', 'RECALL_ERROR', `Recall failed for ${recallErrors} of ${sourceFeatures.length} domains; no discovery available.`);
+  if (candidates.length === 0) return stop(events, 'recall', 'NO_RECALL', `No discovery recalled across ${sourceFeatures.length} domains.`);
   events.push({ stage: 'recall', status: 'ok', code: 'RECALL_FOUND', detail: `${candidates.length} discovery matches recalled.` });
 
   const floor = options.minSimilarity ?? 0.32;
@@ -152,12 +190,28 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
   if (!rawGoal?.trim()) return stop(events, 'goal', 'GOAL_LLM_UNAVAILABLE', 'LLM did not return a goal response.');
   const goal = parseGoal(rawGoal);
   if (!goal) return stop(events, 'goal', 'GOAL_REJECTED', 'LLM returned no actionable goal.');
-  const weakness: Weakness = { id: `research-${selected.feature.id}`, kind: 'research', goal };
+  const weakness: Weakness = {
+    id: selectedDream?.selection.weaknessId ?? `research-${selected.feature.id}`,
+    kind: 'research', goal,
+  };
   events.push({ stage: 'goal', status: 'ok', code: 'GOAL_SYNTHESIZED', detail: goal });
 
-  const plan = await planVariant({ weakness, inspirations: [] }, chat);
+  const parent = selectedDream?.selection.parentId;
+  const parentRecord = parent && parent !== 'root'
+    ? dreamArchiveRecords.find((record) => record.id === parent)
+    : undefined;
+  const inspirations = parentRecord ? [{
+    id: parentRecord.id, goal: parentRecord.detail ?? parentRecord.id,
+    score: parentRecord.score, diff: '',
+  }] : [];
+  const plan = await planVariant({ weakness, inspirations }, chat);
   if (!plan || !plan.steps.length || /^none$/i.test(plan.summary.trim())) {
     return stop(events, 'plan', 'PLAN_UNAVAILABLE', 'LLM returned no usable plan.');
+  }
+  if (parent) {
+    plan.approach = parent === 'root' ? 'fresh' : 'build-on';
+    if (parent === 'root') delete plan.basedOn;
+    else plan.basedOn = parent;
   }
   events.push({ stage: 'plan', status: 'ok', code: 'PLAN_CREATED', detail: `${plan.steps.length} step(s).` });
 
@@ -172,6 +226,14 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
       text: selected.hit.text, similarity: selected.hit.similarity ?? 0,
     },
     plan,
+    ...(selectedDream ? { dream: {
+      policyId: selectedDream.best.policy.id,
+      weaknessId: selectedDream.selection.weaknessId,
+      parentId: selectedDream.selection.parentId,
+      replayObjective: selectedDream.best.objective,
+      evidence: 'replay' as const,
+      pairedDecision: selectedDream.paired.decision,
+    } } : {}),
     events: [...events, { stage: 'archive', status: 'ok', code: 'PLAN_ARCHIVED', detail: 'Plan stored in isolated proposal archive.' }],
   };
   try {

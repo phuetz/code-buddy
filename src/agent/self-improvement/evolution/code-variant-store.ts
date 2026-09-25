@@ -40,10 +40,35 @@ export interface VariantRecord {
    * from the baseline alone. Optional for backward-compat with pre-genealogy records.
    */
   parents?: string[];
+  /** Observed replay edge. Unlike `parents`, this is the checkout actually used. */
+  discovery?: {
+    worldId: string;
+    primaryParentId: string;
+    weaknessId: string;
+    baselineScore: number;
+  };
   /** Generation depth: 0 for a direct child of the baseline, else 1 + max(parent generation). */
   generation?: number;
   /** Number of offspring selected from this variant as a parent. Persisted for the penalty. */
   childrenCount?: number;
+}
+
+/** Capture a replay edge only when explicitly enabled and grounded by baseline fitness. */
+export function recordedDiscoveryEdge(args: {
+  optIn?: string;
+  worldId: string;
+  primaryParentId?: string;
+  weaknessId: string;
+  baselineScore?: number;
+}): VariantRecord['discovery'] | undefined {
+  if (args.optIn !== 'true' || !args.worldId || !args.primaryParentId || !args.weaknessId
+    || args.baselineScore === undefined || !Number.isFinite(args.baselineScore)) return undefined;
+  return {
+    worldId: args.worldId,
+    primaryParentId: args.primaryParentId,
+    weaknessId: args.weaknessId,
+    baselineScore: args.baselineScore,
+  };
 }
 
 export interface VariantStoreStats {

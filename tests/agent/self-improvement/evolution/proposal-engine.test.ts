@@ -7,6 +7,7 @@ import path from 'node:path';
 import { proposeResearchImprovement } from '../../../../src/agent/self-improvement/evolution/proposal-engine.js';
 import { registerEvolveCommands } from '../../../../src/commands/cli/evolve-command.js';
 import type { FeatureArea } from '../../../../src/agent/self-improvement/evolution/feature-map.js';
+import type { VariantRecord } from '../../../../src/agent/self-improvement/evolution/code-variant-store.js';
 
 const features: FeatureArea[] = [{
   id: 'context-rag', name: 'Context and RAG', description: 'Retrieve reliable context for agent turns',
@@ -16,6 +17,18 @@ const discovery = {
   id: 'arxiv-0000', source: 'arxiv', text: 'A reliable method for contextual retrieval.',
   similarity: 0.75, confidence: 0.9,
 };
+const dreamRecords: VariantRecord[] = [
+  {
+    id: 'prior-low', branch: 'evolve/low', sha: 'low', baselineSha: 'base', score: 0.2,
+    passedAll: true, regressions: [], createdAt: '2026-09-25T00:00:01.000Z',
+    discovery: { worldId: 'base', primaryParentId: 'root', weaknessId: 'research-context-rag', baselineScore: 0.1 },
+  },
+  {
+    id: 'prior-high', branch: 'evolve/high', sha: 'high', baselineSha: 'base', score: 0.9,
+    passedAll: true, regressions: [], createdAt: '2026-09-25T00:00:02.000Z',
+    discovery: { worldId: 'base', primaryParentId: 'root', weaknessId: 'research-self-improvement-1', baselineScore: 0.1 },
+  },
+];
 const roots: string[] = [];
 const originalCwd = process.cwd();
 
@@ -30,6 +43,7 @@ function project(): string {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   process.chdir(originalCwd);
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -135,5 +149,79 @@ describe('evolve propose', () => {
     expect(result.status).toBe('stopped');
     if (result.status === 'stopped') expect(result.reason).toBe('ARCHIVE_FAILED');
     expect(readdirSync(path.join(root, 'src'))).toEqual(['marker.ts']);
+  });
+
+  it('keeps the original source path when dream is disabled', async () => {
+    project();
+    vi.stubEnv('CODEBUDDY_DREAM_RSI', '');
+    const recall = vi.fn(async () => [discovery]);
+    const result = await proposeResearchImprovement({
+      features, recall, hasProvider: () => true, dreamRecords: [],
+      chat: async () => null,
+    });
+    expect(result.status).toBe('stopped');
+    if (result.status === 'stopped') expect(result.reason).toBe('GOAL_LLM_UNAVAILABLE');
+    expect(result.events.map((event) => event.stage)).not.toContain('dream');
+    expect(recall).toHaveBeenCalledOnce();
+  });
+
+  it('stops by name when dream is enabled but the archive has no replayable tree', async () => {
+    project();
+    const recall = vi.fn(async () => [discovery]);
+    const result = await proposeResearchImprovement({
+      features, recall, hasProvider: () => true, dreamEnabled: true, dreamRecords: [],
+    });
+    expect(result.status).toBe('stopped');
+    if (result.status === 'stopped') expect(result.reason).toBe('DREAM_ARCHIVE_INSUFFICIENT');
+    expect(result.events.at(-1)?.stage).toBe('dream');
+    expect(recall).not.toHaveBeenCalled();
+  });
+
+  it('uses the dreamed weakness and records its observed parent in a proposal', async () => {
+    const root = project();
+    const twoFeatures = [...features, {
+      id: 'self-improvement', name: 'Self improvement', description: 'Improve the DGM policy',
+      paths: ['src/agent/self-improvement/'], catalogIds: [],
+    }];
+    const recall = vi.fn(async () => [discovery]);
+    const result = await proposeResearchImprovement({
+      features: twoFeatures, recall, dreamEnabled: true, dreamRecords, hasProvider: () => true,
+      chat: async (prompt) => prompt.includes('Réponds STRICTEMENT en JSON')
+        ? JSON.stringify({ approach: 'fresh', summary: 'Planifier la recherche', steps: [{ title: 'Mesurer', description: 'Mesurer le rejeu.' }] })
+        : 'Améliore le rejeu des branches avec une mesure reproductible.',
+      archiveRoot: path.join(root, 'proposals'),
+    });
+    expect(result.status).toBe('planned');
+    if (result.status !== 'planned') return;
+    expect(result.record.feature.id).toBe('self-improvement');
+    expect(result.record.weakness.id).toBe('research-self-improvement-1');
+    expect(result.record.dream?.parentId).toBe('root');
+    expect(result.record.dream?.evidence).toBe('replay');
+    expect(result.events.map((event) => event.code)).toContain('DREAM_POLICY_SELECTED');
+    expect(recall).toHaveBeenCalledOnce();
+  });
+
+  it('binds the archived plan to the selected recorded parent', async () => {
+    const root = project();
+    const stronger = {
+      ...dreamRecords[0]!, id: 'prior-stronger', score: 0.95,
+      createdAt: '2026-09-25T00:00:03.000Z',
+      discovery: {
+        ...dreamRecords[0]!.discovery!, primaryParentId: 'prior-low',
+      },
+    };
+    const result = await proposeResearchImprovement({
+      features, dreamEnabled: true, dreamRecords: [...dreamRecords, stronger],
+      hasProvider: () => true, recall: async () => [discovery],
+      chat: async (prompt) => prompt.includes('Réponds STRICTEMENT en JSON')
+        ? JSON.stringify({ approach: 'fresh', summary: 'Planifier le rappel', steps: [{ title: 'Mesurer', description: 'Mesurer la qualité.' }] })
+        : 'Améliore le rappel avec une mesure reproductible.',
+      archiveRoot: path.join(root, 'proposals'),
+    });
+    expect(result.status).toBe('planned');
+    if (result.status !== 'planned') return;
+    expect(result.record.dream?.parentId).toBe('prior-low');
+    expect(result.record.plan.approach).toBe('build-on');
+    expect(result.record.plan.basedOn).toBe('prior-low');
   });
 });
