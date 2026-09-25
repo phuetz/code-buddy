@@ -845,6 +845,35 @@ describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () 
     expect(document.getElementById('presence-line')?.textContent).toBe('en ligne');
   });
 
+  it('abandons une connexion WebSocket bloquée avant authentification', () => {
+    const first = sockets[0]!;
+    first.readyState = 3;
+    first.emit('close');
+    vi.advanceTimersByTime(1000);
+    const stalled = sockets[1]!;
+    stalled.readyState = 1;
+    stalled.emit('open');
+    expect(JSON.parse(stalled.sent[0]!).type).toBe('authenticate');
+
+    // A server can accept the socket yet never answer authentication.
+    // No close event arrives, so backoff alone cannot recover.
+    vi.advanceTimersByTime(6000);
+    expect(stalled.readyState).toBe(3);
+    vi.advanceTimersByTime(5000);
+    expect(sockets.length).toBeGreaterThan(2);
+  });
+
+  it('ignore une authentification tardive provenant du socket remplacé', () => {
+    const old = sockets[0]!;
+    old.readyState = 3;
+    old.emit('close');
+    vi.advanceTimersByTime(1000);
+    const current = sockets[1]!;
+    expect(current.readyState).toBe(0);
+    old.emit('message', { data: JSON.stringify({ type: 'authenticated' }) });
+    expect((api.state as { connected: boolean }).connected).toBe(false);
+  });
+
   it('queues a message sent while disconnected and replays it once re-authenticated', () => {
     const first = sockets[0]!;
     first.readyState = 3;

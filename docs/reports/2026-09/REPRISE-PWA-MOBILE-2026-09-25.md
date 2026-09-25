@@ -11,3 +11,7 @@ Les tests DOM et actifs sans socket passent (56 tests distincts). Le type-check 
 ## Ce que je n'ai pas pu vérifier
 
 Le replay navigateur et les suites serveur avec socket attendent la barrière du pilote. Windows et un téléphone physique ne sont pas exécutés ici.
+
+## Contre-revue et reprise
+
+La contre-revue a montré un échec identique avec les plafonds de 5 s et de 30 s. Le plafond seul ne réglait donc pas la reconnexion. La reprise protège le cas où le socket reste ouvert sans réponse d'authentification : échéance de 5 s, fermeture et nouvelle tentative. Elle ignore aussi les trames arrivant d'un socket remplacé. Deux tests déterministes sont rouges sur l'ancien code, verts sur le candidat et rouges sous mutation. Le cache du service worker est incrémenté pour diffuser le nouveau client. La barrière locale refuse toujours loopback et Chromium ; le parcours E2E réel reste à rejouer par le pilote.
