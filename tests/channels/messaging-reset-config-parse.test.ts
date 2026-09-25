@@ -5,12 +5,22 @@
  * user file lives under CODEBUDDY_HOME, which the product resolves first and
  * vitest.setup.ts sets for every test file.
  */
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const dirs: string[] = [];
+const sqliteAvailable = (() => {
+  try {
+    const Database = createRequire(import.meta.url)('better-sqlite3') as new (file: string) => { close(): void };
+    new Database(':memory:').close();
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 afterEach(() => {
   vi.resetModules();
@@ -21,6 +31,23 @@ function tempDir(): string {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'cb-reset-cfg-'));
   dirs.push(dir);
   return dir;
+}
+
+/** Linux keeps an unlinked SQLite file usable, so check descriptors before removing its directory. */
+function openHandlesUnder(roots: string[]): string[] {
+  const fdDir = '/proc/self/fd';
+  if (!existsSync(fdDir)) return [];
+  const real = roots.map((root) => realpathSync(root) + path.sep);
+  const open: string[] = [];
+  for (const fd of readdirSync(fdDir)) {
+    try {
+      const target = readlinkSync(path.join(fdDir, fd));
+      if (real.some((root) => target.startsWith(root))) open.push(target);
+    } catch {
+      // A descriptor may close while /proc/self/fd is being enumerated.
+    }
+  }
+  return open;
 }
 
 interface ConfigCase {
@@ -120,6 +147,9 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     else process.env[key] = value;
   };
   let changedDir = false;
+  let closeDatabase = (): void => {};
+  let databaseIsOpen = (): boolean => false;
+  let resetCompleted = false;
   process.env.HOME = osHome;
   process.env.USERPROFILE = osHome;
   // The user file is resolved by resolveUserConfigFile: CODEBUDDY_CONFIG,
@@ -153,6 +183,9 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     if (spec.projectModeAtLoad !== undefined) chmodSync(projectFile, spec.projectModeAtLoad);
 
     vi.resetModules();
+    const database = await import('../../src/database/index.js');
+    closeDatabase = database.resetDatabaseSystem;
+    databaseIsOpen = () => database.getDatabaseManager().isInitialized();
     const toml = await import('../../src/config/toml-config.js');
     const store = await import('../../src/persistence/session-store.js');
     const messaging = await import('../../src/channels/messaging-session-reset.js');
@@ -200,6 +233,7 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
       ));
     }
     await handlers.__resetInboundMessagingSessionForTests(sessionKey);
+    resetCompleted = true;
     const localMapKept = handlers.__companionChannelHistoriesForTests().has(sessionKey);
     let companionRaw = '';
     if (historyDir) {
@@ -246,16 +280,26 @@ async function exercise(spec: ConfigCase): Promise<{ projectDir: string }> {
     }
     return { projectDir };
   } finally {
-    if (changedDir) process.chdir(previous.cwd);
-    restore('HOME', previous.home);
-    restore('USERPROFILE', previous.profile);
-    restore('CODEBUDDY_HOME', previous.codebuddyHome);
-    restore('CODEBUDDY_CONFIG', previous.codebuddyConfig);
-    restore('CODEBUDDY_SESSIONS_DIR', previous.sessions);
-    restore('CODEBUDDY_SESSION_RESET_ARCHIVE_DIR', previous.archive);
-    restore('CODEBUDDY_CHANNEL_HISTORY', previous.history);
-    restore('CODEBUDDY_CHANNEL_HISTORY_DIR', previous.historyDir);
-    vi.resetModules();
+    try {
+      // The product keeps its process-wide database open. This test owns the
+      // throwaway profile and must close that database before afterEach removes it.
+      const checkOpen = process.platform === 'linux' && sqliteAvailable && resetCompleted && !spec.keep;
+      const wasOpen = checkOpen && databaseIsOpen();
+      closeDatabase();
+      if (checkOpen) expect(wasOpen, 'la remise a zero a ouvert la base temporaire').toBe(true);
+      expect(openHandlesUnder(dirs), 'aucun fichier temporaire ouvert avant suppression').toEqual([]);
+    } finally {
+      if (changedDir) process.chdir(previous.cwd);
+      restore('HOME', previous.home);
+      restore('USERPROFILE', previous.profile);
+      restore('CODEBUDDY_HOME', previous.codebuddyHome);
+      restore('CODEBUDDY_CONFIG', previous.codebuddyConfig);
+      restore('CODEBUDDY_SESSIONS_DIR', previous.sessions);
+      restore('CODEBUDDY_SESSION_RESET_ARCHIVE_DIR', previous.archive);
+      restore('CODEBUDDY_CHANNEL_HISTORY', previous.history);
+      restore('CODEBUDDY_CHANNEL_HISTORY_DIR', previous.historyDir);
+      vi.resetModules();
+    }
   }
 }
 
