@@ -62,6 +62,12 @@ describe('Ruche prototype', () => {
     expect(() => f.jArbiter.ingest(first)).toThrow('RUCHE_REPLAY_OR_FORK');
     const tampered = { ...f.ja.append('message', { text: 'suite' }), payload: { text: 'faux' } };
     expect(() => f.jArbiter.ingest(tampered)).toThrow('RUCHE_HASH_MISMATCH');
+    const protoPayload = JSON.parse('{"text":"salut","__proto__":{"injected":true}}') as Record<string, unknown>;
+    const fresh = new RucheJournal(f.arbiter, new Map([
+      [f.arbiter.id, { publicKey: f.arbiter.publicKey, role: 'arbitre' }],
+      [f.a.id, { publicKey: f.a.publicKey, role: 'agent' }],
+    ]));
+    expect(() => fresh.ingest({ ...first, payload: protoPayload })).toThrow('RUCHE_INVALID_EVENT');
     const third = f.ja.append('message', { text: 'trois' });
     expect(() => f.jArbiter.ingest(third)).toThrow('RUCHE_REPLAY_OR_FORK');
     const outsider = identity();

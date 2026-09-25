@@ -60,20 +60,20 @@ function validPayload(type: RucheEventType, p: Record<string, unknown>): boolean
   const time = (k: string): boolean => Number.isSafeInteger(p[k]) && (p[k] as number) > 0;
   const token = (): boolean => Number.isSafeInteger(p.token) && (p.token as number) > 0;
   switch (type) {
-    case 'message': return str('text');
-    case 'mention': return str('to', 128) && str('text');
-    case 'lease.request': return str('work', 256) && time('ttlMs') && (p.ttlMs as number) <= 3_600_000;
-    case 'lease.grant': return str('work', 256) && str('holder', 128) && hash('requestHash') && token() && time('expiresAt');
-    case 'lease.deny': return str('work', 256) && str('holder', 128) && hash('requestHash') && str('reason', 128);
-    case 'lease.renew.request': return str('work', 256) && token() && time('ttlMs') && (p.ttlMs as number) <= 3_600_000;
-    case 'lease.renew': return str('work', 256) && str('holder', 128) && hash('requestHash') && token() && time('expiresAt');
-    case 'lease.release.request': return str('work', 256) && token();
-    case 'lease.release': return str('work', 256) && str('holder', 128) && hash('requestHash') && token();
-    case 'verdict': return typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && str('command') && Number.isSafeInteger(p.exitCode) && hash('logHash') && hash('reportHash');
-    case 'approval.request': return str('effectId', 128) && str('effect') && typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && time('expiresAt');
-    case 'approval.response': return str('effectId', 128) && typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && typeof p.approved === 'boolean' && hash('requestHash');
-    case 'approval.consume': return str('effectId', 128) && hash('requestHash') && hash('responseHash');
-    case 'heartbeat': return str('lane', 128) && time('expiresAt');
+    case 'message': return exactKeys(p, ['text']) && str('text');
+    case 'mention': return exactKeys(p, ['to', 'text']) && str('to', 128) && str('text');
+    case 'lease.request': return exactKeys(p, ['work', 'ttlMs']) && str('work', 256) && time('ttlMs') && (p.ttlMs as number) <= 3_600_000;
+    case 'lease.grant': return exactKeys(p, ['work', 'holder', 'requestHash', 'token', 'expiresAt']) && str('work', 256) && str('holder', 128) && hash('requestHash') && token() && time('expiresAt');
+    case 'lease.deny': return exactKeys(p, ['work', 'holder', 'requestHash', 'reason']) && str('work', 256) && str('holder', 128) && hash('requestHash') && str('reason', 128);
+    case 'lease.renew.request': return exactKeys(p, ['work', 'token', 'ttlMs']) && str('work', 256) && token() && time('ttlMs') && (p.ttlMs as number) <= 3_600_000;
+    case 'lease.renew': return exactKeys(p, ['work', 'holder', 'requestHash', 'token', 'expiresAt']) && str('work', 256) && str('holder', 128) && hash('requestHash') && token() && time('expiresAt');
+    case 'lease.release.request': return exactKeys(p, ['work', 'token']) && str('work', 256) && token();
+    case 'lease.release': return exactKeys(p, ['work', 'holder', 'requestHash', 'token']) && str('work', 256) && str('holder', 128) && hash('requestHash') && token();
+    case 'verdict': return exactKeys(p, ['revision', 'command', 'exitCode', 'logHash', 'reportHash']) && typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && str('command') && Number.isSafeInteger(p.exitCode) && hash('logHash') && hash('reportHash');
+    case 'approval.request': return exactKeys(p, ['effectId', 'effect', 'revision', 'expiresAt']) && str('effectId', 128) && str('effect') && typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && time('expiresAt');
+    case 'approval.response': return exactKeys(p, ['effectId', 'revision', 'approved', 'requestHash']) && str('effectId', 128) && typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && typeof p.approved === 'boolean' && hash('requestHash');
+    case 'approval.consume': return exactKeys(p, ['effectId', 'requestHash', 'responseHash']) && str('effectId', 128) && hash('requestHash') && hash('responseHash');
+    case 'heartbeat': return exactKeys(p, ['lane', 'expiresAt']) && str('lane', 128) && time('expiresAt');
   }
 }
 
