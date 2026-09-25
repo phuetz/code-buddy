@@ -1,6 +1,6 @@
 # Reprise des mandats Lisa — revue 233
 
-Ouvert le 25/09/2026 avant correction. Branche `feat/lisa-mandats-2026-09-24`, départ `43898b9b4`.
+Ouvert le 25/09/2026 avant correction. Branche `feat/lisa-mandats-2026-09-24`, départ `43898b9b4`, correctif local `28e4d423c`.
 
 Le rapport de livraison et les sorties brutes sont conservés dans le dossier de reprise du partage. Le cœur des mandats n'est pas branché dans le produit. Aucun service réel ne sera lancé.
 
