@@ -42,6 +42,22 @@ describe('research knowledge-ingest — handlers', () => {
     expect(res).toEqual({ ingested: 0, linksCreated: 0, supports: 0, contradicts: 0 });
   });
 
+  it('forwards GitHub filters while keeping both as the scientific default', async () => {
+    const calls: unknown[] = [];
+    const { deps } = stubDeps({
+      fetchPublications: async (_topic, options) => {
+        calls.push(options);
+        return [];
+      },
+    });
+    await runIngest('agents', { source: 'github', minStars: '750', pushedSince: '2026-09-01', sort: 'recent' }, deps);
+    await runIngest('agents', {}, deps);
+    expect(calls).toEqual([
+      { source: 'github', limit: 6, minStars: 750, pushedSince: '2026-09-01', sort: 'recent' },
+      { source: 'both', limit: 6 },
+    ]);
+  });
+
   it('runRecall returns hit count and prints', async () => {
     const { deps, logs } = stubDeps();
     const n = await runRecall('comment marche l attention', { limit: '3' }, deps);

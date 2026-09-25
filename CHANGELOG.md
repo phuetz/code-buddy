@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- **research:** `buddy research ingest --source github|models|all` ajoute les dépôts GitHub populaires et les modèles de génération Hugging Face au CKG, avec filtres, tri, identifiants stables et ingestion idempotente. `both` conserve arXiv et Europe PMC.
+
 ## [2.3.0] (unreleased)
 
 ### Added

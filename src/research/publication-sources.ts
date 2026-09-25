@@ -13,6 +13,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { fetchGithubRepos, fetchHfModels, type DiscoverySort } from './discovery-sources.js';
 
 export interface Publication {
   /** Stable id, e.g. "arxiv:2501.13956" or "MED:39000000". */
@@ -23,7 +24,16 @@ export interface Publication {
   url?: string;
 }
 
-export type PublicationSource = 'arxiv' | 'europepmc' | 'both';
+export type PublicationSource = 'arxiv' | 'europepmc' | 'both' | 'github' | 'models' | 'all';
+export interface PublicationFetchOptions {
+  source?: PublicationSource;
+  limit?: number;
+  minStars?: number;
+  pushedSince?: string;
+  sort?: DiscoverySort;
+  fetcher?: typeof fetch;
+  now?: Date;
+}
 
 const FETCH_TIMEOUT_MS = 30_000;
 const FETCH_RETRIES = 2;
@@ -123,13 +133,15 @@ async function fetchEuropePmc(topic: string, limit: number): Promise<Publication
  */
 export async function fetchPublications(
   topic: string,
-  opts: { source?: PublicationSource; limit?: number } = {},
+  opts: PublicationFetchOptions = {},
 ): Promise<Publication[]> {
   const source = opts.source ?? 'both';
   const limit = Math.max(1, Math.min(50, opts.limit ?? 6));
   const jobs: Array<Promise<Publication[]>> = [];
-  if (source === 'arxiv' || source === 'both') jobs.push(fetchArxiv(topic, limit));
-  if (source === 'europepmc' || source === 'both') jobs.push(fetchEuropePmc(topic, limit));
+  if (source === 'arxiv' || source === 'both' || source === 'all') jobs.push(fetchArxiv(topic, limit));
+  if (source === 'europepmc' || source === 'both' || source === 'all') jobs.push(fetchEuropePmc(topic, limit));
+  if (source === 'github' || source === 'all') jobs.push(fetchGithubRepos(topic, { ...opts, limit }));
+  if (source === 'models' || source === 'all') jobs.push(fetchHfModels(topic, { ...opts, limit }));
   const all = (await Promise.all(jobs)).flat();
   const seen = new Set<string>();
   const deduped: Publication[] = [];

@@ -11,13 +11,13 @@
  */
 
 import type { Command } from 'commander';
-import type { Publication, PublicationSource } from '../../research/publication-sources.js';
+import type { Publication, PublicationSource, PublicationFetchOptions } from '../../research/publication-sources.js';
 import type { RelationClassifier } from '../../memory/collective-knowledge-graph.js';
 import type { PullFromPeerResult } from '../../fleet/peer-ckg-bridge.js';
 import { logger } from '../../utils/logger.js';
 
 export interface KnowledgeIngestDeps {
-  fetchPublications: (topic: string, opts: { source?: PublicationSource; limit?: number }) => Promise<Publication[]>;
+  fetchPublications: (topic: string, opts: PublicationFetchOptions) => Promise<Publication[]>;
   ingestPublication: (
     pub: Publication,
     opts?: { relationClassifier?: RelationClassifier },
@@ -108,13 +108,19 @@ function clampInt(value: string | undefined, def: number, min: number, max: numb
 /** Ingest publications on a topic into the CKG (auto-linked). Returns counts (for tests). */
 export async function runIngest(
   topic: string,
-  opts: { limit?: string; source?: string; classify?: boolean },
+  opts: { limit?: string; source?: string; classify?: boolean; minStars?: string; pushedSince?: string; sort?: string },
   deps: KnowledgeIngestDeps,
 ): Promise<{ ingested: number; linksCreated: number; supports: number; contradicts: number }> {
   const limit = clampInt(opts.limit, 6, 1, 50);
-  const source = (['arxiv', 'europepmc', 'both'].includes(opts.source ?? '') ? opts.source : 'both') as PublicationSource;
+  const source = (['arxiv', 'europepmc', 'both', 'github', 'models', 'all'].includes(opts.source ?? '') ? opts.source : 'both') as PublicationSource;
   deps.log(`🔎 Publications sur « ${topic} » (${source}, max ${limit}/source)…`);
-  const pubs = await deps.fetchPublications(topic, { source, limit });
+  const minStars = clampInt(opts.minStars, 500, 0, 1_000_000);
+  const sort = opts.sort === 'recent' || opts.sort === 'trending' ? opts.sort : 'stars';
+  const pubs = await deps.fetchPublications(topic, {
+    source, limit,
+    ...(source === 'github' || source === 'all' ? { minStars, ...(opts.pushedSince ? { pushedSince: opts.pushedSince } : {}) } : {}),
+    ...(source === 'github' || source === 'models' || source === 'all' ? { sort } : {}),
+  });
   if (pubs.length === 0) {
     deps.log('Aucune publication récupérée (source injoignable, ou aucun résultat).');
     return { ingested: 0, linksCreated: 0, supports: 0, contradicts: 0 };
@@ -331,11 +337,14 @@ export function addKnowledgeSubcommands(cmd: Command, depsFactory: () => Promise
 
   cmd
     .command('ingest <topic>')
-    .description('Fetch scientific publications on a topic and ingest them into the collective knowledge graph (auto-linked)')
+    .description('Fetch publications, popular GitHub repositories or recent LLMs into the collective knowledge graph')
     .option('-n, --limit <n>', 'Max publications per source', '6')
-    .option('-s, --source <src>', 'Source: arxiv | europepmc | both', 'both')
+    .option('-s, --source <src>', 'Source: arxiv | europepmc | both | github | models | all', 'both')
+    .option('--min-stars <n>', 'Minimum GitHub stars (default: 500)', '500')
+    .option('--pushed-since <date>', 'Minimum GitHub push date (YYYY-MM-DD; default: last 30 days)')
+    .option('--sort <order>', 'GitHub: stars|recent; models: trending|recent')
     .option('--classify', 'Use the LLM to tag neighbour links as supports/contradicts (slower)', false)
-    .action(async (topic: string, opts: { limit?: string; source?: string; classify?: boolean }) => {
+    .action(async (topic: string, opts: { limit?: string; source?: string; classify?: boolean; minStars?: string; pushedSince?: string; sort?: string }) => {
       await runIngest(topic, opts, await depsFactory());
     });
 

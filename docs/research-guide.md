@@ -200,6 +200,29 @@ l'injection CKG). Sans l'un des deux, le run est **strictement identique**
   dédup par hash de contenu côté CKG, donc relancer la même recherche
   renforce la connaissance existante plutôt que de la dupliquer).
 
+## Alimenter le CKG depuis les catalogues publics
+
+`buddy research ingest "<thème>" --source github` interroge GitHub Search pour les
+dépôts dont le thème correspond à la requête. Le seuil est de 500 étoiles
+(`--min-stars N`) et la date du dernier push doit remonter à moins de 30 jours
+(`--pushed-since AAAA-MM-JJ` pour la fixer). `--sort stars` est le tri par
+défaut ; `--sort recent` demande le tri GitHub par mise à jour. Un jeton
+`GITHUB_TOKEN` est facultatif. La réponse `X-RateLimit-Remaining: 0` est
+signalée et la commande ne réessaie pas en boucle.
+
+`buddy research ingest "<thème>" --source models` interroge le catalogue public
+Hugging Face pour les modèles `text-generation`. `--sort trending` (défaut)
+ou `--sort recent` choisit respectivement la tendance et la date de création.
+Les fiches ne reprennent que les métadonnées publiées : nombre de paramètres,
+licence, taille du contexte et date lorsqu'elles sont présentes.
+
+Chaque résultat est un nœud `discovery` avec identifiant stable
+`github:<owner>/<repo>` ou `hf:<id>`. Réingérer une fiche inchangée ne crée
+aucun événement dans le ledger ; une fiche modifiée remplace la version du même
+identifiant. Une source momentanément indisponible contribue zéro résultat.
+`--source both` conserve exactement arXiv et Europe PMC ; `--source all` ajoute
+GitHub et Hugging Face à ces deux sources. `--limit` s'applique à chaque source.
+
 ## Ce que contient le rapport
 
 Tout rapport Deep Research (Phase A/B/C, avec ou sans D) suit la même forme :
