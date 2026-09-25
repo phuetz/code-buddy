@@ -33,7 +33,7 @@ function fixture() {
   const jb = new RucheJournal(b, trust, clock);
   const jArbiter = new RucheJournal(arbiter, trust, clock);
   const jHuman = new RucheJournal(human, trust, clock);
-  const authority = new RucheAuthority(jArbiter, clock);
+  const authority = new RucheAuthority(jArbiter, arbiter.id, clock);
   return { a, b, arbiter, human, ja, jb, jArbiter, jHuman, authority, clock, advance: (ms: number) => { now += ms; } };
 }
 
@@ -139,7 +139,7 @@ describe('Ruche prototype', () => {
     f.authority.receiveApprovalResponse(response);
     expect(await f.authority.withApproval('effect-1', revision, descriptor, effect)).toBe('sent');
     await expect(f.authority.withApproval('effect-1', revision, descriptor, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
-    const restarted = new RucheAuthority(f.jArbiter, f.clock);
+    const restarted = new RucheAuthority(f.jArbiter, f.arbiter.id, f.clock);
     await expect(restarted.withApproval('effect-1', revision, descriptor, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
     expect(effect).toHaveBeenCalledTimes(1);
     const expiring = f.ja.append('approval.request', { effectId: 'effect-2', effect: { action: 'publish', target: 'release' }, revision, expiresAt: f.clock() + 10 });
@@ -172,7 +172,7 @@ describe('Ruche prototype', () => {
     f.authority.receiveApprovalRequest(request);
     const response = f.jHuman.append('approval.response', { effectId: 'effect-disk', revision, approved: true, requestHash: request.hash });
     f.authority.receiveApprovalResponse(response);
-    const stopped = new RucheAuthority(f.jArbiter, f.clock, () => { throw new Error('disk full'); });
+    const stopped = new RucheAuthority(f.jArbiter, f.arbiter.id, f.clock, () => { throw new Error('disk full'); });
     const effect = vi.fn(async () => 'done');
     await expect(stopped.withApproval('effect-disk', revision, descriptor, effect)).rejects.toThrow('disk full');
     expect(effect).not.toHaveBeenCalled();
@@ -197,7 +197,7 @@ describe('Ruche prototype', () => {
     expect(getPeerMethodHandler('peer.ruche.pull')).toBeUndefined();
   });
 
-  it('refuses a second profile acting as the pinned arbiter for the same work', () => {
+  it('refuses a second profile acting as the pinned arbiter for the same work and RPC', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ruche-arbiter-'));
     const a = path.join(root, 'a');
     const b = path.join(root, 'b');
@@ -216,6 +216,25 @@ describe('Ruche prototype', () => {
       expect(() => withLocalRuche((state) => state.authority.requestLease(
         state.agent.append('lease.request', { work: 'shared', ttlMs: 1000 }),
       ))).toThrow('RUCHE_NOT_ARBITER');
+      const request = withLocalRuche((state) => state.agent.append('lease.request', { work: 'shared', ttlMs: 1000 }));
+      wireRucheBridge();
+      const bail = getPeerMethodHandler('peer.ruche.bail');
+      expect(bail).toBeTypeOf('function');
+      await expect(bail!({ event: request }, {
+        connectionId: 'test', scopes: [], traceId: 'test', depth: 0,
+      })).rejects.toThrow('RUCHE_NOT_ARBITER');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('requires an explicit arbiter key before creating a local profile', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ruche-unpinned-'));
+    vi.stubEnv('CODEBUDDY_HOME', root);
+    vi.stubEnv('CODEBUDDY_RUCHE_ARBITER_PUBLIC_KEY', '');
+    try {
+      expect(() => withLocalRuche(() => 'unused')).toThrow('RUCHE_ARBITER_NOT_CONFIGURED');
+      expect(fs.existsSync(path.join(root, 'ruche'))).toBe(false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -233,7 +252,7 @@ describe('Ruche prototype', () => {
     const callback = vi.fn(async () => 'done');
     await expect(f.authority.withApproval('bound', revision, unrelated, callback)).rejects.toThrow('RUCHE_APPROVAL_EFFECT_MISMATCH');
     expect(callback).not.toHaveBeenCalled();
-    expect(await f.authority.withApproval('bound', revision, requested, callback)).toBe('done');
+    expect(await f.authority.withApproval('bound', revision, { target: 'public release', action: 'publish' }, callback)).toBe('done');
     expect(callback).toHaveBeenCalledTimes(1);
   });
 });

@@ -24,9 +24,9 @@ export class RucheAuthority {
 
   constructor(
     readonly journal: RucheJournal,
+    private readonly pinnedArbiterId: string,
     private readonly now: () => number = Date.now,
     private readonly persistBeforeEffect: () => void = () => {},
-    private readonly pinnedArbiterId?: string,
   ) {
     for (const event of journal.events()) {
       const p = event.payload;
@@ -52,18 +52,18 @@ export class RucheAuthority {
     }
     for (const event of journal.events().filter((item) => item.type === 'approval.response')) {
       const approval = this.approvals.get(event.payload.effectId as string);
-      if (approval?.request.hash === event.payload.requestHash) approval.response = event;
+      if (approval && approval.request.hash === event.payload.requestHash) approval.response = event;
     }
     for (const event of journal.events().filter((item) => item.type === 'approval.consume')) {
       const approval = this.approvals.get(event.payload.effectId as string);
-      if (approval?.request.hash === event.payload.requestHash && approval.response?.hash === event.payload.responseHash) {
+      if (approval && approval.request.hash === event.payload.requestHash && approval.response?.hash === event.payload.responseHash) {
         approval.consumed = true;
       }
     }
   }
 
   private assertArbiter(): void {
-    if (this.pinnedArbiterId && this.journal.signerId !== this.pinnedArbiterId) {
+    if (this.journal.signerId !== this.pinnedArbiterId) {
       throw new Error('RUCHE_NOT_ARBITER');
     }
   }

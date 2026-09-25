@@ -106,7 +106,7 @@ export function withLocalRuche<T>(fn: (state: LocalRuche) => T): T {
         seen.add(event.hash);
       }
     };
-    const authority = new RucheAuthority(arbiterJournal, Date.now, persist, arbiterId);
+    const authority = new RucheAuthority(arbiterJournal, arbiterId, Date.now, persist);
     return fn({ agent, authority, agentId: agentIdentity.id, arbiterId, events: existing, persist });
   } finally {
     fs.rmdirSync(lock);
