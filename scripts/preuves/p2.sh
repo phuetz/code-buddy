@@ -115,55 +115,7 @@ run_case transcript-repair npx --no-install tsx scripts/preuves/p2.ts transcript
 run_case transcript-resume-cli npx --no-install tsx scripts/preuves/p2.ts transcript-resume-cli
 run_case security-audit npx --no-install tsx src/index.ts security audit --profile-dir "$FIXTURE_DIR/profile" --project "$FIXTURE_DIR/project" --json
 
-python3 - "$RUN_DIR" <<'PY'
-import csv, json, sys
-from pathlib import Path
-
-run = Path(sys.argv[1])
-def load(label):
-    raw = (run / 'logs' / f'{label}.log').read_text()
-    return json.loads(raw[raw.index('{'):raw.rindex('}') + 1])
-
-checks = {
-    'verifier': lambda x: x['oracleCount'] == 1 and x['result']['metadata']['verdict'] == 'CONFIRMED',
-    'lessons': lambda x: x['gate']['accepted'] and x['gate']['delta'] == 1 and x['gate']['rolledBack'],
-    'lessons-apply': lambda x: x['gate']['accepted'] and x['gate']['delta'] == 1 and x['applied'] and x['scoreAfter']['covered'] == 1,
-    'tools': lambda x: all(not c['applied'] or c['gate']['accepted'] for c in x['cycles']),
-    'tool-authoring': lambda x: x['created']['success'] and x['created']['data']['visiblePassed'] == 2 and x['created']['data']['robustnessPassed'] == 2 and x['invoked']['output'].strip() == 'encore-un-test',
-    'skills': lambda x: all(not c['applied'] or c.get('behavior', {}).get('accepted') for c in x['cycles']),
-    'skill-authoring': lambda x: x['created']['success'] and x['registered'] and x['savedBytes'] > 0,
-    'strategies': lambda x: x['cycle']['gate']['accepted'] and x['cycle']['gate']['paired']['wins'] == 6 and not x['cycle']['applied'],
-    'strategies-apply': lambda x: x['cycle']['gate']['accepted'] and x['cycle']['applied'] and x['cycle']['gate']['paired']['wins'] == 6,
-    'skill-firewall': lambda x: x['report']['total'] == 2 and len(x['report']['imported']) == 1 and len(x['report']['quarantined']) == 1,
-    'command-validator': lambda x: not x['result']['success'],
-    'secret-guard': lambda x: x['result']['success'] and 'Found 1 potential secret' in x['result']['output'] and not x['rawValueExposed'],
-    'deployment-guard': lambda x: not x['result']['success'] and not x['fakeDeployExecuted'],
-    'output-sanitizer': lambda x: x['visible'] == 'avantVISIBLEFIN' and x['removedChars'] == 60,
-    'output-sanitizer-cli': lambda x: x['markerInjected'] and x['outputEqualsOriginal'] and not x['outputHasThink'] and not x['outputHasInst'] and not x['outputHasInvisible'],
-    'transcript-repair': lambda x: x['orphanRemoved'] and x['syntheticAdded'],
-    'transcript-resume-cli': lambda x: x['repairObserved'] and x['assistantResponded'],
-    'security-audit': lambda x: not x['passed'] and any(f['checkId'] == 'config.plaintext_secret' for f in x['findings']),
-}
-failed = []
-for label, check in checks.items():
-    try:
-        ok = bool(check(load(label)))
-    except (OSError, ValueError, KeyError, TypeError, IndexError) as error:
-        ok = False
-        print(f'CHECK {label}: ERROR {error}')
-    print(f'CHECK {label}: {"PASS" if ok else "FAIL"}')
-    if not ok: failed.append(label)
-
-with (run / 'measure.csv').open(newline='') as source:
-    exits = {label: int(exit_code) for label, _, _, exit_code in csv.reader(source)}
-for label, code in exits.items():
-    expected = 1 if label == 'security-audit' else 0
-    if code != expected:
-        failed.append(f'{label}: exit {code}, expected {expected}')
-if failed:
-    raise SystemExit('Proof checks failed: ' + ', '.join(failed))
-print(f'CHECK total: {len(checks)} surfaces/executions validated')
-PY
+python3 scripts/preuves/p2-checks.py "$RUN_DIR"
 
 printf '\nRésultats bruts : %s/logs\n' "$RUN_DIR"
 printf 'Mesures : %s/measure.csv\n' "$RUN_DIR"

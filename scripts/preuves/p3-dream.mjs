@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { waitForDreamPromotion } from './p3-promotion.mjs';
 
 const root = process.env.P3_REPO_ROOT;
 if (!root) throw new Error('P3_REPO_ROOT is required');
@@ -59,16 +60,15 @@ const daemonCode = await new Promise((resolve, reject) => {
   daemon.once('close', (code) => { clearTimeout(timer); resolve(code); });
 });
 const journal = path.join(cwd, '.codebuddy/companion/dreams.jsonl');
-let journalText = '';
-for (let i = 0; i < 30; i += 1) {
-  journalText = await fs.readFile(journal, 'utf8').catch(() => '');
-  if (journalText.includes('audio/speech_end')) break;
-  await new Promise((resolve) => setTimeout(resolve, 100));
-}
+const memoryFile = path.join(cwd, '.codebuddy/CODEBUDDY_MEMORY.md');
+const { journalText, memoryText } = await waitForDreamPromotion({
+  readJournal: () => fs.readFile(journal, 'utf8').catch(() => ''),
+  readMemory: () => fs.readFile(memoryFile, 'utf8').catch(() => ''),
+  serverAlive: () => cli.exitCode === null,
+});
 cli.kill('SIGTERM');
 await new Promise((resolve) => cli.once('close', resolve));
 const entries = journalText.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
 const result = entries.find((entry) => entry.byKind?.['audio/speech_end']);
-const memoryText = await fs.readFile(path.join(cwd, '.codebuddy/CODEBUDDY_MEMORY.md'), 'utf8').catch(() => '');
 console.log(JSON.stringify({ httpStatus: 200, health, daemonExitCode: daemonCode, journalBytes: Buffer.byteLength(journalText), memoryBytes: Buffer.byteLength(memoryText), promoted: memoryText.includes('dream:recent'), dream: result ?? null, serverLog: serverOutput.split('\n').filter((line) => /bridge listening|Server listening/.test(line)).join('\n'), daemonLog: daemonOutput.trim() }, null, 2));
 if (daemonCode !== 0 || !result?.byKind?.['audio/speech_end'] || !result?.byKind?.['audio/speech_start'] || result?.total < 2 || !memoryText.includes('dream:recent')) process.exitCode = 1;

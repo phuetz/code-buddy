@@ -184,7 +184,7 @@ async function subagentsProbe(): Promise<void> {
     ],
   }, spawn);
   report({ teamStarted: teamStarted.entry?.content, member: member.entry?.content, teamStatus: teamStatus.entry?.content, teamStopped: teamStopped.entry?.content, batch: results, eventCount: events.length, eventSample: events.slice(0, 12) });
-  assertObserved('équipe et deux délégués terminés', results.length === 2 && results.every((result) => result.success) && events.length > 0 && teamStatus.entry?.content.includes('TEAM MEMBERS (1)') === true);
+  assertObserved('équipe sans tâche déléguée et deux unités batch terminées', results.length === 2 && results.every((result) => result.success) && events.length > 0 && teamStatus.entry?.content.includes('TEAM MEMBERS (1)') === true && teamStopped.entry?.content.includes('0/0 tasks completed') === true);
 }
 
 async function swarmProbe(): Promise<void> {

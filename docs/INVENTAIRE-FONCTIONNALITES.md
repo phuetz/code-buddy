@@ -3,14 +3,14 @@
 > État établi le 25/09/2026 à partir des exécutions consignées dans `docs/preuves/`.
 > Chaque preuve ci-dessous indique son fichier, sa date et le commit de code testé.
 >
-> Légende — ✅ exécuté réellement avec une mesure · ❌ défaut observé · ⛔ non prouvable dans cette campagne. Une réussite de tests seule ne vaut pas preuve d’usage.
+> Légende — ✅ exécuté réellement avec une mesure · 🧪 exercice partiel avec dépendance simulée · ❌ défaut observé · ⛔ non prouvable dans cette campagne. Une réussite de tests seule ne vaut pas preuve d’usage.
 
 ## Ce qui est prouvé au 25/09/2026
 
 - L’agent a lu un fichier avec `view_file` et répondu « indigo » ; la bascule après panne du fournisseur principal a abouti sur Ollama. Les cinq modes d’autorisation et le refus d’écriture en mode `plan` ont été exercés. Bubblewrap a permis l’écriture interne et bloqué la sortie de l’espace. [P1](preuves/p1.md)
 - Le contexte a été réduit de 13 à 7 messages, et un segment compacté a été restauré exactement. La mémoire épisodique a consolidé trois tours ; l’oubli a archivé puis restauré un souvenir. [P1](preuves/p1.md)
-- La flotte a répondu par `peer.chat`, exécuté une lecture distante et refusé trois accès non autorisés ; un fait a été transféré et intégré. L’équipe, les délégations et l’essaim ont terminé sur les cas de recette mesurés. [P1](preuves/p1.md)
-- Le Verifier a rendu `CONFIRMED` sur un oracle exécuté. Le cycle de leçons a mesuré un gain puis annulé la proposition en mode `propose-only`. Un outil créé par l’agent a passé quatre cas et a été invoqué. [P2](preuves/p2.md)
+- La flotte a répondu par `peer.chat`, exécuté une lecture distante et refusé trois accès non autorisés ; un fait a été transféré et intégré. Une équipe a été créée sans tâche confiée ; deux unités `/batch` et un essaim ont abouti. [P1](preuves/p1.md)
+- Le harnais Verifier a rendu `CONFIRMED` sur un oracle exécuté via un `executeTool` factice : résultat 🧪. Le cycle de leçons a mesuré un gain puis annulé la proposition en mode `propose-only`. Un outil créé par l’agent a passé quatre cas et a été invoqué. [P2](preuves/p2.md)
 - Sur les cas exercés, le pare-feu a mis une compétence injectée en quarantaine, le validateur a refusé `mkfs`, la garde de déploiement a bloqué `fly deploy`, le nettoyeur a préservé le texte visible malgré des marqueurs injectés, et la reprise de session a réparé un transcript puis répondu `P2_OK`. [P2](preuves/p2.md)
 - Le daemon sensoriel Rust a livré six événements en 932 ms via le pont loopback ; le rêve a consolidé 23 percepts ; une règle a refusé `rm -rf /` puis exécuté une action locale autorisée avec audit. [P3](preuves/p3.md)
 - Le serveur MCP a répondu à `initialize` et `tools/list` en stdio : 64 outils annoncés, tous marqués lecture seule. Le CLI a aussi exécuté les aides de 116 noms et 73 lectures sûres ; cela ne prouve pas le TUI interactif ni les commandes restées à l’aide seule. [P4](preuves/p4.md)
@@ -24,10 +24,12 @@ La commande demandée `npx tsx src/index.ts catalog generate --json` échoue sur
 | Mesure runtime | Valeur | Source |
 |---|---:|---|
 | Enregistrements de commandes CLI à la racine | **114** | `--help` runtime |
-| Noms CLI en comptant les alias | **116** | 116 invocations `--help` réussies |
+| Noms CLI en comptant les alias | **116** | 114 lignes runtime + 2 alias ; 116 invocations `--help` réussies |
 | Lectures sûres CLI supplémentaires | **73** (63 code 0, 10 code 1) | balayage P4 |
 | Outils d’agent exposés et uniques | **226** | sonde P1 ; l’assertion attendait 230 et a échoué |
 | Entrées directes du catalogue fournisseur | **61** | sonde P1 ; seul Ollama a été appelé réellement |
+
+Le total historique **105 commandes** était une affirmation de l’ancien inventaire sans mesure conservée. La liste historique contient **103 noms** ; 102 figurent encore dans les 116 noms runtime, 14 noms s’y sont ajoutés et `message` n’y figure plus. Les 114 lignes d’enregistrement runtime comprennent deux lignes à alias (`autonomy|colab`, `session|sessions`). Les unités et les dates des trois comptes diffèrent ; le chiffre courant mesuré est 116 noms, sans prétendre expliquer les deux noms manquants derrière l’ancienne affirmation 105. [P4](preuves/p4.md)
 
 Les autres totaux précédemment affichés (lignes de code, variables d’environnement, fichiers/tests, composants) ne sont pas fournis par ce générateur absent et ne sont pas recalculés ici. [P1](preuves/p1.md) · [P4](preuves/p4.md)
 
@@ -51,7 +53,7 @@ Les autres totaux précédemment affichés (lignes de code, variables d’enviro
 |---|---|---|
 | Travail — ce qu’il voit | Compression du contexte | ✅ 13 → 7 messages et 1 804 → 912 jetons. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 | Travail étendue — compaction réversible | Déploiement d’un segment compacté | ✅ 2 segments ; restauration exacte du marqueur `unique-0`, 5 863 caractères. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
-| Épisodique — ce qui s’est passé | Consolidation d’épisodes et promotion en mémoire | ✅ 3 tours, 1 ligne JSONL, 6 sujets, 1 point ouvert et promotion. Le rejeu de chronologie reste non vérifié. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
+| Épisodique — ce qui s’est passé | Consolidation d’épisodes et promotion en mémoire | ✅ 3 tours fournis par `readConversation` injecté, 1 ligne JSONL, 6 sujets, 1 point ouvert et promotion. Lecture de la vraie session et rejeu : ⛔. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 | Sémantique — ce qu’il sait | Graphe collectif et rappel pertinent | ⛔ Le rapport P1 précise que cette fonction déjà marquée prouvée n’a pas été réexécutée dans la campagne. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 | Procédurale — comment faire | Création d’outils et savoir-faire sous garde empirique | ⛔ L’outil créé est prouvé en section 5 ; les 189 améliorations historiques n’ont pas été rejouées ici. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 | Oubli | Archivage et restauration d’un souvenir | ✅ un souvenir archivé après avance contrôlée de 90 jours, puis restauré. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
@@ -60,7 +62,7 @@ Les autres totaux précédemment affichés (lignes de code, variables d’enviro
 
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
-| Verifier indépendant | Un agent séparé juge le travail | ✅ vrai `node --test`, 1 oracle, verdict `CONFIRMED`. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Verifier indépendant | Un agent séparé juge le travail | 🧪 `VerifierAgent.execute` avec `llmCall` et `executeTool` injectés ; l’oracle `node --test` a tourné, mais registre et exécuteur de production non exercés. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 | Porte de preuves sur les buts | Un résultat sans preuve est rétrogradé | ⛔ Non exercée par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 | `buddy loop` | Plan, exécution, vérification et jugement | ⛔ Non exercé par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 | Porte de revue de diff | Refus d’écritures non revues | ⛔ Non exercée par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
@@ -74,7 +76,9 @@ Les autres totaux précédemment affichés (lignes de code, variables d’enviro
 | Flotte (`peer.chat`) | Appel d’un pair par WebSocket | ✅ réponse Ollama réelle, 74 jetons, serveur local éphémère arrêté après le test. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 | Outils distants | Outil lecture seule soumis aux barrières du pair | ✅ `view_file` distant en 2 ms ; refus allowlist, `fleetSafe` et espace de travail. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 | Conseil de modèles | Délibération et arbitrage pour le routage | ⛔ Deux modèles ont répondu, mais juge non neutre et apprentissage refusé. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
-| `/batch`, `/swarm`, `/team` | Décomposition et délégation | ✅ équipe créée, 2 délégations terminées / 44 événements ; essaim réussi en 38 s. [P1](preuves/p1.md) — 2026-09-25, correctif `a8dc11fb2` |
+| `/batch` | Décomposition en unités | ✅ 2 unités terminées, 44 événements. [P1](preuves/p1.md) — 2026-09-25, correctif `a8dc11fb2` |
+| `/swarm` | Exécution d’un essaim | ✅ essaim réussi en 38 s. [P1](preuves/p1.md) — 2026-09-25, correctif `a8dc11fb2` |
+| `/team` | Délégation à un coéquipier | 🧪 équipe créée avec 1 membre puis dissoute : `0/0 tasks completed` ; aucune délégation de tâche prouvée. [P1](preuves/p1.md) — 2026-09-25, correctif `a8dc11fb2` |
 | Fédération de graphes | Tirage et intégration de faits entre pairs | ✅ un fait reçu et intégré via WebSocket réel. [P1](preuves/p1.md) — 2026-09-25, commit `6715ab53d` |
 
 ## 5. Auto-amélioration — bornée par l’expérience
@@ -84,7 +88,7 @@ Quatre surfaces apprenables. L’invariant « jamais `src/` » n’est pas reval
 | Surface | Ce que c'est | Preuve |
 |---|---|---|
 | Leçons | Score, proposition, validation empirique puis conservation ou annulation | ✅ couverture 0/15 → 1/15 ; application en mode `propose-only` annulée, puis cas appliqué conservé dans l’essai séparé. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
-| Outils | Création d’outil, cas visibles et cachés, invocation | ✅ 2/2 cas fonctionnels et 2/2 robustesse ; outil invoqué. Le cycle CLI séparé a refusé un brouillon 0/2. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Outils | Création d’outil, cas visibles et cachés, invocation | ✅ 2/2 cas fonctionnels et 2/2 robustesse ; outil invoqué. Le cycle CLI cité a accepté une autre proposition : 2/2 visibles et 3/3 cachés. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 | Savoir-faire | Rédaction de `SKILL.md` et filtre anti-injection | ⛔ Le candidat de compétence a été refusé au cycle ; le brouillon direct était fautif. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 | Stratégies | Apprentissage borné des plafonds et du raisonnement | ⛔ Rejeu synthétique de 6 gains, mais expériences synthétiques seulement. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 
@@ -95,7 +99,7 @@ Quatre surfaces apprenables. L’invariant « jamais `src/` » n’est pas reval
 | Système nerveux (Rust) | Canaux sensoriels, thalamus et diffusion | ✅ 42 tests Rust puis 6 événements réels via WAV fixture et pont loopback en 932 ms. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 | Yeux (Python/MediaPipe) | Détecteurs à états | ⛔ Aucun parcours caméra/MediaPipe exercé. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 | Voix | Parole, transcription, réponse parlée et interruption | ⛔ Microphone, voix et transcription réelle non exercés. Le WAV de recette ne prouve pas ce parcours. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
-| Rêve | Consolidation du tampon court terme et promotion du saillant | ✅ 23 percepts, journal de 375 octets, mémoire de 806 octets avec `dream:recent`. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Rêve | Consolidation du tampon court terme et promotion du saillant | ✅ 23 percepts et `dream:recent` observés lors du rejeu cité ; le harnais attend désormais la promotion avant d’arrêter le serveur. Les tailles de fichiers varient. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 | Rappels | Annonce vocale/Telegram et acquittement vocal | ⛔ Non exercés par P1–P4. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 | Règles sensorielles | Refus d’actions dangereuses et exécution d’actions autorisées | ✅ `rm -rf /` refusé ; action locale autorisée exécutée et auditée. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 

@@ -2,6 +2,17 @@
 # Rejoue les sondes réelles de la campagne P1. Réseau : Ollama sur loopback.
 set -u
 
+P1_LABELS=,boucle,outils,fournisseurs,rag,contexte,episode,oubli,autorisations,bac_a_sable,bascule,sous_agents,essaim,flotte,conseil,
+if [[ -n "${P1_ONLY:-}" ]]; then
+  IFS=, read -r -a P1_SELECTED <<< "$P1_ONLY"
+  for label in "${P1_SELECTED[@]}"; do
+    if [[ -z "$label" || "$P1_LABELS" != *",$label,"* ]]; then
+      echo "P1_ONLY inconnu : $label" >&2
+      exit 2
+    fi
+  done
+fi
+
 if [[ $# -gt 0 && -e "$1" ]]; then
   echo "Refus : le répertoire de sortie existe déjà : $1" >&2
   exit 2
