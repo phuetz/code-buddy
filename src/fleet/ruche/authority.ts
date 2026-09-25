@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { RucheJournal, type RucheEvent } from './journal.js';
+import { canonicalizeManifest } from '../../skills/skill-signing.js';
+import { RucheJournal, validRucheEffect, type RucheEffect, type RucheEvent } from './journal.js';
 
 export interface Lease {
   work: string;
@@ -25,6 +26,7 @@ export class RucheAuthority {
     readonly journal: RucheJournal,
     private readonly now: () => number = Date.now,
     private readonly persistBeforeEffect: () => void = () => {},
+    private readonly pinnedArbiterId?: string,
   ) {
     for (const event of journal.events()) {
       const p = event.payload;
@@ -60,7 +62,14 @@ export class RucheAuthority {
     }
   }
 
+  private assertArbiter(): void {
+    if (this.pinnedArbiterId && this.journal.signerId !== this.pinnedArbiterId) {
+      throw new Error('RUCHE_NOT_ARBITER');
+    }
+  }
+
   requestLease(request: RucheEvent): RucheEvent {
+    this.assertArbiter();
     if (request.type !== 'lease.request') throw new Error('RUCHE_EXPECTED_LEASE_REQUEST');
     this.journal.ingest(request);
     const work = request.payload.work as string;
@@ -81,6 +90,7 @@ export class RucheAuthority {
   }
 
   renew(request: RucheEvent): RucheEvent {
+    this.assertArbiter();
     if (request.type !== 'lease.renew.request') throw new Error('RUCHE_EXPECTED_RENEW_REQUEST');
     this.journal.ingest(request);
     const work = request.payload.work as string;
@@ -94,6 +104,7 @@ export class RucheAuthority {
   }
 
   release(request: RucheEvent): RucheEvent {
+    this.assertArbiter();
     if (request.type !== 'lease.release.request') throw new Error('RUCHE_EXPECTED_RELEASE_REQUEST');
     this.journal.ingest(request);
     const work = request.payload.work as string;
@@ -106,6 +117,7 @@ export class RucheAuthority {
   }
 
   assertLease(work: string, holder: string, token: number): Lease {
+    this.assertArbiter();
     const lease = this.leases.get(work);
     if (!lease || lease.holder !== holder || lease.token !== token || lease.expiresAt <= this.now()) {
       throw new Error('RUCHE_LEASE_REQUIRED');
@@ -144,7 +156,8 @@ export class RucheAuthority {
   }
 
   /** Call immediately before an outbound effect. The approval is consumed first. */
-  async withApproval<T>(effectId: string, revision: string, effect: () => Promise<T>): Promise<T> {
+  async withApproval<T>(effectId: string, revision: string, descriptor: RucheEffect, effect: () => Promise<T>): Promise<T> {
+    this.assertArbiter();
     const approval = this.approvals.get(effectId);
     const response = approval?.response;
     if (!approval || approval.consumed
@@ -152,6 +165,10 @@ export class RucheAuthority {
       || (approval.request.payload.expiresAt as number) <= this.now()
       || !response || response.payload.approved !== true) {
       throw new Error('RUCHE_APPROVAL_REQUIRED');
+    }
+    if (!validRucheEffect(descriptor)
+      || canonicalizeManifest(approval.request.payload.effect) !== canonicalizeManifest(descriptor)) {
+      throw new Error('RUCHE_APPROVAL_EFFECT_MISMATCH');
     }
     this.journal.append('approval.consume', {
       effectId, requestHash: approval.request.hash, responseHash: response.hash,

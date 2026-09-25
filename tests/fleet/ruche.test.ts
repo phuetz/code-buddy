@@ -124,10 +124,11 @@ describe('Ruche prototype', () => {
   it('blocks an outbound effect until a pinned human approves; silence expires', async () => {
     const f = fixture();
     const revision = 'a'.repeat(40);
-    const request = f.ja.append('approval.request', { effectId: 'effect-1', effect: 'send artifact', revision, expiresAt: f.clock() + 10 });
+    const descriptor = { action: 'send', target: 'artifact' };
+    const request = f.ja.append('approval.request', { effectId: 'effect-1', effect: descriptor, revision, expiresAt: f.clock() + 10 });
     f.authority.receiveApprovalRequest(request);
     const effect = vi.fn(async () => 'sent');
-    await expect(f.authority.withApproval('effect-1', revision, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
+    await expect(f.authority.withApproval('effect-1', revision, descriptor, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
     expect(effect).not.toHaveBeenCalled();
     const response = f.jHuman.append('approval.response', { effectId: 'effect-1', revision, approved: true, requestHash: request.hash });
     const wrongRole = new RucheJournal(f.arbiter, new Map([
@@ -136,15 +137,15 @@ describe('Ruche prototype', () => {
     ]));
     expect(() => wrongRole.ingest(response)).toThrow('RUCHE_WRONG_ROLE');
     f.authority.receiveApprovalResponse(response);
-    expect(await f.authority.withApproval('effect-1', revision, effect)).toBe('sent');
-    await expect(f.authority.withApproval('effect-1', revision, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
+    expect(await f.authority.withApproval('effect-1', revision, descriptor, effect)).toBe('sent');
+    await expect(f.authority.withApproval('effect-1', revision, descriptor, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
     const restarted = new RucheAuthority(f.jArbiter, f.clock);
-    await expect(restarted.withApproval('effect-1', revision, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
+    await expect(restarted.withApproval('effect-1', revision, descriptor, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
     expect(effect).toHaveBeenCalledTimes(1);
-    const expiring = f.ja.append('approval.request', { effectId: 'effect-2', effect: 'publish', revision, expiresAt: f.clock() + 10 });
+    const expiring = f.ja.append('approval.request', { effectId: 'effect-2', effect: { action: 'publish', target: 'release' }, revision, expiresAt: f.clock() + 10 });
     f.authority.receiveApprovalRequest(expiring);
     f.advance(10);
-    await expect(f.authority.withApproval('effect-2', revision, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
+    await expect(f.authority.withApproval('effect-2', revision, descriptor, effect)).rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
     expect(effect).toHaveBeenCalledTimes(1);
   });
 
@@ -166,13 +167,14 @@ describe('Ruche prototype', () => {
   it('does not run an outbound effect if approval consumption cannot be persisted', async () => {
     const f = fixture();
     const revision = 'a'.repeat(40);
-    const request = f.ja.append('approval.request', { effectId: 'effect-disk', effect: 'publish', revision, expiresAt: f.clock() + 10 });
+    const descriptor = { action: 'publish', target: 'release' };
+    const request = f.ja.append('approval.request', { effectId: 'effect-disk', effect: descriptor, revision, expiresAt: f.clock() + 10 });
     f.authority.receiveApprovalRequest(request);
     const response = f.jHuman.append('approval.response', { effectId: 'effect-disk', revision, approved: true, requestHash: request.hash });
     f.authority.receiveApprovalResponse(response);
     const stopped = new RucheAuthority(f.jArbiter, f.clock, () => { throw new Error('disk full'); });
     const effect = vi.fn(async () => 'done');
-    await expect(stopped.withApproval('effect-disk', revision, effect)).rejects.toThrow('disk full');
+    await expect(stopped.withApproval('effect-disk', revision, descriptor, effect)).rejects.toThrow('disk full');
     expect(effect).not.toHaveBeenCalled();
   });
 

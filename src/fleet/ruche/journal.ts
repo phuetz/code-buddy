@@ -24,6 +24,12 @@ export interface RucheTrust {
   role: RucheRole;
 }
 
+export interface RucheEffect {
+  action: string;
+  target: string;
+  parameters?: Record<string, string | number | boolean | null>;
+}
+
 export interface RucheEvent {
   v: 1;
   agentId: string;
@@ -54,6 +60,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+export function validRucheEffect(value: unknown): value is RucheEffect {
+  if (!isRecord(value) || typeof value.action !== 'string' || typeof value.target !== 'string'
+    || value.action.length < 1 || value.action.length > 128
+    || value.target.length < 1 || value.target.length > 1024) return false;
+  const keys = Object.keys(value).sort().join(',');
+  if (keys !== 'action,target' && keys !== 'action,parameters,target') return false;
+  if (!('parameters' in value)) return true;
+  if (!isRecord(value.parameters) || Object.keys(value.parameters).length > 32) return false;
+  return Object.entries(value.parameters).every(([key, item]) =>
+    /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)
+    && (item === null || typeof item === 'boolean'
+      || (typeof item === 'string' && item.length <= 1024)
+      || (typeof item === 'number' && Number.isSafeInteger(item))));
+}
+
 function validPayload(type: RucheEventType, p: Record<string, unknown>): boolean {
   const str = (k: string, max = 4096): boolean => typeof p[k] === 'string' && (p[k] as string).length > 0 && (p[k] as string).length <= max;
   const hash = (k: string): boolean => typeof p[k] === 'string' && HASH_RE.test(p[k] as string);
@@ -70,7 +91,7 @@ function validPayload(type: RucheEventType, p: Record<string, unknown>): boolean
     case 'lease.release.request': return exactKeys(p, ['work', 'token']) && str('work', 256) && token();
     case 'lease.release': return exactKeys(p, ['work', 'holder', 'requestHash', 'token']) && str('work', 256) && str('holder', 128) && hash('requestHash') && token();
     case 'verdict': return exactKeys(p, ['revision', 'command', 'exitCode', 'logHash', 'reportHash']) && typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && str('command') && Number.isSafeInteger(p.exitCode) && hash('logHash') && hash('reportHash');
-    case 'approval.request': return exactKeys(p, ['effectId', 'effect', 'revision', 'expiresAt']) && str('effectId', 128) && str('effect') && typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && time('expiresAt');
+    case 'approval.request': return exactKeys(p, ['effectId', 'effect', 'revision', 'expiresAt']) && str('effectId', 128) && validRucheEffect(p.effect) && typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && time('expiresAt');
     case 'approval.response': return exactKeys(p, ['effectId', 'revision', 'approved', 'requestHash']) && str('effectId', 128) && typeof p.revision === 'string' && /^[a-f0-9]{40}([a-f0-9]{24})?$/.test(p.revision) && typeof p.approved === 'boolean' && hash('requestHash');
     case 'approval.consume': return exactKeys(p, ['effectId', 'requestHash', 'responseHash']) && str('effectId', 128) && hash('requestHash') && hash('responseHash');
     case 'heartbeat': return exactKeys(p, ['lane', 'expiresAt']) && str('lane', 128) && time('expiresAt');
@@ -91,6 +112,10 @@ export class RucheJournal {
   ) {
     if (identity.id !== publicKeyId(identity.publicKey)) throw new Error('RUCHE_IDENTITY_MISMATCH');
     if (trust.get(identity.id)?.publicKey !== identity.publicKey) throw new Error('RUCHE_UNTRUSTED_SELF');
+  }
+
+  get signerId(): string {
+    return this.identity.id;
   }
 
   head(agentId: string): RucheEvent | undefined {
