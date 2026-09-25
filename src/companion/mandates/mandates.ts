@@ -7,15 +7,15 @@
  * supervised. The charter decides the rest, in a fixed order (`decideAutonomousAction`):
  *
  *   1. only AUTONOMOUS origins are decided here; an interactive session keeps its own flow;
- *   2. an unidentified speaker never acts (fail closed);
+ *   2. only a proven owner may act (fail closed);
  *   3. Lisa never writes her own guardrails (mandates, charter, identities, policies);
  *   4. an undeclared effect is never allowed on its own;
- *   5. reading is free;
+ *   5. reading outside sensitive paths is free;
  *   6. an EMISSION towards the world (message to a third party, purchase, publication, e-mail,
  *      definitive deletion) is ALWAYS asked — no mandate can waive it;
- *   7. a REVERSIBLE action runs alone only under an autonomous, unexpired, in-cap mandate that
- *      names the tool, the origin and (when set) the paths — and always with a restore point.
- *      Anything else is asked. Silence to a question is a refusal (the asker's contract).
+ *   7. a REVERSIBLE action is only conditionally eligible under an autonomous, unexpired, in-cap
+ *      mandate that names the tool, origin and paths. The executor must verify a restore point
+ *      before acting. Anything else is asked; asking never authorizes action on silence.
  *
  * The loader fails closed: an unreadable, invalid or symlinked file yields NO mandate, so every
  * reversible action falls back to asking.
@@ -28,13 +28,12 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import TOML from '@iarna/toml';
 import { z } from 'zod';
+import type { CompanionIdentity } from '../companion-identity.js';
 import { deobfuscateSafeForScan } from '../../security/text-deobfuscation.js';
 import { logger } from '../../utils/logger.js';
 
 export type ToolEffect = 'read' | 'reversible' | 'emission';
 export type AutonomousOrigin = 'voice' | 'initiative';
-export type IdentityRole = 'owner' | 'present' | 'guest';
-
 const idRe = /^[a-z0-9][a-z0-9-]{1,63}$/;
 const toolRe = /^[a-z][a-z0-9_]{1,63}$/;
 
@@ -67,11 +66,11 @@ export const mandatesFileSchema = z
   })
   .strict();
 
-export function mandatesFilePath(env: NodeJS.ProcessEnv = process.env): string {
+export function mandatesFilePath(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string {
   const override = env.CODEBUDDY_LISA_MANDATES_FILE?.trim();
   return override && path.isAbsolute(override)
     ? override
-    : path.join(homedir(), '.codebuddy', 'lisa', 'mandats.toml');
+    : path.join(home, '.codebuddy', 'lisa', 'mandats.toml');
 }
 
 export interface LoadedMandates {
@@ -140,7 +139,8 @@ export interface ActionRequest {
   effect: ToolEffect | undefined;
   /** Undefined = interactive session: not decided here. */
   origin: AutonomousOrigin | undefined;
-  role: IdentityRole;
+  /** Verified identity from the channel resolver; a role without high confidence grants nothing. */
+  identity: Pick<CompanionIdentity, 'role' | 'confidence'>;
   /** Absolute paths the action would touch (files written, moved, deleted). */
   targets?: string[];
   /** Shell command text, when the tool runs one. */
@@ -149,6 +149,8 @@ export interface ActionRequest {
 
 export interface DecisionContext {
   mandates: Mandate[];
+  /** Exact path passed to loadMandates; required even when an environment override is used. */
+  mandatesFile: string;
   now: Date;
   /** How many actions each mandate already ran today (the caller keeps the journal). */
   usedToday: (mandateId: string) => number;
@@ -161,21 +163,54 @@ export interface DecisionResult {
   decision: AutonomousDecision;
   reason: string;
   mandateId?: string;
+  /** An obligation for the executor, never a claim that a restore point already exists. */
+  requiresCheckpoint?: true;
 }
 
-/** Guardrail files Lisa must never write, whatever a mandate says. */
-export function defaultProtectedPaths(home: string = homedir()): string[] {
+/** Owner-controlled paths are outside mandates, whatever a mandate says. */
+export function defaultProtectedPaths(home: string = homedir(), mandatesFile: string = mandatesFilePath(process.env, home)): string[] {
   const codebuddy = path.join(home, '.codebuddy');
   return [
-    path.join(codebuddy, 'lisa'),
-    path.join(codebuddy, 'settings.json'),
-    path.join(codebuddy, 'user-settings.json'),
-    path.join(codebuddy, 'identity-links.json'),
-    path.join(codebuddy, 'devices.json'),
-    path.join(codebuddy, 'policies'),
-    path.join(codebuddy, 'vision.env'),
+    codebuddy,
+    mandatesFile,
+    path.join(home, '.ssh'),
+    path.join(home, '.gnupg'),
+    path.join(home, '.aws'),
+    path.join(home, '.azure'),
+    path.join(home, '.kube'),
+    path.join(home, '.docker'),
+    path.join(home, '.config'),
+    path.join(home, '.local', 'share', 'keyrings'),
     path.join(home, '.config', 'systemd', 'user'),
   ];
+}
+
+const sensitiveDirectories = new Set([
+  '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config', '.codebuddy',
+  'keyrings', 'credentials', 'secrets',
+]);
+
+/** Access settings, credentials, owner rules and their implementation are never mandate targets. */
+function isSensitiveTarget(target: string): boolean {
+  const real = realTarget(target);
+  if (real === null) return true;
+  const parts = real.toLowerCase().split(path.sep).filter(Boolean);
+  const base = parts.at(-1) ?? '';
+  if (parts.some((part) => sensitiveDirectories.has(part))) return true;
+  if (/(?:^|\/)src\/(?:companion|security|config)(?:\/|$)/.test(parts.join('/'))) return true;
+  return /^(?:mandats\.toml|lignee-habiter-le-robot\.md|agents\.md|claude\.md|codebuddy\.md|\.env(?:\..*)?|\.netrc|\.npmrc|\.git-credentials|authorized_keys|id_(?:rsa|ed25519|ecdsa)(?:\.pub)?|(?:credentials|secrets?|auth|access|policy|permissions|settings)(?:\..*)?|.*\.(?:pem|key|p12|pfx))$/.test(base);
+}
+
+/** A hard link can modify a protected inode under an innocent-looking name. */
+function hasUnsafeExistingTarget(target: string): boolean {
+  const real = realTarget(target);
+  if (real === null) return true;
+  try {
+    const stat = statSync(real);
+    return stat.isDirectory() || stat.nlink > 1;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ENOENT';
+  }
 }
 
 function expandHome(p: string, home: string): string {
@@ -225,20 +260,25 @@ function localDate(now: Date): string {
 /** The charter, in order. Pure: everything it needs is passed in. */
 export function decideAutonomousAction(request: ActionRequest, context: DecisionContext): DecisionResult {
   if (!request.origin) return { decision: 'defer', reason: 'interactive session: its own confirmation flow applies' };
-  if (request.role === 'guest') return { decision: 'deny', reason: 'unidentified speaker: never acts' };
+  if (request.identity?.role !== 'owner' || request.identity.confidence !== 'high') {
+    return { decision: 'deny', reason: 'autonomous action requires a proven owner identity' };
+  }
 
   const home = context.home ?? homedir();
   const targets = request.targets ?? [];
+  if (!path.isAbsolute(context.mandatesFile)) {
+    return { decision: 'deny', reason: 'the loaded mandate file path must be absolute' };
+  }
   // The default guardrails are ALWAYS enforced; a caller can only add to them.
-  const protectedPaths = [...defaultProtectedPaths(home), ...context.protectedPaths];
+  const protectedPaths = [...defaultProtectedPaths(home, context.mandatesFile), mandatesFilePath(process.env, home), ...context.protectedPaths];
   if (targets.some((t) => realTarget(t) === null)) {
     return { decision: 'deny', reason: 'a target goes through a dangling symlink: where it lands is unknown' };
   }
   // Protected when the target is a guardrail, lies inside one, or CONTAINS one (moving or
   // deleting ~/.codebuddy would take ~/.codebuddy/lisa with it).
-  const guarded = targets.find((t) => protectedPaths.some((p) => isUnder(t, p) || isUnder(p, t)));
-  if (guarded && request.effect !== 'read') {
-    return { decision: 'deny', reason: `Lisa never writes her own guardrails (${guarded})` };
+  const guarded = targets.find((t) => isSensitiveTarget(t) || protectedPaths.some((p) => isUnder(t, p) || isUnder(p, t)));
+  if (guarded) {
+    return { decision: 'deny', reason: `sensitive or owner-controlled path is outside mandates (${guarded})` };
   }
 
   if (!request.effect) return { decision: 'ask', reason: `effect of ${request.tool} is undeclared` };
@@ -250,6 +290,9 @@ export function decideAutonomousAction(request: ActionRequest, context: Decision
   // A reversible action must say what it touches, in absolute paths; otherwise it is asked.
   if (targets.length === 0 || targets.some((t) => !path.isAbsolute(t))) {
     return { decision: 'ask', reason: 'a reversible action must name its absolute targets' };
+  }
+  if (targets.some(hasUnsafeExistingTarget)) {
+    return { decision: 'deny', reason: 'a directory or hard-linked file cannot be safely changed under a mandate' };
   }
   const today = localDate(context.now);
   // Invisible characters, homoglyphs and odd spacing must not smuggle a forbidden word through.
@@ -273,8 +316,9 @@ export function decideAutonomousAction(request: ActionRequest, context: Decision
     }
     return {
       decision: 'allow-with-checkpoint',
-      reason: `mandate ${mandate.id}: reversible, with a restore point`,
+      reason: `mandate ${mandate.id}: a verified restore point is required before execution`,
       mandateId: mandate.id,
+      requiresCheckpoint: true,
     };
   }
   if (supervised) {

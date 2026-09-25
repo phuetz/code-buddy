@@ -17,7 +17,7 @@ l'étude indépendante L3 (conduite en parallèle par la flotte).
 
 ## Déroulé
 
-1. Cœur écrit : schéma strict, chargeur fermé en cas de doute, `decideAutonomousAction` pure (13 tests).
+1. Cœur écrit : schéma strict, chargeur fermé en cas de doute, `decideAutonomousAction` pure (14 tests à cette étape).
    Faille vue à l'écriture : les cibles étaient comparées par chemin déclaré, un lien symbolique posé
    dans un dossier autorisé et pointant vers `~/.codebuddy/lisa` passait. Comparaison par chemin
    réel ; contre-essai : l'ancienne comparaison fait tomber exactement le test du lien piégé.

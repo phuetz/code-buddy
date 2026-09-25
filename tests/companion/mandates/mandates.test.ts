@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -9,6 +9,7 @@ import {
   decideAutonomousAction,
   defaultProtectedPaths,
   loadMandates,
+  mandatesFilePath,
 } from '../../../src/companion/mandates/mandates.js';
 
 const dirs: string[] = [];
@@ -40,6 +41,7 @@ const RANGER: Mandate = {
 function context(home: string, mandates: Mandate[] = [RANGER], used = 0): DecisionContext {
   return {
     mandates,
+    mandatesFile: path.join(home, '.codebuddy', 'lisa', 'mandats.toml'),
     now: new Date(2026, 8, 24, 21, 0),
     usedToday: () => used,
     protectedPaths: defaultProtectedPaths(home),
@@ -52,7 +54,7 @@ function move(home: string, overrides: Partial<ActionRequest> = {}): ActionReque
     tool: 'move_file',
     effect: 'reversible',
     origin: 'initiative',
-    role: 'owner',
+    identity: { role: 'owner', confidence: 'high' },
     targets: [path.join(home, 'Téléchargements', 'rangé', 'facture.pdf')],
     ...overrides,
   };
@@ -66,7 +68,14 @@ describe('decideAutonomousAction — the charter, in order', () => {
 
   it('never lets an unidentified voice act, even under a mandate', () => {
     const home = sandboxHome();
-    expect(decideAutonomousAction(move(home, { origin: 'voice', role: 'guest' }), context(home)).decision).toBe('deny');
+    for (const identity of [
+      { role: 'guest' as const, confidence: 'none' as const },
+      { role: 'present' as const, confidence: 'medium' as const },
+      { role: 'owner' as const, confidence: 'medium' as const },
+    ]) {
+      expect(decideAutonomousAction(move(home, { origin: 'voice', identity }), context(home)).decision, identity.role).toBe('deny');
+    }
+    expect(decideAutonomousAction(move(home, { origin: 'voice' }), context(home)).decision).toBe('allow-with-checkpoint');
   });
 
   it('reading is free; an undeclared effect is asked', () => {
@@ -77,7 +86,7 @@ describe('decideAutonomousAction — the charter, in order', () => {
 
   it('an emission is always asked, whatever the mandates say', () => {
     const home = sandboxHome();
-    const everything: Mandate = { ...RANGER, id: 'tout', outils: ['send_email'], chemins: undefined };
+    const everything: Mandate = { ...RANGER, id: 'tout', outils: ['send_email'] };
     expect(decideAutonomousAction(
       move(home, { tool: 'send_email', effect: 'emission' }),
       context(home, [everything]),
@@ -88,8 +97,9 @@ describe('decideAutonomousAction — the charter, in order', () => {
     const home = sandboxHome();
     expect(decideAutonomousAction(move(home), context(home))).toEqual({
       decision: 'allow-with-checkpoint',
-      reason: 'mandate ranger-telechargements: reversible, with a restore point',
+      reason: 'mandate ranger-telechargements: a verified restore point is required before execution',
       mandateId: 'ranger-telechargements',
+      requiresCheckpoint: true,
     });
   });
 
@@ -141,6 +151,60 @@ describe('decideAutonomousAction — the charter, in order', () => {
     const own = { ...RANGER, chemins: ['~'] };
     const request = move(home, { targets: [path.join(home, '.codebuddy', 'lisa', 'mandats.toml')] });
     expect(decideAutonomousAction(request, context(home, [own])).decision).toBe('deny');
+  });
+
+  it('refuses access settings, keys, the charter and the rules code under a broad mandate', () => {
+    const home = sandboxHome();
+    const broad = { ...RANGER, chemins: ['~'] };
+    const charterDir = path.join(home, 'charter');
+    mkdirSync(charterDir);
+    writeFileSync(path.join(charterDir, 'LIGNEE-HABITER-LE-ROBOT.md'), 'Owner rules');
+    for (const target of [
+      path.join(home, '.ssh', 'authorized_keys'),
+      path.join(home, '.config', 'cloud', 'credentials.json'),
+      path.join(home, 'Documents', '.env.production'),
+      path.join(home, 'charter', 'LIGNEE-HABITER-LE-ROBOT.md'),
+      charterDir,
+      path.join(home, 'project', 'src', 'companion', 'mandates', 'mandates.ts'),
+    ]) {
+      expect(decideAutonomousAction(move(home, { targets: [target] }), context(home, [broad])).decision, target).toBe('deny');
+    }
+    expect(decideAutonomousAction(move(home, {
+      tool: 'view_file', effect: 'read', targets: [path.join(home, '.ssh', 'authorized_keys')],
+    }), context(home, [broad])).decision).toBe('deny');
+  });
+
+  it('protects the actual configurable mandate file', () => {
+    const home = sandboxHome();
+    const file = path.join(home, 'Documents', 'owner-rules.toml');
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, `version = 1
+[[mandat]]
+id = "broad"
+description = "Broad folder"
+confiance = "autonome"
+origines = ["initiative"]
+outils = ["move_file"]
+effets = ["reversible"]
+chemins = ["~"]
+plafond_par_jour = 3
+expire = "2026-12-31"
+`);
+    const configured = mandatesFilePath({ CODEBUDDY_LISA_MANDATES_FILE: file }, home);
+    const loaded = loadMandates(configured);
+    expect(loaded.problems).toEqual([]);
+    expect(loaded.mandates).toHaveLength(1);
+    const ctx = { ...context(home, loaded.mandates), mandatesFile: configured, protectedPaths: [] };
+    expect(decideAutonomousAction(move(home, { targets: [file] }), ctx).decision).toBe('deny');
+  });
+
+  it.skipIf(process.platform === 'win32')('refuses a hard link that could change a guarded inode', () => {
+    const home = sandboxHome();
+    const guarded = path.join(home, '.codebuddy', 'lisa', 'mandats.toml');
+    const alias = path.join(home, 'Téléchargements', 'rangé', 'anodin.toml');
+    writeFileSync(guarded, 'version = 1\n');
+    linkSync(guarded, alias);
+    expect(decideAutonomousAction(move(home, { targets: [alias] }), context(home)).decision).toBe('deny');
   });
 
   it('a target that CONTAINS a guardrail is protected too', () => {
