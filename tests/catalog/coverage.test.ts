@@ -74,11 +74,13 @@ describe('DGM catalogue coverage', () => {
     expect(new Set(coverage.assignments.map((item) => item.id)).size).toBe(catalog.entries.length);
     expect(coverage.unmatched).toEqual(coverage.assignments.filter((item) => item.domainId === null));
     expect(coverage.assignments.find((item) => item.id === 'provider:ollama')?.domainId).toBe('model-routing');
+    expect(coverage.assignments.find((item) => item.id === 'cli:src/commands/cli/catalog-command.ts:articles')?.domainId)
+      .toBe('cli-interface');
     expect(coverage.byDomain['model-routing']).toBeGreaterThan(0);
     expect(coverage.unmatched, 'Every generated catalogue entry needs a curated domain').toEqual([]);
     const digest = createHash('sha256').update(catalog.entries.map((entry) => entry.id).sort().join('\n')).digest('hex');
     expect(digest, 'Review new catalogue IDs and their domains before updating this fingerprint')
-      .toBe('4fce6c31eab8b0fe1eb140cf983393fd0cfc4c60f0f88c74ff56e819221b872a');
+      .toBe('9269918e08f67e97a85ccfe12250cee983fc1a933740909a796a9dcb99ee4956');
     expect(buildCatalogCoverage(catalog, CURATED_FEATURES)).toEqual(coverage);
   });
 
