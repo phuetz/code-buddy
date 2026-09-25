@@ -19,6 +19,7 @@ import { getFeatureMap, type FeatureArea, type FeatureEnrichment } from './featu
 
 /** A recall hit reduced to what prioritization + synthesis need (subset of CkgRecallResult). */
 export interface ResearchHit {
+  id?: string;
   text: string;
   similarity?: number;
   confidence: number;
@@ -123,6 +124,7 @@ function makeDefaultRecall(): ResearchRecall {
         ...(opts.limit ? { limit: opts.limit } : {}),
       });
       return hits.map((h) => ({
+        id: h.id,
         text: h.text,
         similarity: h.similarity,
         confidence: h.confidence,
@@ -136,7 +138,7 @@ function makeDefaultRecall(): ResearchRecall {
   };
 }
 
-function makeDefaultChat(model?: string): SynthChat {
+export function makeDefaultChat(model?: string): SynthChat {
   return async (prompt) => {
     try {
       const { detectProviderFromEnv } = await import('../../../utils/provider-detector.js');
