@@ -48,6 +48,22 @@ export const CURATED_FEATURES: FeatureArea[] = [
   { id: 'research-ingest', name: 'Research ingestion', description: 'Wide research and ingestion of scientific publications into the collective knowledge graph.', paths: ['src/research/'] },
   { id: 'deep-research', name: 'Deep Research (cited pipeline)', description: 'Multi-source, cited research pipeline: query planning, deterministic web search/scrape fan-out, near-duplicate dedup, iterative gap loops, STORM multi-perspective co-writing, and Collective-Knowledge-Graph bridging into a referenced report.', paths: ['src/agent/deep-research.ts', 'src/agent/deep-research-storm.ts', 'src/agent/deep-research-ckg.ts', 'src/commands/research/'] },
   { id: 'multimodal', name: 'Multimodal & video understanding', description: 'Image/audio/video perception: frame sampling and dedup, keyframe description, long-form transcription, YouTube captions, cloud/local video understanding and multimodal tool routing.', paths: ['src/tools/video/', 'src/tools/multimodal-index.ts', 'src/codebuddy/tool-definitions/multimodal-tools.ts', 'src/tools/registry/multimodal-tools.ts'] },
+  { id: 'computer-use', name: 'Computer use & GUI automation', description: 'Computer use and GUI automation: computer_control, OmniParser visual grounding, snapshot_with_screenshot, browser agent and web_test flows.', paths: ['src/tools/computer-control-tool.ts', 'src/desktop-automation/omniparser-runner.ts', 'src/browser-automation/', 'src/tools/registry/web-test-tool.ts', 'src/codebuddy/tool-definitions/computer-control-tools.ts'] },
+  { id: 'messaging-channels', name: 'Messaging channels', description: 'Messaging channel adapters, chat transports, inbound and outbound messages, delivery and channel-specific commands.', paths: ['src/channels/', 'src/channels/index.ts'] },
+  { id: 'http-api', name: 'HTTP & WebSocket API', description: 'HTTP API routes, WebSocket protocol, authentication, request handling and server lifecycle.', paths: ['src/server/', 'src/gateway/'] },
+  { id: 'configuration', name: 'Configuration', description: 'Configuration files, environment settings, profiles, policy resolution, secret references and validation.', paths: ['src/config/', 'src/commands/cli/config-command.ts'] },
+  { id: 'cowork-gui', name: 'Cowork GUI', description: 'Cowork Electron desktop GUI, renderer panels, main-process IPC, windows and visual workflows.', paths: ['cowork/src/renderer/App.tsx', 'cowork/src/renderer/components/', 'cowork/src/main/index.ts'] },
+  { id: 'cli-interface', name: 'CLI & slash interface', description: 'Command-line and slash command interface, terminal interaction, help and command dispatch.', paths: ['src/index.ts', 'src/commands/slash/', 'src/ui/'] },
+  { id: 'tool-execution', name: 'Tools & workspace operations', description: 'Agent tool execution, file and shell operations, registry, permissions and tool results.', paths: ['src/tools/registry/', 'src/tools/bash/bash-tool.ts', 'src/codebuddy/tool-definitions/'] },
+  { id: 'security-sandbox', name: 'Security & sandbox', description: 'Security policies, sandbox isolation, permission checks, auditing and secret protection.', paths: ['src/security/', 'src/sandbox/'] },
+  { id: 'companion', name: 'Companion & personal assistant', description: 'Companion persona, relationship state, personal assistant interaction and reminders.', paths: ['src/companion/', 'src/commands/assistant.ts'] },
+  { id: 'automation-workflows', name: 'Automation & workflows', description: 'Scheduled automation, cron jobs, workflow orchestration, task pipelines and triggers.', paths: ['src/orchestration/', 'src/commands/cron-cli/'] },
+  { id: 'integrations-mcp', name: 'Integrations & MCP', description: 'Model Context Protocol integrations, connectors, resources, OAuth and external tool servers.', paths: ['src/mcp/', 'src/commands/mcp.ts'] },
+  { id: 'model-training', name: 'Model training & LoRA', description: 'LoRA model training, dataset preparation, training quality gates and model adaptation.', paths: ['src/lora/', 'src/commands/lora.ts'] },
+  { id: 'devices', name: 'Devices & remote nodes', description: 'Device pairing, remote node management, transport and device authorization.', paths: ['src/nodes/device-node.ts', 'src/commands/cli/device-commands.ts', 'src/commands/cli/node-commands.ts'] },
+  { id: 'home-automation', name: 'Home automation', description: 'Home automation commands, household integrations and connected device control.', paths: ['src/commands/maison.ts', 'src/commands/maison-food.ts'] },
+  { id: 'developer-workflows', name: 'Developer workflows', description: 'Software development workflows, specifications, issue pipelines, code review and project checks.', paths: ['src/commands/dev/', 'src/commands/spec.ts', 'src/commands/spec-plan.ts'] },
+  { id: 'observability', name: 'Observability & diagnostics', description: 'Run traces, telemetry, metrics, diagnostics and execution trajectory inspection.', paths: ['src/observability/', 'src/telemetry/'] },
 ];
 
 /** Enrichment source: extra areas discovered dynamically (e.g. from Code Explorer). Injectable. */
@@ -110,7 +126,7 @@ export async function getFeatureMap(opts: { enrich?: FeatureEnrichment; repo?: s
   }
 }
 
-/** Attach IDs only to the 21 curated domains; Code Explorer additions remain optional. */
+/** Attach IDs only to the curated domains; Code Explorer additions remain optional. */
 export function attachCatalogToFeatureMap(catalog: Catalog, areas: FeatureArea[] = CURATED_FEATURES): FeatureArea[] {
   const coverage = buildCatalogCoverage(catalog, CURATED_FEATURES);
   const idsByDomain = new Map(CURATED_FEATURES.map((area) => [area.id, [] as string[]]));

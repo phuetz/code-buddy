@@ -56,6 +56,10 @@ const nameRules: Partial<Record<CatalogFamily, MatchRule[]>> = {
     { domain: 'voice-loop', test: /^(voice|speak)(\b|$)/i },
   ],
   tool: [
+    { domain: 'computer-use', test: /^(computer_control|gui_control|web_test|browser(?:_|$)|snapshot_with_screenshot$|omniparser)/ },
+    { domain: 'messaging-channels', test: /^(discord|slack|telegram|feishu|whatsapp|signal|teams|matrix)(_|$)/ },
+    { domain: 'security-sandbox', test: /^(security_|secrets_|permission_|sandbox_)/ },
+    { domain: 'integrations-mcp', test: /^(mcp_|a2a_|feishu_drive_|feishu_doc_)/ },
     { domain: 'operational-self-model', test: /^self_describe$/ },
     { domain: 'collective-memory-ckg', test: /^(ckg_|collective_)/ },
     { domain: 'persistent-memory', test: /^(memory_|remember_|forget_)/ },
@@ -80,9 +84,7 @@ const nameRules: Partial<Record<CatalogFamily, MatchRule[]>> = {
     { domain: 'fleet', test: /^peer[.:_-]/i },
     { domain: 'agent-executor', test: /^(chat|chat_stream|execute_tool|tool_execute|stop)$/i },
   ],
-  channel: [
-    { domain: 'voice-loop', test: /voice/i },
-  ],
+  channel: [],
   cowork: [
     { domain: 'fleet', test: /^(Fleet|Team|SubAgent)/ },
     { domain: 'persistent-memory', test: /^Memory/ },
@@ -92,6 +94,25 @@ const nameRules: Partial<Record<CatalogFamily, MatchRule[]>> = {
 };
 
 const pathRules: MatchRule[] = [
+  { domain: 'computer-use', test: /^src\/(desktop-automation\/|browser-automation\/|tools\/(computer-control|browser)|tools\/registry\/(web-test|browser|gui-)|codebuddy\/tool-definitions\/(computer-control|browser))/ },
+  { domain: 'messaging-channels', test: /^src\/channels\// },
+  { domain: 'cowork-gui', test: /^cowork\/src\// },
+  { domain: 'security-sandbox', test: /^src\/(security\/|sandbox\/|tools\/(security|sandbox|secret))/ },
+  { domain: 'integrations-mcp', test: /^src\/(mcp\/|commands\/mcp\.|tools\/registry\/mcp)/ },
+  { domain: 'companion', test: /^src\/(companion\/|commands\/assistant\.)/ },
+  { domain: 'automation-workflows', test: /^src\/(orchestration\/|commands\/cron-cli\/|commands\/pipeline\.|commands\/campaign\.)/ },
+  { domain: 'model-training', test: /^src\/(lora\/|commands\/lora\.)/ },
+  { domain: 'devices', test: /^src\/(nodes\/|commands\/cli\/(device|node)-commands\.|commands\/device-auth\.)/ },
+  { domain: 'home-automation', test: /^src\/commands\/maison/ },
+  { domain: 'developer-workflows', test: /^src\/commands\/(dev\/|spec(?:-plan|-next)?\.)/ },
+  { domain: 'observability', test: /^src\/(observability\/|telemetry\/)/ },
+  { domain: 'self-improvement', test: /^src\/commands\/(cli\/(evolve|improve|forge)-command|lessons\.)/ },
+  { domain: 'fleet', test: /^src\/commands\/(cli\/(fleet|team|swarm|peer|council)|team|swarm)/ },
+  { domain: 'skills', test: /^src\/commands\/(skills-cli\/|cli\/(skills|hermes)-)/ },
+  { domain: 'model-routing', test: /^src\/commands\/(cli\/(models|provider|login|logout)-|models\.|providers\.)/ },
+  { domain: 'autonomy', test: /^src\/commands\/cli\/daemon-/ },
+  { domain: 'sessions-checkpoints', test: /^src\/(sessions\/|cli\/session-commands\.|commands\/(run-cli\/|.*(?:session|backup|checkpoint)))/ },
+  { domain: 'configuration', test: /^src\/(config\/|commands\/(cli\/)?(?:config|secrets|policy|execpolicy|approvals)[-/.])/ },
   { domain: 'sessions-checkpoints', test: /^src\/server\/routes\/sessions\.ts$/ },
   { domain: 'fleet', test: /^src\/server\/routes\/(a2a|fleet)/ },
   { domain: 'persistent-memory', test: /^src\/server\/routes\/(memory|lessons)/ },
@@ -109,6 +130,7 @@ const pathRules: MatchRule[] = [
   { domain: 'fleet', test: /^src\/(fleet\/|agent\/multi-agent\/)/ },
   { domain: 'agent-executor', test: /^src\/agent\/(execution|middleware)\// },
   { domain: 'tool-selection', test: /^src\/tools\/tool-selector/ },
+  { domain: 'model-routing', test: /^src\/(codebuddy\/(client\.ts|providers\/)|providers\/)/ },
   { domain: 'model-routing', test: /^src\/(providers\/|config\/model-|agent\/facades\/model-routing)/ },
   { domain: 'prompt-building', test: /^src\/services\/prompt-builder/ },
   { domain: 'code-intelligence', test: /^src\/(knowledge\/|plugins\/code-explorer\/)/ },
@@ -119,6 +141,10 @@ const pathRules: MatchRule[] = [
   { domain: 'research-ingest', test: /^src\/research\// },
   { domain: 'deep-research', test: /^src\/(agent\/deep-research|commands\/research\/)/ },
   { domain: 'multimodal', test: /^src\/(tools\/video\/|tools\/multimodal|codebuddy\/tool-definitions\/multimodal)/ },
+  { domain: 'http-api', test: /^src\/(server\/|gateway\/)/ },
+  { domain: 'cli-interface', test: /^src\/(index\.ts$|commands\/|cli\/|ui\/)/ },
+  { domain: 'tool-execution', test: /^src\/(tools\/|codebuddy\/tool-definitions\/)/ },
+  { domain: 'agent-executor', test: /^src\/(agent\/|codebuddy\/)/ },
 ];
 
 const sharedFiles = new Set([
@@ -127,12 +153,44 @@ const sharedFiles = new Set([
   'cowork/src/renderer/App.tsx',
 ]);
 
+const familyDefaults: Record<CatalogFamily, string> = {
+  cli: 'cli-interface', slash: 'cli-interface', tool: 'tool-execution',
+  http: 'http-api', websocket: 'http-api', channel: 'messaging-channels',
+  cowork: 'cowork-gui', environment: 'configuration',
+  provider: 'model-routing', middleware: 'agent-executor',
+};
+
 function resolveAssignment(entry: CatalogEntry, domains: Set<string>, areas: readonly CoverageArea[]): { domainId: string | null; rule: string | null } {
   const accept = (domain: string, rule: string): { domainId: string; rule: string } | null =>
     domains.has(domain) ? { domainId: domain, rule } : null;
   if (entry.family === 'provider') return accept('model-routing', 'family:provider') ?? { domainId: null, rule: null };
   if (entry.family === 'middleware') return accept('agent-executor', 'family:middleware') ?? { domainId: null, rule: null };
 
+  // Environment ownership follows the code that reads the variable. A config
+  // reader is considered only after all more specific readers have been tried.
+  if (entry.family === 'environment') {
+    for (const rule of pathRules.filter((item) => item.domain !== 'configuration')) {
+      for (const source of entry.sources) {
+        if (rule.test.test(source.file)) {
+          const match = accept(rule.domain, `reader:${source.file}`);
+          if (match) return match;
+        }
+      }
+    }
+    for (const area of areas.filter((item) => item.id !== 'configuration')) {
+      for (const source of entry.sources) {
+        if (area.paths.some((candidate) => candidate.endsWith('/')
+          ? source.file.startsWith(candidate) : source.file === candidate)) {
+          const match = accept(area.id, `reader:${source.file}`);
+          if (match) return match;
+        }
+      }
+    }
+    return accept('configuration', 'reader:fallback:configuration') ?? { domainId: null, rule: null };
+  }
+
+  // Names distinguish entries in shared registries and nested commands whose
+  // declarations share one file. A non-shared source is then resolved by path.
   for (const rule of nameRules[entry.family] ?? []) {
     if (rule.test.test(entry.name)) {
       const match = accept(rule.domain, `name:${entry.family}:${rule.test.source}`);
@@ -156,7 +214,9 @@ function resolveAssignment(entry: CatalogEntry, domains: Set<string>, areas: rea
       }
     }
   }
-  return { domainId: null, rule: null };
+  const fallback = familyDefaults[entry.family];
+  return fallback ? accept(fallback, `family:${entry.family}`) ?? { domainId: null, rule: null }
+    : { domainId: null, rule: null };
 }
 
 /** Every catalogue ID receives either one curated domain or an explicit unmatched record. */
