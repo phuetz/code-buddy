@@ -66,6 +66,16 @@ Sortie complète : `mutant-source-message-sync.log`. Le curseur dépend de l'heu
 
 La sonde du rapport initial a échoué sur quatre contrôles : nom du test absent, valeur `42` impossible, mutation de l'attendu plutôt que de la source, et ligne erronée pour `context_expand` (`sonde-rapport-avant.log`). Les extraits ci-dessus reprennent les vrais noms, lignes et valeurs observés. Les trois fonctionnalités justifient `🧪` pour les surfaces testées, sans démontrer une exécution réelle multi-machine.
 
+Sur le commit de code `6f6103b4a`, les suites touchées et leurs appelants ont donné la sortie brute suivante (`commit-6f6103b-tests.log`) :
+
+```text
+ Test Files  18 passed (18)
+      Tests  113 passed (113)
+tests_exit=0
+```
+
+Le typecheck complet s'est terminé avec `typecheck_exit=0` (`commit-6f6103b-typecheck.log`). Le lint complet s'est terminé avec `✖ 2552 problems (0 errors, 2552 warnings)` et `lint_exit=0` (`commit-6f6103b-lint.log`).
+
 ## Ce que je n'ai pas pu vérifier
 
 - Le transport WebSocket entre deux machines et les profils réels.
