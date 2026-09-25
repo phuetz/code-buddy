@@ -1,0 +1,22 @@
+[
+  { "domain": "collective-memory-ckg", "query": "Shared multi-agent knowledge graph curation, corroboration and memory privacy", "relevant": ["arxiv:2208.08130", "arxiv:2605.27825"] },
+  { "domain": "persistent-memory", "query": "Long-term memory persistence and privacy for chat agents", "relevant": ["arxiv:2605.27825", "arxiv:2608.12990", "arxiv:2606.25161"] },
+  { "domain": "reasoning", "query": "Tree of thoughts deliberate reasoning for large language model agents", "relevant": ["arxiv:2305.10601", "arxiv:2309.07694", "arxiv:2405.07551"] },
+  { "domain": "context-rag", "query": "Retrieval augmented generation, context selection and evidence reranking", "relevant": ["arxiv:2605.01664", "arxiv:2504.13684"] },
+  { "domain": "self-improvement", "query": "Open-ended self-improvement of coding agents through evaluated variants", "relevant": ["arxiv:2603.25681", "arxiv:2602.04837", "arxiv:2402.07456"] },
+  { "domain": "fleet", "query": "Communication and coordination between multiple autonomous agents", "relevant": ["arxiv:2203.08975", "arxiv:2608.25992"] },
+  { "domain": "tool-selection", "query": "LLM agent tool selection with retrieval and least privilege", "relevant": ["arxiv:2606.20023", "arxiv:2607.05441"] },
+  { "domain": "research-ingest", "query": "Scientific publication ingestion and knowledge graph curation", "relevant": ["arxiv:2208.08130", "arxiv:1611.00097"] },
+  { "domain": "voice-loop", "query": "Full-duplex spoken dialogue turn taking and speech recognition", "relevant": ["arxiv:2503.04721", "arxiv:2607.29125", "arxiv:2003.10369"] },
+  { "domain": "security-sandbox", "query": "Defending language model agents against prompt injection", "relevant": ["arxiv:2410.05451", "arxiv:2402.06363"] },
+  { "domain": "code-intelligence", "query": "Repository-level neural code search", "relevant": ["arxiv:2502.07067"] },
+  { "domain": "computer-use", "query": "Evaluation of long-horizon computer-use GUI agents", "relevant": ["arxiv:2606.11042", "arxiv:2506.16042", "arxiv:2601.20650"] },
+  { "domain": "model-routing", "query": "Adaptive model routing for coding agents by quality and cost", "relevant": ["arxiv:2608.28726", "arxiv:2606.22902", "arxiv:2604.07494"] },
+  { "domain": "deep-research", "query": "Automated scientific literature review with cited retrieval", "relevant": ["arxiv:2411.18583", "arxiv:1611.00097"] },
+  { "domain": "automation-workflows", "query": "Multi-agent LLM workflow orchestration with quality and cost constraints", "relevant": ["arxiv:2608.25992", "arxiv:2511.15755"] },
+  { "domain": "multimodal", "query": "Long video understanding with temporal search", "relevant": ["arxiv:2502.06428", "arxiv:2504.02259", "arxiv:2403.15377"] },
+  { "domain": "agent-executor", "query": "Reviewability and delegated software engineering tasks for coding agents", "relevant": ["arxiv:2606.17099", "arxiv:2604.07494"] },
+  { "domain": "sessions-checkpoints", "query": "Long-running LLM agent memory consolidation across sessions", "relevant": ["arxiv:2608.12990", "arxiv:2605.16045"] },
+  { "domain": "negative-medical", "query": "Parkinson medication dosing and dysphagia screening", "relevant": [] },
+  { "domain": "negative-noise", "query": "An unstudied private feature with no scientific publication", "relevant": [] }
+]

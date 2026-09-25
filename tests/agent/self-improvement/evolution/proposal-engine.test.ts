@@ -14,7 +14,7 @@ const features: FeatureArea[] = [{
   paths: ['src/context/'], catalogIds: ['tool:context_expand'],
 }];
 const discovery = {
-  id: 'arxiv-0000', source: 'arxiv', text: 'A reliable method for contextual retrieval.',
+  id: 'arxiv-0000', name: 'arxiv:2605.01664v1', type: 'discovery', source: 'arxiv', text: 'A reliable method for contextual retrieval.',
   similarity: 0.75, confidence: 0.9,
 };
 const dreamRecords: VariantRecord[] = [
@@ -94,6 +94,16 @@ describe('evolve propose', () => {
     });
     expect(failed.status).toBe('stopped');
     if (failed.status === 'stopped') expect(failed.reason).toBe('RECALL_ERROR');
+  });
+
+  it('stops before goal synthesis when recall contains only a non-publication video', async () => {
+    project();
+    const chat = vi.fn(async () => 'Applique la méthode au contexte.');
+    const result = await proposeResearchImprovement({ features,
+      recall: async () => [{ ...discovery, source: 'youtube:vision-ia', similarity: 0.95 }], chat });
+    expect(result.status).toBe('stopped');
+    if (result.status === 'stopped') expect(result.reason).toBe('NO_SCIENTIFIC_MATCH');
+    expect(chat).not.toHaveBeenCalled();
   });
 
   it('names an empty LLM response after selecting a research weakness', async () => {

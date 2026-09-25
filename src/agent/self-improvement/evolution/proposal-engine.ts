@@ -7,14 +7,18 @@ import type { FeatureArea } from './feature-map.js';
 import { getFeatureMap } from './feature-map.js';
 import {
   buildGoalPrompt,
+  excludeHumanRejected,
   makeDefaultChat,
   matchScore,
   parseGoal,
   selectMatches,
+  scholarlyIdentity,
+  toArticleLink,
   type FeatureMatch,
   type ResearchRecall,
   type SynthChat,
 } from './research-weakness-source.js';
+import { upsertArticleLinks, type ArticleLink } from '../../../catalog/article-links.js';
 import { planVariant, type VariantPlan } from './variant-planner.js';
 import type { Weakness } from './evolution-engine.js';
 import type { VariantRecord } from './code-variant-store.js';
@@ -24,6 +28,8 @@ export type ProposalStop =
   | 'NO_RECALL'
   | 'RECALL_ERROR'
   | 'BELOW_THRESHOLD'
+  | 'NO_SCIENTIFIC_MATCH'
+  | 'HUMAN_REJECTED'
   | 'CONTRADICTED'
   | 'PROVIDER_MISSING'
   | 'PROVIDER_ERROR'
@@ -65,6 +71,8 @@ export interface ProposeOptions {
   hasProvider?: () => boolean | Promise<boolean>;
   model?: string;
   minSimilarity?: number;
+  linksPath?: string;
+  persistLinks?: boolean;
   archiveRoot?: string;
   now?: () => Date;
   /** Opt-in override; otherwise only CODEBUDDY_DREAM_RSI=true enables replay. */
@@ -88,7 +96,7 @@ function defaultProposalRecall(): ResearchRecall {
     const { getCollectiveKnowledgeGraph } = await import('../../../memory/collective-knowledge-graph.js');
     const hits = await getCollectiveKnowledgeGraph().recallHybrid(_query, { types: ['discovery'], limit: opts.limit ?? 5 });
     return hits.map((hit) => ({
-      id: hit.id, text: hit.text, similarity: hit.similarity, confidence: hit.confidence,
+      id: hit.id, name: hit.name, type: hit.type, text: hit.text, similarity: hit.similarity, confidence: hit.confidence,
       corroborations: hit.corroborations, source: hit.source, relations: hit.relations,
     }));
   };
@@ -157,7 +165,9 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
     });
   }
   const recall = options.recall ?? defaultProposalRecall();
+  const persistLinks = options.persistLinks ?? (Boolean(options.linksPath) || !options.recall);
   const candidates: FeatureMatch[] = [];
+  const links: ArticleLink[] = [];
   let recallErrors = 0;
   for (const feature of sourceFeatures) {
     let hits: Awaited<ReturnType<ResearchRecall>>;
@@ -167,19 +177,38 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
       recallErrors += 1;
       hits = [];
     }
-    for (const hit of hits) if (hit?.text) candidates.push({ feature, hit, score: matchScore(hit) });
+    for (const hit of hits) if (hit?.text) {
+      const candidate = { feature, hit, score: matchScore(hit) };
+      candidates.push(candidate);
+      const link = toArticleLink(candidate, feature.description);
+      if (link) links.push(link);
+    }
+  }
+  if (persistLinks && links.length) {
+    try { upsertArticleLinks(links, options.linksPath); }
+    catch (error) { return stop(events, 'archive', 'ARCHIVE_FAILED', `Article links: ${error instanceof Error ? error.message : String(error)}`); }
   }
   if (candidates.length === 0 && recallErrors > 0) return stop(events, 'recall', 'RECALL_ERROR', `Recall failed for ${recallErrors} of ${sourceFeatures.length} domains; no discovery available.`);
   if (candidates.length === 0) return stop(events, 'recall', 'NO_RECALL', `No discovery recalled across ${sourceFeatures.length} domains.`);
   events.push({ stage: 'recall', status: 'ok', code: 'RECALL_FOUND', detail: `${candidates.length} discovery matches recalled.` });
 
-  const floor = options.minSimilarity ?? 0.32;
-  const matches = selectMatches(candidates, { minSimilarity: floor, limit: 1 });
+  const floor = options.minSimilarity ?? 0.45;
+  let reviewed: FeatureMatch[];
+  try { reviewed = persistLinks ? excludeHumanRejected(candidates, options.linksPath) : candidates; }
+  catch (error) { return stop(events, 'archive', 'ARCHIVE_FAILED', `Article links: ${error instanceof Error ? error.message : String(error)}`); }
+  const matches = selectMatches(reviewed,
+    { minSimilarity: floor, limit: 1 });
   if (matches.length === 0) {
-    const aboveFloor = candidates.some((candidate) => (candidate.hit.similarity ?? 0) >= floor);
-    return aboveFloor
+    const scientific = candidates.filter((candidate) => scholarlyIdentity(candidate.hit));
+    if (!scientific.length) return stop(events, 'filter', 'NO_SCIENTIFIC_MATCH', 'No identifiable scientific publication in recalled discoveries.');
+    if (reviewed.length < candidates.length && selectMatches(candidates, { minSimilarity: floor, limit: 1 }).length) {
+      return stop(events, 'filter', 'HUMAN_REJECTED', 'All solid publications were rejected by human review.');
+    }
+    const contradicted = scientific.some((candidate) => (candidate.hit.similarity ?? 0) >= floor &&
+      candidate.hit.relations?.some((relation) => relation.predicate === 'contradicts'));
+    return contradicted
       ? stop(events, 'filter', 'CONTRADICTED', 'Discoveries above the threshold are contradicted.')
-      : stop(events, 'filter', 'BELOW_THRESHOLD', `No discovery meets similarity ${floor}.`);
+      : stop(events, 'filter', 'BELOW_THRESHOLD', `No scientific discovery meets similarity ${floor} and aggregate score 0.32.`);
   }
   const selected = matches[0]!;
   events.push({ stage: 'filter', status: 'ok', code: 'WEAKNESS_SELECTED', detail: `Domain ${selected.feature.id}; article ${selected.hit.id ?? 'unknown'}; similarity ${selected.hit.similarity ?? 0}.` });
