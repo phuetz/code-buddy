@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   appendLisaJournal, isLisaJournalQuestion, maybeDeliverLisaEveningSummary,
-  readLisaJournal, summarizeLisaDay,
+  readLisaJournal, summarizeLisaDay, hasLisaOwnerPresence,
 } from '../../src/companion/lisa-journal.js';
 
 const roots: string[] = [];
@@ -58,5 +58,23 @@ describe('Lisa journal', () => {
     expect(say).toHaveBeenCalledTimes(1);
     expect(telegram).not.toHaveBeenCalled();
     expect(await maybeDeliverLisaEveningSummary(deps)).toBe(false);
+  });
+
+  it('does not treat another recognized face as the owner of the journal', () => {
+    expect(hasLisaOwnerPresence({ hasMatch: true, name: 'Other', hasUnknownFace: false, ageMs: 0 },
+      { CODEBUDDY_LISA_OWNER_FACE_NAME: 'Owner' })).toBe(false);
+    expect(hasLisaOwnerPresence({ hasMatch: true, name: 'Owner', hasUnknownFace: false, ageMs: 0 },
+      { CODEBUDDY_LISA_OWNER_FACE_NAME: 'Owner' })).toBe(true);
+    expect(hasLisaOwnerPresence({ hasMatch: true, name: 'Owner', hasUnknownFace: false, ageMs: 0 }, {})).toBe(false);
+  });
+
+  it.skipIf(process.platform === 'win32')('refuses to append to a journal exposed to other users', () => {
+    const { file } = fixture();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, '');
+    fs.chmodSync(file, 0o644);
+    expect(() => appendLisaJournal({ kind: 'silence', reason: 'No change' }, file))
+      .toThrow('permissions are too broad');
+    expect(fs.readFileSync(file, 'utf8')).toBe('');
   });
 });

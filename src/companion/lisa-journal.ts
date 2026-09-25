@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getCompanionConductor } from './orchestrator.js';
 import { resolveAwayClock } from './away-mode.js';
-import { hasConfirmedPresence } from './presence-loop.js';
+import type { PresenceContext } from '../memory/presence-injector.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import type { LisaPulseEvent } from './lisa-pulse.js';
 
@@ -39,8 +39,12 @@ export function appendLisaJournal(event: LisaPulseEvent, file = lisaJournalPath(
   };
   const directory = path.dirname(file);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  if (process.platform !== 'win32') fs.chmodSync(directory, 0o700);
   const stat = fs.lstatSync(file, { throwIfNoEntry: false });
   if (stat && !stat.isFile()) throw new Error('Lisa journal is not a regular file');
+  if (stat && process.platform !== 'win32' && (stat.mode & 0o077) !== 0) {
+    throw new Error('Lisa journal permissions are too broad');
+  }
   const fd = fs.openSync(file, 'a', 0o600);
   try {
     fs.writeFileSync(fd, `${JSON.stringify(entry)}\n`);
@@ -86,6 +90,12 @@ export function isLisaJournalQuestion(heard: string): boolean {
   return /(?:qu as tu fait|tu as fait quoi|qu est ce que tu as fait).{0,30}aujourd hui/.test(text);
 }
 
+/** A configured owner match, not an arbitrary recognized face, is needed for speech. */
+export function hasLisaOwnerPresence(context: PresenceContext, env: NodeJS.ProcessEnv = process.env): boolean {
+  const ownerName = env.CODEBUDDY_LISA_OWNER_FACE_NAME?.trim().toLocaleLowerCase();
+  return Boolean(ownerName && context.hasMatch && context.name?.trim().toLocaleLowerCase() === ownerName);
+}
+
 interface SummaryState { date?: string }
 export interface LisaSummaryDependencies {
   now?: () => number;
@@ -112,7 +122,7 @@ export async function maybeDeliverLisaEveningSummary(deps: LisaSummaryDependenci
   const isPresent = deps.isPresent ?? (async () => {
     try {
       const { readPresenceContext } = await import('../memory/presence-injector.js');
-      return hasConfirmedPresence(await readPresenceContext());
+      return hasLisaOwnerPresence(await readPresenceContext());
     } catch { return false; }
   });
   let delivered = false;
