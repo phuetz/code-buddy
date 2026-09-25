@@ -1,24 +1,22 @@
-import { test, expect, devices } from '@playwright/test';
+import { test, expect } from 'playwright/test';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { createServer, Server as HttpServer } from 'node:http';
 import { AddressInfo } from 'node:net';
 
-test.use({
-  ...devices['Pixel 5'],
-});
-
 test.describe('Mobile PWA E2E', () => {
-  let buddyServer: any;
+  let buddyServer: HttpServer | null;
   let baseUrl: string;
   let port: number;
-  let stopFn: any;
-  let createToken: any;
-  let serverInstance: any;
+  let stopFn: typeof import('../../src/server/index.js').stopServer;
+  let createToken: typeof import('../../src/server/auth/jwt.js').createUserToken;
+  let serverInstance: typeof import('../../src/server/index.js');
   let tmpHome: string;
   let stubServer: HttpServer;
   let stubUrl: string;
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
 
   test.beforeAll(async () => {
     // Start Stub LLM Provider
@@ -42,6 +40,7 @@ test.describe('Mobile PWA E2E', () => {
 
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'mobile-pwa-e2e-home-'));
     process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
     process.env.CODEBUDDY_MOBILE_PWA = 'true';
     process.env.JWT_SECRET = 'mobile-pwa-e2e-test-secret-32b-min';
     process.env.CODEBUDDY_PROVIDER = 'ollama';
@@ -73,20 +72,31 @@ test.describe('Mobile PWA E2E', () => {
     if (buddyServer) {
         await stopFn(buddyServer);
     }
-    stubServer.close();
+    if (stubServer) await new Promise<void>((resolve) => stubServer.close(() => resolve()));
     delete process.env.CODEBUDDY_MOBILE_PWA;
     delete process.env.JWT_SECRET;
     delete process.env.CODEBUDDY_PROVIDER;
     delete process.env.GROK_MODEL;
     delete process.env.OLLAMA_HOST;
-    delete process.env.HOME;
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    if (originalUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = originalUserProfile;
+    if (tmpHome) fs.rmSync(tmpHome, { recursive: true, force: true });
   });
   
   test('authenticates, sends chat, receives reply, and reconnects', async ({ page }) => {
      const token = createToken('e2e-user', ['chat', 'tools', 'sessions'], process.env.JWT_SECRET);
      
      await page.goto(`${baseUrl}/__codebuddy__/mobile/#token=${token}`);
+
+     for (const size of [96, 192, 512]) {
+       const response = await page.request.get(`${baseUrl}/__codebuddy__/mobile/assets/icon-${size}.png`);
+       expect(response.status(), `PWA icon ${size}`).toBe(200);
+       expect(response.headers()['content-type']).toContain('image/png');
+       const bytes = await response.body();
+       expect(bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))).toBe(true);
+     }
      
      await expect(page.locator('#main-screen')).toHaveClass(/active/);
      await expect(page.locator('#presence-line')).toHaveText('en ligne');

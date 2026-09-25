@@ -240,7 +240,8 @@
   }
 
   function reconnectDelayMs() {
-    return Math.min(30000, 1000 * Math.pow(2, Math.min(state.reconnectAttempt, 5)));
+    // Keep a recovering local server reachable promptly after failed handshakes.
+    return Math.min(5000, 1000 * Math.pow(2, Math.min(state.reconnectAttempt, 5)));
   }
 
   function scheduleReconnect() {

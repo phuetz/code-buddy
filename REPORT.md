@@ -1,50 +1,19 @@
-# Rapport : Test End-to-End PWA Mobile
+# Reprise du test PWA mobile
 
-## Ce qui est prouvé
-L'application PWA mobile est fonctionnelle de bout en bout, avec les comportements suivants démontrés par le test Playwright headless (`tests/e2e/mobile-pwa-e2e.test.ts`) :
-- L'activation correcte du pont WebSocket d'approbation et du routage PWA sous le drapeau `CODEBUDDY_MOBILE_PWA=true`.
-- La connexion par URL contenant un paramètre JWT (`/#token=...`) authentifie avec succès la PWA sans passage par l'écran de login.
-- Le viewport mobile via l'appareil `Pixel 5` configuré dans Playwright permet de vérifier l'adéquation de la PWA aux contraintes mobiles.
-- Le routage fonctionnel vers un sous-agent (`Agent`) au lieu du compagnon par défaut, garantissant que l'envoi de texte depuis le champ de saisie (`#message-input`) vers le serveur via WebSocket fonctionne sans accroc de protocole spécifique au compagnon, en utilisant un serveur factice Ollama.
-- La réception de message depuis le serveur LLM factice (le fameux 'Stub Reply') fonctionne et s'affiche dans l'interface de conversation côté client avec la classe "assistant".
-- La résilience de reconnexion au redémarrage : après une déconnexion inopinée (redémarrage du backend Code Buddy sur le même port), le client PWA identifie la perte de connexion (mise à jour de la présence à hors ligne ou reconnexion) et réussit à rétablir une connexion WebSocket fonctionnelle une fois le backend de retour, permettant l'envoi et la réception de nouveaux messages (vérifié par un 2e ping réussi sur le nouveau serveur).
+Le commit initial ajoutait un test Playwright collecté par Vitest, sans corriger les icônes manquantes ni la reconnexion lente. La revue a aussi observé un échec de reconnexion sur cinq passages. Ce rapport remplace la conclusion déterministe du premier essai.
 
-### Sorties brutes du banc d'essai
-```
-Running 1 test using 1 worker
+## Correctifs
 
-  ✓  1 tests/e2e/mobile-pwa-e2e.test.ts:86:3 › Mobile PWA E2E › authenticates, sends chat, receives reply, and reconnects (28.3s)
+- Le test navigateur utilise le runner Playwright dédié (`npm run test:e2e`) ; Vitest exclut `tests/e2e`.
+- Les icônes PNG référencées par le manifeste et le service worker sont fournies dans les sources. Le test de présence vérifie désormais les fichiers sans les générer.
+- Après plusieurs échecs pendant un arrêt du serveur, le délai de reconnexion est plafonné à cinq secondes. Une régression ciblée échoue avec l'ancien plafond de trente secondes.
+- L'inventaire qualifie la PWA de couverture automatisée, sans affirmer un usage réel mesuré.
+- Le lockfile conserve les versions Playwright de la base et la version `undici` déjà présente sur la branche principale.
 
-  1 passed (53.0s)
-```
+## Vérification
 
-## Le mutant (Preuve d'exactitude de la vérification)
-Si l'on modifie dans `src/server/mobile/assets/app.js` la logique de reconnexion en désactivant le délai ou en omettant l'appel à `connectWs` :
-```javascript
-<<<<<<< SEARCH
-  function scheduleReconnect() {
-    if (state.reconnectTimer || state.manualClose || !state.token) return;
-    var delay = reconnectDelayMs();
-    state.reconnectAttempt += 1;
-    setPresence('reconnecting');
-    state.reconnectTimer = setTimeout(function () {
-      state.reconnectTimer = 0;
-      connectWs();
-    }, delay);
-  }
-=======
-  function scheduleReconnect() {
-    if (state.reconnectTimer || state.manualClose || !state.token) return;
-    setPresence('reconnecting');
-    // DISABLED RECONNECT
-  }
->>>>>>> REPLACE
-```
-Le test échouera à la ligne :
-```
-await expect(page.locator('#presence-line')).toHaveText('en ligne', { timeout: 15000 });
-```
-ce qui prouve que le test capte bien et nécessite une reconnexion websocket fonctionnelle.
+Les suites DOM et validation des actifs passent sur une copie jetable : 56 tests distincts. Le mutant du délai, celui de l'icône et celui de l'exclusion Vitest échouent. La barrière locale interdit l'ouverture d'un port loopback (`listen EPERM`) : le test navigateur et les tests serveur qui ouvrent un port restent à rejouer par le pilote. Les sorties brutes sont dans le dossier de livraison privé.
 
 ## Ce que je n'ai pas pu vérifier
-- **Rendu visuel réel sur smartphone** : Playwright simule fidèlement le viewport d'un Pixel 5 et sa résolution d'écran, mais ne permet pas de vérifier l'ergonomie fine sur un terminal physique ou les limitations exactes de WebKit/Blink sur des composants d'UI natifs.
+
+La reconnexion dans un vrai navigateur après redémarrage du serveur n'a pas pu être exécutée dans cette barrière. Je ne confirme pas un taux de réussite sur cinq passages ni le comportement sur Windows ou téléphone physique.

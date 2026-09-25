@@ -862,7 +862,7 @@ describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () 
     expect((api.state as { outbox: unknown[] }).outbox).toHaveLength(0);
   });
 
-  it('backs off exponentially up to 30 s and resets after a successful auth', () => {
+  it('backs off exponentially up to 5 s and resets after a successful auth', () => {
     const delays: number[] = [];
     for (let i = 0; i < 7; i += 1) {
       const ws = sockets[sockets.length - 1]!;
@@ -872,12 +872,22 @@ describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () 
       vi.advanceTimersByTime(30000);
     }
     expect(delays[0]).toBe(2000);
-    expect(Math.max(...delays)).toBe(30000);
+    expect(Math.max(...delays)).toBe(5000);
     const ws = sockets[sockets.length - 1]!;
     ws.readyState = 1;
     ws.emit('open');
     api.handleFrame({ type: 'authenticated', payload: { userId: 'u', scopes: ['chat'] } });
     expect((api.state as { reconnectAttempt: number }).reconnectAttempt).toBe(0);
+  });
+
+  it('retries within five seconds after several failures during a server restart', () => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const ws = sockets[sockets.length - 1]!;
+      ws.readyState = 3;
+      ws.emit('close');
+      vi.advanceTimersByTime(30000);
+    }
+    expect((api as unknown as { reconnectDelayMs: () => number }).reconnectDelayMs()).toBeLessThanOrEqual(5000);
   });
 
   it('does not reconnect after an explicit logout', () => {

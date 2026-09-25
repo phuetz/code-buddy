@@ -13,6 +13,7 @@ const ASSETS_TO_CACHE = [
   '/__codebuddy__/mobile/assets/app.js',
   '/__codebuddy__/mobile/assets/emoji-data.js',
   '/__codebuddy__/mobile/assets/icon.svg',
+  '/__codebuddy__/mobile/assets/icon-72.png',
   '/__codebuddy__/mobile/assets/icon-96.png',
   '/__codebuddy__/mobile/assets/icon-192.png',
   '/__codebuddy__/mobile/assets/icon-512.png'

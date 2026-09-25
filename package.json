@@ -96,6 +96,7 @@
     "verify:avatar-unreal": "node scripts/verify-unreal-avatar-plugin.mjs",
     "pilot:validate": "pwsh -NoProfile -ExecutionPolicy Bypass -File scratch/run-all-probes.ps1",
     "test": "vitest run",
+    "test:e2e": "playwright test --config=playwright.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:real": "RUN_REAL_TESTS=1 vitest run",
@@ -259,7 +260,6 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
     "@types/better-sqlite3": "^7.6.13",
