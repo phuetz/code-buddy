@@ -1,9 +1,13 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicKeyId } from '../../src/skills/skill-signing.js';
 import { RucheAuthority, laneIsActive, laneStatuses, recordVerdict } from '../../src/fleet/ruche/authority.js';
 import { ingestRuchePage, pullRuchePage, unwireRucheBridge, wireRucheBridge } from '../../src/fleet/ruche/bridge.js';
 import { GENESIS, RucheJournal, type RucheIdentity, type RucheTrust } from '../../src/fleet/ruche/journal.js';
+import { withLocalRuche } from '../../src/fleet/ruche/local-store.js';
 import { getPeerMethodHandler } from '../../src/server/websocket/peer-method-registry.js';
 
 function identity(): RucheIdentity {
@@ -189,5 +193,45 @@ describe('Ruche prototype', () => {
     expect(getPeerMethodHandler('peer.ruche.event')).toBeTypeOf('function');
     unwireRucheBridge();
     expect(getPeerMethodHandler('peer.ruche.pull')).toBeUndefined();
+  });
+
+  it('refuses a second profile acting as the pinned arbiter for the same work', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ruche-arbiter-'));
+    const a = path.join(root, 'a');
+    const b = path.join(root, 'b');
+    const arbiter = identity();
+    fs.mkdirSync(path.join(a, 'ruche'), { recursive: true });
+    fs.writeFileSync(path.join(a, 'ruche', 'arbiter.key.pem'), arbiter.privateKey.export({ type: 'pkcs8', format: 'pem' }));
+    fs.writeFileSync(path.join(a, 'ruche', 'arbiter.pub.pem'), arbiter.publicKey);
+    vi.stubEnv('CODEBUDDY_RUCHE_ARBITER_PUBLIC_KEY', arbiter.publicKey);
+    try {
+      vi.stubEnv('CODEBUDDY_HOME', a);
+      const first = withLocalRuche((state) => state.authority.requestLease(
+        state.agent.append('lease.request', { work: 'shared', ttlMs: 1000 }),
+      ));
+      expect(first.type).toBe('lease.grant');
+      vi.stubEnv('CODEBUDDY_HOME', b);
+      expect(() => withLocalRuche((state) => state.authority.requestLease(
+        state.agent.append('lease.request', { work: 'shared', ttlMs: 1000 }),
+      ))).toThrow('RUCHE_NOT_ARBITER');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses substituting an unrelated effect without consuming the approval', async () => {
+    const f = fixture();
+    const revision = 'a'.repeat(40);
+    const requested = { action: 'publish', target: 'public release' };
+    const unrelated = { action: 'send', target: 'private email' };
+    const request = f.ja.append('approval.request', { effectId: 'bound', effect: requested, revision, expiresAt: f.clock() + 10 });
+    f.authority.receiveApprovalRequest(request);
+    const response = f.jHuman.append('approval.response', { effectId: 'bound', revision, approved: true, requestHash: request.hash });
+    f.authority.receiveApprovalResponse(response);
+    const callback = vi.fn(async () => 'done');
+    await expect(f.authority.withApproval('bound', revision, unrelated, callback)).rejects.toThrow('RUCHE_APPROVAL_EFFECT_MISMATCH');
+    expect(callback).not.toHaveBeenCalled();
+    expect(await f.authority.withApproval('bound', revision, requested, callback)).toBe('done');
+    expect(callback).toHaveBeenCalledTimes(1);
   });
 });
