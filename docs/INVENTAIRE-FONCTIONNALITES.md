@@ -2,6 +2,7 @@
 
 > État établi le 25/09/2026 à partir des exécutions consignées dans `docs/preuves/`.
 > Chaque preuve ci-dessous indique son fichier, sa date et le commit de code testé.
+> Les verdicts historiques P1–P4 portent sur leurs commits cités. Une sonde directe sur la branche d’inventaire révèle un écart de nettoyage de sortie détaillé ci-dessous.
 >
 > Légende — ✅ exécuté réellement avec une mesure · 🧪 exercice partiel avec dépendance simulée · ❌ défaut observé · ⛔ non prouvable dans cette campagne. Une réussite de tests seule ne vaut pas preuve d’usage.
 
@@ -11,7 +12,7 @@
 - Le contexte a été réduit de 13 à 7 messages, et un segment compacté a été restauré exactement. La mémoire épisodique a consolidé trois tours ; l’oubli a archivé puis restauré un souvenir. [P1](preuves/p1.md)
 - La flotte a répondu par `peer.chat`, exécuté une lecture distante et refusé trois accès non autorisés ; un fait a été transféré et intégré. Une équipe a été créée sans tâche confiée ; deux unités `/batch` et un essaim ont abouti. [P1](preuves/p1.md)
 - Le harnais Verifier a rendu `CONFIRMED` sur un oracle exécuté via un `executeTool` factice : résultat 🧪. Le cycle de leçons a mesuré un gain puis annulé la proposition en mode `propose-only`. Un outil créé par l’agent a passé quatre cas et a été invoqué. [P2](preuves/p2.md)
-- Sur les cas exercés, le pare-feu a mis une compétence injectée en quarantaine, le validateur a refusé `mkfs`, la garde de déploiement a bloqué `fly deploy`, le nettoyeur a préservé le texte visible malgré des marqueurs injectés, et la reprise de session a réparé un transcript puis répondu `P2_OK`. [P2](preuves/p2.md)
+- Sur les cas exercés en P2, le pare-feu a mis une compétence injectée en quarantaine, le validateur a refusé `mkfs`, la garde de déploiement a bloqué `fly deploy`, le nettoyeur a préservé le texte visible malgré des marqueurs injectés, et la reprise de session a réparé un transcript puis répondu `P2_OK`. Sur cette branche d’inventaire, la sonde directe de nettoyage laisse passer un caractère de largeur nulle. [P2](preuves/p2.md)
 - Le daemon sensoriel Rust a livré six événements en 932 ms via le pont loopback ; le rêve a consolidé 23 percepts ; une règle a refusé `rm -rf /` puis exécuté une action locale autorisée avec audit. [P3](preuves/p3.md)
 - Le serveur MCP a répondu à `initialize` et `tools/list` en stdio : 64 outils annoncés, tous marqués lecture seule. Le CLI a aussi exécuté les aides de 116 noms et 73 lectures sûres ; cela ne prouve pas le TUI interactif ni les commandes restées à l’aide seule. [P4](preuves/p4.md)
 
@@ -130,7 +131,7 @@ Quatre surfaces apprenables. L’invariant « jamais `src/` » n’est pas reval
 | Validateur de commandes | Analyse du shell avant exécution | ✅ `mkfs /dev/p2-fixture` refusé avant exécution. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 | Garde des secrets | Détection de secrets dans les fichiers suivis | ⛔ Une clé factice est masquée ; l’absence universelle de secrets n’a pas été établie. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 | Garde de déploiement | Confirmation avant opération sensible | ✅ `fly deploy` refusé sans approbation, faux binaire non exécuté ; test rouge, vert et mutant rouge. [P2](preuves/p2.md) — 2026-09-25, correctif `98e2cb0c2` |
-| Nettoyage de sortie | Retrait des marqueurs internes des réponses | ✅ un relais local a injecté les marqueurs ; sortie égale au texte original sans marqueurs. [P2](preuves/p2.md) — 2026-09-25, correctif `98e2cb0c2` |
+| Nettoyage de sortie | Retrait des marqueurs internes des réponses | ❌ sur cette branche : la sonde directe conserve un caractère de largeur nulle (`removedChars=59`). ✅ historique limité au correctif P2 `98e2cb0c2` (`removedChars=60`), non présent dans le code de cette branche. [P2](preuves/p2.md), [sortie de la branche](preuves/p2-brut/output-sanitizer-inventaire.log) — 2026-09-25 |
 | Réparation de transcript | Réparation des appels d’outils après compaction | ✅ reprise CLI a injecté un résultat synthétique et répondu `P2_OK`. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 
 ---

@@ -9,4 +9,6 @@ Les trois contre-revues P1, P2 et P3 sont lues en entier. Le rapport de livraiso
 
 Sondes ciblées : rouges avant correction, vertes après correction ; les mutants P1, P2 et P3 reproduisent le faux résultat. Sorties intégrales dans le dossier de reprise. Un premier export du commit correctif `bc17c3a3e` a confirmé le type-check (code 0). Les suites P1/P2/P4 y rencontrent le refus de socket locale du lanceur `tsx` ; P3 s’arrête sur six tests Rust de pont réseau (`EPERM`, 36 autres réussis). La sonde Ollama loopback est également inaccessible. Le lint a signalé un bloc `catch` vide dans le harnais P3 ; il est corrigé avant le rejeu final.
 
+Un rejeu direct sans socket de la sonde P2 `output-sanitizer` sur le commit de clôture a détecté un écart de code entre la branche d’inventaire et le correctif P2 cité : caractère de largeur nulle conservé, 59 caractères retirés au lieu de 60. L’inventaire distingue désormais le succès historique P2 du défaut présent sur cette branche. La sortie directe est ajoutée aux preuves sans altérer le journal historique.
+
 État déployé : aucun. Aucun push ni fusion.
