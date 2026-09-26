@@ -16,6 +16,10 @@ import {
 } from "./memory-forgetting.js";
 import { withSessionLock } from "../persistence/session-lock.js";
 import { readTextAtomic, writeFileAtomic } from '../utils/atomic-write.js';
+import {
+  formatProvenance, normalizeProvenance, provenanceEnabled,
+  type MemoryKind, type MemoryProvenance,
+} from './memory-provenance.js';
 
 function mapMemoryCategoryToFactCategory(cat: MemoryCategory): FactCategory {
   switch (cat) {
@@ -60,6 +64,8 @@ export interface Memory {
   lastAccessedAt?: Date;
   accessCount: number;
   tags?: string[];
+  kind?: MemoryKind;
+  provenance?: MemoryProvenance;
 }
 
 export type MemoryCategory =
@@ -81,6 +87,7 @@ export interface MemoryConfig {
   userCharLimit: number;       // USER.md-equivalent budget
   securityScan: boolean;       // Reject prompt-injection/exfiltration patterns before durable writes
   rejectExactDuplicates: boolean;
+  provenanceEnabled: boolean;
 }
 
 const DEFAULT_CONFIG: MemoryConfig = {
@@ -94,6 +101,7 @@ const DEFAULT_CONFIG: MemoryConfig = {
   userCharLimit: parsePositiveInt(process.env.CODEBUDDY_MEMORY_USER_CHAR_LIMIT, 1375),
   securityScan: process.env.CODEBUDDY_MEMORY_SECURITY_SCAN !== 'false',
   rejectExactDuplicates: process.env.CODEBUDDY_MEMORY_REJECT_DUPLICATES !== 'false',
+  provenanceEnabled: provenanceEnabled(),
 };
 
 export type MemoryScope = "project" | "user";
@@ -107,6 +115,16 @@ export interface ArchivedMemory {
   /** ISO timestamp of the `## Forgotten <ISO>` section it was archived under. */
   forgottenAt: string;
   scope: MemoryScope;
+  kind?: MemoryKind;
+  provenance?: MemoryProvenance;
+}
+
+function archiveAttribution(memory: Memory, enabled: boolean): string {
+  if (!enabled && !memory.kind && !memory.provenance) return '';
+  const encoded = Buffer.from(JSON.stringify({
+    kind: memory.kind ?? 'hypothesis', provenance: normalizeProvenance(memory.provenance),
+  })).toString('base64url');
+  return `, attribution ${encoded}`;
 }
 
 export interface MemoryUsage {
@@ -164,6 +182,8 @@ interface MemoryMeta {
   updatedAt?: Date;
   lastAccessedAt?: Date;
   accessCount?: number;
+  kind?: MemoryKind;
+  provenance?: MemoryProvenance;
 }
 
 function parseMemoryMeta(body: string): MemoryMeta {
@@ -175,17 +195,35 @@ function parseMemoryMeta(body: string): MemoryMeta {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   };
   const accessed = Number.parseInt(field("accessed") ?? "", 10);
+  let provenance: MemoryProvenance | undefined;
+  const encoded = field('provenance');
+  if (encoded && /^[A-Za-z0-9_-]+$/.test(encoded)) {
+    try {
+      const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+      if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
+        provenance = normalizeProvenance(decoded as MemoryProvenance);
+      }
+    } catch { /* Malformed optional metadata never replaces the memory value. */ }
+  }
+  const kind = field('kind');
   return {
     createdAt: date(field("created")),
     updatedAt: date(field("updated")),
     lastAccessedAt: date(field("last")),
     accessCount: Number.isFinite(accessed) && accessed >= 0 ? accessed : undefined,
+    ...(kind === 'preference' || kind === 'observation' || kind === 'hypothesis' || kind === 'report'
+      ? { kind } : {}),
+    ...(provenance ? { provenance } : {}),
   };
 }
 
-function renderMemoryMeta(memory: Memory): string {
+function renderMemoryMeta(memory: Memory, withProvenance: boolean): string {
   const last = memory.lastAccessedAt ? ` last=${memory.lastAccessedAt.toISOString()}` : "";
-  return `  <!-- meta: accessed=${memory.accessCount} created=${memory.createdAt.toISOString()} updated=${memory.updatedAt.toISOString()}${last} -->`;
+  const attributed = withProvenance || Boolean(memory.kind || memory.provenance);
+  const kind = attributed ? ` kind=${memory.kind ?? 'hypothesis'}` : '';
+  const provenance = attributed
+    ? ` provenance=${Buffer.from(JSON.stringify(normalizeProvenance(memory.provenance))).toString('base64url')}` : '';
+  return `  <!-- meta: accessed=${memory.accessCount} created=${memory.createdAt.toISOString()} updated=${memory.updatedAt.toISOString()}${last}${kind}${provenance} -->`;
 }
 
 function cloneMemoryMap(memories: Map<string, Memory>): Map<string, Memory> {
@@ -197,6 +235,7 @@ function cloneMemoryMap(memories: Map<string, Memory>): Map<string, Memory> {
       updatedAt: new Date(memory.updatedAt),
       lastAccessedAt: memory.lastAccessedAt ? new Date(memory.lastAccessedAt) : undefined,
       tags: memory.tags ? [...memory.tags] : undefined,
+      provenance: memory.provenance ? { ...memory.provenance } : undefined,
     },
   ]));
 }
@@ -236,6 +275,8 @@ function memoryEquals(left: Memory | undefined, right: Memory | undefined): bool
     && left.updatedAt.getTime() === right.updatedAt.getTime()
     && left.lastAccessedAt?.getTime() === right.lastAccessedAt?.getTime()
     && left.accessCount === right.accessCount
+    && left.kind === right.kind
+    && JSON.stringify(left.provenance) === JSON.stringify(right.provenance)
     && leftTags.length === rightTags.length
     && leftTags.every((tag, index) => tag === rightTags[index]);
 }
@@ -644,6 +685,8 @@ export class PersistentMemoryManager extends EventEmitter {
       ...(meta?.lastAccessedAt ? { lastAccessedAt: meta.lastAccessedAt } : {}),
       accessCount: meta?.accessCount ?? 0,
       ...(tags && tags.length > 0 ? { tags } : {}),
+      ...(meta?.kind ? { kind: meta.kind } : {}),
+      ...(meta?.provenance ? { provenance: meta.provenance } : {}),
     };
   }
 
@@ -657,6 +700,8 @@ export class PersistentMemoryManager extends EventEmitter {
       scope?: MemoryScope;
       category?: MemoryCategory;
       tags?: string[];
+      kind?: MemoryKind;
+      provenance?: MemoryProvenance;
     } = {}
   ): Promise<MemoryWriteResult> {
     const { scope = "project", category = "context", tags } = options;
@@ -665,9 +710,11 @@ export class PersistentMemoryManager extends EventEmitter {
     const normalizedValue = value.trim();
 
     this.assertMemoryWriteSafe(normalizedKey, normalizedValue);
+    this.assertProvenanceWriteSafe(normalizedKey, normalizedValue, options.provenance);
 
     const existing = memories.get(normalizedKey);
-    if (this.config.rejectExactDuplicates && existing?.value === normalizedValue) {
+    if (this.config.rejectExactDuplicates && existing?.value === normalizedValue
+      && !(this.config.provenanceEnabled && (options.kind || options.provenance))) {
       return {
         status: 'duplicate',
         key: normalizedKey,
@@ -683,64 +730,70 @@ export class PersistentMemoryManager extends EventEmitter {
     let reconciliation: NonNullable<MemoryWriteResult['reconciliation']> = { status: 'skipped', reason: 'no LLM provider available' };
 
     try {
-      const { FactsMemoryService } = await import('./facts-memory.js');
-      const service = new FactsMemoryService();
-
-      if (await service.isAvailable()) {
-        const newFact: Fact = {
-          category: mapMemoryCategoryToFactCategory(category),
-          text: `${normalizedKey}: ${normalizedValue}`,
-          source: tags?.join(', ') || 'manual',
-          updatedAt: new Date()
-        };
-
-        const currentFacts: Fact[] = Array.from(memories.entries()).map(([k, m]) => ({
-          category: mapMemoryCategoryToFactCategory(m.category),
-          text: `${k}: ${m.value}`,
-          source: m.tags?.join(', ') || 'persistent-memory',
-          updatedAt: m.updatedAt
-        }));
-
-        const reconciledFacts = await service.reconcileFacts(currentFacts, [newFact]);
-
-        memories.clear();
-        for (const fact of reconciledFacts) {
-          let fKey = `fact-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-          let fValue = fact.text;
-          const parsed = parseReconciledFactText(fact.text);
-          if (parsed) {
-            fKey = parsed.key;
-            fValue = parsed.value;
-          }
-
-          // The map was cleared above — prior metadata lives in previousMemories.
-          const prior = previousMemories.get(fKey);
-          memories.set(fKey, {
-            key: fKey,
-            value: fValue,
-            category: mapFactCategoryToMemoryCategory(fact.category),
-            createdAt: prior?.createdAt || fact.updatedAt || new Date(),
-            updatedAt: fact.updatedAt || new Date(),
-            ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
-            accessCount: prior?.accessCount || 0,
-            tags: mergeMemoryTags(prior?.tags, fact.source, tags)
-          });
-        }
-
-        await this.guardReconciliation(previousMemories, memories, scope, normalizedKey);
-
-        if (!memories.has(normalizedKey)) {
-          const newKeys = Array.from(memories.keys()).filter((memoryKey) => !previousMemories.has(memoryKey));
-          const reconciledKey = newKeys[newKeys.length - 1];
-          if (!reconciledKey) {
-            throw new Error(`Reconciliation did not retain the new memory "${normalizedKey}"`);
-          }
-          resultKey = reconciledKey;
-        }
-        reconciliation = { status: 'applied' };
+      if (this.config.provenanceEnabled) {
+        // An LLM reconciliation could merge two claims and silently transfer
+        // the source of one to the other. Keep attributed writes exact.
+        this.setMemoryDirect(memories, normalizedKey, normalizedValue, category, tags, options);
       } else {
-        // Fallback to default direct write
-        this.setMemoryDirect(memories, normalizedKey, normalizedValue, category, tags);
+        const { FactsMemoryService } = await import('./facts-memory.js');
+        const service = new FactsMemoryService();
+
+        if (await service.isAvailable()) {
+          const newFact: Fact = {
+            category: mapMemoryCategoryToFactCategory(category),
+            text: `${normalizedKey}: ${normalizedValue}`,
+            source: tags?.join(', ') || 'manual',
+            updatedAt: new Date()
+          };
+
+          const currentFacts: Fact[] = Array.from(memories.entries()).map(([k, m]) => ({
+            category: mapMemoryCategoryToFactCategory(m.category),
+            text: `${k}: ${m.value}`,
+            source: m.tags?.join(', ') || 'persistent-memory',
+            updatedAt: m.updatedAt
+          }));
+
+          const reconciledFacts = await service.reconcileFacts(currentFacts, [newFact]);
+
+          memories.clear();
+          for (const fact of reconciledFacts) {
+            let fKey = `fact-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+            let fValue = fact.text;
+            const parsed = parseReconciledFactText(fact.text);
+            if (parsed) {
+              fKey = parsed.key;
+              fValue = parsed.value;
+            }
+
+            // The map was cleared above — prior metadata lives in previousMemories.
+            const prior = previousMemories.get(fKey);
+            memories.set(fKey, {
+              key: fKey,
+              value: fValue,
+              category: mapFactCategoryToMemoryCategory(fact.category),
+              createdAt: prior?.createdAt || fact.updatedAt || new Date(),
+              updatedAt: fact.updatedAt || new Date(),
+              ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
+              accessCount: prior?.accessCount || 0,
+              tags: mergeMemoryTags(prior?.tags, fact.source, tags)
+            });
+          }
+
+          await this.guardReconciliation(previousMemories, memories, scope, normalizedKey);
+
+          if (!memories.has(normalizedKey)) {
+            const newKeys = Array.from(memories.keys()).filter((memoryKey) => !previousMemories.has(memoryKey));
+            const reconciledKey = newKeys[newKeys.length - 1];
+            if (!reconciledKey) {
+              throw new Error(`Reconciliation did not retain the new memory "${normalizedKey}"`);
+            }
+            resultKey = reconciledKey;
+          }
+          reconciliation = { status: 'applied' };
+        } else {
+          // Fallback to default direct write
+          this.setMemoryDirect(memories, normalizedKey, normalizedValue, category, tags);
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -751,7 +804,7 @@ export class PersistentMemoryManager extends EventEmitter {
       for (const [memoryKey, memory] of previousMemories) {
         memories.set(memoryKey, memory);
       }
-      this.setMemoryDirect(memories, normalizedKey, normalizedValue, category, tags);
+      this.setMemoryDirect(memories, normalizedKey, normalizedValue, category, tags, options);
     }
 
     try {
@@ -803,6 +856,8 @@ export class PersistentMemoryManager extends EventEmitter {
       scope?: MemoryScope;
       category?: MemoryCategory;
       tags?: string[];
+      kind?: MemoryKind;
+      provenance?: MemoryProvenance;
     } = {},
   ): Promise<MemoryWriteResult> {
     const { scope = 'project', category, tags } = options;
@@ -824,6 +879,7 @@ export class PersistentMemoryManager extends EventEmitter {
     }
 
     this.assertMemoryWriteSafe(normalizedKey, normalizedValue);
+    this.assertProvenanceWriteSafe(normalizedKey, normalizedValue, options.provenance);
 
     const previousMemories = cloneMemoryMap(memories);
     memories.set(normalizedKey, {
@@ -832,6 +888,10 @@ export class PersistentMemoryManager extends EventEmitter {
       category: category ?? existing.category,
       updatedAt: new Date(),
       tags: tags ?? existing.tags,
+      ...(this.config.provenanceEnabled || options.kind || options.provenance ? {
+        kind: options.kind ?? (category === 'preferences' ? 'preference' : 'hypothesis'),
+        provenance: normalizeProvenance(options.provenance),
+      } : {}),
     });
 
     try {
@@ -863,6 +923,7 @@ export class PersistentMemoryManager extends EventEmitter {
     value: string,
     category: MemoryCategory,
     tags?: string[],
+    attribution?: { kind?: MemoryKind; provenance?: MemoryProvenance },
   ): void {
     const existing = memories.get(key);
     const memory: Memory = {
@@ -874,6 +935,10 @@ export class PersistentMemoryManager extends EventEmitter {
       ...(existing?.lastAccessedAt ? { lastAccessedAt: existing.lastAccessedAt } : {}),
       accessCount: existing?.accessCount || 0,
       tags,
+      ...(this.config.provenanceEnabled || attribution?.kind || attribution?.provenance ? {
+        kind: attribution?.kind ?? (category === 'preferences' ? 'preference' : 'hypothesis'),
+        provenance: normalizeProvenance(attribution?.provenance),
+      } : {}),
     };
     memories.set(key, memory);
   }
@@ -925,6 +990,13 @@ export class PersistentMemoryManager extends EventEmitter {
     }
   }
 
+  private assertProvenanceWriteSafe(key: string, value: string, provenance?: MemoryProvenance): void {
+    if (!provenance) return;
+    const details = Object.values(provenance).filter((item): item is string => typeof item === 'string')
+      .join(' ').replace(/\s+/g, ' ');
+    this.assertMemoryWriteSafe(key, `${value} ${details}`);
+  }
+
   private assertScopeWithinLimit(scope: MemoryScope): void {
     if (!this.config.enforceCharLimits) return;
     const usage = this.getMemoryUsage(scope);
@@ -945,6 +1017,23 @@ export class PersistentMemoryManager extends EventEmitter {
     return Array.from(memories.values())
       .map((memory) => `${memory.key}: ${memory.value}`)
       .join('\n§\n');
+  }
+
+  /** Prompt view only: memory age never follows recall reinforcement. */
+  formatMemoryForPrompt(memory: Memory, withProvenance: boolean = this.config.provenanceEnabled): string {
+    if (!withProvenance) return `${memory.key}: ${memory.value}`;
+    return `${memory.key}: ${memory.value} [${formatProvenance(
+      memory.kind ?? (memory.category === 'preferences' ? 'preference' : 'hypothesis'),
+      memory.provenance,
+    )}]`;
+  }
+
+  isProvenanceEnabled(): boolean {
+    return this.config.provenanceEnabled;
+  }
+
+  private renderAttributedEntries(memories: Map<string, Memory>): string {
+    return Array.from(memories.values()).map((memory) => this.formatMemoryForPrompt(memory)).join('\n§\n');
   }
 
   getMemoryUsage(scope: MemoryScope): MemoryUsage {
@@ -1158,7 +1247,7 @@ export class PersistentMemoryManager extends EventEmitter {
     const lines = removed.map(memory => {
       const tags = memory.tags?.length ? ` [${memory.tags.join(', ')}]` : '';
       const ageDays = Math.max(0, Math.round((now.getTime() - memory.createdAt.getTime()) / 86_400_000));
-      return `- **${memory.key}** (${memory.category}${tags}, accessed ${memory.accessCount}×, age ${ageDays}d, retention 1.000): ${escapeArchiveValue(memory.value)}`;
+      return `- **${memory.key}** (${memory.category}${tags}, accessed ${memory.accessCount}×, age ${ageDays}d, retention 1.000${archiveAttribution(memory, this.config.provenanceEnabled)}): ${escapeArchiveValue(memory.value)}`;
     });
     // Same recoverable format as forgetting. Durable archive precedes deletion;
     // failures propagate to the caller's snapshot rollback/direct-write fallback.
@@ -1193,7 +1282,7 @@ export class PersistentMemoryManager extends EventEmitter {
       const tags = memory.tags?.length ? ` [${memory.tags.join(", ")}]` : "";
       return (
         `- **${memory.key}** (${memory.category}${tags}, accessed ${memory.accessCount}×, ` +
-        `age ${Math.round(candidate.ageDays)}d, retention ${candidate.retention.toFixed(3)}): ${escapeArchiveValue(memory.value)}`
+        `age ${Math.round(candidate.ageDays)}d, retention ${candidate.retention.toFixed(3)}${archiveAttribution(memory, this.config.provenanceEnabled)}): ${escapeArchiveValue(memory.value)}`
       );
     });
 
@@ -1267,6 +1356,8 @@ export class PersistentMemoryManager extends EventEmitter {
         scope: s,
         category: entry.category,
         ...(entry.tags?.length ? { tags: entry.tags } : {}),
+        ...(entry.kind ? { kind: entry.kind } : {}),
+        ...(entry.provenance ? { provenance: entry.provenance } : {}),
       });
       if (result.status === "stored" || result.status === "updated") {
         await this.verifyPersistedMemory(s, result.key, entry.value);
@@ -1323,10 +1414,10 @@ export class PersistentMemoryManager extends EventEmitter {
         continue;
       }
       const entry = line.match(
-        /^- \*\*(.+?)\*\* \((\w+)(?: \[([^\]]*)\])?, accessed \d+×, age \d+d, retention [\d.]+\): (.*)$/,
+        /^- \*\*(.+?)\*\* \((\w+)(?: \[([^\]]*)\])?, accessed \d+×, age \d+d, retention [\d.]+(?:, attribution ([A-Za-z0-9_-]+))?\): (.*)$/,
       );
       if (!entry) continue;
-      const [, entryKey, rawCategory, rawTags, value] = entry;
+      const [, entryKey, rawCategory, rawTags, encodedAttribution, value] = entry;
       if (entryKey === undefined || value === undefined) continue;
       const category: MemoryCategory = (
         ["project", "preferences", "decisions", "patterns", "context", "custom"] as const
@@ -1337,6 +1428,18 @@ export class PersistentMemoryManager extends EventEmitter {
         ?.split(",")
         .map((t) => t.trim())
         .filter(Boolean);
+      let attribution: { kind?: MemoryKind; provenance?: MemoryProvenance } = {};
+      if (encodedAttribution && encodedAttribution.length <= 4096) {
+        try {
+          const decoded: unknown = JSON.parse(Buffer.from(encodedAttribution, 'base64url').toString('utf8'));
+          if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
+            const value = decoded as { kind?: unknown; provenance?: MemoryProvenance };
+            if (value.kind === 'preference' || value.kind === 'observation'
+              || value.kind === 'hypothesis' || value.kind === 'report') attribution.kind = value.kind;
+            attribution.provenance = normalizeProvenance(value.provenance);
+          }
+        } catch { /* A damaged annotation never discards the archived value. */ }
+      }
       entries.push({
         key: entryKey,
         value: unescapeArchiveValue(value),
@@ -1344,6 +1447,7 @@ export class PersistentMemoryManager extends EventEmitter {
         ...(tags?.length ? { tags } : {}),
         forgottenAt,
         scope,
+        ...attribution,
         lineIndex: i,
       });
     }
@@ -1527,7 +1631,7 @@ export class PersistentMemoryManager extends EventEmitter {
           if (memory.tags && memory.tags.length > 0) {
             content += `  Tags: ${memory.tags.join(", ")}\n`;
           }
-          content += `${renderMemoryMeta(memory)}\n`;
+          content += `${renderMemoryMeta(memory, this.config.provenanceEnabled)}\n`;
         }
       }
       content += `\n`;
@@ -1584,8 +1688,10 @@ export class PersistentMemoryManager extends EventEmitter {
       return `<memory-store-error>MEMORY STORE ERROR: ${details}. The affected store is unavailable, not empty; do not infer that memories are absent.</memory-store-error>`;
     }
     const sections: string[] = [];
-    const projectEntries = this.renderScopeEntries(this.projectMemories);
-    const userEntries = this.renderScopeEntries(this.userMemories);
+    const projectEntries = this.config.provenanceEnabled
+      ? this.renderAttributedEntries(this.projectMemories) : this.renderScopeEntries(this.projectMemories);
+    const userEntries = this.config.provenanceEnabled
+      ? this.renderAttributedEntries(this.userMemories) : this.renderScopeEntries(this.userMemories);
 
     if (projectEntries) {
       const usage = this.getMemoryUsage('project');
@@ -1674,7 +1780,11 @@ export class PersistentMemoryManager extends EventEmitter {
           updatedAt: fact.updatedAt || new Date(),
           ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
           accessCount: prior?.accessCount || 0,
-          tags: mergeMemoryTags(prior?.tags, fact.source, ['auto-captured'])
+          tags: mergeMemoryTags(prior?.tags, fact.source, ['auto-captured']),
+          ...(this.config.provenanceEnabled ? {
+            kind: prior?.value === value ? prior.kind ?? 'hypothesis' : 'hypothesis',
+            provenance: prior?.value === value ? prior.provenance ?? {} : {},
+          } : {})
         });
       }
 
@@ -1798,7 +1908,10 @@ export class PersistentMemoryManager extends EventEmitter {
         output += `   (empty)\n`;
       } else {
         for (const [key, memory] of memories) {
-          output += `   • ${key}: ${memory.value.slice(0, 50)}${memory.value.length > 50 ? "..." : ""}\n`;
+          const preview = memory.value.slice(0, 50) + (memory.value.length > 50 ? '...' : '');
+          output += this.config.provenanceEnabled
+            ? `   • ${this.formatMemoryForPrompt({ ...memory, value: preview })}\n`
+            : `   • ${key}: ${preview}\n`;
           output += `     Category: ${memory.category} | Accessed: ${memory.accessCount}x\n`;
         }
       }
