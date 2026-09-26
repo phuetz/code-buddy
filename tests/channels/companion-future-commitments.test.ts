@@ -84,7 +84,7 @@ describe('channel future commitment gate', () => {
         } : reply('Je te rappellerai le train.');
       },
     });
-    expect(result.text).toBe("Aucun rappel correspondant n'est confirmé pour le moment.");
+    expect(result.text).toBe('Échec : remind (résultat non confirmé).');
     expect(result.historySuffix ?? '').not.toContain('[Rappel créé');
   });
 
@@ -105,7 +105,7 @@ describe('channel future commitment gate', () => {
         } : reply('');
       },
     });
-    expect(result.text).toBe("Je n'ai pas pu confirmer le rappel.");
+    expect(result.text).toBe('Échec : remind (store unavailable).');
     expect(result.historySuffix ?? '').not.toContain('[Rappel créé');
   });
 });

@@ -332,18 +332,23 @@ export async function runCompanionChannelTurn(
     }
   }
 
-  if (!finalText && executedTools.length > 0) {
-    const hasImage = mediaProduced.length > 0;
-    if (hasImage) {
-      finalText = 'Voilà, j’ai créé l’image pour toi !';
-    } else if (
-      futureCommitmentsEnabled(env)
-      && executedTools.filter((tool) => tool.name === 'remind').length > registeredReminders.length
-    ) {
-      finalText = "Je n'ai pas pu confirmer le rappel.";
-    } else {
-      finalText = 'C’est fait !';
-    }
+  const unverifiedReminder = futureCommitmentsEnabled(env) &&
+    executedTools.filter((tool) => tool.name === 'remind').length > registeredReminders.length;
+  const failedTools = executedTools.filter((tool) => !tool.success || (tool.name === 'remind' && unverifiedReminder));
+  const succeededTools = executedTools.filter((tool) => !failedTools.includes(tool));
+  const genericSuccess = /^\s*(?:c['’]est fait|fait|done|terminé)[\s.!]*$/iu.test(finalText);
+  if (failedTools.length > 0) {
+    const successes = succeededTools.length > 0
+      ? `Réussi : ${succeededTools.map((tool) => tool.name).join(', ')}. ` : '';
+    const failures = failedTools.map((tool) => `${tool.name} (${tool.success
+      ? 'résultat non confirmé' : (tool.output ?? 'échec').slice(0, 160)})`).join(', ');
+    finalText = `${successes}Échec : ${failures}.`;
+  } else if ((!finalText && executedTools.length > 0) || genericSuccess) {
+    finalText = mediaProduced.length > 0
+      ? 'Voilà, j’ai créé l’image pour toi !'
+      : succeededTools.length > 0
+        ? `Réussi : ${succeededTools.map((tool) => tool.name).join(', ')}.`
+        : "Je n'ai pas de résultat confirmé pour cette demande.";
   }
 
   if (futureCommitmentsEnabled(env)) {
