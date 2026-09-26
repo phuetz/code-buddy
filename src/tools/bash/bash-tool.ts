@@ -38,6 +38,7 @@ import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
 import { completeLisaActionBestEffort, prepareLisaActionBestEffort, lisaUnifiedCheckpointsEnabled, type LisaActionReturnPoint } from '../../checkpoints/lisa-action-store.js';
 import { lisaBashTargets } from '../../checkpoints/lisa-bash-targets.js';
 import { auditLogger } from '../../security/audit-logger.js';
+import { logger } from '../../utils/logger.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
 import { rewriteCommandWithRtk } from './rtk-rewrite.js';
 import {
@@ -708,7 +709,13 @@ export class BashTool implements Disposable {
 
   /** Durable, explicit targets for supported destructive shell commands. */
   private checkpointLisaDestructiveTargets(command: string, cwd: string): LisaActionReturnPoint | undefined {
-    const targets = lisaBashTargets(command);
+    let targets: string[];
+    try {
+      targets = lisaBashTargets(command);
+    } catch (error) {
+      logger.warn(`Lisa checkpoint target discovery unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
     if (targets.length === 0) return undefined;
     return prepareLisaActionBestEffort(cwd, `bash-${Date.now()}`, command, 'bash', targets);
   }

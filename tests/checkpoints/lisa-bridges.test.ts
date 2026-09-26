@@ -101,6 +101,36 @@ describe('Lisa checkpoint integration', () => {
     }
   });
 
+  for (const command of ['rm *.log', 'mv a.log b.txt && echo done', 'echo hello > out.txt && rm a.log']) {
+    it.skipIf(process.platform === 'win32')(`bash executes ${command} when target discovery is unavailable`, async () => {
+      const root = fixture();
+      fs.writeFileSync(path.join(root, 'a.log'), 'original');
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      const confirmation = ConfirmationService.getInstance();
+      confirmation.setSessionFlag('bashCommands', true);
+      confirmation.setInteractiveBridge(async () => ({ confirmed: true }));
+      const bash = new BashTool();
+      try {
+        const result = await bash.execute(command, 10_000, root);
+        expect(result.success, result.error ?? result.output).toBe(true);
+        expect(fs.existsSync(path.join(root, 'a.log'))).toBe(false);
+        if (command.startsWith('mv')) {
+          expect(fs.readFileSync(path.join(root, 'b.txt'), 'utf8')).toBe('original');
+          expect(result.output).toContain('done');
+        }
+        if (command.startsWith('echo')) {
+          expect(fs.readFileSync(path.join(root, 'out.txt'), 'utf8')).toBe('hello\n');
+        }
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('Lisa checkpoint target discovery unavailable'));
+        expect(new LisaActionStore().list()).toHaveLength(0);
+      } finally {
+        bash.dispose();
+        confirmation.setInteractiveBridge(null);
+        confirmation.setSessionFlag('bashCommands', false);
+      }
+    });
+  }
+
   it('a failed completion is logged without replacing the operation result', () => {
     const root = fixture();
     const target = path.join(root, 'work.txt');
