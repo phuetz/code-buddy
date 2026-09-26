@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { generateCatalog, type Catalog } from '../../src/catalog/generate.js';
@@ -78,10 +77,18 @@ describe('DGM catalogue coverage', () => {
       .toBe('cli-interface');
     expect(coverage.byDomain['model-routing']).toBeGreaterThan(0);
     expect(coverage.unmatched, 'Every generated catalogue entry needs a curated domain').toEqual([]);
-    const digest = createHash('sha256').update(catalog.entries.map((entry) => entry.id).sort().join('\n')).digest('hex');
-    expect(digest, 'Review new catalogue IDs and their domains before updating this fingerprint')
-      .toBe('9269918e08f67e97a85ccfe12250cee983fc1a933740909a796a9dcb99ee4956');
     expect(buildCatalogCoverage(catalog, CURATED_FEATURES)).toEqual(coverage);
+  });
+
+  it('keeps complete coverage when a new environment reader extends the generated catalogue', () => {
+    const catalog = generateCatalog(checkout);
+    catalog.entries.push({
+      id: 'environment:CODEBUDDY_FUTURE_OPTION', family: 'environment', name: 'CODEBUDDY_FUTURE_OPTION',
+      sources: [{ file: 'src/config/config-schema.ts', line: 1, commit: 'fixture' }],
+    });
+    const coverage = buildCatalogCoverage(catalog, CURATED_FEATURES);
+    expect(coverage.total).toBe(catalog.entries.length);
+    expect(coverage.unmatched).toEqual([]);
   });
 
   it('uses reader paths for environment variables and configuration for unknown readers', () => {

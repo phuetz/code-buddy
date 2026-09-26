@@ -86,7 +86,7 @@ export function registerEvolveCommands(program: Command): void {
     .command('propose')
     .description('Select a research weakness and archive a plan without mutating code or creating a branch (optional CODEBUDDY_DREAM_RSI=true)')
     .option('--source <src>', 'Proposal source (research)', 'research')
-    .option('--min-similarity <score>', 'Minimum discovery similarity (0 to 1)', '0.32')
+    .option('--min-similarity <score>', 'Minimum discovery similarity (0 to 1)', '0.45')
     .option('--model <model>', 'Model for goal synthesis and planning')
     .option('--json', 'Write all stages and the result as JSON')
     .action(async (options: { source: string; minSimilarity: string; model?: string; json?: boolean }) => {

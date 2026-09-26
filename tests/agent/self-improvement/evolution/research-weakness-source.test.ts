@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   isContradicted,
   matchScore,
@@ -6,6 +7,8 @@ import {
   buildGoalPrompt,
   parseGoal,
   fetchResearchGoals,
+  filterResearchHits,
+  scholarlyIdentity,
   type ResearchHit,
   type FeatureMatch,
 } from '../../../../src/agent/self-improvement/evolution/research-weakness-source.js';
@@ -15,6 +18,25 @@ const feat = (id: string): FeatureArea => ({ id, name: `Feat ${id}`, description
 const hit = (over: Partial<ResearchHit> = {}): ResearchHit => ({ name: 'arxiv:2606.20023v2', type: 'discovery', source: 'arxiv', text: 'A paper about X', confidence: 0.8, similarity: 0.6, relations: [], ...over });
 
 describe('prioritization (pure)', () => {
+  it('checks the 20 annotated relevance queries against the default scientific guard', () => {
+    const queries = JSON.parse(readFileSync(new URL('../../../fixtures/dgm-relevance-20.json', import.meta.url), 'utf8')) as
+      Array<{ domain: string; query: string; relevant: string[] }>;
+    expect(queries).toHaveLength(20);
+    expect(new Set(queries.map((row) => row.domain)).size).toBe(20);
+    for (const row of queries) {
+      const feature = { ...feat(row.domain), description: row.query };
+      const candidates: FeatureMatch[] = [
+        { feature, hit: hit({ name: 'arxiv:9999.99999', similarity: 0.44, confidence: 0.95 }), score: 0.418 },
+        { feature, hit: hit({ name: 'video:irrelevant', source: 'video', similarity: 0.99 }), score: 0.99 },
+      ];
+      if (row.relevant[0]) {
+        candidates.push({ feature, hit: hit({ name: row.relevant[0], similarity: 0.46, confidence: 0.9 }), score: 0.414 });
+      }
+      const selected = filterResearchHits(candidates);
+      expect(selected.map((item) => scholarlyIdentity(item.hit)), row.domain).toEqual(row.relevant[0] ? [row.relevant[0]] : []);
+    }
+  });
+
   it('isContradicted flags a contradicts relation', () => {
     expect(isContradicted(hit({ relations: [{ predicate: 'contradicts', target: 'y' }] }))).toBe(true);
     expect(isContradicted(hit({ relations: [{ predicate: 'supports', target: 'y' }] }))).toBe(false);
