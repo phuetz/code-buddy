@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- **research:** `buddy research ingest --source blogs` lit des flux RSS/Atom configurés en JSON, filtre les billets par mots du thème et utilise leur URL canonique pour la déduplication CKG. `--feeds-file` sélectionne la liste ; les erreurs de flux échouent ouvertement.
 - **research:** `buddy research ingest --source github|models|all` ajoute les dépôts GitHub populaires et les modèles de génération Hugging Face au CKG, avec filtres, tri, identifiants stables et ingestion idempotente. `both` conserve arXiv et Europe PMC.
 
 ## [2.3.0] (unreleased)

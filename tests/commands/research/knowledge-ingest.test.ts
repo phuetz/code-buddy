@@ -58,6 +58,19 @@ describe('research knowledge-ingest — handlers', () => {
     ]);
   });
 
+  it('forwards the blog feed file through the ingest command', async () => {
+    const calls: unknown[] = [];
+    const { deps } = stubDeps({ fetchPublications: async (_topic, options) => {
+      calls.push(options);
+      return [];
+    } });
+    const cmd = new Command('research');
+    cmd.exitOverride();
+    addKnowledgeSubcommands(cmd, async () => deps);
+    await cmd.parseAsync(['node', 'research', 'ingest', 'agent memory', '--source', 'blogs', '--feeds-file', 'feeds.json']);
+    expect(calls).toEqual([{ source: 'blogs', limit: 6, feedsFile: 'feeds.json' }]);
+  });
+
   it('runRecall returns hit count and prints', async () => {
     const { deps, logs } = stubDeps();
     const n = await runRecall('comment marche l attention', { limit: '3' }, deps);

@@ -216,12 +216,25 @@ ou `--sort recent` choisit respectivement la tendance et la date de création.
 Les fiches ne reprennent que les métadonnées publiées : nombre de paramètres,
 licence, taille du contexte et date lorsqu'elles sont présentes.
 
+`buddy research ingest "<thème>" --source blogs --feeds-file flux.json` lit une
+liste JSON d'URL HTTPS de flux RSS ou Atom. Un [exemple de liste](research-blog-feeds.example.json)
+est fourni, mais aucun flux n'est intégré au code. Sans `--feeds-file`, le chemin
+par défaut est `research/blog-feeds.json` sous le profil Code Buddy. Seuls les
+billets dont le titre ou le résumé contient **tous les mots du thème** sont
+ingérés (casse et accents ignorés). `--limit` borne le total de billets blogs ;
+la lecture des flux s'arrête à cette limite. L'identifiant et l'URL du nœud
+sont l'URL du billet : fragment et paramètres de suivi (`utm_*`, `fbclid`,
+`gclid`) retirés. La même URL présente dans plusieurs flux ou lors d'une
+nouvelle exécution ne crée pas de doublon. Un fichier absent, un flux invalide
+ou une erreur HTTP n'interrompt pas la lecture des autres flux.
+
 Chaque résultat est un nœud `discovery` avec identifiant stable
-`github:<owner>/<repo>` ou `hf:<id>`. Réingérer une fiche inchangée ne crée
+`github:<owner>/<repo>`, `hf:<id>` ou l'URL canonique du billet. Réingérer une fiche inchangée ne crée
 aucun événement dans le ledger ; une fiche modifiée remplace la version du même
 identifiant. Une source momentanément indisponible contribue zéro résultat.
 `--source both` conserve exactement arXiv et Europe PMC ; `--source all` ajoute
-GitHub et Hugging Face à ces deux sources. `--limit` s'applique à chaque source.
+GitHub, Hugging Face et les blogs configurés à ces deux sources. `--limit`
+s'applique à chaque catalogue et au total des billets blogs.
 
 ## Ce que contient le rapport
 
