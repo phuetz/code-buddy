@@ -11,7 +11,7 @@
 
 import { CodeBuddyClient, type CodeBuddyMessage, type CodeBuddyResponse, type CodeBuddyTool } from '../codebuddy/client.js';
 import { logger } from '../utils/logger.js';
-import type { CompanionIdentity } from '../companion/companion-identity.js';
+import { DEFAULT_GUEST_IDENTITY, type CompanionIdentity } from '../companion/companion-identity.js';
 import {
   companionHistorySessionKey,
   rememberCompanionChannelTurn,
@@ -133,6 +133,17 @@ export async function runCompanionChannelTurn(
     input.sessionKey = resolveTurnSessionKey(input);
   }
   const identity = input.identity;
+  const confirmationText = lastUserText(input.messages);
+  if (env.CODEBUDDY_REMINDERS === 'true' && /^confirme rappel\b/i.test(confirmationText)) {
+    const { reminderVoiceCoordinator } = await import('../companion/reminder-voice-auth.js');
+    const confirmation = await reminderVoiceCoordinator.confirm(
+      confirmationText,
+      identity ?? DEFAULT_GUEST_IDENTITY,
+    );
+    if (confirmation.handled) {
+      return { text: confirmation.text ?? 'Confirmation refusée.', model: input.model };
+    }
+  }
   const toolsEnabled = isCompanionToolsEnabled(env) && Boolean(identity && identity.role !== 'guest');
 
   const chat =
