@@ -13,4 +13,6 @@ Deux témoins du garde ont échoué avant correction, puis 45 tests distincts on
 
 Constats moyens : la capture des ports a été retirée ; les mentions « non exercé » trompeuses de l'inventaire ont été changées en « non rejoué ». Le journal brut historique P3 et le correctif `ws search` utilisé lors de P4 ne sont pas présents sur cette branche ; aucune preuve de rejeu complet n'est revendiquée pour eux.
 
-Les vérifications finales et les limites de la livraison figurent dans le rapport privé.
+Vérifications sur le commit de correction `0bd89060e` dans une copie Git jetable : 69 fichiers de tests, 1 154 tests distincts, dont 1 135 réussis et 19 échecs liés aux sous-processus/IPC interdits par le bac d'exécution (`EPERM`). Les 19 échecs appartiennent à cinq fichiers non modifiés ; le garde de confidentialité passe isolément (45/45). `npm run typecheck` : sortie 0. `npm run lint` : 0 erreur, 2 552 avertissements. Syntaxe des quatre scripts shell et des deux modules P3 vérifiée ; la préparation P3 produit un WAV de 64 044 octets sous le dossier ignoré.
+
+Les vérifications sur le commit de clôture et les limites de la livraison figurent dans le rapport privé.
