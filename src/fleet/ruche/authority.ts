@@ -16,6 +16,9 @@ interface Approval {
   consumed: boolean;
 }
 
+const APPROVAL_MAX_MS = 300_000;
+const APPROVAL_CLOCK_SKEW_MS = 5_000;
+
 /** One serialized arbiter per work scope. Calls are deliberately synchronous. */
 export class RucheAuthority {
   private readonly leases = new Map<string, Lease>();
@@ -134,10 +137,18 @@ export class RucheAuthority {
     return [...this.leases.keys()].map((work) => this.status(work)).filter((lease): lease is Lease => lease !== null);
   }
 
+  private approvalRequestIsTimely(request: RucheEvent): boolean {
+    const now = this.now();
+    const expiresAt = request.payload.expiresAt as number;
+    return request.at <= now + APPROVAL_CLOCK_SKEW_MS
+      && expiresAt > now && expiresAt <= now + APPROVAL_MAX_MS;
+  }
+
   receiveApprovalRequest(request: RucheEvent): void {
     if (request.type !== 'approval.request') throw new Error('RUCHE_EXPECTED_APPROVAL_REQUEST');
     const effectId = request.payload.effectId as string;
     if (this.approvals.has(effectId)) throw new Error('RUCHE_EFFECT_REPLAY');
+    if (!this.approvalRequestIsTimely(request)) throw new Error('RUCHE_INVALID_DEADLINE');
     this.journal.ingest(request);
     this.approvals.set(effectId, { request, consumed: false });
   }
@@ -148,7 +159,7 @@ export class RucheAuthority {
     if (!approval || approval.consumed || approval.response
       || approval.request.hash !== response.payload.requestHash
       || approval.request.payload.revision !== response.payload.revision
-      || (approval.request.payload.expiresAt as number) <= this.now()) {
+      || !this.approvalRequestIsTimely(approval.request)) {
       throw new Error('RUCHE_APPROVAL_INVALID');
     }
     this.journal.ingest(response);
@@ -162,7 +173,7 @@ export class RucheAuthority {
     const response = approval?.response;
     if (!approval || approval.consumed
       || approval.request.payload.revision !== revision
-      || (approval.request.payload.expiresAt as number) <= this.now()
+      || !this.approvalRequestIsTimely(approval.request)
       || !response || response.payload.approved !== true) {
       throw new Error('RUCHE_APPROVAL_REQUIRED');
     }

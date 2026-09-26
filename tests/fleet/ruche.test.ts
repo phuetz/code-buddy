@@ -16,7 +16,7 @@ function identity(): RucheIdentity {
   return { id: publicKeyId(publicKey), publicKey, privateKey: pair.privateKey };
 }
 
-function fixture() {
+function fixture(agentClockOffset = 0) {
   let now = 1_000_000;
   const a = identity();
   const b = identity();
@@ -29,7 +29,7 @@ function fixture() {
     [human.id, { publicKey: human.publicKey, role: 'humain' }],
   ]);
   const clock = () => now;
-  const ja = new RucheJournal(a, trust, clock);
+  const ja = new RucheJournal(a, trust, () => now + agentClockOffset);
   const jb = new RucheJournal(b, trust, clock);
   const jArbiter = new RucheJournal(arbiter, trust, clock);
   const jHuman = new RucheJournal(human, trust, clock);
@@ -183,6 +183,35 @@ describe('Ruche prototype', () => {
       .toThrow('RUCHE_INVALID_DEADLINE');
     expect(f.ja.append('approval.request', { ...payload, expiresAt: f.clock() + 300_000 }).type)
       .toBe('approval.request');
+  });
+
+  it('rejects a signed approval request whose agent clock extends the arbiter deadline', async () => {
+    const future = fixture(365 * 24 * 60 * 60 * 1000);
+    const revision = 'a'.repeat(40);
+    const effect = { action: 'publish', target: 'artifact' };
+    const request = future.ja.append('approval.request', {
+      effectId: 'future-clock', effect, revision,
+      expiresAt: future.clock() + 365 * 24 * 60 * 60 * 1000 + 300_000,
+    });
+    expect(() => future.authority.receiveApprovalRequest(request)).toThrow('RUCHE_INVALID_DEADLINE');
+    expect(future.jArbiter.head(future.a.id)).toBeUndefined();
+    // A journal written by an older version must remain unable to consume this request.
+    future.jArbiter.ingest(request);
+    const response = future.jHuman.append('approval.response', {
+      effectId: 'future-clock', revision, approved: true, requestHash: request.hash,
+    });
+    future.jArbiter.ingest(response);
+    const restored = new RucheAuthority(future.jArbiter, future.arbiter.id, future.clock);
+    const outbound = vi.fn(async () => 'sent');
+    await expect(restored.withApproval('future-clock', revision, effect, outbound))
+      .rejects.toThrow('RUCHE_APPROVAL_REQUIRED');
+    expect(outbound).not.toHaveBeenCalled();
+
+    const boundary = fixture(5_000);
+    const valid = boundary.ja.append('approval.request', {
+      effectId: 'bounded-clock', effect, revision, expiresAt: boundary.clock() + 300_000,
+    });
+    expect(() => boundary.authority.receiveApprovalRequest(valid)).not.toThrow();
   });
 
   it('does not run an outbound effect if approval consumption cannot be persisted', async () => {
