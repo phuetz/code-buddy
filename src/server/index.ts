@@ -1609,7 +1609,6 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               );
               const {
                 createCanonicalVoiceReplySpeaker,
-                speakCanonicalVoiceInitiative,
               } = await import('../conversation/voice-continuity.js');
               const conversationBridge = getCrossChannelConversationBridge();
               // Resolve activity on every turn. The voice process may start
@@ -1696,8 +1695,6 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 t: string,
                 context?: import('../sensory/voice-entrainment.js').VoiceTurnContext,
               ) => Promise<void> = reply;
-              let reminderShortcut: ((t: string) => boolean) | undefined;
-              // Narrower than reminderShortcut: only what may skip the address gate.
               let reminderGateBypass: ((t: string) => boolean) | undefined;
               let maisonShortcut: ((t: string) => boolean) | undefined;
               if (process.env.CODEBUDDY_REMINDERS === 'true') {
@@ -1705,12 +1702,6 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 const { sayNow } = await import('../sensory/voice-loop.js');
                 // Reminder phrases short-circuit the normal reply (the robot confirms instead
                 // of chatting). Only acks/snoozes/undos also bypass the silence gate.
-                reminderShortcut = (t: string) =>
-                  rem.matchAck(t, Date.now()) !== null ||
-                  rem.isSnoozeCommand(t, Date.now()) ||
-                  rem.isUndoCommand(t, Date.now()) ||
-                  rem.isReminderVoiceCommand(t) ||
-                  rem.parseVoiceReminder(t) !== null;
                 reminderGateBypass = (t: string) => rem.bypassesAddressGate(t, Date.now());
                 onHeard = async (t, context) => {
                   const sayCanonical = createCanonicalVoiceReplySpeaker(
@@ -1781,49 +1772,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 };
               }
 
-              // Event follow-ups (opt-in): when Patrice mentions a dated future event IN a real
-              // conversation with Lisa, capture it and confirm aloud so a mis-hear is corrected on
-              // the spot; the presence loop later asks how it went. Capture runs AFTER the reply and
-              // fire-and-forget so it never adds reply latency, and is skipped for reminder commands
-              // (those are handled above and would otherwise double as a "future event").
+              // A named phrase from the microphone cannot authenticate its speaker.
+              // Follow-up capture remains available to a future authenticated channel.
               if (process.env.CODEBUDDY_COMPANION_EVENT_FOLLOWUPS === 'true') {
-                const ef = await import('../companion/event-followups.js');
-                const { sayNow } = await import('../sensory/voice-loop.js');
-                const extractor = ef.makeLLMEventExtractor();
-                const inner = onHeard;
-                onHeard = async (t, context) => {
-                  // Start prospective extraction on its own cognitive lane while
-                  // the canonical response is generated and spoken. The result
-                  // may propose a later initiative, but never owns this turn's mouth.
-                  const capturePromise = reminderShortcut?.(t) || maisonShortcut?.(t)
-                    ? null
-                    : ef.captureEventFollowUp(t, Date.now(), { extractor })
-                        .then((captured) => ({ captured, error: undefined }))
-                        .catch((error: unknown) => ({ captured: null, error }));
-                  await inner(t, context);
-                  if (!capturePromise) return;
-                  void capturePromise
-                    .then(async ({ captured, error }) => {
-                      if (error) {
-                        logger.warn(
-                          `[event-followup] capture failed: ${
-                            error instanceof Error ? error.message : String(error)
-                          }`,
-                        );
-                        return;
-                      }
-                      if (captured) {
-                        const confirmation = ef.confirmationLine(captured, Date.now());
-                        await speakCanonicalVoiceInitiative(
-                          confirmation,
-                          (content) => sayNow(content, { phoneDelivery: 'never' }),
-                          conversationBridge,
-                        );
-                        logger.info(`[event-followup] captured "${captured.event}" → due ${new Date(captured.dueAt).toISOString()}`);
-                      }
-                    });
-                };
-                logger.info('Event follow-ups: Enabled (CODEBUDDY_COMPANION_EVENT_FOLLOWUPS) — capture dated events from conversation, ask how they went');
+                logger.warn('Event follow-ups: microphone capture suspended until owner identity is authenticated');
               }
 
               const wireOpts: Parameters<typeof wireSpeechReaction>[0] = {

@@ -5,9 +5,7 @@
  *
  * Mined from MySoulmate's `proactiveMessageService` followUp trigger + `autoMemoryService`
  * event capture, adapted to an always-on mic with two deliberate guards:
- *   - **capture only on addressed/engaged turns** (the caller wires this on `onHeard`, which only
- *     fires when the respond gate said yes) — NOT on every ambient/mistranscribed utterance, so
- *     Lisa never follows up on something she overheard from the TV;
+ *   - capture requires an explicit named vocative address, beyond the response gate;
  *   - **confirm at capture** (the caller speaks `confirmationLine()` right after) so a mis-heard
  *     capture is corrected immediately instead of ambushing Patrice days later.
  *
@@ -22,6 +20,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { logger } from '../utils/logger.js';
+import type { CompanionIdentity } from './companion-identity.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export interface EventFollowUp {
@@ -43,7 +42,8 @@ export interface EventCandidate {
   event: string;
   /** Epoch ms of the start of the event's day. */
   eventDayAt: number;
-  followUp: string;
+  /** Untrusted model text. Never persisted or spoken. */
+  followUp?: string;
 }
 
 /** Pluggable extraction of a future event from an utterance. Default: an LLM (see below). */
@@ -65,6 +65,26 @@ export function hasFutureCue(text: string): boolean {
   return /\b(demain|apr[eè]s-?demain|ce soir|cet apr[eè]s-midi|tout à l'heure|la semaine prochaine|le week-?end|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|dans\s+\d+\s*(?:min|minutes?|heures?|h|jours?|semaines?)|à\s*\d{1,2}\s*h|le\s+\d{1,2}\b)/i.test(
     text ?? '',
   );
+}
+
+/** A greeting or an engaged window is not evidence of a named request. */
+export function isExplicitNamedAddress(text: string, name: string): boolean {
+  const escaped = name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (!escaped) return false;
+  return new RegExp(`^(?:(?:bonjour|salut|hello|hey)\\s+)?${escaped}\\s*[,!?:]`, 'iu').test(text.trim());
+}
+
+function safeEventLabel(value: string): string {
+  const label = value.trim().replace(/\s+/g, ' ');
+  if (!label || label.length > 72 || !/^[\p{L}\p{N} '’-]+$/u.test(label) ||
+      /\b(?:ignore|oublie|instructions?|prompt|system|followup|envoie|publie|repete|ecris|supprime)\b/iu.test(label)) {
+    throw new Error('Untrusted event label');
+  }
+  return label;
+}
+
+function fixedFollowUp(event: string): string {
+  return `Alors, comment s'est passé ${event} ?`;
 }
 
 // ── store ─────────────────────────────────────────────────────────────
@@ -95,7 +115,12 @@ export function loadEventFollowUps(statePath = defaultStatePath()): EventFollowU
     mode: 0o600,
     isValid: (value): value is unknown[] => Array.isArray(value),
   });
-  return parsed.filter(isEventFollowUp);
+  return parsed.filter(isEventFollowUp).flatMap((item) => {
+    try {
+      const event = safeEventLabel(item.event);
+      return [{ ...item, event, followUp: fixedFollowUp(event) }];
+    } catch { return []; }
+  });
 }
 
 export function saveEventFollowUps(items: EventFollowUp[], statePath = defaultStatePath()): boolean {
@@ -112,6 +137,7 @@ export function saveEventFollowUps(items: EventFollowUp[], statePath = defaultSt
 
 /** Add a captured event to the store, returning the persisted follow-up. */
 export function addFollowUp(candidate: EventCandidate, nowMs: number, statePath = defaultStatePath()): EventFollowUp {
+  const event = safeEventLabel(candidate.event);
   const items = loadEventFollowUps(statePath);
   if (process.env.CODEBUDDY_LISA_PULSE === 'true') {
     const { localDate } = resolveFollowUpDate(nowMs);
@@ -120,10 +146,10 @@ export function addFollowUp(candidate: EventCandidate, nowMs: number, statePath 
   }
   const followUp: EventFollowUp = {
     id: randomBytes(6).toString('hex'),
-    event: candidate.event,
+    event,
     eventDayAt: candidate.eventDayAt,
     dueAt: candidate.eventDayAt + DAY_MS, // ask the day AFTER the event
-    followUp: candidate.followUp,
+    followUp: fixedFollowUp(event),
     createdAt: nowMs,
   };
   items.push(followUp);
@@ -215,10 +241,12 @@ export function confirmationLine(followUp: EventFollowUp, nowMs: number): string
 export async function captureEventFollowUp(
   text: string,
   nowMs: number,
-  opts: { extractor: EventExtractor; statePath?: string },
+  opts: { extractor: EventExtractor; statePath?: string; explicitAddress: boolean; identity?: CompanionIdentity },
 ): Promise<EventFollowUp | null> {
   try {
-    if (!hasFutureCue(text)) return null;
+    const identity = opts.identity;
+    if (!opts.explicitAddress || identity?.role !== 'owner' || identity.confidence !== 'high' ||
+        (identity.channel !== 'telegram' && identity.channel !== 'pwa') || !hasFutureCue(text)) return null;
     const candidate = await opts.extractor(text, nowMs);
     if (!candidate || !candidate.event?.trim() || !Number.isFinite(candidate.eventDayAt)) return null;
     const eventDay = startOfDay(candidate.eventDayAt);
@@ -252,7 +280,7 @@ export function makeLLMEventExtractor(): EventExtractor {
     const sys =
       "Tu extrais UN événement FUTUR daté mentionné par l'utilisateur, pour qu'un assistant puisse lui " +
       'redemander APRÈS comment ça s\'est passé. Réponds STRICTEMENT en JSON, rien d\'autre : ' +
-      '{"event": "libellé court", "whenISO": "YYYY-MM-DD", "followUp": "question courte en français"} ' +
+      '{"event": "libellé court", "whenISO": "YYYY-MM-DD"} ' +
       's\'il y a un événement futur avec une date/jour identifiable ; sinon {"event": null}. ' +
       `Aujourd'hui = ${weekday} ${todayISO}. Résous les dates relatives (demain, jeudi, la semaine prochaine) par rapport à ça.`;
     const resp = await client.chat(
@@ -265,7 +293,7 @@ export function makeLLMEventExtractor(): EventExtractor {
     const raw = (resp?.choices?.[0]?.message?.content ?? '').trim();
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return null;
-    let parsed: { event?: string | null; whenISO?: string; followUp?: string };
+    let parsed: { event?: string | null; whenISO?: string };
     try {
       parsed = JSON.parse(match[0]);
     } catch {
@@ -278,7 +306,6 @@ export function makeLLMEventExtractor(): EventExtractor {
     return {
       event,
       eventDayAt: when.getTime(),
-      followUp: (parsed.followUp?.trim() || `Alors, comment s'est passé ${event} ?`),
     };
   };
 }
