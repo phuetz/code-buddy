@@ -24,3 +24,5 @@ Dans les contextes injectés, la date, l'âge, la machine, le canal et la preuve
 Les vues `/memory list`, `/memory recent`, `/memory recall` et `/memory archived` affichent cette attribution en mode actif. Le temps relatif de `recent` est nommé « stored » : il décrit la mise à jour du fichier et ne remplace pas la date du constat. Les résultats du second index sémantique, qui ne portent pas cette provenance, sont explicitement signalés comme non attribués.
 
 Le mode attribué écrit directement les nouveaux souvenirs au lieu de les confier à la réconciliation par modèle, qui pourrait fusionner deux affirmations et mélanger leurs sources. Les lecteurs de fournisseurs distants ne disposent pas de ce format local.
+
+Les champs de source hérités restent des données non fiables : le rendu retire les motifs d'instruction ou d'exfiltration et neutralise les chevrons, sans effacer le souvenir stocké.

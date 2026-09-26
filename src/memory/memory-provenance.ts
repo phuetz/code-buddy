@@ -33,6 +33,17 @@ export function normalizeProvenance(input?: MemoryProvenance): MemoryProvenance 
   };
 }
 
+function safePromptField(value?: string): string | undefined {
+  if (!value) return undefined;
+  // Imported legacy metadata may bypass today's write guard. Treat it as data
+  // and omit common instruction/exfiltration payloads from prompt rendering.
+  if (/\b(ignore|override|bypass|discard)\b.{0,80}\b(system|developer|previous|prior|above)\b.{0,80}\b(instructions?|prompt|rules?)\b/i.test(value)
+    || /\b(exfiltrate|steal|leak|send|upload|post)\b.{0,100}\b(api[-_ ]?key|token|secret|password|credential|private key)\b/i.test(value)) {
+    return undefined;
+  }
+  return value.replaceAll('<', '‹').replaceAll('>', '›');
+}
+
 export function formatProvenance(
   kind: MemoryKind,
   provenance: MemoryProvenance | undefined,
@@ -45,7 +56,14 @@ export function formatProvenance(
     hypothesis: 'hypothèse',
     report: 'ancien compte rendu',
   };
-  const source = normalizeProvenance(provenance);
+  const normalized = normalizeProvenance(provenance);
+  const source: MemoryProvenance = {
+    ...normalized,
+    machine: safePromptField(normalized.machine),
+    channel: safePromptField(normalized.channel),
+    verification: safePromptField(normalized.verification),
+    source: safePromptField(normalized.source),
+  };
   const observed = source.observedAt ? new Date(source.observedAt).getTime() : NaN;
   const ageDays = Number.isFinite(observed) && observed <= now.getTime()
     ? Math.floor((now.getTime() - observed) / 86_400_000) : null;
