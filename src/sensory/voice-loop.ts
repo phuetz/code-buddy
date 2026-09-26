@@ -1906,17 +1906,9 @@ export async function defaultReply(
   replyOpts?: VoiceStepOptions
 ): Promise<string> {
   if (process.env.CODEBUDDY_LISA_JOURNAL === 'true') {
-    const { isLisaJournalQuestion, summarizeLisaDay, hasLisaOwnerPresence } = await import('../companion/lisa-journal.js');
+    const { isLisaJournalQuestion } = await import('../companion/lisa-journal.js');
     if (isLisaJournalQuestion(heard)) {
-      try {
-        const { readPresenceContext } = await import('../memory/presence-injector.js');
-        const named = /\blisa\b/i.test(heard) && await resolveVoiceRobotNamed(heard, replyOpts);
-        const present = hasLisaOwnerPresence(await readPresenceContext());
-        if (named && present) return summarizeLisaDay();
-      } catch {
-        // A broken identity sensor must never expose the journal.
-      }
-      return 'Je ne peux pas lire le journal sans identité propriétaire confirmée et sans être appelée par mon nom.';
+      return 'Cette demande nécessite un canal privé authentifié.';
     }
   }
   const fast = fastCompanionReply(heard);
