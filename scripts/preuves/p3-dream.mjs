@@ -6,8 +6,8 @@ import { waitForDreamPromotion } from './p3-promotion.mjs';
 
 const root = process.env.P3_REPO_ROOT;
 if (!root) throw new Error('P3_REPO_ROOT is required');
-const cwd = path.join(root, '.qa-p3/dream-project');
-const home = path.join(root, '.qa-p3/home');
+const cwd = path.join(root, '_qa/p3/dream-project');
+const home = path.join(root, '_qa/p3/home');
 async function freePort() {
   const server = net.createServer();
   await new Promise((resolve, reject) => server.listen(0, '127.0.0.1', resolve).once('error', reject));
@@ -49,7 +49,7 @@ while (Date.now() < deadline) {
   await new Promise((resolve) => setTimeout(resolve, 200));
 }
 if (!health) throw new Error(`server health did not become ready: ${serverOutput.slice(-1200)}`);
-const daemon = spawn(path.join(root, 'buddy-sense/target/debug/buddy-sense'), [path.join(root, '.qa-p3/speech.wav')], {
+const daemon = spawn(path.join(root, 'buddy-sense/target/debug/buddy-sense'), [path.join(root, '_qa/p3/speech.wav')], {
   cwd: path.join(root, 'buddy-sense'),
   env: { ...env, BUDDY_SENSE_BRIDGE_URL: `ws://127.0.0.1:${bridgePort}`, BUDDY_SENSE_TOKEN: token, BUDDY_SENSE_HEARTBEAT_MS: '40' },
   stdio: ['ignore', 'pipe', 'pipe'],

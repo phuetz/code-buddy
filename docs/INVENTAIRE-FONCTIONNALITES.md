@@ -64,11 +64,11 @@ Les autres totaux précédemment affichés (lignes de code, variables d’enviro
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
 | Verifier indépendant | Un agent séparé juge le travail | 🧪 `VerifierAgent.execute` avec `llmCall` et `executeTool` injectés ; l’oracle `node --test` a tourné, mais registre et exécuteur de production non exercés. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
-| Porte de preuves sur les buts | Un résultat sans preuve est rétrogradé | ⛔ Non exercée par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
-| `buddy loop` | Plan, exécution, vérification et jugement | ⛔ Non exercé par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
-| Porte de revue de diff | Refus d’écritures non revues | ⛔ Non exercée par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
-| Espace de travail fantôme | Validation dans un clone avant écriture | ⛔ Non exercé par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
-| Registre d’intentions | Spécifications falsifiables et détection de dérive | ⛔ Non exercé par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Porte de preuves sur les buts | Un résultat sans preuve est rétrogradé | ⛔ Non rejouée par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| `buddy loop` | Plan, exécution, vérification et jugement | ⛔ Non rejoué par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Porte de revue de diff | Refus d’écritures non revues | ⛔ Non rejouée par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Espace de travail fantôme | Validation dans un clone avant écriture | ⛔ Non rejoué par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
+| Registre d’intentions | Spécifications falsifiables et détection de dérive | ⛔ Non rejoué par P1–P4. [P2](preuves/p2.md) — 2026-09-25, commit `98e2cb0c2` |
 
 ## 4. Plusieurs cerveaux
 
@@ -99,9 +99,9 @@ Quatre surfaces apprenables. L’invariant « jamais `src/` » n’est pas reval
 |---|---|---|
 | Système nerveux (Rust) | Canaux sensoriels, thalamus et diffusion | ✅ 42 tests Rust puis 6 événements réels via WAV fixture et pont loopback en 932 ms. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 | Yeux (Python/MediaPipe) | Détecteurs à états | ⛔ Aucun parcours caméra/MediaPipe exercé. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
-| Voix | Parole, transcription, réponse parlée et interruption | ⛔ Microphone, voix et transcription réelle non exercés. Le WAV de recette ne prouve pas ce parcours. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Voix | Parole, transcription, réponse parlée et interruption | ⛔ Microphone, voix et transcription réelle non rejoués dans P3. Le WAV de recette ne prouve pas ce parcours. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 | Rêve | Consolidation du tampon court terme et promotion du saillant | ✅ 23 percepts et `dream:recent` observés lors du rejeu cité ; le harnais attend désormais la promotion avant d’arrêter le serveur. Les tailles de fichiers varient. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
-| Rappels | Annonce vocale/Telegram et acquittement vocal | ⛔ Non exercés par P1–P4. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
+| Rappels | Annonce vocale/Telegram et acquittement vocal | ⛔ Non rejoués par P1–P4. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 | Règles sensorielles | Refus d’actions dangereuses et exécution d’actions autorisées | ✅ `rm -rf /` refusé ; action locale autorisée exécutée et auditée. [P3](preuves/p3.md) — 2026-09-25, commit `6715ab53d` |
 
 ## 7. Médias

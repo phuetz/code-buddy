@@ -3,15 +3,15 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = process.cwd();
-const rulesFile = path.join(root, '.qa-p3/sensory-rules.json');
+const rulesFile = path.join(root, '_qa/p3/sensory-rules.json');
 process.env.CODEBUDDY_SENSORY_RULES_FILE = rulesFile;
-process.env.CODEBUDDY_RULE_RUNS_FILE = path.join(root, '.qa-p3/rule-runs.jsonl');
+process.env.CODEBUDDY_RULE_RUNS_FILE = path.join(root, '_qa/p3/rule-runs.jsonl');
 await fs.rm(process.env.CODEBUDDY_RULE_RUNS_FILE, { force: true });
-await fs.rm(path.join(root, '.qa-p3/rules-action.txt'), { force: true });
+await fs.rm(path.join(root, '_qa/p3/rules-action.txt'), { force: true });
 const { getGlobalEventBus } = await import(pathToFileURL(`${root}/src/events/event-bus.ts`));
 const { wireSensoryRules, readRuleRuns } = await import(pathToFileURL(`${root}/src/sensory/sensory-rules-engine.ts`));
 const stop = wireSensoryRules({
-  rules: [{ id: 'p3-local-action', match: { modality: 'vision', kind: 'person_entered' }, action: { type: 'shell', command: 'printf triggered > .qa-p3/rules-action.txt' } }],
+  rules: [{ id: 'p3-local-action', match: { modality: 'vision', kind: 'person_entered' }, action: { type: 'shell', command: 'printf triggered > _qa/p3/rules-action.txt' } }],
 });
 getGlobalEventBus().emit('sensory:perception', {
   id: 'p3-rule-event', type: 'sensory:perception', source: 'p3-local-fixture', timestamp: Date.now(),
@@ -24,6 +24,6 @@ for (let i = 0; i < 50; i += 1) {
   if (runs.some((run) => run.rule === 'p3-local-action')) break;
 }
 stop();
-const action = await fs.readFile(path.join(root, '.qa-p3/rules-action.txt'), 'utf8').catch(() => '');
+const action = await fs.readFile(path.join(root, '_qa/p3/rules-action.txt'), 'utf8').catch(() => '');
 console.log(JSON.stringify({ auditEntries: runs.length, lastRun: runs.find((run) => run.rule === 'p3-local-action') ?? null, actionBytes: Buffer.byteLength(action), actionOutput: action }, null, 2));
 if (!runs.some((run) => run.rule === 'p3-local-action' && run.ok) || action !== 'triggered') process.exitCode = 1;

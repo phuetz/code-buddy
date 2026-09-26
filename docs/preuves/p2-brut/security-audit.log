@@ -1,8 +1,8 @@
 {
-  "profileDir": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
-  "projectDir": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
-  "effectiveProfileDir": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
-  "effectiveProjectDir": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
+  "profileDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
+  "projectDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
+  "effectiveProfileDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
+  "effectiveProjectDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
   "limitations": [
     "Remote MCP hostnames are not resolved. A passed URL is not a guarantee that DNS stays off private networks.",
     "MCP server checks follow the runtime loader: project mcp.json (mcpServers or servers), project settings.json mcpServers, and profile mcp.json. Project settings.local.json and profile settings.json are not runtime MCP server sources.",

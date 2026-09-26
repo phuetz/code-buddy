@@ -17,7 +17,7 @@ Arguments:
 
 Options:
   -V, --version                            output the version number
-  -d, --directory <dir>                    set working directory (default: "/data/patrice/DEV/cb-preuves-p4-2026-09-25")
+  -d, --directory <dir>                    set working directory (default: "<racine>/DEV/cb-preuves-p4-2026-09-25")
   -k, --api-key <key>                      CodeBuddy API key (or set GROK_API_KEY env var)
   -u, --base-url <url>                     CodeBuddy API base URL (or set GROK_BASE_URL env var)
   -m, --model <model>                      AI model to use (e.g., grok-code-fast-1, grok-4-latest) (or set GROK_MODEL env var)
@@ -88,7 +88,7 @@ Commands:
   ws                                       Manage and search the opt-in multi-repository workspace
   provider                                 Manage AI providers (Claude, ChatGPT, Grok, Gemini)
   mcp                                      Manage MCP servers or expose Code Buddy with `buddy mcp serve`
-  campaign                                 Native editorial, book-promotion and PubCommander campaign workspace
+  campaign                                 Native editorial and book-promotion campaign workspace
   influencer                               Influencer & book-trailer media pipeline (scripts/influencer)
   maison                                   Household rhythm, holidays, quiet modes and private meal safety
   pipeline                                 Manage and run pipeline workflows

@@ -1,4 +1,4 @@
-RUN_DIR=/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6
+RUN_DIR=<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6
 DATE=2026-09-25T17:01:09Z
 
 === verifier ===
@@ -22,7 +22,7 @@ COMMAND=npx --no-install tsx scripts/preuves/p2.ts verifier
 MEASURE label=verifier duration_ms=12637 bytes=642 exit=0
 
 === lessons ===
-COMMAND=npx --no-install tsx src/index.ts improve cycle --json 
+COMMAND=npx --no-install tsx src/index.ts improve cycle --json
 {
   "schemaVersion": 1,
   "kind": "self_improvement_cycle",
@@ -214,7 +214,7 @@ COMMAND=npx --no-install tsx src/index.ts improve cycle --json
 MEASURE label=lessons duration_ms=462 bytes=4497 exit=0
 
 === lessons-apply ===
-COMMAND=npx --no-install tsx src/index.ts improve cycle --apply --no-commit --json 
+COMMAND=npx --no-install tsx src/index.ts improve cycle --apply --no-commit --json
 {
   "schemaVersion": 1,
   "kind": "self_improvement_cycle",
@@ -408,7 +408,7 @@ COMMAND=npx --no-install tsx src/index.ts improve cycle --apply --no-commit --js
 MEASURE label=lessons-apply duration_ms=407 bytes=4543 exit=0
 
 === tools ===
-COMMAND=npx --no-install tsx src/index.ts improve tools --scenario slugify --apply --json 
+COMMAND=npx --no-install tsx src/index.ts improve tools --scenario slugify --apply --json
 {
   "kind": "self_improvement_tools",
   "cycles": [
@@ -478,7 +478,7 @@ COMMAND=npx --no-install tsx scripts/preuves/p2.ts tool-authoring
 MEASURE label=tool-authoring duration_ms=3620 bytes=673 exit=0
 
 === skills ===
-COMMAND=env OLLAMA_MODEL=qwen3:4b-instruct npx --no-install tsx src/index.ts improve skills --scenario git-bisect --apply --json 
+COMMAND=env OLLAMA_MODEL=qwen3:4b-instruct npx --no-install tsx src/index.ts improve skills --scenario git-bisect --apply --json
 {
   "kind": "self_improvement_skills",
   "cycles": [
@@ -550,7 +550,7 @@ COMMAND=npx --no-install tsx scripts/preuves/p2.ts skill-authoring
       "createdSkills": [
         "authored-p2-bisect"
       ],
-      "path": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/work/.codebuddy/skills/authored-p2-bisect/SKILL.md"
+      "path": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/work/.codebuddy/skills/authored-p2-bisect/SKILL.md"
     }
   },
   "registered": true,
@@ -559,7 +559,7 @@ COMMAND=npx --no-install tsx scripts/preuves/p2.ts skill-authoring
 MEASURE label=skill-authoring duration_ms=17080 bytes=1308 exit=0
 
 === strategies ===
-COMMAND=npx --no-install tsx src/index.ts improve strategies --scope headless --experiences experiences.jsonl --json 
+COMMAND=npx --no-install tsx src/index.ts improve strategies --scope headless --experiences experiences.jsonl --json
 {
   "kind": "self_improvement_strategies",
   "cycle": {
@@ -627,7 +627,7 @@ COMMAND=npx --no-install tsx src/index.ts improve strategies --scope headless --
 MEASURE label=strategies duration_ms=553 bytes=1806 exit=0
 
 === strategies-apply ===
-COMMAND=npx --no-install tsx src/index.ts improve strategies --scope headless --experiences experiences.jsonl --apply --json 
+COMMAND=npx --no-install tsx src/index.ts improve strategies --scope headless --experiences experiences.jsonl --apply --json
 {
   "kind": "self_improvement_strategies",
   "cycle": {
@@ -696,7 +696,7 @@ COMMAND=npx --no-install tsx src/index.ts improve strategies --scope headless --
 MEASURE label=strategies-apply duration_ms=519 bytes=1837 exit=0
 
 === skill-firewall ===
-COMMAND=npx --no-install tsx src/index.ts skills import --dir /data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/skills --json 
+COMMAND=npx --no-install tsx src/index.ts skills import --dir <racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/skills --json
 {
   "source": "skills",
   "report": {
@@ -738,7 +738,7 @@ COMMAND=npx --no-install tsx scripts/preuves/p2.ts secret-guard
 {
   "result": {
     "success": true,
-    "output": "Found 1 potential secret(s):\n\n## CRITICAL (1)\n  /data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/secret-fixture.txt:1:12 [openai_key]\n    Match: sk-A***\n    OpenAI API key detected\n    Suggestion: Use environment variable OPENAI_API_KEY\n"
+    "output": "Found 1 potential secret(s):\n\n## CRITICAL (1)\n  <racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/secret-fixture.txt:1:12 [openai_key]\n    Match: sk-A***\n    OpenAI API key detected\n    Suggestion: Use environment variable OPENAI_API_KEY\n"
   },
   "rawValueExposed": false
 }
@@ -860,12 +860,12 @@ COMMAND=npx --no-install tsx scripts/preuves/p2.ts transcript-resume-cli
 MEASURE label=transcript-resume-cli duration_ms=11081 bytes=1695 exit=0
 
 === security-audit ===
-COMMAND=npx --no-install tsx src/index.ts security audit --profile-dir /data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile --project /data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project --json 
+COMMAND=npx --no-install tsx src/index.ts security audit --profile-dir <racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile --project <racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project --json
 {
-  "profileDir": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
-  "projectDir": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
-  "effectiveProfileDir": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
-  "effectiveProjectDir": "/data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
+  "profileDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
+  "projectDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
+  "effectiveProfileDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
+  "effectiveProjectDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
   "limitations": [
     "Remote MCP hostnames are not resolved. A passed URL is not a guarantee that DNS stays off private networks.",
     "MCP server checks follow the runtime loader: project mcp.json (mcpServers or servers), project settings.json mcpServers, and profile mcp.json. Project settings.local.json and profile settings.json are not runtime MCP server sources.",
@@ -925,5 +925,5 @@ CHECK transcript-resume-cli: PASS
 CHECK security-audit: PASS
 CHECK total: 18 surfaces/executions validated
 
-Résultats bruts : /data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/logs
-Mesures : /data/patrice/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/measure.csv
+Résultats bruts : <racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/logs
+Mesures : <racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/measure.csv
