@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { parseExperimentFiche, selectExperimentLane } from '../../../../src/agent/self-improvement/evolution/experiment-fiche.js';
-import { completeFiche } from './experiment-fixture.js';
+import { parseExperimentFiche, parseProposalFicheInput, selectExperimentLane } from '../../../../src/agent/self-improvement/evolution/experiment-fiche.js';
+import { completeFiche, usageBrief } from './experiment-fixture.js';
 
 describe('DGM experiment fiche', () => {
+  it('accepts an observed-first usage brief but refuses one without evidence or thresholds', () => {
+    expect(parseProposalFicheInput(usageBrief).lane).toBe('usage');
+    expect(() => parseExperimentFiche(usageBrief)).toThrow();
+    expect(() => parseProposalFicheInput({ ...usageBrief, problem: { statement: 'Unproven failure' } })).toThrow();
+    expect(() => parseProposalFicheInput({ ...usageBrief, acceptance: undefined })).toThrow();
+  });
   it('accepts a complete typed fiche and rejects each missing required section', () => {
     expect(parseExperimentFiche(completeFiche).feature.id).toBe('context-rag');
     for (const key of ['problem', 'research', 'feature', 'hypothesis', 'comparison', 'acceptance'] as const) {

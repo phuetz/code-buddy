@@ -14,3 +14,12 @@ export const completeFiche = {
   },
   acceptance: { minResult: 0.8, maxDurationMs: 120000, maxCostUsd: 0.2 },
 } as const;
+
+const { research: _article, ...observedProblem } = completeFiche;
+export const usageBrief = {
+  ...observedProblem,
+  comparison: {
+    currentMethod: completeFiche.comparison.currentMethod,
+    equalBudget: completeFiche.comparison.equalBudget,
+  },
+};

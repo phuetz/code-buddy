@@ -7,7 +7,7 @@ import { proposeResearchImprovement } from '../../../../src/agent/self-improveme
 import { registerEvolveCommands } from '../../../../src/commands/cli/evolve-command.js';
 import type { FeatureArea } from '../../../../src/agent/self-improvement/evolution/feature-map.js';
 import type { VariantRecord } from '../../../../src/agent/self-improvement/evolution/code-variant-store.js';
-import { completeFiche } from './experiment-fixture.js';
+import { completeFiche, usageBrief } from './experiment-fixture.js';
 import { CollectiveKnowledgeGraph } from '../../../../src/memory/collective-knowledge-graph.js';
 import { recordExperimentLesson } from '../../../../src/agent/self-improvement/evolution/experiment-lessons.js';
 import { parseExperimentFiche } from '../../../../src/agent/self-improvement/evolution/experiment-fiche.js';
@@ -54,6 +54,39 @@ afterEach(() => {
 });
 
 describe('evolve propose', () => {
+  it('starts from an observed failure, selects an article, and completes the strict fiche', async () => {
+    const root = project();
+    const recall = vi.fn(async () => [discovery]);
+    const result = await proposeResearchImprovement({ fiche: usageBrief, features, recall,
+      archiveRoot: path.join(root, 'proposals'),
+      chat: async (prompt) => prompt.includes('Réponds STRICTEMENT en JSON')
+        ? JSON.stringify({ approach: 'fresh', summary: 'Test the reranker', steps: [{ title: 'Compare', description: 'Run paired trials.' }] })
+        : 'Apply contextual reranking to the context benchmark.',
+    });
+    expect(result.status).toBe('planned');
+    if (result.status !== 'planned') return;
+    expect(result.record.fiche.research.articleId).toBe('arxiv:2605.01664');
+    expect(result.record.fiche.comparison.proposedMethod).toContain('contextual reranking');
+    expect(result.record.fiche.problem.evidence.reference).toBe('run-42/case-7');
+    expect(recall.mock.calls[0]?.[0]).toContain('context benchmark misses');
+  });
+
+  it('checks collective lessons after filling an observed-first brief', async () => {
+    const root = project();
+    const graph = new CollectiveKnowledgeGraph({ ledgerPath: path.join(root, 'ledger.jsonl'), persistentEmbeddingCache: false });
+    const goal = 'Apply contextual reranking to the context benchmark.';
+    recordExperimentLesson(graph, { experimentId: 'failed-usage', fiche: parseExperimentFiche({
+      ...completeFiche, research: { ...completeFiche.research, method: goal },
+      comparison: { ...completeFiche.comparison, proposedMethod: goal },
+    }), result: { status: 'failed', before: 0.7, after: 0.6, durationMs: 100, costUsd: 0, notes: [] },
+    provenance: { at: '2026-09-26T10:00:00.000Z', revision: 'abc', machine: 'qa', model: 'fixture', conditions: 'paired trials' } });
+    const result = await proposeResearchImprovement({ fiche: usageBrief, features, graph,
+      archiveRoot: path.join(root, 'proposals'), recall: async () => [discovery],
+      chat: async () => goal });
+    expect(result.status).toBe('stopped');
+    if (result.status === 'stopped') expect(result.reason).toBe('ALREADY_TRIED');
+    expect(readdirSync(root)).not.toContain('proposals');
+  });
   it('routes an observed failure to article recall and archives only an experiment', async () => {
     const root = project();
     const recall = vi.fn(async () => [discovery]);

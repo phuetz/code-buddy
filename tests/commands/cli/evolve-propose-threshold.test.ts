@@ -4,7 +4,7 @@ import { registerEvolveCommands } from '../../../src/commands/cli/evolve-command
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { completeFiche } from '../../agent/self-improvement/evolution/experiment-fixture.js';
+import { completeFiche, usageBrief } from '../../agent/self-improvement/evolution/experiment-fixture.js';
 
 const proposal = vi.hoisted(() => vi.fn(async (_options: { minSimilarity?: number }) => ({
   status: 'stopped' as const,
@@ -51,6 +51,13 @@ describe('evolve propose similarity threshold', () => {
   it('passes an explicit usage budget and lane', async () => {
     await propose(['--usage-share', '0.6', '--source', 'research']);
     expect(proposal.mock.calls[0]?.[0]).toMatchObject({ usageShare: 0.6, lane: 'research' });
+  });
+
+  it('accepts an observed-first usage brief for article search', async () => {
+    writeFileSync(ficheFile, JSON.stringify(usageBrief));
+    await propose([]);
+    expect(proposal).toHaveBeenCalledOnce();
+    expect(proposal.mock.calls[0]?.[0]).toMatchObject({ fiche: { lane: 'usage', problem: usageBrief.problem } });
   });
 
   it('refuses an incomplete input before invoking the proposal engine', async () => {

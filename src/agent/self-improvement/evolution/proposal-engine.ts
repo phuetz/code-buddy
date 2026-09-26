@@ -20,7 +20,8 @@ import {
 } from './research-weakness-source.js';
 import { upsertArticleLinks, type ArticleLink } from '../../../catalog/article-links.js';
 import type { CollectiveKnowledgeGraph } from '../../../memory/collective-knowledge-graph.js';
-import { parseExperimentFiche, selectExperimentLane, type ExperimentFiche, type ExperimentLane } from './experiment-fiche.js';
+import { parseExperimentFiche, parseProposalFicheInput, selectExperimentLane,
+  type ExperimentFiche, type ExperimentLane, type UsageBrief } from './experiment-fiche.js';
 import { hasTriedExperimentLesson } from './experiment-lessons.js';
 import { planVariant, type VariantPlan } from './variant-planner.js';
 import type { Weakness } from './evolution-engine.js';
@@ -154,10 +155,11 @@ function archiveProposal(root: string, record: ProposalRecord): string {
 /** No mutator, worktree, branch or baseline scorer is called; optional replay only reads the variant store. */
 export async function proposeResearchImprovement(options: ProposeOptions = {}): Promise<ProposalResult> {
   const events: ProposalEvent[] = [];
-  let fiche: ExperimentFiche;
-  try { fiche = parseExperimentFiche(options.fiche); }
+  let fiche: ExperimentFiche | UsageBrief;
+  try { fiche = parseProposalFicheInput(options.fiche); }
   catch (error) { return stop(events, 'source', 'FICHE_INCOMPLETE', error instanceof Error ? error.message : String(error)); }
   const root = options.archiveRoot ?? path.join(getCodeBuddyHome(), 'self-improvement', 'evolution', 'proposals');
+  const articleId = 'research' in fiche ? fiche.research.articleId : null;
   let lane: ExperimentLane;
   try {
     lane = options.lane && options.lane !== 'auto' ? options.lane
@@ -240,7 +242,7 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
   try { reviewed = persistLinks ? excludeHumanRejected(candidates, options.linksPath) : candidates; }
   catch (error) { return stop(events, 'archive', 'ARCHIVE_FAILED', `Article links: ${error instanceof Error ? error.message : String(error)}`); }
   const matches = selectMatches(reviewed.filter((candidate) =>
-    candidate.feature.id === fiche.feature.id && scholarlyIdentity(candidate.hit) === fiche.research.articleId),
+    candidate.feature.id === fiche.feature.id && (!articleId || scholarlyIdentity(candidate.hit) === articleId)),
     { minSimilarity: floor, limit: 1 });
   if (matches.length === 0) {
     if (selectMatches(reviewed, { minSimilarity: floor, limit: 1 }).length > 0) {
@@ -262,13 +264,15 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
     areaPath.endsWith('/') ? file.startsWith(areaPath) : file === areaPath))) {
     return stop(events, 'filter', 'FICHE_MISMATCH', 'Fiche files are outside the selected feature.');
   }
-  try {
-    const graph = options.graph ?? (await import('../../../memory/collective-knowledge-graph.js')).getCollectiveKnowledgeGraph();
-    if (hasTriedExperimentLesson(graph, fiche)) {
-      return stop(events, 'filter', 'ALREADY_TRIED', 'This article, feature and method already have an experiment lesson.');
+  if (articleId) {
+    try {
+      const graph = options.graph ?? (await import('../../../memory/collective-knowledge-graph.js')).getCollectiveKnowledgeGraph();
+      if (hasTriedExperimentLesson(graph, fiche)) {
+        return stop(events, 'filter', 'ALREADY_TRIED', 'This article, feature and method already have an experiment lesson.');
+      }
+    } catch (error) {
+      return stop(events, 'filter', 'LESSON_RECALL_ERROR', error instanceof Error ? error.message : String(error));
     }
-  } catch (error) {
-    return stop(events, 'filter', 'LESSON_RECALL_ERROR', error instanceof Error ? error.message : String(error));
   }
   events.push({ stage: 'filter', status: 'ok', code: 'WEAKNESS_SELECTED', detail: `Domain ${selected.feature.id}; article ${selected.hit.id ?? 'unknown'}; similarity ${selected.hit.similarity ?? 0}.` });
 
@@ -278,6 +282,25 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
   if (!rawGoal?.trim()) return stop(events, 'goal', 'GOAL_LLM_UNAVAILABLE', 'LLM did not return a goal response.');
   const goal = parseGoal(rawGoal);
   if (!goal) return stop(events, 'goal', 'GOAL_REJECTED', 'LLM returned no actionable goal.');
+  if (!articleId) {
+    try {
+      fiche = parseExperimentFiche({
+        ...fiche,
+        research: { articleId: scholarlyIdentity(selected.hit), method: goal },
+        comparison: { ...fiche.comparison, proposedMethod: goal },
+      });
+    } catch (error) {
+      return stop(events, 'filter', 'FICHE_INCOMPLETE', error instanceof Error ? error.message : String(error));
+    }
+    try {
+      const graph = options.graph ?? (await import('../../../memory/collective-knowledge-graph.js')).getCollectiveKnowledgeGraph();
+      if (hasTriedExperimentLesson(graph, fiche)) {
+        return stop(events, 'filter', 'ALREADY_TRIED', 'This article, feature and method already have an experiment lesson.');
+      }
+    } catch (error) {
+      return stop(events, 'filter', 'LESSON_RECALL_ERROR', error instanceof Error ? error.message : String(error));
+    }
+  }
   const weakness: Weakness = {
     id: selectedDream?.selection.weaknessId ?? `research-${selected.feature.id}`,
     kind: 'research', goal,
@@ -305,7 +328,8 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
 
   const id = `proposal-${randomUUID()}`;
   const record: ProposalRecord = {
-    id, createdAt: (options.now ?? (() => new Date()))().toISOString(), source: lane, fiche, weakness,
+    id, createdAt: (options.now ?? (() => new Date()))().toISOString(), source: lane,
+    fiche: parseExperimentFiche(fiche), weakness,
     feature: { id: selected.feature.id, name: selected.feature.name, catalogIds: selected.feature.catalogIds ?? [] },
     article: {
       ...(selected.hit.id ? { id: selected.hit.id } : {}),

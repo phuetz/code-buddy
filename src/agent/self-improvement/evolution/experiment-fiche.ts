@@ -49,6 +49,26 @@ export const EXPERIMENT_FICHE_SCHEMA = z.object({
 export type ExperimentFiche = z.infer<typeof EXPERIMENT_FICHE_SCHEMA>;
 export type ExperimentLane = ExperimentFiche['lane'];
 
+/** Usage starts with an observed failure. The selected paper and method complete the fiche. */
+export const USAGE_BRIEF_SCHEMA = z.object({
+  schemaVersion: z.literal(1),
+  lane: z.literal('usage'),
+  problem: EXPERIMENT_FICHE_SCHEMA.shape.problem,
+  feature: EXPERIMENT_FICHE_SCHEMA.shape.feature,
+  hypothesis: EXPERIMENT_FICHE_SCHEMA.shape.hypothesis,
+  comparison: z.object({
+    currentMethod: nonempty,
+    equalBudget: EXPERIMENT_FICHE_SCHEMA.shape.comparison.innerType().shape.equalBudget,
+  }).strict(),
+  acceptance: EXPERIMENT_FICHE_SCHEMA.shape.acceptance,
+}).strict();
+export type UsageBrief = z.infer<typeof USAGE_BRIEF_SCHEMA>;
+
+export function parseProposalFicheInput(input: unknown): ExperimentFiche | UsageBrief {
+  const complete = EXPERIMENT_FICHE_SCHEMA.safeParse(input);
+  return complete.success ? complete.data : USAGE_BRIEF_SCHEMA.parse(input);
+}
+
 export function parseExperimentFiche(input: unknown): ExperimentFiche {
   return EXPERIMENT_FICHE_SCHEMA.parse(input);
 }

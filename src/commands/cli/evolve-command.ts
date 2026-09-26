@@ -103,8 +103,8 @@ export function registerEvolveCommands(program: Command): void {
       }
       let fiche;
       try {
-        const { parseExperimentFiche } = await import('../../agent/self-improvement/evolution/experiment-fiche.js');
-        fiche = parseExperimentFiche(JSON.parse(readFileSync(options.ficheInput, 'utf8')));
+        const { parseProposalFicheInput } = await import('../../agent/self-improvement/evolution/experiment-fiche.js');
+        fiche = parseProposalFicheInput(JSON.parse(readFileSync(options.ficheInput, 'utf8')));
       } catch (error) {
         logger.error(`Invalid experiment fiche: ${error instanceof Error ? error.message : String(error)}`);
         process.exitCode = 2;
