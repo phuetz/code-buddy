@@ -5,6 +5,7 @@
  * Prevents concurrent writes to the same session from multiple processes.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -175,26 +176,54 @@ export class SessionLock {
 }
 
 /**
+ * The file lock accepts a second holder with its own PID, so it does not
+ * order sections of one process, and the first release unlinked the lock
+ * file under the others. Each path gets one in-process queue here; the file
+ * lock still guards against other processes. A section entered from inside a
+ * running section on the same path (same async chain) re-enters it without
+ * waiting; a continuation that outlives its section waits like any caller.
+ */
+interface HeldSection { key: string; active: boolean }
+const heldSections = new AsyncLocalStorage<readonly HeldSection[]>();
+const inProcessTails = new Map<string, Promise<void>>();
+
+/**
  * Execute a function with a session lock held.
- * Throws if the lock cannot be acquired.
+ * Sections on one path run one at a time in this process; another process
+ * holding the lock makes this throw.
  */
 export async function withSessionLock<T>(
   sessionFilePath: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const lock = new SessionLock(sessionFilePath);
+  const key = path.resolve(sessionFilePath);
+  const held = heldSections.getStore() ?? [];
+  if (held.some((section) => section.key === key && section.active)) return fn();
 
-  if (!lock.acquire()) {
-    const holder = lock.getLockHolder();
-    throw new Error(
-      `Session file is locked by PID ${holder?.pid ?? 'unknown'}. ` +
-      `If this is stale, delete ${sessionFilePath}.lock`
-    );
-  }
-
+  const previous = inProcessTails.get(key) ?? Promise.resolve();
+  let endTurn!: () => void;
+  const turn = new Promise<void>((resolve) => { endTurn = resolve; });
+  const tail = previous.then(() => turn);
+  inProcessTails.set(key, tail);
+  await previous;
+  const section: HeldSection = { key, active: true };
   try {
-    return await fn();
+    const lock = new SessionLock(sessionFilePath);
+    if (!lock.acquire()) {
+      const holder = lock.getLockHolder();
+      throw new Error(
+        `Session file is locked by PID ${holder?.pid ?? 'unknown'}. ` +
+        `If this is stale, delete ${sessionFilePath}.lock`
+      );
+    }
+    try {
+      return await heldSections.run([...held, section], fn);
+    } finally {
+      lock.release();
+    }
   } finally {
-    lock.release();
+    section.active = false;
+    endTurn();
+    if (inProcessTails.get(key) === tail) inProcessTails.delete(key);
   }
 }

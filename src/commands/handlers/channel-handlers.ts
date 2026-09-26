@@ -18,6 +18,8 @@ import {
 } from '../../conversation/argument-obligations.js';
 import { shouldRunSemanticResponseGate } from '../../conversation/semantic-response-gate.js';
 import type { ConversationTurn } from '../../conversation/types.js';
+import type { MessagingArchiveSealer, MessagingSessionResetPolicy } from '../../channels/messaging-session-reset.js';
+import type { SessionFileCopy } from '../../persistence/session-store.js';
 import {
   MODEL_NAME_PATTERN,
   clearSessionModelOverride,
@@ -646,7 +648,9 @@ export function __resetChannelAIHandlerForTests(): void {
   channelTurnTails.clear();
   channelBotPersonas.clear();
   companionChannelHistories.clear();
+  companionChannelActivityAt.clear();
   recentLisaSelfieSessions.clear();
+  beforeMessagingResetStepForTests.clear();
   __resetSessionModelOverridesForTests();
 }
 
@@ -673,6 +677,93 @@ interface CachedChannelAgent {
 const channelAgentCache = new Map<string, CachedChannelAgent>();
 const channelTurnTails = new Map<string, Promise<void>>();
 const companionChannelHistories = new Map<string, ConversationTurn[]>();
+/** Epoch ms of the latest local-map turn. Selfie-only chats have no other clock. */
+const companionChannelActivityAt = new Map<string, number>();
+
+/** Test-only view of the handler-local companion history. */
+export function __companionChannelHistoriesForTests(): ReadonlyMap<string, ConversationTurn[]> {
+  return companionChannelHistories;
+}
+
+/** Test-only: backdate the local map so an idle reset can be decided without waiting. */
+export function __ageLocalCompanionHistoryForTests(sessionKey: string, at: number): boolean {
+  if (!companionChannelHistories.has(sessionKey) || !Number.isFinite(at)) return false;
+  companionChannelActivityAt.set(sessionKey, at);
+  return true;
+}
+
+/** Test-only: backdate a cached agent so an idle reset can be decided without waiting. */
+export function __ageChannelAgentForTests(sessionKey: string, lastUsed: number): boolean {
+  const cached = channelAgentCache.get(sessionKey);
+  if (!cached) return false;
+  cached.lastUsed = lastUsed;
+  return true;
+}
+
+/**
+ * Test-only. Puts an object with the agent's history reader in the cache, so a
+ * reset archives what a cached agent holds. Production code never calls this.
+ */
+export function __seedChannelAgentForTests(
+  sessionKey: string,
+  agent: Pick<import('../../agent/codebuddy-agent.js').CodeBuddyAgent, 'getChatHistory' | 'dispose'>,
+  lastUsed: number,
+): void {
+  channelAgentCache.set(sessionKey, {
+    agent: agent as import('../../agent/codebuddy-agent.js').CodeBuddyAgent,
+    lastUsed,
+    runtimeIdentity: 'test',
+  });
+}
+
+/**
+ * Test-only. Seeds the handler-local map so an idle reset can be required
+ * without an agent. Production resets do not call this.
+ */
+export function __seedLocalCompanionHistoryForTests(sessionKey: string, content: string, at: number): void {
+  companionChannelHistories.set(sessionKey, [{ role: 'user', content }]);
+  companionChannelActivityAt.set(sessionKey, at);
+}
+
+/**
+ * Points of a messaging reset where a test may act. `erase` is the start of
+ * the erase callback; every other step is followed by a fresh read of the
+ * reset policy, then by the write or erase it names. `session-save` runs
+ * inside the session lock, before the file is read again and emptied.
+ */
+export type MessagingResetStep =
+  | 'archive'
+  | 'erase'
+  | 'companion-clear'
+  | 'companion-rename'
+  | 'session-save'
+  | 'index-purge'
+  | 'session-rename'
+  | 'memory-evict';
+
+const beforeMessagingResetStepForTests = new Map<MessagingResetStep, () => void>();
+
+/** Test-only. Runs once, at the given step, then clears itself. */
+export function __beforeMessagingResetStepForTests(step: MessagingResetStep, hook?: () => void): void {
+  if (hook) beforeMessagingResetStepForTests.set(step, hook);
+  else beforeMessagingResetStepForTests.delete(step);
+}
+
+/** Test-only. Runs once, at the start of the erase callback, then clears itself. */
+export function __beforeMessagingResetEraseForTests(hook?: () => void): void {
+  __beforeMessagingResetStepForTests('erase', hook);
+}
+
+function runMessagingResetStepHookForTests(step: MessagingResetStep): void {
+  const hook = beforeMessagingResetStepForTests.get(step);
+  beforeMessagingResetStepForTests.delete(step);
+  hook?.();
+}
+
+/** Test-only entry to the same reset the inbound receiver uses. */
+export async function __resetInboundMessagingSessionForTests(sessionKey: string): Promise<void> {
+  await maybeResetInboundMessagingSession(sessionKey);
+}
 const CHANNEL_AGENT_IDLE_MS = 2 * 60 * 60 * 1000; // evict after 2h idle
 const CHANNEL_AGENT_MAX = 50;
 const DEFAULT_CHANNEL_TURN_TIMEOUT_MS = 3 * 60 * 1000;
@@ -997,6 +1088,7 @@ function rememberCompanionChannelTurn(
       { role: 'assistant' as const, content: assistantText },
     ].slice(-20),
   );
+  companionChannelActivityAt.set(sessionKey, Date.now());
 }
 
 function hashForLog(value: unknown): string | undefined {
@@ -1252,6 +1344,319 @@ function isChannelAllowlistedSender(
   return identities.some((identity) => allowed.has(identity.trim().replace(/^@/, '').toLowerCase()));
 }
 
+type MessagingSnapshotPart = {
+  source: 'agent-cache' | 'session-store' | 'companion-history' | 'local-map';
+  transcript: string;
+  readState: 'ok' | 'failed';
+};
+
+function readFailure(source: MessagingSnapshotPart['source'], err: unknown): {
+  ok: false;
+  source: MessagingSnapshotPart['source'];
+  error: string;
+} {
+  return {
+    ok: false,
+    source,
+    error: err instanceof Error ? err.message : 'read failed',
+  };
+}
+
+async function loadMessagingSessionSnapshot(
+  sessionKey: string,
+): Promise<
+  | {
+    ok: true;
+    lastActivityAt: number | null;
+    transcript: string;
+    parts: MessagingSnapshotPart[];
+  }
+  | { ok: false; source: MessagingSnapshotPart['source']; error: string }
+> {
+  let lastActivityAt: number | null = null;
+  const consider = (at: number | null, text: string): void => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (at !== null && Number.isFinite(at)) {
+      lastActivityAt = lastActivityAt === null ? at : Math.max(lastActivityAt, at);
+    }
+  };
+
+  let agentText = '';
+  const cached = channelAgentCache.get(sessionKey);
+  if (cached) {
+    try {
+      const history = cached.agent.getChatHistory?.() ?? [];
+      agentText = history
+        .map((entry) => {
+          const content = typeof entry.content === 'string' ? entry.content.trim() : '';
+          return content ? `${entry.type}: ${content}` : '';
+        })
+        .filter((line) => line.length > 0)
+        .join('\n');
+      consider(cached.lastUsed, agentText);
+    } catch (err) {
+      return readFailure('agent-cache', err);
+    }
+  }
+
+  let storeText = '';
+  try {
+    const { getSessionStore } = await import('../../persistence/session-store.js');
+    const { sessionMessagesTranscript } = await import('../../channels/messaging-session-reset.js');
+    const store = getSessionStore();
+    const read = await store.readSessionFileState(sessionKey);
+    if (read.state === 'unreadable') {
+      return readFailure('session-store', new Error(read.error));
+    }
+    if (read.state === 'ok' && read.session.messages.length > 0) {
+      const at = read.session.lastAccessedAt instanceof Date
+        ? read.session.lastAccessedAt.getTime()
+        : Date.parse(String(read.session.lastAccessedAt));
+      storeText = sessionMessagesTranscript(read.session.messages);
+      consider(Number.isFinite(at) ? at : null, storeText);
+    }
+  } catch (err) {
+    return readFailure('session-store', err);
+  }
+
+  let companionText = '';
+  try {
+    const { readCompanionHistoryForReset } = await import('../../companion/channel-history.js');
+    const read = readCompanionHistoryForReset(sessionKey, process.env);
+    if (read.state === 'unreadable') {
+      return readFailure('companion-history', new Error(read.error));
+    }
+    if (read.state === 'ok') {
+      companionText = read.transcript;
+      consider(read.updatedAtMs, companionText);
+    }
+  } catch (err) {
+    return readFailure('companion-history', err);
+  }
+
+  const localText = (companionChannelHistories.get(sessionKey) ?? [])
+    .map((turn) => `${turn.role}: ${turn.content}`)
+    .filter((line) => line.trim().length > 2)
+    .join('\n');
+  const localAt = companionChannelActivityAt.get(sessionKey);
+  if (localAt !== undefined) consider(localAt, localText);
+
+  const parts: MessagingSnapshotPart[] = [
+    { source: 'agent-cache', transcript: agentText.trim(), readState: 'ok' },
+    { source: 'session-store', transcript: storeText.trim(), readState: 'ok' },
+    { source: 'companion-history', transcript: companionText.trim(), readState: 'ok' },
+    { source: 'local-map', transcript: localText.trim(), readState: 'ok' },
+  ];
+  return {
+    ok: true,
+    lastActivityAt,
+    transcript: parts.map((part) => part.transcript).filter((text) => text.length > 0).join('\n\n'),
+    parts,
+  };
+}
+
+/**
+ * Before a channel turn continues, apply the configured messaging reset.
+ * mode none returns before any session read. A present config file that
+ * cannot be read or parsed, now or when the configuration was loaded,
+ * cancels before any session read, and so do config files that now describe
+ * another `session_reset` than the loaded one (another current directory, an
+ * edit) and a relative archive directory. Each store the
+ * reset would clear is archived first. A failed archive of any one of them
+ * cancels the clear and every store stays in place. The policy is read again
+ * right before the archive and before each erase; a change stops the reset
+ * at that step. The session file is archived as the bytes it holds right
+ * then, read once under its lock: an encrypted file gives an encrypted copy,
+ * whatever changed since the snapshot. The other stores follow the at-rest
+ * rule of those bytes, and the erase only runs on these same bytes: it reads
+ * the file again, compares and empties it in one section under the session
+ * lock, so a turn written after the archive is never emptied with it. The
+ * session's SQLite index rows are deleted inside that same section, and the
+ * companion history is compared and emptied the same way under the file lock
+ * its turn writes take.
+ */
+async function maybeResetInboundMessagingSession(sessionKey: string): Promise<void> {
+  const {
+    applyChannelMessagingSessionReset,
+    resolveMessagingSessionResetArchiveDir,
+    resolveSessionResetPolicy,
+    sessionMessagesTranscript,
+  } = await import('../../channels/messaging-session-reset.js');
+  const { messagingResetSessionConfig } = await import('../../config/toml-config.js');
+  const os = await import('node:os');
+  let loadedPolicy: MessagingSessionResetPolicy;
+  try {
+    loadedPolicy = resolveSessionResetPolicy(messagingResetSessionConfig());
+  } catch (err) {
+    logger.warn('messaging session reset policy unavailable, keeping the session', {
+      error: err instanceof Error ? err.message : 'unavailable',
+    });
+    return;
+  }
+  const policy = loadedPolicy;
+  if (policy.mode === 'none') return;
+  /**
+   * Reads the policy again, files and loaded section, and throws when it is
+   * no longer the one this reset decided on. Called right before each write
+   * or erase: a config file edited while the reset runs stops it at the next
+   * step. What an earlier step already erased stays erased, and archived.
+   */
+  const confirmPolicy = (step: MessagingResetStep): void => {
+    runMessagingResetStepHookForTests(step);
+    const again = resolveSessionResetPolicy(messagingResetSessionConfig());
+    if (again.mode !== policy.mode || again.idleMinutes !== policy.idleMinutes || again.atHour !== policy.atHour) {
+      throw new Error(`messaging reset policy changed before ${step}`);
+    }
+  };
+  let archiveDir: string;
+  try {
+    archiveDir = resolveMessagingSessionResetArchiveDir(process.env, os.homedir());
+  } catch (err) {
+    logger.warn('messaging session reset archive directory refused, keeping the session', {
+      error: err instanceof Error ? err.message : 'refused',
+    });
+    return;
+  }
+
+  const { clearCompanionChannelHistoryIfUnchanged } = await import('../../companion/channel-history.js');
+  const now = Date.now();
+  const snapshot = await loadMessagingSessionSnapshot(sessionKey);
+  if (!snapshot.ok) {
+    logger.warn('messaging session reset cancelled because a memory read failed', {
+      sessionHash: hashForLog(sessionKey),
+      source: snapshot.source,
+    });
+    return;
+  }
+  try {
+    confirmPolicy('archive');
+  } catch (err) {
+    logger.warn('messaging session reset policy changed before archive, keeping the session', {
+      sessionHash: hashForLog(sessionKey),
+      error: err instanceof Error ? err.message : 'changed',
+    });
+    return;
+  }
+  // The session file is archived as it is on disk now: its bytes, read once
+  // under the session lock, never decoded and written again. Whatever wrote
+  // the file since the snapshot, the copy keeps the file's at-rest state.
+  const { getSessionStore } = await import('../../persistence/session-store.js');
+  const store = getSessionStore();
+  const provedStore = (snapshot.parts.find((part) => part.source === 'session-store')?.transcript ?? '').trim();
+  let copy: SessionFileCopy;
+  try {
+    copy = await store.readSessionFileCopy(sessionKey);
+  } catch (err) {
+    logger.warn('messaging session reset could not copy the session, keeping it', {
+      sessionHash: hashForLog(sessionKey),
+      error: err instanceof Error ? err.message : 'copy failed',
+    });
+    return;
+  }
+  const keep = (reason: string): void => {
+    logger.warn('messaging session reset cancelled before archive, keeping the session', {
+      sessionHash: hashForLog(sessionKey),
+      reason,
+    });
+  };
+  if (copy.state === 'unreadable') return keep('session file unreadable');
+  const copied = copy.state === 'ok' ? sessionMessagesTranscript(copy.session.messages).trim() : '';
+  if (copied !== provedStore) return keep('session contents changed before archive');
+  // The rule is read from the copied bytes, not from the snapshot.
+  const protection = store.contentProtection(copy.state === 'ok' ? copy.session : null);
+  if (protection.encrypt && copy.state === 'ok' && !copy.sealedAtRest && copy.session.messages.length > 0) {
+    // Encryption is required but the file still holds its messages in clear:
+    // a verbatim copy would be a new plaintext file. The next save seals it.
+    return keep('session not yet encrypted at rest');
+  }
+  // The four stores may repeat the same turns: all are sealed, not only the session.
+  let sealer: MessagingArchiveSealer | undefined;
+  if (protection.encrypt) {
+    const { openSessionText, sealSessionText } = await import('../../persistence/session-content.js');
+    const keyPath = protection.keyPath;
+    sealer = {
+      seal: (transcript) => sealSessionText(transcript, keyPath),
+      open: (sealed) => openSessionText(sealed, keyPath),
+    };
+  }
+  const archivedBytes = copy.state === 'ok' ? copy.bytes : null;
+  const parts = snapshot.parts.map((part) =>
+    part.source === 'session-store' && archivedBytes ? { ...part, raw: archivedBytes } : part,
+  );
+  const outcome = await applyChannelMessagingSessionReset({
+    sessionKey,
+    now,
+    policy,
+    snapshot,
+    parts,
+    archiveDir,
+    ...(sealer ? { sealer } : {}),
+    resetSession: async () => {
+      runMessagingResetStepHookForTests('erase');
+      const sessionRead = await store.readSessionFileCopy(sessionKey);
+      if (sessionRead.state === 'unreadable') {
+        throw new Error(sessionRead.error);
+      }
+      // Only the bytes that were archived may be erased.
+      const sameFile = sessionRead.state === 'ok'
+        ? archivedBytes !== null && sessionRead.bytes.equals(archivedBytes)
+        : archivedBytes === null;
+      if (!sameFile) {
+        throw new Error('session contents changed before erase');
+      }
+      const protectionNow = store.contentProtection(sessionRead.state === 'ok' ? sessionRead.session : null);
+      if (protectionNow.encrypt !== protection.encrypt) {
+        throw new Error('session protection changed before erase');
+      }
+      // Companion history: read, compared and renamed under the history file
+      // lock that every companion turn write takes.
+      confirmPolicy('companion-clear');
+      const provedCompanion = snapshot.parts.find((part) => part.source === 'companion-history')?.transcript ?? '';
+      const cleared = clearCompanionChannelHistoryIfUnchanged(sessionKey, provedCompanion, process.env, now, {
+        beforeWrite: () => confirmPolicy('companion-rename'),
+      });
+      if (!cleared.ok) {
+        throw new Error(cleared.error);
+      }
+      if (sessionRead.state === 'ok' && sessionRead.session.messages.length > 0 && archivedBytes) {
+        // Compared and emptied in one section under the session lock: a turn
+        // written since the archive keeps the file, and the reset stops here.
+        const outcome = await store.clearSessionMessagesIfUnchanged(sessionKey, archivedBytes, {
+          encrypt: protection.encrypt,
+          beforeRead: () => confirmPolicy('session-save'),
+          beforeIndexPurge: () => confirmPolicy('index-purge'),
+          beforeWrite: () => confirmPolicy('session-rename'),
+        });
+        if (outcome === 'changed') throw new Error('session contents changed before erase');
+        if (outcome === 'protection-changed') throw new Error('session protection changed before erase');
+      }
+      confirmPolicy('memory-evict');
+      companionChannelHistories.delete(sessionKey);
+      companionChannelActivityAt.delete(sessionKey);
+      evictChannelAgent(sessionKey, true);
+    },
+  });
+  if (outcome.action === 'cancelled') {
+    logger.warn('messaging session reset cancelled', {
+      sessionHash: hashForLog(sessionKey),
+      reason: outcome.reason,
+      error: outcome.error,
+    });
+  }
+}
+
+async function resetInboundMessagingSessionQuietly(sessionKey: string): Promise<void> {
+  try {
+    await maybeResetInboundMessagingSession(sessionKey);
+  } catch (resetErr) {
+    logger.warn('messaging session reset skipped', {
+      sessionHash: hashForLog(sessionKey),
+      error: resetErr instanceof Error ? resetErr.message : 'failed',
+    });
+  }
+}
+
 export async function registerAIMessageHandler(manager: import('../../channels/index.js').ChannelManager): Promise<void> {
   if (aiHandlerRegistered) return;
   aiHandlerRegistered = true;
@@ -1377,6 +1782,8 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             includeImageBytes: false,
           });
           if (served) {
+            await serializeChannelTurn(sessionKey, async () => {
+            await resetInboundMessagingSessionQuietly(sessionKey);
             if (served.imagePath) {
               const ch = channel as {
                 sendImageFile?: (id: string, p: string, c?: string) => Promise<void>;
@@ -1428,6 +1835,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             // The selfie IS a turn of the conversation: without this the next
             // companion prompt has no trace of the photo that was just sent.
             rememberCompanionChannelTurn(sessionKey, message.content, served.caption);
+            });
             return;
           }
         } catch (selfieErr) {
@@ -1607,6 +2015,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
 
       const queuedAt = Date.now();
       await serializeChannelTurn(sessionKey, async (turn) => {
+      await resetInboundMessagingSessionQuietly(sessionKey);
       const queueWaitMs = Date.now() - queuedAt;
       if (queueWaitMs >= 1_000) {
         logger.info('Channel turn dequeued after waiting', {
