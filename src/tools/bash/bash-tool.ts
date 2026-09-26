@@ -35,7 +35,10 @@ import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
 import { parseBashCommand } from '../../security/bash-parser.js';
 import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
+import { completeLisaActionBestEffort, prepareLisaActionBestEffort, lisaUnifiedCheckpointsEnabled, type LisaActionReturnPoint } from '../../checkpoints/lisa-action-store.js';
+import { lisaBashTargets } from '../../checkpoints/lisa-bash-targets.js';
 import { auditLogger } from '../../security/audit-logger.js';
+import { logger } from '../../utils/logger.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
 import { rewriteCommandWithRtk } from './rtk-rewrite.js';
 import {
@@ -445,168 +448,181 @@ export class BashTool implements Disposable {
         };
       }
 
-      let requiresDirectApproval = policy.action === 'ask';
-      let escalationReason = policy.reason;
-
-      if (policy.action === 'sandbox') {
-        const sandboxed = await executeInWorkspaceSandbox(
-          executionCommand,
-          effectiveCwd,
-          timeout,
-          signal,
-        );
-        if (signal?.aborted) {
-          return { success: false, error: 'Command aborted by user' };
-        }
-        if (sandboxed.available && sandboxed.result) {
-          if (sandboxed.result.timedOut) {
-            return {
-              success: false,
-              error: `Command timed out after ${timeout}ms\n[sandbox:${sandboxed.result.backend}]`,
-              ...(sandboxed.result.stdout ? { output: sandboxed.result.stdout } : {}),
-            };
-          }
-          if (sandboxed.result.exitCode === 0) {
-            return this.formatProcessResult(
-              sandboxed.result.stdout,
-              sandboxed.result.stderr,
-              sandboxed.result.exitCode,
-              `sandbox:${sandboxed.result.backend}`,
-            );
-          }
-          if (!isSandboxBoundaryFailure(sandboxed.result)) {
-            return this.formatProcessResult(
-              sandboxed.result.stdout,
-              sandboxed.result.stderr,
-              sandboxed.result.exitCode,
-              `sandbox:${sandboxed.result.backend}`,
-            );
-          }
-          requiresDirectApproval = true;
-          escalationReason = `Sandbox boundary denied the command: ${sandboxed.result.stderr || sandboxed.result.stdout}`;
-        } else {
-          requiresDirectApproval = true;
-          escalationReason = sandboxed.reason || 'Workspace sandbox unavailable';
+      let lisaCheckpoint: LisaActionReturnPoint | undefined;
+      if (lisaUnifiedCheckpointsEnabled()) {
+        try {
+          lisaCheckpoint = this.checkpointLisaDestructiveTargets(executionCommand, effectiveCwd);
+        } catch (error) {
+          return { success: false,
+            error: `Lisa return point required: ${error instanceof Error ? error.message : String(error)}` };
         }
       }
+      try {
+        let requiresDirectApproval = policy.action === 'ask';
+        let escalationReason = policy.reason;
 
-      if (requiresDirectApproval) {
-        const refused = refusedUnconfinedEscalationResult(
-          policy.action,
-          true,
-          escalationReason,
-          options?.refuseUnconfinedEscalation === true,
-        );
-        if (refused) return refused;
-
-        const confirmationResult = await this.confirmationService.requestConfirmation(
-          {
-            operation: 'Run command outside the workspace sandbox',
-            filename: executionCommand,
-            showVSCodeOpen: false,
-            content:
-              (executionCommand === command
-                ? `Command: ${executionCommand}\n`
-                : `Original command: ${command}\nTransformed command: ${executionCommand}\n`) +
-              `Working directory: ${effectiveCwd}\n` +
-              `Boundary: ${escalationReason}`,
-            approvalKey: policy.approvalKey,
-            riskLevel: 'high',
-            detail: { cwd: effectiveCwd },
-          },
-          'bash',
-        );
-
-        if (!confirmationResult.confirmed) {
-          return {
-            success: false,
-            error: confirmationResult.feedback || 'Command execution cancelled by user',
-          };
-        }
-      }
-
-      if (!executableIdentitiesStillMatch(policy, effectiveCwd)) {
-        return {
-          success: false,
-          error: 'Executable identity changed after policy evaluation; retry the command for a fresh decision.',
-        };
-      }
-
-      // Checkpoint files targeted by destructive commands (rm, mv, etc.)
-      this.checkpointDestructiveTargets(executionCommand);
-
-      // Execute using spawn (safer than exec)
-      const result = await this.executeWithSpawn(executionCommand, {
-        timeout,
-        cwd: effectiveCwd,
-        ...(signal ? { signal } : {}),
-      });
-
-      if (result.exitCode !== 0) {
-        const errorMessage = result.stderr || `Command exited with code ${result.exitCode}`;
-
-        if (signal?.aborted || result.exitCode === 130) {
-          return { success: false, error: 'Command aborted by user', output: result.stdout };
-        }
-
-        // Attempt self-healing if enabled
-        if (this.selfHealingEnabled && allowSelfHealing) {
-          const healingResult = await this.selfHealingEngine.attemptHealing(
+        if (policy.action === 'sandbox') {
+          const sandboxed = await executeInWorkspaceSandbox(
             executionCommand,
-            errorMessage,
-            async (fixCmd: string) => {
-              // A model-proposed repair is a new command, not a continuation
-              // of the approved one. Route it through validation, RTK freeze,
-              // policy, sandbox and exact approval again; only disable nested
-              // healing to keep the retry budget bounded.
-              return this.executeInternal(fixCmd, timeout * 2, effectiveCwd, false, signal, options);
+            effectiveCwd,
+            timeout,
+            signal,
+          );
+          if (signal?.aborted) {
+            return { success: false, error: 'Command aborted by user' };
+          }
+          if (sandboxed.available && sandboxed.result) {
+            if (sandboxed.result.timedOut) {
+              return {
+                success: false,
+                error: `Command timed out after ${timeout}ms\n[sandbox:${sandboxed.result.backend}]`,
+                ...(sandboxed.result.stdout ? { output: sandboxed.result.stdout } : {}),
+              };
             }
+            if (sandboxed.result.exitCode === 0) {
+              return this.formatProcessResult(
+                sandboxed.result.stdout,
+                sandboxed.result.stderr,
+                sandboxed.result.exitCode,
+                `sandbox:${sandboxed.result.backend}`,
+              );
+            }
+            if (!isSandboxBoundaryFailure(sandboxed.result)) {
+              return this.formatProcessResult(
+                sandboxed.result.stdout,
+                sandboxed.result.stderr,
+                sandboxed.result.exitCode,
+                `sandbox:${sandboxed.result.backend}`,
+              );
+            }
+            requiresDirectApproval = true;
+            escalationReason = `Sandbox boundary denied the command: ${sandboxed.result.stderr || sandboxed.result.stdout}`;
+          } else {
+            requiresDirectApproval = true;
+            escalationReason = sandboxed.reason || 'Workspace sandbox unavailable';
+          }
+        }
+
+        if (requiresDirectApproval) {
+          const refused = refusedUnconfinedEscalationResult(
+            policy.action,
+            true,
+            escalationReason,
+            options?.refuseUnconfinedEscalation === true,
+          );
+          if (refused) return refused;
+
+          const confirmationResult = await this.confirmationService.requestConfirmation(
+            {
+              operation: 'Run command outside the workspace sandbox',
+              filename: executionCommand,
+              showVSCodeOpen: false,
+              content:
+                (executionCommand === command
+                  ? `Command: ${executionCommand}\n`
+                  : `Original command: ${command}\nTransformed command: ${executionCommand}\n`) +
+                `Working directory: ${effectiveCwd}\n` +
+                `Boundary: ${escalationReason}`,
+              approvalKey: policy.approvalKey,
+              riskLevel: 'high',
+              detail: { cwd: effectiveCwd },
+            },
+            'bash',
           );
 
-          if (healingResult.success && healingResult.finalResult) {
-            return {
-              success: true,
-              output: `🔧 Self-healed after ${healingResult.attempts.length} attempt(s)\n` +
-                      `Fix applied: ${healingResult.fixedCommand}\n\n` +
-                      (healingResult.finalResult.output || 'Success'),
-            };
-          }
-
-          // If healing failed, return original error with healing info
-          if (healingResult.attempts.length > 0) {
+          if (!confirmationResult.confirmed) {
             return {
               success: false,
-              error: `${errorMessage}\n\n🔧 Self-healing attempted ${healingResult.attempts.length} fix(es) but failed.`,
+              error: confirmationResult.feedback || 'Command execution cancelled by user',
+            };
+          }
+        }
+
+        if (!executableIdentitiesStillMatch(policy, effectiveCwd)) {
+          return {
+            success: false,
+            error: 'Executable identity changed after policy evaluation; retry the command for a fresh decision.',
+          };
+        }
+
+        // Checkpoint files targeted by destructive commands (rm, mv, etc.)
+        if (!lisaUnifiedCheckpointsEnabled()) this.checkpointDestructiveTargets(executionCommand);
+
+        // Execute using spawn (safer than exec)
+        const result = await this.executeWithSpawn(executionCommand, {
+          timeout,
+          cwd: effectiveCwd,
+          ...(signal ? { signal } : {}),
+        });
+
+        if (result.exitCode !== 0) {
+          const errorMessage = result.stderr || `Command exited with code ${result.exitCode}`;
+
+          if (signal?.aborted || result.exitCode === 130) {
+            return { success: false, error: 'Command aborted by user', output: result.stdout };
+          }
+
+          // Attempt self-healing if enabled
+          if (this.selfHealingEnabled && allowSelfHealing) {
+            const healingResult = await this.selfHealingEngine.attemptHealing(
+              executionCommand,
+              errorMessage,
+              async (fixCmd: string) => {
+                // A model-proposed repair is a new command, not a continuation
+                // of the approved one. Route it through validation, RTK freeze,
+                // policy, sandbox and exact approval again; only disable nested
+                // healing to keep the retry budget bounded.
+                return this.executeInternal(fixCmd, timeout * 2, effectiveCwd, false, signal, options);
+              }
+            );
+
+            if (healingResult.success && healingResult.finalResult) {
+              return {
+                success: true,
+                output: `🔧 Self-healed after ${healingResult.attempts.length} attempt(s)\n` +
+                        `Fix applied: ${healingResult.fixedCommand}\n\n` +
+                        (healingResult.finalResult.output || 'Success'),
+              };
+            }
+
+            // If healing failed, return original error with healing info
+            if (healingResult.attempts.length > 0) {
+              return {
+                success: false,
+                error: `${errorMessage}\n\n🔧 Self-healing attempted ${healingResult.attempts.length} fix(es) but failed.`,
+              };
+            }
+          }
+
+          return {
+            success: false,
+            error: errorMessage,
+          };
+        }
+
+        const output = result.stdout + (result.stderr ? `\nSTDERR: ${result.stderr}` : '');
+        const trimmedOutput = output.trim() || 'Command executed successfully (no output)';
+
+        // Check if this looks like test output and enrich it
+        if (isLikelyTestOutput(trimmedOutput)) {
+          const parsed = parseTestOutput(trimmedOutput);
+          if (parsed.isTestOutput && parsed.data) {
+            // Return structured test data as JSON for the renderer
+            return {
+              success: true,
+              output: JSON.stringify(parsed.data),
+              data: { type: 'test-results', framework: parsed.data.framework },
             };
           }
         }
 
         return {
-          success: false,
-          error: errorMessage,
+          success: true,
+          output: trimmedOutput,
         };
+      } finally {
+        completeLisaActionBestEffort(lisaCheckpoint);
       }
-
-      const output = result.stdout + (result.stderr ? `\nSTDERR: ${result.stderr}` : '');
-      const trimmedOutput = output.trim() || 'Command executed successfully (no output)';
-
-      // Check if this looks like test output and enrich it
-      if (isLikelyTestOutput(trimmedOutput)) {
-        const parsed = parseTestOutput(trimmedOutput);
-        if (parsed.isTestOutput && parsed.data) {
-          // Return structured test data as JSON for the renderer
-          return {
-            success: true,
-            output: JSON.stringify(parsed.data),
-            data: { type: 'test-results', framework: parsed.data.framework },
-          };
-        }
-      }
-
-      return {
-        success: true,
-        output: trimmedOutput,
-      };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return {
@@ -695,6 +711,21 @@ export class BashTool implements Disposable {
     } catch {
       // Parsing failed — skip checkpointing (command already validated)
     }
+  }
+
+  /** Durable, explicit targets for supported destructive shell commands. */
+  private checkpointLisaDestructiveTargets(command: string, cwd: string): LisaActionReturnPoint | undefined {
+    let targets: string[];
+    try {
+      targets = lisaBashTargets(command);
+    } catch (error) {
+      logger.warn(`Lisa checkpoint target discovery unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+    if (targets.length === 0) return undefined;
+    const point = prepareLisaActionBestEffort(cwd, `bash-${Date.now()}`, command, 'bash', targets);
+    if (!point) throw new Error('Destructive targets were not checkpointed');
+    return point;
   }
 
   /**

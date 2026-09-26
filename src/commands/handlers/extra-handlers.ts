@@ -31,6 +31,18 @@ export interface CommandHandlerResult {
 
 export async function handleUndo(_args: string[]): Promise<CommandHandlerResult> {
   try {
+    if (process.env.CODEBUDDY_LISA_UNIFIED_CHECKPOINTS === 'true') {
+      const { LisaActionStore } = await import('../../checkpoints/lisa-action-store.js');
+      const store = new LisaActionStore();
+      const last = store.list().filter(item => item.state === 'completed' && item.origin !== 'undo').at(-1);
+      if (!last) {
+        const content = 'No completed Lisa action checkpoint available to undo.';
+        return { handled: true, failed: true, entry: { type: 'assistant', content, timestamp: new Date() } };
+      }
+      const restored = store.restore(last.id);
+      const content = `Restored action ${last.actionId} from checkpoint ${last.id}: ${restored.restored.length} file(s). Return point: ${restored.safetyCheckpointId}`;
+      return { handled: true, entry: { type: 'assistant', content, timestamp: new Date() } };
+    }
     const { getPersistentCheckpointManager } = await import('../../checkpoints/persistent-checkpoint-manager.js');
     const checkpointManager = getPersistentCheckpointManager();
     const checkpoints = checkpointManager.getCheckpoints();

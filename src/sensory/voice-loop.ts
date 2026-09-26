@@ -1905,6 +1905,12 @@ export async function defaultReply(
   history: VoiceHistoryTurn[] = [],
   replyOpts?: VoiceStepOptions
 ): Promise<string> {
+  if (process.env.CODEBUDDY_LISA_JOURNAL === 'true') {
+    const { isLisaJournalQuestion } = await import('../companion/lisa-journal.js');
+    if (isLisaJournalQuestion(heard)) {
+      return 'Cette demande nécessite un canal privé authentifié.';
+    }
+  }
   const fast = fastCompanionReply(heard);
   if (fast) {
     if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);

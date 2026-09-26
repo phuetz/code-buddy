@@ -3815,6 +3815,11 @@ addLazyCommandGroup(program, 'speak', 'Synthesize speech using AudioReader TTS',
   registerSpeakCommand(program);
 });
 
+addLazyCommandGroup(program, 'lisa', 'Lisa action history and return points', async () => {
+  const { registerLisaCommand } = await import('./commands/cli/lisa-command.js');
+  registerLisaCommand(program, cli.stdout);
+});
+
 addLazyCommandGroup(program, 'assistant', 'Manage the voice assistant (Lisa): improvement loop, voice', async () => {
   const { registerAssistantCommand } = await import('./commands/assistant.js');
   registerAssistantCommand(program);
