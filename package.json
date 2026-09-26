@@ -96,6 +96,7 @@
     "verify:avatar-unreal": "node scripts/verify-unreal-avatar-plugin.mjs",
     "pilot:validate": "pwsh -NoProfile -ExecutionPolicy Bypass -File scratch/run-all-probes.ps1",
     "test": "vitest run",
+    "test:e2e": "playwright test --config=playwright.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:real": "RUN_REAL_TESTS=1 vitest run",

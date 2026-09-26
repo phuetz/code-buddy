@@ -63,6 +63,7 @@
     streamEl: null,
     streamId: null,
     pingTimer: 0,
+    handshakeTimer: 0,
     reconnectTimer: 0,
     reconnectAttempt: 0,
     manualClose: false,
@@ -240,7 +241,8 @@
   }
 
   function reconnectDelayMs() {
-    return Math.min(30000, 1000 * Math.pow(2, Math.min(state.reconnectAttempt, 5)));
+    // Keep a recovering local server reachable promptly after failed handshakes.
+    return Math.min(5000, 1000 * Math.pow(2, Math.min(state.reconnectAttempt, 5)));
   }
 
   function scheduleReconnect() {
@@ -1949,6 +1951,8 @@
     if (type === 'connected') return;
     if (type === 'authenticated') {
       state.connected = true;
+      clearTimeout(state.handshakeTimer);
+      state.handshakeTimer = 0;
       state.reconnectAttempt = 0;
       if (state.reconnectTimer) {
         clearTimeout(state.reconnectTimer);
@@ -1969,7 +1973,9 @@
     if (type === 'error') {
       var code = data.error && data.error.code;
       var msg = (data.error && data.error.message) || 'Erreur';
-      if (code === 'AUTH_FAILED' || code === 'UNAUTHORIZED') {
+      if (!state.connected || code === 'AUTH_FAILED' || code === 'UNAUTHORIZED') {
+        logout();
+        el('token-input').value = '';
         setError(msg);
         return;
       }
@@ -2062,16 +2068,29 @@
 
   function connectWs() {
     state.manualClose = false;
+    clearTimeout(state.handshakeTimer);
+    state.handshakeTimer = 0;
     if (state.ws && state.ws.close) {
       state.ws.onclose = null;
       try { state.ws.close(); } catch (_e) { /* ignore */ }
     }
     var ws = new WebSocket(wsUrl());
     state.ws = ws;
+    state.connected = false;
+    // A WebSocket may stay open (or connecting) without an auth reply. Without
+    // this deadline, neither close nor the reconnect backoff can make progress.
+    state.handshakeTimer = setTimeout(function () {
+      if (state.ws !== ws || state.connected || state.manualClose) return;
+      state.handshakeTimer = 0;
+      try { ws.close(); } catch (_e) { /* ignore */ }
+      scheduleReconnect();
+    }, 5000);
     ws.addEventListener('open', function () {
-      send('authenticate', { token: state.token, approvalCapable: true });
+      if (state.ws !== ws || state.manualClose) return;
+      ws.send(JSON.stringify({ type: 'authenticate', payload: { token: state.token, approvalCapable: true } }));
     });
     ws.addEventListener('message', function (ev) {
+      if (state.ws !== ws) return;
       try {
         handleFrame(JSON.parse(ev.data));
       } catch (_err) {
@@ -2080,6 +2099,8 @@
     });
     ws.addEventListener('close', function () {
       if (state.ws !== ws) return; // socket remplacé, on l'ignore
+      clearTimeout(state.handshakeTimer);
+      state.handshakeTimer = 0;
       state.connected = false;
       setStreaming(false);
       setPresence('offline');
@@ -2134,11 +2155,14 @@
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (_err) { /* ignore */ }
     state.token = '';
     state.manualClose = true;
+    state.connected = false;
     state.outbox = [];
     if (state.reconnectTimer) {
       clearTimeout(state.reconnectTimer);
       state.reconnectTimer = 0;
     }
+    clearTimeout(state.handshakeTimer);
+    state.handshakeTimer = 0;
     if (state.ws) state.ws.close();
     show('main-screen', false);
     show('login-screen', true);
@@ -2993,6 +3017,7 @@
     root.removeEventListener('online', onVisibilityOrOnline);
     clearTimeout(state.longPressTimer);
     clearInterval(state.pingTimer);
+    clearTimeout(state.handshakeTimer);
     clearTimeout(state.reconnectTimer);
     state.reconnectTimer = 0;
     state.bound = false;

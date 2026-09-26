@@ -106,7 +106,7 @@ Quatre surfaces apprenables. **Jamais `src/`** : c'est un invariant scanné.
 |---|---|---|
 | CLI (Ink/React) | 105 commandes, complétion, thèmes | ✅ usage quotidien |
 | Cowork | Application de bureau Electron, ateliers visuels | 🧪 |
-| PWA mobile | Compagnon sur téléphone, historique persistant, album photo | ✅ en usage |
+| PWA mobile | Compagnon sur téléphone, historique persistant, album photo | 🧪 parcours navigateur automatisé ; usage réel non mesuré |
 | Serveur HTTP | Un port, API compatible OpenAI, A2A Google, WebSocket | ✅ |
 | Serveur MCP | Code Buddy s'expose comme serveur MCP | ❓ |
 
