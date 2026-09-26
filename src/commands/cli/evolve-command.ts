@@ -6,7 +6,8 @@
  * (main/master) — that invariant is enforced in code (`assertMergeTargetAllowed`), not convention.
  *
  *   evolve run --goal "<weakness>"   author + evaluate candidate variant(s) (gated by CODEBUDDY_EVOLVE)
- *   evolve propose                 select research weakness + archive a plan (no mutator)
+ *   evolve propose --fiche-input    archive a validated usage or research experiment fiche
+ *   evolve experiment <id>          run a reversible lesson experiment and record its result
  *   evolve list                      list evaluated variants (ranked)
  *   evolve review <id>               show a variant's fitness + diff vs baseline (read-only)
  *   evolve keep <id> [--confirm]     merge a reviewed variant into the current branch (human-gated)
@@ -120,6 +121,26 @@ export function registerEvolveCommands(program: Command): void {
         if (result.status === 'planned') logger.info(`[evolve propose] plan: ${result.archivePath}`);
       }
       if (result.status === 'stopped') process.exitCode = 2;
+    });
+
+  evolve
+    .command('experiment <proposal-id>')
+    .description('Run an archived fiche as a reversible lesson experiment and record its result')
+    .requiredOption('--experiment-input <file>', 'JSON lesson candidate and curated benchmark scenarios')
+    .option('--json', 'Write the empirical gate result as JSON')
+    .action(async (proposalId: string, options: { experimentInput: string; json?: boolean }) => {
+      try {
+        const input = JSON.parse(readFileSync(options.experimentInput, 'utf8')) as unknown;
+        // This command only exercises the learnable lessons layer; it never runs the code mutator.
+        const { runArchivedFicheExperiment } = await import('../../agent/self-improvement/evolution/archived-experiment.js');
+        const result = runArchivedFicheExperiment(proposalId, input);
+        if (options.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+        else logger.info(`[evolve experiment] ${result.outcome.accepted ? 'passed' : 'failed'}: ${result.outcome.rejectionReason ?? 'thresholds met'}; delta=${result.outcome.delta}`);
+        if (!result.outcome.accepted) process.exitCode = 2;
+      } catch (error) {
+        logger.error(`Experiment refused: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 2;
+      }
     });
 
   evolve

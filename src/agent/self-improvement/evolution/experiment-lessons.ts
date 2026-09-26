@@ -47,7 +47,15 @@ export function hasTriedExperimentLesson(graph: CollectiveKnowledgeGraph, input:
 export function recordExperimentLesson(graph: CollectiveKnowledgeGraph, input: ExperimentLessonInput): CkgRecallResult {
   const fiche = parseExperimentFiche(input.fiche);
   const result = resultSchema.parse(input.result);
-  const provenance = provenanceSchema.parse(input.provenance);
+  const parsedProvenance = provenanceSchema.parse(input.provenance);
+  // A full hexadecimal Git SHA looks like a 40-character secret to CKG redaction.
+  // Twelve hexadecimal digits retain an actionable revision without bypassing redaction.
+  const provenance = {
+    ...parsedProvenance,
+    revision: /^[0-9a-f]{40,64}$/i.test(parsedProvenance.revision)
+      ? parsedProvenance.revision.slice(0, 12).toLowerCase()
+      : parsedProvenance.revision,
+  };
   if (!/^[a-zA-Z0-9_-]{1,32}$/.test(input.experimentId)) throw new Error('Invalid experiment id');
   const name = `${ideaPrefix(fiche)}${input.experimentId}`;
   const text = JSON.stringify({ schemaVersion: 1, experimentId: input.experimentId, fiche, result, provenance });

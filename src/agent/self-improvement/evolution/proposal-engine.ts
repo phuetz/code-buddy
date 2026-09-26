@@ -242,7 +242,7 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
   try { reviewed = persistLinks ? excludeHumanRejected(candidates, options.linksPath) : candidates; }
   catch (error) { return stop(events, 'archive', 'ARCHIVE_FAILED', `Article links: ${error instanceof Error ? error.message : String(error)}`); }
   const matches = selectMatches(reviewed.filter((candidate) =>
-    candidate.feature.id === fiche.feature.id && (!articleId || scholarlyIdentity(candidate.hit) === articleId)),
+    candidate.feature.id === fiche.feature.id && (!articleId || scholarlyIdentity(candidate.hit)?.toLowerCase() === articleId.toLowerCase())),
     { minSimilarity: floor, limit: 1 });
   if (matches.length === 0) {
     if (selectMatches(reviewed, { minSimilarity: floor, limit: 1 }).length > 0) {

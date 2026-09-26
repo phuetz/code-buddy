@@ -109,13 +109,16 @@ export function validateProposal(
     return result;
   };
   const notes: string[] = [];
+  const runsPerArm = fiche?.comparison.equalBudget.runsPerArm ?? 1;
   const before = scoreBenchmark(scenarios, port);
+  for (let run = 1; run < runsPerArm; run++) scoreBenchmark(scenarios, port);
   beforeDurationMs = Math.max(0, Date.now() - startedAt);
 
   // Gate 1 — structural / policy validity (no apply on a malformed proposal).
   const structural = structuralProblem(proposal);
   if (structural) {
-    return finish({
+    // No proposed method ran, so there is no experiment result to remember.
+    return {
       outcome: {
         accepted: false,
         proposalId: proposal.id,
@@ -127,13 +130,20 @@ export function validateProposal(
         rolledBack: false,
         notes: [structural],
       },
-    });
+    };
   }
 
   // Apply transiently and re-measure.
   const applied = port.add(proposal.lesson.category, proposal.lesson.content, proposal.lesson.context);
   const afterStartedAt = Date.now();
-  const after = scoreBenchmark(scenarios, port);
+  let after;
+  try {
+    after = scoreBenchmark(scenarios, port);
+    for (let run = 1; run < runsPerArm; run++) scoreBenchmark(scenarios, port);
+  } catch (error) {
+    port.remove(applied.id);
+    throw error;
+  }
   afterDurationMs = Math.max(0, Date.now() - afterStartedAt);
   const delta = after.covered - before.covered;
   const regressions = findRegressions(before, after);

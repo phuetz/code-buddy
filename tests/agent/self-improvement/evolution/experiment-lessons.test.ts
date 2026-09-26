@@ -16,6 +16,18 @@ function graph(): { graph: CollectiveKnowledgeGraph; ledger: string } {
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe('DGM experiment lessons', () => {
+  it('preserves a precise short Git revision through collective redaction', () => {
+    const { graph: memory } = graph();
+    const fullRevision = 'a'.repeat(40);
+    const lesson = recordExperimentLesson(memory, {
+      experimentId: 'git-revision', fiche: completeFiche,
+      result: { status: 'failed', before: 0, after: 0, durationMs: 1, costUsd: 0, notes: [] },
+      provenance: { at: '2026-09-26T10:10:00.000Z', revision: fullRevision,
+        machine: 'qa-node', model: 'offline-fixture', conditions: 'deterministic trial' },
+    });
+    expect(JSON.parse(lesson.text).provenance.revision).toBe(fullRevision.slice(0, 12));
+  });
+
   it('records a failed experiment as a lesson linked to article and feature with provenance', () => {
     const { graph: first, ledger } = graph();
     const lesson = recordExperimentLesson(first, {

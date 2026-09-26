@@ -86,6 +86,25 @@ describe('self-improvement: capability benchmark (deterministic)', () => {
 });
 
 describe('self-improvement: empirical gate (DGM-style, snapshot/rollback)', () => {
+  it('does not mark a structurally invalid, unmeasured idea as already tried', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dgm-unmeasured-'));
+    try {
+      const graph = new CollectiveKnowledgeGraph({ ledgerPath: path.join(root, 'ledger.jsonl'), persistentEmbeddingCache: false });
+      const fiche = parseExperimentFiche({ ...completeFiche,
+        hypothesis: { metric: 'covered_scenarios', direction: 'increase', minimumImprovement: 1 },
+      });
+      const result = validateProposal(lessonProposal({ content: 'too short' }), SCENARIOS, fakePort(), {
+        keepOnAccept: false,
+        experiment: { fiche, graph, provenance: {
+          at: '2026-09-26T10:10:00.000Z', revision: 'abc123', machine: 'qa-node',
+          model: 'offline-fixture', conditions: 'two deterministic scenarios',
+        } },
+      });
+      expect(result.outcome.rejectionReason).toBe('structural-invalid');
+      expect(graph.getCurrentEntitiesByNamePrefix('lesson', 'dgm-experiment-')).toHaveLength(0);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
   it('rejects a positive benchmark delta below the fiche numeric result threshold', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'dgm-threshold-'));
     try {

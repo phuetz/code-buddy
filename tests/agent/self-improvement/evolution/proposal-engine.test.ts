@@ -136,6 +136,17 @@ describe('evolve propose', () => {
     if (result.status === 'stopped') expect(result.reason).toBe('FICHE_MISMATCH');
   });
 
+  it('accepts a stable publication id with uppercase prefix', async () => {
+    const root = project();
+    const result = await proposeResearchImprovement({ fiche: { ...fiche, research: {
+      ...fiche.research, articleId: 'ARXIV:2605.01664',
+    } }, features, recall: async () => [discovery], archiveRoot: path.join(root, 'proposals'),
+    chat: async (prompt) => prompt.includes('Réponds STRICTEMENT en JSON')
+      ? JSON.stringify({ approach: 'fresh', summary: 'Compare rankers', steps: [{ title: 'Measure', description: 'Use paired trials.' }] })
+      : 'Test contextual reranking against the existing ranker.' });
+    expect(result.status).toBe('planned');
+  });
+
   it('does not propose an article, feature and method already recorded as a failed lesson', async () => {
     const root = project();
     const graph = new CollectiveKnowledgeGraph({ ledgerPath: path.join(root, 'ledger.jsonl'), persistentEmbeddingCache: false });
