@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { lisaPulseEnabled, observeLisaSignals, runLisaPulse, type LisaDecision, type LisaSignal } from '../../src/companion/lisa-pulse.js';
+import { lisaPulseEnabled, observeLisaSignals, runLisaPulse, type LisaAuthority, type LisaDecision, type LisaSignal } from '../../src/companion/lisa-pulse.js';
 
 const roots: string[] = [];
 function setup() {
@@ -22,6 +22,23 @@ afterEach(() => {
 });
 
 describe('Lisa pulse', () => {
+  it.each(['allow-with-checkpoint', 'defer', 'alllow'])('refuses unknown read authority %s', async (authority) => {
+    const fixture = setup();
+    let signal = 'one';
+    const executeAction = vi.fn(async () => ({ success: true, detail: 'read' }));
+    const deps = { ...fixture, workspace: fixture.root,
+      observe: async () => [{ source: 'git', fingerprint: signal, summary: signal }],
+      decide: async (): Promise<LisaDecision> => ({ kind: 'act', reason: 'read', action: {
+        tool: 'view_file', args: { path: 'note.txt' }, effect: 'read',
+      } }),
+      authorizeAction: async () => ({ decision: authority as LisaAuthority }),
+      executeAction,
+    };
+    await runLisaPulse('check', deps);
+    signal = 'two';
+    expect((await runLisaPulse('check', deps)).kind).toBe('silence');
+    expect(executeAction).not.toHaveBeenCalled();
+  });
   it('does not run without both opt-in switches', () => {
     expect(lisaPulseEnabled({})).toBe(false);
     expect(lisaPulseEnabled({ CODEBUDDY_LISA_PULSE: 'true' })).toBe(false);

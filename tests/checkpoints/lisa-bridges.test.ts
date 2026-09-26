@@ -81,7 +81,7 @@ describe('Lisa checkpoint integration', () => {
     });
   }
 
-  it.skipIf(process.platform === 'win32')('bash executes with an oversized target when capture is unavailable', async () => {
+  it.skipIf(process.platform === 'win32')('bash refuses an oversized destructive target without a return point', async () => {
     const root = fixture();
     const target = path.join(root, 'large.txt');
     fs.writeFileSync(target, Buffer.alloc(4 * 1024 * 1024 + 1));
@@ -92,8 +92,9 @@ describe('Lisa checkpoint integration', () => {
     const bash = new BashTool();
     try {
       const result = await bash.execute('rm large.txt', 10_000, root);
-      expect(result.success, result.error ?? result.output).toBe(true);
-      expect(fs.existsSync(target)).toBe(false);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Lisa return point required');
+      expect(fs.existsSync(target)).toBe(true);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('exceeds checkpoint limit'));
     } finally {
       bash.dispose();
@@ -102,7 +103,7 @@ describe('Lisa checkpoint integration', () => {
   });
 
   for (const command of ['rm *.log', 'mv a.log b.txt && echo done', 'echo hello > out.txt && rm a.log']) {
-    it.skipIf(process.platform === 'win32')(`bash executes ${command} when target discovery is unavailable`, async () => {
+    it.skipIf(process.platform === 'win32')(`bash refuses ${command} when target discovery is unavailable`, async () => {
       const root = fixture();
       fs.writeFileSync(path.join(root, 'a.log'), 'original');
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
@@ -112,15 +113,11 @@ describe('Lisa checkpoint integration', () => {
       const bash = new BashTool();
       try {
         const result = await bash.execute(command, 10_000, root);
-        expect(result.success, result.error ?? result.output).toBe(true);
-        expect(fs.existsSync(path.join(root, 'a.log'))).toBe(false);
-        if (command.startsWith('mv')) {
-          expect(fs.readFileSync(path.join(root, 'b.txt'), 'utf8')).toBe('original');
-          expect(result.output).toContain('done');
-        }
-        if (command.startsWith('echo')) {
-          expect(fs.readFileSync(path.join(root, 'out.txt'), 'utf8')).toBe('hello\n');
-        }
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Lisa return point required');
+        expect(fs.readFileSync(path.join(root, 'a.log'), 'utf8')).toBe('original');
+        expect(fs.existsSync(path.join(root, 'b.txt'))).toBe(false);
+        expect(fs.existsSync(path.join(root, 'out.txt'))).toBe(false);
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('Lisa checkpoint target discovery unavailable'));
         expect(new LisaActionStore().list()).toHaveLength(0);
       } finally {

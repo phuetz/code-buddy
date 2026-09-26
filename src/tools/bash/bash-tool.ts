@@ -448,9 +448,15 @@ export class BashTool implements Disposable {
         };
       }
 
-      const lisaCheckpoint = lisaUnifiedCheckpointsEnabled()
-        ? this.checkpointLisaDestructiveTargets(executionCommand, effectiveCwd)
-        : undefined;
+      let lisaCheckpoint: LisaActionReturnPoint | undefined;
+      if (lisaUnifiedCheckpointsEnabled()) {
+        try {
+          lisaCheckpoint = this.checkpointLisaDestructiveTargets(executionCommand, effectiveCwd);
+        } catch (error) {
+          return { success: false,
+            error: `Lisa return point required: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      }
       try {
         let requiresDirectApproval = policy.action === 'ask';
         let escalationReason = policy.reason;
@@ -714,10 +720,12 @@ export class BashTool implements Disposable {
       targets = lisaBashTargets(command);
     } catch (error) {
       logger.warn(`Lisa checkpoint target discovery unavailable: ${error instanceof Error ? error.message : String(error)}`);
-      return undefined;
+      throw error;
     }
     if (targets.length === 0) return undefined;
-    return prepareLisaActionBestEffort(cwd, `bash-${Date.now()}`, command, 'bash', targets);
+    const point = prepareLisaActionBestEffort(cwd, `bash-${Date.now()}`, command, 'bash', targets);
+    if (!point) throw new Error('Destructive targets were not checkpointed');
+    return point;
   }
 
   /**

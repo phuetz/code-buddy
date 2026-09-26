@@ -14,6 +14,11 @@ describe('Lisa shell return-point targets', () => {
     expect(() => lisaBashTargets('cp -t directory source.txt')).toThrow('options have no complete return point');
   });
 
+  it('does not miss a destructive command behind a wrapper or an absolute executable', () => {
+    expect(() => lisaBashTargets('sudo rm note.txt')).toThrow('no complete return point');
+    expect(lisaBashTargets('/bin/rm note.txt')).toEqual(['note.txt']);
+  });
+
   it('leaves a read-only command outside checkpoint handling', () => {
     expect(lisaBashTargets('git status --short')).toEqual([]);
   });

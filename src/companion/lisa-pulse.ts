@@ -240,7 +240,10 @@ export async function runLisaPulse(checklist: string, deps: LisaPulseDependencie
     const event = record({ kind: 'decision_required', reason: decision.reason, action, mandateId });
     return event;
   }
-  if (authority === 'deny' || !deps.executeAction) return record({ kind: 'silence', reason: 'No authorized executor' });
+  if (!deps.executeAction || (action.effect === 'read' && authority !== 'allow') ||
+      (action.effect === 'reversible' && authority !== 'allow' && authority !== 'allow+checkpoint')) {
+    return record({ kind: 'silence', reason: 'No authorized executor' });
+  }
   if (action.effect === 'reversible' && (authority !== 'allow+checkpoint' || !action.files?.length)) {
     const event = record({ kind: 'failure', reason: 'Reversible action lacks a return point', action });
     return event;
