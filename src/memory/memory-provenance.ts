@@ -21,7 +21,7 @@ export function normalizeProvenance(input?: MemoryProvenance): MemoryProvenance 
   const clean = (value: unknown): string | undefined =>
     typeof value === 'string' && value.trim()
       ? value.trim().normalize('NFKC').replace(/\s+/g, ' ')
-        .replace(/[\p{Cc}\p{Cf}]/gu, '').slice(0, 500) : undefined;
+        .replace(/[\p{Cc}\p{Cf}\u115F\u1160\u2800\u3164\uFFA0]/gu, '').slice(0, 500) : undefined;
   const observedAt = clean(input.observedAt);
   return {
     ...(observedAt && Number.isFinite(Date.parse(observedAt)) ? { observedAt: new Date(observedAt).toISOString() } : {}),
@@ -32,9 +32,15 @@ export function normalizeProvenance(input?: MemoryProvenance): MemoryProvenance 
   };
 }
 
-function unsafePromptMetadata(value: string): boolean {
-  const words = value.normalize('NFKC').normalize('NFKD')
-    .replace(/\p{M}/gu, '').replace(/[\p{Cc}\p{Cf}]/gu, '');
+/** ASCII-only detection view; the original text remains intact in storage. */
+export function memoryPromptScanText(value: string): string {
+  return value.normalize('NFKC').normalize('NFKD')
+    .replace(/\p{M}/gu, '').replace(/\s+/gu, ' ')
+    .replace(/[^\x20-\x7E]/g, '');
+}
+
+export function unsafeMemoryPromptText(value: string): boolean {
+  const words = memoryPromptScanText(value);
   // Imported legacy metadata may bypass today's write guard. Treat it as data
   // and omit instructions even when their parts occupy different fields or
   // appear in a different order.
@@ -45,7 +51,7 @@ function unsafePromptMetadata(value: string): boolean {
 }
 
 function safePromptField(value?: string): string | undefined {
-  if (!value || unsafePromptMetadata(value)) return undefined;
+  if (!value || unsafeMemoryPromptText(value)) return undefined;
   return value.replaceAll('<', '‹').replaceAll('>', '›');
 }
 
@@ -64,7 +70,7 @@ export function formatProvenance(
   const normalized = normalizeProvenance(provenance);
   const fields = [normalized.machine, normalized.channel, normalized.verification, normalized.source]
     .filter((value): value is string => Boolean(value));
-  const metadataSplitUnsafe = unsafePromptMetadata(fields.filter((field) => !unsafePromptMetadata(field)).join(' '));
+  const metadataSplitUnsafe = unsafeMemoryPromptText(fields.filter((field) => !unsafeMemoryPromptText(field)).join(' '));
   const source: MemoryProvenance = {
     ...normalized,
     machine: metadataSplitUnsafe ? undefined : safePromptField(normalized.machine),

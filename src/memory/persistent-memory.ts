@@ -17,7 +17,8 @@ import {
 import { withSessionLock } from "../persistence/session-lock.js";
 import { readTextAtomic, writeFileAtomic } from '../utils/atomic-write.js';
 import {
-  formatProvenance, normalizeProvenance, provenanceEnabled,
+  formatProvenance, memoryPromptScanText, normalizeProvenance, provenanceEnabled,
+  unsafeMemoryPromptText,
   type MemoryKind, type MemoryProvenance,
 } from './memory-provenance.js';
 
@@ -954,7 +955,8 @@ export class PersistentMemoryManager extends EventEmitter {
     if (!this.config.securityScan) return;
 
     const content = `${key}\n${value}`;
-    if (/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/u.test(content)) {
+    if (/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/u.test(content)
+      || (this.config.provenanceEnabled && /[\u115F\u1160\u2800\u3164\uFFA0]/u.test(content))) {
       throw new MemoryWriteRejectedError(
         'Memory write rejected: invisible Unicode control characters are not allowed in prompt-injected memory.',
         'memory_security_rejected',
@@ -980,8 +982,9 @@ export class PersistentMemoryManager extends EventEmitter {
       },
     ];
 
+    const scanned = this.config.provenanceEnabled ? memoryPromptScanText(content) : content;
     for (const { pattern, reason } of threatPatterns) {
-      if (pattern.test(content)) {
+      if (pattern.test(scanned)) {
         throw new MemoryWriteRejectedError(
           `Memory write rejected: ${reason} detected.`,
           'memory_security_rejected',
@@ -1021,8 +1024,10 @@ export class PersistentMemoryManager extends EventEmitter {
 
   /** Prompt view only: memory age never follows recall reinforcement. */
   formatMemoryForPrompt(memory: Memory, withProvenance: boolean = this.config.provenanceEnabled): string {
-    if (!withProvenance) return `${memory.key}: ${memory.value}`;
-    return `${memory.key}: ${memory.value} [${formatProvenance(
+    const entry = `${memory.key}: ${memory.value}`;
+    if (!withProvenance) return entry;
+    const visibleEntry = unsafeMemoryPromptText(entry) ? '[contenu non fiable masqué]' : entry;
+    return `${visibleEntry} [${formatProvenance(
       memory.kind ?? (memory.category === 'preferences' ? 'preference' : 'hypothesis'),
       memory.provenance,
     )}]`;
