@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -120,6 +121,25 @@ describe('catalog states and evidence', () => {
     const feature = buildCatalog({ root, revision: REVISION }).features[0]!;
     expect(feature.states.testedInSituation).toBe('inconnu');
     expect(feature.lastProof?.revision).toBe(OLD_REVISION);
+  });
+
+  it('uses a source digest to keep a proof current across documentation changes only', () => {
+    const root = fixture();
+    proof(root, OLD_REVISION);
+    const digest = createHash('sha256');
+    for (const relative of [
+      'docs/catalog/inventory.json', 'src/catalog/feature.ts',
+      'src/commands/feature.ts', 'src/index.ts',
+    ].sort()) {
+      digest.update(relative).update('\0').update(readFileSync(path.join(root, relative))).update('\0');
+    }
+    const recordPath = path.join(root, 'docs/preuves/feature.json');
+    const record = JSON.parse(readFileSync(recordPath, 'utf8'));
+    record.sourceDigest = digest.digest('hex');
+    writeFileSync(recordPath, JSON.stringify(record));
+    expect(buildCatalog({ root, revision: REVISION }).features[0]!.states.testedInSituation).toBe('vrai');
+    put(root, 'src/catalog/feature.ts', 'export const feature = false;');
+    expect(buildCatalog({ root, revision: REVISION }).features[0]!.states.testedInSituation).toBe('inconnu');
   });
 
   it('treats a current failing run as false and rejects an artifact escaping the root', () => {

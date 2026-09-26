@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 export type CatalogState = 'vrai' | 'faux' | 'inconnu';
@@ -11,6 +12,7 @@ export interface CatalogProof {
   kind: 'integration' | 'field';
   result: 'passed' | 'failed';
   summary: string;
+  sourceDigest?: string;
 }
 
 interface FeatureDefinition {
@@ -183,7 +185,24 @@ function isProof(root: string, value: unknown): value is CatalogProof {
     && typeof proof.date === 'string' && /^\d{4}-\d\d-\d\dT/.test(proof.date)
     && !Number.isNaN(Date.parse(proof.date))
     && hasTrace(root, proof.artifact)
+    && (proof.sourceDigest === undefined || (typeof proof.sourceDigest === 'string' && /^[0-9a-f]{64}$/i.test(proof.sourceDigest)))
     && typeof proof.summary === 'string' && proof.summary.length > 0;
+}
+
+function sourceDigest(root: string, feature: FeatureDefinition): string | null {
+  const paths = [...new Set([
+    'docs/catalog/inventory.json',
+    ...(feature.codePaths ?? []),
+    ...(feature.entrypoint?.checks.map((check) => check.file) ?? []),
+  ])].sort();
+  if (!feature.codePaths?.length || !feature.entrypoint?.checks.length) return null;
+  const digest = createHash('sha256');
+  for (const relative of paths) {
+    const file = locatedFile(root, relative);
+    if (!file) return null;
+    digest.update(relative).update('\0').update(readFileSync(file)).update('\0');
+  }
+  return digest.digest('hex');
 }
 
 function proofsByFeature(root: string, inventory: Inventory, warnings: string[]): Map<string, CatalogProof[]> {
@@ -244,7 +263,10 @@ export function buildCatalog(options: CatalogOptions): CatalogStatus {
     const latestEvidence = evidence[0] ?? null;
     const lastProof = evidence.find((item) => item.result === 'passed') ?? null;
     let testedInSituation: CatalogState = 'inconnu';
-    if (latestEvidence && revision && latestEvidence.revision === revision) {
+    const matchesSource = latestEvidence?.sourceDigest
+      ? latestEvidence.sourceDigest === sourceDigest(root, feature)
+      : !!(latestEvidence && revision && latestEvidence.revision === revision);
+    if (latestEvidence && matchesSource) {
       testedInSituation = latestEvidence.result === 'passed' ? 'vrai' : 'faux';
     } else if (latestEvidence) reasons.push('Preuve ancienne ou révision courante inconnue.');
     let deployed: CatalogState = installed ? coded : 'inconnu';
