@@ -100,14 +100,29 @@ async function fetchText(url: string): Promise<string | null> {
   return null;
 }
 
+/** `CODEBUDDY_RESEARCH_SORT=recent` : les publications les plus récentes d'abord (ingestion quotidienne). */
+export function researchSortRecent(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.CODEBUDDY_RESEARCH_SORT ?? '').trim().toLowerCase() === 'recent';
+}
+
+export function arxivQueryUrl(topic: string, limit: number, env: NodeJS.ProcessEnv = process.env): string {
+  const sort = researchSortRecent(env) ? '&sortBy=submittedDate&sortOrder=descending' : '';
+  return `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(topic)}&start=0&max_results=${limit}${sort}`;
+}
+
+export function europePmcQueryUrl(topic: string, limit: number, env: NodeJS.ProcessEnv = process.env): string {
+  const sort = researchSortRecent(env) ? `&sort=${encodeURIComponent('P_PDATE_D desc')}` : '';
+  return `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(topic)}&format=json&pageSize=${limit}&resultType=core${sort}`;
+}
+
 async function fetchArxiv(topic: string, limit: number): Promise<Publication[]> {
-  const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(topic)}&start=0&max_results=${limit}`;
+  const url = arxivQueryUrl(topic, limit);
   const xml = await fetchText(url);
   return xml ? parseArxivAtom(xml, limit) : [];
 }
 
 async function fetchEuropePmc(topic: string, limit: number): Promise<Publication[]> {
-  const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(topic)}&format=json&pageSize=${limit}&resultType=core`;
+  const url = europePmcQueryUrl(topic, limit);
   const text = await fetchText(url);
   if (!text) return [];
   try {
