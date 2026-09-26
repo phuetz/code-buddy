@@ -45,6 +45,20 @@ function captureChat(reply = 'Coucou toi.') {
 }
 
 describe('runCompanionTurn — one path for every companion surface', () => {
+  it('guards a cached selfie caption before sending it when enabled', async () => {
+    const result = await runCompanionTurn('photo', {
+      surface: 'mobile',
+      env: { CODEBUDDY_COMPANION_PERSONA: 'copine', CODEBUDDY_LISA_FUTURE_COMMITMENTS: 'true' },
+      resolveProvider: () => null,
+      serveSelfie: async () => ({
+        handled: true, caption: 'Je te préviens quand la prochaine photo est prête.',
+        imagePath: '/nowhere/a.png', mimeType: 'image/png', imageBase64: 'AAAA',
+        refused: false, reason: 'ok', contentTier: 'safe',
+      }),
+    });
+    expect(result.text).toBe("Je n'ai pas de suivi programmé pour te prévenir plus tard.");
+  });
+
   it('serves a cached selfie without ever calling the LLM', async () => {
     const { chat } = captureChat();
     const result = await runCompanionTurn('envoie-moi une photo de toi', {
