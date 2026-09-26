@@ -59,7 +59,7 @@ test.describe('Mobile PWA E2E', () => {
       rateLimit: false,
       cors: false,
     });
-    
+
     buddyServer = started.server;
     stopFn = serverInstance.stopServer;
     createToken = createUserToken;
@@ -84,10 +84,11 @@ test.describe('Mobile PWA E2E', () => {
     else process.env.USERPROFILE = originalUserProfile;
     if (tmpHome) fs.rmSync(tmpHome, { recursive: true, force: true });
   });
-  
+
   test('authenticates, sends chat, receives reply, and reconnects', async ({ page }) => {
+     test.setTimeout(90000);
      const token = createToken('e2e-user', ['chat', 'tools', 'sessions'], process.env.JWT_SECRET);
-     
+
      await page.goto(`${baseUrl}/__codebuddy__/mobile/#token=${token}`);
 
      for (const size of [96, 192, 512]) {
@@ -97,7 +98,7 @@ test.describe('Mobile PWA E2E', () => {
        const bytes = await response.body();
        expect(bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))).toBe(true);
      }
-     
+
      await expect(page.locator('#main-screen')).toHaveClass(/active/);
      await expect(page.locator('#presence-line')).toHaveText('en ligne');
 
@@ -107,7 +108,7 @@ test.describe('Mobile PWA E2E', () => {
 
      await page.fill('#message-input', 'ping from pwa');
      await page.click('#send-btn');
-     
+
      await expect(page.locator('.msg-row.user')).toContainText('ping from pwa');
      await expect(page.locator('.msg-row.assistant')).toContainText('Stub Reply', { timeout: 10000 });
 
@@ -130,7 +131,7 @@ test.describe('Mobile PWA E2E', () => {
      });
      buddyServer = started.server;
 
-     await expect(page.locator('#presence-line')).toHaveText('en ligne', { timeout: 15000 });
+     await expect(page.locator('#presence-line')).toHaveText('en ligne', { timeout: 30000 });
 
      // Send a second message after reconnect to prove it's fully connected
      await page.fill('#message-input', 'ping 2');

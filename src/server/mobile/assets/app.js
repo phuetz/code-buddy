@@ -1973,7 +1973,9 @@
     if (type === 'error') {
       var code = data.error && data.error.code;
       var msg = (data.error && data.error.message) || 'Erreur';
-      if (code === 'AUTH_FAILED' || code === 'UNAUTHORIZED') {
+      if (!state.connected || code === 'AUTH_FAILED' || code === 'UNAUTHORIZED') {
+        logout();
+        el('token-input').value = '';
         setError(msg);
         return;
       }
@@ -2153,6 +2155,7 @@
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (_err) { /* ignore */ }
     state.token = '';
     state.manualClose = true;
+    state.connected = false;
     state.outbox = [];
     if (state.reconnectTimer) {
       clearTimeout(state.reconnectTimer);

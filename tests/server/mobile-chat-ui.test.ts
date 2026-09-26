@@ -863,6 +863,29 @@ describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () 
     expect(sockets.length).toBeGreaterThan(2);
   });
 
+  it.each(['AUTH_FAILED', 'UNAUTHORIZED', 'RATE_LIMITED'])('arrête les reconnexions après %s', (code) => {
+    const first = sockets[0]!;
+    first.readyState = 3;
+    first.emit('close');
+    vi.advanceTimersByTime(1000);
+    const rejected = sockets[1]!;
+    rejected.readyState = 1;
+    rejected.emit('open');
+    rejected.emit('message', {
+      data: JSON.stringify({ type: 'error', error: { code, message: 'Jeton refusé' } }),
+    });
+
+    expect(rejected.readyState).toBe(3);
+    expect((api.state as { token: string }).token).toBe('');
+    expect(sessionStorage.getItem('codebuddy_mobile_token')).toBeNull();
+    expect((document.getElementById('token-input') as HTMLTextAreaElement).value).toBe('');
+    expect(document.getElementById('error-message')?.textContent).toBe('Jeton refusé');
+    const count = sockets.length;
+    rejected.emit('close');
+    vi.advanceTimersByTime(60000);
+    expect(sockets.length).toBe(count);
+  });
+
   it('ignore une authentification tardive provenant du socket remplacé', () => {
     const old = sockets[0]!;
     old.readyState = 3;
