@@ -10,6 +10,8 @@ import {
   resetAcks,
   resetUndo,
   noteCreatedForUndo,
+  pendingAcks,
+  peekUndo,
   whenRemindersPersisted,
   bypassesAddressGate,
 } from '../../src/companion/reminders.js';
@@ -102,6 +104,7 @@ describe('spoken reminder authorization', () => {
     expect(await coordinator.handleVoice(phrase, deps())).toBe(true);
     expect(notifyOwner).not.toHaveBeenCalled();
     expect((await listReminders())[0]?.lastDoneAt).toBeUndefined();
+    expect(pendingAcks(NOW).map((item) => item.id)).toContain(reminder.id);
   });
 
   it('does not remove a fresh reminder when the TV says annule', async () => {
@@ -110,6 +113,7 @@ describe('spoken reminder authorization', () => {
     expect(bypassesAddressGate('annule', NOW)).toBe(false);
     expect(await coordinator.handleVoice('annule', deps())).toBe(true);
     expect((await listReminders()).map((item) => item.id)).toContain(reminder.id);
+    expect(peekUndo('annule', NOW)?.id).toBe(reminder.id);
   });
 
   it('refuses a stale acknowledgement if the same reminder fires again before confirmation', async () => {
@@ -121,20 +125,30 @@ describe('spoken reminder authorization', () => {
     expect((await listReminders())[0]?.lastDoneAt).toBeUndefined();
   });
 
-  it('lets the owner acknowledge, defer and cancel addressed requests after authentication', async () => {
+  it('lets the owner acknowledge an addressed request after authentication', async () => {
     const reminder = await addReminder({ label: 'médicaments', time: '09:00', now: new Date(NOW) });
     openAck(reminder, NOW);
     await coordinator.handleVoice("Lisa, c'est fait", deps());
     expect((await listReminders())[0]?.lastDoneAt).toBeUndefined();
     expect((await coordinator.confirm('confirme rappel a1b2c3d4e5f6', owner)).success).toBe(true);
     expect((await listReminders())[0]?.lastDoneAt).toBeDefined();
+  });
 
+  it('keeps a report pending until the owner confirms the addressed request', async () => {
+    const reminder = await addReminder({ label: 'médicaments', time: '09:00', now: new Date(NOW) });
     openAck(reminder, NOW);
     await coordinator.handleVoice('Lisa, dans 10 minutes', deps());
+    expect(pendingAcks(NOW).map((item) => item.id)).toContain(reminder.id);
     expect((await coordinator.confirm('confirme rappel a1b2c3d4e5f6', owner)).success).toBe(true);
+    expect(pendingAcks(NOW).map((item) => item.id)).not.toContain(reminder.id);
+  });
 
+  it('keeps an undo available until the owner confirms the addressed cancellation', async () => {
+    const reminder = await addReminder({ label: 'médicaments', time: '09:00', now: new Date(NOW) });
     noteCreatedForUndo(reminder, NOW);
     await coordinator.handleVoice('Lisa, annule', deps());
+    expect(peekUndo('annule', NOW)?.id).toBe(reminder.id);
+    expect((await listReminders()).map((item) => item.id)).toContain(reminder.id);
     expect((await coordinator.confirm('confirme rappel a1b2c3d4e5f6', owner)).success).toBe(true);
     expect(await listReminders()).toEqual([]);
   });
