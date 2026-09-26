@@ -12,6 +12,7 @@ import { getRequestStats } from '../middleware/logging.js';
 import { getDatabaseManager } from '../../database/database-manager.js';
 import { getConnectionStats } from '../websocket/handler.js';
 import { detectProviderFromEnv } from '../../utils/provider-detector.js';
+import { getServerRuntimeStatus, type RuntimeStatus } from '../../runtime/runtime-status.js';
 import type { ServerStats } from '../types.js';
 
 const require = createRequire(import.meta.url);
@@ -165,6 +166,7 @@ async function probeProviderApi(): Promise<{ ready: boolean; message: string; la
 interface HealthCheckResponse {
   status: 'ok' | 'degraded' | 'error';
   version: string;
+  runtime: RuntimeStatus;
   uptime: number;
   uptimeFormatted: string;
   timestamp: string;
@@ -264,6 +266,7 @@ router.get(
     const response: HealthCheckResponse = {
       status,
       version: VERSION,
+      runtime: getServerRuntimeStatus(),
       uptime: uptimeSeconds,
       uptimeFormatted: formatUptime(uptimeSeconds),
       timestamp: new Date().toISOString(),

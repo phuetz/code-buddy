@@ -7,6 +7,7 @@ import type {
 import { validateModel, getModelInfo } from "../utils/model-utils.js";
 import { getModelToolConfig } from "../config/model-tools.js";
 import { logger } from "../utils/logger.js";
+import { recordEffectiveCall } from '../runtime/runtime-status.js';
 import { normalizeBaseURL, DEFAULT_BASE_URL } from "../utils/base-url.js";
 import type { CircuitBreakerConfig } from "../providers/circuit-breaker.js";
 import { GeminiNativeProvider } from "./providers/provider-gemini-native.js";
@@ -766,6 +767,10 @@ export class CodeBuddyClient {
     // Dispatch to the active strategy.
     try {
       const response = await this.dispatchChat(messages, tools, opts, searchOptions);
+      recordEffectiveCall({
+        provider: this.getRuntimeProviderId(),
+        model: this.chatgptProvider?.getEffectiveModel() ?? response.model ?? null,
+      });
       return finish(response);
     } catch (error) {
       if (opts.signal?.aborted) {
@@ -1070,8 +1075,17 @@ export class CodeBuddyClient {
       : primaryFactory();
 
     let yieldedAnyChunk = false;
+    let observedModel: string | null = null;
     try {
       for await (const chunk of primaryStream) {
+        const effectiveModel = this.chatgptProvider?.getEffectiveModel() ?? chunk.model ?? null;
+        if (!yieldedAnyChunk || (effectiveModel && effectiveModel !== observedModel)) {
+          recordEffectiveCall({
+            provider: this.getRuntimeProviderId(),
+            model: effectiveModel,
+          });
+          observedModel = effectiveModel;
+        }
         yieldedAnyChunk = true;
         yield chunk;
       }

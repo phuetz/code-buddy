@@ -4329,6 +4329,11 @@ addLazyCommand(program, 'resources', 'Explicit network resource inventory and re
   return createResourcesCommand();
 });
 
+addLazyCommand(program, 'runtime', 'Inspect the installed code and active runtime evidence', async () => {
+  const { createRuntimeCommand } = await import('./commands/runtime.js');
+  return createRuntimeCommand();
+});
+
 // Spec — BMAD-inspired spec-driven, review-gated work pipeline
 addLazyCommandGroup(
   program,
