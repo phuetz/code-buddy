@@ -55,6 +55,7 @@ import {
   noteSpokenText,
 } from './voice-activity.js';
 import { prepareSpeech } from './speech-sanitizer.js';
+import { futureCommitmentsEnabled, guardFutureCommitments } from '../companion/future-commitments.js';
 import { matchVoiceInteraction, VOICE_INTERACTION_PREWARM_PHRASES } from './voice-interactions.js';
 import { clockCompanionReply, voiceClockPromptBlock } from './voice-clock.js';
 import {
@@ -3821,7 +3822,10 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       try {
         const correction = prepareSpeech(await pending);
         if (!correction || signal.aborted) return '';
-        const guarded = guardRelationshipReply(correction).response.trim();
+        const relationshipSafe = guardRelationshipReply(correction).response.trim();
+        const guarded = futureCommitmentsEnabled(env)
+          ? guardFutureCommitments(relationshipSafe).text
+          : relationshipSafe;
         if (!guarded || signal.aborted) return '';
         if (timedStreamSpeak) {
           let streamed = false;
@@ -3932,7 +3936,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // ---- FAST PATH: streaming pipeline — speak from the first sentence ----
       // Never lets a streaming failure crash the turn; on nothing-spoken it falls through to
       // the blocking path below (which is the original, unchanged tour-par-tour behavior).
-      if (streamFn && visualReply === undefined) {
+      if (streamFn && visualReply === undefined && !futureCommitmentsEnabled(env)) {
         try {
           let shortFirstConfig: VoiceShortFirstConfig | undefined;
           const relationshipSafety = new RelationshipSafetyStreamGuard(
@@ -4157,6 +4161,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       const preparedReply = prepareSpeech(rawReply);
       const relationshipGuard = guardRelationshipReply(preparedReply ?? '');
       let reply = applyLimitsContract(relationshipGuard.response, { heard }).text;
+      if (futureCommitmentsEnabled(env)) {
+        reply = guardFutureCommitments(reply).text;
+      }
       let emptyReplyRecovery = false;
       if (reply) firstSafeReleaseMs ??= Date.now() - startedAt;
       if (relationshipGuard.intervened) {

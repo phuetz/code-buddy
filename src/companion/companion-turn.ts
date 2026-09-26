@@ -23,6 +23,7 @@ import type { CompanionHistoryTurn } from './companion-history.js';
 import { rememberSharedPhotos } from './shared-photo-memory.js';
 import { applyLimitsContract } from './reply-augment.js';
 import { guardRelationshipReply } from '../conversation/relationship-safety.js';
+import { futureCommitmentsEnabled, guardFutureCommitments } from './future-commitments.js';
 import type {
   CompanionSelfieServeResult,
   CompanionSelfieSurface,
@@ -132,7 +133,9 @@ export async function runCompanionTurn(
       });
       if (served) {
         return {
-          text: served.caption,
+          text: futureCommitmentsEnabled(env)
+            ? guardFutureCommitments(served.caption).text
+            : served.caption,
           kind: served.imagePath ? 'selfie' : 'text',
           ...(served.imagePath ? { imagePath: served.imagePath } : {}),
           ...(served.imageBase64 && served.mimeType
