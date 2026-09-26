@@ -390,6 +390,9 @@ export function recordBanditOutcome(
 
 /** Run one mutation→evaluate→record cycle. Never merges; prunes losing branches by default. */
 export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<EvolutionCycleResult> {
+  if (opts.weakness.kind === 'research') {
+    throw new Error('Research articles require an experiment fiche; evolve propose never mutates code');
+  }
   const basePath = opts.basePath ?? process.cwd();
   const variantId = opts.variantId ?? `evo-${Date.now().toString(36)}`;
   const branch = `codebuddy/evolve/${variantId}`;

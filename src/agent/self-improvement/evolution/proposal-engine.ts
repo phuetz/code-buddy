@@ -1,5 +1,5 @@
 /** Read-only selection and planning followed by one isolated proposal archive write. */
-import { closeSync, existsSync, mkdirSync, openSync, realpathSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getCodeBuddyHome } from '../../../utils/codebuddy-home.js';
@@ -19,6 +19,9 @@ import {
   type SynthChat,
 } from './research-weakness-source.js';
 import { upsertArticleLinks, type ArticleLink } from '../../../catalog/article-links.js';
+import type { CollectiveKnowledgeGraph } from '../../../memory/collective-knowledge-graph.js';
+import { parseExperimentFiche, selectExperimentLane, type ExperimentFiche, type ExperimentLane } from './experiment-fiche.js';
+import { hasTriedExperimentLesson } from './experiment-lessons.js';
 import { planVariant, type VariantPlan } from './variant-planner.js';
 import type { Weakness } from './evolution-engine.js';
 import type { VariantRecord } from './code-variant-store.js';
@@ -39,7 +42,12 @@ export type ProposalStop =
   | 'ARCHIVE_FAILED'
   | 'DREAM_ARCHIVE_INSUFFICIENT'
   | 'DREAM_POLICY_UNSUPPORTED'
-  | 'DREAM_WEAKNESS_UNMAPPED';
+  | 'DREAM_WEAKNESS_UNMAPPED'
+  | 'FICHE_INCOMPLETE'
+  | 'FICHE_MISMATCH'
+  | 'BUDGET_LANE_MISMATCH'
+  | 'ALREADY_TRIED'
+  | 'LESSON_RECALL_ERROR';
 
 export interface ProposalEvent {
   stage: 'source' | 'recall' | 'filter' | 'provider' | 'dream' | 'goal' | 'plan' | 'archive';
@@ -51,7 +59,8 @@ export interface ProposalEvent {
 export interface ProposalRecord {
   id: string;
   createdAt: string;
-  source: 'research';
+  source: ExperimentLane;
+  fiche: ExperimentFiche;
   weakness: Weakness;
   feature: { id: string; name: string; catalogIds: string[] };
   article: { id?: string; source?: string; text: string; similarity: number };
@@ -75,10 +84,29 @@ export interface ProposeOptions {
   persistLinks?: boolean;
   archiveRoot?: string;
   now?: () => Date;
+  /** Complete, human-reviewable experiment contract. No inferred evidence or thresholds. */
+  fiche?: unknown;
+  lane?: ExperimentLane | 'auto';
+  usageShare?: number;
+  graph?: CollectiveKnowledgeGraph;
   /** Opt-in override; otherwise only CODEBUDDY_DREAM_RSI=true enables replay. */
   dreamEnabled?: boolean;
   /** Injectable historical archive for offline tests; production reads CodeVariantStore only. */
   dreamRecords?: VariantRecord[];
+}
+
+function archivedLaneBudgetMs(root: string): { usage: number; research: number } {
+  const budget = { usage: 0, research: 0 };
+  if (!existsSync(root)) return budget;
+  for (const name of readdirSync(root).filter((entry) => /^proposal-[\w-]+\.json$/.test(entry))) {
+    try {
+      const record = JSON.parse(readFileSync(path.join(root, name), 'utf8')) as { fiche?: unknown };
+      const fiche = parseExperimentFiche(record.fiche);
+      const reservedMs = 2 * fiche.comparison.equalBudget.runsPerArm * fiche.comparison.equalBudget.maxDurationMsPerArm;
+      budget[fiche.lane] += reservedMs;
+    } catch { /* malformed historical rows do not count as allocated work */ }
+  }
+  return budget;
 }
 
 function stop(events: ProposalEvent[], stage: ProposalEvent['stage'], reason: ProposalStop, detail: string): ProposalResult {
@@ -125,7 +153,20 @@ function archiveProposal(root: string, record: ProposalRecord): string {
 
 /** No mutator, worktree, branch or baseline scorer is called; optional replay only reads the variant store. */
 export async function proposeResearchImprovement(options: ProposeOptions = {}): Promise<ProposalResult> {
-  const events: ProposalEvent[] = [{ stage: 'source', status: 'ok', code: 'RESEARCH_SELECTED', detail: 'Research discovery source selected.' }];
+  const events: ProposalEvent[] = [];
+  let fiche: ExperimentFiche;
+  try { fiche = parseExperimentFiche(options.fiche); }
+  catch (error) { return stop(events, 'source', 'FICHE_INCOMPLETE', error instanceof Error ? error.message : String(error)); }
+  const root = options.archiveRoot ?? path.join(getCodeBuddyHome(), 'self-improvement', 'evolution', 'proposals');
+  let lane: ExperimentLane;
+  try {
+    lane = options.lane && options.lane !== 'auto' ? options.lane
+      : options.lane === 'auto' ? selectExperimentLane(archivedLaneBudgetMs(root), { usageShare: options.usageShare },
+        2 * fiche.comparison.equalBudget.runsPerArm * fiche.comparison.equalBudget.maxDurationMsPerArm)
+        : fiche.lane;
+  } catch (error) { return stop(events, 'source', 'BUDGET_LANE_MISMATCH', error instanceof Error ? error.message : String(error)); }
+  if (lane !== fiche.lane) return stop(events, 'source', 'BUDGET_LANE_MISMATCH', `Next allocated lane is ${lane}; fiche is ${fiche.lane}.`);
+  events.push({ stage: 'source', status: 'ok', code: lane === 'usage' ? 'USAGE_SELECTED' : 'RESEARCH_SELECTED', detail: `${lane} source selected.` });
   let providerAvailable: boolean;
   try {
     providerAvailable = options.hasProvider ? await options.hasProvider() : (options.chat ? true : await defaultHasProvider());
@@ -139,7 +180,8 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
   const dreamEnabled = options.dreamEnabled ?? process.env.CODEBUDDY_DREAM_RSI === 'true';
   let selectedDream: Extract<ReturnType<typeof dreamExplorationPolicy>, { status: 'selected' }> | undefined;
   let dreamArchiveRecords: VariantRecord[] = [];
-  let sourceFeatures = features;
+  let sourceFeatures = lane === 'usage' ? features.filter((feature) => feature.id === fiche.feature.id) : features;
+  if (!sourceFeatures.length) return stop(events, 'source', 'FICHE_MISMATCH', 'Fiche feature is absent from the feature map.');
   if (dreamEnabled) {
     if (options.dreamRecords) dreamArchiveRecords = options.dreamRecords;
     else {
@@ -172,7 +214,8 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
   for (const feature of sourceFeatures) {
     let hits: Awaited<ReturnType<ResearchRecall>>;
     try {
-      hits = await recall(feature.description, { types: ['discovery'], limit: 5 });
+      hits = await recall(lane === 'usage' ? `${fiche.problem.statement} ${feature.description}` : feature.description,
+        { types: ['discovery'], limit: 5 });
     } catch {
       recallErrors += 1;
       hits = [];
@@ -196,9 +239,13 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
   let reviewed: FeatureMatch[];
   try { reviewed = persistLinks ? excludeHumanRejected(candidates, options.linksPath) : candidates; }
   catch (error) { return stop(events, 'archive', 'ARCHIVE_FAILED', `Article links: ${error instanceof Error ? error.message : String(error)}`); }
-  const matches = selectMatches(reviewed,
+  const matches = selectMatches(reviewed.filter((candidate) =>
+    candidate.feature.id === fiche.feature.id && scholarlyIdentity(candidate.hit) === fiche.research.articleId),
     { minSimilarity: floor, limit: 1 });
   if (matches.length === 0) {
+    if (selectMatches(reviewed, { minSimilarity: floor, limit: 1 }).length > 0) {
+      return stop(events, 'filter', 'FICHE_MISMATCH', 'No selected publication matches the fiche article and feature.');
+    }
     const scientific = candidates.filter((candidate) => scholarlyIdentity(candidate.hit));
     if (!scientific.length) return stop(events, 'filter', 'NO_SCIENTIFIC_MATCH', 'No identifiable scientific publication in recalled discoveries.');
     if (reviewed.length < candidates.length && selectMatches(candidates, { minSimilarity: floor, limit: 1 }).length) {
@@ -211,6 +258,18 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
       : stop(events, 'filter', 'BELOW_THRESHOLD', `No scientific discovery meets similarity ${floor} and aggregate score 0.32.`);
   }
   const selected = matches[0]!;
+  if (!fiche.feature.files.every((file) => selected.feature.paths.some((areaPath) =>
+    areaPath.endsWith('/') ? file.startsWith(areaPath) : file === areaPath))) {
+    return stop(events, 'filter', 'FICHE_MISMATCH', 'Fiche files are outside the selected feature.');
+  }
+  try {
+    const graph = options.graph ?? (await import('../../../memory/collective-knowledge-graph.js')).getCollectiveKnowledgeGraph();
+    if (hasTriedExperimentLesson(graph, fiche)) {
+      return stop(events, 'filter', 'ALREADY_TRIED', 'This article, feature and method already have an experiment lesson.');
+    }
+  } catch (error) {
+    return stop(events, 'filter', 'LESSON_RECALL_ERROR', error instanceof Error ? error.message : String(error));
+  }
   events.push({ stage: 'filter', status: 'ok', code: 'WEAKNESS_SELECTED', detail: `Domain ${selected.feature.id}; article ${selected.hit.id ?? 'unknown'}; similarity ${selected.hit.similarity ?? 0}.` });
 
   const chat = options.chat ?? makeDefaultChat(options.model);
@@ -244,10 +303,9 @@ export async function proposeResearchImprovement(options: ProposeOptions = {}): 
   }
   events.push({ stage: 'plan', status: 'ok', code: 'PLAN_CREATED', detail: `${plan.steps.length} step(s).` });
 
-  const root = options.archiveRoot ?? path.join(getCodeBuddyHome(), 'self-improvement', 'evolution', 'proposals');
   const id = `proposal-${randomUUID()}`;
   const record: ProposalRecord = {
-    id, createdAt: (options.now ?? (() => new Date()))().toISOString(), source: 'research', weakness,
+    id, createdAt: (options.now ?? (() => new Date()))().toISOString(), source: lane, fiche, weakness,
     feature: { id: selected.feature.id, name: selected.feature.name, catalogIds: selected.feature.catalogIds ?? [] },
     article: {
       ...(selected.hit.id ? { id: selected.hit.id } : {}),

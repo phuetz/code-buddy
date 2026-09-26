@@ -92,7 +92,8 @@ export type GateRejectionReason =
   | 'structural-invalid'
   | 'policy-violation'
   | 'no-improvement'
-  | 'regression';
+  | 'regression'
+  | 'acceptance-threshold';
 
 export interface GateOutcome {
   accepted: boolean;

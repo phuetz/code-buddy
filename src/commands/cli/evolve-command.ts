@@ -15,6 +15,7 @@
  */
 
 import { execFileSync } from 'child_process';
+import { readFileSync } from 'node:fs';
 import type { Command } from 'commander';
 import { logger } from '../../utils/logger.js';
 import {
@@ -84,20 +85,34 @@ export function registerEvolveCommands(program: Command): void {
 
   evolve
     .command('propose')
-    .description('Select a research weakness and archive a plan without mutating code or creating a branch (optional CODEBUDDY_DREAM_RSI=true)')
-    .option('--source <src>', 'Proposal source (research)', 'research')
+    .description('Select an article for a complete experiment fiche and archive a plan without mutating code')
+    .requiredOption('--fiche-input <file>', 'JSON experiment fiche with evidence, equal-budget comparison and numeric thresholds')
+    .option('--source <src>', 'Budget lane (auto, usage or research)', 'auto')
+    .option('--usage-share <fraction>', 'Share allocated to observed usage failures (0 to 1)', '0.8')
     .option('--min-similarity <score>', 'Minimum discovery similarity (0 to 1)', '0.45')
     .option('--model <model>', 'Model for goal synthesis and planning')
     .option('--json', 'Write all stages and the result as JSON')
-    .action(async (options: { source: string; minSimilarity: string; model?: string; json?: boolean }) => {
+    .action(async (options: { ficheInput: string; source: string; usageShare: string; minSimilarity: string; model?: string; json?: boolean }) => {
       const floor = Number(options.minSimilarity);
-      if (options.source !== 'research' || !Number.isFinite(floor) || floor < 0 || floor > 1) {
-        logger.error('Use --source research and --min-similarity between 0 and 1.');
+      const share = Number(options.usageShare);
+      if (!['auto', 'usage', 'research'].includes(options.source) || !Number.isFinite(floor) || floor < 0 || floor > 1 ||
+        !Number.isFinite(share) || share < 0 || share > 1) {
+        logger.error('Use --source auto|usage|research, --usage-share and --min-similarity between 0 and 1.');
+        process.exitCode = 2;
+        return;
+      }
+      let fiche;
+      try {
+        const { parseExperimentFiche } = await import('../../agent/self-improvement/evolution/experiment-fiche.js');
+        fiche = parseExperimentFiche(JSON.parse(readFileSync(options.ficheInput, 'utf8')));
+      } catch (error) {
+        logger.error(`Invalid experiment fiche: ${error instanceof Error ? error.message : String(error)}`);
         process.exitCode = 2;
         return;
       }
       const { proposeResearchImprovement } = await import('../../agent/self-improvement/evolution/proposal-engine.js');
-      const result = await proposeResearchImprovement({ minSimilarity: floor, ...(options.model ? { model: options.model } : {}) });
+      const result = await proposeResearchImprovement({ fiche, lane: options.source as 'auto' | 'usage' | 'research',
+        usageShare: share, minSimilarity: floor, ...(options.model ? { model: options.model } : {}) });
       if (options.json) {
         process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       } else {
@@ -245,6 +260,11 @@ export function registerEvolveCommands(program: Command): void {
         process.exitCode = 1;
         return;
       }
+      if (options.auto && options.source === 'research') {
+        logger.error('Research articles require evolve propose with an experiment fiche.');
+        process.exitCode = 2;
+        return;
+      }
       const { runEvolutionRound, agentMutator, formatEvolveRoundSummary } = await import('../../agent/self-improvement/evolution/evolution-engine.js');
       const { makeLlmVariantPlanner } = await import('../../agent/self-improvement/evolution/variant-planner.js');
       const { defaultDeterministicComponents, evalTasksComponent, harnessTasksComponent } = await import('../../agent/self-improvement/evolution/variant-fitness.js');
@@ -283,7 +303,7 @@ export function registerEvolveCommands(program: Command): void {
           limit: rounds,
           includeEvalFailures: all || src === 'eval' || src === 'both',
           includeHotspots: all || src === 'hotspots' || src === 'both',
-          includeResearch: all || src === 'research',
+          includeResearch: false,
           env: process.env,
         });
         if (weaknesses.length === 0) {
