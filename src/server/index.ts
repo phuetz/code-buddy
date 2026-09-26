@@ -1686,10 +1686,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               // keeps deterministic address/greeting/continuity only. `always` is the explicit
               // unfiltered push-to-talk/test escape hatch resolved and warned at startup above.
 
-              // Reminder voice-ack: a spoken "c'est fait" marks a PENDING reminder done. It binds
-              // only to a reminder fired in its window (safety: never from ambient speech / the
-              // chime-in LLM), bypasses the silence gate, reads the bind back, and short-circuits
-              // the normal reply so the robot doesn't both confirm AND chat.
+              // Reminder requests heard by the room microphone require a fresh reply from an
+              // authenticated owner channel before any store mutation.
               // `reply` is a VoiceReplyHandler (callable + `.interrupt()`); the wrappers below
               // replace it with plain handlers, so type onHeard by the call contract they share.
               let onHeard: (
@@ -1697,67 +1695,35 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 context?: import('../sensory/voice-entrainment.js').VoiceTurnContext,
               ) => Promise<void> = reply;
               let reminderShortcut: ((t: string) => boolean) | undefined;
-              // Narrower than reminderShortcut: only what may skip the address gate.
-              let reminderGateBypass: ((t: string) => boolean) | undefined;
               let maisonShortcut: ((t: string) => boolean) | undefined;
               if (process.env.CODEBUDDY_REMINDERS === 'true') {
                 const rem = await import('../companion/reminders.js');
                 const { sayNow } = await import('../sensory/voice-loop.js');
-                // Reminder phrases short-circuit the normal reply (the robot confirms instead
-                // of chatting). Only acks/snoozes/undos also bypass the silence gate.
+                const { reminderVoiceCoordinator } = await import('../companion/reminder-voice-auth.js');
+                const { resolveCompanionIdentity } = await import('../companion/companion-identity.js');
+                const { sendTelegramAlert } = await import('../sensory/alert.js');
+                const { getActivePersonaVoiceAsync } = await import('../personas/persona-manager.js');
                 reminderShortcut = (t: string) =>
                   rem.matchAck(t, Date.now()) !== null ||
                   rem.isSnoozeCommand(t, Date.now()) ||
                   rem.isUndoCommand(t, Date.now()) ||
                   rem.isReminderVoiceCommand(t) ||
                   rem.parseVoiceReminder(t) !== null;
-                reminderGateBypass = (t: string) => rem.bypassesAddressGate(t, Date.now());
                 onHeard = async (t, context) => {
                   const sayCanonical = createCanonicalVoiceReplySpeaker(
                     t,
                     (content) => sayNow(content, { phoneDelivery: 'never' }),
                     conversationBridge,
                   );
-                  // Spoken undo FIRST: a bare "annule" right after a creation reverts it (the
-                  // confirm-and-await flow, ambient-style — the confirmation read the cadence
-                  // back, the correction stays natural speech). Window-bounded, so it never
-                  // hijacks an "annule" said minutes later in conversation.
-                  const undone = rem.undoPending(t, Date.now());
-                  if (undone) {
-                    await rem.removeReminder(undone.id);
-                    await sayCanonical(`OK, j'annule le rappel : ${undone.label}.`);
-                    return;
-                  }
-                  // Snooze a pending reminder ("dans 10 minutes" / "plus tard") before anything else.
-                  const snoozed = await rem.snoozePending(t, Date.now());
-                  if (snoozed) {
-                    const mins = Math.max(1, Math.round(snoozed.delayMs / 60_000));
-                    await sayCanonical(`D'accord, je te le rappelle dans ${mins} minute${mins > 1 ? 's' : ''}.`);
-                    return;
-                  }
-                  const id = rem.matchAck(t, Date.now());
-                  if (id) {
-                    const done = await rem.markDone(id, 'voice');
-                    if (done) await sayCanonical(rem.reminderReadback(done.label));
-                    return;
-                  }
-                  // Manage reminders by voice (list / remove / disable) BEFORE create, so
-                  // "supprime le rappel du train" isn't misread as a new reminder.
-                  if (await rem.handleReminderVoiceCommand(t, { speak: sayCanonical })) return;
-                  const created = rem.parseVoiceReminder(t);
-                  if (created) {
-                    try {
-                      const r = await rem.addReminder(created);
-                      // Arm the spoken undo: a bare "annule" within the window reverts THIS creation.
-                      rem.noteCreatedForUndo(r, Date.now());
-                      // Read back the CADENCE ("demain" / "tous les jours") so a mis-captured
-                      // recurrence is audible on the spot (the train-bug class of confusion).
-                      await sayCanonical(`C'est noté : ${r.label}, ${rem.reminderCadencePhrase(r)} à ${r.time}.`);
-                    } catch (err) {
-                      logger.warn(`[reminders] voice create failed: ${err instanceof Error ? err.message : String(err)}`);
-                    }
-                    return;
-                  }
+                  const robotName = process.env.CODEBUDDY_ROBOT_NAME?.trim()
+                    || (await getActivePersonaVoiceAsync()).robotName?.trim()
+                    || 'Buddy';
+                  if (await reminderVoiceCoordinator.handleVoice(t, {
+                    identity: resolveCompanionIdentity({ channel: 'voice', isVoicePresence: true }),
+                    robotName,
+                    speak: async (line) => { await sayCanonical(line); },
+                    notifyOwner: sendTelegramAlert,
+                  })) return;
                   await reply(t, context);
                 };
               }
@@ -1878,13 +1844,12 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               if (responsePolicy.gateEnabled) {
                 // Reuse the session decider shared with the vision greeting above, so a
                 // person-arrival greeting's open engagement window carries into this gate.
-                // Agenda requests and reminder creations are NOT bypasses: they must be
-                // addressed like any request, or ambient speech (the radio) triggers them.
+                // No reminder action bypasses the address gate, including acks and snoozes.
                 wireOpts.shouldRespond = (t) =>
-                  reminderGateBypass?.(t) || maisonShortcut?.(t)
+                  maisonShortcut?.(t)
                     ? Promise.resolve({
                         respond: true,
-                        reason: reminderGateBypass?.(t) ? 'reminder' : 'maison',
+                        reason: 'maison',
                       })
                     : responseDecider.decide(t);
               }

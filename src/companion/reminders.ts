@@ -8,9 +8,9 @@
  *
  * SAFETY is the point — this is health. A false "taken" → a missed or double dose, and ambient
  * speech gets mis-attributed ("c'est fait" about dinner must not mark the meds done). So an
- * acknowledgement binds ONLY when (a) an explicit done-phrase is heard AND (b) a reminder is
- * actually pending in its ack window. It never fires from the chime-in LLM or free-floating
- * ambient speech; the caller reads the bind back aloud so a mis-bind is audible + correctable.
+ * acknowledgement is a candidate ONLY when (a) an explicit done-phrase is heard AND (b) a reminder
+ * is pending in its ack window. The voice caller must also require an address and authenticated
+ * owner confirmation before any mutation; timing alone cannot identify the speaker.
  *
  * @module companion/reminders
  */
@@ -1002,24 +1002,9 @@ export async function snoozePending(
   return { id: target.id, label: target.label, delayMs };
 }
 
-/**
- * May this utterance skip the "am I being addressed?" gate? Only replies to
- * something the robot just did qualify, each already bounded by its window:
- * an acknowledgement or a snooze of a reminder that just fired, an undo of a
- * reminder just created. A spoken question is never an acknowledgement.
- *
- * Agenda requests and reminder creations are NOT here: they must go through the
- * normal gate, otherwise the radio creates reminders or recites the agenda
- * ("…l'intelligence à venir" on France Inter did, 2026-09-22/23). When the robot
- * is addressed, the voice handler still serves them.
- */
-export function bypassesAddressGate(text: string, nowMs: number): boolean {
-  const isQuestion = /\?\s*$/.test(text.trim());
-  return (
-    (!isQuestion && matchAck(text, nowMs) !== null) ||
-    isSnoozeCommand(text, nowMs) ||
-    isUndoCommand(text, nowMs)
-  );
+/** A reminder response is never evidence that the speaker addressed Lisa. */
+export function bypassesAddressGate(_text: string, _nowMs: number): boolean {
+  return false;
 }
 
 /** True when the utterance is a snooze AND a reminder is pending (for the voice shortcut gate). */
@@ -1085,6 +1070,13 @@ export function undoPending(text: string, nowMs: number): { id: string; label: s
 /** True when the utterance would undo a fresh creation (for the voice shortcut gate). */
 export function isUndoCommand(text: string, nowMs: number): boolean {
   return parseUndo(text) && lastCreated !== null && nowMs - lastCreated.atMs <= undoWindowMs();
+}
+
+/** Inspect the undo target without consuming it; confirmation must bind to this same creation. */
+export function peekUndo(text: string, nowMs: number): { id: string; label: string } | null {
+  return isUndoCommand(text, nowMs) && lastCreated
+    ? { id: lastCreated.id, label: lastCreated.label }
+    : null;
 }
 
 /** Test seam. */
