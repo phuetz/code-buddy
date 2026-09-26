@@ -1,0 +1,23 @@
+{
+  "source": "skills",
+  "report": {
+    "imported": [
+      {
+        "name": "imported-p2-clean",
+        "sourcePath": "clean",
+        "verdict": "allow"
+      }
+    ],
+    "quarantined": [
+      {
+        "sourcePath": "attack",
+        "reason": "Skill Firewall quarantine: score 55/100; 1 critical; capabilities: prompt-injection.",
+        "verdict": "quarantine"
+      }
+    ],
+    "review": [],
+    "skipped": [],
+    "total": 2,
+    "dryRun": true
+  }
+}

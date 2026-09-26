@@ -1,0 +1,55 @@
+{
+  "kind": "self_improvement_skills",
+  "cycles": [
+    {
+      "kind": "skill_improvement_cycle",
+      "startedAt": "2026-09-25T17:01:39.304Z",
+      "autonomy": "auto-apply",
+      "selectedScenarioId": "git-bisect",
+      "proposalId": "llm-skill:git-bisect",
+      "gate": {
+        "proposalId": "llm-skill:git-bisect",
+        "scenarioId": "git-bisect",
+        "accepted": false,
+        "validationLevel": "coverage",
+        "reasons": [
+          "Behavioral validation did not demonstrate a gain without regression"
+        ]
+      },
+      "behavior": {
+        "accepted": false,
+        "wins": 0,
+        "losses": 0,
+        "tested": 2,
+        "cases": [
+          {
+            "id": "first-bad",
+            "before": false,
+            "after": false
+          },
+          {
+            "id": "no-regression",
+            "before": false,
+            "after": false
+          }
+        ]
+      },
+      "applied": false,
+      "notes": [
+        "No verified behavioral improvement; proposal not installed"
+      ]
+    },
+    {
+      "kind": "skill_improvement_cycle",
+      "startedAt": "2026-09-25T17:02:05.577Z",
+      "autonomy": "auto-apply",
+      "selectedScenarioId": null,
+      "proposalId": null,
+      "gate": null,
+      "applied": false,
+      "notes": [
+        "no uncovered skill scenario with an available proposal"
+      ]
+    }
+  ]
+}

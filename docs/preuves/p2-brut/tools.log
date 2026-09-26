@@ -1,0 +1,41 @@
+{
+  "kind": "self_improvement_tools",
+  "cycles": [
+    {
+      "kind": "tool_improvement_cycle",
+      "startedAt": "2026-09-25T17:01:23.424Z",
+      "autonomy": "auto-apply",
+      "selectedScenarioId": "slugify",
+      "proposalId": "llm-tool:slugify",
+      "gate": {
+        "proposalId": "llm-tool:slugify",
+        "scenarioId": "slugify",
+        "visiblePassed": 2,
+        "visibleTotal": 2,
+        "heldOutPassed": 3,
+        "heldOutTotal": 3,
+        "accepted": true,
+        "reasons": [
+          "accepted and kept (auto-apply): passed visible + held-out, statically clean"
+        ],
+        "appliedRef": "authored__slugify_text"
+      },
+      "applied": true,
+      "notes": [
+        "accepted and kept (auto-apply): passed visible + held-out, statically clean"
+      ]
+    },
+    {
+      "kind": "tool_improvement_cycle",
+      "startedAt": "2026-09-25T17:01:35.207Z",
+      "autonomy": "auto-apply",
+      "selectedScenarioId": null,
+      "proposalId": null,
+      "gate": null,
+      "applied": false,
+      "notes": [
+        "no uncovered tool scenario with an available proposal"
+      ]
+    }
+  ]
+}

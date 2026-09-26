@@ -1,0 +1,7 @@
+{
+  "raw": "avant<think>pensée privée</think>VISIBLE[INST]instruction cachée[/INST]FIN​",
+  "visible": "avantVISIBLEFIN",
+  "rawChars": 75,
+  "visibleChars": 15,
+  "removedChars": 60
+}

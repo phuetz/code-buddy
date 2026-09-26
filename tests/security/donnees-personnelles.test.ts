@@ -19,7 +19,8 @@
  * témoin » — et poser la politique dans le test lui-même.
  */
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -93,6 +94,10 @@ const RE_UUID_PROJET_FLOW = new RegExp(
   'i',
 );
 
+/** Chemins de poste Unix. Les exemples de sauvegarde et de tests Cowork sont publics. */
+const RE_CHEMIN_DATA_UTILISATEUR = /(?<![\w:])\/data\/(?!backups\/)[a-z][\w.-]*\//i;
+const RE_CHEMIN_USERS_UTILISATEUR = /(?<![\w:])\/Users\/(?!(?:demo|foo|haoqing|r|username|yourname|user)\/)[a-z][\w.-]*\//;
+
 /**
  * Fichiers où une adresse privée est le SUJET : ils prouvent qu'une adresse de
  * plage privée est refusée (SSRF, origines de développement, boucle locale,
@@ -147,6 +152,8 @@ const FICHIERS_PLAGES_PRIVEES = new Set([
 ]);
 
 const MOTIFS_REGEX = [
+  { nom: 'chemin-data-utilisateur', regex: RE_CHEMIN_DATA_UTILISATEUR, exempte: new Set<string>() },
+  { nom: 'chemin-users-utilisateur', regex: RE_CHEMIN_USERS_UTILISATEUR, exempte: new Set<string>() },
   { nom: 'ip-lan-16', regex: RE_IP_LAN_16, exempte: FICHIERS_PLAGES_PRIVEES },
   { nom: 'ip-lan-8', regex: RE_IP_LAN_8, exempte: FICHIERS_PLAGES_PRIVEES },
   { nom: 'ip-maillee', regex: RE_IP_MAILLEE, exempte: FICHIERS_PLAGES_PRIVEES },
@@ -226,6 +233,18 @@ function detecterMotifsInterdits(fichier: string, contenu: string): string[] {
 }
 
 const DETECTION_FIXTURES = [
+  {
+    nom: 'chemin de données utilisateur',
+    fichier: 'fixtures/data-author.md',
+    contenu: 'témoin : /data/qa-personne/projet/rapport.txt',
+    motif: 'chemin-data-utilisateur',
+  },
+  {
+    nom: 'chemin macOS utilisateur',
+    fichier: 'fixtures/macos-author.md',
+    contenu: 'témoin : /Users/qa-personne/projet/rapport.txt',
+    motif: 'chemin-users-utilisateur',
+  },
   {
     nom: 'chemin home auteur',
     fichier: ['fixtures/', 'home-author', '.md'].join(''),
@@ -407,6 +426,9 @@ const DETECTION_FIXTURES = [
  * du garde-fou une alarme qu'on finirait par désarmer.
  */
 const NON_DETECTIONS = [
+  { nom: 'racine anonymisée', contenu: '<racine>/tmp/projet/rapport.txt' },
+  { nom: 'sauvegarde collective', contenu: '/data/backups/hub/rapport.txt' },
+  { nom: 'chemin macOS fictif Cowork', contenu: '/Users/demo/projet/rapport.txt' },
   { nom: 'boucle locale', contenu: ['http://', ['127', '0', '0', '1'].join('.'), ':3000'].join('') },
   { nom: 'boucle locale tiretée', contenu: ['peer-', ['127', '0', '0', '1'].join('-'), ':3000'].join('') },
   { nom: 'adresse de documentation RFC 5737 (TEST-NET-3)', contenu: ['ws://', ['203', '0', '113', '10'].join('.'), ':3000/ws'].join('') },
@@ -420,8 +442,11 @@ const NON_DETECTIONS = [
   { nom: 'UUID hors contexte de projet vidéo', contenu: 'id: f65b8e2d-83ca-4b26-8bc2-b21ece813c4b' },
 ] as const;
 
-function fichiersSuivis(): string[] {
-  return execFileSync('git', ['ls-files'], { cwd: RACINE, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
+async function fichiersSuivis(): Promise<string[]> {
+  const { stdout } = await promisify(execFile)('git', ['ls-files'], {
+    cwd: RACINE, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+  });
+  return stdout
     .split('\n')
     .filter(Boolean)
     .filter((f) => !EXEMPTS.has(f))
@@ -440,13 +465,13 @@ describe('aucune donnée personnelle dans un dépôt public', () => {
     expect(detecterMotifsInterdits(['fixtures/', 'neutral', '.md'].join(''), contenu)).toEqual([]);
   });
 
-  it('aucun fichier suivi ne nomme la situation ou l’infrastructure privée de l’auteur', () => {
+  it('aucun fichier suivi ne nomme la situation ou l’infrastructure privée de l’auteur', async () => {
     const fautifs: string[] = [];
 
-    for (const fichier of fichiersSuivis()) {
+    for (const fichier of await fichiersSuivis()) {
       let contenu: string;
       try {
-        contenu = readFileSync(join(RACINE, fichier), 'utf8').toLowerCase();
+        contenu = readFileSync(join(RACINE, fichier), 'utf8');
       } catch {
         continue; // fichier supprimé ou illisible : rien à inspecter
       }

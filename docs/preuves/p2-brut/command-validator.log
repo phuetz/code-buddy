@@ -1,0 +1,7 @@
+{
+  "command": "mkfs /dev/p2-fixture",
+  "result": {
+    "success": false,
+    "error": "Command blocked: Dangerous command pattern detected"
+  }
+}

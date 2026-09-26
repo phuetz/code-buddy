@@ -1,0 +1,8 @@
+{
+  "command": "fly deploy",
+  "result": {
+    "success": false,
+    "error": "Unconfined escalation refused in MCP mode. Operation accesses secrets or deployment configuration. Approval required."
+  },
+  "fakeDeployExecuted": false
+}

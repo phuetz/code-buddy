@@ -1,0 +1,43 @@
+{
+  "profileDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
+  "projectDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
+  "effectiveProfileDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/profile",
+  "effectiveProjectDir": "<racine>/DEV/cb-preuves-p2-2026-09-25/_qa/preuves-p2/run.QTgXc6/fixtures/project",
+  "limitations": [
+    "Remote MCP hostnames are not resolved. A passed URL is not a guarantee that DNS stays off private networks.",
+    "MCP server checks follow the runtime loader: project mcp.json (mcpServers or servers), project settings.json mcpServers, and profile mcp.json. Project settings.local.json and profile settings.json are not runtime MCP server sources.",
+    "Skill directories are capped at 40 entries and a bounded file walk. A larger tree fails the audit instead of being reported as clean. A symlink or non-regular file inside a skill is not followed and fails the audit.",
+    "exact_failure and same_tool_failure accept 0 as off. idempotent_no_progress does not: 0 keeps the historical default and the minimum is 2. same_tool_failure counts every failure of that tool in the turn, even when the arguments differ. warnings_enabled and hard_stop_enabled can both be turned off by the operator."
+  ],
+  "passed": false,
+  "status": "failed",
+  "findings": [
+    {
+      "checkId": "profile.file.loose_permissions",
+      "severity": "high",
+      "title": "Configuration file is group or world accessible",
+      "detail": ".codebuddy/settings.json mode 664 is broader than owner-only. The fix removes group and world bits and does not add owner bits.",
+      "fixable": true,
+      "subject": ".codebuddy/settings.json",
+      "subjectRoot": "project"
+    },
+    {
+      "checkId": "config.plaintext_secret",
+      "severity": "critical",
+      "title": "Plaintext secret in configuration",
+      "detail": ".codebuddy/settings.json:1 matches openai_key. Replace it with a secret reference. The value is not repeated here.",
+      "fixable": false
+    }
+  ],
+  "suppressedFindings": [],
+  "summary": {
+    "critical": 1,
+    "high": 1,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 2
+  },
+  "fixes": []
+}
+

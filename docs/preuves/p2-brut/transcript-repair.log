@@ -1,0 +1,59 @@
+[2026-09-25T17:02:36.925Z] ℹ️ INFO  Transcript repair: removed 1 orphaned tool results, injected 1 synthetic results, stripped 0 unpairable tool calls, dropped 0 duplicate results
+{
+  "raw": [
+    {
+      "role": "user",
+      "content": "vérifie le calcul"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "orphelin",
+      "name": "bash",
+      "content": "ancienne sortie"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "appel-1",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\":\"true\"}"
+          }
+        }
+      ]
+    }
+  ],
+  "curated": [
+    {
+      "role": "user",
+      "content": "vérifie le calcul"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "appel-1",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\":\"true\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "appel-1",
+      "name": "bash",
+      "content": "[result lost during compaction]"
+    }
+  ],
+  "rawCount": 3,
+  "curatedCount": 3,
+  "orphanRemoved": true,
+  "syntheticAdded": true
+}
