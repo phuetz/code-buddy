@@ -20,9 +20,8 @@ export function normalizeProvenance(input?: MemoryProvenance): MemoryProvenance 
   if (!input) return {};
   const clean = (value: unknown): string | undefined =>
     typeof value === 'string' && value.trim()
-      ? value.trim().replace(/\s+/g, ' ').split('')
-        .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
-        .join('').slice(0, 500) : undefined;
+      ? value.trim().normalize('NFKC').replace(/\s+/g, ' ')
+        .replace(/[\p{Cc}\p{Cf}]/gu, '').slice(0, 500) : undefined;
   const observedAt = clean(input.observedAt);
   return {
     ...(observedAt && Number.isFinite(Date.parse(observedAt)) ? { observedAt: new Date(observedAt).toISOString() } : {}),
@@ -33,14 +32,20 @@ export function normalizeProvenance(input?: MemoryProvenance): MemoryProvenance 
   };
 }
 
-function safePromptField(value?: string): string | undefined {
-  if (!value) return undefined;
+function unsafePromptMetadata(value: string): boolean {
+  const words = value.normalize('NFKC').normalize('NFKD')
+    .replace(/\p{M}/gu, '').replace(/[\p{Cc}\p{Cf}]/gu, '');
   // Imported legacy metadata may bypass today's write guard. Treat it as data
-  // and omit common instruction/exfiltration payloads from prompt rendering.
-  if (/\b(ignore|override|bypass|discard)\b.{0,80}\b(system|developer|previous|prior|above)\b.{0,80}\b(instructions?|prompt|rules?)\b/i.test(value)
-    || /\b(exfiltrate|steal|leak|send|upload|post)\b.{0,100}\b(api[-_ ]?key|token|secret|password|credential|private key)\b/i.test(value)) {
-    return undefined;
-  }
+  // and omit instructions even when their parts occupy different fields or
+  // appear in a different order.
+  return (/\b(ignore|override|bypass|discard)\b/i.test(words)
+      && /\b(system|developer|previous|prior|above)\b/i.test(words)
+      && /\b(instructions?|prompt|rules?)\b/i.test(words))
+    || /\b(exfiltrate|steal|leak|send|upload|post)\b.{0,100}\b(api[-_ ]?key|token|secret|password|credential|private key)\b/i.test(words);
+}
+
+function safePromptField(value?: string): string | undefined {
+  if (!value || unsafePromptMetadata(value)) return undefined;
   return value.replaceAll('<', '‹').replaceAll('>', '›');
 }
 
@@ -57,12 +62,15 @@ export function formatProvenance(
     report: 'ancien compte rendu',
   };
   const normalized = normalizeProvenance(provenance);
+  const fields = [normalized.machine, normalized.channel, normalized.verification, normalized.source]
+    .filter((value): value is string => Boolean(value));
+  const metadataSplitUnsafe = unsafePromptMetadata(fields.filter((field) => !unsafePromptMetadata(field)).join(' '));
   const source: MemoryProvenance = {
     ...normalized,
-    machine: safePromptField(normalized.machine),
-    channel: safePromptField(normalized.channel),
-    verification: safePromptField(normalized.verification),
-    source: safePromptField(normalized.source),
+    machine: metadataSplitUnsafe ? undefined : safePromptField(normalized.machine),
+    channel: metadataSplitUnsafe ? undefined : safePromptField(normalized.channel),
+    verification: metadataSplitUnsafe ? undefined : safePromptField(normalized.verification),
+    source: metadataSplitUnsafe ? undefined : safePromptField(normalized.source),
   };
   const observed = source.observedAt ? new Date(source.observedAt).getTime() : NaN;
   const ageDays = Number.isFinite(observed) && observed <= now.getTime()

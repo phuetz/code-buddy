@@ -101,7 +101,7 @@ const DEFAULT_CONFIG: MemoryConfig = {
   userCharLimit: parsePositiveInt(process.env.CODEBUDDY_MEMORY_USER_CHAR_LIMIT, 1375),
   securityScan: process.env.CODEBUDDY_MEMORY_SECURITY_SCAN !== 'false',
   rejectExactDuplicates: process.env.CODEBUDDY_MEMORY_REJECT_DUPLICATES !== 'false',
-  provenanceEnabled: provenanceEnabled(),
+  provenanceEnabled: false,
 };
 
 export type MemoryScope = "project" | "user";
@@ -409,7 +409,7 @@ export class PersistentMemoryManager extends EventEmitter {
 
   constructor(config: Partial<MemoryConfig> = {}) {
     super();
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...DEFAULT_CONFIG, provenanceEnabled: provenanceEnabled(), ...config };
     // Freeze relative paths at construction; later process/session cwd changes
     // must not redirect a delayed metadata flush to another project.
     this.config.projectMemoryPath = path.resolve(this.config.projectMemoryPath);
@@ -1038,7 +1038,8 @@ export class PersistentMemoryManager extends EventEmitter {
 
   getMemoryUsage(scope: MemoryScope): MemoryUsage {
     const memories = scope === 'project' ? this.projectMemories : this.userMemories;
-    const used = this.renderScopeEntries(memories).length;
+    const used = (this.config.provenanceEnabled
+      ? this.renderAttributedEntries(memories) : this.renderScopeEntries(memories)).length;
     const limit = this.getMemoryLimit(scope);
     return {
       scope,
