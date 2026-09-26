@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { logger } from '../utils/logger.js';
 
 export interface LisaFileState {
   path: string;
@@ -202,5 +203,33 @@ export class LisaActionStore {
         if (fs.existsSync(operation.temporary)) fs.unlinkSync(operation.temporary);
       }
     }
+  }
+}
+
+export interface LisaActionReturnPoint {
+  store: LisaActionStore;
+  id: string;
+}
+
+/** A return point must not become a failure of the original file operation. */
+export function prepareLisaActionBestEffort(
+  root: string, actionId: string, description: string, origin: string, files: string[],
+): LisaActionReturnPoint | undefined {
+  try {
+    const store = new LisaActionStore(root);
+    const checkpoint = store.prepare(actionId, description, origin, files);
+    return { store, id: checkpoint.id };
+  } catch (error) {
+    logger.warn(`Lisa return point unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  }
+}
+
+export function completeLisaActionBestEffort(point: LisaActionReturnPoint | undefined): void {
+  if (!point) return;
+  try {
+    point.store.complete(point.id);
+  } catch (error) {
+    logger.warn(`Lisa return point incomplete: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

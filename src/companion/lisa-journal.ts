@@ -25,7 +25,7 @@ export function lisaJournalPath(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 function safeText(input: string, max: number): string {
-  return input.replace(/[\r\n\u0000-\u001f]+/g, ' ').slice(0, max);
+  return input.replace(/[\p{Cc}]+/gu, ' ').slice(0, max);
 }
 
 export function appendLisaJournal(event: LisaPulseEvent, file = lisaJournalPath()): LisaJournalEntry {

@@ -35,7 +35,7 @@ import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
 import { parseBashCommand } from '../../security/bash-parser.js';
 import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
-import { LisaActionStore, lisaUnifiedCheckpointsEnabled } from '../../checkpoints/lisa-action-store.js';
+import { completeLisaActionBestEffort, prepareLisaActionBestEffort, lisaUnifiedCheckpointsEnabled, type LisaActionReturnPoint } from '../../checkpoints/lisa-action-store.js';
 import { lisaBashTargets } from '../../checkpoints/lisa-bash-targets.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
@@ -614,7 +614,7 @@ export class BashTool implements Disposable {
           output: trimmedOutput,
         };
       } finally {
-        if (lisaCheckpoint) lisaCheckpoint.store.complete(lisaCheckpoint.id);
+        completeLisaActionBestEffort(lisaCheckpoint);
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -707,12 +707,10 @@ export class BashTool implements Disposable {
   }
 
   /** Durable, explicit targets for supported destructive shell commands. */
-  private checkpointLisaDestructiveTargets(command: string, cwd: string): { store: LisaActionStore; id: string } | undefined {
+  private checkpointLisaDestructiveTargets(command: string, cwd: string): LisaActionReturnPoint | undefined {
     const targets = lisaBashTargets(command);
     if (targets.length === 0) return undefined;
-    const store = new LisaActionStore(cwd);
-    const checkpoint = store.prepare(`bash-${Date.now()}`, command, 'bash', targets);
-    return { store, id: checkpoint.id };
+    return prepareLisaActionBestEffort(cwd, `bash-${Date.now()}`, command, 'bash', targets);
   }
 
   /**

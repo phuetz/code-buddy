@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
-import { LisaActionStore, lisaUnifiedCheckpointsEnabled } from './lisa-action-store.js';
+import { prepareLisaActionBestEffort, lisaUnifiedCheckpointsEnabled } from './lisa-action-store.js';
 
 export interface FileSnapshot {
   path: string;
@@ -166,7 +166,7 @@ export class PersistentCheckpointManager extends EventEmitter {
     if (files && files.length > 0) {
       checkpoint.files = this.snapshotFiles(files);
       if (lisaUnifiedCheckpointsEnabled()) {
-        new LisaActionStore(this.workingDirectory).prepare(checkpoint.id, description, 'persistent-checkpoint-manager', files);
+        prepareLisaActionBestEffort(this.workingDirectory, checkpoint.id, description, 'persistent-checkpoint-manager', files);
       }
     }
 

@@ -18,7 +18,7 @@ export function lisaBashTargets(command: string): string[] {
     if (part.args.some(arg => arg === '-t' || arg.startsWith('--target-directory') || arg.startsWith('--backup'))) {
       throw new Error('Destructive command options have no complete return point');
     }
-    if (args.some(arg => /[*?\[\]{}]/.test(arg))) {
+    if (args.some(arg => /[*?[\]{}]/.test(arg))) {
       throw new Error('Wildcard targets have no complete return point');
     }
     if (part.command === 'rm' || part.command === 'mv') targets.push(...args);

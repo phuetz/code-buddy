@@ -19,7 +19,7 @@ import * as crypto from 'crypto';
 import { spawn } from 'child_process';
 import { diff_match_patch } from 'diff-match-patch';
 import { getErrorMessage } from '../types/index.js';
-import { LisaActionStore, lisaUnifiedCheckpointsEnabled } from '../checkpoints/lisa-action-store.js';
+import { prepareLisaActionBestEffort, lisaUnifiedCheckpointsEnabled } from '../checkpoints/lisa-action-store.js';
 import { TypedEventEmitter, CheckpointEvents } from '../events/index.js';
 
 export interface Checkpoint {
@@ -225,7 +225,7 @@ export class CheckpointManager extends TypedEventEmitter<CheckpointEvents> {
     // Get files to checkpoint
     const filesToCheckpoint = options.files || await this.getTrackedFiles();
     if (lisaUnifiedCheckpointsEnabled() && options.files?.length) {
-      new LisaActionStore(this.workingDirectory).prepare(id, options.name ?? options.operation, 'undo-checkpoint-manager', options.files);
+      prepareLisaActionBestEffort(this.workingDirectory, id, options.name ?? options.operation, 'undo-checkpoint-manager', options.files);
     }
 
     // Create file snapshots in parallel for better performance
