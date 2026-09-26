@@ -166,6 +166,8 @@
   ],
   "files": [
     "dist",
+    "docs/catalog",
+    "docs/preuves",
     "codebuddy-runtime.json",
     "examples/claude_desktop_config.json",
     "README.md",

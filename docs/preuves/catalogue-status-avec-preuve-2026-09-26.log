@@ -1,0 +1,3 @@
+PASS: compiled buddy catalog status --json exited 0
+PASS: schemaVersion=1, features=299, tools=235
+PASS: catalog-status coded=vrai wired=vrai testedInSituation=vrai deployed=inconnu

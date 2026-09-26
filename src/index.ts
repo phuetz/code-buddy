@@ -3982,6 +3982,11 @@ addLazyCommandGroup(program, 'tools', 'Inspect tool profiles and effective tool 
   registerToolsCommands(program);
 });
 
+addLazyCommandGroup(program, 'catalog', 'Inspect feature states and evidence', async () => {
+  const { registerCatalogCommands } = await import('./commands/cli/catalog-command.js');
+  registerCatalogCommands(program);
+});
+
 addLazyCommandGroup(program, 'autonomous-code', 'Run a guarded Agentic Coding Cell task contract', async () => {
   const { registerAutonomousCodeCommand } = await import('./commands/cli/autonomous-code-command.js');
   registerAutonomousCodeCommand(program);
