@@ -5,7 +5,7 @@
 > par exécution, ce qui n'est couvert que par des tests, et ce qui n'a jamais été
 > éprouvé en usage réel. Rien ne doit être communiqué avant d'être passé en ✅.
 >
-> Légende — ✅ prouvé par exécution, avec la mesure · 🧪 couvert par des tests
+> Légende — ✅ prouvé par exécution, avec la mesure · ⚠️ prouvé, mais avec un défaut mesuré · 🧪 couvert par des tests
 > automatisés · ❓ jamais éprouvé en usage réel · 💤 présent mais éteint par défaut
 
 ## L'ampleur, en chiffres
@@ -31,7 +31,7 @@
 | 230 outils | Fichiers, shell, navigateur, recherche, médias, mémoire… | 🧪 |
 | 15 fournisseurs | Grok, Claude, GPT, Gemini, Ollama, LM Studio, Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral | 🧪 |
 | Sélection d'outils par RAG | Les outils sont filtrés par embeddings pour réduire le prompt | 🧪 |
-| Bascule de fournisseur | Sur quota épuisé ou panne, passage au suivant sans perdre la session | 🧪 💤 |
+| Bascule de fournisseur | Sur quota épuisé ou panne, passage au suivant sans perdre la session | ⚠️ **24/09** : panne classée `unreachable`, bascule vers Ollama (outils 20 → 6), réponse, santé persistée. Mais la sortie JSON annonce le modèle en panne et facture un coût fictif 💤 |
 | Modes d'autorisation | `default`, `plan`, `acceptEdits`, `dontAsk`, `bypassPermissions` | 🧪 |
 | Bac à sable noyau | Bubblewrap, Landlock ou seatbelt pour `bash`, **fermeture en cas d'échec** | 🧪 💤 |
 
@@ -86,10 +86,10 @@ Quatre surfaces apprenables. **Jamais `src/`** : c'est un invariant scanné.
 |---|---|---|
 | Système nerveux (Rust) | Cinq sens sur canaux bornés, thalamus qui coalesce, diffusion | 🧪 20 tests Rust |
 | Yeux (Python/MediaPipe) | Détecteurs à états : une seule alerte par transition, pas de spam | ✅ en service 24/7 |
-| Voix | Parole → transcription → pensée → parole, avec interruption possible | ✅ en usage quotidien |
+| Voix | Parole → transcription → pensée → parole, avec interruption possible | ⚠️ en usage quotidien ; **audit du 24/09** : 25 constats, dont une phrase entendue qui pouvait lancer un `rm` sans confirmation — corrigés en partie (#214-#220) |
 | Rêve | Consolide le tampon court terme en journal, promeut le saillant en mémoire | 🧪 actif |
-| Rappels | Annoncés à voix haute et par Telegram, acquittés à la voix | ✅ en usage |
-| Règles sensorielles | Des règles déclenchent des actions ; une action dangereuse est **refusée à l'écriture** | 🧪 💤 |
+| Rappels | Annoncés à voix haute et par Telegram, acquittés à la voix | ⚠️ en usage ; la radio déclenchait l'agenda et créait des rappels (corrigé #215) |
+| Règles sensorielles | Des règles déclenchent des actions ; une action dangereuse est **refusée à l'écriture** | ⚠️ **24/09** : 5 commandes destructrices sur 10 acceptées (`truncate ~/.env`, `find -delete`, `mv ~/.ssh`, `python … rmtree`, `git reset --hard`) 💤 |
 
 ## 7. Médias
 
@@ -115,13 +115,25 @@ Quatre surfaces apprenables. **Jamais `src/`** : c'est un invariant scanné.
 | Fonctionnalité | Ce que c'est | Preuve |
 |---|---|---|
 | Pare-feu de compétences | Scan anti-injection avec dé-obfuscation (zéro-largeur, homoglyphes, bidi) | 🧪 |
-| Validateur de commandes | Analyse statique du shell avant exécution | 🧪 |
+| Validateur de commandes | Analyse statique du shell avant exécution | ⚠️ **24/09** : `rm -rf src` passe tous les validateurs statiques ; seule la classification ExecPolicy distingue lecture et écriture |
 | Garde des secrets | Aucun secret en clair dans les fichiers suivis | 🧪 |
 | Garde de déploiement | Les opérations sensibles exigent une confirmation | 🧪 |
 | Nettoyage de sortie | Retire les fuites de modèle (`<think>`, `[INST]`, caractères invisibles) | 🧪 |
 | Réparation de transcript | Répare les paires d'appels d'outils perdues à la compaction | 🧪 |
 
 ---
+
+## Éprouvé le 24/09 — fonctionnalités jusque-là absentes de cet inventaire
+
+| Fonctionnalité | Ce que c'est | Preuve |
+|---|---|---|
+| Échange de compétences signées | Paquets signés ed25519, confiance au premier usage, re-scan du pare-feu | ⚠️ un caractère modifié → vérification **et** installation refusées (« SHA-256 mismatch ») ; mais l'export ne trouve qu'une compétence fournie sur 8 (fichiers plats `.skill.md`) 💤 |
+| Espace de travail multi-dépôts | Recherche et lecture en lecture seule sur plusieurs dépôts | ✅ deux vrais dépôts, `ws search` trouve la définition dans l'un et l'usage dans l'autre 💤 |
+| Sessions voyage dans le temps | Chronologie par tour, rejouer, restaurer, bifurquer | ⚠️ mémoire à travers `--resume` (« citron »), chronologie et instantanés ; mais `replay --at`, décrit comme « inspecter », propose une restauration et bloque sans terminal 💤 |
+| Auto-banc de capacités | Historique des scores des modèles, régressions | ❌ ne mesure pas la capacité : consignes sans contexte, réponses attendues propres à ce dépôt ; recommande un modèle à 0 % 💤 |
+| Configuration par fichier | TOML, profils, `settings.json` | ⚠️ la section `[middleware]` n'est lue par aucun code, le rechargement à chaud n'est jamais démarré (comparaison OpenClaw, rapport du 24/09) |
+
+Détail et méthode : `docs/reports/2026-09/RAPPORT-INVENTAIRE-PREUVES-2026-09-24.md`.
 
 ## Ce qu'il reste à prouver
 
