@@ -87,4 +87,25 @@ describe('channel future commitment gate', () => {
     expect(result.text).toBe("Aucun rappel correspondant n'est confirmé pour le moment.");
     expect(result.historySuffix ?? '').not.toContain('[Rappel créé');
   });
+
+  it('does not say a reminder is done when its tool failed and the model is silent', async () => {
+    let round = 0;
+    const result = await runCompanionChannelTurn({
+      apiKey: 'k', baseUrl: 'http://localhost', model: 'm',
+      messages: [{ role: 'user', content: 'Rappelle-moi le train.' }],
+      identity: owner,
+      env: { CODEBUDDY_LISA_FUTURE_COMMITMENTS: 'true', CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true' },
+      executeTool: async () => ({ success: false, error: 'store unavailable' }),
+      chat: async () => {
+        round += 1;
+        return round === 1 ? {
+          model: 'm', choices: [{ message: { role: 'assistant', content: '', tool_calls: [{
+            id: 'call-r', type: 'function', function: { name: 'remind', arguments: JSON.stringify({ label: 'train', time: '09:00' }) },
+          }] }, finish_reason: 'tool_calls' }],
+        } : reply('');
+      },
+    });
+    expect(result.text).toBe("Je n'ai pas pu confirmer le rappel.");
+    expect(result.historySuffix ?? '').not.toContain('[Rappel créé');
+  });
 });

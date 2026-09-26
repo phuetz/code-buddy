@@ -336,6 +336,11 @@ export async function runCompanionChannelTurn(
     const hasImage = mediaProduced.length > 0;
     if (hasImage) {
       finalText = 'Voilà, j’ai créé l’image pour toi !';
+    } else if (
+      futureCommitmentsEnabled(env)
+      && executedTools.filter((tool) => tool.name === 'remind').length > registeredReminders.length
+    ) {
+      finalText = "Je n'ai pas pu confirmer le rappel.";
     } else {
       finalText = 'C’est fait !';
     }
