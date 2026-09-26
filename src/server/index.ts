@@ -1762,21 +1762,31 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 };
               }
 
-              // Maison shortcuts are deterministic and local: quiet/focus/guest/cooking modes and
-              // named cooking timers do not wait for an LLM. Explicit wording only, so ordinary
-              // conversation still falls through to the normal hybrid reply.
+              // Maison shortcuts are deterministic, but their state changes require an
+              // identified owner. A spoken robot name grants only `present`, not ownership.
               {
                 const maison = await import('../companion/maison-voice-actions.js');
                 const { sayNow } = await import('../sensory/voice-loop.js');
                 maisonShortcut = maison.isMaisonVoiceCommand;
                 const inner = onHeard;
                 onHeard = async (t, context) => {
+                  if (!maisonShortcut?.(t)) {
+                    await inner(t, context);
+                    return;
+                  }
+                  const { resolveCompanionIdentity } = await import('../companion/companion-identity.js');
+                  const identity = resolveCompanionIdentity({
+                    channel: 'voice',
+                    isVoicePresence: true,
+                    robotNamed: await responseDecider.isAddressed(t),
+                    env: process.env,
+                  });
                   const sayCanonical = createCanonicalVoiceReplySpeaker(
                     t,
                     (content) => sayNow(content, { phoneDelivery: 'never' }),
                     conversationBridge,
                   );
-                  if (await maison.handleMaisonVoiceCommand(t, { speak: sayCanonical })) return;
+                  if (await maison.handleMaisonVoiceCommand(t, { identity, speak: sayCanonical })) return;
                   await inner(t, context);
                 };
               }
@@ -1878,13 +1888,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               if (responsePolicy.gateEnabled) {
                 // Reuse the session decider shared with the vision greeting above, so a
                 // person-arrival greeting's open engagement window carries into this gate.
-                // Agenda requests and reminder creations are NOT bypasses: they must be
-                // addressed like any request, or ambient speech (the radio) triggers them.
+                // Agenda, reminder creation and Maison requests are not bypasses: they
+                // must pass the address gate before their own action checks.
                 wireOpts.shouldRespond = (t) =>
-                  reminderGateBypass?.(t) || maisonShortcut?.(t)
+                  reminderGateBypass?.(t)
                     ? Promise.resolve({
                         respond: true,
-                        reason: reminderGateBypass?.(t) ? 'reminder' : 'maison',
+                        reason: 'reminder',
                       })
                     : responseDecider.decide(t);
               }

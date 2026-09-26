@@ -14,6 +14,7 @@ import {
 import type { CompanionIdentity } from '../../src/companion/companion-identity.js';
 import { FormalToolRegistry } from '../../src/tools/registry/tool-registry.js';
 import type { ITool, ToolSchema } from '../../src/tools/registry/types.js';
+import type { ConfirmationService } from '../../src/utils/confirmation-service.js';
 
 describe('companion-toolset', () => {
   const ownerIdentity: CompanionIdentity = {
@@ -327,6 +328,9 @@ describe('companion-toolset', () => {
         identity: ownerIdentity,
         env: { CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true' },
         registry: testRegistry,
+        confirmationService: {
+          requestConfirmation: vi.fn(async () => ({ confirmed: true })),
+        } as unknown as ConfirmationService,
       });
 
       expect(res.success).toBe(true);

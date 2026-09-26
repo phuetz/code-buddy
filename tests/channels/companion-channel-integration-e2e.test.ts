@@ -14,6 +14,7 @@ import { runCompanionChannelTurn } from '../../src/channels/companion-channel-tu
 import { FormalToolRegistry } from '../../src/tools/registry/tool-registry.js';
 import { registerBuiltinTools } from '../../src/tools/registry/index.js';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client.js';
+import type { ConfirmationService } from '../../src/utils/confirmation-service.js';
 
 describe('Companion Channel Integration E2E', () => {
   it('runs complete Telegram identified flow: tool loop, photo delivery simulation, history suffix, next turn', async () => {
@@ -118,7 +119,9 @@ describe('Companion Channel Integration E2E', () => {
       });
 
       const waitingWords: string[] = [];
+      const requestConfirmation = vi.fn(async () => ({ confirmed: true }));
       const turnResult = await runCompanionChannelTurn({
+        confirmationService: { requestConfirmation } as unknown as ConfirmationService,
         apiKey: 'fake-key',
         baseUrl: 'http://127.0.0.1:9999/v1',
         model: 'test-model',
@@ -134,6 +137,10 @@ describe('Companion Channel Integration E2E', () => {
 
       // Assertions on turnResult
       expect(waitingWords).toContain('Je dessine…');
+      expect(requestConfirmation).toHaveBeenCalledWith(
+        expect.objectContaining({ toolName: 'image_generate', forcePrompt: true }),
+        'tool',
+      );
       expect(turnResult.text).toContain('adorable chat roux');
       expect(turnResult.media).toHaveLength(1);
       expect(turnResult.media?.[0].imagePath).toBe(tmpImage);

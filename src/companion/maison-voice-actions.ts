@@ -7,6 +7,7 @@ import {
 import { MealPlanStore } from '../meals/index.js';
 import { logger } from '../utils/logger.js';
 import { normalizeVoiceInteractionText } from '../sensory/voice-interactions.js';
+import type { CompanionIdentity } from './companion-identity.js';
 
 export type MaisonVoiceCommand =
   | { kind: 'mode'; mode: HomeMode; durationMs?: number; boundaryHour?: number }
@@ -18,6 +19,8 @@ export type MaisonVoiceCommand =
 
 export interface MaisonVoiceActionDeps {
   speak: (text: string) => Promise<void | boolean>;
+  /** An action requires an identified owner; absent identity fails closed. */
+  identity?: Pick<CompanionIdentity, 'role'>;
   now?: () => Date;
   timeZone?: string;
   homeModeStore?: Pick<HomeModeStore, 'setMode'>;
@@ -136,12 +139,19 @@ function modeConfirmation(mode: HomeMode): string {
   return confirmations[mode];
 }
 
+/** Consume a recognized Maison phrase, but act only for a verified owner. Naming
+ * Lisa gives a voice speaker the `present` role, never proof of who spoke. */
 export async function handleMaisonVoiceCommand(
   text: string,
   deps: MaisonVoiceActionDeps
 ): Promise<boolean> {
   const command = parseMaisonVoiceCommand(text);
   if (!command) return false;
+  if (deps.identity?.role !== 'owner') {
+    logger.warn('[maison-voice] Command ignored: voice speaker is not identified as owner');
+    await deps.speak('Je ne peux pas exécuter cette commande Maison par la voix : je ne peux pas identifier le propriétaire.');
+    return true;
+  }
   try {
     const now = deps.now?.() ?? new Date();
     if (Number.isNaN(now.getTime())) throw new Error('Maison voice clock is invalid');

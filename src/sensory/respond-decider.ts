@@ -183,13 +183,14 @@ function levenshtein(a: string, b: string): number {
 /** True if word `a` is within a small edit distance of target `b` (tol scales with `b`). */
 function fuzzyWordMatch(a: string, b: string): boolean {
   if (a === b) return true;
-  const tol = b.length <= 4 ? 1 : 2;
+  if (a[0] !== b[0]) return false;
+  const tol = b.length <= 5 ? 1 : 2;
   return Math.abs(a.length - b.length) <= tol && levenshtein(a, b) <= tol;
 }
 
-/** Default fuzzy matcher: any word within a small edit distance of the name counts as
- *  addressed (STT turns "Buddy" into "buddy"/"body"/"buddha"). Errs toward catching the
- *  address — ignoring someone talking straight to you is the worse failure.
+/** Default fuzzy matcher: a word within a small edit distance of the name counts as
+ *  addressed (STT turns "Buddy" into "buddy"/"body"/"buddha"). Short names keep
+ *  their initial letter so an unrelated word cannot become an address so easily.
  *
  *  Multi-word names ("Code Buddy") are matched too: a per-word tokenizer can never bring a
  *  single word within edit distance of a two-word name, so we also try (a) a run of consecutive
@@ -209,7 +210,9 @@ export function fuzzyNameMatch(text: string, name: string): boolean {
 
   // Single-word name (the common case): any word close enough.
   if (nameWords.length <= 1) {
-    return words.some((w) => fuzzyWordMatch(w, n));
+    // A short single name can be an ordinary word one edit away. Only retain
+    // observed recognition variants; never infer an address from edit distance.
+    return words.some((w) => w === n || (n === 'lisa' && (w === 'liza' || w === 'lissa')));
   }
 
   // Multi-word name: (b) collapsed single token, then (a) a consecutive word run.

@@ -528,6 +528,8 @@ buddy maison food plan add 2026-07-14 19:30 dinner ratatouille "Ratatouille mais
 
 À la voix : « mode concentration », « j'ai des invités », « silence aujourd'hui », « mets un minuteur
 de dix minutes pour les pâtes » et « qu'est-ce qu'on mange ? » sont traités localement sans attendre un LLM.
+Ces commandes demandent une identité propriétaire vérifiée. La présence et le nom de Lisa ne prouvent
+pas cette identité : dans ce cas, Lisa refuse la commande à voix haute sans changer l'état de la Maison.
 `life-rhythm/…`, `meals/…`, `maison-voice-actions.ts`, `buddy maison`.
 
 ### 🌙 Travailler utilement quand tu es seul (et sûr par construction)
