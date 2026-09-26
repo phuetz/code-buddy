@@ -306,6 +306,8 @@ export async function runCompanionChannelTurn(
     const hasImage = mediaProduced.length > 0;
     if (hasImage) {
       finalText = 'Voilà, j’ai créé l’image pour toi !';
+    } else if (executedTools.every((tool) => !tool.success)) {
+      finalText = 'Je n’ai pas pu exécuter cette demande. Une confirmation du propriétaire peut être nécessaire.';
     } else {
       finalText = 'C’est fait !';
     }

@@ -31,7 +31,7 @@ describe('Maison voice actions', () => {
 
   afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
-  it('consumes an unauthenticated Maison command without changing state or speaking', async () => {
+  it('refuses an unauthenticated Maison command aloud without changing state', async () => {
     const guest = resolveCompanionIdentity({ channel: 'voice', isVoicePresence: true, robotNamed: false });
     const present = resolveCompanionIdentity({ channel: 'voice', isVoicePresence: true, robotNamed: true });
     const setMode = vi.spyOn(modes, 'setMode');
@@ -44,7 +44,10 @@ describe('Maison voice actions', () => {
       })).toBe(true);
     }
     expect(setMode).not.toHaveBeenCalled();
-    expect(speak).not.toHaveBeenCalled();
+    expect(speak).toHaveBeenCalledTimes(3);
+    for (const [message] of speak.mock.calls) {
+      expect(message).toMatch(/identifi|reconnai|propriétaire/i);
+    }
     expect((await modes.getCurrent()).mode).toBe('normal');
   });
 

@@ -149,6 +149,7 @@ export async function handleMaisonVoiceCommand(
   if (!command) return false;
   if (deps.identity?.role !== 'owner') {
     logger.warn('[maison-voice] Command ignored: voice speaker is not identified as owner');
+    await deps.speak('Je ne peux pas exécuter cette commande Maison par la voix : je ne peux pas identifier le propriétaire.');
     return true;
   }
   try {

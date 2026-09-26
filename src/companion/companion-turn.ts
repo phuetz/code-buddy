@@ -29,6 +29,7 @@ import type {
   TryServeCompanionSelfieOptions,
 } from './lisa-selfie-router.js';
 import { resolveCompanionIdentity, type CompanionIdentity } from './companion-identity.js';
+import type { ConfirmationService } from '../utils/confirmation-service.js';
 
 export type CompanionSurface = CompanionSelfieSurface;
 export type { CompanionHistoryTurn } from './companion-history.js';
@@ -76,6 +77,7 @@ export interface RunCompanionTurnOptions {
     tools: unknown[],
     opts: { model: string; maxTokens?: number; signal?: AbortSignal; tool_choice?: unknown },
   ) => Promise<CodeBuddyResponse>;
+  confirmationService?: ConfirmationService;
   preparePhotos?: typeof prepareCompanionPhotos;
   rememberPhotos?: typeof rememberSharedPhotos;
 }
@@ -200,6 +202,7 @@ export async function runCompanionTurn(
     ...(options.onWaitingWord ? { onWaitingWord: options.onWaitingWord } : {}),
     ...(options.signal ? { signal: options.signal } : {}),
     ...(options.chat ? { chat: options.chat } : {}),
+    ...(options.confirmationService ? { confirmationService: options.confirmationService } : {}),
   };
 
   try {

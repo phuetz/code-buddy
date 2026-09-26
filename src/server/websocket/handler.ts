@@ -896,6 +896,7 @@ export async function produceCompanionReply(
   const { runCompanionTurn } = await import('../../companion/companion-turn.js');
   const result = await runCompanionTurn(message, {
     surface: 'mobile',
+    confirmationService: ConfirmationService.getInstance(),
     includeImageBytes: true,
     ...(options.userId ? { userId: options.userId } : {}),
     ...(options.history ? { history: options.history } : {}),

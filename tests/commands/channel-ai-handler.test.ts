@@ -2007,11 +2007,32 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     expect(hoisted.runCompanionChannelTurn).toHaveBeenCalledTimes(1);
     const payload = hoisted.runCompanionChannelTurn.mock.calls[0]?.[0] as {
       messages: Array<{ role: string; content?: string }>;
+      confirmationService?: { requestConfirmation: unknown };
     };
+    expect(payload.confirmationService?.requestConfirmation).toBeTypeOf('function');
     expect(payload.messages[0]?.role).toBe('system');
     expect(JSON.stringify(payload.messages)).not.toMatch(/view_file|mcp__/);
     const delivered = send.mock.calls.map((call) => String(call[0]?.content ?? '')).join('\n');
     expect(telegramHtmlChunkToPlain(delivered)).toContain('Hey. Je suis là.');
+  });
+
+  it('accepts Telegram approval commands only from an owner chat', async () => {
+    const { getRemoteApprovalService } = await import('../../src/security/remote-approval.js');
+    const approval = vi.spyOn(getRemoteApprovalService(), 'handleResponse').mockImplementation(() => {});
+    process.env.CODEBUDDY_SENSORY_ALERT_CHAT = 'owner-chat';
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+
+    await manager.emit(makeMessage('/approve approval-example', 'other-chat'), { type: 'telegram', send });
+    expect(approval).not.toHaveBeenCalled();
+    expect(send.mock.calls.at(-1)?.[0]?.content).toMatch(/réservée au propriétaire/i);
+
+    const ownerMessage = makeMessage('/approve approval-example', 'owner-chat');
+    ownerMessage.channel.id = 'owner-chat';
+    await manager.emit(ownerMessage, { type: 'telegram', send });
+    expect(approval).toHaveBeenCalledWith('approval-example', true);
+    approval.mockRestore();
   });
 
   it('keeps the agent profile for a code/lance command even with a companion persona', async () => {
