@@ -25,6 +25,7 @@ import {
   behaviorDescriptor,
   diverseElites,
   computeGeneration,
+  recordedDiscoveryEdge,
   selectParentWithPenalty,
   type VariantRecord,
 } from './code-variant-store.js';
@@ -389,6 +390,9 @@ export function recordBanditOutcome(
 
 /** Run one mutation→evaluate→record cycle. Never merges; prunes losing branches by default. */
 export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<EvolutionCycleResult> {
+  if (opts.weakness.kind === 'research') {
+    throw new Error('Research articles require an experiment fiche; evolve propose never mutates code');
+  }
   const basePath = opts.basePath ?? process.cwd();
   const variantId = opts.variantId ?? `evo-${Date.now().toString(36)}`;
   const branch = `codebuddy/evolve/${variantId}`;
@@ -537,11 +541,25 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
   })();
   // Genealogy: the elites that inspired this variant are its parents; generation = 1 + max(parent gen).
   const parents = inspirations.map((i) => i.id);
+  const baselineSha = git(['rev-parse', '--verify', `${opts.baselineRef}^{commit}`], basePath).trim();
+  const branchParent = env.CODEBUDDY_DREAM_RSI !== 'true'
+    ? undefined
+    : branchBase === opts.baselineRef
+      ? 'root'
+      : store.list().find((candidate) => candidate.baselineSha === baselineSha
+        && (candidate.branch === branchBase || candidate.sha === branchBase))?.id;
+  const discovery = recordedDiscoveryEdge({
+    optIn: env.CODEBUDDY_DREAM_RSI,
+    worldId: baselineSha,
+    primaryParentId: branchParent,
+    weaknessId: opts.weakness.id,
+    baselineScore: opts.baseline?.score,
+  });
   const record: VariantRecord = {
     id: variantId,
     branch,
     sha,
-    baselineSha: git(['rev-parse', '--verify', `${opts.baselineRef}^{commit}`], basePath).trim(),
+    baselineSha,
     fitness: report,
     score: report.score,
     passedAll: report.passedAll,
@@ -551,6 +569,7 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
     ...(mutationPlan ? { plan: mutationPlan } : {}),
     behavior: behaviorDescriptor(changedPathsVsBase(branch, opts.baselineRef, basePath)),
     parents,
+    ...(discovery ? { discovery } : {}),
     generation: computeGeneration(parents, store.list()),
   };
   store.record(record);

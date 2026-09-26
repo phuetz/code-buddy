@@ -18,6 +18,18 @@
 import type { Experience } from './types.js';
 import type { StrategyEvaluator } from './strategy-gate.js';
 import type { StrategyEvaluation, StrategyPairedObservation, StrategySpec } from './strategy-types.js';
+import { pairedBayesianDecision, type PairedDecision } from './paired-gate.js';
+
+/** Shared paired summary for deterministic replay scores; never claims live evidence. */
+export function pairedReplayDecision(pairs: readonly { parent: number; candidate: number }[]): PairedDecision {
+  let wins = 0;
+  let losses = 0;
+  for (const pair of pairs) {
+    if (pair.candidate > pair.parent + 1e-12) wins++;
+    else if (pair.candidate < pair.parent - 1e-12) losses++;
+  }
+  return pairedBayesianDecision(wins, losses);
+}
 
 export interface RunFacts {
   rounds?: number;

@@ -7,6 +7,12 @@ import {
 } from '../../../src/agent/self-improvement/capability-benchmark.js';
 import { validateProposal, type LessonMutatorPort } from '../../../src/agent/self-improvement/empirical-gate.js';
 import type { BenchmarkScenario, ImprovementProposal } from '../../../src/agent/self-improvement/types.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { CollectiveKnowledgeGraph } from '../../../src/memory/collective-knowledge-graph.js';
+import { parseExperimentFiche } from '../../../src/agent/self-improvement/evolution/experiment-fiche.js';
+import { completeFiche } from './evolution/experiment-fixture.js';
 
 /** In-memory lessons store implementing the mutator port (deterministic). */
 function fakePort(): LessonMutatorPort & { items: Array<{ id: string; content: string; context?: string }> } {
@@ -80,6 +86,70 @@ describe('self-improvement: capability benchmark (deterministic)', () => {
 });
 
 describe('self-improvement: empirical gate (DGM-style, snapshot/rollback)', () => {
+  it('does not mark a structurally invalid, unmeasured idea as already tried', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dgm-unmeasured-'));
+    try {
+      const graph = new CollectiveKnowledgeGraph({ ledgerPath: path.join(root, 'ledger.jsonl'), persistentEmbeddingCache: false });
+      const fiche = parseExperimentFiche({ ...completeFiche,
+        hypothesis: { metric: 'covered_scenarios', direction: 'increase', minimumImprovement: 1 },
+      });
+      const result = validateProposal(lessonProposal({ content: 'too short' }), SCENARIOS, fakePort(), {
+        keepOnAccept: false,
+        experiment: { fiche, graph, provenance: {
+          at: '2026-09-26T10:10:00.000Z', revision: 'abc123', machine: 'qa-node',
+          model: 'offline-fixture', conditions: 'two deterministic scenarios',
+        } },
+      });
+      expect(result.outcome.rejectionReason).toBe('structural-invalid');
+      expect(graph.getCurrentEntitiesByNamePrefix('lesson', 'dgm-experiment-')).toHaveLength(0);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it('rejects a positive benchmark delta below the fiche numeric result threshold', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dgm-threshold-'));
+    try {
+      const graph = new CollectiveKnowledgeGraph({ ledgerPath: path.join(root, 'ledger.jsonl'), persistentEmbeddingCache: false });
+      const fiche = parseExperimentFiche({ ...completeFiche,
+        hypothesis: { metric: 'covered_scenarios', direction: 'increase', minimumImprovement: 1 },
+        acceptance: { minResult: 2, maxDurationMs: 120000, maxCostUsd: 0 },
+      });
+      const result = validateProposal(lessonProposal(), SCENARIOS, fakePort(), {
+        keepOnAccept: false,
+        experiment: { fiche, graph, provenance: {
+          at: '2026-09-26T10:10:00.000Z', revision: 'abc123', machine: 'qa-node', model: 'offline-fixture', conditions: 'two deterministic scenarios',
+        } },
+      });
+      expect(result.outcome.delta).toBe(1);
+      expect(result.outcome.accepted).toBe(false);
+      expect(result.outcome.rejectionReason).toBe('acceptance-threshold');
+      expect(graph.getCurrentEntitiesByNamePrefix('lesson', 'dgm-experiment-')[0]?.text).toContain('"status":"failed"');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+  it('records a rejected experiment in the collective graph and never keeps an article-driven mutation', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'dgm-gate-'));
+    try {
+      const graph = new CollectiveKnowledgeGraph({ ledgerPath: path.join(root, 'ledger.jsonl'), persistentEmbeddingCache: false });
+      const fiche = parseExperimentFiche({ ...completeFiche, hypothesis: {
+        metric: 'covered_scenarios', direction: 'increase', minimumImprovement: 1,
+      }, comparison: { ...completeFiche.comparison, equalBudget: {
+        runsPerArm: 1, maxDurationMsPerArm: 60000, maxCostUsdPerArm: 0,
+      } }, acceptance: { minResult: 1, maxDurationMs: 120000, maxCostUsd: 0 } });
+      const port = fakePort();
+      const experiment = { fiche, graph, provenance: {
+        at: '2026-09-26T10:10:00.000Z', revision: 'abc123', machine: 'qa-node', model: 'offline-fixture', conditions: 'two deterministic scenarios',
+      } };
+      expect(() => validateProposal(lessonProposal(), SCENARIOS, port, { keepOnAccept: true, experiment })).toThrow();
+      expect(port.items).toHaveLength(0);
+      const result = validateProposal(lessonProposal({ content: 'Unrelated coffee preference with no benchmark guidance.' }),
+        SCENARIOS, port, { keepOnAccept: false, experiment });
+      expect(result.outcome.accepted).toBe(false);
+      expect(port.items).toHaveLength(0);
+      const lessons = graph.getCurrentEntitiesByNamePrefix('lesson', 'dgm-experiment-');
+      expect(lessons).toHaveLength(1);
+      expect(lessons[0]?.text).toContain('"status":"failed"');
+      expect(lessons[0]?.text).toContain('"revision":"abc123"');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
   it('accepts and keeps a validated lesson under auto-apply; the number moves', () => {
     const port = fakePort();
     const before = scoreBenchmark(SCENARIOS, port).covered;
