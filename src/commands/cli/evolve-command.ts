@@ -6,6 +6,7 @@
  * (main/master) — that invariant is enforced in code (`assertMergeTargetAllowed`), not convention.
  *
  *   evolve run --goal "<weakness>"   author + evaluate candidate variant(s) (gated by CODEBUDDY_EVOLVE)
+ *   evolve propose                 select research weakness + archive a plan (no mutator)
  *   evolve list                      list evaluated variants (ranked)
  *   evolve review <id>               show a variant's fitness + diff vs baseline (read-only)
  *   evolve keep <id> [--confirm]     merge a reviewed variant into the current branch (human-gated)
@@ -80,6 +81,31 @@ export function registerEvolveCommands(program: Command): void {
   const evolve = program
     .command('evolve')
     .description('Git-versioned evolutionary self-improvement: evaluate code variants, keep the best (human-gated)');
+
+  evolve
+    .command('propose')
+    .description('Select a research weakness and archive a plan without mutating code or creating a branch (optional CODEBUDDY_DREAM_RSI=true)')
+    .option('--source <src>', 'Proposal source (research)', 'research')
+    .option('--min-similarity <score>', 'Minimum discovery similarity (0 to 1)', '0.45')
+    .option('--model <model>', 'Model for goal synthesis and planning')
+    .option('--json', 'Write all stages and the result as JSON')
+    .action(async (options: { source: string; minSimilarity: string; model?: string; json?: boolean }) => {
+      const floor = Number(options.minSimilarity);
+      if (options.source !== 'research' || !Number.isFinite(floor) || floor < 0 || floor > 1) {
+        logger.error('Use --source research and --min-similarity between 0 and 1.');
+        process.exitCode = 2;
+        return;
+      }
+      const { proposeResearchImprovement } = await import('../../agent/self-improvement/evolution/proposal-engine.js');
+      const result = await proposeResearchImprovement({ minSimilarity: floor, ...(options.model ? { model: options.model } : {}) });
+      if (options.json) {
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      } else {
+        for (const event of result.events) logger.info(`[evolve propose] ${event.stage}: ${event.code} — ${event.detail}`);
+        if (result.status === 'planned') logger.info(`[evolve propose] plan: ${result.archivePath}`);
+      }
+      if (result.status === 'stopped') process.exitCode = 2;
+    });
 
   evolve
     .command('list')
