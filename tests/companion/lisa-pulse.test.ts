@@ -44,16 +44,36 @@ describe('Lisa pulse', () => {
     const fixture = setup();
     let signal = 'one';
     const executeAction = vi.fn(async () => ({ success: true, detail: 'executed' }));
+    const alertOwner = vi.fn(async () => true);
     const authorizeAction = vi.fn(async () => ({ decision: 'allow+checkpoint' as const, mandateId: 'm-1' }));
     const deps = { ...fixture, workspace: fixture.root,
       observe: async () => [{ source: 'git', fingerprint: signal, summary: signal }],
       decide: async (): Promise<LisaDecision> => ({ kind: 'act', reason: 'proposed', action: { tool: 'cron_create', args: {}, effect: 'reversible', files: ['a.txt'] } }),
-      authorizeAction, executeAction };
+      authorizeAction, executeAction, alertOwner };
     await runLisaPulse('', deps);
     signal = 'two';
     expect((await runLisaPulse('', deps)).kind).toBe('decision_required');
     expect(authorizeAction).not.toHaveBeenCalled();
     expect(executeAction).not.toHaveBeenCalled();
+    expect(alertOwner).not.toHaveBeenCalled();
+  });
+
+  it('records a model proposal awaiting authorization without sending a Telegram', async () => {
+    const fixture = setup();
+    let signal = 'one';
+    const alertOwner = vi.fn(async () => true);
+    const deps = { ...fixture, workspace: fixture.root,
+      observe: async () => [{ source: 'git', fingerprint: signal, summary: signal }],
+      decide: async (): Promise<LisaDecision> => ({ kind: 'act', reason: 'checklist text', action: {
+        tool: 'view_file', args: { path: 'note.txt' }, effect: 'read',
+      } }),
+      authorizeAction: async () => ({ decision: 'ask' as const }),
+      alertOwner,
+    };
+    await runLisaPulse('checklist text', deps);
+    signal = 'two';
+    expect((await runLisaPulse('checklist text', deps)).kind).toBe('decision_required');
+    expect(alertOwner).not.toHaveBeenCalled();
   });
 
   it('takes a return point before an authorized reversible action', async () => {

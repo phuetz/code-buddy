@@ -215,7 +215,6 @@ export async function runLisaPulse(checklist: string, deps: LisaPulseDependencie
       (action.effect === 'read' && !READ_TOOLS.has(action.tool)) ||
       (action.effect === 'reversible' && !REVERSIBLE_TOOLS.has(action.tool))) {
     const event = record({ kind: 'decision_required', reason: 'Effect or tool requires owner approval', action });
-    await deps.alertOwner?.('Lisa demande une décision pour une action proposée. Aucune action lancée.');
     return event;
   }
   if (action.effect === 'reversible') {
@@ -224,7 +223,6 @@ export async function runLisaPulse(checklist: string, deps: LisaPulseDependencie
     if (typeof declaredTarget !== 'string' || action.files?.length !== 1 ||
         path.resolve(root, declaredTarget) !== path.resolve(root, action.files[0]!)) {
       const event = record({ kind: 'failure', reason: 'Action target and checkpoint target differ', action });
-      await deps.alertOwner?.('Lisa: une action sans point de retour exact a été refusée.');
       return event;
     }
   }
@@ -240,13 +238,11 @@ export async function runLisaPulse(checklist: string, deps: LisaPulseDependencie
   const mandateId = authorization?.mandateId;
   if (authority === 'ask') {
     const event = record({ kind: 'decision_required', reason: decision.reason, action, mandateId });
-    await deps.alertOwner?.('Lisa demande une décision pour une action proposée. Aucune action lancée.');
     return event;
   }
   if (authority === 'deny' || !deps.executeAction) return record({ kind: 'silence', reason: 'No authorized executor' });
   if (action.effect === 'reversible' && (authority !== 'allow+checkpoint' || !action.files?.length)) {
     const event = record({ kind: 'failure', reason: 'Reversible action lacks a return point', action });
-    await deps.alertOwner?.('Lisa: une action réversible sans point de retour a été refusée.');
     return event;
   }
   let checkpointId: string | undefined;
