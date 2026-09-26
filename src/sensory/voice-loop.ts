@@ -205,6 +205,8 @@ export interface VoiceStepOptions {
   onSpokenPrefixTelemetry?: (cause: SpokenPrefixTelemetryCause) => void;
   /** Register a non-blocking semantic correction for playback after the initial answer. */
   onSemanticCorrection?: (correction: Promise<string>) => void;
+  /** The channel turn checked this answer against persisted reminder proofs. */
+  onCommitmentsGuarded?: () => void;
   /** Opt-in contract owned by the fast chitchat route. */
   shortFirst?: VoiceShortFirstConfig;
   /** Tell the outer audio pipeline that the fast route accepted the short-first contract. */
@@ -2016,6 +2018,7 @@ export async function defaultReply(
         maxTokens: voiceMaxTokens(heard, history),
       });
       reply = turnResult.text.trim();
+      if (futureCommitmentsEnabled(process.env)) replyOpts?.onCommitmentsGuarded?.();
     } else {
       const client = new CodeBuddyClient(route.apiKey, route.model, route.baseURL);
       const resp = await client.chat(
@@ -4138,6 +4141,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
 
       // ---- BLOCKING FALLBACK: the original tour-par-tour behavior, unchanged ----
       let rawReply: string;
+      let channelCommitmentsGuarded = false;
       if (visualReply !== undefined) {
         rawReply = visualReply;
       } else {
@@ -4150,6 +4154,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
           onSemanticCorrection: (correction) => {
             semanticCorrectionPromise = correction.catch(() => '');
           },
+          onCommitmentsGuarded: () => { channelCommitmentsGuarded = true; },
         });
         replyMs = Date.now() - replyStart;
       }
@@ -4161,7 +4166,8 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       const preparedReply = prepareSpeech(rawReply);
       const relationshipGuard = guardRelationshipReply(preparedReply ?? '');
       let reply = applyLimitsContract(relationshipGuard.response, { heard }).text;
-      if (futureCommitmentsEnabled(env)) {
+      // Keep the proof-bearing channel result intact; guard every other path here.
+      if (futureCommitmentsEnabled(env) && !channelCommitmentsGuarded) {
         reply = guardFutureCommitments(reply).text;
       }
       let emptyReplyRecovery = false;

@@ -1,7 +1,39 @@
 import { describe, expect, it } from 'vitest';
-import { guardFutureCommitments } from '../../src/companion/future-commitments.js';
+import { futureCommitmentsEnabled, guardFutureCommitments } from '../../src/companion/future-commitments.js';
 
 describe('future commitments in French', () => {
+  it('guards by default unless explicitly disabled', () => {
+    expect(futureCommitmentsEnabled({})).toBe(true);
+    expect(futureCommitmentsEnabled({ CODEBUDDY_LISA_FUTURE_COMMITMENTS: 'false' })).toBe(false);
+  });
+
+  it.each([
+    "Je t'enverrai le message.", "Je vais t'envoyer un e-mail.",
+    "J'enverrai le mail demain.", 'Je te le rappelle demain.',
+    "Promis, je m'en occupe.", 'Je posterai ça sur le blog.',
+    "Je publierai l'article.", "I'll email them tomorrow.",
+    "C'est envoyé.", "Je t'ai envoyé le message.",
+  ])('refuses an unproved emission or promise: %s', (line) => {
+    const result = guardFutureCommitments(line);
+    expect(result.intervened).toBe(true);
+    expect(result.text).not.toBe(line);
+  });
+
+  it('does not let a proved reminder carry an email promise in the same sentence', () => {
+    const result = guardFutureCommitments("Je te rappellerai les courses demain et j'enverrai le mail.", [
+      { kind: 'reminder', id: 'r-1', label: 'courses', mechanism: 'remind' },
+    ]);
+    expect(result.intervened).toBe(true);
+    expect(result.text).not.toMatch(/enverrai|mail/i);
+  });
+
+  it('accepts a short exact registered reminder label', () => {
+    const result = guardFutureCommitments('Je te rappellerai le bus demain.', [
+      { kind: 'reminder', id: 'r-2', label: 'bus', mechanism: 'remind' },
+    ]);
+    expect(result.intervened).toBe(false);
+    expect(result.text).toContain('r-2');
+  });
   it.each([
     'Je vais surveiller ce traitement.',
     'Je te préviens quand le build est terminé.',

@@ -2,6 +2,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { makeVoiceReply } from '../../src/sensory/voice-loop.js';
 
 describe('voice future commitment gate', () => {
+  it('does not contradict a channel reply already checked with reminder proof', async () => {
+    const synthesized: string[] = [];
+    const line = 'Je te rappellerai les courses demain. Rappel enregistré (r-1).';
+    const onHeard = makeVoiceReply({
+      env: { CODEBUDDY_LISA_FUTURE_COMMITMENTS: 'true' },
+      replyFn: async (_heard, options) => {
+        options?.onCommitmentsGuarded?.();
+        return line;
+      },
+      synth: async (text) => { synthesized.push(text); return '/tmp/future-proof.wav'; },
+      play: async () => {},
+    });
+    await onHeard('Lisa, rappelle-moi les courses demain.');
+    expect(synthesized[0]).toContain('Je te rappellerai les courses demain.');
+    expect(synthesized[0]).not.toContain('Aucun rappel correspondant');
+  });
+
   it('guards the text before synthesis and does not release an unguarded stream', async () => {
     const streamed = vi.fn(async function* () {
       yield 'Je vais surveiller ce traitement.';

@@ -14,7 +14,8 @@ export interface FutureCommitmentVerdict {
 }
 
 function normalized(text: string): string {
-  return text.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  return text.toLowerCase().replace(/\bj[’']/g, 'je ').replace(/\bt[’']/g, 'te ')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .replace(/œ/g, 'oe').replace(/[’']/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
@@ -30,18 +31,23 @@ function classify(sentence: string): CommitmentKind | null {
     || /\bje vais (?:te |vous )?(?:prevenir|envoyer|faire un resume|dire quand)\b/.test(s)
     || /\bje (?:vais m en occuper|m en occuperai|reviendrai vers toi)\b/.test(s)
     || /\bje verifie (?:demain|plus tard|ce soir)\b/.test(s)
-    || /\bje reviens vers toi (?:demain|plus tard|ce soir)\b/.test(s)) return 'followup';
+    || /\bje reviens vers toi (?:demain|plus tard|ce soir)\b/.test(s)
+    || /\bje (?:te |vous )?(?:posterai|publierai|ecrirai|expedierai)\b/.test(s)
+    || /\bje vais (?:te |vous )?(?:poster|publier|ecrire|expedier)\b/.test(s)
+    || /\bpromis je m en occupe\b/.test(s)
+    || /\b(?:c est|je (?:te |vous )?ai|je l ai) (?:envoye|publie|poste|ecrit)\b/.test(s)
+    || /\bi ll (?:email|send|post|publish)\b/.test(s)) return 'followup';
   if (/\bje (?:vais|compte|promets de) (?:te |vous )?rappeler\b/.test(s)
     || /\bje (?:te |vous )?rappellerai\b/.test(s)
-    || /\bje (?:te |vous )?rappelle (?:demain|plus tard|ce soir|dans)\b/.test(s)) return 'reminder';
+    || /\bje (?:te |vous )?(?:le |la |les )?rappelle (?:demain|plus tard|ce soir|dans)\b/.test(s)) return 'reminder';
   return null;
 }
 
 function reminderMatches(sentence: string, proof: RegisteredReminderProof): boolean {
-  const labelWords = normalized(proof.label).split(' ').filter((word) => word.length >= 4);
-  if (labelWords.length === 0) return false;
+  const label = normalized(proof.label);
+  if (label.length < 3) return false;
   const utterance = ` ${normalized(sentence)} `;
-  return labelWords.some((word) => utterance.includes(` ${word} `));
+  return utterance.includes(` ${label} `);
 }
 
 /**
@@ -83,5 +89,5 @@ export function guardFutureCommitments(
 }
 
 export function futureCommitmentsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.CODEBUDDY_LISA_FUTURE_COMMITMENTS === 'true';
+  return env.CODEBUDDY_LISA_FUTURE_COMMITMENTS !== 'false';
 }
