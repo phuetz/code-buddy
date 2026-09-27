@@ -38,6 +38,14 @@ export function validateSkillProposal(
 
   // SG1: valid markdown content, non-empty instructions, structure / triggers
   const trimmed = content.trim();
+  if (!proposal.spec.name.startsWith('authored-')) {
+    return {
+      ...base,
+      accepted: false,
+      rejectionReason: 'name-invalid',
+      reasons: [`SG1: skill name "${proposal.spec.name}" must start with "authored-"`],
+    };
+  }
   if (trimmed.length < 20 || !proposal.spec.name) {
     return {
       ...base,
