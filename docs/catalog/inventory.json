@@ -5,68 +5,2679 @@
       "id": "catalog-status",
       "discoveryKey": "cli:catalog",
       "title": "Catalogue des états et preuves",
-      "codePaths": ["src/catalog/status.ts", "src/commands/cli/catalog-command.ts"],
+      "codePaths": [
+        "src/catalog/status.ts",
+        "src/commands/cli/catalog-command.ts"
+      ],
       "entrypoint": {
         "kind": "cli",
         "checks": [
-          { "file": "src/index.ts", "contains": "addLazyCommandGroup(program, 'catalog'" },
-          { "file": "src/index.ts", "contains": "registerCatalogCommands(program)" },
-          { "file": "src/commands/cli/catalog-command.ts", "contains": ".command('status')" }
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'catalog'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerCatalogCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/catalog-command.ts",
+            "contains": ".command('status')"
+          }
         ]
+      },
+      "domain": "cli",
+      "benefit": {
+        "en": "Inspect the evidence level of tracked features before presenting them.",
+        "fr": "Consultez le niveau de preuve des fonctionnalités avant de les présenter."
       }
     },
     {
       "id": "resource-catalog-tool",
       "discoveryKey": "tool:resource_catalog",
       "title": "Outil de sélection des ressources",
-      "codePaths": ["src/fleet/resource-catalog.ts", "src/tools/resource-catalog-tool.ts"],
+      "codePaths": [
+        "src/fleet/resource-catalog.ts",
+        "src/tools/resource-catalog-tool.ts"
+      ],
       "entrypoint": {
         "kind": "tool",
         "checks": [
-          { "file": "src/codebuddy/resource-catalog-tool-defs.ts", "contains": "name: 'resource_catalog'" },
-          { "file": "src/codebuddy/tools.ts", "contains": "registerGroup([RAGCHAT_TOOL_DEF, RESOURCE_CATALOG_TOOL_DEF" },
-          { "file": "src/tools/registry/research-tools.ts", "contains": "new ResourceCatalogTool()" },
-          { "file": "src/tools/registry/interactive-adapters.ts", "contains": "...createResearchTools()" }
+          {
+            "file": "src/codebuddy/resource-catalog-tool-defs.ts",
+            "contains": "name: 'resource_catalog'"
+          },
+          {
+            "file": "src/codebuddy/tools.ts",
+            "contains": "registerGroup([RAGCHAT_TOOL_DEF, RESOURCE_CATALOG_TOOL_DEF"
+          },
+          {
+            "file": "src/tools/registry/research-tools.ts",
+            "contains": "new ResourceCatalogTool()"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createResearchTools()"
+          }
         ]
-      }
+      },
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Find available resources for an agent task.",
+        "fr": "Trouvez les ressources disponibles pour une tâche d’agent."
+      },
+      "verificationLimit": "Resource selection was not exercised in a live agent turn."
     },
     {
       "id": "http-health",
       "title": "Route HTTP de santé",
-      "codePaths": ["src/server/routes/health.ts"],
+      "codePaths": [
+        "src/server/routes/health.ts"
+      ],
       "entrypoint": {
         "kind": "route",
         "checks": [
-          { "file": "src/server/index.ts", "contains": "app.use('/api/health', healthRoutes)" },
-          { "file": "src/server/routes/health.ts", "contains": "router.get(\n  '/'," }
+          {
+            "file": "src/server/index.ts",
+            "contains": "app.use('/api/health', healthRoutes)"
+          },
+          {
+            "file": "src/server/routes/health.ts",
+            "contains": "router.get(\n  '/',"
+          }
         ]
+      },
+      "domain": "server-api",
+      "benefit": {
+        "en": "Check the HTTP server health endpoint.",
+        "fr": "Vérifiez la santé du serveur HTTP."
       }
     },
     {
       "id": "telegram-channel",
       "title": "Canal Telegram",
-      "codePaths": ["src/channels/telegram/index.ts"],
+      "codePaths": [
+        "src/channels/telegram/index.ts"
+      ],
       "entrypoint": {
         "kind": "channel",
         "checks": [
-          { "file": "src/index.ts", "contains": "handleChannels(action, options)" },
-          { "file": "src/commands/handlers/channel-handlers.ts", "contains": "case 'telegram': {" },
-          { "file": "src/commands/handlers/channel-handlers.ts", "contains": "return new TelegramChannel({" }
+          {
+            "file": "src/index.ts",
+            "contains": "handleChannels(action, options)"
+          },
+          {
+            "file": "src/commands/handlers/channel-handlers.ts",
+            "contains": "case 'telegram': {"
+          },
+          {
+            "file": "src/commands/handlers/channel-handlers.ts",
+            "contains": "return new TelegramChannel({"
+          }
         ]
-      }
+      },
+      "domain": "sensory",
+      "benefit": {
+        "en": "Connect conversations through Telegram.",
+        "fr": "Reliez les conversations à Telegram."
+      },
+      "verificationLimit": "Requires a Telegram account and token; neither was used."
     },
     {
       "id": "fleet-cli",
       "discoveryKey": "cli:fleet",
       "title": "Commandes de la flotte",
-      "codePaths": ["src/commands/cli/fleet-commands.ts"],
+      "codePaths": [
+        "src/commands/cli/fleet-commands.ts"
+      ],
       "entrypoint": {
         "kind": "cli",
         "checks": [
-          { "file": "src/index.ts", "contains": "addLazyCommandGroup(program, 'fleet'" },
-          { "file": "src/index.ts", "contains": "registerFleetCommands(program)" }
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'fleet'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerFleetCommands(program)"
+          }
         ]
-      }
+      },
+      "domain": "fleet",
+      "benefit": {
+        "en": "Inspect and operate the multi-agent fleet from the terminal.",
+        "fr": "Inspectez et pilotez la flotte multi-agents dans le terminal."
+      },
+      "verificationLimit": "Status was inspected, but peer dispatch needs a second configured peer."
+    },
+    {
+      "id": "cli-daemon",
+      "title": "Background daemon",
+      "domain": "cli",
+      "benefit": {
+        "en": "Run Code Buddy as a managed background process.",
+        "fr": "Exécutez Code Buddy comme processus de fond administré."
+      },
+      "codePaths": [
+        "src/commands/cli/daemon-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'daemon'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerDaemonCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/daemon-commands.ts",
+            "contains": "registerDaemonCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:daemon"
+    },
+    {
+      "id": "cli-ruche",
+      "title": "Signed coordination",
+      "domain": "fleet",
+      "benefit": {
+        "en": "Exchange signed coordination messages.",
+        "fr": "Échangez des messages de coordination signés."
+      },
+      "codePaths": [
+        "src/commands/cli/ruche-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'ruche'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerRucheCommand(program)"
+          },
+          {
+            "file": "src/commands/cli/ruche-command.ts",
+            "contains": "registerRucheCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:ruche"
+    },
+    {
+      "id": "cli-trigger",
+      "title": "Event triggers",
+      "domain": "cli",
+      "benefit": {
+        "en": "Configure event-driven agent responses.",
+        "fr": "Configurez des réponses de l’agent déclenchées par événement."
+      },
+      "codePaths": [
+        "src/commands/cli/daemon-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'trigger'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerTriggerCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/daemon-commands.ts",
+            "contains": "registerTriggerCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:trigger"
+    },
+    {
+      "id": "cli-speak",
+      "title": "Speech synthesis",
+      "domain": "sensory",
+      "benefit": {
+        "en": "Generate spoken output from text.",
+        "fr": "Produisez une sortie vocale à partir de texte."
+      },
+      "codePaths": [
+        "src/commands/cli/speak-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'speak'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerSpeakCommand(program)"
+          },
+          {
+            "file": "src/commands/cli/speak-command.ts",
+            "contains": "registerSpeakCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:speak"
+    },
+    {
+      "id": "cli-assistant",
+      "title": "Voice assistant",
+      "domain": "sensory",
+      "benefit": {
+        "en": "Configure the Lisa voice assistant.",
+        "fr": "Configurez l’assistante vocale Lisa."
+      },
+      "codePaths": [
+        "src/commands/assistant.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'assistant'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerAssistantCommand(program)"
+          },
+          {
+            "file": "src/commands/assistant.ts",
+            "contains": "registerAssistantCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:assistant"
+    },
+    {
+      "id": "cli-widgets",
+      "title": "Conversation widgets",
+      "domain": "cli",
+      "benefit": {
+        "en": "Manage inline conversation widgets.",
+        "fr": "Gérez les widgets intégrés aux conversations."
+      },
+      "codePaths": [
+        "src/commands/widgets.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'widgets'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerWidgetsCommand(program)"
+          },
+          {
+            "file": "src/commands/widgets.ts",
+            "contains": "registerWidgetsCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:widgets"
+    },
+    {
+      "id": "cli-security",
+      "title": "Security audit",
+      "domain": "security",
+      "benefit": {
+        "en": "Audit the local project and profile security.",
+        "fr": "Auditez la sécurité du projet et du profil local."
+      },
+      "codePaths": [
+        "src/commands/cli/security-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'security'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerSecurityCommand(program)"
+          },
+          {
+            "file": "src/commands/cli/security-command.ts",
+            "contains": "registerSecurityCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:security"
+    },
+    {
+      "id": "cli-heartbeat",
+      "title": "Heartbeat engine",
+      "domain": "sensory",
+      "benefit": {
+        "en": "Inspect and configure periodic agent wakeups.",
+        "fr": "Inspectez et configurez les réveils périodiques de l’agent."
+      },
+      "codePaths": [
+        "src/commands/cli/native-engine-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'heartbeat'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerHeartbeatCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/native-engine-commands.ts",
+            "contains": "registerHeartbeatCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:heartbeat"
+    },
+    {
+      "id": "cli-hub",
+      "title": "Skills marketplace",
+      "domain": "cli",
+      "benefit": {
+        "en": "Search and manage shared skills.",
+        "fr": "Recherchez et gérez des skills partagés."
+      },
+      "codePaths": [
+        "src/commands/cli/native-engine-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'hub'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerHubCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/native-engine-commands.ts",
+            "contains": "registerHubCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:hub"
+    },
+    {
+      "id": "cli-curator",
+      "title": "Local curator",
+      "domain": "context-memory",
+      "benefit": {
+        "en": "Review proposed maintenance for memory, skills and costs.",
+        "fr": "Examinez des propositions d’entretien de la mémoire, des skills et des coûts."
+      },
+      "codePaths": [
+        "src/commands/curator-cli.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'curator'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerCuratorCommand(program)"
+          },
+          {
+            "file": "src/commands/curator-cli.ts",
+            "contains": "registerCuratorCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:curator"
+    },
+    {
+      "id": "cli-triage",
+      "title": "Support bundle",
+      "domain": "cli",
+      "benefit": {
+        "en": "Create a redacted local diagnostic bundle.",
+        "fr": "Créez un dossier de diagnostic local expurgé."
+      },
+      "codePaths": [
+        "src/commands/cli/triage-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'triage'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerTriageCommand(program)"
+          },
+          {
+            "file": "src/commands/cli/triage-command.ts",
+            "contains": "registerTriageCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:triage"
+    },
+    {
+      "id": "cli-gateway-pairing",
+      "title": "Gateway pairing approval",
+      "domain": "server-api",
+      "benefit": {
+        "en": "Approve or reject gateway device pairing.",
+        "fr": "Approuvez ou refusez l’association d’un appareil à la passerelle."
+      },
+      "codePaths": [
+        "src/commands/cli/native-engine-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'gateway-pairing'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerGatewayPairingCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/native-engine-commands.ts",
+            "contains": "registerGatewayPairingCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:gateway-pairing"
+    },
+    {
+      "id": "cli-screen",
+      "title": "Screen capture",
+      "domain": "sensory",
+      "benefit": {
+        "en": "Capture or watch desktop activity.",
+        "fr": "Capturez ou surveillez l’activité du bureau."
+      },
+      "codePaths": [
+        "src/commands/cli/screen-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'screen'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerScreenCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/screen-commands.ts",
+            "contains": "registerScreenCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:screen"
+    },
+    {
+      "id": "cli-device",
+      "title": "Remote device nodes",
+      "domain": "fleet",
+      "benefit": {
+        "en": "Manage SSH, ADB and local device nodes.",
+        "fr": "Gérez des nœuds SSH, ADB et locaux."
+      },
+      "codePaths": [
+        "src/commands/cli/device-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'device'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerDeviceCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/device-commands.ts",
+            "contains": "registerDeviceCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:device"
+    },
+    {
+      "id": "cli-identity",
+      "title": "Agent identity files",
+      "domain": "context-memory",
+      "benefit": {
+        "en": "Manage local agent identity and user files.",
+        "fr": "Gérez les fichiers locaux d’identité de l’agent et de l’utilisateur."
+      },
+      "codePaths": [
+        "src/commands/cli/native-engine-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'identity'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerIdentityCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/native-engine-commands.ts",
+            "contains": "registerIdentityCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:identity"
+    },
+    {
+      "id": "cli-companion",
+      "title": "Companion settings",
+      "domain": "sensory",
+      "benefit": {
+        "en": "Configure companion behaviour and voice.",
+        "fr": "Configurez le comportement et la voix du compagnon."
+      },
+      "codePaths": [
+        "src/commands/cli/native-engine-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'companion'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerCompanionCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/native-engine-commands.ts",
+            "contains": "registerCompanionCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:companion"
+    },
+    {
+      "id": "cli-groups",
+      "title": "Group chat security",
+      "domain": "security",
+      "benefit": {
+        "en": "Configure group chat access controls.",
+        "fr": "Configurez les accès aux discussions de groupe."
+      },
+      "codePaths": [
+        "src/commands/cli/native-engine-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'groups'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerGroupCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/native-engine-commands.ts",
+            "contains": "registerGroupCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:groups"
+    },
+    {
+      "id": "cli-auth-profile",
+      "title": "Authentication profiles",
+      "domain": "providers",
+      "benefit": {
+        "en": "Manage provider authentication profiles.",
+        "fr": "Gérez les profils d’authentification des fournisseurs."
+      },
+      "codePaths": [
+        "src/commands/cli/native-engine-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'auth-profile'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerAuthProfileCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/native-engine-commands.ts",
+            "contains": "registerAuthProfileCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:auth-profile"
+    },
+    {
+      "id": "cli-code-explorer",
+      "title": "Code Explorer integration",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Inspect code relationships and session sync.",
+        "fr": "Inspectez les relations du code et la synchronisation de session."
+      },
+      "codePaths": [
+        "src/commands/cli/code-explorer-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'code-explorer'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerCodeExplorerCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/code-explorer-commands.ts",
+            "contains": "registerCodeExplorerCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:code-explorer"
+    },
+    {
+      "id": "cli-hermes",
+      "title": "Hermes profile",
+      "domain": "cli",
+      "benefit": {
+        "en": "Inspect the native Hermes-style agent profile.",
+        "fr": "Inspectez le profil agent natif de type Hermes."
+      },
+      "codePaths": [
+        "src/commands/cli/hermes-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'hermes'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerHermesCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/hermes-commands.ts",
+            "contains": "registerHermesCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:hermes"
+    },
+    {
+      "id": "cli-acp",
+      "title": "Editor agent protocol",
+      "domain": "server-api",
+      "benefit": {
+        "en": "Expose an agent over ACP stdio to an editor.",
+        "fr": "Reliez un éditeur à l’agent par ACP sur stdio."
+      },
+      "codePaths": [
+        "src/commands/cli/acp-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'acp'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerAcpCommand(program)"
+          },
+          {
+            "file": "src/commands/cli/acp-command.ts",
+            "contains": "registerAcpCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:acp"
+    },
+    {
+      "id": "cli-tools",
+      "title": "Tool availability",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Inspect effective tools and tool profiles.",
+        "fr": "Inspectez les outils disponibles et leurs profils."
+      },
+      "codePaths": [
+        "src/commands/cli/tools-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'tools'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerToolsCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/tools-commands.ts",
+            "contains": "registerToolsCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:tools"
+    },
+    {
+      "id": "cli-autonomous-code",
+      "title": "Guarded coding cell",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Run a guarded autonomous coding contract.",
+        "fr": "Exécutez un contrat de codage autonome encadré."
+      },
+      "codePaths": [
+        "src/commands/cli/autonomous-code-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'autonomous-code'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerAutonomousCodeCommand(program)"
+          },
+          {
+            "file": "src/commands/cli/autonomous-code-command.ts",
+            "contains": "registerAutonomousCodeCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:autonomous-code"
+    },
+    {
+      "id": "cli-session",
+      "title": "Saved sessions",
+      "domain": "context-memory",
+      "benefit": {
+        "en": "Manage stored conversations and resumes.",
+        "fr": "Gérez les conversations enregistrées et leur reprise."
+      },
+      "codePaths": [
+        "src/cli/session-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'session'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerSessionCommands(program)"
+          },
+          {
+            "file": "src/cli/session-commands.ts",
+            "contains": "registerSessionCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:session"
+    },
+    {
+      "id": "cli-config",
+      "title": "Configuration",
+      "domain": "cli",
+      "benefit": {
+        "en": "Inspect effective configuration and missing settings.",
+        "fr": "Inspectez la configuration effective et les réglages manquants."
+      },
+      "codePaths": [
+        "src/commands/cli/config-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'config'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerConfigCommand(program)"
+          },
+          {
+            "file": "src/commands/cli/config-command.ts",
+            "contains": "registerConfigCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:config"
+    },
+    {
+      "id": "cli-policy",
+      "title": "Policy diagnostics",
+      "domain": "security",
+      "benefit": {
+        "en": "Inspect and repair policy findings by domain.",
+        "fr": "Inspectez et réparez les constats de politique par domaine."
+      },
+      "codePaths": [
+        "src/commands/cli/policy-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'policy'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerPolicyCommand(program)"
+          },
+          {
+            "file": "src/commands/cli/policy-command.ts",
+            "contains": "registerPolicyCommand"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:policy"
+    },
+    {
+      "id": "cli-dev",
+      "title": "Developer workflows",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Run guided plan, implementation and verification flows.",
+        "fr": "Lancez des parcours guidés de planification, réalisation et vérification."
+      },
+      "codePaths": [
+        "src/commands/dev/index.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'dev'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerDevCommands(program)"
+          },
+          {
+            "file": "src/commands/dev/index.ts",
+            "contains": "registerDevCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:dev"
+    },
+    {
+      "id": "cli-run",
+      "title": "Run observability",
+      "domain": "cli",
+      "benefit": {
+        "en": "Inspect traces and replay agent runs.",
+        "fr": "Inspectez les traces et rejouez les exécutions de l’agent."
+      },
+      "codePaths": [
+        "src/commands/run-cli/index.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'run'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerRunCommands(program)"
+          },
+          {
+            "file": "src/commands/run-cli/index.ts",
+            "contains": "registerRunCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:run"
+    },
+    {
+      "id": "cli-cron",
+      "title": "Scheduled jobs",
+      "domain": "cli",
+      "benefit": {
+        "en": "Create and manage scheduled jobs.",
+        "fr": "Créez et gérez des tâches planifiées."
+      },
+      "codePaths": [
+        "src/commands/cron-cli/index.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'cron'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerCronCommands(program)"
+          },
+          {
+            "file": "src/commands/cron-cli/index.ts",
+            "contains": "registerCronCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:cron"
+    },
+    {
+      "id": "cli-skills",
+      "title": "Installed skills",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "List installed skill packages and their origin.",
+        "fr": "Listez les packs de skills installés et leur origine."
+      },
+      "codePaths": [
+        "src/commands/skills-cli/index.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'skills'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerSkillsCommands(program)"
+          },
+          {
+            "file": "src/commands/skills-cli/index.ts",
+            "contains": "registerSkillsCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:skills"
+    },
+    {
+      "id": "cli-nodes",
+      "title": "Companion app nodes",
+      "domain": "fleet",
+      "benefit": {
+        "en": "Manage connected desktop and mobile nodes.",
+        "fr": "Gérez les nœuds de l’application compagnon sur ordinateur et mobile."
+      },
+      "codePaths": [
+        "src/commands/cli/node-commands.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'nodes'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerNodeCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/node-commands.ts",
+            "contains": "registerNodeCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:nodes"
+    },
+    {
+      "id": "cli-secrets",
+      "title": "Encrypted secrets vault",
+      "domain": "security",
+      "benefit": {
+        "en": "Manage credentials in the local encrypted vault.",
+        "fr": "Gérez les identifiants dans le coffre local chiffré."
+      },
+      "codePaths": [
+        "src/commands/cli/secrets-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'secrets'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerSecretsCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/secrets-command.ts",
+            "contains": "registerSecretsCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:secrets"
+    },
+    {
+      "id": "cli-approvals",
+      "title": "Action approvals",
+      "domain": "security",
+      "benefit": {
+        "en": "Review pending tool and action approvals.",
+        "fr": "Examinez les approbations d’outils et d’actions en attente."
+      },
+      "codePaths": [
+        "src/commands/cli/approvals-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'approvals'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerApprovalsCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/approvals-command.ts",
+            "contains": "registerApprovalsCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:approvals"
+    },
+    {
+      "id": "cli-insights",
+      "title": "Usage insights",
+      "domain": "cli",
+      "benefit": {
+        "en": "Inspect token, cost and activity metrics.",
+        "fr": "Consultez les mesures de jetons, de coût et d’activité."
+      },
+      "codePaths": [
+        "src/commands/cli/insights-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'insights'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerInsightsCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/insights-command.ts",
+            "contains": "registerInsightsCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:insights"
+    },
+    {
+      "id": "cli-bundles",
+      "title": "Skill bundles",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Group skills under a named command.",
+        "fr": "Regroupez des skills sous une commande nommée."
+      },
+      "codePaths": [
+        "src/commands/cli/bundles-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'bundles'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerBundlesCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/bundles-command.ts",
+            "contains": "registerBundlesCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:bundles"
+    },
+    {
+      "id": "cli-improve",
+      "title": "Empirical improvement",
+      "domain": "dgm",
+      "benefit": {
+        "en": "Run guarded learning experiments.",
+        "fr": "Lancez des expériences d’apprentissage encadrées."
+      },
+      "codePaths": [
+        "src/commands/cli/improve-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'improve'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerImproveCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/improve-command.ts",
+            "contains": "registerImproveCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:improve"
+    },
+    {
+      "id": "cli-evolve",
+      "title": "Evolution experiments",
+      "domain": "dgm",
+      "benefit": {
+        "en": "Propose and review code variants through explicit commands.",
+        "fr": "Proposez et examinez des variantes de code par commandes explicites."
+      },
+      "codePaths": [
+        "src/commands/cli/evolve-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'evolve'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerEvolveCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/evolve-command.ts",
+            "contains": "registerEvolveCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:evolve"
+    },
+    {
+      "id": "cli-lsp",
+      "title": "LSP diagnostics",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Inspect language-server diagnostics.",
+        "fr": "Inspectez les diagnostics du serveur de langage."
+      },
+      "codePaths": [
+        "src/commands/cli/lsp-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'lsp'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerLspCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/lsp-command.ts",
+            "contains": "registerLspCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:lsp"
+    },
+    {
+      "id": "cli-proxy",
+      "title": "OpenAI-compatible proxy",
+      "domain": "server-api",
+      "benefit": {
+        "en": "Expose an OpenAI-compatible proxy to clients.",
+        "fr": "Exposez un proxy compatible OpenAI aux clients."
+      },
+      "codePaths": [
+        "src/commands/cli/proxy-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'proxy'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerProxyCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/proxy-command.ts",
+            "contains": "registerProxyCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:proxy"
+    },
+    {
+      "id": "cli-deploy",
+      "title": "Web deployment workflow",
+      "domain": "cli",
+      "benefit": {
+        "en": "Prepare a web deployment through a CLI workflow.",
+        "fr": "Préparez un déploiement web par un parcours CLI."
+      },
+      "codePaths": [
+        "src/commands/cli/deploy-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'deploy'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerDeployCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/deploy-command.ts",
+            "contains": "registerDeployCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:deploy"
+    },
+    {
+      "id": "cli-provision",
+      "title": "Project provisioning",
+      "domain": "cli",
+      "benefit": {
+        "en": "Prepare database and authentication for a generated project.",
+        "fr": "Préparez base de données et authentification d’un projet généré."
+      },
+      "codePaths": [
+        "src/commands/cli/provision-command.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "addLazyCommandGroup(program, 'provision'"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "registerProvisionCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/provision-command.ts",
+            "contains": "registerProvisionCommands"
+          }
+        ]
+      },
+      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "discoveryKey": "cli:provision"
+    },
+    {
+      "id": "cli-film",
+      "title": "Film production",
+      "domain": "media",
+      "benefit": {
+        "en": "Assemble scene clips into a film.",
+        "fr": "Assemblez des clips de scènes en film."
+      },
+      "codePaths": [
+        "src/commands/film.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "'film',"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "createFilmCommand()"
+          },
+          {
+            "file": "src/commands/film.ts",
+            "contains": "createFilmCommand"
+          }
+        ]
+      },
+      "verificationLimit": "A live run is needed for the requested action.",
+      "discoveryKey": "cli:film"
+    },
+    {
+      "id": "cli-token",
+      "title": "API token",
+      "domain": "server-api",
+      "benefit": {
+        "en": "Mint a signed API access token.",
+        "fr": "Créez un jeton signé d’accès à l’API."
+      },
+      "codePaths": [
+        "src/commands/token.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "'token',"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "createTokenCommand()"
+          },
+          {
+            "file": "src/commands/token.ts",
+            "contains": "createTokenCommand"
+          }
+        ]
+      },
+      "verificationLimit": "A live run is needed for the requested action.",
+      "discoveryKey": "cli:token"
+    },
+    {
+      "id": "cli-pair",
+      "title": "Android pairing",
+      "domain": "server-api",
+      "benefit": {
+        "en": "Pair an Android authenticator locally.",
+        "fr": "Associez localement un authentificateur Android."
+      },
+      "codePaths": [
+        "src/commands/device-auth.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "'pair',"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "createPairCommand()"
+          },
+          {
+            "file": "src/commands/device-auth.ts",
+            "contains": "createPairCommand"
+          }
+        ]
+      },
+      "verificationLimit": "A live run is needed for the requested action.",
+      "discoveryKey": "cli:pair"
+    },
+    {
+      "id": "cli-devices",
+      "title": "Android devices",
+      "domain": "server-api",
+      "benefit": {
+        "en": "List and revoke paired authenticators.",
+        "fr": "Listez et révoquez les authentificateurs associés."
+      },
+      "codePaths": [
+        "src/commands/device-auth.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "'devices',"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "createDevicesCommand()"
+          },
+          {
+            "file": "src/commands/device-auth.ts",
+            "contains": "createDevicesCommand"
+          }
+        ]
+      },
+      "verificationLimit": "A live run is needed for the requested action.",
+      "discoveryKey": "cli:devices"
+    },
+    {
+      "id": "cli-user-model",
+      "title": "User preference model",
+      "domain": "context-memory",
+      "benefit": {
+        "en": "Review a structured model of work preferences.",
+        "fr": "Examinez un modèle structuré des préférences de travail."
+      },
+      "codePaths": [
+        "src/commands/user-model.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "'user-model',"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "createUserModelCommand()"
+          },
+          {
+            "file": "src/commands/user-model.ts",
+            "contains": "createUserModelCommand"
+          }
+        ]
+      },
+      "verificationLimit": "A live run is needed for the requested action.",
+      "discoveryKey": "cli:user-model"
+    },
+    {
+      "id": "cli-update",
+      "title": "Update channels",
+      "domain": "cli",
+      "benefit": {
+        "en": "Inspect available update channels.",
+        "fr": "Inspectez les canaux de mise à jour."
+      },
+      "codePaths": [
+        "src/commands/update.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "'update',"
+          },
+          {
+            "file": "src/index.ts",
+            "contains": "createUpdateCommand()"
+          },
+          {
+            "file": "src/commands/update.ts",
+            "contains": "createUpdateCommand"
+          }
+        ]
+      },
+      "verificationLimit": "A live run is needed for the requested action.",
+      "discoveryKey": "cli:update"
+    },
+    {
+      "id": "tool-web-search",
+      "title": "Web search",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Retrieve web search results for an agent task.",
+        "fr": "Obtenez des résultats web pour une tâche de l’agent."
+      },
+      "codePaths": [
+        "src/codebuddy/tool-definitions/web-tools.ts",
+        "src/tools/registry/web-tools.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/codebuddy/tool-definitions/web-tools.ts",
+            "contains": "name: 'web_search'"
+          },
+          {
+            "file": "src/tools/registry/web-tools.ts",
+            "contains": "createWebTools"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createWebTools()"
+          }
+        ]
+      },
+      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "discoveryKey": "tool:web_search"
+    },
+    {
+      "id": "tool-browser",
+      "title": "Browser automation",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Navigate pages through an agent browser tool.",
+        "fr": "Parcourez des pages avec l’outil navigateur de l’agent."
+      },
+      "codePaths": [
+        "src/codebuddy/tool-definitions/browser-tools.ts",
+        "src/tools/registry/misc-tools.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/codebuddy/tool-definitions/browser-tools.ts",
+            "contains": "name: 'browser'"
+          },
+          {
+            "file": "src/tools/registry/misc-tools.ts",
+            "contains": "createMiscTools"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createMiscTools()"
+          }
+        ]
+      },
+      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "discoveryKey": "tool:browser"
+    },
+    {
+      "id": "tool-deep-research",
+      "title": "Deep research",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Prepare a sourced multi-step research report.",
+        "fr": "Préparez un rapport de recherche étayé en plusieurs étapes."
+      },
+      "codePaths": [
+        "src/codebuddy/tool-definitions/research-tools.ts",
+        "src/tools/registry/research-tools.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/codebuddy/tool-definitions/research-tools.ts",
+            "contains": "name: 'deep_research'"
+          },
+          {
+            "file": "src/tools/registry/research-tools.ts",
+            "contains": "createResearchTools"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createResearchTools()"
+          }
+        ]
+      },
+      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "discoveryKey": "tool:deep_research"
+    },
+    {
+      "id": "tool-verify",
+      "title": "Verification tool",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Ask the agent to verify a concrete result.",
+        "fr": "Demandez à l’agent de vérifier un résultat concret."
+      },
+      "codePaths": [
+        "src/codebuddy/tool-definitions/verify-tools.ts",
+        "src/tools/registry/verify-tools.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/codebuddy/tool-definitions/verify-tools.ts",
+            "contains": "name: 'verify'"
+          },
+          {
+            "file": "src/tools/registry/verify-tools.ts",
+            "contains": "createVerifyTools"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createVerifyTools()"
+          }
+        ]
+      },
+      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "discoveryKey": "tool:verify"
+    },
+    {
+      "id": "tool-image-generate",
+      "title": "Image generation",
+      "domain": "media",
+      "benefit": {
+        "en": "Request image generation through a configured provider.",
+        "fr": "Demandez une image au fournisseur configuré."
+      },
+      "codePaths": [
+        "src/codebuddy/tool-definitions/multimodal-tools.ts",
+        "src/tools/registry/multimodal-tools.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/codebuddy/tool-definitions/multimodal-tools.ts",
+            "contains": "name: 'image_generate'"
+          },
+          {
+            "file": "src/tools/registry/multimodal-tools.ts",
+            "contains": "createMultimodalTools"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createMultimodalTools()"
+          }
+        ]
+      },
+      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "discoveryKey": "tool:image_generate"
+    },
+    {
+      "id": "tool-video-generate",
+      "title": "Video generation",
+      "domain": "media",
+      "benefit": {
+        "en": "Request a video clip through a configured backend.",
+        "fr": "Demandez un clip vidéo au moteur configuré."
+      },
+      "codePaths": [
+        "src/codebuddy/tool-definitions/multimodal-tools.ts",
+        "src/tools/registry/multimodal-tools.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/codebuddy/tool-definitions/multimodal-tools.ts",
+            "contains": "name: 'video_generate'"
+          },
+          {
+            "file": "src/tools/registry/multimodal-tools.ts",
+            "contains": "createMultimodalTools"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createMultimodalTools()"
+          }
+        ]
+      },
+      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "discoveryKey": "tool:video_generate"
+    },
+    {
+      "id": "tool-understand-video",
+      "title": "Video understanding",
+      "domain": "media",
+      "benefit": {
+        "en": "Extract information from video with configured media tools.",
+        "fr": "Extrayez des informations vidéo avec les outils médias configurés."
+      },
+      "codePaths": [
+        "src/codebuddy/tool-definitions/multimodal-tools.ts",
+        "src/tools/registry/multimodal-tools.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/codebuddy/tool-definitions/multimodal-tools.ts",
+            "contains": "name: 'understand_video'"
+          },
+          {
+            "file": "src/tools/registry/multimodal-tools.ts",
+            "contains": "createMultimodalTools"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createMultimodalTools()"
+          }
+        ]
+      },
+      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "discoveryKey": "tool:understand_video"
+    },
+    {
+      "id": "http-chat",
+      "title": "Chat HTTP API",
+      "domain": "server-api",
+      "benefit": {
+        "en": "Send a chat request over HTTP.",
+        "fr": "Envoyez une requête de conversation en HTTP."
+      },
+      "codePaths": [
+        "src/server/routes/chat.ts"
+      ],
+      "entrypoint": {
+        "kind": "route",
+        "checks": [
+          {
+            "file": "src/server/index.ts",
+            "contains": "app.use('/api/chat'"
+          },
+          {
+            "file": "src/server/routes/chat.ts",
+            "contains": "router."
+          }
+        ]
+      },
+      "verificationLimit": "HTTP listener and authentication were not exercised in this inventory."
+    },
+    {
+      "id": "http-sessions",
+      "title": "Sessions HTTP API",
+      "domain": "server-api",
+      "benefit": {
+        "en": "Inspect and manage saved sessions over HTTP.",
+        "fr": "Inspectez et gérez les sessions enregistrées en HTTP."
+      },
+      "codePaths": [
+        "src/server/routes/sessions.ts"
+      ],
+      "entrypoint": {
+        "kind": "route",
+        "checks": [
+          {
+            "file": "src/server/index.ts",
+            "contains": "app.use('/api/sessions'"
+          },
+          {
+            "file": "src/server/routes/sessions.ts",
+            "contains": "router."
+          }
+        ]
+      },
+      "verificationLimit": "HTTP listener and authentication were not exercised in this inventory."
+    },
+    {
+      "id": "http-memory",
+      "title": "Memory HTTP API",
+      "domain": "server-api",
+      "benefit": {
+        "en": "Read and update agent memory over HTTP.",
+        "fr": "Lisez et mettez à jour la mémoire de l’agent en HTTP."
+      },
+      "codePaths": [
+        "src/server/routes/memory.ts"
+      ],
+      "entrypoint": {
+        "kind": "route",
+        "checks": [
+          {
+            "file": "src/server/index.ts",
+            "contains": "app.use('/api/memory'"
+          },
+          {
+            "file": "src/server/routes/memory.ts",
+            "contains": "router."
+          }
+        ]
+      },
+      "verificationLimit": "HTTP listener and authentication were not exercised in this inventory."
+    },
+    {
+      "id": "http-a2a",
+      "title": "A2A task API",
+      "domain": "server-api",
+      "benefit": {
+        "en": "Exchange agent tasks over the A2A endpoint.",
+        "fr": "Échangez des tâches d’agents sur le point d’entrée A2A."
+      },
+      "codePaths": [
+        "src/server/routes/a2a-protocol.ts"
+      ],
+      "entrypoint": {
+        "kind": "route",
+        "checks": [
+          {
+            "file": "src/server/index.ts",
+            "contains": "app.use('/api/a2a'"
+          },
+          {
+            "file": "src/server/routes/a2a-protocol.ts",
+            "contains": "router."
+          }
+        ]
+      },
+      "verificationLimit": "HTTP listener and authentication were not exercised in this inventory."
+    },
+    {
+      "id": "cowork-studio",
+      "title": "App Studio",
+      "domain": "cowork",
+      "benefit": {
+        "en": "Iterate on an app in the desktop studio.",
+        "fr": "Itérez sur une application dans le studio de bureau."
+      },
+      "codePaths": [
+        "cowork/src/renderer/components/studio/AppStudioView.tsx"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "cowork/src/renderer/components/NewShell.tsx",
+            "contains": "primaryView === 'studio'"
+          },
+          {
+            "file": "cowork/src/main/index.ts",
+            "contains": "registerStudioFilesIpc(ipcMain)"
+          }
+        ]
+      },
+      "verificationLimit": "Electron UI and its external services were not run."
+    },
+    {
+      "id": "cowork-video-studio",
+      "title": "Video Studio",
+      "domain": "cowork",
+      "benefit": {
+        "en": "Organize video work in a desktop view.",
+        "fr": "Organisez le travail vidéo dans une vue de bureau."
+      },
+      "codePaths": [
+        "cowork/src/renderer/components/videostudio/VideoStudioView.tsx"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "cowork/src/renderer/components/NewShell.tsx",
+            "contains": "primaryView === 'videostudio'"
+          },
+          {
+            "file": "cowork/src/main/index.ts",
+            "contains": "registerFilmIpc(ipcMain"
+          }
+        ]
+      },
+      "verificationLimit": "Electron UI and its external services were not run."
+    },
+    {
+      "id": "agent-loop",
+      "title": "Agent tool loop",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Continue a request across model replies and tool results.",
+        "fr": "Poursuivez une demande sur plusieurs réponses du modèle et résultats d’outils."
+      },
+      "codePaths": [
+        "src/agent/execution/agent-executor.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/agent/codebuddy-agent.ts",
+            "contains": "processUserMessageStream"
+          },
+          {
+            "file": "src/agent/execution/agent-executor.ts",
+            "contains": "runTurnLoop"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "provider-ollama",
+      "title": "Local Ollama provider",
+      "domain": "providers",
+      "benefit": {
+        "en": "Use a locally served model without a paid API key.",
+        "fr": "Utilisez un modèle servi localement sans clé API payante."
+      },
+      "codePaths": [
+        "src/codebuddy/providers/ollama-native-transport.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/codebuddy/client.ts",
+            "contains": "OpenAICompatProvider"
+          },
+          {
+            "file": "src/codebuddy/providers/ollama-native-transport.ts",
+            "contains": "isOllamaEndpoint"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "provider-failover",
+      "title": "Provider failover",
+      "domain": "providers",
+      "benefit": {
+        "en": "Switch to a configured provider when an eligible failure occurs.",
+        "fr": "Basculez vers un fournisseur configuré après un échec admissible."
+      },
+      "codePaths": [
+        "src/providers/provider-failover-policy.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/codebuddy/client.ts",
+            "contains": "ProviderFailoverExhaustedError"
+          },
+          {
+            "file": "src/providers/provider-failover-policy.ts",
+            "contains": "CODEBUDDY_PROVIDER_FALLBACK"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "provider-chatgpt-oauth",
+      "title": "ChatGPT OAuth provider",
+      "domain": "providers",
+      "benefit": {
+        "en": "Use a ChatGPT authenticated Responses backend.",
+        "fr": "Utilisez un backend Responses authentifié par ChatGPT."
+      },
+      "codePaths": [
+        "src/codebuddy/providers/provider-chatgpt-responses.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/codebuddy/client.ts",
+            "contains": "new ChatGptResponsesProvider"
+          },
+          {
+            "file": "src/codebuddy/providers/provider-chatgpt-responses.ts",
+            "contains": "class ChatGptResponsesProvider"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "provider-gemini-cli",
+      "title": "Gemini CLI provider",
+      "domain": "providers",
+      "benefit": {
+        "en": "Use a local Gemini CLI subprocess as a model route.",
+        "fr": "Utilisez le sous-processus Gemini CLI comme voie vers le modèle."
+      },
+      "codePaths": [
+        "src/codebuddy/providers/provider-gemini-cli.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/codebuddy/client.ts",
+            "contains": "new GeminiCliProvider"
+          },
+          {
+            "file": "src/codebuddy/providers/provider-gemini-cli.ts",
+            "contains": "class GeminiCliProvider"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "provider-agy-cli",
+      "title": "AGY CLI provider",
+      "domain": "providers",
+      "benefit": {
+        "en": "Use an AGY CLI subprocess as a model route.",
+        "fr": "Utilisez le sous-processus AGY CLI comme voie vers le modèle."
+      },
+      "codePaths": [
+        "src/codebuddy/providers/provider-agy-cli.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/codebuddy/client.ts",
+            "contains": "new AgyCliProvider"
+          },
+          {
+            "file": "src/codebuddy/providers/provider-agy-cli.ts",
+            "contains": "class AgyCliProvider"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "context-compaction",
+      "title": "Context compaction",
+      "domain": "context-memory",
+      "benefit": {
+        "en": "Keep long conversations within a model context budget.",
+        "fr": "Maintenez les longues conversations dans le budget de contexte du modèle."
+      },
+      "codePaths": [
+        "src/context/context-manager-v2.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/agent/execution/agent-executor.ts",
+            "contains": "ContextManagerV2"
+          },
+          {
+            "file": "src/context/context-manager-v2.ts",
+            "contains": "class ContextManagerV2"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "memory-ckg",
+      "title": "Collective knowledge graph",
+      "domain": "context-memory",
+      "benefit": {
+        "en": "Recall shared knowledge through the CKG.",
+        "fr": "Rappelez des connaissances partagées par le graphe CKG."
+      },
+      "codePaths": [
+        "src/memory/collective-knowledge-graph.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/agent/execution/context-pipeline.ts",
+            "contains": "getCollectiveKnowledgeGraph().formatCollectiveContext"
+          },
+          {
+            "file": "src/memory/collective-knowledge-graph.ts",
+            "contains": "class CollectiveKnowledgeGraph"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "fleet-peer-chat",
+      "title": "Peer chat",
+      "domain": "fleet",
+      "benefit": {
+        "en": "Send a model request to a connected fleet peer.",
+        "fr": "Envoyez une requête au modèle d’un pair connecté de la flotte."
+      },
+      "codePaths": [
+        "src/fleet/peer-chat-bridge.ts"
+      ],
+      "entrypoint": {
+        "kind": "route",
+        "checks": [
+          {
+            "file": "src/server/index.ts",
+            "contains": "wirePeerChatBridge("
+          },
+          {
+            "file": "src/fleet/peer-chat-bridge.ts",
+            "contains": "registerPeerMethod('peer.chat'"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "fleet-peer-tools",
+      "title": "Peer read-only tools",
+      "domain": "fleet",
+      "benefit": {
+        "en": "Request an allowed read-only tool on a peer.",
+        "fr": "Demandez un outil autorisé en lecture seule à un pair."
+      },
+      "codePaths": [
+        "src/fleet/peer-tool-bridge.ts"
+      ],
+      "entrypoint": {
+        "kind": "route",
+        "checks": [
+          {
+            "file": "src/server/index.ts",
+            "contains": "wirePeerToolBridge()"
+          },
+          {
+            "file": "src/fleet/peer-tool-bridge.ts",
+            "contains": "registerPeerMethod('peer.tool.invoke'"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "security-sandbox",
+      "title": "Native shell sandbox",
+      "domain": "security",
+      "benefit": {
+        "en": "Confine shell commands when native sandbox mode is enabled.",
+        "fr": "Confinez les commandes shell lorsque le bac à sable natif est activé."
+      },
+      "codePaths": [
+        "src/security/native-sandbox.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/tools/bash/bash-tool.ts",
+            "contains": "confineSpawn"
+          },
+          {
+            "file": "src/security/native-sandbox.ts",
+            "contains": "confineSpawn"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "security-skill-firewall",
+      "title": "Skill firewall",
+      "domain": "security",
+      "benefit": {
+        "en": "Scan skills for risky capabilities before use.",
+        "fr": "Analysez les skills à la recherche de capacités risquées avant usage."
+      },
+      "codePaths": [
+        "src/security/skill-scanner.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/skills/skill-importer.ts",
+            "contains": "scanSkillFirewall(skillDir)"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "sensory-voice-loop",
+      "title": "Voice conversation loop",
+      "domain": "sensory",
+      "benefit": {
+        "en": "Turn heard speech into a spoken companion response.",
+        "fr": "Transformez la parole entendue en réponse vocale du compagnon."
+      },
+      "codePaths": [
+        "src/sensory/voice-loop.ts"
+      ],
+      "entrypoint": {
+        "kind": "channel",
+        "checks": [
+          {
+            "file": "src/sensory/speech-reaction.ts",
+            "contains": "import('./voice-loop.js')"
+          },
+          {
+            "file": "src/sensory/voice-loop.ts",
+            "contains": "sayNow"
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "media-film-assemble",
+      "title": "Film assembly",
+      "domain": "media",
+      "benefit": {
+        "en": "Assemble prepared clips with transitions and audio.",
+        "fr": "Assemblez des clips prêts avec transitions et audio."
+      },
+      "codePaths": [
+        "src/tools/video/film-assemble.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/commands/film.ts",
+            "contains": ".command('assemble <name>')"
+          },
+          {
+            "file": "src/agent/film/film-producer.ts",
+            "contains": "assembleFilm("
+          }
+        ]
+      },
+      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+    },
+    {
+      "id": "tool-read-file",
+      "title": "File reading",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Let the agent read a workspace file before answering.",
+        "fr": "Laissez l’agent lire un fichier du projet avant de répondre."
+      },
+      "codePaths": [
+        "src/codebuddy/tool-definitions/core-tools.ts",
+        "src/tools/registry/text-editor-tools.ts",
+        "src/tools/registry/tool-alias-map.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/codebuddy/tool-definitions/core-tools.ts",
+            "contains": "name: \"read_file\""
+          },
+          {
+            "file": "src/tools/registry/tool-alias-map.ts",
+            "contains": "read_file: 'view_file'"
+          },
+          {
+            "file": "src/tools/registry/text-editor-tools.ts",
+            "contains": "new ViewFileTool()"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createTextEditorTools()"
+          }
+        ]
+      },
+      "verificationLimit": "Read-only tool verified on a disposable fixture."
+    },
+    {
+      "id": "context-tool-selection",
+      "title": "Tool selection",
+      "domain": "agent-tools",
+      "benefit": {
+        "en": "Select task-relevant tools while retaining tool search.",
+        "fr": "Sélectionnez les outils pertinents tout en gardant leur recherche."
+      },
+      "codePaths": [
+        "src/codebuddy/tools.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/codebuddy/tools.ts",
+            "contains": "name: 'tool_search'"
+          },
+          {
+            "file": "src/codebuddy/tools.ts",
+            "contains": "selectRelevantTools(query, allTools"
+          }
+        ]
+      },
+      "verificationLimit": "Selection quality was not measured on a live task."
+    },
+    {
+      "id": "context-checkpoints",
+      "title": "Session checkpoints",
+      "domain": "context-memory",
+      "benefit": {
+        "en": "Create checkpoints and rewind agent changes.",
+        "fr": "Créez des points de contrôle et revenez sur les modifications de l’agent."
+      },
+      "codePaths": [
+        "src/agent/facades/session-facade.ts",
+        "src/checkpoints/checkpoint-manager.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/agent/codebuddy-agent.ts",
+            "contains": "checkpointManager: this.checkpointManager"
+          },
+          {
+            "file": "src/agent/facades/session-facade.ts",
+            "contains": "this.checkpointManager.createCheckpoint(description)"
+          }
+        ]
+      },
+      "verificationLimit": "A reversible edit and rewind scenario was not executed."
+    },
+    {
+      "id": "dgm-learning-cycle",
+      "title": "Learning cycle",
+      "domain": "dgm",
+      "benefit": {
+        "en": "Try a bounded learning cycle from the improve command.",
+        "fr": "Essayez un cycle d’apprentissage borné depuis la commande improve."
+      },
+      "codePaths": [
+        "src/commands/cli/improve-command.ts",
+        "src/agent/self-improvement/engine.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "registerImproveCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/improve-command.ts",
+            "contains": ".command('cycle')"
+          }
+        ]
+      },
+      "verificationLimit": "An improvement cycle was not launched."
+    },
+    {
+      "id": "dgm-authored-tools",
+      "title": "Authored tool experiments",
+      "domain": "dgm",
+      "benefit": {
+        "en": "Evaluate proposed agent tools with the improve command.",
+        "fr": "Évaluez des outils proposés par l’agent avec la commande improve."
+      },
+      "codePaths": [
+        "src/commands/cli/improve-command.ts",
+        "src/agent/self-improvement/tool-engine.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "registerImproveCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/improve-command.ts",
+            "contains": ".command('tools')"
+          }
+        ]
+      },
+      "verificationLimit": "No generated tool was evaluated in this inventory."
+    },
+    {
+      "id": "dgm-evolve-propose",
+      "title": "Evolution proposals",
+      "domain": "dgm",
+      "benefit": {
+        "en": "Inspect a proposed code-evolution experiment.",
+        "fr": "Inspectez une proposition d’expérience d’évolution du code."
+      },
+      "codePaths": [
+        "src/commands/cli/evolve-command.ts",
+        "src/agent/self-improvement/evolution/proposal-engine.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "registerEvolveCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/evolve-command.ts",
+            "contains": ".command('propose')"
+          }
+        ]
+      },
+      "verificationLimit": "No proposal was generated or executed."
+    },
+    {
+      "id": "cowork-desktop-chat",
+      "title": "Desktop chat",
+      "domain": "cowork",
+      "benefit": {
+        "en": "Continue a session in the Cowork desktop workspace.",
+        "fr": "Poursuivez une session dans l’espace de travail Cowork."
+      },
+      "codePaths": [
+        "cowork/src/renderer/components/NewShell.tsx",
+        "cowork/src/renderer/components/DockWorkspace.tsx"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "cowork/src/renderer/components/NewShell.tsx",
+            "contains": "primaryView === 'chat'"
+          },
+          {
+            "file": "cowork/src/renderer/components/NewShell.tsx",
+            "contains": "<DockWorkspace />"
+          }
+        ]
+      },
+      "verificationLimit": "Electron was not launched on this host."
+    },
+    {
+      "id": "cowork-desktop-assistant",
+      "title": "Desktop assistant",
+      "domain": "cowork",
+      "benefit": {
+        "en": "Open the companion view in Cowork.",
+        "fr": "Ouvrez la vue compagnon dans Cowork."
+      },
+      "codePaths": [
+        "cowork/src/renderer/components/assistant/AssistantView.tsx"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "cowork/src/renderer/components/NewShell.tsx",
+            "contains": "primaryView === 'assistant'"
+          },
+          {
+            "file": "cowork/src/main/index.ts",
+            "contains": "registerAssistantIpc("
+          }
+        ]
+      },
+      "verificationLimit": "Electron and companion hardware were not launched."
+    },
+    {
+      "id": "cowork-desktop-settings",
+      "title": "Desktop settings",
+      "domain": "cowork",
+      "benefit": {
+        "en": "Adjust Cowork settings in the desktop window.",
+        "fr": "Réglez Cowork dans la fenêtre de bureau."
+      },
+      "codePaths": [
+        "cowork/src/renderer/components/SettingsPanel.tsx"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "cowork/src/renderer/App.tsx",
+            "contains": "<SettingsPanel onClose="
+          },
+          {
+            "file": "cowork/src/renderer/App.tsx",
+            "contains": "import('./components/SettingsPanel')"
+          }
+        ]
+      },
+      "verificationLimit": "Electron was not launched on this host."
+    },
+    {
+      "id": "fleet-peer-sessions",
+      "title": "Multi-turn peer sessions",
+      "domain": "fleet",
+      "benefit": {
+        "en": "Continue a conversation with a fleet peer across turns.",
+        "fr": "Poursuivez une conversation avec un pair de la flotte sur plusieurs tours."
+      },
+      "codePaths": [
+        "src/fleet/peer-session-bridge.ts"
+      ],
+      "entrypoint": {
+        "kind": "route",
+        "checks": [
+          {
+            "file": "src/server/index.ts",
+            "contains": "wirePeerSessionBridge("
+          },
+          {
+            "file": "src/fleet/peer-session-bridge.ts",
+            "contains": "registerPeerMethod('peer.chat-session.start'"
+          }
+        ]
+      },
+      "verificationLimit": "Requires two live peers and a configured model."
+    },
+    {
+      "id": "media-video-stitch",
+      "title": "Video clip stitching",
+      "domain": "media",
+      "benefit": {
+        "en": "Combine prepared clips with transitions.",
+        "fr": "Combinez des clips prêts avec transitions."
+      },
+      "codePaths": [
+        "src/tools/registry/multimodal-tools.ts"
+      ],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          {
+            "file": "src/tools/registry/multimodal-tools.ts",
+            "contains": "new VideoStitchTool()"
+          },
+          {
+            "file": "src/tools/registry/interactive-adapters.ts",
+            "contains": "...createMultimodalTools()"
+          }
+        ]
+      },
+      "verificationLimit": "No media clips or ffmpeg run were supplied."
+    },
+    {
+      "id": "dgm-capability-benchmark",
+      "title": "Capability benchmark",
+      "domain": "dgm",
+      "benefit": {
+        "en": "Measure a selected model on a curated capability scenario.",
+        "fr": "Mesurez un modèle sélectionné sur un scénario de capacité défini."
+      },
+      "codePaths": [
+        "src/commands/cli/improve-command.ts",
+        "src/agent/self-improvement/continuous-benchmark.ts"
+      ],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          {
+            "file": "src/index.ts",
+            "contains": "registerImproveCommands(program)"
+          },
+          {
+            "file": "src/commands/cli/improve-command.ts",
+            "contains": ".command('bench')"
+          },
+          {
+            "file": "src/commands/cli/improve-command.ts",
+            "contains": "benchmark.runBenchmark("
+          }
+        ]
+      },
+      "verificationLimit": "The benchmark run was limited to one Ollama scenario; no improvement cycle was executed."
     }
   ]
 }

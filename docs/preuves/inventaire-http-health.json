@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-health",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.186Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "a2cfaadf29acfa8d45240b3e2073c6ed299dcc20618ee9d140cf59aae50abf83",
+  "artifact": "docs/preuves/inventaire-http-health.log",
+  "summary": "Route HTTP /api/health appelée en local ; 200, état degraded car source sale, arrêt gracieux confirmé."
+}

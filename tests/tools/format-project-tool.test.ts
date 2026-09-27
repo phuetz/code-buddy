@@ -38,4 +38,11 @@ describe('FormatProjectTool', () => {
     expect(result.success).toBe(false);
     expect((result.data as { files: string[] }).files).toContain('bad.ts');
   });
+
+  it('returns success false when prettier is absent', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'format-project-tool-missing-'));
+    const result = await new FormatProjectTool().execute({ root });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Prettier not found');
+  });
 });

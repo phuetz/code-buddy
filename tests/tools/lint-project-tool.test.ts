@@ -55,7 +55,7 @@ process.exit(1);
   it('no-ops when eslint is absent', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lint-project-tool-missing-'));
     const result = await new LintProjectTool().execute({ root });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     expect((result.data as { missing: boolean }).missing).toBe(true);
   });
 });

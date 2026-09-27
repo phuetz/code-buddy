@@ -110,7 +110,9 @@ export class PermissionManager extends EventEmitter {
     // Check cache first
     const cached = this.cache.get(permission);
     if (cached && Date.now() - cached.timestamp < this.config.cacheDuration) {
-      return this.formatResult(permission, cached.status);
+      const result = this.formatResult(permission, cached.status);
+      this.emit('permission-checked', result);
+      return result;
     }
 
     let status: PermissionStatus;

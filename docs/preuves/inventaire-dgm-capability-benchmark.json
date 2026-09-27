@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "dgm-capability-benchmark",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.187Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "04da426a605f224679b043af62b07bc0e129126e185dd3e8775981bc0cb3bf53",
+  "artifact": "docs/preuves/inventaire-dgm-capability-benchmark.log",
+  "summary": "Banc de capacité exécuté sur un scénario Ollama ; score nul, aucune amélioration revendiquée."
+}

@@ -1,0 +1,22 @@
+{
+  "rule": "Connected domains by shared positives; SHA-256 sorted groups, each assigned to the smaller partition, first tie to development",
+  "development": [
+    "agent-executor",
+    "model-routing",
+    "voice-loop",
+    "code-intelligence",
+    "self-improvement",
+    "fleet",
+    "multimodal",
+    "tool-selection"
+  ],
+  "heldOut": [
+    "reasoning",
+    "collective-memory-ckg",
+    "deep-research",
+    "persistent-memory",
+    "research-ingest",
+    "sessions-checkpoints",
+    "context-rag"
+  ]
+}

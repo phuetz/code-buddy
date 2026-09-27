@@ -26,4 +26,10 @@ describe('GitSummaryTool', () => {
     expect(data.untracked).toBe(1);
     expect(data.lastCommit?.subject).toBe('initial commit');
   });
+  it('returns failure when not a git repository', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'git-summary-tool-not-repo-'));
+    const result = await new GitSummaryTool().execute({ root });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Not a git repository');
+  });
 });

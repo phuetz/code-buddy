@@ -7,7 +7,9 @@
  * - projet npm avec script `build` : `npm run build`, puis copie du dossier
  *   de sortie (dist, build, out) ;
  * - site statique : copie des fichiers du projet (sans node_modules, .git,
- *   .codebuddy).
+ *   .codebuddy à aucun niveau).
+ * Aucun fichier `.env`/`.env.*` n'est jamais copié, ni d'un site statique ni
+ * d'un dossier construit.
  * La copie va dans `<dossier choisi>/<nom du projet>-site` (jamais d'écrasement
  * silencieux : un suffixe numérique est ajouté si le dossier existe).
  * Le lanceur de build et la boîte de dialogue sont injectés (testables).
@@ -19,6 +21,7 @@ import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+import { buildStudioChildEnv, killProcessTree, killableSpawnOptions } from './child-env.js';
 import { assertTrustedRoot } from './studio-versions-service.js';
 
 export interface SiteExportResult {
@@ -35,22 +38,64 @@ export type SiteExportOutcome =
 export interface SiteExportDeps {
   trustedRoots?: () => string[];
   chooseDirectory: (defaultPath: string) => Promise<string | null>;
-  runBuild?: (cwd: string) => Promise<{ code: number | null; output: string[] }>;
+  /** Lanceur du build ; reçoit les variables du projet quand `resolveProjectEnv` est fourni. */
+  runBuild?: (cwd: string, extraEnv?: Record<string, string>) => Promise<{ code: number | null; output: string[] }>;
+  /**
+   * Variables propres au projet (ses secrets, par ex.) ajoutées par-dessus
+   * l'environnement minimal du build : les clés de l'hôte n'y arrivent jamais.
+   */
+  resolveProjectEnv?: (root: string) => Promise<Record<string, string>>;
 }
 
 const BUILD_OUTPUT_DIRS = ['dist', 'build', 'out'];
-const STATIC_EXCLUDES = new Set(['node_modules', '.git', '.codebuddy', '.studio-probe-dist', 'dist', 'build']);
+/** Exclus au PREMIER niveau d'un site statique (sorties de build). */
+const STATIC_TOP_EXCLUDES = new Set(['.studio-probe-dist', 'dist', 'build']);
+/** Exclus à TOUT niveau (dépendances, dépôts, état interne). */
+const ANY_LEVEL_EXCLUDES = new Set(['node_modules', '.git', '.codebuddy']);
 const BUILD_TIMEOUT_MS = 5 * 60_000;
 
-const defaultRunBuild = (cwd: string): Promise<{ code: number | null; output: string[] }> =>
+/** `.env`, `.env.local`, `.env.production`… : secrets, jamais publiés. */
+export function isEnvFileName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower === '.env' || lower.startsWith('.env.');
+}
+
+/**
+ * Faut-il copier `rel` (relatif à la source copiée) ? Les `.env*` ne sortent
+ * jamais, quel que soit le niveau ; pour un site statique, on écarte aussi
+ * node_modules/.git/.codebuddy à tout niveau et les sorties de build à la racine.
+ */
+export function shouldCopySitePath(rel: string, kind: 'build' | 'static'): boolean {
+  if (rel === '') return true;
+  const parts = rel.split(/[\\/]+/).filter(Boolean);
+  if (parts.some(isEnvFileName)) return false;
+  if (kind === 'build') return true;
+  if (parts.some((part) => ANY_LEVEL_EXCLUDES.has(part))) return false;
+  return !STATIC_TOP_EXCLUDES.has(parts[0] ?? '');
+}
+
+export interface NpmBuildOptions {
+  timeoutMs?: number;
+  extraEnv?: Record<string, string>;
+  /** Environnement de l'hôte dont on lit la liste blanche (défaut `process.env`). */
+  baseEnv?: NodeJS.ProcessEnv;
+}
+
+/**
+ * `npm run build` avec un environnement en liste blanche (jamais les clés de
+ * l'hôte) ; au délai dépassé, tout l'arbre de processus est arrêté.
+ */
+export const runNpmBuild = (cwd: string, options: NpmBuildOptions = {}): Promise<{ code: number | null; output: string[] }> =>
   new Promise((resolve) => {
+    const timeoutMs = options.timeoutMs ?? BUILD_TIMEOUT_MS;
     const output: string[] = [];
     const isWin = process.platform === 'win32';
     const child = spawn(isWin ? 'npm.cmd' : 'npm', ['run', 'build'], {
       cwd,
       shell: isWin,
       windowsHide: true,
-      env: { ...process.env, CI: 'true', FORCE_COLOR: '0' },
+      ...killableSpawnOptions(),
+      env: buildStudioChildEnv({ ...options.extraEnv, CI: 'true', FORCE_COLOR: '0' }, options.baseEnv),
     });
     const push = (chunk: Buffer) => {
       output.push(...String(chunk).split(/\r?\n/).filter(Boolean));
@@ -59,9 +104,9 @@ const defaultRunBuild = (cwd: string): Promise<{ code: number | null; output: st
     child.stdout?.on('data', push);
     child.stderr?.on('data', push);
     const timer = setTimeout(() => {
-      output.push(`build interrompu après ${BUILD_TIMEOUT_MS / 1000} s`);
-      child.kill('SIGTERM');
-    }, BUILD_TIMEOUT_MS);
+      output.push(`build interrompu après ${Math.round(timeoutMs / 1000)} s`);
+      killProcessTree(child);
+    }, timeoutMs);
     child.on('error', (error) => {
       clearTimeout(timer);
       output.push(String(error));
@@ -114,7 +159,12 @@ export class SiteExportService {
         if (!pkg.scripts?.build) {
           return { ok: false, error: 'Le projet n’a pas de script « build » dans package.json.' };
         }
-        const run = await (this.deps.runBuild ?? defaultRunBuild)(root);
+        const extraEnv = this.deps.resolveProjectEnv
+          ? await this.deps.resolveProjectEnv(root).catch(() => ({}))
+          : undefined;
+        const runBuild =
+          this.deps.runBuild ?? ((dir: string, env?: Record<string, string>) => runNpmBuild(dir, { extraEnv: env }));
+        const run = await (extraEnv ? runBuild(root, extraEnv) : runBuild(root));
         buildLog = run.output.slice(-40);
         if (run.code !== 0) {
           return { ok: false, error: `npm run build a échoué (code ${run.code ?? 'null'}).`, buildLog };
@@ -145,12 +195,7 @@ export class SiteExportService {
       await fs.cp(source, target, {
         recursive: true,
         dereference: false,
-        filter: (src) => {
-          if (kind === 'build') return true;
-          const rel = path.relative(root, src);
-          const top = rel.split(path.sep)[0] ?? '';
-          return rel === '' || !STATIC_EXCLUDES.has(top);
-        },
+        filter: (src) => shouldCopySitePath(path.relative(source, src), kind),
       });
       return { ok: true, data: { savedTo: target, kind, files: await countFiles(target), ...(buildLog ? { buildLog } : {}) } };
     } catch (error) {

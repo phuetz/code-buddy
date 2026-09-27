@@ -1,0 +1,7 @@
+Commande 1 : buddy run show <RUN_ID>
+Code de sortie : 0
+Sortie : Tool calls: 1 ; tool_call read_file path=package.json ; tool_result read_file ok.
+Commande 2 : buddy run replay <RUN_ID>
+Code de sortie : 0
+Sortie : No replayable tool events found in this run.
+Constat : le rejoueur ignore le nom read_file alors que le journal contient cet appel.

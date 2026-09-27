@@ -12,6 +12,8 @@ const oauthMock = vi.hoisted(() => ({
   getChatGptAuth: vi.fn(),
   hasCodexCredentials: vi.fn(),
   getCodexAuthFilePath: vi.fn(() => '/tmp/codex-auth.json'),
+  getLastChatGptRefreshFailure: vi.fn(() => null),
+  describeChatGptRefreshFailure: vi.fn(() => 'OpenAI refused the refresh token (HTTP 401) (refresh_token_reused): it was already used, expired or revoked. Run `buddy login` again.'),
 }));
 
 const modelMock = vi.hoisted(() => ({
@@ -124,5 +126,17 @@ describe('handleWhoami', () => {
     oauthMock.getChatGptAuth.mockResolvedValueOnce(null);
     const result = await handleWhoami();
     expect(result.entry?.content).toMatch(/unreadable/);
+  });
+
+  it('names the real refresh failure instead of claiming the file is unreadable', async () => {
+    oauthMock.hasCodexCredentials.mockReturnValueOnce(true);
+    oauthMock.getChatGptAuth.mockResolvedValueOnce(null);
+    oauthMock.getLastChatGptRefreshFailure.mockReturnValueOnce({
+      kind: 'http', status: 401, code: 'refresh_token_reused', transient: false, at: '2026-09-27T00:00:00.000Z',
+    } as never);
+    const result = await handleWhoami();
+    expect(result.entry?.content).toContain('token refresh failed');
+    expect(result.entry?.content).toContain('HTTP 401');
+    expect(result.entry?.content).not.toMatch(/unreadable/);
   });
 });

@@ -425,8 +425,8 @@ describe('Notebook Tool - Execution', () => {
       // Try to start again
       const result = await tool.execute({ action: 'kernel_start', path: 'test.ipynb' });
 
-      expect(result.success).toBe(true);
-      expect(result.content).toContain('already running');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('already running');
     });
 
     it('should accept custom kernel name', async () => {

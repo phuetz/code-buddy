@@ -270,7 +270,7 @@ export function validateFilePath(
 
   // Resolve path if base directory provided
   let resolvedPath = trimmed;
-  if (baseDirectory && !isAbsolute) {
+  if (baseDirectory) {
     resolvedPath = path.resolve(baseDirectory, trimmed);
 
     // Ensure resolved path stays within base directory

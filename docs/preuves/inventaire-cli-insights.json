@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-insights",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.183Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "6faa67efb348c42795d09e2d9aa3baa7ae2c941af848af78fb9fa54bd467c160",
+  "artifact": "docs/preuves/inventaire-cli-insights.log",
+  "summary": "Tableau de coût et de jetons ouvert dans un HOME isolé."
+}
