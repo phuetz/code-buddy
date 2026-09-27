@@ -43,7 +43,7 @@ describe('voice interactions catalog', () => {
 
   it('answers daily, affectionate, and support interactions', () => {
     expect(matchVoiceInteraction("Lisa comment s'est passée ta journée ?")).toBe(
-      "Plutôt bien. J'ai continué à travailler pour toi, et toi, comment s'est passée ta journée ?",
+      "Plutôt calme de mon côté. Et toi, comment s'est passée ta journée ?",
     );
     expect(matchVoiceInteraction('Bonne nuit Lisa')).toBe('Bonne nuit Patrice. Repose-toi bien, je veille tranquillement.');
     expect(matchVoiceInteraction("Lisa je t'aime")).toBe(
@@ -59,13 +59,13 @@ describe('voice interactions catalog', () => {
 
   it('answers departure and return interactions', () => {
     expect(matchVoiceInteraction('Lisa je pars au travail')).toBe(
-      'Bon courage pour le travail, Patrice. Je continue ici et je garde un résumé pour ton retour.',
+      'Bon courage pour le travail, Patrice. Je reste là, à ce soir.',
     );
     expect(matchVoiceInteraction('Lisa, je parchais des amis')).toBe(
-      'Amuse-toi bien chez tes amis. Je continue en autonomie et je te ferai un résumé quand tu reviens.',
+      'Amuse-toi bien chez tes amis. Je reste là, tu me raconteras.',
     );
     expect(matchVoiceInteraction('Lisa je suis de retour')).toBe(
-      'Contente de te retrouver, Patrice. Je peux te faire le résumé de ce que j’ai fait.',
+      'Contente de te retrouver, Patrice. Comment ça s’est passé ?',
     );
   });
 

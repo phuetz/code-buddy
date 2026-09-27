@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerRunCommands } from '../../src/commands/run-cli/index.js';
 import { resetLessonCandidateQueues } from '../../src/agent/lesson-candidate-queue.js';
 import { RunStore } from '../../src/observability/run-store.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 describe('buddy run retrospective', () => {
   let tempDir: string;
@@ -37,10 +38,11 @@ describe('buddy run retrospective', () => {
     await new Promise((resolve) => setTimeout(resolve, 120));
     consoleLogSpy.mockRestore();
     store.dispose();
+    await store.whenStreamsClosed();
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
     resetLessonCandidateQueues();
     process.chdir(oldCwd);
-    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTestDir(tempDir);
   });
 
   it('runs the Learning Agent from the CLI against a real persisted run', async () => {

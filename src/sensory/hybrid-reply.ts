@@ -21,6 +21,7 @@
  * @module sensory/hybrid-reply
  */
 
+import { recordVoiceTurn, type VoiceTurnRoute } from './voice-turn-journal.js';
 import { logger } from '../utils/logger.js';
 import type {
   ReplyFn,
@@ -554,7 +555,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
     await dependencyPromise;
   }
 
-  function remember(user: string, assistant: string): void {
+  function remember(user: string, assistant: string, route: VoiceTurnRoute): void {
     if (!assistant.trim()) return;
     const previousUser = history.at(-2);
     const previousAssistant = history.at(-1);
@@ -570,6 +571,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
     history.push({ role: 'user', content: user });
     history.push({ role: 'assistant', content: assistant });
     while (history.length > maxTurns * 2) history.shift();
+    recordVoiceTurn({ heard: user, reply: assistant, route });
   }
 
   function lastAssistantAskedQuestion(recent: readonly HybridTurn[]): boolean {
@@ -785,7 +787,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         // that was explicitly precomputed for immediate delivery.
         void evolveRelationshipFromUtterance(heard);
         const safeShortcut = guardBeforeMemory(shortcut);
-        remember(heard, safeShortcut);
+        remember(heard, safeShortcut, 'shortcut');
         return safeShortcut;
       }
       // Lisa selfie — cache-first, before the LLM (companion profile has no tools).
@@ -819,7 +821,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
               }
             }
             const line = guardBeforeMemory(selfie.caption);
-            remember(heard, line);
+            remember(heard, line, 'selfie');
             logger.info(
               `[voice-hybrid] lisa-selfie cache=${selfie.reason} image=${Boolean(selfie.imagePath)}`,
             );
@@ -842,7 +844,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         if (share) {
           void evolveRelationshipFromUtterance(heard);
           const line = guardBeforeMemory(share.spokenReply);
-          remember(heard, line);
+          remember(heard, line, 'photo');
           logger.info(
             `[voice-hybrid] camera-share success=${share.success} telegram=${share.telegramSent}`,
           );
@@ -936,7 +938,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         }
       }
       if (signal?.aborted) return '';
-      remember(heard, out);
+      remember(heard, out, substantive ? 'agent' : 'conversation');
       const quality = assessConversationResponse(heard, out, recentHistory);
       logger.info(
         `[voice-hybrid] route=${substantive ? 'agent' : 'chitchat'} responseChars=${out.length}`
@@ -1034,7 +1036,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         yield safeShortcut;
         if (!replyOpts?.signal?.aborted) {
           void evolveRelationshipFromUtterance(heard);
-          remember(heard, safeShortcut);
+          remember(heard, safeShortcut, 'shortcut');
         }
         return;
       }
@@ -1108,7 +1110,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
               if (spoken) {
                 yield STREAM_FAILURE_CLOSURE;
                 await evolveRelationshipFromUtterance(heard);
-                remember(heard, `${spoken} ${STREAM_FAILURE_CLOSURE}`);
+                remember(heard, `${spoken} ${STREAM_FAILURE_CLOSURE}`, substantive ? 'agent' : 'conversation');
                 logger.warn(
                   `[voice-hybrid] agent stream interrupted after partial delivery: ${
                     error instanceof Error ? error.message : String(error)
@@ -1140,7 +1142,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           if (completed) {
             await evolveRelationshipFromUtterance(heard);
             const canonical = [completed, correction].filter(Boolean).join(' ');
-            remember(heard, canonical);
+            remember(heard, canonical, substantive ? 'agent' : 'conversation');
             logger.info(`[voice-hybrid] route=agent-stream responseChars=${canonical.length}`);
           }
           return;
@@ -1190,7 +1192,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           if (!replyOpts?.signal?.aborted && spokenPrefix) {
             yield STREAM_FAILURE_CLOSURE;
             await evolveRelationshipFromUtterance(heard);
-            remember(heard, `${spokenPrefix} ${STREAM_FAILURE_CLOSURE}`);
+            remember(heard, `${spokenPrefix} ${STREAM_FAILURE_CLOSURE}`, substantive ? 'agent' : 'conversation');
             logger.warn(
               `[voice-hybrid] prefixed reply interrupted after prefix delivery: ${
                 error instanceof Error ? error.message : String(error)
@@ -1205,7 +1207,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         if (!completed) {
           yield STREAM_FAILURE_CLOSURE;
           await evolveRelationshipFromUtterance(heard);
-          remember(heard, `${spokenPrefix} ${STREAM_FAILURE_CLOSURE}`);
+          remember(heard, `${spokenPrefix} ${STREAM_FAILURE_CLOSURE}`, substantive ? 'agent' : 'conversation');
           return;
         }
         if (completed) yield completed;
@@ -1229,7 +1231,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         const canonical = [spokenPrefix, completed, correction].filter(Boolean).join(' ');
         if (canonical) {
           await evolveRelationshipFromUtterance(heard);
-          remember(heard, canonical);
+          remember(heard, canonical, substantive ? 'agent' : 'conversation');
           logger.info(
             `[voice-hybrid] route=agent-prefixed responseChars=${canonical.length}`,
           );
@@ -1295,7 +1297,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           if (spoken) {
             yield STREAM_FAILURE_CLOSURE;
             await evolveRelationshipFromUtterance(heard);
-            remember(heard, `${spoken} ${STREAM_FAILURE_CLOSURE}`);
+            remember(heard, `${spoken} ${STREAM_FAILURE_CLOSURE}`, substantive ? 'agent' : 'conversation');
             logger.warn(
               `[voice-hybrid] chitchat stream interrupted after partial delivery: ${
                 error instanceof Error ? error.message : String(error)
@@ -1382,6 +1384,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         remember(
           heard,
           [replyOpts?.spokenPrefix, completed, correction].filter(Boolean).join(' '),
+          substantive ? 'agent' : 'conversation',
         );
         logger.info(`[voice-hybrid] route=chitchat-stream responseChars=${completed.length}`);
       }

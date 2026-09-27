@@ -3,7 +3,7 @@
  * Priorité : option de ligne de commande, fichier, constante historique.
  * Aucune source : les valeurs d'aujourd'hui. Pas de rechargement à chaud.
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -543,6 +543,16 @@ describe('middleware — le projet change après la construction', () => {
     writeToml(dirA, '.codebuddy/config.toml', '[middleware]\nmax_turns = 90\n');
     agent.setWorkingDirectory(dirA);
     agent.setWorkingDirectory(undefined);
+    expect(agent.maxToolRounds).toBe(11);
+  });
+
+  it.skipIf(process.platform === 'win32')('un lien vers le même projet n\'est pas un autre projet (macOS /var → /private/var)', () => {
+    const { dirA } = projects();
+    const alias = path.join(path.dirname(dirA), 'lien-vers-a');
+    symlinkSync(dirA, alias);
+    const agent = spawn();
+    writeToml(dirA, '.codebuddy/config.toml', '[middleware]\nmax_turns = 90\n');
+    agent.setWorkingDirectory(alias);
     expect(agent.maxToolRounds).toBe(11);
   });
 

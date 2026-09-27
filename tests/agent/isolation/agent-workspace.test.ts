@@ -12,6 +12,7 @@ import {
 } from '../../../src/agent/isolation/agent-workspace.js';
 import { createAgentConfig } from '../../../src/agent/isolation/agent-config.js';
 import type { AgentConfig } from '../../../src/agent/isolation/agent-config.js';
+import { removeTestDirAsync } from '../../helpers/tmp.js';
 
 describe('Agent Workspace', () => {
   const testBaseDir = path.join(os.tmpdir(), 'codebuddy-test-workspaces');
@@ -25,7 +26,7 @@ describe('Agent Workspace', () => {
 
   afterEach(async () => {
     await resetWorkspaceManager();
-    await fs.remove(testBaseDir);
+    await removeTestDirAsync(testBaseDir);
   });
 
   describe('AgentWorkspace', () => {

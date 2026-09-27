@@ -1,7 +1,8 @@
 import { createIsolatedHome } from '../helpers/isolated-home.js';
 /**
  * Inner life — Lisa's own small interior. The invariants that protect her honesty and her ADN:
- *   - every activity is DIGITALLY authentic (no human-life fantasy: eating, sleeping, going out…);
+ *   - « j'ai … » only comes out of an activity the tick REALLY performed, carrying what it found;
+ *     everything else is a thought, phrased as one (charter: never say you did what you did not do);
  *   - a tick drifts her mood a touch on its own (the `self-time` signal) and stores a vignette;
  *   - the vignette only reaches a reply when inner-life is enabled.
  * Pure core + injected seams — no model, no real home dir.
@@ -11,11 +12,15 @@ import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
-  INNER_LIFE_ACTIVITIES,
-  pickInnerLifeActivity,
+  INNER_LIFE_THOUGHTS,
+  VERIFIED_ACTIVITIES,
+  chooseInnerLifeMoment,
+  remindersLeftToday,
   runInnerLifeTick,
   isInnerLifeEnabled,
+  type InnerLifeSources,
 } from '../../src/companion/inner-life.js';
+import type { Reminder } from '../../src/companion/reminders.js';
 import {
   loadRelationshipState,
   saveRelationshipState,
@@ -36,34 +41,114 @@ afterAll(async () => {
   }
 });
 
-describe('INNER_LIFE_ACTIVITIES — digitally authentic only (honesty invariant)', () => {
-  // Human-life verbs Lisa can never truthfully claim (she is digital). If any vignette used these,
-  // she'd be lying — the whole point of the adaptation vs MySoulmate.
-  const HUMAN_LIFE = /\b(mang|cuisin|dormi|dors|marche|promen|cours|sport|yoga|medit|dessin|jardin|douche|bois|café|resto|dehors|balade|film|series?)\b/i;
-  it('has a non-trivial pool', () => {
-    expect(INNER_LIFE_ACTIVITIES.length).toBeGreaterThanOrEqual(6);
+function sources(overrides: Partial<InnerLifeSources> = {}): InnerLifeSources {
+  return {
+    now: () => new Date(2026, 8, 24, 14, 30),
+    reminders: async () => [],
+    recentCommitCount: async () => null,
+    recentEpisode: async () => null,
+    ...overrides,
+  };
+}
+
+function reminder(time: string, extra: Partial<Reminder> = {}): Reminder {
+  return { id: time, label: 'secret-label', time, enabled: true, createdAt: '2026-09-01T00:00:00Z', ...extra };
+}
+
+// A claimed past act in French: « j'ai … » (both apostrophes).
+const CLAIMED_ACT = /\bj[’']ai\b/i;
+// Human-life verbs Lisa can never truthfully claim (she is digital).
+const HUMAN_LIFE = /\b(mang|cuisin|dormi|dors|marche|promen|cours|sport|yoga|medit|dessin|jardin|douche|bois|café|resto|dehors|balade|film|series?)\b/i;
+
+describe('honesty invariant', () => {
+  it('a thought never claims an act', () => {
+    expect(INNER_LIFE_THOUGHTS.length).toBeGreaterThanOrEqual(3);
+    for (const thought of INNER_LIFE_THOUGHTS) {
+      expect(thought.line, thought.id).not.toMatch(CLAIMED_ACT);
+      expect(thought.line, thought.id).not.toMatch(HUMAN_LIFE);
+    }
   });
-  for (const a of INNER_LIFE_ACTIVITIES) {
-    it(`"${a.id}" is digital, not a human activity`, () => {
-      expect(a.line).not.toMatch(HUMAN_LIFE);
-      expect(a.line.length).toBeGreaterThan(8);
-      expect(a.moodEffect).toBeGreaterThan(0);
-    });
-  }
+
+  it('a claimed act only comes out of an activity that really ran, with what it found', async () => {
+    const seen: string[] = [];
+    for (let i = 0; i < VERIFIED_ACTIVITIES.length; i++) {
+      const moment = await chooseInnerLifeMoment(sources(), i);
+      seen.push(moment.kind);
+      if (moment.kind === 'thought') expect(moment.line).not.toMatch(CLAIMED_ACT);
+    }
+    // With nothing to read (no repo, no episode), only the reminders check can honestly say something.
+    expect(seen).toEqual(['done', 'thought', 'thought']);
+  });
 });
 
-describe('pickInnerLifeActivity', () => {
-  it('is deterministic by index and wraps', () => {
-    expect(pickInnerLifeActivity(0)).toBe(INNER_LIFE_ACTIVITIES[0]);
-    expect(pickInnerLifeActivity(INNER_LIFE_ACTIVITIES.length)).toBe(INNER_LIFE_ACTIVITIES[0]);
-    expect(pickInnerLifeActivity(-1)).toBe(
-      INNER_LIFE_ACTIVITIES[INNER_LIFE_ACTIVITIES.length - 1]
-    );
+describe('verified activities', () => {
+  it('check-reminders counts what is really left today and never says the label', async () => {
+    const moment = await chooseInnerLifeMoment(sources({
+      reminders: async () => [
+        reminder('09:00'),
+        reminder('18:00'),
+        reminder('20:15'),
+        reminder('19:00', { enabled: false }),
+        reminder('21:00', { date: '2026-09-25' }),
+      ],
+    }), 0);
+    expect(moment).toMatchObject({ id: 'check-reminders', kind: 'done' });
+    expect(moment.line).toBe('j’ai regardé tes rappels : il en reste 2 aujourd’hui, le prochain à 18 h');
+    expect(moment.line).not.toContain('secret-label');
+  });
+
+  it('compares times as numbers: an unpadded morning time is not "still ahead" in the afternoon', () => {
+    const now = new Date(2026, 8, 24, 14, 30);
+    expect(remindersLeftToday([reminder('9:00'), reminder('18:05'), reminder('15:00')], now).map((r) => r.time))
+      .toEqual(['15:00', '18:05']);
+  });
+
+  it('every verified line stays digital and never names a reminder', async () => {
+    const full = sources({
+      reminders: async () => [reminder('18:00'), reminder('19:30')],
+      recentCommitCount: async () => 4,
+      recentEpisode: async () => 'on a parlé du train pour Lyon',
+    });
+    for (let i = 0; i < VERIFIED_ACTIVITIES.length; i++) {
+      const moment = await chooseInnerLifeMoment(full, i);
+      expect(moment.kind).toBe('done');
+      expect(moment.line).not.toMatch(HUMAN_LIFE);
+      expect(moment.line).not.toContain('secret-label');
+      expect(moment.line).not.toContain('Lyon');
+    }
+  });
+
+  it('check-reminders drops one already fired today', () => {
+    const now = new Date(2026, 8, 24, 14, 30);
+    const fired = reminder('16:00', { lastFiredAt: new Date(2026, 8, 24, 16, 0).toISOString() });
+    expect(remindersLeftToday([fired, reminder('17:30')], now).map((r) => r.time)).toEqual(['17:30']);
+  });
+
+  it('look-at-repo reports the real commit count, and nothing without a repo', async () => {
+    expect((await chooseInnerLifeMoment(sources({ recentCommitCount: async () => 7 }), 1)).line)
+      .toBe('j’ai jeté un œil au dépôt : 7 commits en 24 heures');
+    expect((await chooseInnerLifeMoment(sources({ recentCommitCount: async () => null }), 1)).kind)
+      .toBe('thought');
+  });
+
+  it('reread-episode claims a reread only when there is an episode to read', async () => {
+    expect((await chooseInnerLifeMoment(sources({ recentEpisode: async () => 'on a parlé du train' }), 2)))
+      .toMatchObject({ kind: 'done', line: 'j’ai relu ce qu’on s’est dit la dernière fois' });
+    expect((await chooseInnerLifeMoment(sources(), 2)).kind).toBe('thought');
+  });
+
+  it('a failing source falls back to a thought instead of throwing', async () => {
+    const moment = await chooseInnerLifeMoment(sources({
+      reminders: async () => {
+        throw new Error('store unreadable');
+      },
+    }), 0);
+    expect(moment.kind).toBe('thought');
   });
 });
 
 describe('runInnerLifeTick', () => {
-  it('promotes the chosen vignette and drifts mood via the real state file', async () => {
+  it('promotes the moment and drifts mood via the real state file', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'inner-life-'));
     const statePath = join(dir, 'relationship-state.json');
     try {
@@ -71,16 +156,17 @@ describe('runInnerLifeTick', () => {
       saveRelationshipState({ celebratedMilestones: [], mood: 40 }, statePath);
 
       let promoted: string | null = null;
-      const activity = await runInnerLifeTick({
-        pick: () => INNER_LIFE_ACTIVITIES[2]!,
-        promote: async (a) => {
-          promoted = a.line;
+      const moment = await runInnerLifeTick({
+        sources: sources({ recentCommitCount: async () => 3 }),
+        index: 1,
+        promote: async (m) => {
+          promoted = m.line;
         },
         relationshipStatePath: statePath,
       });
 
-      expect(activity?.id).toBe(INNER_LIFE_ACTIVITIES[2]!.id);
-      expect(promoted).toBe(INNER_LIFE_ACTIVITIES[2]!.line);
+      expect(moment).toMatchObject({ id: 'look-at-repo', kind: 'done' });
+      expect(promoted).toBe('j’ai jeté un œil au dépôt : 3 commits en 24 heures');
       // Mood moved on its own (self-time signal): from 40 toward baseline, strictly up.
       const after = personalityOf(loadRelationshipState(statePath)).mood;
       expect(after).toBeGreaterThan(40);
@@ -91,8 +177,9 @@ describe('runInnerLifeTick', () => {
   });
 
   it('never throws even when promote fails', async () => {
-    const activity = await runInnerLifeTick({
-      pick: () => INNER_LIFE_ACTIVITIES[0]!,
+    const moment = await runInnerLifeTick({
+      sources: sources(),
+      index: 0,
       promote: async () => {
         throw new Error('boom');
       },
@@ -100,7 +187,7 @@ describe('runInnerLifeTick', () => {
         /* skip real I/O */
       },
     });
-    expect(activity).toBeNull();
+    expect(moment).toBeNull();
   });
 });
 

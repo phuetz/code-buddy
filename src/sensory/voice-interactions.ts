@@ -79,7 +79,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
     category: 'daily',
     examples: ["Comment s'est passée ta journée ?", 'Tu as fait quoi ?'],
     reply:
-      "Plutôt bien. J'ai continué à travailler pour toi, et toi, comment s'est passée ta journée ?",
+      "Plutôt calme de mon côté. Et toi, comment s'est passée ta journée ?",
     patterns: [
       lisaCommand(
         'comment s est passee ta journee|comment etait ta journee|tu as fait quoi aujourd hui|quoi de neuf|ta journee'
@@ -112,7 +112,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
     category: 'departure',
     examples: ['Lisa je pars chez des amis', 'Je vais voir des amis'],
     reply:
-      'Amuse-toi bien chez tes amis. Je continue en autonomie et je te ferai un résumé quand tu reviens.',
+      'Amuse-toi bien chez tes amis. Je reste là, tu me raconteras.',
     patterns: [
       lisaCommand(
         '(?:je pars|je part|je vais|je m en vais|je partais|je parchais).*(?:chez des amis|voir des amis|visite chez des amis|des amis)'
@@ -123,7 +123,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
     id: 'departure-work',
     category: 'departure',
     examples: ['Lisa je pars au travail', 'Je vais travailler'],
-    reply: `Bon courage pour le travail, ${resolveUserName()}. Je continue ici et je garde un résumé pour ton retour.`,
+    reply: `Bon courage pour le travail, ${resolveUserName()}. Je reste là, à ce soir.`,
     patterns: [
       lisaCommand('(?:je pars|je vais|je m en vais).*(?:au travail|travailler|bosser|au bureau)'),
     ],
@@ -132,7 +132,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
     id: 'departure-generic',
     category: 'departure',
     examples: ['À tout à l’heure Lisa', 'Je reviens plus tard'],
-    reply: `À tout à l’heure ${resolveUserName()}. Je reste disponible et je continue calmement.`,
+    reply: `À tout à l’heure ${resolveUserName()}. Je reste disponible.`,
     patterns: [
       lisaCommand(
         'a tout a l heure|a plus tard|je reviens plus tard|je pars un moment|je m absente'
@@ -143,7 +143,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
     id: 'return-home',
     category: 'return',
     examples: ['Lisa je suis rentré', 'Je suis revenu'],
-    reply: `Contente de te retrouver, ${resolveUserName()}. Je peux te faire le résumé de ce que j’ai fait.`,
+    reply: `Contente de te retrouver, ${resolveUserName()}. Comment ça s’est passé ?`,
     patterns: [
       lisaCommand(
         'je suis rentre|je suis revenue|je suis revenu|je rentre|me revoila|je suis de retour'
@@ -222,7 +222,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
     category: 'work',
     requiresAgent: true,
     examples: ['Continue en autonomie', 'Travaille pendant mon absence'],
-    reply: 'Je continue en autonomie et je garde les preuves pour ton retour.',
+    reply: 'Je m’y mets.',
     patterns: [
       lisaCommand(
         'continue en autonomie|travaille en autonomie|travaille pendant mon absence|continue pendant mon absence'
