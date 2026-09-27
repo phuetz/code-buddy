@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * Desktop WebSocket Endpoint integration test (`/desktop`).
  *
@@ -103,7 +104,7 @@ describe('desktop WebSocket endpoint (/desktop)', () => {
     else process.env.CODEBUDDY_HOME = previousHome;
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   async function start(): Promise<string> {

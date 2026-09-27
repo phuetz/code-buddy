@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { removeTmpDirStrict } from '../helpers/tmp.js';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -133,7 +134,7 @@ describe('shared session LLM context', () => {
     await __resetHttpAgentSessionCacheForTests();
     if (previousDir === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR;
     else process.env.CODEBUDDY_SESSIONS_DIR = previousDir;
-    rmSync(sessionsDir, { recursive: true, force: true });
+    removeTmpDirStrict(sessionsDir);
   });
 
   async function seedOwned(): Promise<string> {
