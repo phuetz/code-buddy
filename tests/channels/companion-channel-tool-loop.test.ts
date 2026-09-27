@@ -222,4 +222,31 @@ describe('runCompanionChannelTurn with tools', () => {
     expect(result.executedTools).toHaveLength(1);
     expect(result.executedTools![0].name).toBe('remind');
   });
+
+  it('does not announce success when every requested tool was refused', async () => {
+    let calls = 0;
+    const result = await runCompanionChannelTurn({
+      apiKey: 'k',
+      baseUrl: 'http://localhost',
+      model: 'm',
+      messages: [{ role: 'user', content: 'dessine un chat' }],
+      identity: ownerIdentity,
+      env: { CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true' },
+      executeTool: async () => ({ success: false, error: 'confirmation required' }),
+      chat: async () => {
+        calls += 1;
+        return {
+          model: 'm',
+          choices: [{ message: calls === 1
+            ? { role: 'assistant', content: '', tool_calls: [{ id: 'image-1', type: 'function', function: { name: 'image_generate', arguments: '{}' } }] }
+            : { role: 'assistant', content: '' },
+          }],
+        } as never;
+      },
+    });
+
+    expect(result.executedTools).toEqual([expect.objectContaining({ name: 'image_generate', success: false })]);
+    expect(result.text).toMatch(/pas pu exécuter|confirmation/i);
+    expect(result.text).not.toMatch(/c.est fait/i);
+  });
 });

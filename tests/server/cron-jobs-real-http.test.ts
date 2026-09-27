@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -26,8 +27,8 @@ describe('cron jobs HTTP routes', () => {
     } else {
       process.env.CODEBUDDY_HOME = previousHome;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-    fs.rmSync(tmpCron, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
+    removeTmpDirStrict(tmpCron);
   });
 
   it('loads persisted cron jobs before listing or triggering them over real HTTP', async () => {

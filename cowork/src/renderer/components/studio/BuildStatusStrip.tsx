@@ -1,4 +1,4 @@
-import { StopCircle } from 'lucide-react';
+import { StopCircle, Wrench } from 'lucide-react';
 import { Pill } from '../ui/Pill.js';
 import { StatTile } from '../ui/StatTile.js';
 import type { UiTone } from '../../utils/ui-tone.js';
@@ -11,6 +11,10 @@ export interface BuildStatusStripProps {
   error?: string | null;
   /** Extra status shown alongside the phase (e.g. auto-fix "Fixing… 2/3"). */
   note?: string | null;
+  /** Aperçu cassé détecté par la sonde (résumé), budget automatique épuisé. */
+  problem?: string | null;
+  /** « Corriger » : une tentative de correction à la demande (bolt.new « Attempt fix »). */
+  onFix?: () => void;
   onStop: () => void;
 }
 
@@ -39,7 +43,7 @@ function formatElapsed(ms: number): string {
   return `${minutes}m ${remaining}s`;
 }
 
-export function BuildStatusStrip({ phase, elapsedMs, error, note, onStop }: BuildStatusStripProps) {
+export function BuildStatusStrip({ phase, elapsedMs, error, note, problem, onFix, onStop }: BuildStatusStripProps) {
   const canStop = phase === 'starting' || phase === 'running' || phase === 'installing';
 
   return (
@@ -62,6 +66,23 @@ export function BuildStatusStrip({ phase, elapsedMs, error, note, onStop }: Buil
         {phase === 'error' && (error || 'An error occurred.')}
 
       </div>
+      {problem ? (
+        <span className="inline-flex items-center gap-2" data-testid="build-problem">
+          <Pill tone="danger">Aperçu cassé : {problem}</Pill>
+          {onFix ? (
+            <button
+              type="button"
+              onClick={onFix}
+              data-testid="build-fix"
+              title="Envoyer l'erreur détectée à l'agent pour une nouvelle tentative de correction"
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-accent px-3 text-xs font-medium text-accent-foreground hover:bg-accent/90"
+            >
+              <Wrench className="h-4 w-4" aria-hidden="true" />
+              Corriger
+            </button>
+          ) : null}
+        </span>
+      ) : null}
       <button
         type="button"
         onClick={onStop}

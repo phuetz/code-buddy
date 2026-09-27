@@ -105,7 +105,7 @@ describe('channel future commitment gate', () => {
         } : reply('');
       },
     });
-    expect(result.text).toBe('Échec : remind (store unavailable).');
+    expect(result.text).toBe('Je n’ai pas pu exécuter cette demande. Échec : remind (store unavailable).');
     expect(result.historySuffix ?? '').not.toContain('[Rappel créé');
   });
 });

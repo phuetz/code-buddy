@@ -6,6 +6,7 @@
  * voice loop's fastest-model reply, with no history and an assistant tone.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 
 const ENV_KEYS = [
   'CODEBUDDY_COMPANION_PERSONA',
@@ -41,7 +42,11 @@ describe('produceCompanionReply — single companion path', () => {
     expect(voiceSpy).not.toHaveBeenCalled();
     expect(turnSpy).toHaveBeenCalledTimes(1);
     expect(turnSpy.mock.calls[0]?.[0]).toBe('Coucou');
-    expect(turnSpy.mock.calls[0]?.[1]).toMatchObject({ surface: 'mobile', includeImageBytes: true });
+    expect(turnSpy.mock.calls[0]?.[1]).toMatchObject({
+      surface: 'mobile',
+      includeImageBytes: true,
+      confirmationService: ConfirmationService.getInstance(),
+    });
     expect(reply).toBe('Coucou toi.');
   });
 

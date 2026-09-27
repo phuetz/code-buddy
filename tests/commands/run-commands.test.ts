@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registerRunCommands } from '../../src/commands/run-cli/index.js';
 import { RunStore } from '../../src/observability/run-store.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 let tempDir: string;
@@ -43,11 +44,11 @@ describe('Run CLI commands', () => {
         // Ignore cleanup races from already-ended runs.
       }
     }
-    await new Promise((resolve) => setTimeout(resolve, 60));
     consoleLogSpy.mockRestore();
     store.dispose();
+    await store.whenStreamsClosed();
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
-    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTestDir(tempDir);
   });
 
   function startRun(objective: string, metadata?: Parameters<RunStore['startRun']>[1]): string {
@@ -347,14 +348,14 @@ describe('Run CLI commands', () => {
     store.endRun(orphanRunId, 'completed');
 
     activeRunIds = activeRunIds.filter((id) => id !== staleRunId && id !== orphanRunId);
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await store.whenStreamsClosed();
 
     const baseline = store.checkArtifactIndexHealth();
     if (baseline.unavailable) {
       return;
     }
 
-    fs.rmSync(path.join(tempDir, staleRunId), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTestDir(path.join(tempDir, staleRunId));
     fs.rmSync(path.join(tempDir, orphanRunId, 'artifacts', 'orphan.md'), { force: true });
 
     const checkProgram = createProgram();

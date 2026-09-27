@@ -6,6 +6,8 @@
  * (main/master) — that invariant is enforced in code (`assertMergeTargetAllowed`), not convention.
  *
  *   evolve run --goal "<weakness>"   author + evaluate candidate variant(s) (gated by CODEBUDDY_EVOLVE)
+ *   evolve propose --fiche-input    archive a validated usage or research experiment fiche
+ *   evolve experiment <id>          run a reversible lesson experiment and record its result
  *   evolve list                      list evaluated variants (ranked)
  *   evolve review <id>               show a variant's fitness + diff vs baseline (read-only)
  *   evolve keep <id> [--confirm]     merge a reviewed variant into the current branch (human-gated)
@@ -14,6 +16,7 @@
  */
 
 import { execFileSync } from 'child_process';
+import { readFileSync } from 'node:fs';
 import type { Command } from 'commander';
 import { logger } from '../../utils/logger.js';
 import {
@@ -80,6 +83,65 @@ export function registerEvolveCommands(program: Command): void {
   const evolve = program
     .command('evolve')
     .description('Git-versioned evolutionary self-improvement: evaluate code variants, keep the best (human-gated)');
+
+  evolve
+    .command('propose')
+    .description('Select an article for a complete experiment fiche and archive a plan without mutating code')
+    .requiredOption('--fiche-input <file>', 'JSON experiment fiche with evidence, equal-budget comparison and numeric thresholds')
+    .option('--source <src>', 'Budget lane (auto, usage or research)', 'auto')
+    .option('--usage-share <fraction>', 'Share allocated to observed usage failures (0 to 1)', '0.8')
+    .option('--min-similarity <score>', 'Minimum discovery similarity (0 to 1)', '0.45')
+    .option('--model <model>', 'Model for goal synthesis and planning')
+    .option('--json', 'Write all stages and the result as JSON')
+    .action(async (options: { ficheInput: string; source: string; usageShare: string; minSimilarity: string; model?: string; json?: boolean }) => {
+      const floor = Number(options.minSimilarity);
+      const share = Number(options.usageShare);
+      if (!['auto', 'usage', 'research'].includes(options.source) || !Number.isFinite(floor) || floor < 0 || floor > 1 ||
+        !Number.isFinite(share) || share < 0 || share > 1) {
+        logger.error('Use --source auto|usage|research, --usage-share and --min-similarity between 0 and 1.');
+        process.exitCode = 2;
+        return;
+      }
+      let fiche;
+      try {
+        const { parseProposalFicheInput } = await import('../../agent/self-improvement/evolution/experiment-fiche.js');
+        fiche = parseProposalFicheInput(JSON.parse(readFileSync(options.ficheInput, 'utf8')));
+      } catch (error) {
+        logger.error(`Invalid experiment fiche: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 2;
+        return;
+      }
+      const { proposeResearchImprovement } = await import('../../agent/self-improvement/evolution/proposal-engine.js');
+      const result = await proposeResearchImprovement({ fiche, lane: options.source as 'auto' | 'usage' | 'research',
+        usageShare: share, minSimilarity: floor, ...(options.model ? { model: options.model } : {}) });
+      if (options.json) {
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      } else {
+        for (const event of result.events) logger.info(`[evolve propose] ${event.stage}: ${event.code} — ${event.detail}`);
+        if (result.status === 'planned') logger.info(`[evolve propose] plan: ${result.archivePath}`);
+      }
+      if (result.status === 'stopped') process.exitCode = 2;
+    });
+
+  evolve
+    .command('experiment <proposal-id>')
+    .description('Run an archived fiche as a reversible lesson experiment and record its result')
+    .requiredOption('--experiment-input <file>', 'JSON lesson candidate and curated benchmark scenarios')
+    .option('--json', 'Write the empirical gate result as JSON')
+    .action(async (proposalId: string, options: { experimentInput: string; json?: boolean }) => {
+      try {
+        const input = JSON.parse(readFileSync(options.experimentInput, 'utf8')) as unknown;
+        // This command only exercises the learnable lessons layer; it never runs the code mutator.
+        const { runArchivedFicheExperiment } = await import('../../agent/self-improvement/evolution/archived-experiment.js');
+        const result = runArchivedFicheExperiment(proposalId, input);
+        if (options.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+        else logger.info(`[evolve experiment] ${result.outcome.accepted ? 'passed' : 'failed'}: ${result.outcome.rejectionReason ?? 'thresholds met'}; delta=${result.outcome.delta}`);
+        if (!result.outcome.accepted) process.exitCode = 2;
+      } catch (error) {
+        logger.error(`Experiment refused: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 2;
+      }
+    });
 
   evolve
     .command('list')
@@ -219,6 +281,11 @@ export function registerEvolveCommands(program: Command): void {
         process.exitCode = 1;
         return;
       }
+      if (options.auto && options.source === 'research') {
+        logger.error('Research articles require evolve propose with an experiment fiche.');
+        process.exitCode = 2;
+        return;
+      }
       const { runEvolutionRound, agentMutator, formatEvolveRoundSummary } = await import('../../agent/self-improvement/evolution/evolution-engine.js');
       const { makeLlmVariantPlanner } = await import('../../agent/self-improvement/evolution/variant-planner.js');
       const { defaultDeterministicComponents, evalTasksComponent, harnessTasksComponent } = await import('../../agent/self-improvement/evolution/variant-fitness.js');
@@ -257,7 +324,7 @@ export function registerEvolveCommands(program: Command): void {
           limit: rounds,
           includeEvalFailures: all || src === 'eval' || src === 'both',
           includeHotspots: all || src === 'hotspots' || src === 'both',
-          includeResearch: all || src === 'research',
+          includeResearch: false,
           env: process.env,
         });
         if (weaknesses.length === 0) {

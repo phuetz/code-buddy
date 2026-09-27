@@ -29,6 +29,7 @@ import {
   _legacyPathForTests,
 } from '../../../src/agent/multi-agent/workflow-multi-persistence.js';
 import type { PersistedWorkflow } from '../../../src/agent/multi-agent/workflow-persistence.js';
+import { removeTestDirAsync } from '../../helpers/tmp.js';
 
 const WORKFLOWS_DIR = _workflowsDirForTests();
 const LEGACY_PATH = _legacyPathForTests();
@@ -50,7 +51,7 @@ function makeState(goal = 'test', overrides: Partial<PersistedWorkflow> = {}): P
 
 async function rmRecursive(p: string): Promise<void> {
   try {
-    await fs.rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await removeTestDirAsync(p);
   } catch {
     /* ignore */
   }

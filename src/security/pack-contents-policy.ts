@@ -36,6 +36,12 @@ export const DEFAULT_ALLOWED_PREFIXES: readonly string[] = [
   'package.json',
   'NOTICE',
   'CHANGELOG.md',
+  // `buddy catalog status` reads its inventory and the proof records beside it
+  // from the installed package. package.json lists them by explicit globs
+  // (top-level *.json and *.log only), so raw campaign dumps never ship.
+  'docs/catalog/inventory.json',
+  'docs/catalog/README.md',
+  'docs/preuves',
 ];
 
 /**
@@ -143,6 +149,11 @@ export function auditPackContents(
       if (file === cleanDir || file.startsWith(cleanDir + '/') || file.includes('/' + cleanDir + '/')) {
         violations.push({ file: rawFile, rule: `forbidden-directory: ${dir}` });
       }
+    }
+
+    // Proof records: only top-level JSON records and their text traces may ship.
+    if (file.startsWith('docs/preuves/') && !/^docs\/preuves\/[^/]+\.(json|log)$/i.test(file)) {
+      violations.push({ file: rawFile, rule: 'forbidden-proof-file: docs/preuves/*.json|*.log only' });
     }
 
     // 3. Allowed prefixes check (Rule a)

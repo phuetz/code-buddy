@@ -42,6 +42,35 @@ describe('research knowledge-ingest — handlers', () => {
     expect(res).toEqual({ ingested: 0, linksCreated: 0, supports: 0, contradicts: 0 });
   });
 
+  it('forwards GitHub filters while keeping both as the scientific default', async () => {
+    const calls: unknown[] = [];
+    const { deps } = stubDeps({
+      fetchPublications: async (_topic, options) => {
+        calls.push(options);
+        return [];
+      },
+    });
+    await runIngest('agents', { source: 'github', minStars: '750', pushedSince: '2026-09-01', sort: 'recent' }, deps);
+    await runIngest('agents', {}, deps);
+    expect(calls).toEqual([
+      { source: 'github', limit: 6, minStars: 750, pushedSince: '2026-09-01', sort: 'recent' },
+      { source: 'both', limit: 6 },
+    ]);
+  });
+
+  it('forwards the blog feed file through the ingest command', async () => {
+    const calls: unknown[] = [];
+    const { deps } = stubDeps({ fetchPublications: async (_topic, options) => {
+      calls.push(options);
+      return [];
+    } });
+    const cmd = new Command('research');
+    cmd.exitOverride();
+    addKnowledgeSubcommands(cmd, async () => deps);
+    await cmd.parseAsync(['node', 'research', 'ingest', 'agent memory', '--source', 'blogs', '--feeds-file', 'feeds.json']);
+    expect(calls).toEqual([{ source: 'blogs', limit: 6, feedsFile: 'feeds.json' }]);
+  });
+
   it('runRecall returns hit count and prints', async () => {
     const { deps, logs } = stubDeps();
     const n = await runRecall('comment marche l attention', { limit: '3' }, deps);

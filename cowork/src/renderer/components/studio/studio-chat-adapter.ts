@@ -6,6 +6,18 @@
 import type { StudioMessage } from '../studio-iterate/iterate-model.js';
 import { stripPlanBlocks } from './dev-plan.js';
 
+/**
+ * Les messages d'itération partent enveloppés de consignes (édition ciblée,
+ * verrous, mode discussion — voir iteration-prompt.ts) ; la bulle n'affiche
+ * que la demande de l'utilisateur, préfixée en mode discussion.
+ */
+export function visibleUserText(text: string): string {
+  const match = /^\[App Studio — (mode discussion|modification ciblée)\][\s\S]*?\nDemande :\n([\s\S]*)$/.exec(text);
+  if (!match) return text;
+  const request = (match[2] ?? '').trim();
+  return match[1] === 'mode discussion' ? `💬 ${request}` : request;
+}
+
 export interface ChatSourceMessage {
   id: string;
   role: string; // 'user' | 'assistant' | 'system'
@@ -34,7 +46,8 @@ export function sessionToStudioMessages(
   const out: StudioMessage[] = [];
   for (const m of messages) {
     if (m.role !== 'user' && m.role !== 'assistant') continue;
-    const text = textOf(m.content);
+    const raw = textOf(m.content);
+    const text = m.role === 'user' ? visibleUserText(raw) : raw;
     if (!text) continue;
     out.push({ id: m.id, role: m.role, text });
   }

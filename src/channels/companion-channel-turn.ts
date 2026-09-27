@@ -11,7 +11,7 @@
 
 import { CodeBuddyClient, type CodeBuddyMessage, type CodeBuddyResponse, type CodeBuddyTool } from '../codebuddy/client.js';
 import { logger } from '../utils/logger.js';
-import type { CompanionIdentity } from '../companion/companion-identity.js';
+import { DEFAULT_GUEST_IDENTITY, type CompanionIdentity } from '../companion/companion-identity.js';
 import {
   companionHistorySessionKey,
   rememberCompanionChannelTurn,
@@ -138,6 +138,17 @@ export async function runCompanionChannelTurn(
     input.sessionKey = resolveTurnSessionKey(input);
   }
   const identity = input.identity;
+  const confirmationText = lastUserText(input.messages);
+  if (env.CODEBUDDY_REMINDERS === 'true' && /^confirme rappel\b/i.test(confirmationText)) {
+    const { reminderVoiceCoordinator } = await import('../companion/reminder-voice-auth.js');
+    const confirmation = await reminderVoiceCoordinator.confirm(
+      confirmationText,
+      identity ?? DEFAULT_GUEST_IDENTITY,
+    );
+    if (confirmation.handled) {
+      return { text: confirmation.text ?? 'Confirmation refusée.', model: input.model };
+    }
+  }
   const toolsEnabled = isCompanionToolsEnabled(env) && Boolean(identity && identity.role !== 'guest');
 
   const chat =
@@ -342,7 +353,16 @@ export async function runCompanionChannelTurn(
       ? `Réussi : ${succeededTools.map((tool) => tool.name).join(', ')}. ` : '';
     const failures = failedTools.map((tool) => `${tool.name} (${tool.success
       ? 'résultat non confirmé' : (tool.output ?? 'échec').slice(0, 160)})`).join(', ');
-    finalText = `${successes}Échec : ${failures}.`;
+    const allRefused = succeededTools.length === 0 && failedTools.every((tool) => !tool.success);
+    if (allRefused) {
+      // Rien n'a abouti : le dire d'abord (bdc7b1670), puis le détail de chaque échec.
+      const needsConfirmation = failedTools.some((tool) =>
+        /confirm|approv|approbation|permission|refus/i.test(tool.output ?? ''));
+      finalText = `Je n’ai pas pu exécuter cette demande. Échec : ${failures}.${needsConfirmation
+        ? ' Une confirmation du propriétaire peut être nécessaire.' : ''}`;
+    } else {
+      finalText = `${successes}Échec : ${failures}.`;
+    }
   } else if ((!finalText && executedTools.length > 0) || genericSuccess) {
     finalText = mediaProduced.length > 0
       ? 'Voilà, j’ai créé l’image pour toi !'
