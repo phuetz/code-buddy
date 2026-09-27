@@ -424,7 +424,7 @@ describe('schema defaults', () => {
     expect(port?.max).toBe(65535);
 
     const host = getEnvDef('HOST');
-    expect(host?.default).toBe('0.0.0.0');
+    expect(host?.default).toBe('127.0.0.1');
   });
 
   it('should have correct type for boolean env vars', () => {

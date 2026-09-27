@@ -468,7 +468,7 @@ In-session slash commands (not exhaustive):
 
 ## HTTP Server (`src/server/`)
 
-Started with `buddy server`. **One process, one port** (default **3000**, `--port N`): the HTTP API and the WebSocket endpoint `/ws` share that single listener — measured with `ss -ltnp`, nothing else is bound. The fleet convention of a *second* server on another port is a second process (see `docs/deployment.md`). CORS enabled, rate-limit 100 req/min, JWT required in production.
+Started with `buddy server`. **Binds to `127.0.0.1` by default (2.3.0)** — `--host 0.0.0.0` / `HOST=0.0.0.0` is the explicit network exposure (then `JWT_SECRET` is mandatory in practice); `X-Forwarded-For` is only trusted for proxies listed in `CODEBUDDY_TRUSTED_PROXIES`. JWTs without a numeric `exp`, or verified against an empty secret, are rejected; the WebSocket `status` reply before authentication carries only `{connectionId, authenticated:false}`. **One process, one port** (default **3000**, `--port N`): the HTTP API and the WebSocket endpoint `/ws` share that single listener — measured with `ss -ltnp`, nothing else is bound. The fleet convention of a *second* server on another port is a second process (see `docs/deployment.md`). CORS enabled, rate-limit 100 req/min, JWT required in production.
 
 Routes worth knowing: `/api/health`, `/api/chat`, `/api/chat/completions` (OpenAI-compatible), `/api/sessions`, `/api/memory`, `/api/a2a/*` (Google A2A: AgentCard discovery + task lifecycle), `/__codebuddy__/canvas/:id`, `/__codebuddy__/a2ui/`.
 
