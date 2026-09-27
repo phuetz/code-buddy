@@ -80,6 +80,7 @@ import { wirePeerChatBridge, unwirePeerChatBridge } from '../fleet/peer-chat-bri
 import { wirePeerSessionBridge, unwirePeerSessionBridge } from '../fleet/peer-session-bridge.js';
 import { wirePeerToolBridge, unwirePeerToolBridge } from '../fleet/peer-tool-bridge.js';
 import { wirePeerCkgBridge, unwirePeerCkgBridge } from '../fleet/peer-ckg-bridge.js';
+import { wireRucheBridge, unwireRucheBridge } from '../fleet/ruche/bridge.js';
 import {
   wirePeerMissionExchangeBridge,
   unwirePeerMissionExchangeBridge,
@@ -1285,6 +1286,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     // when disabled so callers receive CKG_SYNC_NOT_ENABLED; its handler gates
     // before touching the ledger.
     wirePeerCkgBridge();
+    wireRucheBridge();
     wirePeerMissionExchangeBridge();
     // Phase (d).16a — auto-detect the peer.chat client from env
     // (priority order: ollama > grok > anthropic > gemini > openai).
@@ -1728,21 +1730,31 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 };
               }
 
-              // Maison shortcuts are deterministic and local: quiet/focus/guest/cooking modes and
-              // named cooking timers do not wait for an LLM. Explicit wording only, so ordinary
-              // conversation still falls through to the normal hybrid reply.
+              // Maison shortcuts are deterministic, but their state changes require an
+              // identified owner. A spoken robot name grants only `present`, not ownership.
               {
                 const maison = await import('../companion/maison-voice-actions.js');
                 const { sayNow } = await import('../sensory/voice-loop.js');
                 maisonShortcut = maison.isMaisonVoiceCommand;
                 const inner = onHeard;
                 onHeard = async (t, context) => {
+                  if (!maisonShortcut?.(t)) {
+                    await inner(t, context);
+                    return;
+                  }
+                  const { resolveCompanionIdentity } = await import('../companion/companion-identity.js');
+                  const identity = resolveCompanionIdentity({
+                    channel: 'voice',
+                    isVoicePresence: true,
+                    robotNamed: await responseDecider.isAddressed(t),
+                    env: process.env,
+                  });
                   const sayCanonical = createCanonicalVoiceReplySpeaker(
                     t,
                     (content) => sayNow(content, { phoneDelivery: 'never' }),
                     conversationBridge,
                   );
-                  if (await maison.handleMaisonVoiceCommand(t, { speak: sayCanonical })) return;
+                  if (await maison.handleMaisonVoiceCommand(t, { identity, speak: sayCanonical })) return;
                   await inner(t, context);
                 };
               }
@@ -1844,14 +1856,9 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               if (responsePolicy.gateEnabled) {
                 // Reuse the session decider shared with the vision greeting above, so a
                 // person-arrival greeting's open engagement window carries into this gate.
-                // No reminder action bypasses the address gate, including acks and snoozes.
-                wireOpts.shouldRespond = (t) =>
-                  maisonShortcut?.(t)
-                    ? Promise.resolve({
-                        respond: true,
-                        reason: 'maison',
-                      })
-                    : responseDecider.decide(t);
+                // No bypass remains: Maison requests (#237) and every reminder action,
+                // acks and snoozes included (#249), must pass the address gate first.
+                wireOpts.shouldRespond = (t) => responseDecider.decide(t);
               }
               sensoryTeardown.push(wireSpeechReaction(wireOpts));
               sensoryTeardown.push(() => replyFn.dispose());
@@ -2315,6 +2322,7 @@ export async function stopServer(server: HttpServer): Promise<void> {
     // Phase (d).23 — un-register peer.tool.invoke + .stream.
     unwirePeerToolBridge();
     unwirePeerCkgBridge();
+    unwireRucheBridge();
     unwirePeerMissionExchangeBridge();
     unwireMobileConfirmationBridge();
 

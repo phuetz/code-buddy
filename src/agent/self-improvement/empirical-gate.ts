@@ -13,6 +13,10 @@
 
 import { scoreBenchmark, findRegressions, type LessonSearchPort } from './capability-benchmark.js';
 import type { BenchmarkScenario, GateOutcome, ImprovementProposal } from './types.js';
+import { randomUUID } from 'node:crypto';
+import type { CollectiveKnowledgeGraph } from '../../memory/collective-knowledge-graph.js';
+import { parseExperimentFiche, type ExperimentFiche } from './evolution/experiment-fiche.js';
+import { recordExperimentLesson, type ExperimentProvenance } from './evolution/experiment-lessons.js';
 
 /** Mutator port: apply a lesson proposal and be able to revert it. */
 export interface LessonMutatorPort extends LessonSearchPort {
@@ -52,6 +56,12 @@ export interface ValidateOptions {
    * accepted proposal is rolled back — the engine only REPORTS it would help.
    */
   keepOnAccept: boolean;
+  /** When present, this is an experiment only: always roll back and write every outcome to CKG. */
+  experiment?: {
+    fiche: ExperimentFiche;
+    graph: CollectiveKnowledgeGraph;
+    provenance: ExperimentProvenance;
+  };
 }
 
 /**
@@ -65,12 +75,49 @@ export function validateProposal(
   port: LessonMutatorPort,
   options: ValidateOptions,
 ): GateResult {
+  const experiment = options.experiment;
+  const fiche = experiment ? parseExperimentFiche(experiment.fiche) : null;
+  if (experiment && options.keepOnAccept) throw new Error('Article-driven experiments cannot auto-apply a mutation');
+  if (fiche && (fiche.hypothesis.metric !== 'covered_scenarios' || fiche.hypothesis.direction !== 'increase')) {
+    throw new Error('This gate measures only increased covered_scenarios');
+  }
+  const startedAt = Date.now();
+  let beforeDurationMs = 0;
+  let afterDurationMs = 0;
+  const finish = (result: GateResult): GateResult => {
+    if (!experiment || !fiche) return result;
+    const durationMs = Math.max(0, Date.now() - startedAt);
+    const meetsThreshold = result.outcome.accepted &&
+      result.outcome.delta >= fiche.hypothesis.minimumImprovement &&
+      result.outcome.scoreAfter >= fiche.acceptance.minResult &&
+      durationMs <= fiche.acceptance.maxDurationMs &&
+      Math.max(beforeDurationMs, afterDurationMs) <= fiche.comparison.equalBudget.maxDurationMsPerArm;
+    if (result.outcome.accepted && !meetsThreshold) {
+      result.outcome.accepted = false;
+      result.outcome.rejectionReason = 'acceptance-threshold';
+      result.outcome.notes.push('Experiment did not meet the numeric fiche thresholds');
+    }
+    recordExperimentLesson(experiment.graph, {
+      experimentId: randomUUID().replaceAll('-', ''), fiche,
+      result: {
+        status: meetsThreshold ? 'passed' : 'failed',
+        before: result.outcome.scoreBefore, after: result.outcome.scoreAfter,
+        durationMs, costUsd: 0, notes: result.outcome.notes,
+      },
+      provenance: experiment.provenance,
+    });
+    return result;
+  };
   const notes: string[] = [];
+  const runsPerArm = fiche?.comparison.equalBudget.runsPerArm ?? 1;
   const before = scoreBenchmark(scenarios, port);
+  for (let run = 1; run < runsPerArm; run++) scoreBenchmark(scenarios, port);
+  beforeDurationMs = Math.max(0, Date.now() - startedAt);
 
   // Gate 1 — structural / policy validity (no apply on a malformed proposal).
   const structural = structuralProblem(proposal);
   if (structural) {
+    // No proposed method ran, so there is no experiment result to remember.
     return {
       outcome: {
         accepted: false,
@@ -88,7 +135,16 @@ export function validateProposal(
 
   // Apply transiently and re-measure.
   const applied = port.add(proposal.lesson.category, proposal.lesson.content, proposal.lesson.context);
-  const after = scoreBenchmark(scenarios, port);
+  const afterStartedAt = Date.now();
+  let after;
+  try {
+    after = scoreBenchmark(scenarios, port);
+    for (let run = 1; run < runsPerArm; run++) scoreBenchmark(scenarios, port);
+  } catch (error) {
+    port.remove(applied.id);
+    throw error;
+  }
+  afterDurationMs = Math.max(0, Date.now() - afterStartedAt);
   const delta = after.covered - before.covered;
   const regressions = findRegressions(before, after);
 
@@ -97,49 +153,49 @@ export function validateProposal(
   // Gate 2 — no regression anywhere (a new lesson must not bury existing guidance).
   if (regressions.length > 0) {
     rollback();
-    return {
+    return finish({
       outcome: {
         accepted: false, proposalId: proposal.id,
         scoreBefore: before.covered, scoreAfter: after.covered, delta,
         regressions, rejectionReason: 'regression', rolledBack: true,
         notes: [`reverted: ${regressions.length} scenario(s) regressed`],
       },
-    };
+    });
   }
 
   // Gate 3 — must empirically improve (strict positive delta).
   if (delta <= 0) {
     rollback();
-    return {
+    return finish({
       outcome: {
         accepted: false, proposalId: proposal.id,
         scoreBefore: before.covered, scoreAfter: after.covered, delta,
         regressions: [], rejectionReason: 'no-improvement', rolledBack: true,
         notes: ['reverted: no measurable improvement'],
       },
-    };
+    });
   }
 
   // Accepted. Keep or revert based on autonomy.
   if (!options.keepOnAccept) {
     rollback();
     notes.push('accepted but reverted (propose-only): would improve, pending approval');
-    return {
+    return finish({
       outcome: {
         accepted: true, proposalId: proposal.id,
         scoreBefore: before.covered, scoreAfter: after.covered, delta,
         regressions: [], rolledBack: true, notes,
       },
-    };
+    });
   }
 
   notes.push('accepted and kept (auto-apply): empirically validated, no regression');
-  return {
+  return finish({
     appliedRef: applied.id,
     outcome: {
       accepted: true, proposalId: proposal.id,
       scoreBefore: before.covered, scoreAfter: after.covered, delta,
       regressions: [], rolledBack: false, notes,
     },
-  };
+  });
 }

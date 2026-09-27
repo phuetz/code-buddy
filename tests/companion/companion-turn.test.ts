@@ -10,6 +10,7 @@ import {
   type CompanionHistoryTurn,
 } from '../../src/companion/companion-turn.js';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client.js';
+import type { ConfirmationService } from '../../src/utils/confirmation-service.js';
 
 const ENV_KEYS = [
   'CODEBUDDY_COMPANION_PERSONA',
@@ -227,6 +228,7 @@ describe('runCompanionTurn — one path for every companion surface', () => {
 
     try {
       const result = await runCompanionTurn('dessine un chat roux', {
+        confirmationService: { requestConfirmation: vi.fn(async () => ({ confirmed: true })) } as unknown as ConfirmationService,
         surface: 'mobile',
         userId: 'owner-user',
         env: {

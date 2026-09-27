@@ -1530,7 +1530,21 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       const { getRemoteApprovalService } = await import('../../security/remote-approval.js');
       const approvalSvc = getRemoteApprovalService();
       const approvalCmd = message.content.trim().match(/^\/(approve|deny)\s+(\S+)/i);
+      const { resolveCompanionIdentity } = await import('../../companion/companion-identity.js');
+      const telegramChannel = channel as unknown as { config?: { allowedUsers?: string[] } };
+      const approvalOwner = channel.type === 'telegram' && resolveCompanionIdentity({
+        channel: 'telegram',
+        chatId: message.channel.id,
+        senderId: message.sender?.id,
+        senderUsername: message.sender?.username,
+        allowedUsers: telegramChannel.config?.allowedUsers ?? [],
+        env: process.env,
+      }).role === 'owner';
       if (approvalCmd && approvalCmd[1] && approvalCmd[2]) {
+        if (!approvalOwner) {
+          await channel.send({ channelId: message.channel.id, content: 'Confirmation réservée au propriétaire.', replyTo: message.id });
+          return;
+        }
         const ok = approvalCmd[1].toLowerCase() === 'approve';
         const reqId = approvalCmd[2];
         approvalSvc.handleResponse(reqId, ok);
@@ -1541,11 +1555,13 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         });
         return;
       }
-      approvalSvc.registerChannel('telegram', async (msg) => {
-        await channel.send({ channelId: message.channel.id, content: msg });
-      });
-      const { ConfirmationService } = await import('../../utils/confirmation-service.js');
-      ConfirmationService.getInstance().setRemoteApprovalService(approvalSvc);
+      if (approvalOwner) {
+        approvalSvc.registerChannel('telegram', async (msg) => {
+          await channel.send({ channelId: message.channel.id, content: msg });
+        });
+        const { ConfirmationService } = await import('../../utils/confirmation-service.js');
+        ConfirmationService.getInstance().setRemoteApprovalService(approvalSvc);
+      }
 
       // 2. Context-adaptive agent reply (« comme Claude »): the agent's own
       //    query-classifier + buildForQuery scale the system prompt to the
@@ -2017,6 +2033,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             });
           }
           const generated = await runCompanionChannelTurn({
+            confirmationService: (await import('../../utils/confirmation-service.js')).ConfirmationService.getInstance(),
             apiKey: effectiveRuntime.apiKey,
             baseUrl: effectiveRuntime.baseUrl,
             model: effectiveRuntime.model,
