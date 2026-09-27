@@ -151,3 +151,23 @@ Lecture.
 - Balayage Vitest (studio, preload, ipc, command-runner et fichiers de la vague) : **73 fichiers, 448 tests verts**.
 - `tsc --noEmit` : 0 erreur à la racine et dans cowork.
 - Balayage des données personnelles du diff : vide.
+
+### Deuxième passe de relecture (tête `35f04714c`)
+
+Les deux relectures confirment que les bloquants précédents sont levés et qu'il n'y a aucune façade. Elles concluaient encore **À REPRENDRE** pour un bloquant nouveau, reproduit par le premier relecteur.
+
+| Point relevé | Verdict | Correctif | Preuve (test rouge sur l'ancien code) |
+|---|---|---|---|
+| **Bloquant** — une clé tapée dans le chat devenait le **nom de la version** de fin de tour : écrite dans le commit du dépôt de versions (dans le projet), lisible par l'agent | **Vrai.** Les tests existants ne le voyaient pas : leur tour ne modifiait aucun fichier, donc aucun commit | Double défense (`5390cb1d2`) : **renderer** : libellé masqué au même point de passage que le prompt ; **processus principal** : `StudioVersionsService` masque le libellé **avant le commit** ; si le masquage échoue, libellé neutre | `studio-view-request-context.test.tsx` : vrai `StudioView`, tour qui modifie un fichier, vrai git : `git log` sans la valeur, avec `[secret masqué]` — rouge avec l'ancien `NewShell`. `studio-secrets-never-leave.test.ts` : tous les objets git parcourus — rouge avec l'ancien service |
+| Secondaire — le libellé brut revenait par `studio.versions.list` et s'affichait dans l'onglet Versions (DOM) | **Vrai**, vu par la contre-revue seulement | `list` masque chaque libellé avant de le renvoyer ; cela couvre aussi l'historique écrit avant ce correctif. Masquage impossible → « (libellé masqué) » | Liste IPC : une version écrite par l'ancien code contient la valeur dans git, la liste renvoie `[secret masqué]`. DOM : onglet Versions sans la valeur (`document.body.innerHTML`). Rouges sur l'ancien code |
+| Terminal : sortie de `npm install` et des commandes affichée brute | Vrai (faible) | Chaque ligne masquée dans l'ordre par le processus principal ; une ligne impossible à masquer n'est pas relayée | `command-runner.test.ts` : vrai processus qui imprime la valeur ; seul `[secret masqué]` atteint le renderer — rouge sur l'ancien code |
+| Invariant « point de passage unique » non imposé par le processus principal | Vrai en principe | Réduit : le prompt passe par le masquage dans le renderer ; les versions, le terminal, les journaux du serveur, la console, le zip et l'export du site sont masqués ou gardés dans le processus principal. Le canal de session du cœur reste inchangé | — |
+| `studio.files.*` sans dossier de confiance | Vrai, antérieur à la vague | Non traité : la génération écrit dans un dossier cible relatif ou pas encore créé, et `safeJoin` interdit déjà d'en sortir. À durcir avec son propre test de non-régression | — |
+| Valeurs de moins de 4 caractères dans un `.env` non masquées | Vrai, très faible | Non traité : les masquer abîmerait tout texte. Les secrets saisis dans l'onglet Secrets sont refusés sous 4 caractères ; les `.env*` n'entrent ni dans le zip ni dans les versions | — |
+| Pic de CPU | Les deux relecteurs jugent le correctif du relais juste ; la cause du 1 400 % reste non établie | — | — |
+
+**État final.**
+- Commits `5390cb1d2` (versions) et `a2edb6eff` (terminal), puis le rapport.
+- Balayage Vitest : **73 fichiers, 451 tests verts**.
+- `tsc` : 0 erreur à la racine et dans cowork.
+- Balayage des données personnelles du diff : vide.
