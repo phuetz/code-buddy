@@ -22,7 +22,12 @@ function parseRegion(spec?: string): CaptureRegion | undefined {
   if (!spec) return undefined;
   const m = /^(\d+)x(\d+)(?:\+(\d+),(\d+))?$/.exec(spec.trim());
   if (!m) throw new Error(`invalid --region "${spec}" (expected WxH or WxH+x,y)`);
-  const region: CaptureRegion = { width: Number(m[1]), height: Number(m[2]) };
+  const width = Number(m[1]);
+  const height = Number(m[2]);
+  if (width <= 0 || height <= 0) {
+    throw new Error(`invalid --region "${spec}" (width and height must be > 0)`);
+  }
+  const region: CaptureRegion = { width, height };
   if (m[3] !== undefined) {
     region.x = Number(m[3]);
     region.y = Number(m[4]);

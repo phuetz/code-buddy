@@ -101,7 +101,7 @@ export class LintProjectTool {
       const eslintPath = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'eslint.cmd' : 'eslint');
       if (!(await exists(eslintPath))) {
         const data: LintProjectData = { root, missing: true, errorCount: 0, warningCount: 0, files: [], timedOut: false };
-        return { success: true, output: 'ESLint not found at node_modules/.bin/eslint; no-op.', data };
+        return { success: false, error: 'ESLint not found at node_modules/.bin/eslint; no-op.', data };
       }
 
       const timeoutMs = Math.min(Math.max(Number(input.timeoutMs) || DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS);
