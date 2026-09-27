@@ -3,9 +3,9 @@
   "featureId": "fleet-cli",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:10:05.441012Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "78c48e92648311c0c456e5721938c24cecb60290c58e5cff1b64f3115099e4be",
+  "date": "2026-09-27T16:54:09.480677Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "463f49a2b96b958139f70f1fc1941b4ad20bfdd60a34d44024b1fbfe633d6ef1",
   "artifact": "docs/preuves/vitrine-fleet-cli.log",
   "summary": "Inspected the fleet status; no peer dispatch was attempted."
 }

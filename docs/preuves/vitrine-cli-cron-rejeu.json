@@ -3,9 +3,9 @@
   "featureId": "cli-cron",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:14:37.040402Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "398712f84a5be7d6b1fc9cec84876ad856801933ca3f60308f1ae0d7e67ac661",
+  "date": "2026-09-27T16:54:15.820318Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "9debd022bff96e3ffa21a0833a59ddf00eb6f3825e7133362173c93c7167c12d",
   "artifact": "docs/preuves/vitrine-cli-cron-rejeu.log",
-  "summary": "Created, listed and removed a synthetic cron job under isolated HOME; no job was executed."
+  "summary": "Created, listed and removed a synthetic scheduled job; no background execution was started."
 }

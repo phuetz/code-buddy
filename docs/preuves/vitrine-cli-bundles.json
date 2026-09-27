@@ -3,9 +3,9 @@
   "featureId": "cli-bundles",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:10:07.279820Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "17f65edacefdbba7155055b80e440f5aa87e9ec38532255836d465268ec18d0f",
+  "date": "2026-09-27T16:54:12.075911Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "f9665759b5dd95989b19c53fcbc4d6e94f5eb5188c4866b92d11beceb688a0e8",
   "artifact": "docs/preuves/vitrine-cli-bundles.log",
   "summary": "Listed the isolated skill-bundle store; bundle execution was not exercised."
 }

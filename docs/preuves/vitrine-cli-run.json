@@ -3,9 +3,9 @@
   "featureId": "cli-run",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:10:08.390203Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "f6217acf38c1c572a39e42ab0a68c19db84b7bc23d3d49ecad6f8d6a085a7ca1",
+  "date": "2026-09-27T16:54:13.440402Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "6fab4b575340a49d66af260b3df3b8584aaec80681737ab18d6f9a79f58b4c3d",
   "artifact": "docs/preuves/vitrine-cli-run.log",
   "summary": "Replayed a real Ollama agent read_file call and re-read the disposable package.json."
 }

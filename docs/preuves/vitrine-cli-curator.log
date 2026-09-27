@@ -1,9 +1,8 @@
-Command: buddy curator scan --json (cwd: disposable fixture)
-Exit code: 0
-Scope: Five maintenance sections scanned; zero changes proposed or applied.
+Command: buddy curator scan --json (disposable project)
+Exit: 0
 Output (sanitized):
 {
-  "generatedAt": "2026-09-27T15:10:47.654Z",
+  "generatedAt": "2026-09-27T16:54:38.082Z",
   "cwd": "[REPOSITORY]/_qa/vitrine/fixture",
   "sections": [
     {

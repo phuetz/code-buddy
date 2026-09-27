@@ -2,5 +2,5 @@ Command: buddy widgets preview weather
 Exit code: 0
 Scope: Generated a curated weather widget preview in the isolated HOME; no live data source was queried.
 Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
-[2026-09-27T15:10:05.708Z]  INFO  Preview written: [ISOLATED_HOME]/.codebuddy/widgets/preview-weather.html
-[2026-09-27T15:10:05.709Z]  INFO  Source: curated
+[2026-09-27T16:54:09.869Z]  INFO  Preview written: [ISOLATED_HOME]/.codebuddy/widgets/preview-weather.html
+[2026-09-27T16:54:09.870Z]  INFO  Source: curated

@@ -3,9 +3,9 @@
   "featureId": "cli-nodes",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:10:07.146982Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "f8f52a5de8866c547135b7238f1fd6f7c7e1603a6c7dfd8e7824b43741b7c2a7",
+  "date": "2026-09-27T16:54:11.890565Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "a4bd8986d5db0f08672baa80d388c3e2dabd6b8d1ae5ffed5e98a8c5dfa96384",
   "artifact": "docs/preuves/vitrine-cli-nodes.log",
   "summary": "Read the empty isolated companion node store; no node was paired."
 }

@@ -3,9 +3,9 @@
   "featureId": "cli-session",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:14:10.700344Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "4ab87c59631a8cacc69809bc93dfd8da50b0a522b33a354fef63e48c4504529a",
+  "date": "2026-09-27T16:54:14.287942Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "48823e84ddb6288fab18415ad979c87a412e2bdcf14e1a7e370208119f621712",
   "artifact": "docs/preuves/vitrine-cli-session-rejeu.log",
   "summary": "Listed the saved session from the real Ollama read_file turn; resume was not retested."
 }

@@ -60,4 +60,4 @@ Commands:
   Real runtime smoke: buddy hermes runtime-smoke auto --json
   Real browser smoke: buddy hermes browser-smoke auto --json
 
-[2026-09-27T15:10:06.678Z]  WARN  Project settings validation: root: Unrecognized key(s) in object: 'telemetry'
+[2026-09-27T16:54:11.214Z]  WARN  Project settings validation: root: Unrecognized key(s) in object: 'telemetry'

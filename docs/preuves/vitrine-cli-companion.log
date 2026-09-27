@@ -25,4 +25,4 @@ Next steps:
 - Voice input setup: Missing required tools: sox. Install with: brew install sox (macOS) or apt-get install sox (Linux)
 - TTS setup: edge-tts not found. Install with: pip3 install edge-tts
 
-[2026-09-27T15:10:06.234Z]  WARN  Project settings validation: root: Unrecognized key(s) in object: 'telemetry'
+[2026-09-27T16:54:10.604Z]  WARN  Project settings validation: root: Unrecognized key(s) in object: 'telemetry'

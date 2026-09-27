@@ -3,9 +3,9 @@
   "featureId": "cli-insights",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:14:11.020907Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "4017a8bdb9be60cc4d45ea26b865d247227f030c83b773ea9657c5d9c3a4f125",
+  "date": "2026-09-27T16:54:14.674263Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "a4560110d15687efb220ed749afacd1e2d6422aade02898c105048905f78808d",
   "artifact": "docs/preuves/vitrine-cli-insights-rejeu.log",
   "summary": "Displayed actual isolated usage counters; no cost comparison was inferred."
 }

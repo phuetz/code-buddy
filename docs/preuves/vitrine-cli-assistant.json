@@ -3,9 +3,9 @@
   "featureId": "cli-assistant",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:10:05.642454Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "f156f7db75b56fe1ca128294ee5e44a2b52314dea148778d1cfa18a2bcae5995",
+  "date": "2026-09-27T16:54:09.785216Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "83bf5373c7147d2243dd56e146e4e26313fdb952e760d399f5378c2062924a63",
   "artifact": "docs/preuves/vitrine-cli-assistant.log",
   "summary": "Displayed effective voice configuration; no audio was synthesized."
 }

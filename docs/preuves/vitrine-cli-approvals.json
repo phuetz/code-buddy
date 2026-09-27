@@ -3,9 +3,9 @@
   "featureId": "cli-approvals",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:10:07.210003Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "dc920e9bc4636b541359a06ae35e3e5ebe0cfc56b785c2f63754f845de09364c",
+  "date": "2026-09-27T16:54:11.971635Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "4f6b152164a7209f93687298a6ba5a8874b05748196bfe2083d1449c13287e5c",
   "artifact": "docs/preuves/vitrine-cli-approvals.log",
   "summary": "Read the isolated approval queue; no approval decision was issued."
 }

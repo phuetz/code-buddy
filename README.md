@@ -30,7 +30,7 @@ Look for a `read_file` tool call and a final answer of `1.0.0` in the JSON. This
 
 ## What has been exercised
 
-The [catalogue](docs/catalog/README.md) tracks 91 curated capabilities. **45 have current local execution traces**; 46 remain untested in situation. A static connection in source is never called a successful run. These are ten concrete examples:
+The [catalogue](docs/catalog/README.md) tracks 91 curated capabilities. **45 have current local execution traces**; 46 have no current local execution trace. A static connection in source is never called a successful run. These are ten concrete examples:
 
 | Capability | What the trace actually shows |
 |---|---|
@@ -56,7 +56,7 @@ The links in this table are each project's own documentation, checked on 27 Sept
 | [Claude Code](https://code.claude.com/docs/en/overview) | Terminal, IDE, desktop and browser, with skills, hooks and MCP. | Our terminal and HTTP paths ran. Cowork is only wired in this catalogue; comparable cross-surface work is unverified here. |
 | [Aider](https://aider.chat/docs/) | Terminal pair programming, Git commits and undo; it also documents an experimental [browser UI](https://aider.chat/docs/usage/browser.html). | The local agent/read/replay path ran. No matched code-edit or Git workflow benchmark was run, so there is no speed or quality claim against Aider. |
 | [OpenCode](https://opencode.ai/docs/) | Terminal, desktop and web interfaces with configurable models, including [local providers](https://opencode.ai/docs/providers). | Ollama ran locally here. Code Buddy's desktop and broad provider routes have less direct evidence in this campaign. |
-| [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) | Open-source terminal agent; OpenAI also documents its [SDK and app-server](https://developers.openai.com/fr-FR/blog/codex-as-a-platform). | Code Buddy's HTTP chat ran, but no equivalent SDK/app-server integration or head-to-head coding evaluation was run. |
+| [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) | Open-source terminal agent; OpenAI also documents its [SDK and app-server](https://developers.openai.com/blog/codex-as-a-platform). | Code Buddy's HTTP chat ran, but no equivalent SDK/app-server integration or head-to-head coding evaluation was run. |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/index.md) | Terminal agent with Google authentication, file editing and test execution. | Code Buddy's Ollama file-read turn ran. Google authentication and a matched editing task were not exercised here. |
 
 Code Buddy is behind these projects in **verified breadth for this launch**: only 45 of its 91 curated entries have current traces, and several cover an inspection or dry-run rather than the full workflow. In particular, this campaign did not run Cowork, real peer dispatch, hosted provider authentication, or a production deployment. A small local model also [failed the `buddy try` coding demo](docs/preuves/vitrine-buddy-try-echec.log); its success must not be assumed. We have no independent comparative productivity benchmark.

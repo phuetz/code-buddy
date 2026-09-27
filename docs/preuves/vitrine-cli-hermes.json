@@ -3,9 +3,9 @@
   "featureId": "cli-hermes",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:10:06.792553Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "88e18c19bfefb5db7fe69b468505bf3418338b73fed23210d7c2d7ba3b07db6d",
+  "date": "2026-09-27T16:54:11.342059Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "10e2fe2efea004fedd786afdadf57f583d986aeb54ab414dfefc73c41586e8bc",
   "artifact": "docs/preuves/vitrine-cli-hermes.log",
   "summary": "Displayed documented profile and readiness diagnostics; no Hermes task was run."
 }

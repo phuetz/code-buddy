@@ -2,4 +2,4 @@ Command: buddy evolve list
 Exit code: 0
 Scope: Listed the isolated variant store; no code evolution was run.
 Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
-[2026-09-27T15:10:07.417Z]  INFO  No evaluated variants yet. Run `buddy evolve run --goal "<weakness>"`.
+[2026-09-27T16:54:12.273Z]  INFO  No evaluated variants yet. Run `buddy evolve run --goal "<weakness>"`.

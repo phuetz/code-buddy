@@ -3,9 +3,9 @@
   "featureId": "cli-config",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:14:10.765013Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "f95260aaaf50872ab63395a18c72144ef9b2d648c3a6fde668dbef53d6af5a40",
+  "date": "2026-09-27T16:54:14.380684Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "08cff2b95a50f20237e933da35a82b8f431b78ff871e5f02ff816205a836da55",
   "artifact": "docs/preuves/vitrine-cli-config-rejeu.log",
   "summary": "Displayed core configuration under a clean environment; no personal credentials were loaded."
 }

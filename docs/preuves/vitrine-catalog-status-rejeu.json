@@ -3,9 +3,9 @@
   "featureId": "catalog-status",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:14:10.619340Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "e398f21b73ff1367ceaef355c724779b936f60f35b019b2a4774860eaffc3c18",
+  "date": "2026-09-27T16:54:14.204371Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "30ee7d5f58db2319585f971aeddf9aa274fad82c8643703d13948942d9462675",
   "artifact": "docs/preuves/vitrine-catalog-status-rejeu.log",
   "summary": "Parsed real catalogue JSON and found all 91 curated entries."
 }

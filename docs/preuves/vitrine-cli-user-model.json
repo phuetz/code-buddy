@@ -3,9 +3,9 @@
   "featureId": "cli-user-model",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-27T15:10:07.986258Z",
-  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
-  "sourceDigest": "de836b31317452b8e2a7479bd6f0c7862b5e1b29ecdd01d4d2df1df5725bac9d",
+  "date": "2026-09-27T16:54:12.913120Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "aabbee520f6b28f0738753f2b4cf2efa2a4c3c9bd92a3531152754cb52324893",
   "artifact": "docs/preuves/vitrine-cli-user-model.log",
   "summary": "Read the isolated user-model state; no personal observations were used."
 }
