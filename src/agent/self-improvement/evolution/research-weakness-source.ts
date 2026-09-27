@@ -14,6 +14,7 @@
  * @module agent/self-improvement/evolution/research-weakness-source
  */
 import { logger } from '../../../utils/logger.js';
+import type { CollectiveKnowledgeGraph } from '../../../memory/collective-knowledge-graph.js';
 import type { Weakness } from './evolution-engine.js';
 import { getFeatureMap, type FeatureArea, type FeatureEnrichment } from './feature-map.js';
 import { buildResearchQuery, createResearchBm25Recall, fuseResearchRanks, isResearchArticle } from './research-retrieval.js';
@@ -125,12 +126,12 @@ export function parseGoal(text: string | null): string | null {
 
 // ── default recall + chat (in-process, reused patterns) ──────────────────
 
-function makeDefaultRecall(mode: 'legacy' | 'hybrid'): ResearchRecall {
+function makeDefaultRecall(mode: 'legacy' | 'hybrid', graph?: CollectiveKnowledgeGraph): ResearchRecall {
   let bm25: ReturnType<typeof createResearchBm25Recall> | null = null;
   return async (query, opts) => {
     try {
       const { getCollectiveKnowledgeGraph } = await import('../../../memory/collective-knowledge-graph.js');
-      const ckg = getCollectiveKnowledgeGraph();
+      const ckg = graph ?? getCollectiveKnowledgeGraph();
       const hits = await ckg.recallHybrid(query, {
         types: ['discovery'],
         limit: mode === 'hybrid' ? 100 : (opts.limit ?? 3),
@@ -164,6 +165,45 @@ function makeDefaultRecall(mode: 'legacy' | 'hybrid'): ResearchRecall {
   };
 }
 
+export interface ResearchSelectionArgs extends Pick<FetchResearchGoalsArgs,
+  'recall' | 'perFeature' | 'limit' | 'minSimilarity' | 'filterMode' | 'retrievalMode' | 'queryMode'> {
+  features: FeatureArea[];
+  /** Explicit graph for an offline benchmark; production uses its normal singleton. */
+  ckg?: CollectiveKnowledgeGraph;
+}
+
+export function researchQueryForFeature(feature: FeatureArea, mode: 'legacy' | 'hybrid', queryMode: 'plain' | 'component'): string {
+  return mode === 'hybrid' && queryMode === 'component'
+    ? buildResearchQuery(feature.name, feature) : feature.description;
+}
+
+/** The production selection path, shared verbatim with the offline benchmark. */
+export async function retrieveResearchMatches(args: ResearchSelectionArgs): Promise<FeatureMatch[]> {
+  const mode = args.retrievalMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_RETRIEVAL === 'legacy' ? 'legacy' : 'hybrid');
+  const recall = args.recall ?? makeDefaultRecall(mode, args.ckg);
+  const perFeature = args.perFeature ?? (mode === 'hybrid' ? 20 : 3);
+  const queryMode = args.queryMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_QUERY === 'component' ? 'component' : 'plain');
+  const candidates: FeatureMatch[] = [];
+  for (const feature of args.features) {
+    let hits: ResearchHit[] = [];
+    try {
+      const query = researchQueryForFeature(feature, mode, queryMode);
+      hits = await recall(query, { types: ['discovery'], limit: perFeature });
+    } catch {
+      hits = [];
+    }
+    for (const hit of hits) {
+      if (!hit?.text) continue;
+      candidates.push({ feature, hit, score: hit.retrievalScore ?? matchScore(hit) });
+    }
+  }
+  return selectMatches(candidates, {
+    ...(args.minSimilarity !== undefined ? { minSimilarity: args.minSimilarity } : {}),
+    filterMode: args.filterMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_FILTER === 'legacy' ? 'legacy' : 'none'),
+    limit: args.limit ?? 3,
+  });
+}
+
 function makeDefaultChat(model?: string): SynthChat {
   return async (prompt) => {
     try {
@@ -189,36 +229,8 @@ function makeDefaultChat(model?: string): SynthChat {
 export async function fetchResearchGoals(args: FetchResearchGoalsArgs = {}): Promise<Weakness[]> {
   try {
     const features = args.features ?? (await getFeatureMap(args.enrich ? { enrich: args.enrich } : {}));
-    const mode = args.retrievalMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_RETRIEVAL === 'legacy' ? 'legacy' : 'hybrid');
-    const recall = args.recall ?? makeDefaultRecall(mode);
     const chat = args.chat ?? makeDefaultChat(args.model);
-    const perFeature = args.perFeature ?? (mode === 'hybrid' ? 20 : 3);
-    const limit = args.limit ?? 3;
-
-    // Gather (feature × discovery) candidates.
-    const candidates: FeatureMatch[] = [];
-    for (const feature of features) {
-      let hits: ResearchHit[] = [];
-      try {
-        const queryMode = args.queryMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_QUERY === 'component' ? 'component' : 'plain');
-        const query = mode === 'hybrid' && queryMode === 'component'
-          ? buildResearchQuery(feature.name, feature) : feature.description;
-        hits = await recall(query, { types: ['discovery'], limit: perFeature });
-      } catch {
-        hits = [];
-      }
-      for (const hit of hits) {
-        if (!hit?.text) continue;
-        candidates.push({ feature, hit, score: hit.retrievalScore ?? matchScore(hit) });
-      }
-    }
-    if (candidates.length === 0) return [];
-
-    const matches = selectMatches(candidates, {
-      ...(args.minSimilarity !== undefined ? { minSimilarity: args.minSimilarity } : {}),
-      filterMode: args.filterMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_FILTER === 'legacy' ? 'legacy' : 'none'),
-      limit,
-    });
+    const matches = await retrieveResearchMatches({ ...args, features });
 
     const goals: Weakness[] = [];
     let i = 0;
