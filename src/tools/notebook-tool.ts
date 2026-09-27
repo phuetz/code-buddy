@@ -599,7 +599,7 @@ export class NotebookTool {
     }
 
     if (this.kernelProcess && !this.kernelProcess.killed) {
-      return { success: true, content: 'Kernel is already running. Use kernel_stop first to restart.' };
+      return { success: false, error: 'Kernel is already running. Use kernel_stop first to restart.' };
     }
 
     try {

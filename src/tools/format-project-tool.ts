@@ -22,7 +22,7 @@ export class FormatProjectTool {
       if (!isRecord(input)) return { success: false, error: 'Input must be an object' };
       const root = await safeRoot(String(input.root ?? ''));
       const prettierPath = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'prettier.cmd' : 'prettier');
-      if (!(await exists(prettierPath))) return { success: true, output: 'Prettier not found at node_modules/.bin/prettier; no-op.', data: { root, missing: true, files: [] } };
+      if (!(await exists(prettierPath))) return { success: false, error: 'Prettier not found at node_modules/.bin/prettier; no-op.', data: { root, missing: true, files: [] } };
       const write = input.write === true;
       const timeoutMs = Math.min(Math.max(Number(input.timeoutMs) || DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS);
       const result = await run(root, prettierPath, [write ? '--write' : '--check', '.'], root, timeoutMs);

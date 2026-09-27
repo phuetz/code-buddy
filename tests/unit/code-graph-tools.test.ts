@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -293,5 +293,31 @@ describe('Enhanced Context Provider', () => {
   it('returns null for unrecognized entities', () => {
     const ctx = buildCodeGraphContext(graph, 'hello how are you');
     expect(ctx).toBeNull();
+  });
+});
+
+
+import { CodeGraphTool } from '@/tools/registry/code-graph-tools.js';
+import * as graphDrift from '@/knowledge/graph-drift.js';
+
+vi.mock('@/knowledge/graph-drift.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    detectDrift: vi.fn(),
+    getSnapshotInfo: vi.fn(),
+  };
+});
+
+describe("CodeGraphTool failures", () => {
+  it('should return success: false when drift computation fails', async () => {
+    vi.mocked(graphDrift.getSnapshotInfo).mockReturnValue({} as any);
+    vi.mocked(graphDrift.detectDrift).mockReturnValue(null);
+
+    const tool = new CodeGraphTool();
+    const result = await tool.execute({ operation: 'drift' }, { knowledgeGraph: {} as any }) as any;
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Failed to compute drift');
   });
 });
