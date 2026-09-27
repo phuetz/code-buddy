@@ -224,4 +224,37 @@ describe.skipIf(!hasGit())('StudioView — tours, verrous, versions, discussion 
     await waitFor(() => expect(readFileSync(path.join(root, 'app.js'), 'utf8')).toBe('console.log(1);\n'), { timeout: 5000 });
     expect(await screen.findByTestId('studio-versions-note')).toBeTruthy();
   }, 30_000);
+
+  it('aperçu toujours cassé : 3 corrections automatiques, puis « Corriger » à la demande, une seule tentative', async () => {
+    probe.mockImplementation(async () => ({
+      ok: true,
+      data: {
+        buildOutput: [],
+        consoleErrors: ["Uncaught TypeError: Cannot read properties of undefined (reading 'map')"],
+        pageErrors: [],
+        overlay: false,
+        placeholder: false,
+        rootChildren: 0,
+        textLength: 0,
+      },
+    }));
+    render(
+      <Suspense fallback={<div>chargement</div>}>
+        <StudioView />
+      </Suspense>,
+    );
+    fireEvent.change(await screen.findByLabelText('Iteration message', {}, { timeout: 5000 }), { target: { value: 'Ajoute une liste' } });
+    fireEvent.click(screen.getByText('Send'));
+    // 1 tour utilisateur + 3 corrections automatiques, puis la main revient.
+    const fixBtn = await screen.findByTestId('build-fix', {}, { timeout: 15000 });
+    expect(ipc.continueSession).toHaveBeenCalledTimes(4);
+    expect(String(ipc.continueSession.mock.calls[1]?.[1])).toContain("reading 'map'");
+    expect(screen.getByTestId('build-problem').textContent).toContain('Aperçu cassé');
+    fireEvent.click(fixBtn);
+    await waitFor(() => expect(ipc.continueSession).toHaveBeenCalledTimes(5));
+    // Toujours cassé : le bouton revient, sans nouvelle tentative automatique.
+    await screen.findByTestId('build-fix', {}, { timeout: 5000 });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(ipc.continueSession).toHaveBeenCalledTimes(5);
+  }, 30_000);
 });

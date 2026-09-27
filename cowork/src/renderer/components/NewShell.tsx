@@ -32,6 +32,7 @@ import {
   shouldAutoBuild,
   canRetry,
   buildFixPrompt,
+  MAX_FIX_ATTEMPTS,
   autoFixNote,
 } from './studio/auto-build-model';
 import { sessionToStudioMessages } from './studio/studio-chat-adapter';
@@ -482,6 +483,9 @@ export function StudioView() {
     pendingFirstBuild: false,
   });
   const [autoFixAttempt, setAutoFixAttempt] = useState<number | null>(null);
+  // Dernier problème d'aperçu quand le budget automatique est épuisé : affiché
+  // avec un bouton « Corriger » (une tentative à la demande, comme bolt.new).
+  const [previewProblem, setPreviewProblem] = useState<{ summary: string; prompt: string } | null>(null);
 
   // Fresh project → fresh auto-build state.
   useEffect(() => {
@@ -493,6 +497,7 @@ export function StudioView() {
       pendingFirstBuild: false,
     };
     setAutoFixAttempt(null);
+    setPreviewProblem(null);
   }, [sessionCwd]);
 
   const runBuild = useCallback(async () => {
@@ -515,23 +520,24 @@ export function StudioView() {
     if (result.ok && (!health || health.ok)) {
       st.awaitingFix = false;
       setAutoFixAttempt(null);
+      setPreviewProblem(null);
       return;
     }
+    const fixPrompt =
+      health && !health.ok ? buildPreviewFixPrompt(health) : buildFixPrompt(result.error ?? '', terminalRef.current);
+    const summary = health && !health.ok ? health.summary : (result.error ?? 'échec du démarrage').slice(0, 120);
     if (!canRetry(st.attempts)) {
       // Budget spent — leave the error visible and hand back to the user.
       st.awaitingFix = false;
       setAutoFixAttempt(null);
+      setPreviewProblem({ summary, prompt: fixPrompt });
       return;
     }
+    setPreviewProblem(null);
     st.attempts += 1;
     st.awaitingFix = true;
     setAutoFixAttempt(st.attempts);
-    void sendTurn(
-      health && !health.ok
-        ? buildPreviewFixPrompt(health)
-        : buildFixPrompt(result.error ?? '', terminalRef.current),
-      { mode: 'build', label: `Correction automatique ${st.attempts}` },
-    );
+    void sendTurn(fixPrompt, { mode: 'build', label: `Correction automatique ${st.attempts}` });
   }, [activeSessionId, sessionCwd, ensurePreview, sendTurn]);
 
   // Falling edge of the agent turn = generation, a message, or a fix just finished.
@@ -601,6 +607,16 @@ export function StudioView() {
   }, [turnActive, tree, previewUrl, previewStatus, runBuild]);
 
   const buildNote = [autoFixNote(autoFixAttempt), turnNote].filter(Boolean).join(' · ') || null;
+  const onFixProblem = useCallback(() => {
+    const problem = previewProblem;
+    if (!problem) return;
+    const st = autoBuildRef.current;
+    // Une seule tentative : pas de relance automatique si elle échoue encore.
+    st.attempts = MAX_FIX_ATTEMPTS;
+    st.awaitingFix = true;
+    setPreviewProblem(null);
+    void sendTurn(problem.prompt, { mode: 'build', label: 'Correction demandée' });
+  }, [previewProblem, sendTurn]);
 
   // AI generation: start a project-scoped agent session and STAY in App Studio —
   // the bolt.new split shows the chat (left) driving the workbench (right) live.
@@ -731,6 +747,8 @@ export function StudioView() {
     <AppStudioView
       {...viewProps}
       buildNote={buildNote}
+      buildProblem={previewProblem?.summary ?? null}
+      {...(previewProblem ? { onFixProblem } : {})}
       onGenerateWithAI={onGenerateWithAI}
       onVerifyPreview={onVerifyPreview}
       onNewApp={() => setActiveSession(null)}

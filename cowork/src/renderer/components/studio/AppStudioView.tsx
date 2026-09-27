@@ -59,6 +59,9 @@ export interface AppStudioViewProps {
   buildError?: string | null;
   /** Extra build-strip status (auto-fix "Fixing… n/3"). */
   buildNote?: string | null;
+  /** Aperçu cassé après épuisement des corrections automatiques. */
+  buildProblem?: string | null;
+  onFixProblem?: () => void;
   templates: TemplateCard[];
   busy?: boolean;
   workingDir?: string;
@@ -115,6 +118,8 @@ export function AppStudioView({
   buildElapsedMs,
   buildError,
   buildNote,
+  buildProblem,
+  onFixProblem,
   templates,
   busy = false,
   workingDir,
@@ -371,7 +376,7 @@ export function AppStudioView({
             </button>
           </div>
         ) : null}
-        <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} onStop={onStopBuild} />
+        <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} problem={buildProblem ?? null} {...(onFixProblem ? { onFix: onFixProblem } : {})} onStop={onStopBuild} />
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col border-r border-border bg-surface">
             {chat.plan ? <DevPlanCard plan={chat.plan} /> : null}
@@ -413,7 +418,7 @@ export function AppStudioView({
   return (
     <main className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <StudioComposer templates={templates} onScaffold={onScaffold} onGenerateWithAI={onGenerateWithAI} onPrompt={onPrompt} busy={busy} workingDir={workingDir} seedPrompt={seedPrompt} />
-      <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} onStop={onStopBuild} />
+      <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} problem={buildProblem ?? null} {...(onFixProblem ? { onFix: onFixProblem } : {})} onStop={onStopBuild} />
       {!hasProject ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
           <div className="mx-auto max-w-3xl text-center">
