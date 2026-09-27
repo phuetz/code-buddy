@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import fs from 'fs';
 import { createServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
@@ -26,7 +27,7 @@ describe('session HTTP writes survive a store restart', () => {
   beforeAll(async () => {
     previousSessionsDir = process.env.CODEBUDDY_SESSIONS_DIR;
     sessionsDir = path.join(process.cwd(), '.test-r21', `sessions-${process.pid}`);
-    fs.rmSync(sessionsDir, { recursive: true, force: true });
+    removeTmpDirStrict(sessionsDir);
     fs.mkdirSync(sessionsDir, { recursive: true });
     process.env.CODEBUDDY_SESSIONS_DIR = sessionsDir;
 
@@ -53,7 +54,7 @@ describe('session HTTP writes survive a store restart', () => {
     } else {
       process.env.CODEBUDDY_SESSIONS_DIR = previousSessionsDir;
     }
-    fs.rmSync(sessionsDir, { recursive: true, force: true });
+    removeTmpDirStrict(sessionsDir);
   });
 
   it('persiste création, mise à jour, message et fork', async () => {

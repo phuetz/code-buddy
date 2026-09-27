@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * GK30 — recover canvas HTML and capture it headless (Playwright).
  */
@@ -43,7 +44,7 @@ describe.skipIf(!chromiumExecutableExists())('GK30 canvas headless capture', () 
     resetDatabaseManager();
     if (previousHome === undefined) delete process.env.CODEBUDDY_HOME;
     else process.env.CODEBUDDY_HOME = previousHome;
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   it('serves the stock widget HTML and writes a headless screenshot', async () => {

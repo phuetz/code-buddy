@@ -1,9 +1,10 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * Isolement du catalogue HTTP : les sorties métriques héritées ne doivent
  * pas écrire hors du répertoire temporaire, et deux isolements empilés
  * ne se restaurent pas d'un seul coup.
  */
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -28,7 +29,7 @@ afterEach(() => {
   delete process.env.METRICS_INTERVAL;
   delete process.env.METRICS_CONSOLE;
   for (const dir of leftovers.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
+    removeTmpDirStrict(dir);
   }
 });
 

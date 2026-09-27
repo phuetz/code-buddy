@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * SERV2 — écart 1 du rapport SERV1 : `/v1/chat/completions` renvoyait un
  * `usage.prompt_tokens` obtenu par `longueur / 4` sur le seul texte utilisateur,
@@ -119,7 +120,7 @@ describe('SERV2 usage OpenAI sur /v1/chat/completions', () => {
     } else {
       process.env.CODEBUDDY_HOME = previousHome;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   async function start(): Promise<string> {

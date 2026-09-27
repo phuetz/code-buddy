@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    {
+      "id": "catalog-status",
+      "discoveryKey": "cli:catalog",
+      "title": "Catalogue des états et preuves",
+      "codePaths": ["src/catalog/status.ts", "src/commands/cli/catalog-command.ts"],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          { "file": "src/index.ts", "contains": "addLazyCommandGroup(program, 'catalog'" },
+          { "file": "src/index.ts", "contains": "registerCatalogCommands(program)" },
+          { "file": "src/commands/cli/catalog-command.ts", "contains": ".command('status')" }
+        ]
+      }
+    },
+    {
+      "id": "resource-catalog-tool",
+      "discoveryKey": "tool:resource_catalog",
+      "title": "Outil de sélection des ressources",
+      "codePaths": ["src/fleet/resource-catalog.ts", "src/tools/resource-catalog-tool.ts"],
+      "entrypoint": {
+        "kind": "tool",
+        "checks": [
+          { "file": "src/codebuddy/resource-catalog-tool-defs.ts", "contains": "name: 'resource_catalog'" },
+          { "file": "src/codebuddy/tools.ts", "contains": "registerGroup([RAGCHAT_TOOL_DEF, RESOURCE_CATALOG_TOOL_DEF" },
+          { "file": "src/tools/registry/research-tools.ts", "contains": "new ResourceCatalogTool()" },
+          { "file": "src/tools/registry/interactive-adapters.ts", "contains": "...createResearchTools()" }
+        ]
+      }
+    },
+    {
+      "id": "http-health",
+      "title": "Route HTTP de santé",
+      "codePaths": ["src/server/routes/health.ts"],
+      "entrypoint": {
+        "kind": "route",
+        "checks": [
+          { "file": "src/server/index.ts", "contains": "app.use('/api/health', healthRoutes)" },
+          { "file": "src/server/routes/health.ts", "contains": "router.get(\n  '/'," }
+        ]
+      }
+    },
+    {
+      "id": "telegram-channel",
+      "title": "Canal Telegram",
+      "codePaths": ["src/channels/telegram/index.ts"],
+      "entrypoint": {
+        "kind": "channel",
+        "checks": [
+          { "file": "src/index.ts", "contains": "handleChannels(action, options)" },
+          { "file": "src/commands/handlers/channel-handlers.ts", "contains": "case 'telegram': {" },
+          { "file": "src/commands/handlers/channel-handlers.ts", "contains": "return new TelegramChannel({" }
+        ]
+      }
+    },
+    {
+      "id": "fleet-cli",
+      "discoveryKey": "cli:fleet",
+      "title": "Commandes de la flotte",
+      "codePaths": ["src/commands/cli/fleet-commands.ts"],
+      "entrypoint": {
+        "kind": "cli",
+        "checks": [
+          { "file": "src/index.ts", "contains": "addLazyCommandGroup(program, 'fleet'" },
+          { "file": "src/index.ts", "contains": "registerFleetCommands(program)" }
+        ]
+      }
+    }
+  ]
+}

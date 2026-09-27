@@ -11,6 +11,7 @@ import {
   registerAutonomousCodeCommand,
 } from '../../src/commands/cli/autonomous-code-command.js';
 import { saveCheckpoint } from '../../src/agent/autonomous/checkpoint-manager.js';
+import { removeTestDirAsync } from '../helpers/tmp.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -117,7 +118,7 @@ describe('autonomous-code CLI command', () => {
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
     // Retry: Windows may still hold a handle on just-closed files (AV/indexer).
-    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
+    await removeTestDirAsync(tempRoot);
   });
 
   it('prints JSON report for a valid task contract', async () => {

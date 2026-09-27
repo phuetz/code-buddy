@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "catalog-status",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-26T13:01:29.450Z",
+  "revision": "978b2cbfdf24ff0c79fa425980fcf92bdd9281d3",
+  "sourceDigest": "e1a3d39ecd9137ba35ce2ee2d07be698b3ca65129b5b6970af5553052806a42a",
+  "artifact": "docs/preuves/catalogue-status-avec-preuve-2026-09-26.log",
+  "summary": "Commande CLI compilée, JSON analysé et états vérifiés dans un export à profil jetable."
+}

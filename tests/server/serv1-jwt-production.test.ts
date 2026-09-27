@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -19,7 +20,7 @@ describe('SERV1 JWT production fail-closed', () => {
     if (previousJwt === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousJwt;
     if (tmpHome) {
-      fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTmpDirStrict(tmpHome);
       tmpHome = '';
     }
   });
