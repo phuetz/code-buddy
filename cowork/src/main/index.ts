@@ -70,7 +70,7 @@ import { registerScaffoldIpc } from './studio/scaffold-ipc';
 import { registerPreviewProbeIpc } from './studio/preview-probe-ipc';
 import { registerGithubIpc } from './studio/github-ipc';
 import { registerStudioVersionsIpc } from './studio/studio-versions-ipc';
-import { ProjectSecretsService, redactText, registerProjectSecretsIpc } from './studio/project-secrets-service';
+import { guardSiteExport, ProjectSecretsService, redactText, registerProjectSecretsIpc } from './studio/project-secrets-service';
 import { PreviewBridge, registerPreviewBridgeIpc } from './studio/preview-bridge';
 import { StudioContextService, registerStudioContextIpc } from './studio/studio-context-service';
 import { STUDIO_ZIP_IGNORE } from './studio/studio-export-excludes';
@@ -3316,25 +3316,9 @@ const siteExportService = new SiteExportService({
     return result.canceled ? null : (result.filePaths[0] ?? null);
   },
 });
-ipcMain.handle('studio.exportSite', async (_event, input: unknown) => {
-  const outcome = await siteExportService.exportSite(input);
-  // Un secret du projet ne doit JAMAIS sortir dans le site exporté (ex. une
-  // variable VITE_ intégrée au bundle) : export supprimé et refusé.
-  const root = (input as { root?: unknown } | null)?.root;
-  if (outcome.ok && typeof root === 'string') {
-    const leaks = await projectSecrets.findLeaks(root, outcome.data.savedTo).catch(() => [] as string[]);
-    if (leaks.length > 0) {
-      await fs.promises.rm(outcome.data.savedTo, { recursive: true, force: true }).catch(() => undefined);
-      return {
-        ok: false as const,
-        error:
-          `Export annulé : un secret du projet se retrouve dans le site construit (${leaks.slice(0, 3).join(', ')}). ` +
-          'Une variable VITE_ est publique une fois construite : ne l\'y mettez pas.',
-      };
-    }
-  }
-  return outcome;
-});
+ipcMain.handle('studio.exportSite', async (_event, input: unknown) =>
+  guardSiteExport(projectSecrets, (input as { root?: unknown } | null)?.root, await siteExportService.exportSite(input)),
+);
 
 // Media library (ChatGPT-library parity): every generated media across all
 // session roots; export = native Save-As dialog + copy.

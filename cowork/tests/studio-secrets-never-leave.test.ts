@@ -7,12 +7,12 @@
  */
 import archiver from 'archiver';
 import { execFileSync } from 'child_process';
-import { createWriteStream, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs';
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectSecretsService, parseDotenv, redactText, REDACTED } from '../src/main/studio/project-secrets-service';
+import { guardSiteExport, ProjectSecretsService, parseDotenv, redactText, REDACTED } from '../src/main/studio/project-secrets-service';
 import { STUDIO_ZIP_IGNORE } from '../src/main/studio/studio-export-excludes';
 import { StudioVersionsService } from '../src/main/studio/studio-versions-service';
 
@@ -163,7 +163,16 @@ describe('secrets du projet App Studio', () => {
     writeFileSync(path.join(dist, 'index.html'), '<script src="assets/index.js"></script>');
     writeFileSync(path.join(dist, 'assets', 'index.js'), `const k="${SECRET}";`);
     expect(await service.findLeaks(root, dist)).toEqual([path.join('assets', 'index.js')]);
+    // Le garde branché sur l'IPC studio.exportSite : export refusé ET dossier supprimé.
+    const refused = await guardSiteExport(service, root, { ok: true, data: { savedTo: dist, kind: 'build', files: 2 } });
+    expect(refused.ok).toBe(false);
+    expect(JSON.stringify(refused)).not.toContain(SECRET);
+    expect(existsSync(dist)).toBe(false);
+    mkdirSync(path.join(dist, 'assets'), { recursive: true });
     writeFileSync(path.join(dist, 'assets', 'index.js'), 'const k=import.meta.env;');
     expect(await service.findLeaks(root, dist)).toEqual([]);
+    const kept = await guardSiteExport(service, root, { ok: true, data: { savedTo: dist, kind: 'build', files: 1 } });
+    expect(kept.ok).toBe(true);
+    expect(existsSync(dist)).toBe(true);
   });
 });

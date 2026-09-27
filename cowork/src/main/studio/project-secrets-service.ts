@@ -235,6 +235,29 @@ export class ProjectSecretsService {
   }
 }
 
+/**
+ * Export du site : un secret du projet ne doit JAMAIS sortir dans le site
+ * exporté (une variable VITE_ est intégrée au bundle). Dossier exporté
+ * supprimé et export refusé si une valeur s'y retrouve.
+ */
+export async function guardSiteExport<T extends { ok: boolean }>(
+  service: Pick<ProjectSecretsService, 'findLeaks'>,
+  root: unknown,
+  outcome: T,
+): Promise<T | { ok: false; error: string }> {
+  const savedTo = (outcome as { data?: { savedTo?: unknown } }).data?.savedTo;
+  if (!outcome.ok || typeof root !== 'string' || typeof savedTo !== 'string') return outcome;
+  const leaks = await service.findLeaks(root, savedTo).catch(() => [] as string[]);
+  if (leaks.length === 0) return outcome;
+  await fs.rm(savedTo, { recursive: true, force: true }).catch(() => undefined);
+  return {
+    ok: false,
+    error:
+      `Export annulé : un secret du projet se retrouve dans le site construit (${leaks.slice(0, 3).join(', ')}). ` +
+      "Une variable VITE_ est publique une fois construite : ne l'y mettez pas.",
+  };
+}
+
 export const PROJECT_SECRETS_CHANNELS = {
   list: 'studio.secrets.list',
   set: 'studio.secrets.set',
