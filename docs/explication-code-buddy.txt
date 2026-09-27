@@ -70,3 +70,131 @@ Code Buddy est l'agent. Deux outils frères portent le travail de contexte :
 - Code Explorer : indexe un dépôt en graphe de connaissances interrogeable
   via MCP.
 Comprendre, compresser, agir.
+
+
+Pistes d'amélioration
+=====================
+
+Voici ce que j'améliorerais en priorité, classé par impact. C'est mon avis
+honnête, pas une feuille de route officielle.
+
+1. Simplicité d'installation et de configuration
+-----------------------------------------------
+Le plus gros frein aujourd'hui, c'est la barrière à l'entrée. Trop de variables
+d'environnement, trop de modes d'auth, trop de binaires optionnels. Un nouvel
+utilisateur doit comprendre Ollama vs ChatGPT vs Lemonade, JWT, workspace root,
+sandbox natif, Cowork séparé... avant même de voir un résultat.
+
+- Un vrai mode « zéro config » : `buddy` tout seul détecte Ollama s'il tourne,
+  sinon propose le login, sinon télécharge un petit modèle. Une seule commande,
+  zéro variable à exporter.
+- Regrouper les options avancées derrière un profil nommé ("local", "cloud",
+  "fleet", "max") plutôt qu'une vingtaine de variables dispersées.
+- Un installateur unique qui gère Node, les modules natifs et Cowork en une
+  passe, au lieu de trois chemins distincts.
+
+2. Qualité et fiabilité des petits modèles locaux
+------------------------------------------------
+Le modèle local, c'est le cœur de la promesse à zéro coût. Mais un petit modèle
+peut caler, abandonner, ou appeler les mauvais outils. La boucle `buddy loop`
+devient alors un cercle sans fin.
+
+- Un routeur de tâches plus agressif : les tâches simples (renommer, corriger
+  une typo, générer un test) vont automatiquement au modèle local, les tâches
+  lourdes (refactor, architecture) montent vers le cloud sans que l'utilisateur
+  le demande.
+- Un mode "patience" : quand le modèle local hésite, relancer avec un prompt
+  plus cadré plutôt que d'échouer silencieusement.
+- Des benchmarks honnêtes et publics : pour chaque modèle local supporté, un
+  score réel sur une suite de tâches de codage, pas seulement "il appelle des
+  outils".
+
+3. La flotte : de l'étoile au vrai maillage
+------------------------------------------
+Aujourd'hui la topologie est en étoile : un hub, des pairs qui s'y connectent.
+Les hubs ne se parlent pas entre eux. C'est simple, mais ça crée un point de
+faillle unique et ça complique les déploiements multi-sites.
+
+- Un vrai maillage (mesh) : les hubs se découvrent et se relaient, avec une
+  élection de leader automatique si le hub tombe.
+- Une délégation autonome entre pairs : aujourd'hui le pilote relaie les
+  messages à la main. Le but affiché — que toutes les IA collaborent dans
+  l'harmonie — n'est pas encore atteint. Il faudrait que le conducteur du
+  conseil puisse assigner un rôle à un pair distant et lui faire exécuter
+  une tâche sans intervention humaine.
+- Une authentification plus légère pour le lab : le JWT partagé fonctionne,
+  mais un couplage par clés rotatives ou un mesh Tailscale intégré réduirait
+  la friction.
+- De la persistance de l'historique fleet : aujourd'hui il meurt avec la
+  session. Un journal durable (même simple) permettrait l'audit et le
+  rattrapage après déconnexion.
+
+4. L'auto-amélioration : prouver la valeur
+------------------------------------------
+C'est la fonctionnalité la plus ambitieuse et la plus fragile. Le système
+propose des leçons, des outils, des compétences, des variantes de code — mais
+tout reste proposé, jamais appliqué tout seul, et les gains mesurés sont
+limiteés à leurs critères.
+
+- Des métriques d'impact réelles : pour chaque changement accepté, enregistrer
+  le coût, le temps gagné, et un cas de régression tenu à l'écart. Aujourd'hui
+  on sait qu'une proposition a été validée ; on ne sait pas si elle a vraiment
+  amélioré l'agent sur la durée.
+- Rendre l'application sélective plus fluide : pouvoir accepter une leçon d'un
+  geste, refuser une autre, sans passer par plusieurs commandes.
+- Éviter la prolifération : un nettoyage automatique des leçons et compétences
+  jamais réutilisées, pour que la mémoire ne devienne pas un cimetière.
+
+5. Sécurité : la rendre invisible
+----------------------------------
+La surface de sécurité est impressionnante (Guardian Agent, sandboxs, coffre-
+fort de secrets, détection de secrets, politiques d'exécution). Mais elle est
+aussi complexe, et un utilisateur pressé active `bypassPermissions` ou
+`--yolo` pour avancer.
+
+- Des profils de sécurité prêts à l'emploi ("débutant", "projet", "prod") qui
+  règlent tous les curseurs d'un coup, au lieu de composer les modes à la main.
+- Un tableau de bord unique qui montre, en temps réel, ce qui est autorisé,
+  ce qui a été bloqué, et pourquoi.
+- Rendre le sandbox natif activé par défaut sur Linux/macOS quand c'est
+  possible, plutôt que opt-in : la sécurité par défaut, pas par effort.
+
+6. Expérience Cowork et interfaces
+----------------------------------
+Cowork est puissant mais séparé, lourd (Electron + better-sqlite3 natif), et
+la PWA mobile est un ajout récent. L'expérience n'est pas encore aussi fluide
+que celle d'un Claude Code Desktop ou d'un Cursor.
+
+- Fusionner Cowork dans le flux principal : pouvoir ouvrir l'interface bureau
+  depuis `buddy` sans seconde installation.
+- Une vraie application mobile native (le dépôt lisa-android existe, mais
+  l'expérience reste limitée) pour piloter un agent distant depuis son téléphone.
+- Uniformiser la langue : aujourd'hui aide et erreurs mêlent anglais et français,
+  sans option `--lang`. Un seul endroit pour choisir.
+
+7. Performance et coût
+---------------------
+- Mesurer et publier le coût réel par tâche (tokens, latence, dollars) pour
+  chaque combinaison modèle/fournisseur, pas seulement le TTFT.
+- Réduire la latence du premier outil : le temps entre la question et la
+  première action visible est ce que l'utilisateur ressent le plus.
+- Un cache de contexte partagé entre sessions du même projet, pour ne pas
+  re-lire le dépôt à chaque démarrage.
+
+8. Confiance et adoption
+------------------------
+- Des tutoriels guidés intégrés ("ta première tâche en cinq minutes") plutôt
+  que de renvoyer vers la doc.
+- Une communauté visible : aujourd'hui la communauté est petite comparée à
+  celle de Claude Code ou Aider. Des exemples réels, des recettes partagées,
+  un canal de retours utilisateurs.
+- Des témoignages chiffrés : "X minutes gagnées sur ce refactor", "Y bugs
+  évités grâce au Guardian". Les chiffres convainquent plus que les
+  fonctionnalités listées.
+
+En résumé
+--------
+Code Buddy a déjà l'architecture la plus ambitieuse du marché : multi-
+fournisseurs, flotte, auto-amélioration, sécurité en profondeur. Le travail
+maintenant, c'est de la rendre aussi simple à adopter qu'un outil à un seul
+modèle. La complexité doit devenir un atout caché, pas un mur à l'entrée.
