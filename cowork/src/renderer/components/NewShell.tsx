@@ -370,7 +370,7 @@ export function StudioView() {
       turnRef.current = { root: sessionCwd, preId, mode: opts.mode, label: opts.label };
       await continueSession(activeSessionId, text);
     },
-    [activeSessionId, continueSession, takeVersion],
+    [activeSessionId, continueSession, sessionCwd, takeVersion],
   );
 
   interface AutoContinuationState {
