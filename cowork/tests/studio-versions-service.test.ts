@@ -13,6 +13,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   StudioVersionsService,
+  VERSIONS_GIT_DIR,
+  isForbiddenProjectRoot,
   isSafeRelativePath,
   parseVersionLog,
 } from '../src/main/studio/studio-versions-service';
@@ -152,6 +154,86 @@ describe.skipIf(!hasGit())('StudioVersionsService (git réel)', () => {
     expect((await inside.restore(root, snap.data.id)).ok).toBe(true);
   });
 
+  it('changedSince exige une racine de confiance (il indexe tout l’arbre)', async () => {
+    const snap = await service.snapshot(root, 'v1');
+    if (!snap.ok) throw new Error(snap.error);
+    const guarded = new StudioVersionsService({ trustedRoots: () => [path.join(root, 'src')] });
+    expect(await guarded.changedSince(root, snap.data.id)).toEqual({ ok: false, error: 'project is outside trusted workspaces' });
+    const inside = new StudioVersionsService({ trustedRoots: () => [path.dirname(root)] });
+    expect((await inside.changedSince(root, snap.data.id)).ok).toBe(true);
+  });
+
+  it('refuse de versionner le HOME lui-même, même pour l’état de départ', async () => {
+    const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+    // HOME isolé = le dossier du test (jamais le vrai HOME).
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+    try {
+      expect(os.homedir()).toBe(root);
+      const refused = { ok: false, error: 'refusing to version a system or home directory' };
+      expect(await service.snapshot(root, 'État de départ')).toEqual(refused);
+      expect(await service.list(root)).toEqual(refused);
+      expect(await service.getLocks(root)).toEqual(refused);
+      expect(existsSync(path.join(root, VERSIONS_GIT_DIR))).toBe(false);
+      // Un projet SOUS le HOME reste accepté.
+      expect((await service.snapshot(path.join(root, 'src'), 'ok')).ok).toBe(true);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  it('les .env* ne sont jamais versionnés, et une restauration ne les touche pas', async () => {
+    const secret = 'valeur-secrete-7f3a9c';
+    writeFileSync(path.join(root, '.env.local'), `API_KEY=${secret}\n`);
+    writeFileSync(path.join(root, '.env'), `ROOT_KEY=${secret}\n`);
+    writeFileSync(path.join(root, 'src', '.env.production'), `NESTED=${secret}\n`);
+    const v1 = await service.snapshot(root, 'v1');
+    if (!v1.ok) throw new Error(v1.error);
+    writeFileSync(path.join(root, 'src', 'App.tsx'), 'export const v = 2;\n');
+    writeFileSync(path.join(root, '.env.local'), `API_KEY=${secret}-v2\n`);
+    const v2 = await service.snapshot(root, 'v2');
+    if (!v2.ok) throw new Error(v2.error);
+
+    const gitDir = path.join(root, VERSIONS_GIT_DIR);
+    const git = (...args: string[]) => execFileSync('git', ['--git-dir', gitDir, ...args], { encoding: 'utf8' });
+    const everything = git('rev-list', '--all', '--objects');
+    expect(everything).not.toMatch(/\.env/);
+    const blobs = everything
+      .split('\n')
+      .map((l) => l.split(' ')[0])
+      .filter((sha): sha is string => Boolean(sha))
+      .filter((sha) => git('cat-file', '-t', sha).trim() === 'blob');
+    expect(blobs.length).toBeGreaterThan(0);
+    for (const sha of blobs) expect(git('cat-file', 'blob', sha)).not.toContain(secret);
+    expect(git('log', '-p', '--all')).not.toContain(secret);
+
+    const restored = await service.restore(root, v1.data.id);
+    expect(restored.ok).toBe(true);
+    expect(readFileSync(path.join(root, 'src', 'App.tsx'), 'utf8')).toBe('export const v = 1;\n');
+    expect(readFileSync(path.join(root, '.env.local'), 'utf8')).toBe(`API_KEY=${secret}-v2\n`);
+    expect(readFileSync(path.join(root, '.env'), 'utf8')).toBe(`ROOT_KEY=${secret}\n`);
+    expect(readFileSync(path.join(root, 'src', '.env.production'), 'utf8')).toBe(`NESTED=${secret}\n`);
+  });
+
+  it('revertPaths compare les binaires octet par octet', async () => {
+    // Deux contenus NON UTF-8 qui se décodent pareil (U+FFFD) mais diffèrent en octets.
+    const original = Buffer.from([0x89, 0xff, 0xfe, 0x00, 0x80, 0x0a]);
+    const altered = Buffer.from([0x89, 0xff, 0xfd, 0x00, 0x80, 0x0a]);
+    expect(altered.toString('utf8')).toBe(original.toString('utf8'));
+    writeFileSync(path.join(root, 'logo.bin'), original);
+    const pre = await service.snapshot(root, 'avant');
+    if (!pre.ok) throw new Error(pre.error);
+    writeFileSync(path.join(root, 'logo.bin'), altered);
+    const reverted = await service.revertPaths(root, pre.data.id, ['logo.bin']);
+    expect(reverted).toEqual({ ok: true, data: ['logo.bin'] });
+    expect(readFileSync(path.join(root, 'logo.bin')).equals(original)).toBe(true);
+    // Identique en octets : rien à remettre.
+    expect(await service.revertPaths(root, pre.data.id, ['logo.bin'])).toEqual({ ok: true, data: [] });
+  });
+
   it('persiste les verrous, triés et sans doublon', async () => {
     expect(await service.getLocks(root)).toEqual({ ok: true, data: [] });
     const set = await service.setLocks(root, ['src/App.tsx', 'package.json', 'src/App.tsx', '../evil']);
@@ -161,6 +243,22 @@ describe.skipIf(!hasGit())('StudioVersionsService (git réel)', () => {
 });
 
 describe('fonctions pures', () => {
+  it('isForbiddenProjectRoot : racines, HOME, tmp, dossiers système', () => {
+    const posix = { platform: 'linux' as const, home: '/home/u', tmp: '/tmp' };
+    for (const p of ['/', '/etc', '/etc/nginx', '/usr', '/usr/local/share/x', '/bin', '/sbin', '/var', '/home', '/home/u', '/tmp', '/System/Library']) {
+      expect(isForbiddenProjectRoot(p, posix)).toBe(true);
+    }
+    for (const p of ['/home/u/projets/app', '/tmp/studio-x', '/var/www/site', '/opt/apps/demo', '/data/projets/app']) {
+      expect(isForbiddenProjectRoot(p, posix)).toBe(false);
+    }
+    const win = { platform: 'win32' as const, home: 'C:\\Users\\u', tmp: 'C:\\Users\\u\\AppData\\Local\\Temp' };
+    for (const p of ['C:\\', 'D:\\', 'C:\\Windows', 'c:\\windows\\System32', 'C:\\Program Files\\X', 'C:\\Program Files (x86)', 'C:\\Users', 'C:\\Users\\U']) {
+      expect(isForbiddenProjectRoot(p, win)).toBe(true);
+    }
+    expect(isForbiddenProjectRoot('C:\\Users\\u\\projets\\app', win)).toBe(false);
+    expect(isForbiddenProjectRoot('D:\\dev\\app', win)).toBe(false);
+  });
+
   it('isSafeRelativePath', () => {
     expect(isSafeRelativePath('src/App.tsx')).toBe(true);
     expect(isSafeRelativePath('../x')).toBe(false);

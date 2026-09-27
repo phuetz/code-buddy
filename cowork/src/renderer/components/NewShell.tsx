@@ -54,7 +54,7 @@ import { latestWebTestReport } from './studio/web-test-report-model';
 import { createStudioApis } from './studio/studio-api-bridge';
 import type { StudioScaffoldRequest } from './studio/StudioComposer';
 import { buildAiGenerationPrompt } from './studio/studio-ai-generation';
-import { getStarterFiles, shouldSeedStarter } from './studio/starter-templates';
+import { getStarterFiles, shouldSeedStarter, starterProbePaths } from './studio/starter-templates';
 import {
   buildPreviewFixPrompt,
   collectPreviewHealth,
@@ -641,7 +641,7 @@ export function StudioView() {
       const studioFiles = window.electronAPI?.studio?.files;
       if (cwd && studioFiles) {
         const existing: string[] = [];
-        for (const name of ['package.json', 'index.html']) {
+        for (const name of starterProbePaths(request.stack)) {
           const read = (await studioFiles.read(cwd, name).catch(() => null)) as { ok?: boolean } | null;
           if (read?.ok) existing.push(name);
         }

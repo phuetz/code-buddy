@@ -6,6 +6,7 @@ import {
   getStarterFiles,
   hasStarter,
   shouldSeedStarter,
+  starterProbePaths,
 } from './starter-templates.js';
 
 describe('starter templates', () => {
@@ -51,6 +52,20 @@ describe('starter templates', () => {
     expect(shouldSeedStarter('react-vite', ['package.json'])).toBe(false);
     expect(shouldSeedStarter('react-vite', ['INDEX.HTML'])).toBe(false);
     expect(shouldSeedStarter('static', [])).toBe(false);
+  });
+
+  it('never seeds over an existing skeleton file (src/App.tsx, src/main.tsx…) even without package.json', () => {
+    const probes = starterProbePaths('react-vite');
+    expect(probes).toEqual(expect.arrayContaining(['package.json', 'index.html', 'src/App.tsx', 'src/main.tsx', 'vite.config.ts']));
+    for (const file of getStarterFiles('react-vite')) expect(probes).toContain(file.path);
+    // A folder holding only the user's own src/App.tsx must not be overwritten.
+    expect(shouldSeedStarter('react-vite', ['src/App.tsx'])).toBe(false);
+    expect(shouldSeedStarter('react-vite', ['src\\main.tsx'])).toBe(false);
+    expect(shouldSeedStarter('vue-vite', ['src/App.vue'])).toBe(false);
+    expect(shouldSeedStarter('vue-vite', ['./vite.config.ts'])).toBe(false);
+    // Unrelated files do not block seeding.
+    expect(shouldSeedStarter('vue-vite', ['README.md', 'docs/notes.md'])).toBe(true);
+    expect(starterProbePaths('static')).toEqual([]);
   });
 });
 
