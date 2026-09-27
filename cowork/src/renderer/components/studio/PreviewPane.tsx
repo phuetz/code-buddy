@@ -1,4 +1,4 @@
-import { ExternalLink, Monitor, RefreshCw, ServerOff, ShieldCheck, Smartphone, Tablet } from 'lucide-react';
+import { ExternalLink, Monitor, MousePointerClick, RefreshCw, ServerOff, ShieldCheck, Smartphone, Tablet } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { isLoopbackUrl } from './utils/loopback-url.js';
 
@@ -20,6 +20,11 @@ export interface PreviewPaneProps {
   onVerify?: () => void;
   /** Start (or restart) the preview server — shown in the idle empty state. */
   onStart?: () => void;
+  /** Mode « Sélectionner » : cliquer un élément de l'aperçu pour cibler la prochaine demande. */
+  selecting?: boolean;
+  onToggleSelect?: () => void;
+  /** Appelé à chaque chargement de la frame de l'aperçu (navigation, rechargement). */
+  onFrameLoad?: () => void;
 }
 
 function statusCopy(status: PreviewPaneProps['status'], unsafeUrl: boolean): { title: string; detail: string } {
@@ -38,7 +43,7 @@ function statusCopy(status: PreviewPaneProps['status'], unsafeUrl: boolean): { t
   return { title: 'No preview', detail: 'Generate or start an app to show the result.' };
 }
 
-export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, onStart }: PreviewPaneProps) {
+export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, onStart, selecting = false, onToggleSelect, onFrameLoad }: PreviewPaneProps) {
   const [reloadKey, setReloadKey] = useState(0);
   const [device, setDevice] = useState<PreviewDevice>('desktop');
   const safeUrl = useMemo(() => (url && isLoopbackUrl(url) ? url : null), [url]);
@@ -91,6 +96,21 @@ export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, o
         >
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
         </button>
+        {onToggleSelect && (
+          <button
+            type="button"
+            onClick={onToggleSelect}
+            disabled={!canRender}
+            aria-pressed={selecting}
+            data-testid="preview-select"
+            className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-50 ${selecting ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground hover:bg-background hover:text-foreground'}`}
+            title="Cliquer un élément de l'aperçu : la prochaine demande portera sur lui (Échap pour annuler)"
+            aria-label="Sélectionner un élément de l'aperçu"
+          >
+            <MousePointerClick className="h-4 w-4" aria-hidden="true" />
+            {selecting ? 'Cliquez un élément…' : 'Sélectionner'}
+          </button>
+        )}
         {onOpenExternal && (
           <button
             type="button"
@@ -123,6 +143,8 @@ export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, o
             key={`${safeUrl}-${reloadKey}`}
             src={safeUrl}
             title="App Studio Preview"
+            data-testid="studio-preview-frame"
+            onLoad={onFrameLoad}
             sandbox="allow-scripts allow-same-origin"
             style={frameWidth > 0 ? { width: `${frameWidth}px` } : undefined}
             className={`min-h-0 border-0 bg-white ${frameWidth > 0 ? 'h-full shrink-0 rounded-md border border-border shadow-sm' : 'w-full flex-1'}`}

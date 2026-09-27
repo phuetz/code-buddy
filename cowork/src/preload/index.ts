@@ -1299,6 +1299,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     preview: {
       probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) =>
         ipcRenderer.invoke('studio.preview.probe', request),
+      watch: (request: { url: string; root: string }) => ipcRenderer.invoke('studio.preview.watch', request),
+      inspect: (request: { url: string; enable: boolean }) => ipcRenderer.invoke('studio.preview.inspect', request),
+      locate: (root: string, element: unknown) => ipcRenderer.invoke('studio.preview.locate', root, element),
+      onConsole: (listener: (entry: StudioPreviewConsoleEntry) => void): (() => void) => {
+        const wrapped = (_event: Electron.IpcRendererEvent, entry: StudioPreviewConsoleEntry) => listener(entry);
+        ipcRenderer.on('studio.preview.console', wrapped);
+        return () => {
+          ipcRenderer.removeListener('studio.preview.console', wrapped);
+        };
+      },
+    },
+    context: {
+      candidates: (root: string) => ipcRenderer.invoke('studio.context.candidates', root),
+      read: (root: string, paths: string[]) => ipcRenderer.invoke('studio.context.read', root, paths),
+    },
+    secrets: {
+      list: (root: string) => ipcRenderer.invoke('studio.secrets.list', root),
+      set: (root: string, key: string, value: string) => ipcRenderer.invoke('studio.secrets.set', root, key, value),
+      remove: (root: string, key: string) => ipcRenderer.invoke('studio.secrets.remove', root, key),
+      redact: (root: string, text: string) => ipcRenderer.invoke('studio.secrets.redact', root, text),
     },
     devServer: {
       start: (request: { cwd: string; command: string; url: string; timeoutMs?: number }) =>
@@ -5627,6 +5647,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
 });
 
 // Type declaration for the renderer process
+type StudioResult<T> = { ok: true; data: T } | { ok: false; error: string };
+interface StudioPreviewConsoleEntry {
+  level: 'debug' | 'info' | 'warning' | 'error';
+  message: string;
+  source: string;
+  line: number;
+  at: number;
+}
+interface StudioElementLocation {
+  file: string;
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+  method: 'source' | 'composant' | 'texte' | 'classe' | 'id';
+}
+
 declare global {
   interface Window {
     electronAPI: {
@@ -6217,6 +6253,20 @@ declare global {
         exportSite?: (root: string) => Promise<SiteExportOutcome>;
         preview?: {
           probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) => Promise<unknown>;
+          watch?: (request: { url: string; root: string }) => Promise<{ ok: boolean; error?: string }>;
+          inspect?: (request: { url: string; enable: boolean }) => Promise<{ ok: boolean; error?: string }>;
+          locate?: (root: string, element: unknown) => Promise<StudioResult<StudioElementLocation | null>>;
+          onConsole?: (listener: (entry: StudioPreviewConsoleEntry) => void) => () => void;
+        };
+        context?: {
+          candidates: (root: string) => Promise<StudioResult<{ path: string; bytes: number; tokens: number }[]>>;
+          read: (root: string, paths: string[]) => Promise<StudioResult<{ path: string; content: string; tokens: number }[]>>;
+        };
+        secrets?: {
+          list: (root: string) => Promise<StudioResult<{ key: string; length: number }[]>>;
+          set: (root: string, key: string, value: string) => Promise<StudioResult<{ key: string; length: number }[]>>;
+          remove: (root: string, key: string) => Promise<StudioResult<{ key: string; length: number }[]>>;
+          redact: (root: string, text: string) => Promise<StudioResult<string>>;
         };
         devServer: {
           start: (request: {
