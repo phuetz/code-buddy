@@ -379,6 +379,36 @@ describe.skipIf(!hasGit())('StudioView — élément ciblé, journaux, image, co
     expect(redactSpy).toHaveBeenCalledWith(path.join(base, 'app'), expect.any(String));
   }, 30_000);
 
+  it("secrets : une clé tapée dans le chat n'entre ni dans le commit de version ni dans le DOM de l'onglet Versions", async () => {
+    // Un vrai tour d'itération MODIFIE un fichier : la version de fin de tour est alors écrite.
+    ipc.continueSession.mockImplementationOnce(async () => {
+      const setTurn = (on: boolean) =>
+        useAppStore.setState((st: { sessionStates: Record<string, object> }) => ({
+          sessionStates: { ...st.sessionStates, s1: { ...st.sessionStates.s1, activeTurn: on ? { stepId: 't', userMessageId: 'u' } : null } },
+        }) as never);
+      act(() => setTurn(true));
+      await new Promise((r) => setTimeout(r, 20));
+      writeFileSync(path.join(root, 'src', 'main.js'), 'console.log(2);\n');
+      act(() => setTurn(false));
+    });
+    render(
+      <Suspense fallback={<div>chargement</div>}>
+        <StudioView />
+      </Suspense>,
+    );
+    await screen.findByLabelText('Iteration message', {}, { timeout: 5000 });
+    fireEvent.change(screen.getByLabelText('Iteration message'), { target: { value: `Branche l'API avec ${SECRET}` } });
+    fireEvent.click(screen.getByText('Send'));
+    const gitDir = path.join(root, '.codebuddy', 'studio-versions.git');
+    const log = () => execFileSync('git', ['--git-dir', gitDir, 'log', '--all', '--format=%B'], { encoding: 'utf8' });
+    await waitFor(() => expect(log()).toContain('Tour : '), { timeout: 5000 });
+    expect(log()).not.toContain(SECRET);
+    expect(log()).toContain("Tour : Branche l'API avec [secret masqué]");
+    fireEvent.click(screen.getByTestId('studio-tab-versions'));
+    await screen.findByText(/Branche l'API avec \[secret masqué\]/, {}, { timeout: 5000 });
+    expect(document.body.innerHTML).not.toContain(SECRET);
+  }, 30_000);
+
   it('secrets : jamais dans le prompt (masqués au point de passage unique) ; masquage impossible = rien ne part', async () => {
     render(
       <Suspense fallback={<div>chargement</div>}>

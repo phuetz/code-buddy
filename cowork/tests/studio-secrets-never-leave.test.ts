@@ -134,6 +134,41 @@ describe('secrets du projet App Studio', () => {
     expect(objects).not.toContain('.env.local');
   });
 
+  it.skipIf(!hasGit())('libellé de version tapé dans le chat : masqué avant le commit et à la relecture (vrai git)', async () => {
+    await service.set(root, 'VITE_API_KEY', SECRET);
+    const redact = async (r: string, t: string) => {
+      const res = await service.redact(r, t);
+      if (!res.ok) throw new Error(res.error);
+      return res.data;
+    };
+    const gitDir = path.join(root, '.codebuddy', 'studio-versions.git');
+    const allObjects = () => {
+      const ids = execFileSync('git', ['--git-dir', gitDir, 'rev-list', '--all', '--objects'], { encoding: 'utf8' })
+        .split('\n').map((l) => l.split(' ')[0]).filter((id): id is string => Boolean(id));
+      return ids.map((id) => execFileSync('git', ['--git-dir', gitDir, 'cat-file', '-p', id], { encoding: 'utf8' })).join('\n');
+    };
+    // 1. Écriture : le commit ne porte jamais la valeur.
+    const versions = new StudioVersionsService({ trustedRoots: () => [base], redact });
+    writeFileSync(path.join(root, 'src', 'main.ts'), 'console.log(1);\n');
+    const snap = await versions.snapshot(root, `Tour : Utilise la clé ${SECRET}`);
+    expect(snap.ok && snap.data.changed).toBe(true);
+    expect(allObjects()).not.toContain(SECRET);
+    expect(allObjects()).toContain(`Tour : Utilise la clé ${REDACTED}`);
+    // 2. Relecture : une version écrite AVANT le correctif (sans masquage) est masquée dans la liste IPC.
+    const legacy = new StudioVersionsService({ trustedRoots: () => [base] });
+    writeFileSync(path.join(root, 'src', 'main.ts'), 'console.log(2);\n');
+    await legacy.snapshot(root, `Tour : ancienne ${SECRET}`);
+    expect(allObjects()).toContain(SECRET); // l'ancien historique la contient bien
+    const list = await versions.list(root);
+    expect(list.ok).toBe(true);
+    expect(JSON.stringify(list)).not.toContain(SECRET);
+    expect(list.ok && list.data[0]?.label).toBe(`Tour : ancienne ${REDACTED}`);
+    // 3. Masquage impossible : libellé neutre, jamais le texte brut.
+    const broken = new StudioVersionsService({ trustedRoots: () => [base], redact: async () => { throw new Error('boom'); } });
+    const brokenList = await broken.list(root);
+    expect(JSON.stringify(brokenList)).not.toContain(SECRET);
+  });
+
   it("n'entre pas dans l'export zip (vrai archiver, mêmes exclusions que Cowork)", async () => {
     await service.set(root, 'VITE_API_KEY', SECRET);
     writeFileSync(path.join(root, '.env'), `A=${DOTENV_SECRET}\n`);

@@ -203,9 +203,28 @@ export class StudioVersionsService {
   /** Sérialise les opérations par projet (deux instantanés simultanés se marchent dessus). */
   private readonly queues = new Map<string, Promise<unknown>>();
 
-  constructor(options: { git?: GitRun; trustedRoots?: () => string[] } = {}) {
+  /**
+   * Masque les secrets du projet dans un libellé de version. Un libellé vient
+   * de la demande tapée dans le chat : il peut contenir une clé. Appliqué
+   * AVANT l'écriture du commit et AVANT de renvoyer la liste au renderer
+   * (ce qui couvre aussi les versions écrites avant ce correctif).
+   */
+  private readonly redact: ((root: string, text: string) => Promise<string>) | undefined;
+
+  constructor(options: { git?: GitRun; trustedRoots?: () => string[]; redact?: (root: string, text: string) => Promise<string> } = {}) {
     this.git = options.git ?? defaultGit;
     this.trustedRoots = options.trustedRoots;
+    this.redact = options.redact;
+  }
+
+  /** Libellé masqué ; si le masquage échoue, un libellé neutre (échec fermé). */
+  private async safeLabel(root: string, label: string, fallback: string): Promise<string> {
+    if (!this.redact) return label;
+    try {
+      return await this.redact(root, label);
+    } catch {
+      return fallback;
+    }
   }
 
   /**
@@ -304,7 +323,8 @@ export class StudioVersionsService {
         ok: true,
         data: await this.serialize(root, async () => {
           await this.ensureRepo(root);
-          return this.commitAll(root, typeof label === 'string' ? label : 'Version');
+          const raw = typeof label === 'string' ? label : 'Version';
+          return this.commitAll(root, await this.safeLabel(root, raw, 'Version'));
         }),
       };
     } catch (error) {
@@ -330,7 +350,9 @@ export class StudioVersionsService {
             '--format=@@%H%x1f%ct%x1f%s',
             '--name-status',
           ]);
-          return parseVersionLog(out);
+          const versions = parseVersionLog(out);
+          for (const v of versions) v.label = await this.safeLabel(root, v.label, '(libellé masqué)');
+          return versions;
         }),
       };
     } catch (error) {

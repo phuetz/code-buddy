@@ -2864,7 +2864,10 @@ registerPreviewProbeIpc(
 );
 registerGithubIpc(ipcMain);
 // Versions locales par projet (dépôt git séparé sous .codebuddy/) + verrous de fichiers.
-registerStudioVersionsIpc(ipcMain, new StudioVersionsService({ trustedRoots: () => creativeWorkspaceRoots() }));
+registerStudioVersionsIpc(
+  ipcMain,
+  new StudioVersionsService({ trustedRoots: () => creativeWorkspaceRoots(), redact: redactProjectSecrets }),
+);
 registerOneClickDeployIpc(ipcMain);
 
 // Media generation surface delegates to the core image_generate tool. Local

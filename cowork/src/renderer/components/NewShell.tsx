@@ -398,8 +398,11 @@ export function StudioView() {
         safe.push({ type: 'text', text });
       }
       setSendNote(null);
+      // Le libellé (début de la demande) devient le nom de la version : masqué
+      // lui aussi ; s'il ne peut pas l'être, libellé neutre.
+      const label = (await redactForModel(sessionCwd, opts.label)) ?? 'modification';
       const preId = await takeVersion('Modifications manuelles');
-      turnRef.current = { root: sessionCwd, preId, mode: opts.mode, label: opts.label };
+      turnRef.current = { root: sessionCwd, preId, mode: opts.mode, label };
       const only = safe.length === 1 ? safe[0] : undefined;
       await continueSession(activeSessionId, only && only.type === 'text' ? only.text : safe);
       return true;
