@@ -109,6 +109,10 @@ export function devServerEnv(
 ): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = {};
   for (const key of Object.keys(base)) if (HOST_SECRET_NAME.test(key)) env[key] = undefined;
+  // Cowork tourne souvent avec NODE_ENV=production : hérité, il ferait servir
+  // au serveur de DEV une app en mode production (React sans _debugSource ni
+  // avertissements) — constaté dans la vraie fenêtre. Le projet peut le fixer.
+  if ('NODE_ENV' in base) env.NODE_ENV = undefined;
   return { ...env, ...projectEnv };
 }
 

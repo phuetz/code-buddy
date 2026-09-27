@@ -96,6 +96,34 @@ describe('StudioContextService', () => {
     expect(none).toEqual({ ok: true, data: null });
   });
 
+  it("sans source React (build de production) : le texte d'un ATTRIBUT ne trompe pas la localisation", async () => {
+    // Cas constaté dans la vraie fenêtre Electron : « Ajouter » figure d'abord dans un placeholder.
+    const form = [
+      'export const TodoForm = () => (',
+      '  <form className="todo-form">',
+      '    <input',
+      '      type="text"',
+      '      placeholder="Ajouter une nouvelle tâche..."',
+      '    />',
+      '    <button type="submit">',
+      '      Ajouter',
+      '    </button>',
+      '  </form>',
+      ');',
+      '',
+    ].join('\n');
+    writeFileSync(path.join(root, 'src', 'components', 'TodoForm.tsx'), form);
+    const res = await service.locate(root, {
+      tag: 'button',
+      text: 'Ajouter',
+      html: '<button type="submit">Ajouter</button>',
+      component: 'TodoForm',
+    });
+    expect(res.ok && res.data).toMatchObject({ file: 'src/components/TodoForm.tsx', startLine: 7, endLine: 9, method: 'texte' });
+    const byAria = await service.locate(root, { tag: 'button', html: '<button aria-label="Valider la tâche" class="x">✓</button>' });
+    expect(byAria.ok && byAria.data).toBeNull(); // attribut absent du code : pas de faux positif
+  });
+
   it('elementExtent : balise sur plusieurs lignes, auto-fermante, imbriquée', () => {
     const lines = ['<div>', '  <div>x</div>', '</div>', '<input />', '<img', '  src="a" />'];
     expect(elementExtent(lines, 1, 'div')).toBe(3);

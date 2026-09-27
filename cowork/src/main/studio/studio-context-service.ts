@@ -189,9 +189,14 @@ export class StudioContextService {
         const text = await this.readSafe(real, f.path);
         if (text !== null) contents.set(f.path, text.split(/\r?\n/));
       }
-      const probes: { needle: string; method: ElementLocation['method'] }[] = [];
+      const probes: { needle: string; method: ElementLocation['method']; textContent?: boolean }[] = [];
       const text = (d.text ?? '').replace(/\s+/g, ' ').trim();
-      if (text.length >= 2) probes.push({ needle: text.slice(0, 60), method: 'texte' });
+      // Attributs distinctifs de la balise ouvrante (aria-label, id, name, data-testid…).
+      const opening = /^<[^>]*>/.exec(d.html ?? '')?.[0] ?? '';
+      for (const m of opening.matchAll(/\s((?:aria-label|id|name|data-testid|title|alt|href))="([^"]{2,80})"/g)) {
+        probes.push({ needle: `${m[1]}="${m[2]}"`, method: m[1] === 'id' ? 'id' : 'texte' });
+      }
+      if (text.length >= 2) probes.push({ needle: text.slice(0, 60), method: 'texte', textContent: true });
       if (d.id) probes.push({ needle: `id="${d.id}"`, method: 'id' });
       const cls = (d.classes ?? []).filter((c) => c.length > 2).slice(0, 3);
       if (cls.length) probes.push({ needle: cls.join(' '), method: 'classe' });
@@ -200,22 +205,49 @@ export class StudioContextService {
         probes.push({ needle: `function ${d.component}`, method: 'composant' });
         probes.push({ needle: `const ${d.component} `, method: 'composant' });
       }
+      // Fichier du composant d'abord (quand le nom est connu), pour départager des textes identiques.
+      const ordered = [...contents.entries()].sort(([a], [b]) => {
+        const hit = (f: string) => (d.component && path.basename(f).startsWith(`${d.component}.`) ? 0 : 1);
+        return hit(a) - hit(b);
+      });
+      const openBefore = (lines: string[], idx: number): number | null => {
+        for (let n = idx + 1; n >= Math.max(1, idx - 7); n -= 1) {
+          if (new RegExp(`<${tag}(?=[\\s>/]|$)`, 'i').test(lines[n - 1] ?? '')) return n;
+        }
+        return null;
+      };
       for (const probe of probes) {
-        for (const [file, lines] of contents) {
-          const idx = lines.findIndex((line) => line.includes(probe.needle));
-          if (idx < 0) continue;
-          // Remonter jusqu'à l'ouverture de la balise de l'élément si elle est proche.
-          let start = idx + 1;
-          if (probe.method === 'texte' || probe.method === 'classe' || probe.method === 'id') {
-            for (let n = idx + 1; n >= Math.max(1, idx - 5); n -= 1) {
-              if ((lines[n - 1] ?? '').toLowerCase().includes(`<${tag}`)) {
-                start = n;
-                break;
+        let fallback: { file: string; lines: string[]; idx: number } | null = null;
+        for (const [file, lines] of ordered) {
+          for (let idx = 0; idx < lines.length; idx += 1) {
+            const line = lines[idx] ?? '';
+            if (!line.includes(probe.needle)) continue;
+            if (probe.method === 'composant') {
+              const end = Math.min(lines.length, idx + 21);
+              return { ok: true, data: { file, startLine: idx + 1, endLine: end, excerpt: numbered(lines, idx + 1, end), method: 'composant' } };
+            }
+            // Texte visible : il doit être du CONTENU (entre balises ou seul sur sa ligne),
+            // pas une valeur d'attribut (placeholder="Ajouter une tâche…").
+            if (probe.textContent) {
+              const trimmed = line.trim();
+              const asContent = trimmed === probe.needle || line.includes(`>${probe.needle}`) || trimmed.startsWith(`${probe.needle}<`);
+              if (!asContent) {
+                fallback ??= { file, lines, idx };
+                continue;
               }
             }
+            const start = openBefore(lines, idx);
+            if (start === null) {
+              fallback ??= { file, lines, idx };
+              continue;
+            }
+            const end = Math.max(start, elementExtent(lines, start, tag));
+            return { ok: true, data: { file, startLine: start, endLine: end, excerpt: numbered(lines, start, end), method: probe.method } };
           }
-          const end = probe.method === 'composant' ? Math.min(lines.length, start + 20) : elementExtent(lines, start, tag);
-          return { ok: true, data: { file, startLine: start, endLine: Math.max(start, end), excerpt: numbered(lines, start, Math.max(start, end)), method: probe.method } };
+        }
+        if (fallback && !probe.textContent) {
+          const { file, lines, idx } = fallback;
+          return { ok: true, data: { file, startLine: idx + 1, endLine: idx + 1, excerpt: numbered(lines, idx + 1, idx + 1), method: probe.method } };
         }
       }
       return { ok: true, data: null };
