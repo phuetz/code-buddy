@@ -2871,6 +2871,11 @@ addLazyCommand(
   },
 );
 
+addLazyCommandGroup(program, 'catalog', 'Generate a source-code catalogue', async () => {
+  const { registerCatalogCommand } = await import('./commands/cli/catalog-command.js');
+  registerCatalogCommand(program);
+});
+
 addLazyCommand(
   program,
   'try',
