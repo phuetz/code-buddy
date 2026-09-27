@@ -110,7 +110,8 @@ export function targetBlock(target: TargetElement): string {
         `Attention : ces lignes sont un composant RÉUTILISÉ ; le texte « ${element.text.slice(0, 60)} » de l'élément cliqué vient des données ` +
           `(${origin.file}, ligne ${origin.line}). La demande ne vise que CET élément, pas toutes les instances : ` +
           `ajoute à ${location.file} une prop optionnelle (ou une condition) qui applique le changement, ` +
-          `puis active-la seulement pour cette donnée dans ${origin.file}. Les deux modifications sont nécessaires pour que le rendu change.`,
+          `puis active-la seulement pour cette donnée dans ${origin.file}. Les deux modifications sont nécessaires pour que le rendu change ; ` +
+          'une classe CSS sans règle ne change rien (ajoute la règle, ou un style en ligne), et toute prop utilisée doit être déstructurée.',
       );
     } else {
       lines.push(
