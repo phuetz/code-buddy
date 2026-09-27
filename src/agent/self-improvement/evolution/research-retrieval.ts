@@ -1,5 +1,6 @@
 /** Article retrieval for DGM: BM25 and semantic ranks fused with reciprocal rank fusion. */
 import type { CollectiveKnowledgeGraph, CkgRecallResult } from '../../../memory/collective-knowledge-graph.js';
+import { bibliographicIds, samePublication, type BibliographicId } from '../../../catalog/article-links.js';
 import { BM25Index } from '../../../search/bm25.js';
 
 export interface RankedResearchHit { hit: CkgRecallResult; score: number }
@@ -7,8 +8,10 @@ export interface RankedResearchHit { hit: CkgRecallResult; score: number }
 const RRF_K = 60;
 
 export function isResearchArticle(hit: CkgRecallResult): boolean {
-  return (hit.source === 'arxiv' && /^arxiv:\d{4}\.\d{4,5}/i.test(hit.name)) ||
-    (hit.source === 'europepmc' && /^(?:pmid|doi|europepmc):/i.test(hit.name));
+  if (hit.type !== 'discovery') return false;
+  const ids = bibliographicIds(hit.name, hit.text);
+  return (hit.source === 'arxiv' && Boolean(ids?.arxiv || ids?.doi)) ||
+    (hit.source === 'europepmc' && Boolean(ids?.pmid || ids?.doi));
 }
 
 /** The same CKG entity receives credit from each leg only once. */
@@ -27,12 +30,14 @@ export function fuseResearchRanks(
     });
   }
   const sorted = [...byId.values()].sort((a, b) => b.score - a.score || a.hit.id.localeCompare(b.hit.id));
-  const seenArticles = new Set<string>();
+  const seenArticles: BibliographicId[] = [];
+  const seenNames = new Set<string>();
   const out: RankedResearchHit[] = [];
   for (const row of sorted) {
-    const key = row.hit.name.toLowerCase().replace(/^(arxiv:\d{4}\.\d{4,5})v\d+$/, '$1');
-    if (seenArticles.has(key)) continue;
-    seenArticles.add(key);
+    const ids = bibliographicIds(row.hit.name, row.hit.text);
+    if (ids ? seenArticles.some((previous) => samePublication(previous, ids)) : seenNames.has(row.hit.name)) continue;
+    if (ids) seenArticles.push(ids);
+    else seenNames.add(row.hit.name);
     out.push(row);
     if (out.length >= limit) break;
   }

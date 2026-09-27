@@ -1,19 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CollectiveKnowledgeGraph } from '../../../../src/memory/collective-knowledge-graph.js';
+import { readArticleLinks } from '../../../../src/catalog/article-links.js';
 import { fetchResearchGoals, retrieveResearchMatches, type ResearchHit } from '../../../../src/agent/self-improvement/evolution/research-weakness-source.js';
 import type { FeatureArea } from '../../../../src/agent/self-improvement/evolution/feature-map.js';
 
 const feature: FeatureArea = { id: 'voice-loop', name: 'Voice loop',
   description: 'Streaming speech turn taking for spoken assistants', paths: ['src/sensory/voice-loop.ts'] };
-const low: ResearchHit = { text: 'Low similarity study', similarity: 0.2, confidence: 1 };
+const low: ResearchHit = { name: 'arxiv:2501.01234v1', type: 'discovery', source: 'arxiv',
+  text: 'Low similarity study', similarity: 0.4, confidence: 1 };
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe('production research selection', () => {
-  it('uses the held-out winner as the default selection', async () => {
+  it('uses hybrid retrieval with the main similarity and quality guards by default', async () => {
     vi.stubEnv('CODEBUDDY_DGM_RESEARCH_RETRIEVAL', '');
     vi.stubEnv('CODEBUDDY_DGM_RESEARCH_FILTER', '');
     vi.stubEnv('CODEBUDDY_DGM_RESEARCH_QUERY', '');
@@ -23,7 +25,9 @@ describe('production research selection', () => {
       return [low];
     } });
     expect(seen).toEqual([{ query: feature.description, limit: 20 }]);
-    expect(matches).toHaveLength(1);
+    expect(matches).toEqual([]);
+    expect(await retrieveResearchMatches({ features: [feature], filterMode: 'none',
+      recall: async () => [low] })).toHaveLength(1);
   });
 
   it('uses the real CKG, BM25, semantic recall and goal path with one shared query', async () => {
@@ -37,10 +41,19 @@ describe('production research selection', () => {
         text: 'Streaming speech turn taking with an adaptive voice activity detector.' });
       ckg.remember({ type: 'discovery', source: 'arxiv', name: 'arxiv:2501.00002v1',
         text: 'Graph database indexing for large archives.' });
-      const selected = await retrieveResearchMatches({ features: [feature], ckg, retrievalMode: 'hybrid', filterMode: 'none' });
+      const linksPath = join(dir, 'links.jsonl');
+      const selected = await retrieveResearchMatches({ features: [feature], ckg, linksPath,
+        retrievalMode: 'hybrid', filterMode: 'legacy' });
       expect(selected).toHaveLength(1);
       expect(selected[0]!.hit.name).toBe('arxiv:2501.00001v1');
-      const goals = await fetchResearchGoals({ features: [feature],
+      const links = readArticleLinks(linksPath);
+      expect(links.some((link) => link.featureId === feature.id && link.article.arxiv === '2501.00001')).toBe(true);
+      expect(links.find((link) => link.article.arxiv === '2501.00001')?.method).toContain('rrf');
+      writeFileSync(linksPath, links.map((link) => JSON.stringify(link.article.arxiv === '2501.00001'
+        ? { ...link, humanStatus: 'rejected' } : link)).join('\n') + '\n');
+      expect(await retrieveResearchMatches({ features: [feature], ckg, linksPath,
+        retrievalMode: 'hybrid', filterMode: 'legacy' })).toEqual([]);
+      const goals = await fetchResearchGoals({ features: [feature], persistLinks: false,
         recall: async (query) => {
           expect(query).toBe(feature.description);
           return selected.map((match) => match.hit);

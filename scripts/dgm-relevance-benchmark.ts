@@ -4,7 +4,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CollectiveKnowledgeGraph } from '../src/memory/collective-knowledge-graph.js';
-import { CURATED_FEATURES, type FeatureArea } from '../src/agent/self-improvement/evolution/feature-map.js';
+import { articleIdentity, bibliographicIds, samePublication } from '../src/catalog/article-links.js';
+import { getFeatureMap, type FeatureArea } from '../src/agent/self-improvement/evolution/feature-map.js';
 import { researchQueryForFeature, retrieveResearchMatches, type FetchResearchGoalsArgs } from '../src/agent/self-improvement/evolution/research-weakness-source.js';
 
 interface Gold { domain: string; relevant: string[] }
@@ -16,11 +17,9 @@ interface Row { domain: string; query: string; article: string | null; score: nu
   globalRank: number | null; relevant: boolean; precisionAt5: number; recallAt20: number; ndcgAt10: number }
 
 const modes: Record<string, Mode> = {
-  original: { retrievalMode: 'legacy', filterMode: 'legacy', queryMode: 'plain' },
-  withoutThreshold: { retrievalMode: 'legacy', filterMode: 'none', queryMode: 'plain' },
-  hybrid: { retrievalMode: 'hybrid', filterMode: 'none', queryMode: 'plain' },
-  hybridWithThreshold: { retrievalMode: 'hybrid', filterMode: 'legacy', queryMode: 'plain' },
-  hybridWithComponent: { retrievalMode: 'hybrid', filterMode: 'none', queryMode: 'component' },
+  main: { retrievalMode: 'legacy', filterMode: 'legacy', queryMode: 'plain' },
+  hybridFloor: { retrievalMode: 'hybrid', filterMode: 'legacy', queryMode: 'plain' },
+  hybridNoFloor: { retrievalMode: 'hybrid', filterMode: 'none', queryMode: 'plain' },
 };
 
 function flag(name: string): string {
@@ -62,19 +61,19 @@ for (const row of gold) {
     if (row.relevant.some((article) => other.relevant.includes(article))) throw new Error('Shared positive crosses the split');
   }
 }
+const productionFeatures = await getFeatureMap({ enrich: async () => [], catalog: 'generate' });
 const evaluatedFeatures = (phase === 'development' ? split.development : phase === 'heldout' ? split.heldOut : allSplit).map((domain) => {
-  const feature = CURATED_FEATURES.find((entry) => entry.id === domain);
+  const feature = productionFeatures.find((entry) => entry.id === domain);
   if (!feature) throw new Error(`No production feature for ${domain}`);
   return feature;
 });
-const features = phase === 'batch-audit' ? CURATED_FEATURES : evaluatedFeatures;
+const features = phase === 'batch-audit' ? productionFeatures : evaluatedFeatures;
 const byDomain = new Map(gold.map((row) => [row.domain, row.relevant]));
 const graph = new CollectiveKnowledgeGraph({ ledgerPath: ledgerFile });
 
-function articleId(featureMatch: { hit: { name?: string; source?: string } }): string | null {
-  if (featureMatch.hit.source !== 'arxiv') return null;
-  const id = featureMatch.hit.name?.match(/^arxiv:(\d{4}\.\d{4,5})/i)?.[1];
-  return id ? `arxiv:${id}` : null;
+function articleId(featureMatch: { hit: { name?: string; text: string } }): string | null {
+  const ids = bibliographicIds(featureMatch.hit.name ?? '', featureMatch.hit.text);
+  return ids ? articleIdentity(ids) : null;
 }
 
 async function measure(name: string): Promise<Row[]> {
@@ -82,14 +81,18 @@ async function measure(name: string): Promise<Row[]> {
   if (!mode) throw new Error(`Unknown variant ${name}`);
   // The batch audit uses all curated production features and the real global limit of three.
   // The development diagnostic raises the limit to expose one choice per evaluated feature.
-  const matches = await retrieveResearchMatches({ features, ckg: graph, ...mode,
+  const matches = await retrieveResearchMatches({ features, ckg: graph, persistLinks: false, ...mode,
     ...(phase === 'batch-audit' ? {} : { limit: features.length }) });
   const selected = new Map(matches.map((match) => [match.feature.id, match]));
   const rank = new Map(matches.map((match, index) => [match.feature.id, index + 1]));
   return evaluatedFeatures.map((feature) => {
     const match = selected.get(feature.id);
     const article = match ? articleId(match) : null;
-    const relevant = !!article && byDomain.get(feature.id)!.includes(article);
+    const foundIds = match ? bibliographicIds(match.hit.name ?? '', match.hit.text) : null;
+    const relevant = !!foundIds && byDomain.get(feature.id)!.some((goldId) => {
+      const expectedIds = bibliographicIds(goldId);
+      return !!expectedIds && samePublication(foundIds, expectedIds);
+    });
     const goldCount = byDomain.get(feature.id)!.length;
     return { domain: feature.id,
       query: researchQueryForFeature(feature, mode.retrievalMode!, mode.queryMode!),
@@ -141,15 +144,34 @@ function summary(rows: Row[]): Record<Metric, { value: number; ci95: [number, nu
 }
 
 const selectedFromDevelopment = phase === 'heldout' || phase === 'batch-audit'
-  ? JSON.parse(readFileSync(flag('--selection'), 'utf8')) as { selected: string; hashes: Record<string, string>; phase: string }
+  ? JSON.parse(readFileSync(flag('--selection'), 'utf8')) as {
+    schemaVersion: number; selected: string; hashes: Record<string, string>; phase: string }
   : null;
-const hashes = { ledger: sha(ledgerFile), judgments: sha(judgmentFile), fixture: sha(fixtureFile), split: sha(splitFile) };
-if (selectedFromDevelopment && (selectedFromDevelopment.phase !== 'development' ||
+const hashes = { ledger: sha(ledgerFile), judgments: sha(judgmentFile), fixture: sha(fixtureFile), split: sha(splitFile),
+  selector: sha(path.join(root, 'src/agent/self-improvement/evolution/research-weakness-source.ts')),
+  retrieval: sha(path.join(root, 'src/agent/self-improvement/evolution/research-retrieval.ts')),
+  featureMap: sha(path.join(root, 'src/agent/self-improvement/evolution/feature-map.ts')) };
+if (selectedFromDevelopment && (selectedFromDevelopment.schemaVersion !== 2 ||
+    selectedFromDevelopment.phase !== 'development' || !modes[selectedFromDevelopment.selected] ||
     Object.entries(hashes).some(([key, value]) => selectedFromDevelopment.hashes[key] !== value))) {
   throw new Error('Development selection has a different dataset');
 }
-const names = phase === 'development' ? Object.keys(modes) :
-  [...new Set(['original', selectedFromDevelopment!.selected])];
+const names = Object.keys(modes);
+
+function controlDecision(get: (name: string) => ReturnType<typeof summary>, developmentSelected: string):
+  { selected: string; floorHarms: boolean; accepted: boolean } {
+  const baseline = get('main');
+  const floor = get('hybridFloor');
+  const noFloor = get('hybridNoFloor');
+  const floorHarms = noFloor.recallAt20.value > floor.recallAt20.value &&
+    noFloor.precisionAt5.value >= floor.precisionAt5.value;
+  const candidateName = developmentSelected === 'hybridNoFloor' && floorHarms ? 'hybridNoFloor' : 'hybridFloor';
+  const candidate = get(candidateName);
+  const accepted = developmentSelected !== 'main' && candidate.recallAt20.value > baseline.recallAt20.value &&
+    candidate.precisionAt5.value >= baseline.precisionAt5.value;
+  return { selected: accepted ? candidateName : 'main', floorHarms, accepted };
+}
+
 if (phase === 'batch-audit') {
   const audit: Record<string, { development: ReturnType<typeof summary>; heldOut: ReturnType<typeof summary>;
     developmentFound: number; heldOutFound: number; developmentRows: Row[]; heldOutRows: Row[] }> = {};
@@ -161,13 +183,10 @@ if (phase === 'batch-audit') {
       developmentFound: developmentRows.filter((row) => row.relevant).length,
       heldOutFound: heldOutRows.filter((row) => row.relevant).length, developmentRows, heldOutRows };
   }
-  const selected = selectedFromDevelopment!.selected;
-  const baseline = audit.original!.heldOut;
-  const candidate = audit[selected]!.heldOut;
-  const accepted = selected !== 'original' && candidate.recallAt20.value > baseline.recallAt20.value &&
-    candidate.precisionAt5.value >= baseline.precisionAt5.value;
-  writeFileSync(outputFile, `${JSON.stringify({ schemaVersion: 1, phase, hashes, selected, accepted,
-    source: 'production retrieveResearchMatches; all curated features; global limit 3; CKG TypeScript engine',
+  const decision = controlDecision((name) => audit[name]!.heldOut, selectedFromDevelopment!.selected);
+  writeFileSync(outputFile, `${JSON.stringify({ schemaVersion: 2, phase, hashes,
+    developmentSelected: selectedFromDevelopment!.selected, ...decision,
+    source: 'production retrieveResearchMatches; full curated feature map with catalog IDs; global limit 3; CKG TypeScript; article links disabled on frozen ledger',
     featureCount: features.length, variants: audit }, null, 2)}\n`);
   process.exit(0);
 }
@@ -176,10 +195,10 @@ for (const name of names) {
   const rows = await measure(name);
   variants[name] = { metrics: summary(rows), found: rows.filter((row) => row.relevant).length, rows };
 }
-let selected = selectedFromDevelopment?.selected ?? 'original';
+let selected = 'main';
 if (phase === 'development') {
-  const baseline = variants.original!.metrics;
-  for (const name of names.filter((candidate) => candidate !== 'original')) {
+  const baseline = variants.main!.metrics;
+  for (const name of names.filter((candidate) => candidate !== 'main')) {
     const candidate = variants[name]!.metrics;
     const best = variants[selected]!.metrics;
     if (candidate.precisionAt5.value < baseline.precisionAt5.value) continue;
@@ -187,11 +206,12 @@ if (phase === 'development') {
       (candidate.recallAt20.value === best.recallAt20.value && candidate.ndcgAt10.value > best.ndcgAt10.value)) selected = name;
   }
 }
-const accepted = phase === 'heldout' && selected !== 'original' &&
-  variants[selected]!.metrics.recallAt20.value > variants.original!.metrics.recallAt20.value &&
-  variants[selected]!.metrics.precisionAt5.value >= variants.original!.metrics.precisionAt5.value;
-const output = { schemaVersion: 1, phase, hashes, selected, accepted,
-  source: 'production retrieveResearchMatches; component diagnostic with raised global limit; CKG TypeScript engine; Sol title labels for older needs',
-  domainCount: features.length, positiveCount: features.reduce((n, feature: FeatureArea) => n + byDomain.get(feature.id)!.length, 0),
+const decision = phase === 'heldout'
+  ? controlDecision((name) => variants[name]!.metrics, selectedFromDevelopment!.selected)
+  : { selected, floorHarms: false, accepted: false };
+const output = { schemaVersion: 2, phase, hashes,
+  ...(phase === 'heldout' ? { developmentSelected: selectedFromDevelopment!.selected } : {}), ...decision,
+  source: 'production retrieveResearchMatches; component diagnostic with raised global limit; CKG TypeScript; article links disabled on frozen ledger',
+  domainCount: features.length, positiveCount: evaluatedFeatures.reduce((n, feature: FeatureArea) => n + byDomain.get(feature.id)!.length, 0),
   variants };
 writeFileSync(outputFile, `${JSON.stringify(output, null, 2)}\n`);

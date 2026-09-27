@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { removeTmpDirStrict } from '../helpers/tmp.js';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -206,7 +207,7 @@ describe('shared session — HTTP + two WebSocket clients', () => {
     else process.env.CODEBUDDY_MOBILE_HISTORY = previousHistory;
     // Windows refuse de supprimer un dossier dont un descripteur vient
     // juste d'être fermé (ENOTEMPTY) : Node réessaie si on le lui demande.
-    rmSync(sessionsDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(sessionsDir);
   });
 
   function token(userId: string): string {

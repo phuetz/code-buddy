@@ -21,6 +21,7 @@ import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { ConfirmationService } from '../utils/confirmation-service.js';
 import { FormalToolRegistry } from '../tools/registry/tool-registry.js';
+import { resolveToolEffect } from '../tools/tool-effect.js';
 import type { CompanionIdentity } from './companion-identity.js';
 
 export const OWNER_COMPANION_TOOLS: readonly string[] = Object.freeze([
@@ -310,10 +311,16 @@ export async function executeCompanionTool(
     return { success: false, error: err };
   }
 
-  // 3. Confirmation gate:
-  // Destructive tools are blocked by isForbiddenCompanionTool.
-  // For permitted companion read/generation tools, validate against policy engine kill-switch
-  // and honor any explicit confirmationService passed in context.
+  // 3. Confirmation gate. An outward effect (or unclassified tool) cannot run
+  // without a service able to obtain a fresh human decision.
+  const effect = resolveToolEffect(toolName);
+  const needsHumanConsent = effect === 'emission' || effect === 'unknown';
+  if (needsHumanConsent && !context.confirmationService) {
+    return {
+      success: false,
+      error: `Execution of "${toolName}" requires a confirmation service.`,
+    };
+  }
   if (context.confirmationService) {
     const confirmationRes = await context.confirmationService.requestConfirmation(
       {
@@ -321,6 +328,7 @@ export async function executeCompanionTool(
         filename: toolName,
         toolName,
         toolArgs: args,
+        forcePrompt: needsHumanConsent,
         showVSCodeOpen: false,
         content: `Companion tool: ${toolName}\nArguments:\n${JSON.stringify(args, null, 2)}`,
       },

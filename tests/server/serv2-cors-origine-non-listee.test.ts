@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * SERV2 — écart 3 du rapport SERV1 : une origine HTTP non listée reçoit un
  * **200 sans `Access-Control-Allow-Origin`**, pas un 403. C'est le comportement
@@ -66,7 +67,7 @@ describe('SERV2 CORS — origine HTTP non listée', () => {
     } else {
       process.env.CODEBUDDY_HOME = previousHome;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   it('renvoie l’en-tête ACAO à une origine listée', async () => {

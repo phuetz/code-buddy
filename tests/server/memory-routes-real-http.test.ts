@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * /api/memory backed by the REAL persistent store — real HTTP round-trips
  * against startServer({port: 0}), real memory files in a temp dir, no store
@@ -51,7 +52,7 @@ describe('memory HTTP routes (real persistent store)', () => {
     const { stopServer } = await import('../../src/server/index.js');
     await stopServer(server);
     resetMemoryManagerForTests();
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpDir);
   });
 
   it('POST → GET /:id round-trips through the REAL memory file', async () => {

@@ -1,9 +1,10 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * The phone half of sharing a photo: what the WebSocket accepts, and what the
  * album route is allowed to reveal. Both are remote input surfaces, so both are
  * tested for the refusals as much as for the happy path.
  */
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -92,8 +93,8 @@ describe('the album route data', () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(selfieDir, { recursive: true, force: true });
+    removeTmpDirStrict(dir);
+    removeTmpDirStrict(selfieDir);
   });
 
   it('merges shared photos and Lisa selfies, newest first', async () => {

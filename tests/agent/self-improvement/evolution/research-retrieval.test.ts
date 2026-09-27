@@ -26,6 +26,13 @@ describe('research retrieval', () => {
     expect(isResearchArticle({ ...first, source: 'chat' })).toBe(false);
   });
 
+  it('collapses a shared DOI across arXiv and Europe PMC feeds', () => {
+    const arxiv = { ...hit('a'), name: 'arxiv:2501.01234v1', source: 'arxiv', text: 'DOI:10.1234/shared' };
+    const pmc = { ...hit('b'), name: 'MED:42363493', source: 'europepmc', text: 'DOI:10.1234/shared' };
+    expect(isResearchArticle(pmc)).toBe(true);
+    expect(fuseResearchRanks([arxiv, pmc], [], 20)).toHaveLength(1);
+  });
+
   it('adds the component description and implementation paths to the need', () => {
     expect(buildResearchQuery('Find a paper', { name: 'Voice', description: 'Streaming speech turn taking', paths: ['src/voice.ts'] }))
       .toContain('Streaming speech turn taking\nImplementation: src/voice.ts');
