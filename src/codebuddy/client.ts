@@ -540,6 +540,18 @@ export class CodeBuddyClient {
     }
   }
 
+  /**
+   * Observability only: a failure to name or record the effective call must
+   * never turn a completed LLM response into an error (and thus a failover).
+   */
+  private noteEffectiveCall(model: string | null): void {
+    try {
+      recordEffectiveCall({ provider: this.getRuntimeProviderId(), model });
+    } catch {
+      /* ignored on purpose */
+    }
+  }
+
   private getRuntimeProviderId(): string {
     if (this.isChatGptProvider) return 'chatgpt';
     if (this.isGeminiProvider) return 'gemini';
@@ -767,10 +779,7 @@ export class CodeBuddyClient {
     // Dispatch to the active strategy.
     try {
       const response = await this.dispatchChat(messages, tools, opts, searchOptions);
-      recordEffectiveCall({
-        provider: this.getRuntimeProviderId(),
-        model: this.chatgptProvider?.getEffectiveModel() ?? response.model ?? null,
-      });
+      this.noteEffectiveCall(this.chatgptProvider?.getEffectiveModel() ?? response.model ?? null);
       return finish(response);
     } catch (error) {
       if (opts.signal?.aborted) {
@@ -1080,10 +1089,7 @@ export class CodeBuddyClient {
       for await (const chunk of primaryStream) {
         const effectiveModel = this.chatgptProvider?.getEffectiveModel() ?? chunk.model ?? null;
         if (!yieldedAnyChunk || (effectiveModel && effectiveModel !== observedModel)) {
-          recordEffectiveCall({
-            provider: this.getRuntimeProviderId(),
-            model: effectiveModel,
-          });
+          this.noteEffectiveCall(effectiveModel);
           observedModel = effectiveModel;
         }
         yieldedAnyChunk = true;
