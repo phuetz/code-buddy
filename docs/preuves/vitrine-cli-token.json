@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-token",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:14:59.872257Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "b02719b0d59b0d3d7f6109a0fb5f50cb1cf74d29256922ff3d0fc6cae79314aa",
+  "artifact": "docs/preuves/vitrine-cli-token.log",
+  "summary": "Minted a JWT using a synthetic key and independently verified its HMAC signature, subject and lifetime; server auth was not exercised."
+}

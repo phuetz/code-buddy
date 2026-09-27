@@ -1,0 +1,5 @@
+Command: buddy nodes list
+Exit code: 0
+Scope: Read the empty isolated companion node store; no node was paired.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No nodes paired. Use `buddy nodes pair <platform> <name>` to add one.

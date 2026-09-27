@@ -1,0 +1,6 @@
+Command: buddy token --user fixture --ttl 15m --json
+Environment: isolated HOME, synthetic JWT_SECRET only
+Exit code: 0
+Output token: [REDACTED]
+Independent check: three JWT parts; HS256 HMAC signature valid with synthetic key; subject fixture; expiry minus issue time = 900 seconds.
+No server authentication was tested.

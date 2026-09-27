@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-assistant",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:10:05.642454Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "f156f7db75b56fe1ca128294ee5e44a2b52314dea148778d1cfa18a2bcae5995",
+  "artifact": "docs/preuves/vitrine-cli-assistant.log",
+  "summary": "Displayed effective voice configuration; no audio was synthesized."
+}

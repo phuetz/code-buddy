@@ -1,0 +1,5 @@
+Command: buddy devices list
+Exit code: 0
+Scope: Read the empty isolated Android authenticator store; pairing was not attempted.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No Android devices paired. Run buddy pair.

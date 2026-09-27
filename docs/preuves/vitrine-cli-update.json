@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-update",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:10:08.076998Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "2925f6f454eb80a53220e971433e39f5c3e3b778ceb64a11b9aab00c4f1a4f29",
+  "artifact": "docs/preuves/vitrine-cli-update.log",
+  "summary": "Displayed the stable update plan without installing anything."
+}

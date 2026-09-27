@@ -1,0 +1,6 @@
+Real CLI commands under isolated HOME:
+1. buddy cron add vitrine-fixture --every 86400000 --message fixture-only -> exit 0, job created [ID REDACTED]
+2. buddy cron list -> exit 0, vitrine-fixture listed; next day schedule
+3. buddy cron remove [ID REDACTED] -> exit 0, job removed
+4. buddy cron list -> exit 0, no cron jobs
+No job was executed; no scheduler process survives.

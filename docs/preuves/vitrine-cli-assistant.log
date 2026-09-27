@@ -1,0 +1,96 @@
+Command: buddy assistant show
+Exit code: 0
+Scope: Displayed effective voice configuration; no audio was synthesized.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+Voix
+  TTS engine: pocket
+  Two-speed voice routing: false
+  Kyutai local URL:
+  Kyutai first-audio timeout: 1500
+  Kyutai cache n_q: 12
+  Local short-phrase limit: 80
+  Pocket voice: estelle
+  Pocket language: french
+  Persistent Pocket server: true
+  Pocket server URL: http://127.0.0.1:8766
+  Quantize Pocket TTS: false
+  Stream Pocket audio: true
+  Voicebox URL: http://127.0.0.1:17493
+  Voicebox profile:
+  Voicebox renderer: qwen
+  Voicebox language: fr
+  Voicebox model size: 1.7B
+  Voicebox delivery instruction: Speak as Lisa: warm intimate French girlfriend energy, soft smile in the voice, natural mid tempo, slight breathiness, never rewrite or invent words — delivery only.
+  Stream Voicebox audio: true
+  Assistant output volume: 100
+  Robot voice:
+
+Parole
+  Speak responses: false
+  Speak actions: false
+  Speech permission mode: default
+  Speech model: auto
+  Speech model endpoint: http://127.0.0.1:11434/v1
+  Factual speech model:
+  Prewarm voice model: true
+  Voice reply token cap: 48
+  Conversation depth: natural
+  Voice model temperature: 0.2
+  Voice routing mode: realtime
+  Instant voice backchannel: false
+  Streaming segment chars: 96
+  Voice model keep-alive: 30m
+  Voice model refresh ms: 900000
+  Prewarm common phrases: true
+  TTS prewarm phrase count: 16
+  Acoustic echo cancellation: auto
+  AEC capture source:
+
+Ecoute / reponse
+  Listen for speech: false
+  Assistant name: Lisa
+  Your name:
+  Response policy: contextual
+  Chime in: false
+  Engage window ms: 120000
+  Conversation mode: true
+  Conversation max ms: 600000
+  Speech language: fr
+  Speech debounce ms: 800
+
+Compagnon
+  Greeting: false
+  Companion name: Lisa
+  Reminders: false
+  Relational memory: false
+  Inner life: false
+  Inner-life cadence (heartbeats): 50
+  Voice/channel continuity: true
+  Conversation channel: telegram
+  Conversation channel ID:
+  Channel topic/thread ID:
+  Lisa conversation ID: lisa
+  Mirror voice turns: true
+  Cowork companion continuity: true
+  Mirror Cowork turns: true
+  Cowork shared history turns: 24
+  Persist shared history: true
+  Shared journal byte limit: 819200
+  Warm fresh context: true
+  Deep-answer semantic review: auto
+  Fresh-context interval ms: 900000
+  Additional market symbols:
+  Preferred news topics: actualités France monde technologie intelligence artificielle aujourd'hui
+  News locale: fr-FR
+  Relational cold budget ms: 75
+  Relational cache TTL ms: 5000
+  Conversation episodes: false
+  Episode consolidation beats: 40
+  Proactive companion: false
+  Voice improvement: false
+  Conversation quality loop: true
+  Quality evaluation beats: 30
+  Recurring issue threshold: 2
+  Quality guidance cooldown ms: 21600000
+  Avatar performance bridge: true
+  Stream avatar audio: auto

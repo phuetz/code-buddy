@@ -1,0 +1,20 @@
+Command: buddy deploy platforms
+Exit code: 0
+Scope: Distinguished upload targets from configuration generators; no deployment was sent.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+One-click web publish (buddy deploy run) — target in .codebuddy/deploy.json:
+
+  cloudflare-pages   Cloudflare Pages via wrangler (if already installed)
+  netlify            Netlify via netlify-cli (if already installed)
+
+Config generators (buddy deploy init) — not an upload:
+
+  fly         Fly.io — globally distributed apps
+  railway     Railway — instant deployments
+  render      Render — zero-config cloud
+  hetzner     Hetzner Cloud — European VPS
+  northflank  Northflank — Kubernetes PaaS
+  gcp         Google Cloud Platform
+  nix         Nix flake — declarative installation
+
+Usage: buddy deploy run [--apply]   |   buddy deploy init <platform>

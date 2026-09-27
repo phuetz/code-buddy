@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-tools",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:10:07.001273Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "abc7b639e626511f4ca7a2913956be6840564c69e63b3a9c2cb92f055d743bf7",
+  "artifact": "docs/preuves/vitrine-cli-tools.log",
+  "summary": "Resolved the effective tool profile and allowlist; no tool was invoked by this command."
+}

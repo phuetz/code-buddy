@@ -1,0 +1,8 @@
+Command: buddy fleet status
+Exit code: 0
+Scope: Inspected the fleet status; no peer dispatch was attempted.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+Fleet server: ok
+  WebSocket connections: 0
+  Authenticated: 0
+  Streaming: 0

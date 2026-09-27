@@ -1,0 +1,46 @@
+Real CLI execution in isolated HOME. Paths sanitized.
+Command: buddy config show --category core
+Exit: 0
+Output excerpt:
+
+Code Buddy Environment Configuration
+==================================================
+
+[Core]
+    GROK_API_KEY=(not set)
+    xAI / Grok API key (one of several supported provider authentications)
+    GROK_BASE_URL=(default: https://api.x.ai/v1)
+    Custom API endpoint for Grok
+    GROK_MODEL=(default: grok-3-fast)
+    Default LLM model to use
+    YOLO_MODE=(default: false)
+    Full autonomy mode (400 tool rounds, higher cost limit)
+    MAX_COST=(default: 10)
+    Session cost limit in dollars
+    MORPH_API_KEY=(not set)
+    Morph API key for fast file editing
+    CODEBUDDY_MAX_TOKENS=(not set)
+    Override max output tokens for LLM responses
+    CODEBUDDY_MAX_CONTEXT=(not set)
+    Override max context window size
+    CODEBUDDY_MIN_FREE_MB=(default: 500)
+    disk-guard: min free space (MB) before a guarded write/launch is refused
+    CODEBUDDY_DISK_QUOTA_MB=(default: 0)
+    disk-guard: per-session byte budget (MB); 0 = unlimited
+    CODEBUDDY_TEMP_MAX_AGE_MS=(default: 0)
+    disk-guard: orphan-sweep age cutoff (ms); 0 = presence-based
+    CODEBUDDY_LOG_MAX_MB=(default: 10)
+    disk-guard: append-log rotation size (MB)
+    CODEBUDDY_LOG_MAX_FILES=(default: 5)
+    disk-guard: append-log retention count
+    CODEBUDDY_GOAL_MAX_TURNS=(not set)
+    Turn budget for /goal auto-continue loops (default 20)
+    CODEBUDDY_GOAL_JUDGE_MODEL=(not set)
+    Model used by the /goal judge (default: current session model)
+    CODEBUDDY_RTK=(default: false)
+    Enable RTK shell command rewriting for token-optimized command output
+    CODEBUDDY_RTK_REWRITE=(default: false)
+    Alias flag for enabling RTK shell command rewriting
+    CODEBUDDY_RTK_TIMEOUT_MS=(default: 1000)
+    Timeout for rtk rewrite calls before falling back to the original command
+    CODEBUDDY_LM_RESIZER=(default: false)

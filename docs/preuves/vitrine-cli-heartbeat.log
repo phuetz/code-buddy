@@ -1,0 +1,9 @@
+Command: buddy heartbeat status
+Exit code: 0
+Scope: Read heartbeat engine counters; no scheduled tick was run.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+Heartbeat Engine
+  Running: NO
+  Enabled: YES
+  Total ticks: 0
+  Suppressions: 0 (consecutive: 0)

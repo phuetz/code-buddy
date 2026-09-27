@@ -1,0 +1,11 @@
+Real CLI execution in isolated HOME. Paths sanitized.
+Command: buddy session list
+Exit: 0
+Output excerpt:
+Recent sessions (1):
+
+  session_ - Read package.json with the read_file tool and answer with only its version.
+    4 messages | 9/27/2026 5:07:56 PM
+    origin: cli
+
+Use `buddy sessions resume <id>` to resume a session

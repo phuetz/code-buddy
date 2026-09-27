@@ -1,0 +1,7 @@
+Command: buddy hub list
+Exit code: 0
+Scope: Listed bundled and hub skill availability; no remote hub install was attempted.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No hub-installed skills.
+8 bundled skill(s) shipped with the package are still available to the agent.
+Install more with: buddy hub search

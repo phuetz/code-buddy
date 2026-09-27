@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-devices",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:10:07.837044Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "3c905ff39b006fbce722ecc24db2a4480ee46e280c5d73eddfb83f4126c3be4d",
+  "artifact": "docs/preuves/vitrine-cli-devices.log",
+  "summary": "Read the empty isolated Android authenticator store; pairing was not attempted."
+}

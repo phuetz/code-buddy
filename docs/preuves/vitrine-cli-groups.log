@@ -1,0 +1,5 @@
+Command: buddy groups list
+Exit code: 0
+Scope: Read the empty isolated group access-control store.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No groups configured.

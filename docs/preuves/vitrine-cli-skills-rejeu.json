@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-skills",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:14:10.927376Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "ecf6a305b0d82843019cc94cf3de7f99f1e0156aa5d97a879d401243c688a6f2",
+  "artifact": "docs/preuves/vitrine-cli-skills-rejeu.log",
+  "summary": "Listed locally available skill packages under isolated HOME."
+}

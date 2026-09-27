@@ -1,0 +1,6 @@
+Command: buddy trigger list
+Exit code: 0
+Scope: Listed the isolated trigger store; trigger firing was not exercised.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No triggers configured.
+Use 'codebuddy trigger add' to create one.

@@ -1,0 +1,5 @@
+Real CLI execution in isolated HOME. Paths sanitized.
+Command: buddy catalog status --json
+Exit: 0
+Curated entries found: 91/91
+All catalogue rows returned: 338

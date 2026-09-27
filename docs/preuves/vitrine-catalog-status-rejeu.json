@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "catalog-status",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:14:10.619340Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "e398f21b73ff1367ceaef355c724779b936f60f35b019b2a4774860eaffc3c18",
+  "artifact": "docs/preuves/vitrine-catalog-status-rejeu.log",
+  "summary": "Parsed real catalogue JSON and found all 91 curated entries."
+}

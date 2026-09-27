@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-curator",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:10:47.709077Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "37cc83b35b3fc04250700e7c9db787c88859f92d0ea607038ba1278cb6d3c9f7",
+  "artifact": "docs/preuves/vitrine-cli-curator.log",
+  "summary": "Scanned five maintenance sections in a disposable project; no patch was proposed or applied."
+}

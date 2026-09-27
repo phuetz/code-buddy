@@ -1,0 +1,20 @@
+Command: buddy lsp status
+Exit code: 0
+Scope: Detected installed and missing LSP servers; no diagnostics session was launched.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+LSP Servers (1/14 installed):
+
+  [missing] typescript   typescript-language-server --stdio
+  [missing] javascript   typescript-language-server --stdio
+  [missing] python       pylsp
+  [missing] go           gopls serve
+  [ok ] rust         rust-analyzer
+  [missing] java         jdtls
+  [missing] c            clangd
+  [missing] cpp          clangd
+  [missing] csharp       omnisharp -lsp
+  [missing] php          phpactor language-server
+  [missing] html         vscode-html-language-server --stdio
+  [missing] css          vscode-css-language-server --stdio
+  [missing] ruby         solargraph stdio
+  [missing] kotlin       kotlin-language-server

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-deploy",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:10:07.572463Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "b190bfaee613a161379126f33ac737c4922066d347463f038c7fd8d258088fa8",
+  "artifact": "docs/preuves/vitrine-cli-deploy.log",
+  "summary": "Distinguished upload targets from configuration generators; no deployment was sent."
+}

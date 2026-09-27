@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-identity",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:10:06.059890Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "d8bc80d6925c5f520934fbd76b21f3aa57fe12d441a2b6f110112e5f4a9dc5d1",
+  "artifact": "docs/preuves/vitrine-cli-identity.log",
+  "summary": "Read identity-file state from the isolated profile."
+}

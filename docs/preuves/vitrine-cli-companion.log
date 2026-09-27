@@ -1,0 +1,28 @@
+Command: buddy companion status
+Exit code: 0
+Scope: Displayed companion prerequisites; voice and robotics were not run.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+Buddy Companion Status
+==================================================
+
+Workspace: [REPOSITORY]
+Brain: [todo] ChatGPT OAuth credentials missing
+Auth file: [ISOLATED_HOME]/.codebuddy/codex-auth.json
+Model: grok-code-fast-1
+
+Identity: [todo] SOUL.md not loaded
+Boot: [todo] BOOT.md not loaded
+
+Voice input: [todo] disabled / system / en / auto-send on
+Wake word: [ok] text-match / hey buddy, ok code
+TTS: [todo] enabled / edge-tts / auto / auto-speak off
+Camera: [ok] ffmpeg available / linux
+Percepts: [todo] 0 recorded / [REPOSITORY]/.codebuddy/companion/percepts.jsonl
+
+Next steps:
+- Run `buddy login` to connect the ChatGPT subscription brain.
+- Run `buddy companion setup` to install companion identity files.
+- Voice input setup: Missing required tools: sox. Install with: brew install sox (macOS) or apt-get install sox (Linux)
+- TTS setup: edge-tts not found. Install with: pip3 install edge-tts
+
+[2026-09-27T15:10:06.234Z]  WARN  Project settings validation: root: Unrecognized key(s) in object: 'telemetry'

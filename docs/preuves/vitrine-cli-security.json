@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-security",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:10:08.186625Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "eb87ef0632553220dea77153ca6c62ca86d8f53ea1b60f3c9de893252ad508a7",
+  "artifact": "docs/preuves/vitrine-cli-security.log",
+  "summary": "Audited the isolated profile and fixture project with JSON findings; no fix was applied."
+}

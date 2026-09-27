@@ -1,0 +1,31 @@
+Real CLI execution in isolated HOME. Paths sanitized.
+Command: buddy insights summary
+Exit: 0
+Output excerpt:
+
+Code Buddy Insights
+========================================
+
+Cost & Tokens
+----------------------------------------
+  Session : $0.0000
+  Today   : $0.0000
+  Week    : $0.0000
+  Month   : $0.0000
+  All time: $0.0000
+  Session tokens: 0 in / 0 out
+
+Tool Usage
+----------------------------------------
+  Total executions: 0
+  Unique tools    : 0
+  Success rate    : 0.0%
+
+Agent Activity
+----------------------------------------
+  Recent runs : 1
+  By status   : completed=1
+  Tokens (last 5) : 5,646
+  Tool calls (last 5): 1
+  Latest:
+    [completed] headless prompt (run_mujydc1p_edc8c6, 2026-09-27T15:07:46.621Z)

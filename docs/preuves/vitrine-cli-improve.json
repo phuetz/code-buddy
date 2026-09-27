@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-improve",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T15:10:07.356229Z",
+  "revision": "d8e766b2d514a32649c0c55293cf683095d3386c",
+  "sourceDigest": "3da5e25c3450d896d186266a436834bd92dfb1c251a849ef408c624623068366",
+  "artifact": "docs/preuves/vitrine-cli-improve.log",
+  "summary": "Displayed self-improvement status; no learning cycle or application was run."
+}

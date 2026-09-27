@@ -1,0 +1,5 @@
+Command: buddy device list
+Exit code: 0
+Scope: Read the empty isolated device store; SSH and ADB were not connected.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No devices paired. Use "buddy device pair" to add one.
