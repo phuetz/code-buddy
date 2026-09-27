@@ -18,7 +18,7 @@ Chemins relatifs à `cowork/src/`. Chaque fonctionnalité est câblée IPC → i
 | 4 | Sélection du contexte | Bouton **Contexte** : liste des fichiers texte (jamais `.env*`, ni `node_modules`/`dist`/`.codebuddy`), un clic = inclus (contenu joint, « inutile de relire »), deux = exclu (« ne lis pas »), estimation en jetons par fichier et pour la demande (≈ 4 caractères/jeton), affichée aussi à côté d'Envoyer. | `main/studio/studio-context-service.ts`, `StudioContextPanel.tsx` |
 | 5 | Secrets `.env` du projet | Onglet **Secrets** (nom + valeur masquée) ; valeurs rangées **hors du projet** (données de Cowork, un fichier 0600 par projet) ; le renderer ne reçoit que noms et longueurs ; injectées seulement dans le serveur de dev et les builds ; seuls leurs **noms** sont donnés au modèle. **Point de passage unique** : tout texte qui part vers le modèle est masqué par le processus principal, et rien ne part si le masquage échoue. `.env*` exclus des versions, du zip, de l'export du site ; export du site **refusé** (dossier supprimé) si une valeur se retrouve dans le site construit. | `main/studio/project-secrets-service.ts`, `studio-export-excludes.ts`, `NewShell.tsx` (`sendTurn`), `StudioSecretsPane.tsx` |
 
-**Réserves des deux relectures, traitées** (commit `0666977ff`, par un sous-agent, puis vérifiées) : environnement des builds en liste blanche (plus de clés de l'hôte) et, pour le serveur de dev, clés de l'hôte retirées ; arbre de processus tué au délai dépassé ; `.env*` exclus des versions ; `changedSince` exige la racine de confiance, HOME et dossiers système refusés partout ; `revertPaths` compare des octets ; sonde sans attente de 3 s après un échec de chargement ; exclusions de l'export statique à tous les niveaux ; squelette de départ jamais semé si un de ses fichiers existe ; test de bout en bout de « Ouvrir dans le navigateur » et du Stop du chat.
+**Réserves des deux relectures, traitées** (commit `0666977ff`, par un sous-agent, puis vérifiées) : environnement des builds en liste blanche (plus de clés de l'hôte) et, pour le serveur de dev, clés de l'hôte au nom de secret retirées (liste noire : **insuffisant**, remplacé par une liste blanche au § 6) ; arbre de processus tué au délai dépassé ; `.env*` exclus des versions ; `changedSince` exige la racine de confiance, HOME et dossiers système refusés partout ; `revertPaths` compare des octets ; sonde sans attente de 3 s après un échec de chargement ; exclusions de l'export statique à tous les niveaux ; squelette de départ jamais semé si un de ses fichiers existe ; test de bout en bout de « Ouvrir dans le navigateur » et du Stop du chat.
 
 **Défauts trouvés en pilotant la vraie fenêtre, corrigés** :
 - Cowork lancé avec `NODE_ENV=production` le transmettait au **serveur de dev** : React servi en mode production (pas de source des éléments, pas d'avertissements). Retiré de l'environnement du serveur de dev (`0b6fd96ea`).
@@ -102,4 +102,52 @@ Consigne : contester, défauts réels seulement, citation du diff à l'appui, fi
 - **Un blocage du processus principal (≈ 1 400 % de CPU, 12 fils)** lors de la 1re session Electron, après un clic automatisé sur un bouton « Close » (qui a lancé `showItemInFolder`/`xdg-open`). Non reproduit en deux relances avec les mêmes étapes sans ce clic, CPU à 0 % à chaque étape. **Cause non établie** ; processus arrêtés par PID.
 - **Windows et macOS** non exécutés (`taskkill`, chemins `C:\`, `npm.cmd`).
 - **La suite complète** de la racine et de cowork n'a pas été rejouée : seulement les balayages ciblés ci-dessus.
-- Le binaire Electron et `dist/` du cœur sont ceux d'un autre worktree / du clone principal, **en lecture** (lien symbolique `dist` non versionné) ; le cœur `src/` n'a pas changé depuis la vague 1.
+- Le binaire Electron et `dist/` du cœur sont ceux d'un autre worktree / du clone principal, **en lecture** (lien symbolique `dist` — **versionné par erreur** dans `0b6fd96ea`, retiré par `a508f43d4`, voir § 6) ; le cœur `src/` n'a pas changé depuis la vague 1.
+
+## 6. Corrections après relectures (27/09, après-midi)
+
+Deux relectures indépendantes de la tête `cfb381c03` (DeepSeek, puis AGY en contre-revue) concluaient **À REPRENDRE**. Chaque point a été vérifié dans le code avant d'agir ; chaque correctif a un test qui **échoue sur l'ancienne logique** (source de `cfb381c03` remise, test rouge, source rétablie).
+
+| Point relevé | Verdict | Correctif | Preuve |
+|---|---|---|---|
+| **Bloquant 1** — lien symbolique `dist` versionné (mode `120000`, cible hors dépôt), ajouté par erreur dans `0b6fd96ea` ; le rapport le disait « non versionné » | **Vrai.** Mon affirmation était fausse | `git rm --cached dist`, `/dist` ajouté au `.gitignore` (`dist/` ne couvre pas un lien) (`a508f43d4`) | `git ls-tree HEAD dist` vide |
+| **Bloquant 2** — `CommandRunner` (`npm install` automatique et terminal) lancé avec le `process.env` complet de Cowork : un `postinstall` voyait les clés d'API de l'hôte | **Vrai**, manqué par la 1re relecture et par moi | Environnement en liste blanche + secrets du projet, fourni par le processus principal seulement (celui du renderer est ignoré) ; dossier de confiance exigé (`a508f43d4`) | `command-runner.test.ts` : vrai `spawn` qui imprime son environnement, clé de l'hôte absente ; IPC : dossier hors confiance refusé, `env` du renderer écarté — 2 rouges sur l'ancienne logique |
+| Serveur de dev en liste **noire** de noms (`DATABASE_URL`, `*_DSN` de l'hôte passaient) ; `studio.dev.start` sans dossier de confiance | Vrai ; le rapport disait à tort « clés de l'hôte retirées » | Liste blanche (toute clé hors liste marquée `undefined`, retirée par `app_server`), dossier de confiance exigé (`a508f43d4`) | `studio-dev-server.test.ts` — 2 rouges sur l'ancienne logique |
+| `.env` de sous-dossiers (`apps/web/.env.local`) jamais masqués ni cherchés à l'export | Vrai | Tous les `.env*` du projet (profondeur 6, 50 fichiers, hors dépendances et sorties) (`ec47c2103`) | `studio-secrets-never-leave.test.ts` — rouge sur l'ancienne logique |
+| `findLeaks` sautait les liens symboliques | Vrai | Lien vers un fichier lu à travers ; lien vers un dossier non parcouru (pas de boucle) | même test |
+| Zip : médias `.codebuddy/media-generation` réinclus mais non fouillés | Vrai (très faible) | Fouillés aussi | même test |
+| Demande de **génération initiale** (et son titre) et vérification `web_test` hors du point de passage du masquage | Vrai | Masquées aussi ; si le masquage échoue, rien ne part. Dossier cible pas encore créé : aucun secret possible, le texte part tel quel | `studio-view-request-context.test.tsx` (vrai `StudioView`, vrai service) — rouge sur l'ancienne logique |
+| Relais console : message **brut** si le projet est inconnu | Vrai (non atteignable par l'UI) | Échec fermé | `studio-preview-bridge.test.ts` — rouge |
+| Contexte : fichier atteint par un **dossier** lien symbolique sortant | Vrai (faible) | Chemin réel exigé dans le projet | `studio-context-and-locate.test.ts` — rouge |
+| Pièces jointes perdues quand l'envoi est annulé | Vrai (mineur, relevé par la contre-revue DeepSeek du matin) | Vidées seulement si la demande est partie | test de câblage |
+| « Point de passage unique côté renderer, non imposé par le processus principal » | Vrai **en principe** | Non corrigé : le processus d'agent reçoit ses messages du renderer par l'IPC de session, que je n'ai pas modifié. Les trois chemins d'envoi d'App Studio (itération, génération, vérification) passent désormais tous par le masquage | — |
+| `studio.files.*` sans dossier de confiance (antérieur à la vague 1) | Vrai | Non traité (hors vague) ; `safeJoin` empêche déjà de sortir du dossier donné | — |
+| Tableau de coordination incomplet | Vrai | Mis à jour | — |
+
+### Pic de CPU (1 400 %) : tentative de reproduction
+
+Hypothèses de la contre-revue : un flux de journaux relayé sans limite, ou `xdg-open` sous Xvfb. Protocole : vraie fenêtre Electron sous Xvfb (HOME isolé, session en mode `default`, fournisseur injoignable), app de test qui journalise ~20 000 messages/s dans l'aperçu, onglet Console ouvert, CPU échantillonné toutes les 5 s pendant 30 s.
+
+| Mesure | Processus principal | Renderer de Cowork |
+|---|---|---|
+| Relais de `cfb381c03` (sans limite) | 100 à 120 % | **figé** : plus aucune réponse CDP, capture impossible |
+| Plafond 50 messages/s + regroupement dans le renderer (tête) | 27 à 120 % | réactif (300 lignes affichées) |
+| Témoins, même flux : aperçu masqué / affiché avec relais / affiché **sans** surveillance | 0 % / 66 % / 34 % | — |
+| `showItemInFolder` → `xdg-open` sous Xvfb | 0 % pendant 40 s (`xdg-open` reste en attente, sans CPU) | — |
+
+Lecture.
+- Le relais sans limite était un **vrai défaut** : il figeait l'interface.
+- Il est maintenant borné à trois niveaux :
+  - 50 messages/s au plus, les messages en trop comptés et signalés en une ligne ;
+  - au-delà de 500 messages ignorés dans la seconde, désabonnement pendant 3 s ;
+  - côté renderer, un seul rendu par tranche de 150 ms.
+  Les valeurs à masquer sont gardées 2 s au lieu de relire le projet à chaque message.
+- Le coût qui reste dans le processus principal (~35 %, mesuré même sans surveillance) vient de Chromium, qui reçoit la console de la frame.
+- **Aucune des deux hypothèses ne reproduit 1 400 %** : le flux plafonne vers 1,6 cœur au total, et `xdg-open` ne consomme rien. La cause du pic du matin reste **non établie**.
+
+### État après corrections
+
+- Têtes : `a508f43d4`, `ec47c2103`, `59183da72`, puis le rapport.
+- Balayage Vitest (studio, preload, ipc, command-runner et fichiers de la vague) : **73 fichiers, 448 tests verts**.
+- `tsc --noEmit` : 0 erreur à la racine et dans cowork.
+- Balayage des données personnelles du diff : vide.
