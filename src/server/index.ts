@@ -295,12 +295,6 @@ function createApp(
   // Kubernetes-standard health aliases (no auth required)
   app.use(createK8sHealthAliases());
 
-  // Metrics routes (no auth required for monitoring)
-  app.use('/api/metrics', metricsRoutes);
-
-  // Also expose at /metrics for Prometheus compatibility
-  app.use('/metrics', metricsRoutes);
-
   // Mobile remote-supervision routes (custom pairing-token auth)
   app.use('/api/mobile', mobileRoutes);
 
@@ -317,7 +311,7 @@ function createApp(
   // Android pairs with a local code and proves key possession before JWT auth.
   app.use('/api/auth/device', createDeviceAuthRoutes(config.jwtSecret));
 
-  // Authentication (applied after public health/metrics/mobile endpoints)
+  // Authentication (applied after public health and mobile endpoints)
   app.use(createAuthMiddleware(config));
 
   // A2A routes (auth-based, exempt from CSRF) — must be mounted BEFORE CSRF middleware
@@ -327,6 +321,11 @@ function createApp(
   // network-reachable. All general agent/session/tool/workflow routes below are
   // direct-loopback only; otherwise remote chat could invoke tools indirectly.
   app.use(requireLocalAnonymousAccess);
+
+  // Detailed metrics and reset follow the same JWT and local-anonymous rules
+  // as the other API routes. `/api/health/metrics` remains a public basic probe.
+  app.use('/api/metrics', metricsRoutes);
+  app.use('/metrics', metricsRoutes);
 
   // Read-only Fleet diagnostics for the CLI. These HTTP wrappers expose the
   // same server state and peer description as the Gateway WebSocket methods.

@@ -77,6 +77,49 @@ describe('constat 3 — bind loopback par défaut', () => {
         });
       }
     });
+
+    it('protège les métriques détaillées et réserve leur remise à zéro aux administrateurs', async () => {
+      const { startServer } = await import('../../src/server/index.js');
+      const secret = 'qa-jwt-metrics-secret';
+      const started = await startServer({
+        port: 0,
+        host: '127.0.0.1',
+        authEnabled: true,
+        jwtSecret: secret,
+        websocketEnabled: false,
+        logging: false,
+        rateLimit: false,
+        cors: false,
+      });
+      try {
+        const port = (started.server.address() as AddressInfo).port;
+        const base = `http://127.0.0.1:${port}`;
+        expect((await fetch(`${base}/api/metrics/json`)).status).toBe(401);
+        expect((await fetch(`${base}/metrics`)).status).toBe(401);
+        expect((await fetch(`${base}/api/metrics/reset`, { method: 'POST' })).status).toBe(401);
+        expect((await fetch(`${base}/api/health`)).status).toBe(200);
+
+        const chatToken = generateToken({ userId: 'qa', scopes: ['chat'] }, secret);
+        const chatReset = await fetch(`${base}/api/metrics/reset`, {
+          method: 'POST', headers: { Authorization: `Bearer ${chatToken}` },
+        });
+        expect(chatReset.status).toBe(403);
+
+        const adminToken = generateToken({ userId: 'qa', scopes: ['admin'] }, secret);
+        const adminMetrics = await fetch(`${base}/api/metrics/json`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        expect(adminMetrics.status).toBe(200);
+        const adminReset = await fetch(`${base}/api/metrics/reset`, {
+          method: 'POST', headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        expect(adminReset.status).toBe(200);
+      } finally {
+        await new Promise<void>((resolve, reject) => {
+          started.server.close((error) => (error ? reject(error) : resolve()));
+        });
+      }
+    });
   });
 
   it('CODEBUDDY_TRUSTED_PROXIES est la seule façon de faire confiance à un proxy', async () => {

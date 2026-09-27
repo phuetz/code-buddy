@@ -6,7 +6,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../middleware/index.js';
+import { asyncHandler, requireScope } from '../middleware/index.js';
 import { getMetrics, initMetrics, type MetricsSnapshot } from '../../metrics/metrics-collector.js';
 import { getOpenTelemetry } from '../../integrations/opentelemetry-integration.js';
 
@@ -156,6 +156,7 @@ router.get(
  */
 router.post(
   '/reset',
+  requireScope('admin'),
   asyncHandler(async (_req: Request, res: Response) => {
     const metrics = ensureMetrics();
     metrics.reset();

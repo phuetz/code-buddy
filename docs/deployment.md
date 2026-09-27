@@ -265,13 +265,19 @@ IPs and origins are evaluated correctly.
 | Endpoint | Purpose |
 |:---------|:--------|
 | `GET /api/health` | Liveness + `apiHeartbeat` (30 s provider probe loop) |
-| `GET /api/metrics` | Prometheus metrics |
+| `GET /api/metrics` and `GET /metrics` | Detailed Prometheus metrics; authenticated API token required |
+| `POST /api/metrics/reset` | Reset detailed metrics; authenticated `admin` scope required |
+| `GET /api/health/metrics` | Basic public metrics probe |
 | `GET /api/heartbeat/status` | Heartbeat detail (`?format=report` for Cowork-ready JSON) |
 | `GET /api/daemon/status` | Autonomy daemon status (`?format=report`) |
 
 Observability backends: set `SENTRY_DSN` (errors) and/or
 `OTEL_EXPORTER_OTLP_ENDPOINT` (traces). `buddy doctor` diagnoses a
 misbehaving install (`--fix` applies auto-migrations).
+
+`buddy daemon start` runs its HTTP server without authentication on
+`127.0.0.1` only. For remote access, start `buddy server --host <address>`
+with authentication enabled and provide a token to the metrics scraper.
 
 ---
 

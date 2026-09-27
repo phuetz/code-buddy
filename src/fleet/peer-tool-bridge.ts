@@ -269,6 +269,7 @@ async function execListDirectory({ args }: ExecArgs): Promise<{ output: string; 
   const resolved = await assertPathInsideWorkspace(dirPath);
   const entries = await fs.readdir(resolved, { withFileTypes: true });
   const lines = entries
+    .filter((entry) => !classifySecretPath(path.join(resolved, entry.name)).secret)
     .map((e) => {
       const tag = e.isDirectory() ? 'DIR ' : e.isSymbolicLink() ? 'LINK' : 'FILE';
       return `${tag}  ${e.name}`;
