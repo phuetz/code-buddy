@@ -280,8 +280,11 @@ export class AutoCaptureManager extends EventEmitter {
    * Calculate Jaccard similarity between two strings
    */
   private calculateSimilarity(a: string, b: string): number {
-    const setA = new Set(a.toLowerCase().split(/\s+/));
-    const setB = new Set(b.toLowerCase().split(/\s+/));
+    const setA = new Set(a.toLowerCase().split(/\s+/).filter(Boolean));
+    const setB = new Set(b.toLowerCase().split(/\s+/).filter(Boolean));
+
+    if (setA.size === 0 && setB.size === 0) return 1;
+    if (setA.size === 0 || setB.size === 0) return 0;
 
     const intersection = new Set([...setA].filter(x => setB.has(x)));
     const union = new Set([...setA, ...setB]);

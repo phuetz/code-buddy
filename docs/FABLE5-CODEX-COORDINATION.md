@@ -1,6 +1,6 @@
 # Coordination Fable 5 / Codex
 
-RÉSERVÉ 2026-09-27 — Codex GPT-6, branche `jules/cb-lot-2026-09-27` : intégration séquentielle des trois patchs Jules « succès mensongers », « tests faibles », « modules sans test ». Zones visées : `src/tools/`, `src/commands/cli/screen-commands.ts`, `src/desktop-automation/`, `src/fleet/peer-text-sanitizer.ts`, `src/memory/auto-capture.ts`, `src/utils/validators.ts` et tests associés. Aucun autre agent ne modifie ce worktree pendant l'intégration.
+PASSATION 2026-09-27 — Codex GPT-6, branche `jules/cb-lot-2026-09-27` : lot « succès mensongers » au commit `ab11749d8`, lot « tests faibles » rejeté (assertions affaiblies et diff inapplicable), lot « modules sans test » au commit de tête de cette branche. Zones : `src/tools/`, `src/commands/cli/screen-commands.ts`, `src/desktop-automation/`, `src/fleet/peer-text-sanitizer.ts`, `src/memory/auto-capture.ts`, `src/utils/validators.ts` et tests associés. Rouge 5/26 puis vert 26/26 pour le premier lot ; rouge 5/8 puis vert 8/8 pour le troisième. Suite élargie 307/307, typecheck et build verts, lint ciblé sans erreur. Worktree à rendre propre ; décision humaine : revoir le lot rejeté et valider en CI Windows. Rapport externe dans le partage.
 
 Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de vérité partagée pour les chantiers en cours. Il coordonne les reprises asynchrones ; il ne prouve pas qu'un pair est connecté en temps réel.
 

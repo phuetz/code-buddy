@@ -58,7 +58,7 @@ const KNOWLEDGE_DEFANG_RULES: ReadonlyArray<{ pattern: RegExp; replacement: stri
   // ChatML and every other `<|…|>` control token.
   { pattern: /<\|/g, replacement: '< |' },
   // Its JSON-escaped form, which survives a round-trip through a JSON payload.
-  { pattern: /\\u003c\|/gi, replacement: '\\u003c |' },
+  { pattern: /(\\u003[cC])\|/g, replacement: '$1 |' },
   // GLM-5 full-width variant ＜｜…｜＞.
   { pattern: /＜｜/g, replacement: '＜ ｜' },
   // Half-formed pipe markers leaked by local runtimes: `<channel|>`, `<message|>`, …
