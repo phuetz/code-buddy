@@ -49,8 +49,9 @@ export async function* executeStreaming(
   if (signal?.aborted) {
     return { success: false, error: 'Command aborted by user' };
   }
-  // Validate command (static checks)
-  const validation = validateCommand(command);
+  const cwd = deps.getCurrentDirectory();
+  // Validate against the directory where the command will actually run.
+  const validation = validateCommand(command, undefined, cwd);
   if (!validation.valid) {
     return { success: false, error: `Command blocked: ${validation.reason}` };
   }
@@ -66,11 +67,10 @@ export async function* executeStreaming(
     return { success: false, error: `Command blocked: ${commandSafetyValidation.error}` };
   }
 
-  const cwd = deps.getCurrentDirectory();
   const rewrite = await rewriteCommandWithRtk(command);
   let executionCommand = command;
   if (rewrite.rewritten) {
-    const rewrittenValidation = validateCommand(rewrite.command);
+    const rewrittenValidation = validateCommand(rewrite.command, undefined, cwd);
     const rewrittenSandboxValidation = deps.getSandboxManager().validateCommand(rewrite.command);
     const rewrittenSafetyValidation = validateCommandSafety(rewrite.command);
     if (

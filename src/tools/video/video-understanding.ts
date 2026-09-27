@@ -20,6 +20,7 @@ import { basename, join, isAbsolute, resolve as resolvePath } from 'path';
 import type { ToolResult } from '../../types/index.js';
 import type { Transcriber } from '../../sensory/speech-reaction.js';
 import { logger } from '../../utils/logger.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../../security/secret-files.js';
 import {
   fetchYoutubeCaptions,
   extractYoutubeVideoId,
@@ -292,6 +293,8 @@ async function resolveSegments(
   const localPath = isAbsolute(source) ? source : resolvePath(deps.cwd ?? process.cwd(), source);
   if (existsSync(source) || existsSync(localPath)) {
     const filePath = existsSync(source) ? source : localPath;
+    const secret = checkSecretFileAccess(filePath, 'read');
+    if (secret.secret) return { error: formatSecretRefusal(filePath, secret) };
     const extract = deps.extractAudio ?? (await defaultExtractAudio());
     const extracted = await extract(filePath);
     if (!extracted.success) {

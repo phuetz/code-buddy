@@ -153,7 +153,7 @@ export function hasShellBypassFeatures(command: string): { bypass: boolean; reas
  * Note: Sandbox manager validation is performed separately by the caller
  * since it requires instance state.
  */
-export function validateCommand(command: string, shell?: string): { valid: boolean; reason?: string } {
+export function validateCommand(command: string, shell?: string, cwd: string = process.cwd()): { valid: boolean; reason?: string } {
   // User-defined deny rules (/allowlist deny <pattern>) are a HARD stop in
   // every mode — YOLO skips confirmations, never validation. Checked first so
   // a user rule wins even over commands the static checks would tolerate.
@@ -239,7 +239,7 @@ export function validateCommand(command: string, shell?: string): { valid: boole
   // file tools (src/security/secret-files.ts). Best-effort on the command
   // text: a path assembled at runtime by the interpreter is out of reach of
   // any static filter; CODEBUDDY_NATIVE_SANDBOX is the containment for that.
-  const secretToken = findCredentialPathInCommand(command);
+  const secretToken = findCredentialPathInCommand(command, process.platform, cwd);
   if (secretToken) {
     auditLogger.logCommandValidation({ command, valid: false, reason: `Credential path: ${secretToken}`, source: 'command-validator' });
     return {
@@ -421,13 +421,30 @@ function directoryContainsSecret(directory: string): boolean {
   return false;
 }
 
-function trackedSecretForGitDiff(command: string): string | null {
+/** Expand one shell glob segment without executing the shell or opening files. */
+function globContainsSecret(candidate: string): boolean {
+  const parent = path.dirname(candidate);
+  const pattern = path.basename(candidate);
+  if (/[*?[\]{}]/.test(parent) || (!/[*?]/.test(pattern) && !pattern.includes('['))) return false;
+  let names: string[];
+  try { names = fs.readdirSync(parent); } catch { return false; }
+  const escaped = pattern.replace(/[.+^${}()|\\]/g, '\\$&')
+    .replace(/\*/g, '.*').replace(/\?/g, '.');
+  let matcher: RegExp;
+  try { matcher = new RegExp(`^${escaped}$`); } catch { return false; }
+  return names.some((name) =>
+    (!name.startsWith('.') || pattern.startsWith('.')) &&
+    matcher.test(name) && checkSecretFileAccess(path.join(parent, name), 'read').secret,
+  );
+}
+
+function trackedSecretForGitDiff(command: string, baseDir: string): string | null {
   const invocation = command.match(/(?:^|[;&|]\s*)git\s+(?:-C\s+([^\s;&|]+)\s+)?diff(?:\s|$)/i);
   if (!invocation) return null;
   const prior = command.slice(0, invocation.index ?? 0);
   const cdMatches = Array.from(prior.matchAll(/(?:^|[;&|]\s*)cd\s+([^\s;&|]+)/g));
-  const gitCwd = invocation[1] ?? cdMatches.at(-1)?.[1] ?? process.cwd();
-  const cwd = path.resolve(process.cwd(), gitCwd);
+  const gitCwd = invocation[1] ?? cdMatches.at(-1)?.[1] ?? baseDir;
+  const cwd = path.resolve(baseDir, gitCwd);
   const tail = command.slice((invocation.index ?? 0) + invocation[0].length).split(/[;&|]/, 1)[0] ?? '';
   const pathspecs = tail.match(/(?:^|\s)--\s+(.+)$/)?.[1]?.trim().split(/\s+/).filter(Boolean) ?? [];
   try {
@@ -444,7 +461,7 @@ function trackedSecretForGitDiff(command: string): string | null {
  * Return the first token of `command` that designates a credential file (or a
  * glob / recursive read over a credential root), or null.
  */
-export function findCredentialPathInCommand(command: string, platform: NodeJS.Platform = process.platform): string | null {
+export function findCredentialPathInCommand(command: string, platform: NodeJS.Platform = process.platform, cwd: string = process.cwd()): string | null {
   if (typeof command !== 'string' || !command) return null;
   // Shell joins adjacent quoted fragments and removes escaping before opening
   // paths. On Windows backslashes are path separators, not POSIX escapes.
@@ -452,7 +469,7 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     .replace(/\$(?:""|'')/g, '')
     .replace(/\\([^\n])/g, platform === 'win32' ? '/$1' : '$1')
     .replace(/["']/g, '');
-  const trackedSecret = trackedSecretForGitDiff(expanded);
+  const trackedSecret = trackedSecretForGitDiff(expanded, cwd);
   if (trackedSecret) return trackedSecret;
   const roots = getHomeCredentialRoots();
   const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
@@ -469,6 +486,10 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
   const redirectionTargets = new Set(
     Array.from(expanded.matchAll(/>{1,2}\s*([^\s;|&<>]+)/g), match => match[1]),
   );
+  // A plain filename query constrained to source files does not read file
+  // content. This exception applies to that single command only.
+  const namesOnlyFind = /^\s*find\s/.test(expanded) && !/[;&|]/.test(expanded) &&
+    /\s-name\s+\*\.tsx?(?:\s|$)/.test(expanded) && !/\s-exec\b/.test(expanded);
 
   // A dynamic suffix under a credential root cannot be resolved statically.
   // Refuse that narrow case for readers before tokenization splits `$()`.
@@ -485,7 +506,7 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
 
   // `cd <credential root>` then a RELATIVE name: resolve relative tokens
   // against the last `cd` target seen in the command text.
-  let cdTarget = process.cwd();
+  let cdTarget = cwd;
   for (let i = 0; i < tokens.length; i += 1) {
     const raw = tokens[i] ?? '';
     const token = raw.replace(/^--?[A-Za-z0-9-]+=/, '');
@@ -507,17 +528,29 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     );
     if (isWriteDestination && !checkSecretFileAccess(normalized, 'write').secret) continue;
     if (classifySecretPath(normalized).secret) return raw;
+    if (usesRecursiveReader && globContainsSecret(normalized)) return raw;
     let canonical = normalized;
     try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
     const underRoot = roots.find(
       (root) => canonical === root || canonical.startsWith(root + path.sep),
     );
-    if (!underRoot) continue;
-    if (/[*?[\]{}]/.test(normalized)) return raw;
+    if (/[*?[\]{}]/.test(normalized) && underRoot) return raw;
     const isCdTarget = i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd');
     let isDirectory = false;
     try { isDirectory = fs.statSync(normalized).isDirectory(); } catch { /* missing path */ }
-    if (usesRecursiveReader && isDirectory && !isCdTarget && directoryContainsSecret(normalized)) return raw;
+    // A recursive reader can reach a secret through an innocuous parent
+    // (`grep -r pattern $HOME`, `tar -C ~ .`, `find . -exec cat`). Check the
+    // directory operand itself, not only paths below a credential root.
+    if (usesRecursiveReader && isDirectory && !isCdTarget && !namesOnlyFind && directoryContainsSecret(normalized)) return raw;
+  }
+  // grep -r PATTERN and rg PATTERN search cwd when no path was supplied.
+  for (const match of expanded.matchAll(/(?:^|[;&|]\s*)(grep|egrep|fgrep|rg|ag|ack)\s+([^;&|]+)/g)) {
+    const reader = match[1] ?? '';
+    const args = (match[2] ?? '').trim().split(/\s+/);
+    const positional = args.filter((arg) => !arg.startsWith('-'));
+    const recursive = reader === 'rg' || reader === 'ag' || reader === 'ack' ||
+      args.some((arg) => /^-[A-Za-z]*[rR]/.test(arg) || arg === '--recursive');
+    if (recursive && positional.length === 1 && directoryContainsSecret(cdTarget)) return cdTarget;
   }
   return null;
 }

@@ -120,9 +120,9 @@ export class BashTool implements Disposable {
    * 6. Protected paths - blocks access to sensitive directories
    * 7. Sandbox manager validation - additional runtime checks
    */
-  private validateCommand(command: string): { valid: boolean; reason?: string } {
+  private validateCommand(command: string, cwd: string): { valid: boolean; reason?: string } {
     // Run static validation checks
-    const staticValidation = validateCommand(command);
+    const staticValidation = validateCommand(command, undefined, cwd);
     if (!staticValidation.valid) {
       return staticValidation;
     }
@@ -394,7 +394,7 @@ export class BashTool implements Disposable {
       }
 
       // Validate command before any execution (legacy validation)
-      const validation = this.validateCommand(command);
+      const validation = this.validateCommand(command, effectiveCwd);
       if (!validation.valid) {
         return {
           success: false,
@@ -433,7 +433,7 @@ export class BashTool implements Disposable {
       // RTK is a command transformer. Freeze its output before policy,
       // approval and sandboxing so the command the user sees is exactly the
       // command that will execute.
-      const executionCommand = await this.resolveRtkCommand(command);
+      const executionCommand = await this.resolveRtkCommand(command, effectiveCwd);
       if (signal?.aborted) {
         return { success: false, error: 'Command aborted by user' };
       }
@@ -616,14 +616,14 @@ export class BashTool implements Disposable {
     }
   }
 
-  private async resolveRtkCommand(command: string): Promise<string> {
+  private async resolveRtkCommand(command: string, cwd: string): Promise<string> {
     const rewrite = await rewriteCommandWithRtk(command);
     if (!rewrite.rewritten) return command;
 
     const safetyValidation = validateCommandSafety(rewrite.command);
     if (!safetyValidation.valid) return command;
 
-    const validation = this.validateCommand(rewrite.command);
+    const validation = this.validateCommand(rewrite.command, cwd);
     if (!validation.valid) return command;
 
     return rewrite.command;
