@@ -63,7 +63,7 @@ export function StudioVersionsPane({
       void api.restore(cwd, id).then((res) => {
         setNote(
           res.ok
-            ? `Version ${id.slice(0, 7)} restaurée. L'état précédent est gardé comme version « Avant restauration ».`
+            ? `Version ${id.slice(0, 7)} restaurée. L'état d'avant reste dans la liste : la restauration s'annule en le restaurant.`
             : `Restauration impossible : ${res.error}`,
         );
         refresh();

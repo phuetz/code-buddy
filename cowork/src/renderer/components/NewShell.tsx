@@ -317,7 +317,8 @@ export function StudioView() {
   const locksLoadRef = useRef(0);
   const [versionsKey, setVersionsKey] = useState(0);
   const [turnNote, setTurnNote] = useState<string | null>(null);
-  const turnRef = useRef<{ preId: string | null; mode: IterationMode; label: string }>({
+  const turnRef = useRef<{ root: string; preId: string | null; mode: IterationMode; label: string }>({
+    root: '',
     preId: null,
     mode: 'build',
     label: '',
@@ -327,7 +328,9 @@ export function StudioView() {
     setLockedPaths([]);
     setChatMode('build');
     setTurnNote(null);
-    turnRef.current = { preId: null, mode: 'build', label: '' };
+    // La génération prépare son tour AVANT que la session (et donc son cwd)
+    // n'existe : ne pas l'effacer quand le projet devient actif.
+    if (turnRef.current.root !== sessionCwd) turnRef.current = { root: sessionCwd, preId: null, mode: 'build', label: '' };
     if (!sessionCwd || !locksApi) return;
     const token = ++locksLoadRef.current;
     void locksApi
@@ -364,7 +367,7 @@ export function StudioView() {
     async (text: string, opts: { mode: IterationMode; label: string }) => {
       if (!activeSessionId) return;
       const preId = await takeVersion('Modifications manuelles');
-      turnRef.current = { preId, mode: opts.mode, label: opts.label };
+      turnRef.current = { root: sessionCwd, preId, mode: opts.mode, label: opts.label };
       await continueSession(activeSessionId, text);
     },
     [activeSessionId, continueSession, takeVersion],
@@ -653,7 +656,7 @@ export function StudioView() {
       const prompt = buildAiGenerationPrompt(enrichedRequest, { starterSeeded });
       // Version de départ (squelette ou dossier existant) : on peut toujours y revenir.
       const preId = cwd ? await takeVersion('État de départ', cwd) : null;
-      turnRef.current = { preId, mode: 'build', label: 'Génération' };
+      turnRef.current = { root: cwd ?? '', preId, mode: 'build', label: 'Génération' };
       autoBuildRef.current.attempts = 0;
       const session = await startSession(
         getInitialSessionTitle(request.prompt),

@@ -138,12 +138,18 @@ describe.skipIf(!hasGit())('StudioVersionsService (git réel)', () => {
     expect((await service.restore(root, 'pas-un-id; rm -rf /')).ok).toBe(false);
   });
 
-  it('refuse une racine hors des espaces de travail de confiance', async () => {
+  it('hors des espaces de confiance : instantané permis, restauration/remise/verrous refusés', async () => {
     const guarded = new StudioVersionsService({ trustedRoots: () => [path.join(root, 'src')] });
-    const res = await guarded.snapshot(root, 'x');
-    expect(res).toEqual({ ok: false, error: 'project is outside trusted workspaces' });
+    // L'état de départ d'une génération se prend avant que la session n'existe.
+    const snap = await guarded.snapshot(root, 'État de départ');
+    expect(snap.ok).toBe(true);
+    if (!snap.ok) return;
+    const refused = { ok: false, error: 'project is outside trusted workspaces' };
+    expect(await guarded.restore(root, snap.data.id)).toEqual(refused);
+    expect(await guarded.revertPaths(root, snap.data.id, ['src/App.tsx'])).toEqual(refused);
+    expect(await guarded.setLocks(root, ['a'])).toEqual(refused);
     const inside = new StudioVersionsService({ trustedRoots: () => [path.dirname(root)] });
-    expect((await inside.snapshot(root, 'x')).ok).toBe(true);
+    expect((await inside.restore(root, snap.data.id)).ok).toBe(true);
   });
 
   it('persiste les verrous, triés et sans doublon', async () => {

@@ -75,7 +75,7 @@ export function BuildStatusStrip({ phase, elapsedMs, error, note, problem, onFix
               onClick={onFix}
               data-testid="build-fix"
               title="Envoyer l'erreur détectée à l'agent pour une nouvelle tentative de correction"
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90"
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-accent px-3 text-xs font-medium text-accent-foreground hover:bg-accent/90"
             >
               <Wrench className="h-4 w-4" aria-hidden="true" />
               Corriger

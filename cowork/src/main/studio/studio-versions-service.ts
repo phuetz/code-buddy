@@ -159,8 +159,15 @@ export class StudioVersionsService {
     this.trustedRoots = options.trustedRoots;
   }
 
-  private resolveRoot(root: unknown): Promise<string> {
-    return assertTrustedRoot(root, this.trustedRoots);
+  /**
+   * Opérations DESTRUCTIVES pour les fichiers du projet (restaurer, remettre des
+   * chemins, écrire les verrous) : racine de confiance exigée. Les lectures et
+   * l'instantané (qui n'écrit que sous .codebuddy/) acceptent un dossier pas
+   * encore rattaché à une session — sinon l'état de départ d'une génération
+   * (session pas encore créée) ne pourrait jamais être gardé.
+   */
+  private resolveRoot(root: unknown, destructive = true): Promise<string> {
+    return assertTrustedRoot(root, destructive ? this.trustedRoots : undefined);
   }
 
   private env(root: string): NodeJS.ProcessEnv {
@@ -233,7 +240,7 @@ export class StudioVersionsService {
 
   async snapshot(rootInput: unknown, label: unknown): Promise<VersionsResult<{ id: string; changed: boolean }>> {
     try {
-      const root = await this.resolveRoot(rootInput);
+      const root = await this.resolveRoot(rootInput, false);
       return {
         ok: true,
         data: await this.serialize(root, async () => {
@@ -248,7 +255,7 @@ export class StudioVersionsService {
 
   async list(rootInput: unknown): Promise<VersionsResult<StudioVersion[]>> {
     try {
-      const root = await this.resolveRoot(rootInput);
+      const root = await this.resolveRoot(rootInput, false);
       return {
         ok: true,
         data: await this.serialize(root, async () => {
@@ -341,7 +348,7 @@ export class StudioVersionsService {
   /** Chemins modifiés dans l'arbre de travail depuis la version `id` (ajouts, modifs, suppressions). */
   async changedSince(rootInput: unknown, id: unknown): Promise<VersionsResult<string[]>> {
     try {
-      const root = await this.resolveRoot(rootInput);
+      const root = await this.resolveRoot(rootInput, false);
       if (typeof id !== 'string' || !/^[0-9a-f]{7,64}$/i.test(id)) throw new Error('invalid version id');
       return {
         ok: true,
@@ -361,7 +368,7 @@ export class StudioVersionsService {
 
   async getLocks(rootInput: unknown): Promise<VersionsResult<string[]>> {
     try {
-      const root = await this.resolveRoot(rootInput);
+      const root = await this.resolveRoot(rootInput, false);
       try {
         const raw = JSON.parse(await fs.readFile(path.join(root, LOCKS_FILE), 'utf8')) as { locked?: unknown };
         const locked = Array.isArray(raw.locked) ? raw.locked : [];

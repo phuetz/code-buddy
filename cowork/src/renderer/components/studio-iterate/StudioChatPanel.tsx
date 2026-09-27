@@ -109,7 +109,7 @@ export function StudioChatPanel({
               onClick={() => onModeChange('build')}
               aria-pressed={mode === 'build'}
               data-testid="studio-mode-build"
-              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs ${mode === 'build' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs ${mode === 'build' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
             >
               <Hammer className="h-3.5 w-3.5" aria-hidden="true" />
               Construire
@@ -119,7 +119,7 @@ export function StudioChatPanel({
               onClick={() => onModeChange('discuss')}
               aria-pressed={mode === 'discuss'}
               data-testid="studio-mode-discuss"
-              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs ${mode === 'discuss' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs ${mode === 'discuss' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground'}`}
             >
               <MessagesSquare className="h-3.5 w-3.5" aria-hidden="true" />
               Discuter
@@ -141,7 +141,7 @@ export function StudioChatPanel({
             type="button"
             onClick={onImplementPlan}
             data-testid="studio-implement-plan"
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground hover:bg-accent/90"
           >
             <Hammer className="h-3.5 w-3.5" aria-hidden="true" />
             Implémenter ce plan
