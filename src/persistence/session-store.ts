@@ -12,7 +12,7 @@ import {
 } from '../database/optional-sqlite.js';
 import { withSessionLock } from './session-lock.js';
 import { logger } from '../utils/logger.js';
-import { readJsonAtomic, readJsonAtomicSync, writeJsonAtomic } from '../utils/atomic-write.js';
+import { readJsonAtomicSync, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 /** Metadata for chat sessions */
 export interface SessionMetadata {
@@ -92,6 +92,35 @@ type PersistedSession = Omit<Session, 'createdAt' | 'lastAccessedAt'> & {
   createdAt: string;
   lastAccessedAt: string;
 };
+
+/**
+ * Disk read of one session file.
+ * `absent` is only ENOENT. Any other I/O error, or a file that is present but
+ * not a valid session, is `unreadable` — callers that erase memory must not
+ * treat that as an empty session.
+ */
+export type SessionFileRead =
+  | { state: 'absent' }
+  | { state: 'unreadable'; reason: 'io' | 'invalid'; error: string }
+  | { state: 'ok'; session: Session };
+
+/**
+ * The bytes of one session file, read once, and the session decoded from those
+ * same bytes. A copy written from `bytes` keeps the file's at-rest state: an
+ * encrypted file gives an encrypted copy, whatever happens after the read.
+ */
+export type SessionFileCopy =
+  | { state: 'absent' }
+  | { state: 'unreadable'; reason: 'io' | 'invalid'; error: string }
+  | { state: 'ok'; bytes: Buffer; session: Session; sealedAtRest: boolean };
+
+function nodeErrorCode(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
 
 const DEFAULT_SESSIONS_DIR = path.join(os.homedir(), '.codebuddy', 'sessions');
 const FALLBACK_SESSIONS_DIR = path.join(os.tmpdir(), 'codebuddy', 'sessions');
@@ -274,7 +303,19 @@ export class SessionStore {
     await writeJsonAtomic(filePath, data, { mode: 0o600 });
   }
 
-  private shouldEncrypt(session: Session): boolean {
+  /**
+   * How this store keeps message content at rest. A copy of a session's
+   * messages written elsewhere (a reset archive) must follow the same rule.
+   * Without a session, only the process-wide setting applies.
+   */
+  contentProtection(session: Pick<Session, 'messages' | 'encrypted'> | null): { encrypt: boolean; keyPath?: string } {
+    const encrypt = session
+      ? this.shouldEncrypt(session)
+      : process.env.SESSION_ENCRYPTION === 'true';
+    return { encrypt, ...(this.config.encryptionKeyPath ? { keyPath: this.config.encryptionKeyPath } : {}) };
+  }
+
+  private shouldEncrypt(session: Pick<Session, 'messages' | 'encrypted'>): boolean {
     return session.encrypted === true || process.env.SESSION_ENCRYPTION === 'true' || hasEncryptedSessionContent(session.messages);
   }
 
@@ -288,55 +329,179 @@ export class SessionStore {
   }
 
   /**
-   * Load a session from disk.
-   *
-   * Validates the parsed JSON shape before returning (F32). The previous
-   * implementation blindly spread `data` into the return value, so a
-   * corrupted file with `messages: undefined` or a missing `createdAt`
-   * produced a Session whose dates were `Invalid Date` and whose
-   * messages iterator threw later in unrelated code paths. We now
-   * return `null` (and log a warning) for any shape we don't recognise,
-   * matching the "missing file" behaviour so callers keep working.
+   * Read one session file without collapsing an access error into "missing".
+   * Does not recover from `.bak` and does not write. ENOENT is `absent`.
+   * A permission error, an empty file, or JSON that is not a session is
+   * `unreadable`. A bad shape used to be returned as null from `loadSession`
+   * (F32) so ordinary callers could continue; that null is not an absence.
    */
-  async loadSession(sessionId: string): Promise<Session | null> {
+  async readSessionFileState(sessionId: string): Promise<SessionFileRead> {
     const filePath = this.getSessionFilePath(sessionId);
-
+    let raw: string;
     try {
-      await fsPromises.access(filePath);
-      const data = await readJsonAtomic<Record<string, unknown> | null>(filePath, null, {
-        mode: 0o600,
-        isValid: (value): value is Record<string, unknown> => Boolean(
-          value && typeof value === 'object' && !Array.isArray(value),
-        ),
-      });
-      if (!data) return null;
-
-      if (typeof data !== 'object' || data === null) {
-        logger.warn(`[session-store] invalid session file (not an object): ${sessionId}`);
-        return null;
-      }
-      if (!Array.isArray(data.messages)) {
-        logger.warn(`[session-store] invalid session file (messages is not an array): ${sessionId}`);
-        return null;
-      }
-      const persisted = data as unknown as PersistedSession;
-      const createdAt = new Date(persisted.createdAt);
-      const lastAccessedAt = new Date(persisted.lastAccessedAt);
-      if (isNaN(createdAt.getTime()) || isNaN(lastAccessedAt.getTime())) {
-        logger.warn(`[session-store] invalid session file (bad timestamps): ${sessionId}`);
-        return null;
-      }
-
+      raw = await fsPromises.readFile(filePath, 'utf8');
+    } catch (error) {
+      if (nodeErrorCode(error) === 'ENOENT') return { state: 'absent' };
       return {
-        ...persisted,
-        ...this.decodeContent(persisted),
-        createdAt,
-        lastAccessedAt,
+        state: 'unreadable',
+        reason: 'io',
+        error: error instanceof Error ? error.message : 'unreadable',
       };
-    } catch (_error) {
-      if (_error instanceof SessionDecryptionError) throw _error;
-      return null;
     }
+    return this.decodeSessionFile(raw);
+  }
+
+  /**
+   * Read one session file's bytes under the session lock, for a verbatim copy.
+   * The session is decoded from the bytes returned, never from a second read.
+   * A lock held by another process throws. ENOENT is `absent`, without a lock.
+   */
+  async readSessionFileCopy(sessionId: string): Promise<SessionFileCopy> {
+    const filePath = this.getSessionFilePath(sessionId);
+    const readBytes = async (): Promise<Buffer | SessionFileCopy> => {
+      try {
+        return await fsPromises.readFile(filePath);
+      } catch (error) {
+        if (nodeErrorCode(error) === 'ENOENT') return { state: 'absent' };
+        return { state: 'unreadable', reason: 'io', error: error instanceof Error ? error.message : 'unreadable' };
+      }
+    };
+    const first = await readBytes();
+    if (!Buffer.isBuffer(first)) return first;
+    return withSessionLock(filePath, async () => {
+      const bytes = await readBytes();
+      if (!Buffer.isBuffer(bytes)) return bytes;
+      const read = this.decodeSessionFile(bytes.toString('utf8'));
+      if (read.state !== 'ok') return read;
+      // decodeContent marks a session encrypted exactly when the file holds the envelope.
+      return { state: 'ok', bytes, session: read.session, sealedAtRest: read.session.encrypted === true };
+    });
+  }
+
+  /**
+   * Empty a session's messages only if its file still holds `expected`, the
+   * bytes a caller copied out. Check and write run in one section under the
+   * session lock, so no writer that takes the lock can land between them: a
+   * turn added since the copy leaves the file as it is and returns `changed`.
+   * The SQLite index rows of the session are deleted in the same section,
+   * after the emptied file is written: a turn is written to both under this
+   * lock, so neither can gain a turn in between. The index loses the turns
+   * only once the file no longer holds them, so a session whose file keeps
+   * its turns stays found by the search.
+   * `beforeRead` runs first inside that section, `beforeWrite` right before
+   * the file is written, `beforeIndexPurge` right before the index purge. A
+   * throw from `beforeRead` or `beforeWrite` stops there with nothing erased.
+   * Any failure from the write on (including one reported after the rename,
+   * or from the index purge) puts `expected` back in the file before it is
+   * rethrown, and the index purge is one transaction: both stores stay as
+   * they were. Only if that restore fails too (it is logged) can the file
+   * stay emptied while the index keeps the turns; the archive keeps them.
+   */
+  async clearSessionMessagesIfUnchanged(
+    sessionId: string,
+    expected: Buffer,
+    options: {
+      encrypt: boolean;
+      beforeRead?: () => void;
+      beforeIndexPurge?: () => void;
+      beforeWrite?: () => void;
+    },
+  ): Promise<'cleared' | 'changed' | 'protection-changed'> {
+    const filePath = this.getSessionFilePath(sessionId);
+    return withSessionLock(filePath, async () => {
+      options.beforeRead?.();
+      let bytes: Buffer;
+      try {
+        bytes = await fsPromises.readFile(filePath);
+      } catch (error) {
+        if (nodeErrorCode(error) === 'ENOENT') return 'changed';
+        throw error;
+      }
+      if (!bytes.equals(expected)) return 'changed';
+      const read = this.decodeSessionFile(bytes.toString('utf8'));
+      if (read.state !== 'ok') return 'changed';
+      if (this.shouldEncrypt(read.session) !== options.encrypt) return 'protection-changed';
+      options.beforeWrite?.();
+      try {
+        await this.writeSessionUnlocked({ ...read.session, messages: [] });
+        options.beforeIndexPurge?.();
+        const dbRepository = await this.ensureDatabaseRepository();
+        dbRepository?.deleteMessages(sessionId);
+      } catch (error) {
+        await this.restoreSessionBytesUnlocked(filePath, expected);
+        throw error;
+      }
+      return 'cleared';
+    });
+  }
+
+  /**
+   * After a failed erase, put back the bytes the file held, unless it still
+   * holds them. The caller holds the session lock. A restore that fails too
+   * is logged and the erase error still propagates: the index then keeps the
+   * turns, and the archive written before the erase keeps them as well.
+   */
+  private async restoreSessionBytesUnlocked(filePath: string, expected: Buffer): Promise<void> {
+    try {
+      const current = await fsPromises.readFile(filePath).catch(() => null);
+      if (current && current.equals(expected)) return;
+      await writeFileAtomic(filePath, expected, { mode: 0o600 });
+    } catch (error) {
+      logger.warn('[session-store] session erase failed and the session file could not be restored', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private decodeSessionFile(raw: string): SessionFileRead {
+    let data: unknown;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return { state: 'unreadable', reason: 'invalid', error: 'invalid JSON' };
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return { state: 'unreadable', reason: 'invalid', error: 'session file is not an object' };
+    }
+    const record = data as Record<string, unknown>;
+    if (!Array.isArray(record.messages)) {
+      return { state: 'unreadable', reason: 'invalid', error: 'session messages are not an array' };
+    }
+    const persisted = record as unknown as PersistedSession;
+    const createdAt = new Date(persisted.createdAt);
+    const lastAccessedAt = new Date(persisted.lastAccessedAt);
+    if (Number.isNaN(createdAt.getTime()) || Number.isNaN(lastAccessedAt.getTime())) {
+      return { state: 'unreadable', reason: 'invalid', error: 'session timestamps are invalid' };
+    }
+    try {
+      return {
+        state: 'ok',
+        session: {
+          ...persisted,
+          ...this.decodeContent(persisted),
+          createdAt,
+          lastAccessedAt,
+        },
+      };
+    } catch (error) {
+      if (error instanceof SessionDecryptionError) throw error;
+      return {
+        state: 'unreadable',
+        reason: 'invalid',
+        error: error instanceof Error ? error.message : 'unreadable',
+      };
+    }
+  }
+
+  async loadSession(sessionId: string): Promise<Session | null> {
+    const read = await this.readSessionFileState(sessionId);
+    if (read.state === 'ok') return read.session;
+    if (read.state === 'absent') return null;
+    if (read.reason === 'io') {
+      throw new Error(read.error);
+    }
+    logger.warn(`[session-store] invalid session file (${read.error}): ${sessionId}`);
+    return null;
   }
 
   /**
