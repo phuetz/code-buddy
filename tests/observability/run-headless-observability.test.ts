@@ -6,6 +6,7 @@ import { RunStore } from '../../src/observability/run-store.js';
 import { listRuns } from '../../src/observability/run-viewer.js';
 import { loadTrajectory } from '../../src/observability/run-trajectory-load.js';
 import { renderTrajectory } from '../../src/observability/run-trajectory.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 describe('B-2: Run lifecycle, completion status, trajectory metrics, and auditLogger.init', () => {
   let tmpHome: string;
@@ -37,6 +38,7 @@ describe('B-2: Run lifecycle, completion status, trajectory metrics, and auditLo
       }
     }
     store.dispose();
+    await store.whenStreamsClosed();
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
     if (originalEnvAuditDir !== undefined) {
       process.env.CODEBUDDY_AUDIT_DIR = originalEnvAuditDir;
@@ -44,12 +46,7 @@ describe('B-2: Run lifecycle, completion status, trajectory metrics, and auditLo
       delete process.env.CODEBUDDY_AUDIT_DIR;
     }
     consoleLogSpy.mockRestore();
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    try {
-      fs.rmSync(tmpHome, { recursive: true, force: true });
-    } catch {
-      // ignore
-    }
+    removeTestDir(tmpHome);
   });
 
   function getLogs(): string {

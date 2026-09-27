@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { removeTmpDirStrict } from '../helpers/tmp.js';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -62,7 +63,7 @@ describe('mobile resume sessions API', () => {
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
     });
-    rmSync(sessionsDir, { recursive: true, force: true });
+    removeTmpDirStrict(sessionsDir);
   });
 
   async function seedSession(opts: {

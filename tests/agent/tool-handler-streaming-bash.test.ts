@@ -11,6 +11,7 @@ import { BashTool } from '../../src/tools/index.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import { resetToolFilter } from '../../src/utils/tool-filter.js';
 import type { ToolResult } from '../../src/types/index.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 function bashCall(command: string, id = 'call-stream-bash') {
   return {
@@ -95,8 +96,8 @@ describe('ToolHandler streaming bash observability', () => {
         }
       }
       item.store.dispose();
-      await new Promise((resolve) => setTimeout(resolve, 60));
-      fs.rmSync(item.dir, { recursive: true, force: true });
+      await item.store.whenStreamsClosed();
+      removeTestDir(item.dir);
     }
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
   });

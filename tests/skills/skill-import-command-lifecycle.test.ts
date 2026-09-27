@@ -13,6 +13,7 @@ import {
   resetSkillRegistry,
 } from '../../src/skills/registry.js';
 import { requireSkillWatchersAtLeast } from './watch-health.js';
+import { removeTestDirAsync } from '../helpers/tmp.js';
 import { tmpdir as osTmpdirForTests } from 'node:os';
 import { realpathSync as fsRealpathForTmp } from 'node:fs';
 
@@ -29,7 +30,7 @@ afterEach(async () => {
   // that race: wait for the handles, then remove asynchronously.
   await awaitSkillRegistryWatchersClosed();
   for (const dir of tempDirs.splice(0)) {
-    await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await removeTestDirAsync(dir);
   }
 });
 

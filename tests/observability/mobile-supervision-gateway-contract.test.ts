@@ -8,6 +8,7 @@ import {
   renderMobileSupervisionGatewayContract,
 } from '../../src/observability/mobile-supervision-gateway-contract.js';
 import { RunStore } from '../../src/observability/run-store.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 let tempDir: string;
 let store: RunStore;
@@ -19,9 +20,9 @@ describe('mobile supervision gateway contract', () => {
   });
 
   afterEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 60));
     store.dispose();
-    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await store.whenStreamsClosed();
+    removeTestDir(tempDir);
   });
 
   it('does not touch session or run stores for a contract-only preview', async () => {

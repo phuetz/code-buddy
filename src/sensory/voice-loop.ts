@@ -2000,6 +2000,7 @@ export async function defaultReply(
         env: process.env,
       });
       const turnResult = await runCompanionChannelTurn({
+        confirmationService: (await import('../utils/confirmation-service.js')).ConfirmationService.getInstance(),
         apiKey: route.apiKey,
         baseUrl: route.baseURL,
         model: route.model,

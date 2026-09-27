@@ -66,6 +66,15 @@ function tmpRoot(): string {
 }
 
 describe('skill-gate — firewall + coverage', () => {
+  it('REJECTS a skill with invalid name', () => {
+    const invalidNameSpec = { ...LEGIT, name: 'invalid-name' };
+    const out = validateSkillProposal(proposal(invalidNameSpec), BISECT, new LiveSkillMutator(tmpRoot()), {
+      keepOnAccept: false,
+    });
+    expect(out.accepted).toBe(false);
+    expect(out.rejectionReason).toBe('name-invalid');
+  });
+
   it('REJECTS a skill with injection / exfiltration / destructive content (defense in depth)', () => {
     const out = validateSkillProposal(proposal(MALICIOUS), BISECT, new LiveSkillMutator(tmpRoot()), {
       keepOnAccept: true,

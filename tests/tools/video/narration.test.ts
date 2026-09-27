@@ -23,6 +23,7 @@ import {
   muxNarration,
 } from '../../../src/tools/video/narration.js';
 import { logger } from '../../../src/utils/logger.js';
+import { repoScratchRoot } from '../../helpers/tmp.js';
 
 function makeSpawn(
   opts: {
@@ -158,7 +159,7 @@ describe('synthesizeNarration (injected)', () => {
   });
 
   it('rejects a successful Piper exit that leaves an old WAV untouched', async () => {
-    const temporary = await mkdtemp(join(process.cwd(), '.narration-stale-'));
+    const temporary = await mkdtemp(join(repoScratchRoot(process.cwd()), '.narration-stale-'));
     try {
       const outputPath = join(temporary, 'narration.wav');
       await writeFile(outputPath, 'old wav');
@@ -446,7 +447,7 @@ describe('synthesizeLocalizedNarration', () => {
   });
 
   it('rejects a localized Piper exit that leaves an old WAV untouched', async () => {
-    const temporary = await mkdtemp(join(process.cwd(), '.narration-localized-stale-'));
+    const temporary = await mkdtemp(join(repoScratchRoot(process.cwd()), '.narration-localized-stale-'));
     try {
       const outputPath = join(temporary, 'localized.wav');
       await writeFile(outputPath, 'old localized wav');
@@ -480,7 +481,7 @@ describe('synthesizeLocalizedNarration', () => {
 
 describe('muxNarration', () => {
   it('rejects a successful ffmpeg exit when no muxed file exists', async () => {
-    const temporary = await mkdtemp(join(process.cwd(), '.narration-mux-'));
+    const temporary = await mkdtemp(join(repoScratchRoot(process.cwd()), '.narration-mux-'));
     try {
       const outPath = join(temporary, 'muxed.mp4');
       const fakeSpawn = ((cmd: string) => {

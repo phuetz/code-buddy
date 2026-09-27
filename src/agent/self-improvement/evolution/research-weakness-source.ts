@@ -14,16 +14,24 @@
  * @module agent/self-improvement/evolution/research-weakness-source
  */
 import { logger } from '../../../utils/logger.js';
+import { articleIdentity, bibliographicIds, readArticleLinks, samePublication, upsertArticleLinks, type ArticleLink, type BibliographicId } from '../../../catalog/article-links.js';
+import type { CollectiveKnowledgeGraph } from '../../../memory/collective-knowledge-graph.js';
 import type { Weakness } from './evolution-engine.js';
 import { getFeatureMap, type FeatureArea, type FeatureEnrichment } from './feature-map.js';
+import { buildResearchQuery, createResearchBm25Recall, fuseResearchRanks, isResearchArticle } from './research-retrieval.js';
 
 /** A recall hit reduced to what prioritization + synthesis need (subset of CkgRecallResult). */
 export interface ResearchHit {
+  id?: string;
+  name?: string;
+  type?: string;
   text: string;
   similarity?: number;
   confidence: number;
   corroborations?: number;
   source?: string;
+  /** Reciprocal rank fusion score; ranks candidates but never replaces the quality score. */
+  retrievalScore?: number;
   relations?: Array<{ predicate: string; target?: string; reason?: string }>;
 }
 
@@ -42,10 +50,20 @@ export interface FetchResearchGoalsArgs {
   perFeature?: number;
   /** Minimum semantic similarity for a match to count. */
   minSimilarity?: number;
+  /** Disable only the similarity floor; identity, aggregate score and contradiction guards remain. */
+  filterMode?: 'none' | 'legacy';
+  /** Select CKG recall alone or CKG embeddings fused with BM25. */
+  retrievalMode?: 'legacy' | 'hybrid';
+  queryMode?: 'plain' | 'component';
+  /** Injectable persistence target; default is the isolated Code Buddy profile. */
+  linksPath?: string;
+  /** Disable persistence only for isolated evaluation. */
+  persistLinks?: boolean;
   model?: string;
 }
 
-const DEFAULT_MIN_SIMILARITY = 0.32;
+const DEFAULT_MIN_SIMILARITY = 0.45;
+const DEFAULT_MIN_SCORE = 0.32;
 
 // ── prioritization (pure) ───────────────────────────────────────────────
 
@@ -59,29 +77,89 @@ export function matchScore(hit: ResearchHit): number {
   const conf = typeof hit.confidence === 'number' ? hit.confidence : 0.5;
   const supported = (hit.relations ?? []).some((r) => r.predicate === 'supports' || r.predicate === 'builds_on');
   const corroBoost = 1 + 0.1 * Math.max(0, (hit.corroborations ?? 1) - 1);
-  return sim * conf * (supported ? 1.15 : 1) * corroBoost;
+  return Math.min(1, sim * conf * (supported ? 1.15 : 1) * corroBoost);
+}
+
+/** Only publication feed records with a durable bibliographic identity can guide code changes. */
+export function scholarlyIdentity(hit: ResearchHit): string | null {
+  if (hit.type !== 'discovery') return null;
+  if (hit.source !== 'arxiv' && hit.source !== 'europepmc') return null;
+  const ids = bibliographicIds(hit.name ?? '', hit.text);
+  if (!ids) return null;
+  if (hit.source === 'arxiv' && !ids.arxiv && !ids.doi) return null;
+  if (hit.source === 'europepmc' && !ids.pmid && !ids.doi) return null;
+  return articleIdentity(ids);
+}
+
+export function toArticleLink(match: FeatureMatch, query: string, now = new Date()): ArticleLink | null {
+  const hit = match.hit;
+  if (!scholarlyIdentity(hit)) return null;
+  const ids = bibliographicIds(hit.name ?? '', hit.text)!;
+  const accepted = (hit.similarity ?? 0) >= DEFAULT_MIN_SIMILARITY && match.score >= DEFAULT_MIN_SCORE && !isContradicted(hit);
+  return {
+    schemaVersion: 1, featureId: match.feature.id, catalogIds: [...(match.feature.catalogIds ?? [])].sort(),
+    article: { ...ids, ckgId: hit.id ?? hit.name ?? articleIdentity(ids), source: hit.source as 'arxiv' | 'europepmc', title: hit.text.split(/[.!?]\s/)[0]!.slice(0, 240) },
+    query, method: match.rankScore !== undefined
+      ? 'ckg-bm25-semantic-rrf+dgm-relevance-v1' : 'ckg-recall-hybrid+dgm-relevance-v1',
+    scores: { similarity: hit.similarity ?? 0, confidence: hit.confidence, aggregate: match.score },
+    capturedAt: now.toISOString(), provenance: { ckgId: hit.id ?? hit.name ?? articleIdentity(ids), source: hit.source! },
+    justification: accepted ? 'Publication identifiée, scores au-dessus des seuils et sans contradiction.' : 'Correspondance insuffisante ou contredite ; revue humaine requise.',
+    humanStatus: 'unreviewed',
+  };
+}
+
+/** A human rejection wins over a new automatic score for the same domain and paper. */
+export function excludeHumanRejected(candidates: FeatureMatch[], file?: string): FeatureMatch[] {
+  const rejected = readArticleLinks(file).filter((row) => row.humanStatus === 'rejected');
+  return candidates.filter((candidate) => {
+    if (!scholarlyIdentity(candidate.hit)) return true;
+    const ids = bibliographicIds(candidate.hit.name ?? '', candidate.hit.text)!;
+    return !rejected.some((row) => row.featureId === candidate.feature.id &&
+      samePublication(row.article, ids));
+  });
 }
 
 export interface FeatureMatch {
   feature: FeatureArea;
   hit: ResearchHit;
+  /** Quality score used by the publication guard and persisted article links. */
   score: number;
+  /** Optional RRF ordering score; has no effect on quality thresholds. */
+  rankScore?: number;
+}
+
+/** Ranked publication recall. Scores are monotone; duplicate versions and feeds share one slot. */
+export function filterResearchHits(
+  candidates: FeatureMatch[], opts: { minSimilarity?: number; limit?: number; filterMode?: 'none' | 'legacy' } = {},
+): FeatureMatch[] {
+  const floor = opts.minSimilarity ?? (opts.filterMode === 'none' ? 0 : DEFAULT_MIN_SIMILARITY);
+  const kept = candidates.filter((c) => scholarlyIdentity(c.hit) &&
+    Number.isFinite(c.hit.similarity) && (c.hit.similarity ?? 0) >= floor &&
+    Number.isFinite(c.score) && c.score >= DEFAULT_MIN_SCORE && !isContradicted(c.hit));
+  kept.sort((a, b) => (b.rankScore ?? b.score) - (a.rankScore ?? a.score) ||
+    b.score - a.score || a.feature.id.localeCompare(b.feature.id) ||
+    scholarlyIdentity(a.hit)!.localeCompare(scholarlyIdentity(b.hit)!));
+  const seen: BibliographicId[] = [];
+  const out: FeatureMatch[] = [];
+  for (const match of kept) {
+    const ids = bibliographicIds(match.hit.name ?? '', match.hit.text)!;
+    if (seen.some((previous) => samePublication(previous, ids))) continue;
+    seen.push(ids);
+    out.push(match);
+    if (opts.limit && out.length >= opts.limit) break;
+  }
+  return out;
 }
 
 /** Best (feature × discovery) matches: above the similarity floor, not contradicted, ranked. */
 export function selectMatches(
   candidates: FeatureMatch[],
-  opts: { minSimilarity?: number; limit?: number } = {},
+  opts: { minSimilarity?: number; limit?: number; filterMode?: 'none' | 'legacy' } = {},
 ): FeatureMatch[] {
-  const floor = opts.minSimilarity ?? DEFAULT_MIN_SIMILARITY;
-  const kept = candidates.filter(
-    (c) => (c.hit.similarity ?? 0) >= floor && !isContradicted(c.hit),
-  );
   // One goal per feature (avoid N goals all hitting the same area), best-first.
-  kept.sort((a, b) => b.score - a.score);
   const seenFeature = new Set<string>();
   const out: FeatureMatch[] = [];
-  for (const m of kept) {
+  for (const m of filterResearchHits(candidates, { minSimilarity: opts.minSimilarity, filterMode: opts.filterMode })) {
     if (seenFeature.has(m.feature.id)) continue;
     seenFeature.add(m.feature.id);
     out.push(m);
@@ -114,21 +192,39 @@ export function parseGoal(text: string | null): string | null {
 
 // ── default recall + chat (in-process, reused patterns) ──────────────────
 
-function makeDefaultRecall(): ResearchRecall {
+function makeDefaultRecall(mode: 'legacy' | 'hybrid', graph?: CollectiveKnowledgeGraph): ResearchRecall {
+  let bm25: ReturnType<typeof createResearchBm25Recall> | null = null;
   return async (query, opts) => {
     try {
       const { getCollectiveKnowledgeGraph } = await import('../../../memory/collective-knowledge-graph.js');
-      const hits = await getCollectiveKnowledgeGraph().recallHybrid(query, {
+      const ckg = graph ?? getCollectiveKnowledgeGraph();
+      const hits = await ckg.recallHybrid(query, {
         types: ['discovery'],
-        ...(opts.limit ? { limit: opts.limit } : {}),
+        limit: mode === 'hybrid' ? 100 : (opts.limit ?? 3),
+        ...(mode === 'hybrid' ? { semanticWeight: 1, mmrLambda: 1, inProcess: true } : {}),
       });
-      return hits.map((h) => ({
+      let lexical: typeof hits = [];
+      if (mode === 'hybrid') {
+        try {
+          lexical = (bm25 ??= createResearchBm25Recall(ckg))(query, 100);
+        } catch (err) {
+          logger.debug(`[evolve] research BM25 unavailable: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      const ranked = mode === 'hybrid'
+        ? fuseResearchRanks(hits.filter(isResearchArticle), lexical, opts.limit ?? 20)
+        : hits.map((hit) => ({ hit, score: 0 }));
+      return ranked.map(({ hit: h, score }) => ({
+        id: h.id,
+        name: h.name,
+        type: h.type,
         text: h.text,
         similarity: h.similarity,
         confidence: h.confidence,
         corroborations: h.corroborations,
         source: h.source,
         relations: h.relations,
+        ...(mode === 'hybrid' ? { retrievalScore: score } : {}),
       }));
     } catch {
       return [];
@@ -136,7 +232,57 @@ function makeDefaultRecall(): ResearchRecall {
   };
 }
 
-function makeDefaultChat(model?: string): SynthChat {
+export interface ResearchSelectionArgs extends Pick<FetchResearchGoalsArgs,
+  'recall' | 'perFeature' | 'limit' | 'minSimilarity' | 'filterMode' | 'retrievalMode' |
+  'queryMode' | 'linksPath' | 'persistLinks'> {
+  features: FeatureArea[];
+  /** Inject a frozen graph for offline evaluation; production uses its normal singleton. */
+  ckg?: CollectiveKnowledgeGraph;
+}
+
+export function researchQueryForFeature(feature: FeatureArea, mode: 'legacy' | 'hybrid', queryMode: 'plain' | 'component'): string {
+  return mode === 'hybrid' && queryMode === 'component'
+    ? buildResearchQuery(feature.name, feature) : feature.description;
+}
+
+/** Shared production and benchmark selection, including bibliographic and persistence guards. */
+export async function retrieveResearchMatches(args: ResearchSelectionArgs): Promise<FeatureMatch[]> {
+  const mode = args.retrievalMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_RETRIEVAL === 'legacy' ? 'legacy' : 'hybrid');
+  const recall = args.recall ?? makeDefaultRecall(mode, args.ckg);
+  const perFeature = args.perFeature ?? (mode === 'hybrid' ? 20 : 3);
+  const queryMode = args.queryMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_QUERY === 'component' ? 'component' : 'plain');
+  const filterMode = args.filterMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_FILTER === 'none' ? 'none' : 'legacy');
+  const persistLinks = args.persistLinks ?? (Boolean(args.linksPath) || !args.recall);
+  const candidates: FeatureMatch[] = [];
+  for (const feature of args.features) {
+    let hits: ResearchHit[] = [];
+    const query = researchQueryForFeature(feature, mode, queryMode);
+    try {
+      hits = await recall(query, { types: ['discovery'], limit: perFeature });
+    } catch {
+      hits = [];
+    }
+    const links: ArticleLink[] = [];
+    for (const hit of hits) {
+      if (!hit?.text) continue;
+      const candidate: FeatureMatch = { feature, hit, score: matchScore(hit),
+        ...(hit.retrievalScore !== undefined ? { rankScore: hit.retrievalScore } : {}) };
+      candidates.push(candidate);
+      const link = toArticleLink(candidate, query);
+      if (link) links.push(link);
+    }
+    if (persistLinks && links.length) {
+      try { upsertArticleLinks(links, args.linksPath); }
+      catch (error) { logger.warn(`[evolve] article link persistence failed: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+  }
+  return selectMatches(persistLinks ? excludeHumanRejected(candidates, args.linksPath) : candidates, {
+    ...(args.minSimilarity !== undefined ? { minSimilarity: args.minSimilarity } : {}),
+    filterMode, limit: args.limit ?? 3,
+  });
+}
+
+export function makeDefaultChat(model?: string): SynthChat {
   return async (prompt) => {
     try {
       const { detectProviderFromEnv } = await import('../../../utils/provider-detector.js');
@@ -160,32 +306,9 @@ function makeDefaultChat(model?: string): SynthChat {
  */
 export async function fetchResearchGoals(args: FetchResearchGoalsArgs = {}): Promise<Weakness[]> {
   try {
-    const features = args.features ?? (await getFeatureMap(args.enrich ? { enrich: args.enrich } : {}));
-    const recall = args.recall ?? makeDefaultRecall();
+    const features = args.features ?? (await getFeatureMap({ ...(args.enrich ? { enrich: args.enrich } : {}), catalog: 'generate' }));
     const chat = args.chat ?? makeDefaultChat(args.model);
-    const perFeature = args.perFeature ?? 3;
-    const limit = args.limit ?? 3;
-
-    // Gather (feature × discovery) candidates.
-    const candidates: FeatureMatch[] = [];
-    for (const feature of features) {
-      let hits: ResearchHit[] = [];
-      try {
-        hits = await recall(feature.description, { types: ['discovery'], limit: perFeature });
-      } catch {
-        hits = [];
-      }
-      for (const hit of hits) {
-        if (!hit?.text) continue;
-        candidates.push({ feature, hit, score: matchScore(hit) });
-      }
-    }
-    if (candidates.length === 0) return [];
-
-    const matches = selectMatches(candidates, {
-      ...(args.minSimilarity !== undefined ? { minSimilarity: args.minSimilarity } : {}),
-      limit,
-    });
+    const matches = await retrieveResearchMatches({ ...args, features });
 
     const goals: Weakness[] = [];
     let i = 0;

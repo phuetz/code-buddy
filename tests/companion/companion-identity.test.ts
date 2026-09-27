@@ -168,6 +168,18 @@ describe('companion-identity', () => {
   });
 
   describe('Voice robotNamed resolution via respond-decider', () => {
+    it('keeps a Visa weather request at guest role', async () => {
+      const { createResponseDecider } = await import('../../src/sensory/respond-decider.js');
+      const { resolveVoiceRobotNamed } = await import('../../src/sensory/voice-loop.js');
+      const named = await resolveVoiceRobotNamed('Visa, donne la météo', {
+        responseDecider: createResponseDecider({ robotName: 'Lisa' }),
+      });
+      expect(named).toBe(false);
+      expect(resolveCompanionIdentity({
+        channel: 'voice', isVoicePresence: true, robotNamed: named, env: {},
+      }).role).toBe('guest');
+    });
+
     it('resolves guest when phrase is spoken without robot name outside engagement window, and present when robot is named', async () => {
       const { createResponseDecider } = await import('../../src/sensory/respond-decider.js');
       const { resolveVoiceRobotNamed } = await import('../../src/sensory/voice-loop.js');
