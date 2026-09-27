@@ -153,6 +153,16 @@ export class DelegateAgentTool implements ITool {
       };
     }
 
+    // Specialized agents read their input file directly (readFileSync):
+    // apply the same credential deny list as view_file before handing it over.
+    if (filePath) {
+      const { checkSecretFileAccess, formatSecretRefusal } = await import('../../security/secret-files.js');
+      const secret = checkSecretFileAccess(filePath, 'read', { baseDir: context?.cwd ?? process.cwd() });
+      if (secret.secret) {
+        return { success: false, error: formatSecretRefusal(filePath, secret) };
+      }
+    }
+
     try {
       const bridge = _delegateProvider ? _delegateProvider() : undefined;
 

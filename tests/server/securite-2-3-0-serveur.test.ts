@@ -83,7 +83,7 @@ describe('constat 3 — bind loopback par défaut', () => {
     const { resolveTrustProxySetting } = await import('../../src/server/index.js');
     expect(resolveTrustProxySetting(undefined)).toBe(false);
     expect(resolveTrustProxySetting('  ')).toBe(false);
-    expect(resolveTrustProxySetting('loopback, 10.0.0.0/8')).toEqual(['loopback', '10.0.0.0/8']);
+    expect(resolveTrustProxySetting('loopback, 198.51.100.0/24')).toEqual(['loopback', '198.51.100.0/24']);
   });
 });
 

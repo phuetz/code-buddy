@@ -229,7 +229,11 @@ export class UnifiedVfsRouter implements IVfsProvider {
    * Validate a path using workspace isolation
    * Returns the full PathValidationResult for detailed error handling
    */
-  validateWithIsolation(filePath: string, operation?: string): PathValidationResult {
-    return getWorkspaceIsolation().validatePath(filePath, operation);
+  validateWithIsolation(
+    filePath: string,
+    operation?: string,
+    access: SecretFileAccess = 'read'
+  ): PathValidationResult {
+    return getWorkspaceIsolation().validatePath(filePath, operation, access);
   }
 }

@@ -221,12 +221,16 @@ describe('bash : le validateur voit ~, $HOME et ${HOME}', () => {
     'base64 $HOME/.codebuddy/skill-signing/key.pem',
     'cat $HOME/.ssh/id_rsa',
     'cat ${HOME}/.aws/credentials',
+    'cd ~/.codebuddy && cat server.env',
+    'cd $HOME/.codebuddy/skill-signing && cat key.pem',
+    'cd ~/.codebuddy && cat *.json',
   ])('refuse « %s »', (command) => {
     expect(validateCommand(command).valid).toBe(false);
   });
 
   it.each([
     'cat ~/.codebuddy/settings.json',
+    'cd ~/.codebuddy && cat settings.json',
     'ls ~/.codebuddy',
     'cp .env.example .env',
     'echo $HOME',
@@ -313,5 +317,35 @@ describe('ShellEnvPolicy — noms de jetons que le motif ne voyait pas (constat 
     expect(JSON.stringify(env)).not.toContain(FAKE_TOKEN);
     expect(env.PATH).toBe('/usr/bin');
     expect(env.HTTP_PROXY).toBe('http://proxy.invalid:3128');
+  });
+});
+
+describe('outils de lecture hors VFS (contre-revue)', () => {
+  it('csv_preview refuse le jeton', async () => {
+    const { CsvPreviewTool } = await import('../../src/tools/csv-preview-tool.js');
+    const result = await new CsvPreviewTool().execute({ file: TOKEN_FILE });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(FAKE_TOKEN);
+  });
+
+  it('diff_files refuse deux fichiers d’identifiants sous ~/.codebuddy', async () => {
+    const { DiffFilesTool } = await import('../../src/tools/diff-files-tool.js');
+    const result = await new DiffFilesTool().execute({ root: CB, left: 'codex-auth.json', right: 'xai-auth.json' });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(FAKE_TOKEN);
+  });
+
+  it('diff_files compare toujours deux fichiers ordinaires', async () => {
+    const { DiffFilesTool } = await import('../../src/tools/diff-files-tool.js');
+    const result = await new DiffFilesTool().execute({ root: WORK, left: 'README.md', right: 'notes.md' });
+    expect(result.success).toBe(true);
+  });
+
+  it('delegate_agent refuse de confier le jeton à un agent spécialisé', async () => {
+    const { createDelegateAgentTools } = await import('../../src/tools/registry/delegate-agent-tools.js');
+    const tool = createDelegateAgentTools()[0]!;
+    const result = await tool.execute({ agent: 'excel', action: 'read', filePath: TOKEN_FILE }, { cwd: WORK } as never);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/credential\/secret file/);
   });
 });

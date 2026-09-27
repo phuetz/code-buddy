@@ -407,18 +407,30 @@ export function findCredentialPathInCommand(command: string): string | null {
   );
   const usesRecursiveReader = Array.from(words).some((word) => RECURSIVE_READERS.has(word));
 
-  for (const raw of tokens) {
+  // `cd <credential root>` then a RELATIVE name: resolve relative tokens
+  // against the last `cd` target seen in the command text.
+  let cdTarget: string | null = null;
+  for (let i = 0; i < tokens.length; i += 1) {
+    const raw = tokens[i] ?? '';
     const token = raw.replace(/^--?[A-Za-z0-9-]+=/, '');
     const base = path.basename(token).toLowerCase();
     if (BASH_CREDENTIAL_BASENAMES.has(base)) return raw;
-    if (!path.isAbsolute(token)) continue;
-    const normalized = path.normalize(token).replace(/[\\/]+$/, '') || path.sep;
+    if (i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd')) {
+      cdTarget = path.isAbsolute(token) ? path.normalize(token) : cdTarget ? path.resolve(cdTarget, token) : null;
+    }
+    let candidate = token;
+    if (!path.isAbsolute(token)) {
+      if (!cdTarget || token.startsWith('-')) continue;
+      candidate = path.resolve(cdTarget, token);
+    }
+    const normalized = path.normalize(candidate).replace(/[\\/]+$/, '') || path.sep;
     const underRoot = roots.find(
       (root) => normalized === root || normalized.startsWith(root + path.sep),
     );
     if (!underRoot) continue;
     if (/[*?[\]{}]/.test(normalized)) return raw;
-    if (normalized === underRoot && usesRecursiveReader) return raw;
+    const isCdTarget = i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd');
+    if (normalized === underRoot && usesRecursiveReader && !isCdTarget) return raw;
     if (classifySecretPath(normalized).secret) return raw;
   }
   return null;
