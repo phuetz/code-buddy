@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -104,7 +105,7 @@ describe('SERV1 OpenAI /v1/chat/completions errors', () => {
     } else {
       process.env.CODEBUDDY_HOME = previousHome;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   async function start(): Promise<string> {

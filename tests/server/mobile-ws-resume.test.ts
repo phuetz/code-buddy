@@ -1,4 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { drainSessionTurnQueueForTests } from '../../src/server/mobile/resume-sessions.js';
+import { removeTmpDirStrict } from '../helpers/tmp.js';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -140,6 +142,7 @@ describe('Mobile WebSocket resume session handling', () => {
     for (const client of wss.clients) client.terminate();
     await new Promise<void>((resolve) => wss.close(() => resolve()));
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    await drainSessionTurnQueueForTests();
 
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
@@ -150,7 +153,7 @@ describe('Mobile WebSocket resume session handling', () => {
     if (previousCoworkDb === undefined) delete process.env.CODEBUDDY_COWORK_DB;
     else process.env.CODEBUDDY_COWORK_DB = previousCoworkDb;
 
-    rmSync(sessionsDir, { recursive: true, force: true });
+    removeTmpDirStrict(sessionsDir);
   });
 
   async function authedClient(userId: string): Promise<{ ws: WebSocket; events: Frame[] }> {
