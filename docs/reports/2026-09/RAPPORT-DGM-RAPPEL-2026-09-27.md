@@ -1,5 +1,7 @@
 # Rappel des articles pour la DGM — 27 septembre 2026
 
+> **Mesure invalidée pour la production.** La relecture indépendante a montré que les requêtes ci-dessous provenaient des articles visés et différaient des descriptions réellement envoyées par la DGM. Le « avant » ci-dessous n'était pas non plus le chemin de production. Ces chiffres restent archivés comme expérience exploratoire ; la reprise et la mesure corrigée sont dans `RAPPORT-DGM-RAPPEL-REPRISE-2026-09-27.md`. La commande de banc documentée ci-dessous appartient à l'ancienne version du script et ne fonctionne plus.
+
 Chantier en cours sur `sol/dgm-rappel-hybride-2026-09-27`, départ `8a2891851`.
 
 Le rapport de livraison et les mesures détaillées sont remis dans le répertoire de partage convenu. Les données de jugement et la copie du registre CKG restent hors du dépôt public.
