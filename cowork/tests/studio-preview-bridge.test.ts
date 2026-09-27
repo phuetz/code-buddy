@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CONSOLE_MAX_PER_WINDOW, INSPECTOR_MESSAGE_SOURCE, inspectorScript, PreviewBridge, PREVIEW_BRIDGE_CHANNELS } from '../src/main/studio/preview-bridge';
+import { CONSOLE_MAX_PER_WINDOW, CONSOLE_SUSPEND_MS, INSPECTOR_MESSAGE_SOURCE, inspectorScript, PreviewBridge, PREVIEW_BRIDGE_CHANNELS } from '../src/main/studio/preview-bridge';
 
 function TodoForm() {
   return null;
@@ -79,6 +79,10 @@ describe('PreviewBridge', () => {
       on: vi.fn((_e: string, l: (d: unknown) => void) => {
         listener = l;
       }),
+      off: vi.fn((_e: string, l: (d: unknown) => void) => {
+        if (listener === l) listener = null;
+      }),
+      subscribed: () => listener !== null,
       once: vi.fn(),
       isDestroyed: () => false,
       mainFrame: { framesInSubtree: frames },
@@ -110,13 +114,32 @@ describe('PreviewBridge', () => {
     const sender = makeSender();
     bridge.watch(sender, { url: 'http://127.0.0.1:5173/', root: '/projet' });
     const msg = { message: 'tick', level: 'info', lineNumber: 1, sourceId: 'http://127.0.0.1:5173/src/main.ts', frame: { url: 'http://127.0.0.1:5173/' } };
-    for (let i = 0; i < 5000; i += 1) sender.emit(msg);
+    for (let i = 0; i < 300; i += 1) sender.emit(msg);
     await vi.waitFor(() => expect(sender.send).toHaveBeenCalledTimes(CONSOLE_MAX_PER_WINDOW));
     expect(redact).toHaveBeenCalledTimes(CONSOLE_MAX_PER_WINDOW); // pas de masquage (coûteux) pour les messages ignorés
     clock += 1_000;
     sender.emit(msg);
     await vi.waitFor(() => expect(sender.send).toHaveBeenCalledTimes(CONSOLE_MAX_PER_WINDOW + 2));
-    expect(sender.send.mock.calls[CONSOLE_MAX_PER_WINDOW]?.[1]).toMatchObject({ level: 'warning', message: expect.stringContaining('4950 message(s)') });
+    expect(sender.send.mock.calls[CONSOLE_MAX_PER_WINDOW]?.[1]).toMatchObject({ level: 'warning', message: expect.stringContaining('250 message(s)') });
+    expect(sender.subscribed()).toBe(true);
+  });
+
+  it('flux extrême : le relais se désabonne quelques secondes (le processus principal ne compte plus chaque message), puis revient', async () => {
+    vi.useFakeTimers();
+    try {
+      const bridge = new PreviewBridge({ redact: async (_r, t) => t });
+      const sender = makeSender();
+      bridge.watch(sender, { url: 'http://127.0.0.1:5173/', root: '/projet' });
+      const msg = { message: 'tick', level: 'info', lineNumber: 1, sourceId: 'http://127.0.0.1:5173/src/main.ts', frame: { url: 'http://127.0.0.1:5173/' } };
+      for (let i = 0; i < 5000; i += 1) sender.emit(msg); // après la suspension, emit n'atteint plus le pont
+      expect(sender.off).toHaveBeenCalledTimes(1);
+      expect(sender.subscribed()).toBe(false);
+      expect(sender.send.mock.calls.some(([, e]) => String((e as { message: string }).message).includes('suspendue'))).toBe(true);
+      vi.advanceTimersByTime(CONSOLE_SUSPEND_MS);
+      expect(sender.subscribed()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('échec fermé : masquage prévu mais projet inconnu → aucun message relayé', async () => {

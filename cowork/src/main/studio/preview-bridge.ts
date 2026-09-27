@@ -160,10 +160,13 @@ interface FrameLike {
   executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
 }
 
+type ConsoleListener = (details: { message?: string; level?: unknown; lineNumber?: number; sourceId?: string; frame?: { url?: string } | null }) => void;
+
 interface WebContentsLike {
   id: number;
   send(channel: string, payload: unknown): void;
-  on(event: 'console-message', listener: (details: { message?: string; level?: unknown; lineNumber?: number; sourceId?: string; frame?: { url?: string } | null }) => void): unknown;
+  on(event: 'console-message', listener: ConsoleListener): unknown;
+  off?(event: 'console-message', listener: ConsoleListener): unknown;
   once?(event: 'destroyed', listener: () => void): unknown;
   isDestroyed?(): boolean;
   mainFrame?: { framesInSubtree: FrameLike[] };
@@ -179,6 +182,9 @@ export interface PreviewBridgeOptions {
 /** Plafond du relais console : messages par fenêtre d'une seconde et par fenêtre Cowork. */
 export const CONSOLE_MAX_PER_WINDOW = 50;
 const CONSOLE_WINDOW_MS = 1000;
+/** Au-delà de ce nombre de messages ignorés dans une fenêtre, le relais se désabonne. */
+export const CONSOLE_SUSPEND_AFTER_DROPS = 500;
+export const CONSOLE_SUSPEND_MS = 3000;
 
 interface Watch {
   origin: string;
@@ -191,6 +197,8 @@ export class PreviewBridge {
   private readonly watches = new Map<number, Watch>();
   private readonly attached = new WeakSet<object>();
   private readonly rates = new Map<number, { windowStart: number; count: number; dropped: number }>();
+  private readonly listeners = new Map<number, ConsoleListener>();
+  private readonly suspended = new Map<number, ReturnType<typeof setTimeout>>();
   private readonly now: () => number;
 
   constructor(private readonly options: PreviewBridgeOptions = {}) {
@@ -209,8 +217,16 @@ export class PreviewBridge {
     this.watches.set(sender.id, { origin, root: typeof req.root === 'string' ? req.root : '' });
     if (!this.attached.has(sender)) {
       this.attached.add(sender);
-      sender.on('console-message', (details) => this.onConsole(sender, details));
-      sender.once?.('destroyed', () => this.watches.delete(sender.id));
+      const listener: ConsoleListener = (details) => this.onConsole(sender, details);
+      this.listeners.set(sender.id, listener);
+      sender.on('console-message', listener);
+      sender.once?.('destroyed', () => {
+        this.watches.delete(sender.id);
+        this.listeners.delete(sender.id);
+        const timer = this.suspended.get(sender.id);
+        if (timer) clearTimeout(timer);
+        this.suspended.delete(sender.id);
+      });
     }
     return { ok: true };
   }
@@ -250,6 +266,10 @@ export class PreviewBridge {
     this.rates.set(sender.id, rate);
     if (rate.count > CONSOLE_MAX_PER_WINDOW) {
       rate.dropped += 1;
+      // Flux extrême : même compter chaque message sature le processus principal
+      // (mesuré : ~120 % d'un cœur sous 20 000 messages/s). On se DÉSABONNE
+      // quelques secondes, puis on se réabonne.
+      if (rate.dropped >= CONSOLE_SUSPEND_AFTER_DROPS) this.suspend(sender, rate.dropped);
       return;
     }
     const level = LEVELS[String(details.level)] ?? 'info';
@@ -262,6 +282,28 @@ export class PreviewBridge {
       const entry: PreviewConsoleEntry = { level, message, source, line: details.lineNumber ?? 0, at: Date.now() };
       sender.send(PREVIEW_BRIDGE_CHANNELS.console, entry);
     })();
+  }
+
+  private suspend(sender: WebContentsLike, dropped: number): void {
+    const listener = this.listeners.get(sender.id);
+    if (!listener || !sender.off || this.suspended.has(sender.id)) return;
+    sender.off('console-message', listener);
+    if (!sender.isDestroyed?.()) {
+      sender.send(PREVIEW_BRIDGE_CHANNELS.console, {
+        level: 'warning',
+        message: `Console de l'aperçu suspendue ${CONSOLE_SUSPEND_MS / 1000} s : la page journalise en boucle (${dropped} messages ignorés en moins d'une seconde).`,
+        source: '',
+        line: 0,
+        at: this.now(),
+      } satisfies PreviewConsoleEntry);
+    }
+    const timer = setTimeout(() => {
+      this.suspended.delete(sender.id);
+      this.rates.delete(sender.id);
+      if (!sender.isDestroyed?.() && this.listeners.get(sender.id) === listener) sender.on('console-message', listener);
+    }, CONSOLE_SUSPEND_MS);
+    timer.unref?.();
+    this.suspended.set(sender.id, timer);
   }
 
   /** Active/désactive le mode sélection dans la frame de l'aperçu (et elle seule). */
