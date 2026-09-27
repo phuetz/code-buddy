@@ -69,6 +69,8 @@ import { CommandRunner } from './studio/command-runner';
 import { registerScaffoldIpc } from './studio/scaffold-ipc';
 import { registerPreviewProbeIpc } from './studio/preview-probe-ipc';
 import { registerGithubIpc } from './studio/github-ipc';
+import { registerStudioVersionsIpc } from './studio/studio-versions-ipc';
+import { StudioVersionsService } from './studio/studio-versions-service';
 import { registerOneClickDeployIpc } from './one-click-deploy-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
 import { MediaGenService } from './media/media-gen-service';
@@ -2825,6 +2827,8 @@ registerPreviewProbeIpc(
   }),
 );
 registerGithubIpc(ipcMain);
+// Versions locales par projet (dépôt git séparé sous .codebuddy/) + verrous de fichiers.
+registerStudioVersionsIpc(ipcMain, new StudioVersionsService());
 registerOneClickDeployIpc(ipcMain);
 
 // Media generation surface delegates to the core image_generate tool. Local

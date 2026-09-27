@@ -1,5 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { Bot, Send, Square, Sparkles, User } from 'lucide-react';
+import { Bot, Hammer, MessagesSquare, Send, Square, Sparkles, User } from 'lucide-react';
+import type { IterationMode } from '../studio/iteration-prompt.js';
 import type { StudioMessage } from './iterate-model.js';
 import { lastAssistantMessage } from './iterate-model.js';
 
@@ -9,6 +10,11 @@ export interface StudioChatPanelProps {
   suggestions?: string[];
   onSend?: (text: string) => void;
   onStop?: () => void;
+  /** « Construire » (modifie le code) ou « Discuter » (planifie sans rien écrire). */
+  mode?: IterationMode;
+  onModeChange?: (mode: IterationMode) => void;
+  /** Après un tour de discussion : lance l'implémentation du plan proposé. */
+  onImplementPlan?: () => void;
 }
 
 function Bubble({ message }: { message: StudioMessage }) {
@@ -44,7 +50,16 @@ function Bubble({ message }: { message: StudioMessage }) {
   );
 }
 
-export function StudioChatPanel({ messages, busy = false, suggestions = [], onSend, onStop }: StudioChatPanelProps) {
+export function StudioChatPanel({
+  messages,
+  busy = false,
+  suggestions = [],
+  onSend,
+  onStop,
+  mode = 'build',
+  onModeChange,
+  onImplementPlan,
+}: StudioChatPanelProps) {
   const [draft, setDraft] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const latestAssistant = lastAssistantMessage(messages);
@@ -82,7 +97,35 @@ export function StudioChatPanel({ messages, busy = false, suggestions = [], onSe
           <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           Iterate on the app
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">Ask for a change, then check the preview.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {mode === 'discuss'
+            ? 'Mode discussion : on planifie, aucun fichier ne sera modifié.'
+            : 'Ask for a change, then check the preview.'}
+        </p>
+        {onModeChange ? (
+          <div className="mt-2 inline-flex rounded-md border border-border p-0.5" role="group" aria-label="Mode du chat">
+            <button
+              type="button"
+              onClick={() => onModeChange('build')}
+              aria-pressed={mode === 'build'}
+              data-testid="studio-mode-build"
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs ${mode === 'build' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <Hammer className="h-3.5 w-3.5" aria-hidden="true" />
+              Construire
+            </button>
+            <button
+              type="button"
+              onClick={() => onModeChange('discuss')}
+              aria-pressed={mode === 'discuss'}
+              data-testid="studio-mode-discuss"
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs ${mode === 'discuss' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <MessagesSquare className="h-3.5 w-3.5" aria-hidden="true" />
+              Discuter
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" role="log" aria-live="polite" aria-relevant="additions text">
@@ -93,6 +136,17 @@ export function StudioChatPanel({ messages, busy = false, suggestions = [], onSe
         ) : (
           messages.map((message) => <Bubble key={message.id} message={message} />)
         )}
+        {mode === 'discuss' && onImplementPlan && !busy && latestAssistant?.text ? (
+          <button
+            type="button"
+            onClick={onImplementPlan}
+            data-testid="studio-implement-plan"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90"
+          >
+            <Hammer className="h-3.5 w-3.5" aria-hidden="true" />
+            Implémenter ce plan
+          </button>
+        ) : null}
         <div ref={bottomRef} />
       </div>
 

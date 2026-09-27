@@ -24,6 +24,7 @@ import { EditorTabs } from './EditorTabs.js';
 import type { EditorTab } from './editor-tabs-model.js';
 import { VerifyReportCard } from './VerifyReportCard.js';
 import type { WebTestReport } from './web-test-report-model.js';
+import type { IterationMode } from './iteration-prompt.js';
 
 /** bolt.new-style iterate chat, driven by the active project session. */
 export interface StudioChatProps {
@@ -38,6 +39,10 @@ export interface StudioChatProps {
   verifyReport?: WebTestReport | null;
   onSend: (text: string) => void;
   onStop?: () => void;
+  /** « Construire » ou « Discuter » (planifier sans modifier). */
+  mode?: IterationMode;
+  onModeChange?: (mode: IterationMode) => void;
+  onImplementPlan?: () => void;
 }
 
 export interface AppStudioViewProps {
@@ -78,6 +83,13 @@ export interface AppStudioViewProps {
   onTerminalInput?: (line: string) => void;
   onClearTerminal?: () => void;
   onStopBuild: () => void;
+  /** Fichiers verrouillés (annulés en fin de tour si l'agent les modifie). */
+  lockedPaths?: string[];
+  onToggleLock?: (path: string) => void;
+  /** Incrémenté à chaque nouvelle version locale du projet (recharge l'onglet Versions). */
+  versionsKey?: number;
+  /** Après la restauration d'une version : recharger l'arbre et l'aperçu. */
+  onVersionRestored?: () => void;
 }
 
 type MainTab = 'editor' | 'preview' | 'versions';
@@ -124,6 +136,10 @@ export function AppStudioView({
   onTerminalInput,
   onClearTerminal,
   onStopBuild,
+  lockedPaths,
+  onToggleLock,
+  versionsKey,
+  onVersionRestored,
 }: AppStudioViewProps) {
   const [tab, setTab] = useState<MainTab>('editor');
   const [seedPrompt, setSeedPrompt] = useState<string | undefined>(undefined);
@@ -161,6 +177,8 @@ export function AppStudioView({
         onCreate={onCreateEntry}
         onRename={onRenameEntry}
         onDelete={onDeleteEntry}
+        {...(lockedPaths ? { lockedPaths } : {})}
+        {...(onToggleLock ? { onToggleLock } : {})}
       />
       <section className="grid min-h-0 grid-rows-[minmax(0,1fr)_220px] gap-2">
         <div className="flex min-h-0 flex-col border border-border bg-surface">
@@ -310,7 +328,7 @@ export function AppStudioView({
                 </div>
               </div>
             ) : tab === 'versions' ? (
-              <StudioVersionsPane cwd={workingDir} onRestored={onReloadPreview} />
+              <StudioVersionsPane cwd={workingDir} refreshKey={versionsKey ?? 0} onRestored={onVersionRestored ?? onReloadPreview} />
             ) : (
               <div className="flex h-full min-h-0 flex-col gap-1.5">
                 {tree.length > 0 ? (
@@ -364,6 +382,9 @@ export function AppStudioView({
                 suggestions={chat.suggestions}
                 onSend={chat.onSend}
                 onStop={chat.onStop}
+                {...(chat.mode ? { mode: chat.mode } : {})}
+                {...(chat.onModeChange ? { onModeChange: chat.onModeChange } : {})}
+                {...(chat.onImplementPlan ? { onImplementPlan: chat.onImplementPlan } : {})}
               />
             </div>
             {chat.verifyReport ? (

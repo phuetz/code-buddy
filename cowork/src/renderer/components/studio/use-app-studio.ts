@@ -275,21 +275,24 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   // rule ("installed once this session" / npm's .package-lock.json marker)
   // skipped the install after an auto-fix that ADDED a package to
   // package.json, so the retry hit the same unresolved import again.
-  const ensureInstalled = useCallback(
-    async (cwd: string): Promise<{ ok: boolean; error?: string }> => {
+  const dependenciesMissing = useCallback(
+    async (cwd: string): Promise<boolean> => {
       const pkg = await apis.files.read(cwd, 'package.json');
       const declared = pkg.ok ? listDeclaredDependencies(pkg.data.content) : [];
-      let missing = false;
       if (declared.length === 0) {
-        missing = !(await apis.files.read(cwd, 'node_modules/.package-lock.json')).ok;
-      } else {
-        for (const dep of declared) {
-          if (!(await apis.files.read(cwd, `node_modules/${dep}/package.json`)).ok) {
-            missing = true;
-            break;
-          }
-        }
+        return !(await apis.files.read(cwd, 'node_modules/.package-lock.json')).ok;
       }
+      for (const dep of declared) {
+        if (!(await apis.files.read(cwd, `node_modules/${dep}/package.json`)).ok) return true;
+      }
+      return false;
+    },
+    [apis]
+  );
+
+  const ensureInstalled = useCallback(
+    async (cwd: string): Promise<{ ok: boolean; error?: string }> => {
+      const missing = await dependenciesMissing(cwd);
       if (!missing) return { ok: true };
       beginPhase('installing');
       appendTerminal('$ npm install');
@@ -301,7 +304,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       }
       return { ok: true };
     },
-    [apis, appendTerminal, beginPhase, options.commandIdFactory]
+    [apis, appendTerminal, beginPhase, dependenciesMissing, options.commandIdFactory]
   );
 
   const startDev = useCallback(async (input?: { cwd?: string; command?: string; url?: string }): Promise<{ ok: boolean; error?: string; url?: string }> => {
@@ -423,6 +426,18 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
     setDevPid(null);
   }, [apis, appendTerminal, devPid]);
 
+  // Tours suivants : l'aperçu tourne déjà (Vite recharge à chaud, le serveur
+  // statique relit le disque) — inutile de le relancer, sauf si une dépendance
+  // déclarée manque (il faut alors installer puis redémarrer).
+  const ensurePreview = useCallback(async (): Promise<{ ok: boolean; error?: string; url?: string }> => {
+    if (projectRoot && previewStatus === 'running' && previewUrl) {
+      if (!isNpmProject(tree)) return { ok: true, url: previewUrl };
+      if (!(await dependenciesMissing(projectRoot))) return { ok: true, url: previewUrl };
+      await stopDev();
+    }
+    return startDev();
+  }, [dependenciesMissing, previewStatus, previewUrl, projectRoot, startDev, stopDev, tree]);
+
   const runCommand = useCallback(async (command: string) => {
     if (!projectRoot || !command.trim()) return;
     const id = (options.commandIdFactory ?? defaultCommandId)();
@@ -488,6 +503,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       openFile,
       saveFile,
       startDev,
+      ensurePreview,
       stopDev,
       runCommand,
       refreshTree,
