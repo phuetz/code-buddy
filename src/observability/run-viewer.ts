@@ -305,7 +305,7 @@ function isTestCommand(command: string): boolean {
 }
 
 /**
- * Replay: show timeline then re-execute recorded view_file reads and test commands.
+ * Replay: show timeline then re-execute recorded file reads and test commands.
  */
 export async function replayRun(runId: string, rerun = true): Promise<void> {
   const store = RunStore.getInstance();
@@ -319,7 +319,7 @@ export async function replayRun(runId: string, rerun = true): Promise<void> {
     const name = event.data.toolName;
     const args = event.data.args;
     return (
-      (name === 'view_file' || name === 'file_read') &&
+      (name === 'view_file' || name === 'file_read' || name === 'read_file') &&
       isRecord(args) &&
       typeof args.path === 'string'
     );
@@ -345,7 +345,7 @@ export async function replayRun(runId: string, rerun = true): Promise<void> {
       const args = event.data.args as Record<string, unknown>;
       const relativePath = String(args.path);
       const absolutePath = resolveReplayPath(cwd, relativePath);
-      console.log(`  view_file ${relativePath}`);
+      console.log(`  ${event.data.toolName} ${relativePath}`);
       if (!rerun) continue;
       try {
         const contents = fs.readFileSync(absolutePath, 'utf8');

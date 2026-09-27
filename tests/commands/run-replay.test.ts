@@ -53,6 +53,25 @@ describe('buddy run replay', () => {
     expect(output).toContain('src/ledger.js');
   });
 
+  it('replays a read_file event emitted by a real agent turn', async () => {
+    const workspace = path.join(tempDir, 'toy');
+    fs.mkdirSync(workspace, { recursive: true });
+    fs.writeFileSync(path.join(workspace, 'package.json'), '{"name":"replay-fixture"}\n');
+    const runId = store.startRun('read package metadata', { cwd: workspace, channel: 'terminal' });
+    store.emit(runId, {
+      type: 'tool_call',
+      data: { toolName: 'read_file', args: { path: 'package.json' } },
+    });
+    store.endRun(runId, 'completed');
+    await store.whenStreamsClosed();
+
+    await replayRun(runId, true);
+
+    const output = consoleLogSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(output).toContain('replay-fixture');
+    expect(output).not.toContain('No replayable tool events found');
+  });
+
   it('re-executes a recorded test command so replay has a disk effect', async () => {
     const workspace = path.join(tempDir, 'toy');
     fs.mkdirSync(workspace, { recursive: true });

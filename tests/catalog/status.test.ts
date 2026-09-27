@@ -83,9 +83,9 @@ describe('catalog states and evidence', () => {
         expect(feature?.reasons, definition.id).toContain(definition.verificationLimit);
       }
     }
-    const failedReplay = catalog.features.find((feature) => feature.id === 'cli-run');
-    expect(failedReplay?.states.testedInSituation).toBe('faux');
-    expect(failedReplay?.latestEvidence?.artifact).toBe('docs/preuves/inventaire-cli-run-echec.log');
+    const repairedReplay = catalog.features.find((feature) => feature.id === 'cli-run');
+    expect(repairedReplay?.states.testedInSituation).toBe('vrai');
+    expect(repairedReplay?.latestEvidence?.artifact).toBe('docs/preuves/vitrine-cli-run.log');
   });
 
   it('finds each declared entrypoint in the real source inventory', () => {
