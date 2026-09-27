@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -381,7 +382,7 @@ describe('HTTP agent session isolation', () => {
       }
       expect(fs.existsSync(path.join(workspace, '.codebuddy', 'tool-results'))).toBe(false);
     } finally {
-      fs.rmSync(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTmpDirStrict(workspace);
     }
   });
 

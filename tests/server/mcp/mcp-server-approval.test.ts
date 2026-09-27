@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../../helpers/tmp.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -26,7 +27,7 @@ describe('MCP Server End-to-End Tool Confirmation Flow', () => {
     confirmationService.resetSession();
     vi.useRealTimers();
     try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      removeTmpDirStrict(tmpDir);
     } catch {
       // Ignore cleanup error
     }
