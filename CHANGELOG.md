@@ -1,11 +1,54 @@
-## [Unreleased]
+## [2.3.0] — version candidate (non publiée)
+
+Brouillon établi le 27/09/2026 à partir des PR fusionnées depuis v2.2.0 (#161 à #254) et des quatre PR intégrées dans la branche `release/2.3.0-rc` (#256, #251, #255, #246). La version de `package.json` n'est pas encore relevée.
+
+### Nouveautés
+
+- **Déploiement et fabrique d'applications** : `buddy deploy run` publie un projet web (Cloudflare Pages, Netlify), en simulation par défaut (#162) ; `buddy provision db-auth` ajoute base de données et authentification en une commande (#167) ; gabarit mobile Expo (#163) ; import de maquettes Figma en composants React (#170).
+- **Cowork — App Studio** : sonde de rendu, corrections automatiques, versions par projet, édition ciblée, verrous (#253) ; vague 2 : sélection d'un élément dans l'aperçu, console et journaux du serveur de développement, image ou maquette, choix du contexte, secrets `.env` (#255).
+- **Cowork** : aide expliquant chaque écran (#166), instructions attachées au dossier de travail (#168), export `.docx` / `.pptx` (#177), question rapide et capture d'écran depuis n'importe où (#178).
+- **Sessions** : un seul historique entre la ligne de commande, Cowork et le mobile (#165), session partagée (#171), reprise depuis l'interface mobile (#182), remise à zéro automatique des sessions de messagerie après sauvegarde de la mémoire (#207).
+- **Ligne de commande** : démarrage par une entrée mince (#172), `--compact` en mode headless (#184), `buddy config set/patch/unset` avec schéma, sauvegardes et politiques (#221), catalogue de modèles configurable hors du code (#211), `buddy runtime status` (#247), `buddy catalog status` avec états et dernière preuve (#245).
+- **ChatGPT** : famille GPT-6 visible et utilisable (#202), GPT-6 Sol modèle par défaut de l'abonnement (#203).
+- **Recherche et mémoire** : index vectoriel Rust en repli quand usearch ne s'installe pas (#190), mots vides et synonymes français pour la recherche d'outils (#195), ingestion quotidienne des publications récentes (#235), sources GitHub et modèles pour le graphe de connaissances (#243), provenance et fraîcheur de chaque souvenir (#250).
+- **Auto-amélioration (DGM)** : carte fonctionnalités ↔ code ↔ tests ↔ articles (#224), carte de couverture et garde de pertinence (#239), fiches d'expérience (#248), banc de rappel fidèle à la production et recherche hybride des articles (#251).
+- **Flotte** : Ruche — baux, verdicts signés, approbations liées à l'effet (#242).
+- **Compagnon** : mandats de Lisa jugés par sa charte (#233) ; position de la personne par rapport au robot (#223) ; garde des promesses futures `CODEBUDDY_LISA_FUTURE_COMMITMENTS`, **désactivée par défaut** (#246).
+- **Bac à sable SSH** sans repli sur la machine locale (#176).
+
+### Corrections
+
+- **Compagnon et voix** : Lisa ne dit plus avoir fait ce qu'elle n'a pas fait (#230) ; flux de synthèse qui cale, tours d'écoute non fermés, phrases non jouées comptées comme dites, verrou ElevenLabs (#216-#219) ; rappels ni créés ni acquittés sur une phrase entendue par hasard (#249) ; faux noms vocaux et émissions confirmées (#237) ; succès et échecs des outils dits précisément (#246).
+- **Configuration** : `[middleware]` réellement branché sur le pipeline (#226).
+- **Mémoire** : une puce écrite à la main ne bloque plus toute la mémoire (#213).
+- **Écritures atomiques** sérialisées sur un même chemin (#180) ; compétences résistantes à la limite d'observateurs du noyau (#169) ; compétences écrites par l'agent réellement trouvables (#161).
+- **Flotte** : après acceptation, un échec réseau ne relance plus la tâche ailleurs (#193).
+- **Ligne de commande** : code de sortie 1 quand une commande slash headless échoue (#206) ; projet atteint par un lien symbolique reconnu comme le même projet (#231).
+- **Dépendances** : le serveur LSP livré n'importe plus de paquets de développement (#194) ; lock aligné sur undici 6.29.0 (#234).
+
+### Sécurité
+
+- **Voix** : une phrase entendue ne modifie plus l'espace de travail sans humain (#214) ; la radio ne déclenche plus rappels ni agenda (#215) ; le journal ne recopie plus les conversations de la maison (#220) ; une voix qui ne nomme pas Lisa n'obtient plus le rôle « présent » (#232) ; Maison réservée au propriétaire (#237).
+- **Serveur MCP** : toutes les écritures confinées, outils non listés refusés par défaut (#212).
+- **Webchat** : historique refusé sans jeton (#210).
+- **`buddy security audit`** et seuils configurables du garde de boucle d'outils (#209) ; `audit --fix` opérant sur macOS (#228).
+- **Tests** : la garde Vitest empêche tout test de toucher le vrai profil (#192, #227).
+
+### Interne
+
+- CI : macOS/Windows de nouveau verts (#187, #189, #201, #208, #225, #229), coureurs macOS réservés aux fusions (#164), plus de binaire tiers téléchargé à l'installation (#181), adresses de documentation dans les tests (#199, #256).
+- Tests : 83 outils du catalogue vérifiés réellement (#200, #205), invariants des portes prouvés par mutation (#252), parcours PWA mobile de bout en bout (#244), nettoyages Windows (#254), divers bancs (#173, #175, #204, #236, #241).
+- Documentation et outillage : #174, #188, #191, #196, #197, #198.
+
+### Notes détaillées du cycle (anglais, conservées telles quelles)
+
+#### Notes accumulées (non classées)
 
 - **research:** `buddy research ingest --source blogs` lit des flux RSS/Atom configurés en JSON, filtre les billets par mots du thème et utilise leur URL canonique pour la déduplication CKG. `--feeds-file` sélectionne la liste ; les erreurs de flux échouent ouvertement.
 - **research:** `buddy research ingest --source github|models|all` ajoute les dépôts GitHub populaires et les modèles de génération Hugging Face au CKG, avec filtres, tri, identifiants stables et ingestion idempotente. `both` conserve arXiv et Europe PMC.
 
-## [2.3.0] (unreleased)
 
-### Added
+#### Added
 
 - **agent:** `[tool_loop_guardrails]` in `config.toml` sets `warn_after` and `hard_stop_after` for `exact_failure`, `same_tool_failure`, and `idempotent_no_progress` on the existing tool-loop guard. Unset keys keep the historical 5-then-3 behaviour; the two failure counters stay off until set.
 - **security:** `buddy security audit [--fix] [--json]` reports stable `checkId`s for the skill firewall, profile modes, plaintext configuration secrets, the native sandbox, and MCP guards. Accepted suppressions live in configuration (`checkId` plus a reason). `--fix` only tightens file modes, and only after a mode backup.
@@ -18,7 +61,7 @@
 - **skills:** Authored skill trigger derivation at write time ensures self-improvement skills are discoverable in `SkillRegistry.search`.
 - **perf:** Thin startup entrypoint (`dist/cli-boot.js`) accelerates CLI execution for `--version` (−68%) and `--help` (−29%).
 
-### Fixed
+#### Fixed
 
 - **security:** `buddy security audit` takes `--profile-dir` so it no longer collides with the global `--profile` name. A missing or unreadable profile or project fails the audit instead of being reported as passed. `--fix` only removes permission bits, refuses symlinks, and writes its mode backup inside the profile (never the project). A critical finding cannot be suppressed into a passed result. Incomplete config and skill scans fail the audit. A directory or other non-regular config file fails the audit. A symlink or special file inside a skill fails the audit and is not opened. Profile and project paths in the report are passed through the same secret redaction as finding details. The tool-loop guard reads `config.toml` only when it is a regular file within 512 KiB, and refuses a fifo or other special file instead of blocking the turn. `hasWarned` is true after an `exact_failure` or `same_tool_failure` warning.
 - **skills:** File watcher resilience against kernel inotify table exhaustion (`ENOSPC` / `EMFILE` / `ENFILE`). Falls back to synchronous on-demand reads and degrades health reporting gracefully without crashing.
