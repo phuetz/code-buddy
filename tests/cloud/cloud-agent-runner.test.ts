@@ -14,6 +14,7 @@ import {
   resetCloudAgentRunner,
   type CloudTaskConfig,
 } from '../../src/cloud/cloud-agent-runner.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Mocks
@@ -101,7 +102,7 @@ describe('CloudAgentRunner', () => {
   afterEach(() => {
     resetCloudAgentRunner();
     try {
-      fs.rmSync(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTestDir(testDir);
     } catch {
       // Ignore cleanup errors
     }
