@@ -71,3 +71,75 @@ describe('CommandRunner.runToCompletion', () => {
     });
   });
 });
+
+describe('CommandRunner — environnement (réserve des relectures de la vague 2)', () => {
+  it("npm install / terminal : aucune clé de l'hôte, liste blanche seulement", async () => {
+    process.env.FAKE_HOST_API_KEY_FOR_TEST = 'hote-secret-value';
+    try {
+      const events: CommandOutputEvent[] = [];
+      const runner = new CommandRunner((event) => events.push(event));
+      const res = await runner.runToCompletion({ cwd: process.cwd(), command: 'node -e "console.log(JSON.stringify(process.env))"', id: 'env' });
+      expect(res.ok).toBe(true);
+      const printed = events.filter((e) => e.stream === 'stdout').map((e) => e.line).join('');
+      const env = JSON.parse(printed) as Record<string, string>;
+      expect(env.FAKE_HOST_API_KEY_FOR_TEST).toBeUndefined();
+      expect(typeof (env.PATH ?? env.Path)).toBe('string');
+    } finally {
+      delete process.env.FAKE_HOST_API_KEY_FOR_TEST;
+    }
+  });
+
+  it("IPC : dossier hors confiance refusé, environnement fourni par le processus principal et jamais par le renderer", async () => {
+    const { registerCommandRunnerIpc } = await import('../src/main/studio/command-runner-ipc.js');
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
+    const runner = new CommandRunner();
+    const seen: unknown[] = [];
+    const fake = {
+      runCommand: (input: unknown) => {
+        seen.push(input);
+        return { ok: true, data: { id: 'x', pid: 1 } };
+      },
+      runToCompletion: async (input: unknown) => {
+        seen.push(input);
+        return { ok: true, data: { id: 'x', code: 0 } };
+      },
+      kill: runner.kill.bind(runner),
+    } as unknown as CommandRunner;
+    registerCommandRunnerIpc({ handle: (c: string, h: never) => handlers.set(c, h) } as never, fake, () => null, async (cwd) =>
+      cwd === '/projet' ? { ok: true, env: { PATH: '/bin', VITE_X: 'projet' } } : { ok: false, error: 'project is outside trusted workspaces' },
+    );
+    const refused = await handlers.get('studio.cmd.runToEnd')!({}, { cwd: '/ailleurs', command: 'npm install', id: 'a' });
+    expect(refused).toEqual({ ok: false, error: 'project is outside trusted workspaces' });
+    expect(seen).toHaveLength(0);
+    await handlers.get('studio.cmd.run')!({}, { cwd: '/projet', command: 'ls', id: 'b', env: { OPENAI_API_KEY: 'injecte-par-le-renderer' } });
+    expect(seen[0]).toEqual({ cwd: '/projet', command: 'ls', id: 'b', env: { PATH: '/bin', VITE_X: 'projet' } });
+  });
+});
+
+describe('CommandRunner — sortie du terminal masquée (réserve de la 2e relecture)', () => {
+  it('chaque ligne relayée au renderer est masquée, dans l’ordre ; la valeur brute ne sort jamais', async () => {
+    const { registerCommandRunnerIpc } = await import('../src/main/studio/command-runner-ipc.js');
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
+    const sent: { line: string; stream: string }[] = [];
+    const secret = 'sk-terminal-VALEUR-0123456789';
+    registerCommandRunnerIpc(
+      { handle: (c: string, h: never) => handlers.set(c, h) } as never,
+      new CommandRunner(),
+      () => ({ send: (_c: string, e: { line: string; stream: string }) => sent.push(e) }),
+      async () => ({
+        ok: true,
+        env: { PATH: process.env.PATH ?? '', MA_CLE: secret },
+        redact: async (line: string) => line.split(secret).join('[secret masqué]'),
+      }),
+    );
+    const res = await handlers.get('studio.cmd.runToEnd')!({}, {
+      cwd: process.cwd(),
+      command: 'node -e "console.log(1); console.log(process.env.MA_CLE); console.log(3)"',
+      id: 'masque',
+    });
+    expect(res).toMatchObject({ ok: true });
+    const out = sent.filter((e) => e.stream === 'stdout').map((e) => e.line);
+    expect(out).toEqual(['1', '[secret masqué]', '3']);
+    expect(JSON.stringify(sent)).not.toContain(secret);
+  });
+});

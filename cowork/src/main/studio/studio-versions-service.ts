@@ -27,6 +27,7 @@
 
 import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
+import os from 'os';
 import path from 'path';
 
 export interface StudioVersionChange {
@@ -76,6 +77,10 @@ export const VERSIONS_EXCLUDES = [
   '.studio-probe-dist/',
   '.vite/',
   '*.log',
+  // Secrets du projet : jamais copiés dans le dépôt de versions (ni restaurés,
+  // ni supprimés par une restauration, puisque non suivis).
+  '.env',
+  '.env.*',
 ];
 
 const MAX_LIST = 50;
@@ -148,26 +153,99 @@ export async function assertTrustedRoot(root: unknown, trustedRoots?: () => stri
   return real;
 }
 
+const POSIX_SYSTEM_TREES = ['/etc', '/usr', '/bin', '/sbin', '/lib', '/lib64', '/boot', '/dev', '/proc', '/sys', '/System', '/private/etc'];
+const POSIX_SYSTEM_EXACT = ['/', '/var', '/private', '/private/var', '/home', '/Users', '/tmp', '/private/tmp', '/opt', '/root', '/mnt', '/media', '/Volumes'];
+
+function samePath(a: string, b: string, caseInsensitive: boolean): boolean {
+  return caseInsensitive ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+function isUnder(child: string, parent: string, caseInsensitive: boolean, p: typeof path.posix): boolean {
+  const c = caseInsensitive ? child.toLowerCase() : child;
+  const par = caseInsensitive ? parent.toLowerCase() : parent;
+  const rel = p.relative(par, c);
+  return rel === '' || (!rel.startsWith('..') && !p.isAbsolute(rel));
+}
+
+/**
+ * Un dossier qu'App Studio ne doit JAMAIS versionner, même avant que la session
+ * existe : racine du système de fichiers (ou d'un lecteur), le HOME lui-même,
+ * le dossier temporaire lui-même, les dossiers système (et leur contenu pour
+ * /etc, /usr, C:\Windows, C:\Program Files…). `root` est déjà résolu (realpath).
+ */
+export function isForbiddenProjectRoot(
+  root: string,
+  options: { platform?: NodeJS.Platform; home?: string; tmp?: string } = {},
+): boolean {
+  const platform = options.platform ?? process.platform;
+  const win = platform === 'win32';
+  const p = win ? path.win32 : path.posix;
+  const normalized = p.resolve(root);
+  if (p.parse(normalized).root === normalized || p.dirname(normalized) === normalized) return true;
+  const home = options.home ?? os.homedir();
+  const tmp = options.tmp ?? os.tmpdir();
+  for (const exact of [home, tmp]) {
+    if (exact && samePath(normalized, p.resolve(exact), win)) return true;
+  }
+  if (win) {
+    const drive = p.parse(normalized).root; // ex. « C:\ »
+    const trees = ['Windows', 'Program Files', 'Program Files (x86)', 'ProgramData'].map((d) => p.join(drive, d));
+    if (trees.some((t) => isUnder(normalized, t, true, p))) return true;
+    return ['Users'].map((d) => p.join(drive, d)).some((d) => samePath(normalized, d, true));
+  }
+  if (POSIX_SYSTEM_TREES.some((t) => isUnder(normalized, t, false, p))) return true;
+  return POSIX_SYSTEM_EXACT.some((d) => normalized === d);
+}
+
 export class StudioVersionsService {
   private readonly git: GitRun;
   private readonly trustedRoots: (() => string[]) | undefined;
   /** Sérialise les opérations par projet (deux instantanés simultanés se marchent dessus). */
   private readonly queues = new Map<string, Promise<unknown>>();
 
-  constructor(options: { git?: GitRun; trustedRoots?: () => string[] } = {}) {
+  /**
+   * Masque les secrets du projet dans un libellé de version. Un libellé vient
+   * de la demande tapée dans le chat : il peut contenir une clé. Appliqué
+   * AVANT l'écriture du commit et AVANT de renvoyer la liste au renderer
+   * (ce qui couvre aussi les versions écrites avant ce correctif).
+   */
+  private readonly redact: ((root: string, text: string) => Promise<string>) | undefined;
+
+  constructor(options: { git?: GitRun; trustedRoots?: () => string[]; redact?: (root: string, text: string) => Promise<string> } = {}) {
     this.git = options.git ?? defaultGit;
     this.trustedRoots = options.trustedRoots;
+    this.redact = options.redact;
+  }
+
+  /** Libellé masqué ; si le masquage échoue, un libellé neutre (échec fermé). */
+  private async safeLabel(root: string, label: string, fallback: string): Promise<string> {
+    if (!this.redact) return label;
+    try {
+      return await this.redact(root, label);
+    } catch {
+      return fallback;
+    }
   }
 
   /**
    * Opérations DESTRUCTIVES pour les fichiers du projet (restaurer, remettre des
-   * chemins, écrire les verrous) : racine de confiance exigée. Les lectures et
+   * chemins, écrire les verrous) et `changedSince` (qui indexe tout l'arbre) :
+   * racine de confiance exigée. Toutes refusent un dossier système, la racine
+   * du disque et le HOME entier (`isForbiddenProjectRoot`). Les lectures et
    * l'instantané (qui n'écrit que sous .codebuddy/) acceptent un dossier pas
    * encore rattaché à une session — sinon l'état de départ d'une génération
    * (session pas encore créée) ne pourrait jamais être gardé.
    */
-  private resolveRoot(root: unknown, destructive = true): Promise<string> {
-    return assertTrustedRoot(root, destructive ? this.trustedRoots : undefined);
+  private async resolveRoot(root: unknown, destructive = true): Promise<string> {
+    const real = await assertTrustedRoot(root, destructive ? this.trustedRoots : undefined);
+    // Même sans racine de confiance (état de départ), jamais un dossier système,
+    // la racine du disque ni le HOME entier.
+    const [home, tmp] = await Promise.all([
+      fs.realpath(os.homedir()).catch(() => os.homedir()),
+      fs.realpath(os.tmpdir()).catch(() => os.tmpdir()),
+    ]);
+    if (isForbiddenProjectRoot(real, { home, tmp })) throw new Error('refusing to version a system or home directory');
+    return real;
   }
 
   private env(root: string): NodeJS.ProcessEnv {
@@ -245,7 +323,8 @@ export class StudioVersionsService {
         ok: true,
         data: await this.serialize(root, async () => {
           await this.ensureRepo(root);
-          return this.commitAll(root, typeof label === 'string' ? label : 'Version');
+          const raw = typeof label === 'string' ? label : 'Version';
+          return this.commitAll(root, await this.safeLabel(root, raw, 'Version'));
         }),
       };
     } catch (error) {
@@ -271,7 +350,9 @@ export class StudioVersionsService {
             '--format=@@%H%x1f%ct%x1f%s',
             '--name-status',
           ]);
-          return parseVersionLog(out);
+          const versions = parseVersionLog(out);
+          for (const v of versions) v.label = await this.safeLabel(root, v.label, '(libellé masqué)');
+          return versions;
         }),
       };
     } catch (error) {
@@ -318,14 +399,19 @@ export class StudioVersionsService {
             const inVersion = (await this.run(root, ['cat-file', '-e', `${id}:${rel}`])).code === 0;
             const abs = path.join(root, rel);
             if (inVersion) {
-              const original = await this.must(root, ['show', `${id}:${rel}`]);
+              // Comparaison en OCTETS (hash d'objet git), pas en texte UTF-8 :
+              // un binaire modifié ne doit pas paraître identique, ni l'inverse.
+              const original = (await this.must(root, ['rev-parse', `${id}:${rel}`])).trim();
               let current: string | null = null;
               try {
-                current = await fs.readFile(abs, 'utf8');
+                const st = await fs.lstat(abs);
+                if (st.isFile()) {
+                  current = (await this.must(root, ['hash-object', '--', rel])).trim();
+                }
               } catch {
                 current = null;
               }
-              if (current === original) continue;
+              if (current !== null && current === original) continue;
               await this.must(root, ['checkout', id, '--', rel]);
               reverted.push(rel);
             } else {
@@ -348,7 +434,9 @@ export class StudioVersionsService {
   /** Chemins modifiés dans l'arbre de travail depuis la version `id` (ajouts, modifs, suppressions). */
   async changedSince(rootInput: unknown, id: unknown): Promise<VersionsResult<string[]>> {
     try {
-      const root = await this.resolveRoot(rootInput, false);
+      // `git add -A` sur tout l'arbre : racine de confiance exigée (appelé en fin
+      // de tour, quand la session — donc l'espace de confiance — existe).
+      const root = await this.resolveRoot(rootInput);
       if (typeof id !== 'string' || !/^[0-9a-f]{7,64}$/i.test(id)) throw new Error('invalid version id');
       return {
         ok: true,

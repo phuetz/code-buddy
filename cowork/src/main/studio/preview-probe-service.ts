@@ -25,6 +25,8 @@ import { existsSync, promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { buildStudioChildEnv, killProcessTree, killableSpawnOptions } from './child-env.js';
+
 export interface PreviewProbeInput {
   cwd: string;
   url: string;
@@ -70,8 +72,22 @@ export interface BuildRunResult {
 
 export interface PreviewProbeDeps {
   createWindow: () => ProbeWindowLike;
-  runBuild?: (cwd: string) => Promise<BuildRunResult | null>;
+  /** Build runner; receives the project's own env vars when `resolveProjectEnv` is set. */
+  runBuild?: (cwd: string, extraEnv?: Record<string, string>) => Promise<BuildRunResult | null>;
   wait?: (ms: number) => Promise<void>;
+  /**
+   * Project-specific variables (e.g. the project's secrets) layered over the
+   * minimal allowlisted host env of the build. The host's own keys never reach
+   * the generated code (see `child-env.ts`).
+   */
+  resolveProjectEnv?: (root: string) => Promise<Record<string, string>>;
+}
+
+export interface ViteBuildOptions {
+  timeoutMs?: number;
+  extraEnv?: Record<string, string>;
+  /** Host env the allowlist is read from (default `process.env`). */
+  baseEnv?: NodeJS.ProcessEnv;
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
@@ -118,8 +134,13 @@ function localViteBinary(cwd: string): string | null {
   return existsSync(bin) ? bin : null;
 }
 
-/** Default build runner: the project's own vite, output to a temp dir that is removed afterwards. */
-export async function runViteBuild(cwd: string, timeoutMs = 120_000): Promise<BuildRunResult | null> {
+/**
+ * Default build runner: the project's own vite, output to a temp dir that is
+ * removed afterwards. The child gets an allowlisted env (never the host's API
+ * keys) and, on timeout, its whole process tree is killed.
+ */
+export async function runViteBuild(cwd: string, options: ViteBuildOptions = {}): Promise<BuildRunResult | null> {
+  const timeoutMs = options.timeoutMs ?? 120_000;
   const vite = localViteBinary(cwd);
   if (!vite) return null;
   const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'studio-probe-'));
@@ -129,7 +150,9 @@ export async function runViteBuild(cwd: string, timeoutMs = 120_000): Promise<Bu
       const child = spawn(vite, ['build', '--outDir', outDir, '--emptyOutDir', '--logLevel', 'error'], {
         cwd,
         shell: process.platform === 'win32',
-        env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
+        windowsHide: true,
+        ...killableSpawnOptions(),
+        env: buildStudioChildEnv({ ...options.extraEnv, NO_COLOR: '1', FORCE_COLOR: '0' }, options.baseEnv),
       });
       const push = (chunk: Buffer) => {
         output.push(...chunk.toString('utf8').split(/\r?\n/).filter(Boolean));
@@ -139,7 +162,7 @@ export async function runViteBuild(cwd: string, timeoutMs = 120_000): Promise<Bu
       child.stderr?.on('data', push);
       const timer = setTimeout(() => {
         output.push(`vite build timed out after ${timeoutMs} ms`);
-        child.kill();
+        killProcessTree(child);
       }, timeoutMs);
       child.once('error', (error) => {
         clearTimeout(timer);
@@ -176,7 +199,12 @@ export class PreviewProbeService {
     };
 
     if (input.build !== false) {
-      const build = await (this.deps.runBuild ?? runViteBuild)(cwd).catch((error: unknown) => ({
+      const extraEnv = this.deps.resolveProjectEnv
+        ? await this.deps.resolveProjectEnv(cwd).catch(() => ({}))
+        : undefined;
+      const runBuild =
+        this.deps.runBuild ?? ((dir: string, env?: Record<string, string>) => runViteBuild(dir, { extraEnv: env }));
+      const build = await (extraEnv ? runBuild(cwd, extraEnv) : runBuild(cwd)).catch((error: unknown) => ({
         code: 1,
         output: [String(error)],
       }));
@@ -203,14 +231,19 @@ export class PreviewProbeService {
         },
       );
       const timeoutMs = input.loadTimeoutMs ?? 20_000;
+      let loadFailed = false;
       await Promise.race([
         win.loadURL(url),
         wait(timeoutMs).then(() => {
           throw new Error(`preview load timed out after ${timeoutMs} ms`);
         }),
       ]).catch((error: unknown) => {
+        loadFailed = true;
         signals.navError = signals.navError ?? (error instanceof Error ? error.message : String(error));
       });
+      // Nothing loaded (connection refused, timeout…): there is no app to let
+      // settle nor a DOM worth reading — report the load failure right away.
+      if (loadFailed) return { ok: true, data: signals };
       await wait(input.settleMs ?? 3000);
       const dom = (await win.webContents.executeJavaScript(DOM_SUMMARY_SCRIPT).catch(() => null)) as
         | Partial<Pick<PreviewProbeSignals, 'overlay' | 'placeholder' | 'rootChildren' | 'textLength'>>

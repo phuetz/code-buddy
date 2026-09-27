@@ -21,6 +21,8 @@ export type IterationMode = 'build' | 'discuss';
 export interface IterationOptions {
   lockedFiles?: readonly string[];
   mode?: IterationMode;
+  /** Contexte joint (élément ciblé, journaux, fichiers, noms des secrets) — voir request-context. */
+  context?: string;
 }
 
 /** Message envoyé par « Implémenter ce plan » après un tour de discussion. */
@@ -48,6 +50,7 @@ export function buildIterationPrompt(text: string, options: IterationOptions = {
         'les options avec leurs compromis, et un plan numéroté des fichiers à créer ou modifier.',
       "Termine en proposant de l'implémenter.",
       lockedBlock(locked),
+      options.context ? `\n${options.context}` : '',
       '',
       'Demande :',
       request,
@@ -63,6 +66,7 @@ export function buildIterationPrompt(text: string, options: IterationOptions = {
     '- `create_file` seulement pour un fichier NOUVEAU ; déclare toute nouvelle dépendance dans package.json ;',
     "- n'exécute aucune commande (App Studio installe, relance et vérifie l'aperçu lui-même).",
     lockedBlock(locked),
+    options.context ? `\n${options.context}` : '',
     '',
     'Demande :',
     request,

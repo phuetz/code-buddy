@@ -99,6 +99,7 @@ yarn.lock
 
 # Build outputs
 dist/
+/dist
 /codebuddy-runtime.json
 lib/
 build/

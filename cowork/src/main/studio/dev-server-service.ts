@@ -8,6 +8,7 @@
  */
 
 import { loadCoreModule } from '../utils/core-loader.js';
+import { STUDIO_CHILD_ENV_ALLOWLIST } from './child-env.js';
 
 type ToolResult<TData = unknown> = {
   success: boolean;
@@ -17,7 +18,13 @@ type ToolResult<TData = unknown> = {
 };
 
 interface CoreAppServerTool {
-  start(input: { cwd: string; command: string; url: string; timeoutMs?: number }): Promise<ToolResult>;
+  start(input: {
+    cwd: string;
+    command: string;
+    url: string;
+    timeoutMs?: number;
+    env?: Record<string, string | undefined>;
+  }): Promise<ToolResult>;
   stop(pid: number): Promise<ToolResult>;
   status(): Promise<ToolResult>;
   logs(pid: number, opts?: { lines?: number; stderr?: boolean }): Promise<ToolResult>;
@@ -89,9 +96,41 @@ function linesFromOutput(output: string): string[] {
   return output.split(/\r?\n/).filter((line) => line.length > 0);
 }
 
+
+/**
+ * Environnement du serveur de dev, en LISTE BLANCHE (comme les builds) : le
+ * cœur `app_server` fusionne `{ ...process.env, ...env }` puis retire les clés
+ * `undefined` ; toute variable de l'hôte hors liste blanche est donc marquée
+ * `undefined` (clés d'API, mais aussi `DATABASE_URL`, `*_DSN`…). `NODE_ENV`
+ * est retiré aussi : Cowork tourne souvent en production, et le serveur de DEV
+ * servirait alors l'app en mode production (constaté dans la vraie fenêtre).
+ * Les secrets du PROJET sont ajoutés par-dessus.
+ */
+export function devServerEnv(
+  projectEnv: Record<string, string>,
+  base: NodeJS.ProcessEnv = process.env,
+): Record<string, string | undefined> {
+  const allowed = new Set(STUDIO_CHILD_ENV_ALLOWLIST);
+  allowed.delete('NODE_ENV');
+  const env: Record<string, string | undefined> = {};
+  for (const key of Object.keys(base)) if (!allowed.has(key)) env[key] = undefined;
+  return { ...env, ...projectEnv };
+}
+
+export interface StudioDevServerOptions {
+  /** Secrets du projet à injecter (processus principal seulement). */
+  projectEnv?: (cwd: string) => Promise<Record<string, string>>;
+  /** Masque les secrets du projet dans les journaux avant de les rendre au renderer. */
+  redact?: (cwd: string, text: string) => Promise<string>;
+  /** Refuse un dossier hors des espaces de confiance (lève une erreur). */
+  assertRoot?: (cwd: string) => Promise<unknown>;
+}
+
 export class StudioDevServer {
   private readonly instances = new Map<number, StudioDevServerInstance>();
   private toolPromise: Promise<CoreAppServerTool | null> | null = null;
+
+  constructor(private readonly options: StudioDevServerOptions = {}) {}
 
   async start(input: StudioDevServerStartInput): Promise<StudioDevServerResult<StudioDevServerStartResult>> {
     try {
@@ -102,13 +141,16 @@ export class StudioDevServer {
       if (!command) return { ok: false, error: 'command is required' };
       if (!url) return { ok: false, error: 'url is required' };
 
+      if (this.options.assertRoot) await this.options.assertRoot(cwd);
       const tool = await this.getTool();
       if (!tool) return { ok: false, error: 'Core app_server tool is unavailable' };
 
+      const projectEnv = this.options.projectEnv ? await this.options.projectEnv(cwd).catch(() => ({})) : {};
       const result = await tool.start({
         cwd,
         command,
         url,
+        env: devServerEnv(projectEnv),
         ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
       });
       if (!result.success) {
@@ -177,7 +219,11 @@ export class StudioDevServer {
       if (!result.success) {
         return { ok: false, error: result.error ?? result.output ?? 'app_server logs failed' };
       }
-      const output = result.output ?? '';
+      const cwd = this.instances.get(pid)?.cwd;
+      const raw = result.output ?? '';
+      // Échec fermé : sans projet connu pour ce pid, impossible de masquer ses secrets → rien.
+      if (this.options.redact && !cwd) return { ok: false, error: 'journal indisponible : serveur inconnu de ce studio' };
+      const output = cwd && this.options.redact ? await this.options.redact(cwd, raw).catch(() => '') : raw;
       return { ok: true, data: { pid, output, lines: linesFromOutput(output) } };
     } catch (error) {
       return { ok: false, error: errorMessage(error) };

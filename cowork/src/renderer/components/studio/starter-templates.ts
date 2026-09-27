@@ -245,13 +245,30 @@ export function hasStarter(stackId: string | undefined): boolean {
 }
 
 /**
- * Seed only into a directory that holds no project yet: never overwrite a
- * user's existing package.json / index.html (an "iterate on my project" run).
+ * Paths to probe before seeding: package.json, index.html and EVERY file of
+ * the stack's skeleton. The caller passes the ones that exist to
+ * `shouldSeedStarter`. [] when the stack has no starter.
  */
-export function shouldSeedStarter(stackId: string | undefined, existingRootFiles: readonly string[]): boolean {
+export function starterProbePaths(stackId: string | undefined): string[] {
+  const files = getStarterFiles(stackId);
+  if (files.length === 0) return [];
+  return [...new Set(['package.json', 'index.html', ...files.map((f) => f.path)])];
+}
+
+function normalizeProbePath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+}
+
+/**
+ * Seed only into a directory that holds no project yet: never overwrite a
+ * user's existing package.json / index.html (an "iterate on my project" run),
+ * nor ANY file the skeleton would write (src/App.tsx, src/main.tsx…).
+ * `existingPaths` = the paths among `starterProbePaths(stackId)` that exist.
+ */
+export function shouldSeedStarter(stackId: string | undefined, existingPaths: readonly string[]): boolean {
   if (!hasStarter(stackId)) return false;
-  const lower = existingRootFiles.map((f) => f.toLowerCase());
-  return !lower.includes('package.json') && !lower.includes('index.html');
+  const existing = new Set(existingPaths.map(normalizeProbePath));
+  return !starterProbePaths(stackId).some((p) => existing.has(normalizeProbePath(p)));
 }
 
 /** Short description injected in the generation prompt (kept in sync with the files above). */
