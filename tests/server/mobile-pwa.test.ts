@@ -1,4 +1,5 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { removeTmpDirStrict } from '../helpers/tmp.js';
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
@@ -205,7 +206,7 @@ describe('Mobile PWA Router', () => {
 
     afterAll(async () => {
       await new Promise<void>((resolve) => dotServer.close(() => resolve()));
-      rmSync(tmpParent, { recursive: true, force: true });
+      removeTmpDirStrict(tmpParent);
     });
 
     it.each(['index.html', 'manifest.webmanifest', 'sw.js'])(

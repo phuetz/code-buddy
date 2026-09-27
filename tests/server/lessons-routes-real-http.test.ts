@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * /api/lessons — journey-parity REST management of the learned-lessons store,
  * real HTTP round-trips against startServer({port: 0}) with the REAL tracker
@@ -42,7 +43,7 @@ describe('lessons HTTP routes (real tracker)', () => {
     const { stopServer } = await import('../../src/server/index.js');
     await stopServer(server);
     process.chdir(cwdBefore);
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpDir);
   });
 
   const projectFile = (): string => path.join(tmpDir, '.codebuddy', 'lessons.md');
