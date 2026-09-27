@@ -3,7 +3,33 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import * as fs from 'node:fs';
-import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
+import { checkSecretFileAccess, formatSecretRefusal, getHomeCredentialRoots, isSecretFileReadAllowedByOperator } from '../security/secret-files.js';
+
+function isWithin(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+function canonicalPath(candidate: string): string {
+  let ancestor = path.resolve(candidate);
+  while (!fs.existsSync(ancestor)) {
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) return path.resolve(candidate);
+    ancestor = parent;
+  }
+  return path.resolve(fs.realpathSync(ancestor), path.relative(ancestor, candidate));
+}
+
+function archiveSourceRefusal(source: string): string | null {
+  const verdict = checkSecretFileAccess(source, 'read');
+  if (verdict.secret) return formatSecretRefusal(source, verdict);
+  if (isSecretFileReadAllowedByOperator()) return null;
+  const canonical = canonicalPath(source);
+  if (getHomeCredentialRoots().some(root => isWithin(canonical, root))) {
+    return formatSecretRefusal(source, { secret: true, reason: 'archive under a home credential directory' });
+  }
+  return null;
+}
 
 function findSecretSource(source: string, seen = new Set<string>()): string | null {
   const verdict = checkSecretFileAccess(source, 'read');
@@ -112,6 +138,8 @@ export class ArchiveTool {
 
     try {
       const resolvedPath = path.resolve(process.cwd(), archivePath);
+      const refusal = archiveSourceRefusal(resolvedPath);
+      if (refusal) return { success: false, error: refusal };
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -152,6 +180,14 @@ export class ArchiveTool {
             success: false,
             error: `Listing not supported for ${type} format`
           };
+      }
+
+      const secretMember = files.find(entry =>
+        checkSecretFileAccess(entry.path, 'read').secret || path.isAbsolute(entry.path) ||
+        entry.path.split(/[\\/]/).includes('..'),
+      );
+      if (secretMember) {
+        return { success: false, error: 'Archive contains an unsafe or classified secret member' };
       }
 
       const info: ArchiveInfo = {
@@ -209,14 +245,7 @@ export class ArchiveTool {
           error: 'Output directory must be a string'
         };
       }
-      // Check for path traversal in output directory
-      const resolvedOutput = path.resolve(process.cwd(), options.outputDir);
-      if (!resolvedOutput.startsWith(process.cwd()) && !path.isAbsolute(options.outputDir)) {
-        return {
-          success: false,
-          error: 'Path traversal detected: output directory must be within working directory'
-        };
-      }
+      // The resolved output is checked against the workspace below.
     }
 
     // Validate files array if provided
@@ -239,6 +268,8 @@ export class ArchiveTool {
 
     try {
       const resolvedPath = path.resolve(process.cwd(), archivePath);
+      const refusal = archiveSourceRefusal(resolvedPath);
+      if (refusal) return { success: false, error: refusal };
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -255,10 +286,28 @@ export class ArchiveTool {
         };
       }
 
-      const outputDir = options.outputDir || path.join(
+      const outputDir = path.resolve(options.outputDir || path.join(
         this.outputDir,
         path.basename(resolvedPath, path.extname(resolvedPath))
-      );
+      ));
+      const canonicalOutput = canonicalPath(outputDir);
+      if (!isWithin(canonicalOutput, canonicalPath(process.cwd()))) {
+        return { success: false, error: 'Extraction destination must be within the working directory' };
+      }
+
+      const preflight = await this.list(resolvedPath);
+      if (!preflight.success) return { success: false, error: preflight.error ?? 'Archive preflight failed' };
+      const info = preflight.data as ArchiveInfo;
+      for (const entry of info.files ?? []) {
+        const memberName = options.preservePaths === false ? path.basename(entry.path) : entry.path;
+        const destination = path.resolve(outputDir, memberName);
+        if (!isWithin(destination, outputDir) ||
+            checkSecretFileAccess(entry.path, 'read').secret ||
+            checkSecretFileAccess(destination, 'write').secret ||
+            checkSecretFileAccess(destination, 'read').secret) {
+          return { success: false, error: 'Archive contains an unsafe or classified secret member' };
+        }
+      }
 
       await this.vfs.ensureDir(outputDir);
 

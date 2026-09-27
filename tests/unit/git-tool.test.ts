@@ -218,14 +218,16 @@ index abc123..def456 100644
 +new line
  line2`;
 
-      mockSpawn.mockReturnValueOnce(createMockProcess(diffOutput, '', 0));
+      mockSpawn
+        .mockReturnValueOnce(createMockProcess('M\0file.ts\0', '', 0))
+        .mockReturnValueOnce(createMockProcess(diffOutput, '', 0));
 
       const diff = await gitTool.getDiff();
 
       expect(diff).toBe(diffOutput);
       expect(mockSpawn).toHaveBeenCalledWith(
         'git',
-        ['diff'],
+        ['diff', '--', 'file.ts'],
         { cwd: '/test/repo' }
       );
     });
@@ -233,14 +235,16 @@ index abc123..def456 100644
     it('should return staged diff when staged=true', async () => {
       const diffOutput = 'staged diff content';
 
-      mockSpawn.mockReturnValueOnce(createMockProcess(diffOutput, '', 0));
+      mockSpawn
+        .mockReturnValueOnce(createMockProcess('M\0file.ts\0', '', 0))
+        .mockReturnValueOnce(createMockProcess(diffOutput, '', 0));
 
       const diff = await gitTool.getDiff(true);
 
       expect(diff).toBe(diffOutput);
       expect(mockSpawn).toHaveBeenCalledWith(
         'git',
-        ['diff', '--cached'],
+        ['diff', '--cached', '--', 'file.ts'],
         { cwd: '/test/repo' }
       );
     });
@@ -299,15 +303,17 @@ mno7890 Fifth commit`;
 
   describe('add', () => {
     it('should add all files when "all" is passed', async () => {
-      mockSpawn.mockReturnValueOnce(createMockProcess('', '', 0));
+      mockSpawn
+        .mockReturnValueOnce(createMockProcess('file1.ts\0', '', 0))
+        .mockReturnValueOnce(createMockProcess('', '', 0));
 
       const result = await gitTool.add('all');
 
       expect(result.success).toBe(true);
-      expect(result.output).toContain('all changes');
+      expect(result.output).toContain('all non-secret changes');
       expect(mockSpawn).toHaveBeenCalledWith(
         'git',
-        ['add', '.'],
+        ['add', '--', 'file1.ts'],
         { cwd: '/test/repo' }
       );
     });
@@ -322,7 +328,7 @@ mno7890 Fifth commit`;
       expect(result.output).toContain('file2.ts');
       expect(mockSpawn).toHaveBeenCalledWith(
         'git',
-        ['add', 'file1.ts', 'file2.ts'],
+        ['add', '--', 'file1.ts', 'file2.ts'],
         { cwd: '/test/repo' }
       );
     });

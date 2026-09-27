@@ -786,7 +786,7 @@ describe('GitTool', () => {
 
       const result = await gitTool.add('all');
       expect(result.success).toBe(true);
-      expect(result.output).toContain('all changes');
+      expect(result.output).toContain('all non-secret changes');
     });
   });
 

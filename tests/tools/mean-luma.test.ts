@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, writeFile, rm } from 'fs/promises';
+import { mkdtemp, writeFile, rm, mkdir, symlink } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import {
@@ -37,6 +37,25 @@ describe('mean luma (SENSE1 darkness door)', () => {
       await expect(meanLumaOfImage(file)).resolves.toBe(0);
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuse une image liée à un fichier classé secret avant lecture', async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), 'mean-luma-home-'));
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const credentialDir = path.join(home, '.codebuddy');
+      await mkdir(credentialDir);
+      const credential = path.join(credentialDir, 'codex-auth.json');
+      await writeFile(credential, BLACK_PNG);
+      const alias = path.join(home, 'innocent.png');
+      await symlink(credential, alias);
+      await expect(meanLumaOfImage(alias)).resolves.toBeUndefined();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      await rm(home, { recursive: true, force: true });
     }
   });
 });

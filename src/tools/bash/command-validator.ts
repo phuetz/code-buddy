@@ -19,7 +19,8 @@ import {
 import * as os from 'node:os';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { classifySecretPath, getHomeCredentialRoots } from '../../security/secret-files.js';
+import { execFileSync } from 'node:child_process';
+import { checkSecretFileAccess, classifySecretPath, getHomeCredentialRoots } from '../../security/secret-files.js';
 import { parseShellCommand } from '../../security/bash-parser.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
@@ -395,6 +396,48 @@ const RECURSIVE_READERS = new Set([
   'awk', 'sed', 'diff', 'cmp', 'tee', 'openssl',
 ]);
 
+function directoryContainsSecret(directory: string): boolean {
+  const pending = [directory];
+  const seen = new Set<string>();
+  let inspected = 0;
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    let canonical: string;
+    try { canonical = fs.realpathSync(current); } catch { return true; }
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { return true; }
+    for (const entry of entries) {
+      if (++inspected > 10_000) return true;
+      const child = path.join(current, entry.name);
+      if (checkSecretFileAccess(child, 'read').secret) return true;
+      if (entry.isDirectory()) pending.push(child);
+      else if (entry.isSymbolicLink()) {
+        try { if (fs.statSync(child).isDirectory()) pending.push(child); } catch { return true; }
+      }
+    }
+  }
+  return false;
+}
+
+function trackedSecretForGitDiff(command: string): string | null {
+  const invocation = command.match(/(?:^|[;&|]\s*)git\s+(?:-C\s+([^\s;&|]+)\s+)?diff(?:\s|$)/i);
+  if (!invocation || /\s--\s+[^\s]/.test(command)) return null;
+  const prior = command.slice(0, invocation.index ?? 0);
+  const cdMatches = Array.from(prior.matchAll(/(?:^|[;&|]\s*)cd\s+([^\s;&|]+)/g));
+  const gitCwd = invocation[1] ?? cdMatches.at(-1)?.[1] ?? process.cwd();
+  const cwd = path.resolve(process.cwd(), gitCwd);
+  try {
+    const names = execFileSync('git', ['ls-files', '--cached', '-z'], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2_000,
+    });
+    return names.split('\0').find(file => file && checkSecretFileAccess(path.resolve(cwd, file), 'read').secret) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Return the first token of `command` that designates a credential file (or a
  * glob / recursive read over a credential root), or null.
@@ -407,12 +450,23 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     .replace(/\$(?:""|'')/g, '')
     .replace(/\\([^\n])/g, platform === 'win32' ? '/$1' : '$1')
     .replace(/["']/g, '');
+  const trackedSecret = trackedSecretForGitDiff(expanded);
+  if (trackedSecret) return trackedSecret;
   const roots = getHomeCredentialRoots();
   const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
   const words = new Set(
     tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
   );
   const usesRecursiveReader = Array.from(words).some((word) => RECURSIVE_READERS.has(word));
+  const compact = expanded.replace(/[\s+]/g, '').toLowerCase();
+  if (usesRecursiveReader &&
+      /(?:\.codebuddy|\.codex|\.claude|\.grok|\.gemini|\.ssh|\.aws)/.test(compact) &&
+      /(?:codex-auth|mcp-tokens|skill-signing|key\.pem|id_rsa|credentials|secrets|auth\.json)/.test(compact)) {
+    return 'dynamically composed credential path';
+  }
+  const redirectionTargets = new Set(
+    Array.from(expanded.matchAll(/>{1,2}\s*([^\s;|&<>]+)/g), match => match[1]),
+  );
 
   // A dynamic suffix under a credential root cannot be resolved statically.
   // Refuse that narrow case for readers before tokenization splits `$()`.
@@ -444,10 +498,12 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
       candidate = path.resolve(cdTarget, token);
     }
     const normalized = path.normalize(candidate).replace(/[\\/]+$/, '') || path.sep;
-    // A simple copy of a public template to a new .env is a supported
-    // scaffolding operation. The source remains subject to the read guard.
-    if (tokens[0] === 'cp' && i === tokens.length - 1 &&
-      tokens.length === 3 && !classifySecretPath(tokens[1] ?? '').secret) continue;
+    const firstWord = tokens[0]?.toLowerCase();
+    const isWriteDestination = i === tokens.lastIndexOf(raw) && (
+      redirectionTargets.has(raw) ||
+      (i === tokens.length - 1 && ['cp', 'mv', 'tee'].includes(firstWord ?? ''))
+    );
+    if (isWriteDestination && !checkSecretFileAccess(normalized, 'write').secret) continue;
     if (classifySecretPath(normalized).secret) return raw;
     let canonical = normalized;
     try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
@@ -459,7 +515,7 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     const isCdTarget = i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd');
     let isDirectory = false;
     try { isDirectory = fs.statSync(normalized).isDirectory(); } catch { /* missing path */ }
-    if (usesRecursiveReader && isDirectory && !isCdTarget) return raw;
+    if (usesRecursiveReader && isDirectory && !isCdTarget && directoryContainsSecret(normalized)) return raw;
   }
   return null;
 }

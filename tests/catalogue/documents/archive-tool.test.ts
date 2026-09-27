@@ -5,14 +5,18 @@ import * as path from 'path';
 import { ArchiveExecuteTool } from '../../../src/tools/registry/multimodal-tools';
 
 let tmpDir: string;
+let previousCwd: string;
 
 beforeEach(async () => {
   tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cb-test-archive-'));
+  previousCwd = process.cwd();
+  process.chdir(tmpDir);
   vi.stubEnv('HOME', tmpDir);
   vi.stubEnv('CODEBUDDY_HOME', tmpDir);
 });
 
 afterEach(async () => {
+  process.chdir(previousCwd);
   vi.unstubAllEnvs();
   await fs.promises.rm(tmpDir, { recursive: true, force: true });
 });

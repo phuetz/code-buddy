@@ -158,6 +158,37 @@ describe('PeerToolBridge', () => {
     expect(output).toContain('settings.json');
   });
 
+  it('search conserve un certificat public PEM du workspace', async () => {
+    await fs.writeFile(path.join(tempWorkspace, 'cert.pem'), 'PUBLIC_CERT_MARKER_259\n');
+    const res = await dispatchPeerRequest({
+      id: 'req-public-cert',
+      method: 'peer.tool.invoke',
+      params: { tool: 'search', args: { query: 'PUBLIC_CERT_MARKER_259', path: '.' } },
+    }, defaultCtx);
+    expect(res.ok).toBe(true);
+    expect((res.payload as InvokePayload).output).toContain('PUBLIC_CERT_MARKER_259');
+  });
+
+  it('search masque toujours une clé PEM du HOME isolé', async () => {
+    const previousHome = process.env.HOME;
+    process.env.HOME = tempWorkspace;
+    try {
+      const privateDir = path.join(tempWorkspace, '.codebuddy', 'skill-signing');
+      await fs.mkdir(privateDir, { recursive: true });
+      await fs.writeFile(path.join(privateDir, 'key.pem'), 'PRIVATE_CERT_MARKER_259\n');
+      const res = await dispatchPeerRequest({
+        id: 'req-private-key',
+        method: 'peer.tool.invoke',
+        params: { tool: 'search', args: { query: 'PRIVATE_CERT_MARKER_259', path: '.' } },
+      }, defaultCtx);
+      expect(res.ok).toBe(true);
+      expect((res.payload as InvokePayload).output).not.toContain('PRIVATE_CERT_MARKER_259');
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  });
+
   describe('scope validation', () => {
     it('allows invocation if scopes is undefined (defaults to *)', async () => {
       await fs.writeFile(path.join(tempWorkspace, 'test.txt'), 'hello');

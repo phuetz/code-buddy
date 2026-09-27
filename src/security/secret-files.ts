@@ -165,6 +165,11 @@ function classify(absPath: string, roots: readonly string[]): string | null {
   }
   for (const root of roots) {
     if (isInside(absPath, root) && absPath !== root) {
+      const relative = path.relative(root, absPath);
+      if (path.basename(root) === '.codebuddy' &&
+        /^(sessions|peer-sessions)[\\/]/.test(relative)) {
+        return `private Code Buddy session under ${root}`;
+      }
       // Any path component below the root may name a secret store
       // (e.g. `~/.config/gh/hosts.yml`, `~/.codebuddy/skill-signing/key.pem`).
       if (isCredentialRootSecretBasename(base)) {
@@ -266,7 +271,6 @@ export const SECRET_SEARCH_EXCLUDE_GLOBS: readonly string[] = [
   '!*.key',
   '!*.p12',
   '!*.pfx',
-  '!*.pem',
   '!devices.json',
   '!hosts.yml',
 ];
