@@ -1,0 +1,112 @@
+[
+  {
+    "domain": "collective-memory-ckg",
+    "relevant": [
+      "arxiv:2208.08130",
+      "arxiv:2605.27825"
+    ]
+  },
+  {
+    "domain": "persistent-memory",
+    "relevant": [
+      "arxiv:2605.27825",
+      "arxiv:2608.12990",
+      "arxiv:2606.25161"
+    ]
+  },
+  {
+    "domain": "reasoning",
+    "relevant": [
+      "arxiv:2305.10601",
+      "arxiv:2309.07694",
+      "arxiv:2405.07551"
+    ]
+  },
+  {
+    "domain": "context-rag",
+    "relevant": [
+      "arxiv:2605.01664",
+      "arxiv:2504.13684"
+    ]
+  },
+  {
+    "domain": "self-improvement",
+    "relevant": [
+      "arxiv:2603.25681",
+      "arxiv:2602.04837",
+      "arxiv:2402.07456"
+    ]
+  },
+  {
+    "domain": "fleet",
+    "relevant": [
+      "arxiv:2203.08975",
+      "arxiv:2608.25992"
+    ]
+  },
+  {
+    "domain": "tool-selection",
+    "relevant": [
+      "arxiv:2606.20023",
+      "arxiv:2607.05441"
+    ]
+  },
+  {
+    "domain": "research-ingest",
+    "relevant": [
+      "arxiv:2208.08130",
+      "arxiv:1611.00097"
+    ]
+  },
+  {
+    "domain": "voice-loop",
+    "relevant": [
+      "arxiv:2503.04721",
+      "arxiv:2607.29125",
+      "arxiv:2003.10369"
+    ]
+  },
+  {
+    "domain": "code-intelligence",
+    "relevant": [
+      "arxiv:2502.07067"
+    ]
+  },
+  {
+    "domain": "model-routing",
+    "relevant": [
+      "arxiv:2608.28726",
+      "arxiv:2606.22902",
+      "arxiv:2604.07494"
+    ]
+  },
+  {
+    "domain": "deep-research",
+    "relevant": [
+      "arxiv:2411.18583",
+      "arxiv:1611.00097"
+    ]
+  },
+  {
+    "domain": "multimodal",
+    "relevant": [
+      "arxiv:2502.06428",
+      "arxiv:2504.02259",
+      "arxiv:2403.15377"
+    ]
+  },
+  {
+    "domain": "agent-executor",
+    "relevant": [
+      "arxiv:2606.17099",
+      "arxiv:2604.07494"
+    ]
+  },
+  {
+    "domain": "sessions-checkpoints",
+    "relevant": [
+      "arxiv:2608.12990",
+      "arxiv:2605.16045"
+    ]
+  }
+]

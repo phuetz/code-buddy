@@ -69,6 +69,20 @@ describe('prioritization (pure)', () => {
     ];
     expect(selectMatches(cands, { limit: 1 })).toHaveLength(1);
   });
+
+  it('keeps the main floor by default; disabling it never disables the score guard', () => {
+    const low: FeatureMatch = { feature: feat('low'), hit: hit({ similarity: 0.4 }), score: 0.4 };
+    expect(selectMatches([low])).toEqual([]);
+    expect(selectMatches([low], { filterMode: 'none' })).toHaveLength(1);
+    expect(selectMatches([{ ...low, score: 0.2 }], { filterMode: 'none' })).toEqual([]);
+  });
+
+  it('uses RRF to order eligible papers without mistaking its score for quality', () => {
+    const weak: FeatureMatch = { feature: feat('weak'), hit: hit({ name: 'arxiv:2607.05441v1' }),
+      score: 0.2, rankScore: 0.04 };
+    const sound: FeatureMatch = { feature: feat('sound'), hit: hit(), score: 0.4, rankScore: 0.02 };
+    expect(selectMatches([weak, sound])).toEqual([sound]);
+  });
 });
 
 describe('prompt + parse (pure)', () => {
@@ -114,5 +128,14 @@ describe('fetchResearchGoals (injected features + recall + chat)', () => {
   it('never throws — a recall/chat that throws → []', async () => {
     const goals = await fetchResearchGoals({ features, recall: async () => { throw new Error('ckg down'); }, chat: async () => 'g', persistLinks: false });
     expect(goals).toEqual([]);
+  });
+
+  it('can augment the hybrid query with component details without changing the plain default', async () => {
+    const queries: string[] = [];
+    const recall = async (query: string) => { queries.push(query); return [hit({ similarity: 0.7 })]; };
+    const chat = async () => 'Applique la méthode dans le composant concerné.';
+    await fetchResearchGoals({ features: [feat('voice')], recall, chat });
+    await fetchResearchGoals({ features: [feat('voice')], recall, chat, queryMode: 'component' });
+    expect(queries).toEqual(['desc voice', expect.stringContaining('Component: Feat voice. desc voice')]);
   });
 });
