@@ -142,6 +142,12 @@ export function removeTmpDir(target: string | undefined | null): void {
   }
 }
 
+/** Retry transient Windows cleanup errors without hiding a persistent leak. */
+export function removeTmpDirStrict(target: string | undefined | null): void {
+  if (!target) return;
+  fs.rmSync(target, TMP_RM_OPTIONS);
+}
+
 export async function removeTmpDirAsync(target: string | undefined | null): Promise<void> {
   try {
     await removeTestDirAsync(target);

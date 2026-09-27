@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * GK30 — stock_quote payload and auto widget reach the live canvas route.
  */
@@ -129,7 +130,7 @@ describe('GK30 stock widget on buddy server', () => {
     else process.env.CODEBUDDY_WIDGETS = previousWidgets;
     if (previousAuto === undefined) delete process.env.CODEBUDDY_WIDGETS_AUTO;
     else process.env.CODEBUDDY_WIDGETS_AUTO = previousAuto;
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   async function start(): Promise<string> {
