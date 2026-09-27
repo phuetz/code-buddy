@@ -541,12 +541,14 @@ export class CollectiveKnowledgeGraph {
    * Hybrid recall (Phase 1) — fuses local embeddings (semantic, $0) + keyword + salience,
    * with NO LLM at retrieval (Zep). A paraphrased query with no shared keywords still finds
    * the right knowledge. Embeddings are cached by contentHash across reloads.
+   * `inProcess` selects this implementation when a caller needs the semantic leg even
+   * while the optional Rust engine's recall path is keyword-only.
    */
   async recallHybrid(
     query: string,
-    opts: { limit?: number; types?: EntityType[]; semanticWeight?: number; mmrLambda?: number } = {},
+    opts: { limit?: number; types?: EntityType[]; semanticWeight?: number; mmrLambda?: number; inProcess?: boolean } = {},
   ): Promise<CkgRecallResult[]> {
-    const eng = await this.engineClient();
+    const eng = opts.inProcess ? null : await this.engineClient();
     if (eng) {
       try {
         // Phase 1 engine: keyword recall over the shared ledger (semantic+MMR arrive in Phase 2).

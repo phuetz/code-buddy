@@ -16,14 +16,19 @@
 import { logger } from '../../../utils/logger.js';
 import type { Weakness } from './evolution-engine.js';
 import { getFeatureMap, type FeatureArea, type FeatureEnrichment } from './feature-map.js';
+import { buildResearchQuery, createResearchBm25Recall, fuseResearchRanks, isResearchArticle } from './research-retrieval.js';
 
 /** A recall hit reduced to what prioritization + synthesis need (subset of CkgRecallResult). */
 export interface ResearchHit {
+  id?: string;
+  name?: string;
   text: string;
   similarity?: number;
   confidence: number;
   corroborations?: number;
   source?: string;
+  /** RRF score, when both retrieval legs were available. */
+  retrievalScore?: number;
   relations?: Array<{ predicate: string; target?: string; reason?: string }>;
 }
 
@@ -42,6 +47,12 @@ export interface FetchResearchGoalsArgs {
   perFeature?: number;
   /** Minimum semantic similarity for a match to count. */
   minSimilarity?: number;
+  /** Restore the historical 0.32 similarity floor; default leaves it off. */
+  filterMode?: 'none' | 'legacy';
+  /** Explicit retrieval choice, so a measured regression can be reverted. */
+  retrievalMode?: 'legacy' | 'hybrid';
+  /** Repeat the component description in the query; retained for measured comparisons. */
+  queryMode?: 'plain' | 'component';
   model?: string;
 }
 
@@ -68,14 +79,14 @@ export interface FeatureMatch {
   score: number;
 }
 
-/** Best (feature × discovery) matches: above the similarity floor, not contradicted, ranked. */
+/** Best (feature × discovery) matches: contradiction gate, optional historical similarity floor. */
 export function selectMatches(
   candidates: FeatureMatch[],
-  opts: { minSimilarity?: number; limit?: number } = {},
+  opts: { minSimilarity?: number; limit?: number; filterMode?: 'none' | 'legacy' } = {},
 ): FeatureMatch[] {
-  const floor = opts.minSimilarity ?? DEFAULT_MIN_SIMILARITY;
+  const floor = opts.minSimilarity ?? (opts.filterMode === 'legacy' ? DEFAULT_MIN_SIMILARITY : null);
   const kept = candidates.filter(
-    (c) => (c.hit.similarity ?? 0) >= floor && !isContradicted(c.hit),
+    (c) => (floor === null || (c.hit.similarity ?? 0) >= floor) && !isContradicted(c.hit),
   );
   // One goal per feature (avoid N goals all hitting the same area), best-first.
   kept.sort((a, b) => b.score - a.score);
@@ -114,21 +125,38 @@ export function parseGoal(text: string | null): string | null {
 
 // ── default recall + chat (in-process, reused patterns) ──────────────────
 
-function makeDefaultRecall(): ResearchRecall {
+function makeDefaultRecall(mode: 'legacy' | 'hybrid'): ResearchRecall {
+  let bm25: ReturnType<typeof createResearchBm25Recall> | null = null;
   return async (query, opts) => {
     try {
       const { getCollectiveKnowledgeGraph } = await import('../../../memory/collective-knowledge-graph.js');
-      const hits = await getCollectiveKnowledgeGraph().recallHybrid(query, {
+      const ckg = getCollectiveKnowledgeGraph();
+      const hits = await ckg.recallHybrid(query, {
         types: ['discovery'],
-        ...(opts.limit ? { limit: opts.limit } : {}),
+        limit: mode === 'hybrid' ? 100 : (opts.limit ?? 3),
+        ...(mode === 'hybrid' ? { semanticWeight: 1, mmrLambda: 1, inProcess: true } : {}),
       });
-      return hits.map((h) => ({
+      let lexical: typeof hits = [];
+      if (mode === 'hybrid') {
+        try {
+          lexical = (bm25 ??= createResearchBm25Recall(ckg))(query, 100);
+        } catch (err) {
+          logger.debug(`[evolve] research BM25 unavailable: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      const ranked = mode === 'hybrid'
+        ? fuseResearchRanks(hits.filter(isResearchArticle), lexical, opts.limit ?? 20)
+        : hits.map((hit) => ({ hit, score: matchScore(hit) }));
+      return ranked.map(({ hit: h, score }) => ({
+        id: h.id,
+        name: h.name,
         text: h.text,
         similarity: h.similarity,
         confidence: h.confidence,
         corroborations: h.corroborations,
         source: h.source,
         relations: h.relations,
+        ...(mode === 'hybrid' ? { retrievalScore: score } : {}),
       }));
     } catch {
       return [];
@@ -161,9 +189,10 @@ function makeDefaultChat(model?: string): SynthChat {
 export async function fetchResearchGoals(args: FetchResearchGoalsArgs = {}): Promise<Weakness[]> {
   try {
     const features = args.features ?? (await getFeatureMap(args.enrich ? { enrich: args.enrich } : {}));
-    const recall = args.recall ?? makeDefaultRecall();
+    const mode = args.retrievalMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_RETRIEVAL === 'legacy' ? 'legacy' : 'hybrid');
+    const recall = args.recall ?? makeDefaultRecall(mode);
     const chat = args.chat ?? makeDefaultChat(args.model);
-    const perFeature = args.perFeature ?? 3;
+    const perFeature = args.perFeature ?? (mode === 'hybrid' ? 20 : 3);
     const limit = args.limit ?? 3;
 
     // Gather (feature × discovery) candidates.
@@ -171,19 +200,23 @@ export async function fetchResearchGoals(args: FetchResearchGoalsArgs = {}): Pro
     for (const feature of features) {
       let hits: ResearchHit[] = [];
       try {
-        hits = await recall(feature.description, { types: ['discovery'], limit: perFeature });
+        const queryMode = args.queryMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_QUERY === 'component' ? 'component' : 'plain');
+        const query = mode === 'hybrid' && queryMode === 'component'
+          ? buildResearchQuery(feature.name, feature) : feature.description;
+        hits = await recall(query, { types: ['discovery'], limit: perFeature });
       } catch {
         hits = [];
       }
       for (const hit of hits) {
         if (!hit?.text) continue;
-        candidates.push({ feature, hit, score: matchScore(hit) });
+        candidates.push({ feature, hit, score: hit.retrievalScore ?? matchScore(hit) });
       }
     }
     if (candidates.length === 0) return [];
 
     const matches = selectMatches(candidates, {
       ...(args.minSimilarity !== undefined ? { minSimilarity: args.minSimilarity } : {}),
+      filterMode: args.filterMode ?? (process.env.CODEBUDDY_DGM_RESEARCH_FILTER === 'legacy' ? 'legacy' : 'none'),
       limit,
     });
 

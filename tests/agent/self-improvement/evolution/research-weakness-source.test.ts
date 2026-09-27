@@ -47,6 +47,12 @@ describe('prioritization (pure)', () => {
     ];
     expect(selectMatches(cands, { limit: 1 })).toHaveLength(1);
   });
+
+  it('retains low-similarity candidates by default and restores the old floor on request', () => {
+    const low: FeatureMatch = { feature: feat('low'), hit: hit({ similarity: 0.2 }), score: 0.2 };
+    expect(selectMatches([low])).toHaveLength(1);
+    expect(selectMatches([low], { filterMode: 'legacy' })).toEqual([]);
+  });
 });
 
 describe('prompt + parse (pure)', () => {
@@ -92,5 +98,14 @@ describe('fetchResearchGoals (injected features + recall + chat)', () => {
   it('never throws — a recall/chat that throws → []', async () => {
     const goals = await fetchResearchGoals({ features, recall: async () => { throw new Error('ckg down'); }, chat: async () => 'g' });
     expect(goals).toEqual([]);
+  });
+
+  it('can augment the hybrid query with component details without changing the plain default', async () => {
+    const queries: string[] = [];
+    const recall = async (query: string) => { queries.push(query); return [hit({ similarity: 0.7 })]; };
+    const chat = async () => 'Applique la méthode dans le composant concerné.';
+    await fetchResearchGoals({ features: [feat('voice')], recall, chat });
+    await fetchResearchGoals({ features: [feat('voice')], recall, chat, queryMode: 'component' });
+    expect(queries).toEqual(['desc voice', expect.stringContaining('Component: Feat voice. desc voice')]);
   });
 });
