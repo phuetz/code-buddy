@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -69,7 +70,7 @@ describe.skipIf(!REAL_SERVER_GPT55_ENABLED)('chat routes with real ChatGPT gpt-5
         process.env[key] = value;
       }
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   async function start(): Promise<string> {

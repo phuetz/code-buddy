@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
@@ -116,8 +117,8 @@ describe('optional HTTPS transport (off-device TLS packaging)', () => {
       else process.env[k] = savedEnv[k]!;
     }
     resetDatabaseManager();
-    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpDir);
+    removeTmpDirStrict(tmpHome);
   });
 
   it.skipIf(!hasOpenssl)(
@@ -223,7 +224,7 @@ describe('optional HTTPS transport (off-device TLS packaging)', () => {
         const opts2 = resolveServerTlsOptions();
         expect(opts2!.cert.equals(certBefore)).toBe(true);
       } finally {
-        fs.rmSync(genHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        removeTmpDirStrict(genHome);
       }
     },
     30_000
