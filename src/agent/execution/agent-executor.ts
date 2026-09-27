@@ -1496,6 +1496,19 @@ export class AgentExecutor {
             alwaysInclude: ['view_file', 'bash', 'search'],
           };
         }
+        if (surface === 'try') {
+          // The first-run demo only edits one file and checks a supplied test.
+          // A small model must see the file creation tool directly: the normal
+          // compact selection can spend its eight schemas on search/introspection.
+          const demoTools = ['create_file', 'str_replace_editor', 'view_file', 'bash'];
+          selectionOpts = {
+            ...selectionOpts,
+            maxTools: demoTools.length,
+            alwaysInclude: demoTools,
+            allowedToolNames: demoTools,
+            enableCaching: false,
+          };
+        }
         if (!codeResearch) {
           const { runtimeInspectionTools, connectedFleetSurfaceTools } = await import('../../services/runtime-settings-context.js');
           const inspectionTools = [...new Set([
@@ -1708,7 +1721,8 @@ export class AgentExecutor {
                     [],
                   );
                   return r.choices[0]?.message?.content ?? 'NO_REPLY';
-                }
+                },
+                turnCwd,
               );
             } catch {
               // non-critical
