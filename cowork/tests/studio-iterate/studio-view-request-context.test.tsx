@@ -249,8 +249,8 @@ describe.skipIf(!hasGit())('StudioView — élément ciblé, journaux, image, co
     expect(sent).toContain('3|     <button className="btn btn-primary">');
     expect(sent).toContain('- composant : AddButton');
     expect(sent.endsWith('Rends ce bouton rouge')).toBe(true);
-    // Usage unique : la pastille disparaît après l'envoi.
-    expect(screen.queryByTestId('studio-attachment-cible')).toBeNull();
+    // Usage unique : la pastille disparaît une fois la demande partie.
+    await waitFor(() => expect(screen.queryByTestId('studio-attachment-cible')).toBeNull());
   }, 30_000);
 
   it('console du navigateur et serveur de dev visibles, joints ou envoyés en correction', async () => {
@@ -356,6 +356,27 @@ describe.skipIf(!hasGit())('StudioView — élément ciblé, journaux, image, co
     fireEvent.click(screen.getByText('Send'));
     fireEvent.click(await screen.findByText('Stop', { selector: 'form button' }, { timeout: 5000 }));
     expect(ipc.stopSession).toHaveBeenCalledWith('s1');
+  }, 30_000);
+
+  it('secrets : la demande de GÉNÉRATION initiale (et son titre) passe aussi par le masquage', async () => {
+    useAppStore.setState({ activeSessionId: null, workingDir: base } as never);
+    ipc.startSession.mockReset();
+    ipc.startSession.mockResolvedValue({ id: 's2' });
+    render(
+      <Suspense fallback={<div>chargement</div>}>
+        <StudioView />
+      </Suspense>,
+    );
+    const box = await screen.findByPlaceholderText(/Describe the app to build/, {}, { timeout: 5000 });
+    fireEvent.change(box, { target: { value: `Une app météo avec ma clé ${SECRET}` } });
+    fireEvent.change(screen.getByLabelText('Destination folder'), { target: { value: 'app' } });
+    fireEvent.click(screen.getByText('Generate with AI'));
+    await waitFor(() => expect(ipc.startSession).toHaveBeenCalledTimes(1), { timeout: 5000 });
+    const [title, prompt] = ipc.startSession.mock.calls[0] as [string, string];
+    expect(prompt).not.toContain(SECRET);
+    expect(prompt).toContain('[secret masqué]');
+    expect(title).not.toContain(SECRET);
+    expect(redactSpy).toHaveBeenCalledWith(path.join(base, 'app'), expect.any(String));
   }, 30_000);
 
   it('secrets : jamais dans le prompt (masqués au point de passage unique) ; masquage impossible = rien ne part', async () => {

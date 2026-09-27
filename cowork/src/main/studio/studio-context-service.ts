@@ -145,6 +145,11 @@ export class StudioContextService {
     const abs = path.join(real, rel);
     const st = await fs.lstat(abs).catch(() => null);
     if (!st || !st.isFile() || st.size > MAX_FILE_BYTES) return null;
+    // Un DOSSIER intermédiaire peut être un lien symbolique : le chemin réel
+    // doit rester dans le projet.
+    const resolved = await fs.realpath(abs).catch(() => null);
+    const inside = resolved ? path.relative(real, resolved) : '..';
+    if (!resolved || inside.startsWith('..') || path.isAbsolute(inside)) return null;
     return fs.readFile(abs, 'utf8');
   }
 

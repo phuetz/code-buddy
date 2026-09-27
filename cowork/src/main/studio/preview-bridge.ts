@@ -172,7 +172,13 @@ interface WebContentsLike {
 export interface PreviewBridgeOptions {
   /** Masque les secrets du projet dans un texte (valeurs `.env` + secrets rangés). */
   redact?: (root: string, text: string) => Promise<string>;
+  /** Horloge injectable (tests du plafond de débit). */
+  now?: () => number;
 }
+
+/** Plafond du relais console : messages par fenêtre d'une seconde et par fenêtre Cowork. */
+export const CONSOLE_MAX_PER_WINDOW = 50;
+const CONSOLE_WINDOW_MS = 1000;
 
 interface Watch {
   origin: string;
@@ -184,8 +190,12 @@ const LEVELS: Record<string, ConsoleLevel> = { '0': 'debug', '1': 'info', '2': '
 export class PreviewBridge {
   private readonly watches = new Map<number, Watch>();
   private readonly attached = new WeakSet<object>();
+  private readonly rates = new Map<number, { windowStart: number; count: number; dropped: number }>();
+  private readonly now: () => number;
 
-  constructor(private readonly options: PreviewBridgeOptions = {}) {}
+  constructor(private readonly options: PreviewBridgeOptions = {}) {
+    this.now = options.now ?? Date.now;
+  }
 
   /** Le renderer annonce l'aperçu affiché (URL loopback + dossier du projet). */
   watch(sender: WebContentsLike, input: unknown): { ok: boolean; error?: string } {
@@ -214,10 +224,39 @@ export class PreviewBridge {
     const frameOrigin = details.frame?.url ? originOf(details.frame.url) : null;
     const sourceOrigin = details.sourceId ? originOf(details.sourceId) : null;
     if (frameOrigin !== watch.origin && sourceOrigin !== watch.origin) return;
+    // Échec fermé : masquage prévu mais projet inconnu → rien n'est relayé.
+    if (this.options.redact && !watch.root) return;
+    // Débit borné : une page qui journalise en boucle ne doit pas inonder l'IPC
+    // ni faire re-rendre le renderer en rafale (hypothèse des relectures pour
+    // le pic de CPU). Au-delà du plafond, les messages sont comptés puis
+    // signalés en une seule ligne.
+    const now = this.now();
+    const rate = this.rates.get(sender.id) ?? { windowStart: now, count: 0, dropped: 0 };
+    if (now - rate.windowStart >= CONSOLE_WINDOW_MS) {
+      if (rate.dropped > 0 && !sender.isDestroyed?.()) {
+        sender.send(PREVIEW_BRIDGE_CHANNELS.console, {
+          level: 'warning',
+          message: `${rate.dropped} message(s) de console ignoré(s) : flux trop rapide (plus de ${CONSOLE_MAX_PER_WINDOW} par seconde).`,
+          source: '',
+          line: 0,
+          at: now,
+        } satisfies PreviewConsoleEntry);
+      }
+      rate.windowStart = now;
+      rate.count = 0;
+      rate.dropped = 0;
+    }
+    rate.count += 1;
+    this.rates.set(sender.id, rate);
+    if (rate.count > CONSOLE_MAX_PER_WINDOW) {
+      rate.dropped += 1;
+      return;
+    }
     const level = LEVELS[String(details.level)] ?? 'info';
     const raw = String(details.message ?? '').slice(0, 4000);
     void (async () => {
-      const message = this.options.redact && watch.root ? await this.options.redact(watch.root, raw).catch(() => '') : raw;
+      const message = this.options.redact ? await this.options.redact(watch.root, raw).catch(() => null) : raw;
+      if (message === null) return;
       const source = (details.sourceId ?? '').replace(watch.origin, '');
       if (sender.isDestroyed?.()) return;
       const entry: PreviewConsoleEntry = { level, message, source, line: details.lineNumber ?? 0, at: Date.now() };

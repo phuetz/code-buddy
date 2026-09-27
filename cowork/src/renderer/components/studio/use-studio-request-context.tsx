@@ -34,6 +34,7 @@ import type { StudioChatAttachment } from '../studio-iterate/StudioChatPanel.js'
 
 const INSPECTOR_SOURCE = 'codebuddy-studio-inspector';
 const MAX_BROWSER_ENTRIES = 300;
+const CONSOLE_FLUSH_MS = 150;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
 type ImageType = (typeof IMAGE_TYPES)[number];
@@ -120,11 +121,26 @@ export function useStudioRequestContext(options: UseStudioRequestContextOptions)
     void previewApi.watch({ url: previewUrl && root ? previewUrl : '', root }).catch(() => undefined);
   }, [previewUrl, root, previewApi]);
 
+  // Messages regroupés : un seul rendu par tranche de 150 ms, même sous un flux rapide.
   useEffect(() => {
     if (!previewApi?.onConsole) return;
-    return previewApi.onConsole((entry) => {
-      setBrowser((prev) => [...prev, entry].slice(-MAX_BROWSER_ENTRIES));
+    let queue: BrowserConsoleEntry[] = [];
+    let timer: number | null = null;
+    const flush = () => {
+      timer = null;
+      const batch = queue;
+      queue = [];
+      if (batch.length > 0) setBrowser((prev) => [...prev, ...batch].slice(-MAX_BROWSER_ENTRIES));
+    };
+    const off = previewApi.onConsole((entry) => {
+      queue.push(entry);
+      if (queue.length > MAX_BROWSER_ENTRIES) queue = queue.slice(-MAX_BROWSER_ENTRIES);
+      if (timer === null) timer = window.setTimeout(flush, CONSOLE_FLUSH_MS);
     });
+    return () => {
+      off();
+      if (timer !== null) window.clearTimeout(timer);
+    };
   }, [previewApi]);
 
   // Journaux du serveur de dev (déjà masqués par le processus principal).
@@ -314,9 +330,6 @@ export function useStudioRequestContext(options: UseStudioRequestContextOptions)
       const ctx: RequestContext = { ...baseContext(), files, logs: extra?.logs ? [...logs.filter((l) => l.source !== extra.logs?.source), extra.logs] : logs };
       const prompt = buildIterationPrompt(text, { lockedFiles: lockedFiles(), mode, context: buildContextBlock(ctx) });
       const sentImage = image;
-      setTarget(null);
-      setLogs([]);
-      setImage(null);
       if (!sentImage) return prompt;
       return [
         { type: 'text', text: prompt },
@@ -374,7 +387,14 @@ export function useStudioRequestContext(options: UseStudioRequestContextOptions)
     />
   );
 
+  const clearOneShot = useCallback(() => {
+    setTarget(null);
+    setLogs([]);
+    setImage(null);
+  }, []);
+
   return {
+    clearOneShot,
     selecting,
     toggleSelect,
     onFrameLoad,

@@ -41,7 +41,30 @@ const MAX_VALUE = 8 * 1024;
 const MAX_KEYS = 100;
 /** En dessous, une valeur est trop courte pour être masquée sans casser le texte. */
 const MIN_REDACT_LENGTH = 4;
-const PROJECT_ENV_FILES = ['.env', '.env.local', '.env.development', '.env.development.local', '.env.production', '.env.production.local'];
+const ENV_SCAN_SKIP = new Set(['node_modules', '.git', '.codebuddy', 'dist', 'build', 'out', '.next', '.vite', '.studio-probe-dist', 'coverage']);
+const ENV_SCAN_MAX_DEPTH = 6;
+const VALUES_TTL_MS = 2000;
+const ENV_SCAN_MAX_FILES = 50;
+
+/** `.env` et `.env.*` d'un projet, à tout niveau raisonnable (liens symboliques non suivis). */
+async function findEnvFiles(root: string): Promise<string[]> {
+  const found: string[] = [];
+  const walk = async (dir: string, depth: number): Promise<void> => {
+    if (depth > ENV_SCAN_MAX_DEPTH || found.length >= ENV_SCAN_MAX_FILES) return;
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!ENV_SCAN_SKIP.has(entry.name)) await walk(abs, depth + 1);
+      } else if (entry.isFile() && (entry.name === '.env' || entry.name.startsWith('.env.'))) {
+        found.push(abs);
+        if (found.length >= ENV_SCAN_MAX_FILES) return;
+      }
+    }
+  };
+  await walk(root, 0);
+  return found;
+}
 
 export function isValidSecretKey(key: unknown): key is string {
   return typeof key === 'string' && KEY_RE.test(key);
@@ -159,6 +182,7 @@ export class ProjectSecretsService {
       if (!(key in vars) && Object.keys(vars).length >= MAX_KEYS) return { ok: false, error: 'trop de secrets' };
       vars[key] = value;
       await this.writeVars(real, vars);
+      this.valuesCache.clear();
       return this.list(real);
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -172,6 +196,7 @@ export class ProjectSecretsService {
       const vars = await this.readVars(real);
       delete vars[key];
       await this.writeVars(real, vars);
+      this.valuesCache.clear();
       return this.list(real);
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -188,7 +213,22 @@ export class ProjectSecretsService {
   }
 
   /** Toutes les valeurs à masquer : secrets rangés + valeurs des `.env*` du projet. */
+  private readonly valuesCache = new Map<string, { at: number; values: string[] }>();
+
+  /**
+   * Valeurs à masquer, gardées 2 s par projet : le relais console et les
+   * journaux masquent chaque message, et relire l'arbre du projet à chaque
+   * fois coûterait cher sous un flux rapide. Un `set`/`remove` vide le cache.
+   */
   async valuesFor(root: string): Promise<string[]> {
+    const hit = this.valuesCache.get(root);
+    if (hit && Date.now() - hit.at < VALUES_TTL_MS) return hit.values;
+    const values = await this.computeValues(root);
+    this.valuesCache.set(root, { at: Date.now(), values });
+    return values;
+  }
+
+  private async computeValues(root: string): Promise<string[]> {
     let real: string;
     try {
       real = await fs.realpath(root);
@@ -199,8 +239,10 @@ export class ProjectSecretsService {
     // Les .env* ne sont lus que dans un espace de confiance (la racine vient du renderer).
     const trusted = await assertTrustedRoot(real, this.trustedRoots).then(() => true, () => false);
     if (!trusted) return values;
-    for (const name of PROJECT_ENV_FILES) {
-      const text = await fs.readFile(path.join(real, name), 'utf8').catch(() => null);
+    // Tous les `.env` / `.env.*` du projet, sous-dossiers compris (monorepo :
+    // `apps/web/.env`, `server/.env.local`…), hors dépendances et sorties.
+    for (const file of await findEnvFiles(real)) {
+      const text = await fs.readFile(file, 'utf8').catch(() => null);
       if (text) values.push(...Object.values(parseDotenv(text)));
     }
     return values;
@@ -208,6 +250,12 @@ export class ProjectSecretsService {
 
   async redact(root: unknown, text: unknown): Promise<SecretsResult<string>> {
     if (typeof text !== 'string') return { ok: false, error: 'texte invalide' };
+    // Dossier pas encore créé (1re génération dans un nouveau dossier) : aucun
+    // secret ne peut lui appartenir, le texte part tel quel.
+    if (typeof root === 'string' && path.isAbsolute(root)) {
+      const exists = await fs.stat(root).then(() => true, (e: NodeJS.ErrnoException) => e.code !== 'ENOENT');
+      if (!exists) return { ok: true, data: text };
+    }
     try {
       const real = await this.root(root);
       return { ok: true, data: redactText(text, await this.valuesFor(real)) };
@@ -222,6 +270,10 @@ export class ProjectSecretsService {
    */
   async findZipLeaks(root: string): Promise<string[]> {
     const leaks = await this.findLeaks(root, root, { skipDirs: ZIP_SCAN_SKIP_DIRS });
+    // Le zip réinclut les médias générés sous .codebuddy/media-generation : fouillés aussi.
+    const media = path.join(root, '.codebuddy', 'media-generation');
+    const mediaLeaks = await this.findLeaks(root, media).catch(() => [] as string[]);
+    leaks.push(...mediaLeaks.map((rel) => path.join('.codebuddy', 'media-generation', rel)));
     return leaks.filter((rel) => !/(^|[\\/])\.env(\.|$)/.test(rel));
   }
 
@@ -241,7 +293,13 @@ export class ProjectSecretsService {
         if (entry.isDirectory()) {
           if (!skip.has(entry.name)) await walk(abs);
         }
-        else if (entry.isFile()) {
+        else if (entry.isFile() || entry.isSymbolicLink()) {
+          // Un lien symbolique vers un fichier est lu à travers (un lien vers un
+          // dossier n'est pas parcouru : pas de boucle).
+          if (entry.isSymbolicLink()) {
+            const target = await fs.stat(abs).catch(() => null);
+            if (!target?.isFile()) continue;
+          }
           const buf = await fs.readFile(abs).catch(() => null);
           if (!buf || buf.length > 20 * 1024 * 1024) continue;
           const text = buf.toString('latin1');

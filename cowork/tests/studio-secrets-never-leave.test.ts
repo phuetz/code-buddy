@@ -7,7 +7,7 @@
  */
 import archiver from 'archiver';
 import { execFileSync } from 'child_process';
-import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs';
+import { createWriteStream, existsSync, mkdirSync, symlinkSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -175,6 +175,24 @@ describe('secrets du projet App Studio', () => {
     } finally {
       rmSync(outside, { recursive: true, force: true });
     }
+  });
+
+  it('réserves vague 2 : .env de sous-dossier masqué, lien symbolique fouillé, médias du zip fouillés', async () => {
+    mkdirSync(path.join(root, 'apps', 'web'), { recursive: true });
+    writeFileSync(path.join(root, 'apps', 'web', '.env.local'), `API_TOKEN=${DOTENV_SECRET}\n`);
+    const red = await service.redact(root, `jeton ${DOTENV_SECRET}`);
+    expect(red).toEqual({ ok: true, data: `jeton ${REDACTED}` });
+    // Lien symbolique vers un fichier contenant le secret, dans un site exporté.
+    const site = path.join(base, 'site');
+    mkdirSync(site, { recursive: true });
+    const outsideFile = path.join(base, 'config-dehors.js');
+    writeFileSync(outsideFile, `const t="${DOTENV_SECRET}";`);
+    symlinkSync(outsideFile, path.join(site, 'config.js'));
+    expect(await service.findLeaks(root, site)).toEqual(['config.js']);
+    // Média généré (réinclus dans le zip) contenant la valeur.
+    mkdirSync(path.join(root, '.codebuddy', 'media-generation', 'images'), { recursive: true });
+    writeFileSync(path.join(root, '.codebuddy', 'media-generation', 'images', 'a.png'), Buffer.from(`PNG${DOTENV_SECRET}`));
+    expect(await service.findZipLeaks(root)).toEqual([path.join('.codebuddy', 'media-generation', 'images', 'a.png')]);
   });
 
   it('repère un secret intégré à un site construit (export refusé par Cowork)', async () => {

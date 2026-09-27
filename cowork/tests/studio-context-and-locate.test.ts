@@ -71,6 +71,15 @@ describe('StudioContextService', () => {
     expect((await service.read(path.join(os.tmpdir()), ['x'])).ok).toBe(false);
   });
 
+  it('refuse un fichier atteint par un DOSSIER lien symbolique sortant du projet', async () => {
+    const outsideDir = path.join(base, 'dehors');
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(path.join(outsideDir, 'fuite.ts'), 'export const x = 1;\n');
+    symlinkSync(outsideDir, path.join(root, 'src', 'lien-dossier'));
+    const res = await service.read(root, ['src/lien-dossier/fuite.ts', 'src/App.tsx']);
+    expect(res.ok && res.data.map((f) => f.path)).toEqual(['src/App.tsx']);
+  });
+
   it("localise l'élément par la source React exacte (_debugSource) et borne son étendue", async () => {
     const res = await service.locate(root, {
       tag: 'button',

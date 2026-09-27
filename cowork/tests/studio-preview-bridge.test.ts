@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { INSPECTOR_MESSAGE_SOURCE, inspectorScript, PreviewBridge, PREVIEW_BRIDGE_CHANNELS } from '../src/main/studio/preview-bridge';
+import { CONSOLE_MAX_PER_WINDOW, INSPECTOR_MESSAGE_SOURCE, inspectorScript, PreviewBridge, PREVIEW_BRIDGE_CHANNELS } from '../src/main/studio/preview-bridge';
 
 function TodoForm() {
   return null;
@@ -101,6 +101,31 @@ describe('PreviewBridge', () => {
       source: '/src/App.tsx',
       line: 12,
     }));
+  });
+
+  it('borne le débit du relais console (flux en boucle) et signale les messages ignorés', async () => {
+    let clock = 1_000;
+    const redact = vi.fn(async (_root: string, text: string) => text);
+    const bridge = new PreviewBridge({ redact, now: () => clock });
+    const sender = makeSender();
+    bridge.watch(sender, { url: 'http://127.0.0.1:5173/', root: '/projet' });
+    const msg = { message: 'tick', level: 'info', lineNumber: 1, sourceId: 'http://127.0.0.1:5173/src/main.ts', frame: { url: 'http://127.0.0.1:5173/' } };
+    for (let i = 0; i < 5000; i += 1) sender.emit(msg);
+    await vi.waitFor(() => expect(sender.send).toHaveBeenCalledTimes(CONSOLE_MAX_PER_WINDOW));
+    expect(redact).toHaveBeenCalledTimes(CONSOLE_MAX_PER_WINDOW); // pas de masquage (coûteux) pour les messages ignorés
+    clock += 1_000;
+    sender.emit(msg);
+    await vi.waitFor(() => expect(sender.send).toHaveBeenCalledTimes(CONSOLE_MAX_PER_WINDOW + 2));
+    expect(sender.send.mock.calls[CONSOLE_MAX_PER_WINDOW]?.[1]).toMatchObject({ level: 'warning', message: expect.stringContaining('4950 message(s)') });
+  });
+
+  it('échec fermé : masquage prévu mais projet inconnu → aucun message relayé', async () => {
+    const bridge = new PreviewBridge({ redact: async (_r, t) => t });
+    const sender = makeSender();
+    bridge.watch(sender, { url: 'http://127.0.0.1:5173/', root: '' });
+    sender.emit({ message: 'secret', level: 'error', lineNumber: 1, sourceId: 'http://127.0.0.1:5173/a.js', frame: { url: 'http://127.0.0.1:5173/' } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sender.send).not.toHaveBeenCalled();
   });
 
   it("n'injecte le script que dans une frame loopback de même origine que l'aperçu", async () => {

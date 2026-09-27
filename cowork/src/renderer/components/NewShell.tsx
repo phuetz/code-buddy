@@ -381,8 +381,8 @@ export function StudioView() {
   );
 
   const sendTurn = useCallback(
-    async (content: string | ContentBlock[], opts: { mode: IterationMode; label: string }) => {
-      if (!activeSessionId) return;
+    async (content: string | ContentBlock[], opts: { mode: IterationMode; label: string }): Promise<boolean> => {
+      if (!activeSessionId) return false;
       const blocks: ContentBlock[] = typeof content === 'string' ? [{ type: 'text', text: content }] : content;
       const safe: ContentBlock[] = [];
       for (const block of blocks) {
@@ -393,7 +393,7 @@ export function StudioView() {
         const text = await redactForModel(sessionCwd, block.text);
         if (text === null) {
           setSendNote('Envoi annulé : impossible de masquer les secrets du projet.');
-          return;
+          return false;
         }
         safe.push({ type: 'text', text });
       }
@@ -402,6 +402,7 @@ export function StudioView() {
       turnRef.current = { root: sessionCwd, preId, mode: opts.mode, label: opts.label };
       const only = safe.length === 1 ? safe[0] : undefined;
       await continueSession(activeSessionId, only && only.type === 'text' ? only.text : safe);
+      return true;
     },
     [activeSessionId, continueSession, sessionCwd, takeVersion, redactForModel],
   );
@@ -424,9 +425,11 @@ export function StudioView() {
   const compose = requestCtx.compose;
   onFixWithLogsRef.current = (text, logs) => {
     autoBuildRef.current.attempts = 0;
-    void compose(text, 'build', { logs }).then((content) =>
-      sendTurn(content, { mode: 'build', label: 'Correction des erreurs de la console' }),
-    );
+    void compose(text, 'build', { logs })
+      .then((content) => sendTurn(content, { mode: 'build', label: 'Correction des erreurs de la console' }))
+      .then((sent) => {
+        if (sent) requestCtx.clearOneShot();
+      });
   };
 
   interface AutoContinuationState {
@@ -666,7 +669,7 @@ export function StudioView() {
     }
   }, [turnActive, tree, previewUrl, previewStatus, runBuild]);
 
-  const buildNote = [autoFixNote(autoFixAttempt), turnNote].filter(Boolean).join(' · ') || null;
+  const buildNote = [autoFixNote(autoFixAttempt), turnNote, activeSessionId ? null : sendNote].filter(Boolean).join(' · ') || null;
   const onFixProblem = useCallback(() => {
     const problem = previewProblem;
     if (!problem) return;
@@ -710,13 +713,26 @@ export function StudioView() {
           starterSeeded = writes.every((w) => (w as { ok?: boolean } | null)?.ok === true);
         }
       }
-      const prompt = buildAiGenerationPrompt(enrichedRequest, { starterSeeded });
+      // La demande de génération passe elle aussi par le masquage des secrets
+      // (l'utilisateur peut y coller une clé) ; rien ne part s'il échoue.
+      // Dossier cible relatif (« app-studio-project ») : résolu sous le dossier de travail.
+      const isAbs = (p: string) => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
+      const redactRoot = cwd && isAbs(cwd) ? cwd : cwd && workingDir ? `${workingDir.replace(/[\\/]+$/, '')}/${cwd}` : '';
+      const rawPrompt = buildAiGenerationPrompt(enrichedRequest, { starterSeeded });
+      const rawTitle = getInitialSessionTitle(request.prompt);
+      const prompt = redactRoot ? await redactForModel(redactRoot, rawPrompt) : rawPrompt;
+      const title = redactRoot ? await redactForModel(redactRoot, rawTitle) : rawTitle;
+      if (prompt === null || title === null) {
+        setSendNote('Génération annulée : impossible de masquer les secrets du projet.');
+        return;
+      }
+      setSendNote(null);
       // Version de départ (squelette ou dossier existant) : on peut toujours y revenir.
       const preId = cwd ? await takeVersion('État de départ', cwd) : null;
       turnRef.current = { root: cwd ?? '', preId, mode: 'build', label: 'Génération' };
       autoBuildRef.current.attempts = 0;
       const session = await startSession(
-        getInitialSessionTitle(request.prompt),
+        title,
         prompt,
         cwd,
         null,
@@ -730,7 +746,7 @@ export function StudioView() {
       );
       if (session?.id) setActiveSession(session.id);
     },
-    [startSession, setActiveSession, workingDir, takeVersion]
+    [startSession, setActiveSession, workingDir, takeVersion, redactForModel]
   );
 
   // "Vérifier" taps Code Buddy's web_test through the agent session (which owns
@@ -739,15 +755,15 @@ export function StudioView() {
   const onVerifyPreview = useCallback(() => {
     const url = viewProps.previewUrl;
     if (!activeSessionId || !url) return;
-    void continueSession(
-      activeSessionId,
+    void sendTurn(
       `Vérifie l'application web sur ${url} avec l'outil \`web_test\` : lance web_test avec cette URL, ` +
         `confirme qu'il n'y a aucune erreur console ni erreur de page et que l'interface principale s'affiche, ` +
         `puis résume le rapport (PASSED/FAILED + points clés). Corrige si tu détectes une erreur. ` +
         `Si \`web_test\` n'apparaît pas dans tes outils, appelle d'abord \`tool_search\` avec "web_test" pour le charger — ` +
-        `n'écris PAS ton propre script navigateur (le rapport web_test alimente la carte de vérification de l'interface).`
+        `n'écris PAS ton propre script navigateur (le rapport web_test alimente la carte de vérification de l'interface).`,
+      { mode: 'build', label: 'Vérification web_test' },
     );
-  }, [activeSessionId, viewProps.previewUrl, continueSession]);
+  }, [activeSessionId, viewProps.previewUrl, sendTurn]);
 
   // The bolt.new iterate chat, driven by the active project session (a session
   // with a cwd). Absent → App Studio shows its composer entry screen.
@@ -777,12 +793,17 @@ export function StudioView() {
       onSend: (text: string) => {
         // Nouveau message de l'utilisateur = nouveau budget de corrections automatiques.
         autoBuildRef.current.attempts = 0;
-        void compose(text, chatMode).then((content) =>
-          sendTurn(content, {
-            mode: chatMode,
-            label: text.slice(0, 80),
-          }),
-        );
+        void compose(text, chatMode)
+          .then((content) =>
+            sendTurn(content, {
+              mode: chatMode,
+              label: text.slice(0, 80),
+            }),
+          )
+          // Pièces jointes à usage unique vidées SEULEMENT si la demande est partie.
+          .then((sent) => {
+            if (sent) requestCtx.clearOneShot();
+          });
       },
       attachments: requestCtx.attachments,
       onAttachImage: requestCtx.attachImage,
