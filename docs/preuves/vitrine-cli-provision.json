@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-provision",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:12.723216Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "6e1757d104c6f6322451370f1c3c48e3c4e1ed518ad47e6f9284987de8c204f7",
+  "artifact": "docs/preuves/vitrine-cli-provision.log",
+  "summary": "Planned 14 local database/authentication files in simulation; no overlay was applied."
+}

@@ -1,0 +1,29 @@
+Command: buddy security audit --json --profile-dir [ISOLATED_HOME]/.codebuddy --project [REPOSITORY]/_qa/vitrine/fixture
+Exit code: 0
+Scope: Audited the isolated profile and fixture project with JSON findings; no fix was applied.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+{
+  "profileDir": "[ISOLATED_HOME]/.codebuddy",
+  "projectDir": "[REPOSITORY]/_qa/vitrine/fixture",
+  "effectiveProfileDir": "[ISOLATED_HOME]/.codebuddy",
+  "effectiveProjectDir": "[REPOSITORY]/_qa/vitrine/fixture",
+  "limitations": [
+    "Remote MCP hostnames are not resolved. A passed URL is not a guarantee that DNS stays off private networks.",
+    "MCP server checks follow the runtime loader: project mcp.json (mcpServers or servers), project settings.json mcpServers, and profile mcp.json. Project settings.local.json and profile settings.json are not runtime MCP server sources.",
+    "Skill directories are capped at 40 entries and a bounded file walk. A larger tree fails the audit instead of being reported as clean. A symlink or non-regular file inside a skill is not followed and fails the audit.",
+    "exact_failure and same_tool_failure accept 0 as off. idempotent_no_progress does not: 0 keeps the historical default and the minimum is 2. same_tool_failure counts every failure of that tool in the turn, even when the arguments differ. warnings_enabled and hard_stop_enabled can both be turned off by the operator."
+  ],
+  "passed": true,
+  "status": "passed",
+  "findings": [],
+  "suppressedFindings": [],
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0
+  },
+  "fixes": []
+}

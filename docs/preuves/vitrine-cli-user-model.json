@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-user-model",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:12.913120Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "aabbee520f6b28f0738753f2b4cf2efa2a4c3c9bd92a3531152754cb52324893",
+  "artifact": "docs/preuves/vitrine-cli-user-model.log",
+  "summary": "Read the isolated user-model state; no personal observations were used."
+}

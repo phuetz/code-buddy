@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-policy",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:11.791207Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "faf6813b8a5f10d86525e2fff0240bc152fa039bc153252919ca962464905cf5",
+  "artifact": "docs/preuves/vitrine-cli-policy.log",
+  "summary": "Ran a read-only policy check on the isolated profile."
+}

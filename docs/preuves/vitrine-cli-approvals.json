@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-approvals",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:11.971635Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "4f6b152164a7209f93687298a6ba5a8874b05748196bfe2083d1449c13287e5c",
+  "artifact": "docs/preuves/vitrine-cli-approvals.log",
+  "summary": "Read the isolated approval queue; no approval decision was issued."
+}

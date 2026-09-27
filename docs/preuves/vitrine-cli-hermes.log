@@ -1,0 +1,63 @@
+Command: buddy hermes status
+Exit code: 0
+Scope: Displayed documented profile and readiness diagnostics; no Hermes task was run.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+Command: buddy hermes status --json
+Hermes status: needs attention
+  Requested profile: balanced
+  Active dispatch profile: balanced
+  Feature parity: 20 tracked, 0 active todo(s), 0 deferred
+  Tool parity: 71 tracked, 0 gap(s), 0 partial
+
+Readiness:
+  - Agent identity: ok
+  - Provider/model: needs attention
+  - Runtime route: ok
+  - Browser route: ok
+  - Messaging gateway: ok
+  - Mobile supervision: ok
+  - Protocols: ok
+  - Trajectory recall: ok
+  - Memory: ok
+  - Learning loop: ok
+  - Skills: ok
+
+Routes:
+  Provider: xAI / Grok / grok-code-fast-1 (missing)
+  Providers: configured ollama, lmstudio (local: ollama, lmstudio, missing: xai, openai, anthropic, google, deepseek, mistral)
+  Tool Gateway: configured web, browser (via Nous: none, missing: image_gen, tts, modal)
+  Runtime: local -> os-sandbox (auto: local, os-sandbox, gated: docker)
+  Browser: local-playwright -> none (auto: local-playwright, gated: none)
+  Messaging: configured none (runtime: none, prompt-tools: Email, Home Assistant, Yuanbao, next: Telegram, Discord, Slack, WhatsApp, Signal, SMS (+12 more))
+  Mobile: /api/mobile implemented_not_probed (read=3, draft=1, pending=1, remoteExecDisabled=yes)
+  Memory: local (remote: none, fallback: honcho, openviking, mem0, retaindb, byterover, supermemory, missing: none)
+  Learning: 0 review item(s), 100% retrospective coverage, 0 running / 0 stale (limit 5)
+  Protocols: available mcp-client, mcp-server, a2a-http, a2a-jsonrpc-v1, acp-http, channel-a2a-bridge (partial: acp-editor-integration, missing: none)
+  Trajectories: available trajectory-export, recall-pack, learning-retrospective, golden-workflow-evals, policy-evals (+2 more) (partial: none, missing: none, golden=6, policy=3)
+  Skills: 0/0 enabled, candidates 0 eligible / 0 not eligible
+  Protocol smoke: buddy hermes protocols-smoke local --json
+
+Recommendations:
+  - Run buddy hermes portal status --json to inspect Nous Portal credential and Tool Gateway setup.
+  - Configure SSH, Modal, Daytona, or Vercel Sandbox only if remote Hermes-style execution is a product goal.
+  - Configure Browserbase, Browser Use/Nous Gateway, or Firecrawl only if managed browser backends are a product goal.
+  - Run the local smoke before claiming protocol transport health on a workstation.
+  - Keep ACP editor integration partial until a packaged editor workflow is verified end-to-end.
+  - Create .codebuddy/channels.json or pass --config to configure remote channels.
+  - No runtime channels are registered in this process.
+  - Start the local server before using a phone: buddy server --port 3000.
+
+Commands:
+  Doctor: buddy hermes doctor --json
+  Todo: buddy hermes todo --json
+  Toolsets: buddy hermes toolsets balanced --json
+  Portal: buddy hermes portal status --json
+  Messaging: buddy hermes messaging status --json
+  Mobile: buddy hermes mobile status --json
+  Trajectories: buddy hermes trajectories status --json
+  Run doctor: buddy run doctor --json --limit 5
+  Aggregate local smoke: buddy hermes smoke --json
+  Real runtime smoke: buddy hermes runtime-smoke auto --json
+  Real browser smoke: buddy hermes browser-smoke auto --json
+
+[2026-09-27T16:54:11.214Z]  WARN  Project settings validation: root: Unrecognized key(s) in object: 'telemetry'

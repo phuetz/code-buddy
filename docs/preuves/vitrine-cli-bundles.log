@@ -1,0 +1,5 @@
+Command: buddy bundles list
+Exit code: 0
+Scope: Listed the isolated skill-bundle store; bundle execution was not exercised.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No bundles defined. Use `buddy bundles create <name> <skill...>` to add one.

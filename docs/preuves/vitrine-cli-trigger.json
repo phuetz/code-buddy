@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-trigger",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:09.681024Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "8a3778076aadc4b4eb026288953701e67feb7a7291aa3cef777d1cfd29754a4d",
+  "artifact": "docs/preuves/vitrine-cli-trigger.log",
+  "summary": "Listed the isolated trigger store; trigger firing was not exercised."
+}

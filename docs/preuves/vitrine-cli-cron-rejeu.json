@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-cron",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:15.820318Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "9debd022bff96e3ffa21a0833a59ddf00eb6f3825e7133362173c93c7167c12d",
+  "artifact": "docs/preuves/vitrine-cli-cron-rejeu.log",
+  "summary": "Created, listed and removed a synthetic scheduled job; no background execution was started."
+}

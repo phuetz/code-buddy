@@ -1,0 +1,6 @@
+Command: buddy identity show
+Exit code: 0
+Scope: Read identity-file state from the isolated profile.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No identity files loaded.
+Create .codebuddy/SOUL.md or ~/.codebuddy/SOUL.md to define agent personality.

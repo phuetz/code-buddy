@@ -1,0 +1,6 @@
+Real CLI execution in isolated HOME. Paths sanitized.
+Commands: buddy cron add, list, remove, list
+All exits: 0
+Scheduled fixture appeared in list, then disappeared.
+Job identifier: [REDACTED]
+No job was executed.

@@ -1,0 +1,24 @@
+Real CLI execution in isolated HOME. Paths sanitized.
+Command: buddy skills list
+Exit: 0
+Output excerpt:
+
+Available local skills (15):
+  + typescript-expert (bundled) — Expert TypeScript developer for complex type issues
+  + react-specialist (builtin) — React and frontend development specialist
+  + api-designer (builtin) — REST and GraphQL API design specialist
+  + database-expert (builtin) — Database design and query optimization
+  + security-auditor (builtin) — Security vulnerability detection and prevention
+  + performance-optimizer (builtin) — Performance analysis and optimization
+  + testing-expert (builtin) — Testing strategy and implementation
+  + devops-engineer (builtin) — DevOps, CI/CD, and infrastructure
+  + code-explorer (bundled) — Use the Code Explorer (gitnexus) code-graph MCP tools to understand a codebase through precise relationships — callers, callees, blast radius — instead of reading many files
+  + file-edit (bundled) — Edit files with precise changes
+  + git-commit (bundled) — Create a git commit with a well-formatted message
+  + [PRIVATE_INTEGRATION]-control (bundled) — Pilot [PRIVATE_INTEGRATION] editorial and social campaigns through its MCP tools. Use for listing, drafting, revising, submitting, scheduling, or publishing posts while preserving human approval and dry-run safety.
+  + weather (bundled) — Get current weather and forecasts using the weather tool (Open-Meteo, no API key)
+  + web-app-testing (bundled) — Test a web app you built or changed — launch its dev server, browse it, verify with evidence (web_test), fix, re-run
+  + web-search (bundled) — Search the web for information and return relevant results
+No hub-installed skills.
+8 bundled skill(s) shipped with the package are still available to the agent.
+Install more with: buddy hub search

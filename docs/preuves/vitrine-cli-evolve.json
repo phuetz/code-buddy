@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-evolve",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:12.279568Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "f71a29f74aa9970727718a74ec83c3c908986c8210e63b6fc62cb16ad428d9d6",
+  "artifact": "docs/preuves/vitrine-cli-evolve.log",
+  "summary": "Listed the isolated variant store; no code evolution was run."
+}

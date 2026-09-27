@@ -1,0 +1,38 @@
+Command: buddy curator scan --json (disposable project)
+Exit: 0
+Output (sanitized):
+{
+  "generatedAt": "2026-09-27T16:54:38.082Z",
+  "cwd": "[REPOSITORY]/_qa/vitrine/fixture",
+  "sections": [
+    {
+      "name": "Mémoire persistante",
+      "ok": true,
+      "summary": "0 souvenirs vivants, 0 candidat(s) à l'oubli (rétention < 0.05)"
+    },
+    {
+      "name": "Skills authored",
+      "ok": true,
+      "summary": "aucun répertoire de skills (rien à curer)"
+    },
+    {
+      "name": "CKG (mémoire collective)",
+      "ok": true,
+      "summary": "0 entités, 0 relations, 0 supersédées (0%)"
+    },
+    {
+      "name": "Leçons",
+      "ok": true,
+      "summary": "0 candidate(s) pending, 0 qui stagnent ≥ 7j"
+    },
+    {
+      "name": "Modèles (council)",
+      "ok": true,
+      "summary": "pas de ledger de performance (rien à agréger)"
+    }
+  ],
+  "patches": [],
+  "notes": [
+    "Le Curator PROPOSE et n'applique rien : chaque patch pointe vers la commande humaine existante."
+  ]
+}

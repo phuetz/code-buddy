@@ -1,0 +1,10 @@
+Command: buddy update --dry-run
+Exit code: 0
+Scope: Displayed the stable update plan without installing anything.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+Channel: stable
+Current: 2.2.0
+Source: npm
+Package: @phuetz/code-buddy@latest
+Would run: npm install -g @phuetz/code-buddy@latest
+Dry-run: nothing was installed.

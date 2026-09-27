@@ -1,8 +1,8 @@
 # Fonctionnalités de Code Buddy
 
-Ce catalogue couvre **91 capacités visibles par l’utilisateur** dans le code source actuel. « Raccordée » signifie que les fichiers et les maillons déclarés du point d’entrée existent. « Testée localement » exige une vraie commande ou un tour agent sous HOME isolé avec trace. Aucune entrée n’est présentée comme déployée depuis ce checkout. Le bénéfice décrit la capacité visée par le raccordement ; la preuve d’exécution ne couvre que le scénario nommé dans sa trace.
+Ce catalogue couvre **91 capacités visibles par l’utilisateur**, dont **45 ont une trace d’exécution locale actuelle** dans le code source actuel. « Raccordée » signifie que les fichiers et les maillons déclarés du point d’entrée existent. « Testée localement » exige une vraie commande ou un tour agent sous HOME isolé avec trace. Aucune entrée n’est présentée comme déployée depuis ce checkout. Le bénéfice décrit la capacité visée par le raccordement ; la preuve d’exécution ne couvre que le scénario nommé dans sa trace.
 
-Preuves : [audit statique des raccordements](preuves/verification-statique.md) · [trace de la commande catalogue](preuves/inventaire-catalog-status.log).
+Preuves : [audit statique des raccordements](preuves/verification-statique.md) · [trace de la commande catalogue](preuves/vitrine-catalog-status-rejeu.log).
 
 ## Agent et outils
 
@@ -10,12 +10,12 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 |---|---|---|---|
 | `resource-catalog-tool` — Outil de sélection des ressources | Trouvez les ressources disponibles pour une tâche d’agent. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#resource-catalog-tool) |
 | `cli-code-explorer` — Code Explorer integration | Inspectez les relations du code et la synchronisation de session. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-code-explorer) |
-| `cli-tools` — Tool availability | Inspectez les outils disponibles et leurs profils. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-tools) |
+| `cli-tools` — Tool availability | Inspectez les outils disponibles et leurs profils. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-tools.log); [Maillons vérifiés](preuves/verification-statique.md#cli-tools) |
 | `cli-autonomous-code` — Guarded coding cell | Exécutez un contrat de codage autonome encadré. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-autonomous-code) |
 | `cli-dev` — Developer workflows | Lancez des parcours guidés de planification, réalisation et vérification. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-dev) |
-| `cli-skills` — Installed skills | Listez les packs de skills installés et leur origine. | **Testée localement** | [Trace réelle](preuves/inventaire-cli-skills.log); [Maillons vérifiés](preuves/verification-statique.md#cli-skills) |
-| `cli-bundles` — Skill bundles | Regroupez des skills sous une commande nommée. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-bundles) |
-| `cli-lsp` — LSP diagnostics | Inspectez les diagnostics du serveur de langage. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-lsp) |
+| `cli-skills` — Installed skills | Listez les packs de skills installés et leur origine. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-skills-rejeu.log); [Maillons vérifiés](preuves/verification-statique.md#cli-skills) |
+| `cli-bundles` — Skill bundles | Regroupez des skills sous une commande nommée. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-bundles.log); [Maillons vérifiés](preuves/verification-statique.md#cli-bundles) |
+| `cli-lsp` — LSP diagnostics | Inspectez les diagnostics du serveur de langage. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-lsp.log); [Maillons vérifiés](preuves/verification-statique.md#cli-lsp) |
 | `tool-web-search` — Web search | Obtenez des résultats web pour une tâche de l’agent. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-web-search) |
 | `tool-browser` — Browser automation | Parcourez des pages avec l’outil navigateur de l’agent. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-browser) |
 | `tool-deep-research` — Deep research | Préparez un rapport de recherche étayé en plusieurs étapes. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-deep-research) |
@@ -28,7 +28,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `cli-auth-profile` — Authentication profiles | Gérez les profils d’authentification des fournisseurs. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-auth-profile) |
+| `cli-auth-profile` — Authentication profiles | Gérez les profils d’authentification des fournisseurs. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-auth-profile.log); [Maillons vérifiés](preuves/verification-statique.md#cli-auth-profile) |
 | `provider-ollama` — Local Ollama provider | Utilisez un modèle servi localement sans clé API payante. | **Testée localement** | [Trace réelle](preuves/inventaire-provider-ollama.log); [Maillons vérifiés](preuves/verification-statique.md#provider-ollama) |
 | `provider-failover` — Provider failover | Basculez vers un fournisseur configuré après un échec admissible. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#provider-failover) |
 | `provider-chatgpt-oauth` — ChatGPT OAuth provider | Utilisez un backend Responses authentifié par ChatGPT. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#provider-chatgpt-oauth) |
@@ -39,10 +39,10 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `cli-curator` — Local curator | Examinez des propositions d’entretien de la mémoire, des skills et des coûts. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-curator) |
-| `cli-identity` — Agent identity files | Gérez les fichiers locaux d’identité de l’agent et de l’utilisateur. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-identity) |
-| `cli-session` — Saved sessions | Gérez les conversations enregistrées et leur reprise. | **Testée localement** | [Trace réelle](preuves/inventaire-cli-session.log); [Maillons vérifiés](preuves/verification-statique.md#cli-session) |
-| `cli-user-model` — User preference model | Examinez un modèle structuré des préférences de travail. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-user-model) |
+| `cli-curator` — Local curator | Examinez des propositions d’entretien de la mémoire, des skills et des coûts. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-curator.log); [Maillons vérifiés](preuves/verification-statique.md#cli-curator) |
+| `cli-identity` — Agent identity files | Gérez les fichiers locaux d’identité de l’agent et de l’utilisateur. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-identity.log); [Maillons vérifiés](preuves/verification-statique.md#cli-identity) |
+| `cli-session` — Saved sessions | Gérez les conversations enregistrées et leur reprise. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-session-rejeu.log); [Maillons vérifiés](preuves/verification-statique.md#cli-session) |
+| `cli-user-model` — User preference model | Examinez un modèle structuré des préférences de travail. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-user-model.log); [Maillons vérifiés](preuves/verification-statique.md#cli-user-model) |
 | `context-compaction` — Context compaction | Maintenez les longues conversations dans le budget de contexte du modèle. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#context-compaction) |
 | `memory-ckg` — Collective knowledge graph | Rappelez des connaissances partagées par le graphe CKG. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#memory-ckg) |
 | `context-checkpoints` — Session checkpoints | Créez des points de contrôle et revenez sur les modifications de l’agent. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#context-checkpoints) |
@@ -51,10 +51,10 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `fleet-cli` — Commandes de la flotte | Inspectez et pilotez la flotte multi-agents dans le terminal. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#fleet-cli) |
+| `fleet-cli` — Commandes de la flotte | Inspectez et pilotez la flotte multi-agents dans le terminal. | **Testée localement** | [Trace réelle](preuves/vitrine-fleet-cli.log); [Maillons vérifiés](preuves/verification-statique.md#fleet-cli) |
 | `cli-ruche` — Signed coordination | Échangez des messages de coordination signés. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-ruche) |
-| `cli-device` — Remote device nodes | Gérez des nœuds SSH, ADB et locaux. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-device) |
-| `cli-nodes` — Companion app nodes | Gérez les nœuds de l’application compagnon sur ordinateur et mobile. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-nodes) |
+| `cli-device` — Remote device nodes | Gérez des nœuds SSH, ADB et locaux. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-device.log); [Maillons vérifiés](preuves/verification-statique.md#cli-device) |
+| `cli-nodes` — Companion app nodes | Gérez les nœuds de l’application compagnon sur ordinateur et mobile. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-nodes.log); [Maillons vérifiés](preuves/verification-statique.md#cli-nodes) |
 | `fleet-peer-chat` — Peer chat | Envoyez une requête au modèle d’un pair connecté de la flotte. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#fleet-peer-chat) |
 | `fleet-peer-tools` — Peer read-only tools | Demandez un outil autorisé en lecture seule à un pair. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#fleet-peer-tools) |
 | `fleet-peer-sessions` — Multi-turn peer sessions | Poursuivez une conversation avec un pair de la flotte sur plusieurs tours. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#fleet-peer-sessions) |
@@ -64,12 +64,12 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
 | `http-health` — Route HTTP de santé | Vérifiez la santé du serveur HTTP. | **Testée localement** | [Trace réelle](preuves/inventaire-http-health.log); [Maillons vérifiés](preuves/verification-statique.md#http-health) |
-| `cli-gateway-pairing` — Gateway pairing approval | Approuvez ou refusez l’association d’un appareil à la passerelle. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-gateway-pairing) |
+| `cli-gateway-pairing` — Gateway pairing approval | Approuvez ou refusez l’association d’un appareil à la passerelle. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-gateway-pairing.log); [Maillons vérifiés](preuves/verification-statique.md#cli-gateway-pairing) |
 | `cli-acp` — Editor agent protocol | Reliez un éditeur à l’agent par ACP sur stdio. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-acp) |
 | `cli-proxy` — OpenAI-compatible proxy | Exposez un proxy compatible OpenAI aux clients. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-proxy) |
-| `cli-token` — API token | Créez un jeton signé d’accès à l’API. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-token) |
+| `cli-token` — API token | Créez un jeton signé d’accès à l’API. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-token.log); [Maillons vérifiés](preuves/verification-statique.md#cli-token) |
 | `cli-pair` — Android pairing | Associez localement un authentificateur Android. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-pair) |
-| `cli-devices` — Android devices | Listez et révoquez les authentificateurs associés. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-devices) |
+| `cli-devices` — Android devices | Listez et révoquez les authentificateurs associés. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-devices.log); [Maillons vérifiés](preuves/verification-statique.md#cli-devices) |
 | `http-chat` — Chat HTTP API | Envoyez une requête de conversation en HTTP. | **Testée localement** | [Trace réelle](preuves/inventaire-http-chat.log); [Maillons vérifiés](preuves/verification-statique.md#http-chat) |
 | `http-sessions` — Sessions HTTP API | Inspectez et gérez les sessions enregistrées en HTTP. | **Testée localement** | [Trace réelle](preuves/inventaire-http-sessions.log); [Maillons vérifiés](preuves/verification-statique.md#http-sessions) |
 | `http-memory` — Memory HTTP API | Lisez et mettez à jour la mémoire de l’agent en HTTP. | **Testée localement** | [Trace réelle](preuves/inventaire-http-memory.log); [Maillons vérifiés](preuves/verification-statique.md#http-memory) |
@@ -89,12 +89,12 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `cli-improve` — Empirical improvement | Lancez des expériences d’apprentissage encadrées. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-improve) |
-| `cli-evolve` — Evolution experiments | Proposez et examinez des variantes de code par commandes explicites. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-evolve) |
+| `cli-improve` — Empirical improvement | Lancez des expériences d’apprentissage encadrées. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-improve.log); [Maillons vérifiés](preuves/verification-statique.md#cli-improve) |
+| `cli-evolve` — Evolution experiments | Proposez et examinez des variantes de code par commandes explicites. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-evolve.log); [Maillons vérifiés](preuves/verification-statique.md#cli-evolve) |
 | `dgm-learning-cycle` — Learning cycle | Essayez un cycle d’apprentissage borné depuis la commande improve. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#dgm-learning-cycle) |
 | `dgm-authored-tools` — Authored tool experiments | Évaluez des outils proposés par l’agent avec la commande improve. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#dgm-authored-tools) |
 | `dgm-evolve-propose` — Evolution proposals | Inspectez une proposition d’expérience d’évolution du code. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#dgm-evolve-propose) |
-| `dgm-capability-benchmark` — Capability benchmark | Mesurez un modèle sélectionné sur un scénario de capacité défini. | **Testée localement** | [Trace réelle](preuves/inventaire-dgm-capability-benchmark.log); [Maillons vérifiés](preuves/verification-statique.md#dgm-capability-benchmark) |
+| `dgm-capability-benchmark` — Capability benchmark | Mesurez un modèle sélectionné sur un scénario de capacité défini. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#dgm-capability-benchmark) |
 
 ## Sensoriel et compagnon
 
@@ -102,10 +102,10 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 |---|---|---|---|
 | `telegram-channel` — Canal Telegram | Reliez les conversations à Telegram. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#telegram-channel) |
 | `cli-speak` — Speech synthesis | Produisez une sortie vocale à partir de texte. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-speak) |
-| `cli-assistant` — Voice assistant | Configurez l’assistante vocale Lisa. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-assistant) |
-| `cli-heartbeat` — Heartbeat engine | Inspectez et configurez les réveils périodiques de l’agent. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-heartbeat) |
+| `cli-assistant` — Voice assistant | Configurez l’assistante vocale Lisa. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-assistant.log); [Maillons vérifiés](preuves/verification-statique.md#cli-assistant) |
+| `cli-heartbeat` — Heartbeat engine | Inspectez et configurez les réveils périodiques de l’agent. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-heartbeat.log); [Maillons vérifiés](preuves/verification-statique.md#cli-heartbeat) |
 | `cli-screen` — Screen capture | Capturez ou surveillez l’activité du bureau. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-screen) |
-| `cli-companion` — Companion settings | Configurez le comportement et la voix du compagnon. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-companion) |
+| `cli-companion` — Companion settings | Configurez le comportement et la voix du compagnon. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-companion.log); [Maillons vérifiés](preuves/verification-statique.md#cli-companion) |
 | `sensory-voice-loop` — Voice conversation loop | Transformez la parole entendue en réponse vocale du compagnon. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#sensory-voice-loop) |
 
 ## Vidéo et médias
@@ -123,11 +123,11 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `cli-security` — Security audit | Auditez la sécurité du projet et du profil local. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-security) |
-| `cli-groups` — Group chat security | Configurez les accès aux discussions de groupe. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-groups) |
-| `cli-policy` — Policy diagnostics | Inspectez et réparez les constats de politique par domaine. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-policy) |
-| `cli-secrets` — Encrypted secrets vault | Gérez les identifiants dans le coffre local chiffré. | **Testée localement** | [Trace réelle](preuves/inventaire-cli-secrets.log); [Maillons vérifiés](preuves/verification-statique.md#cli-secrets) |
-| `cli-approvals` — Action approvals | Examinez les approbations d’outils et d’actions en attente. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-approvals) |
+| `cli-security` — Security audit | Auditez la sécurité du projet et du profil local. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-security.log); [Maillons vérifiés](preuves/verification-statique.md#cli-security) |
+| `cli-groups` — Group chat security | Configurez les accès aux discussions de groupe. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-groups.log); [Maillons vérifiés](preuves/verification-statique.md#cli-groups) |
+| `cli-policy` — Policy diagnostics | Inspectez et réparez les constats de politique par domaine. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-policy.log); [Maillons vérifiés](preuves/verification-statique.md#cli-policy) |
+| `cli-secrets` — Encrypted secrets vault | Gérez les identifiants dans le coffre local chiffré. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-secrets-rejeu.log); [Maillons vérifiés](preuves/verification-statique.md#cli-secrets) |
+| `cli-approvals` — Action approvals | Examinez les approbations d’outils et d’actions en attente. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-approvals.log); [Maillons vérifiés](preuves/verification-statique.md#cli-approvals) |
 | `security-sandbox` — Native shell sandbox | Confinez les commandes shell lorsque le bac à sable natif est activé. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#security-sandbox) |
 | `security-skill-firewall` — Skill firewall | Analysez les skills à la recherche de capacités risquées avant usage. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#security-skill-firewall) |
 
@@ -135,20 +135,20 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `catalog-status` — Catalogue des états et preuves | Consultez le niveau de preuve des fonctionnalités avant de les présenter. | **Testée localement** | [Trace réelle](preuves/inventaire-catalog-status.log); [Maillons vérifiés](preuves/verification-statique.md#catalog-status) |
-| `cli-daemon` — Background daemon | Exécutez Code Buddy comme processus de fond administré. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-daemon) |
-| `cli-trigger` — Event triggers | Configurez des réponses de l’agent déclenchées par événement. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-trigger) |
-| `cli-widgets` — Conversation widgets | Gérez les widgets intégrés aux conversations. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-widgets) |
-| `cli-hub` — Skills marketplace | Recherchez et gérez des skills partagés. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-hub) |
+| `catalog-status` — Catalogue des états et preuves | Consultez le niveau de preuve des fonctionnalités avant de les présenter. | **Testée localement** | [Trace réelle](preuves/vitrine-catalog-status-rejeu.log); [Maillons vérifiés](preuves/verification-statique.md#catalog-status) |
+| `cli-daemon` — Background daemon | Exécutez Code Buddy comme processus de fond administré. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-daemon.log); [Maillons vérifiés](preuves/verification-statique.md#cli-daemon) |
+| `cli-trigger` — Event triggers | Configurez des réponses de l’agent déclenchées par événement. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-trigger.log); [Maillons vérifiés](preuves/verification-statique.md#cli-trigger) |
+| `cli-widgets` — Conversation widgets | Gérez les widgets intégrés aux conversations. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-widgets.log); [Maillons vérifiés](preuves/verification-statique.md#cli-widgets) |
+| `cli-hub` — Skills marketplace | Recherchez et gérez des skills partagés. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-hub.log); [Maillons vérifiés](preuves/verification-statique.md#cli-hub) |
 | `cli-triage` — Support bundle | Créez un dossier de diagnostic local expurgé. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-triage) |
-| `cli-hermes` — Hermes profile | Inspectez le profil agent natif de type Hermes. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-hermes) |
-| `cli-config` — Configuration | Inspectez la configuration effective et les réglages manquants. | **Testée localement** | [Trace réelle](preuves/inventaire-cli-config.log); [Maillons vérifiés](preuves/verification-statique.md#cli-config) |
-| `cli-run` — Run observability | Inspectez les traces et rejouez les exécutions de l’agent. | **Échec constaté** | [Trace de l’échec](preuves/inventaire-cli-run-echec.log); [Maillons vérifiés](preuves/verification-statique.md#cli-run) |
-| `cli-cron` — Scheduled jobs | Créez et gérez des tâches planifiées. | **Testée localement** | [Trace réelle](preuves/inventaire-cli-cron.log); [Maillons vérifiés](preuves/verification-statique.md#cli-cron) |
-| `cli-insights` — Usage insights | Consultez les mesures de jetons, de coût et d’activité. | **Testée localement** | [Trace réelle](preuves/inventaire-cli-insights.log); [Maillons vérifiés](preuves/verification-statique.md#cli-insights) |
-| `cli-deploy` — Web deployment workflow | Préparez un déploiement web par un parcours CLI. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-deploy) |
-| `cli-provision` — Project provisioning | Préparez base de données et authentification d’un projet généré. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-provision) |
-| `cli-update` — Update channels | Inspectez les canaux de mise à jour. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-update) |
+| `cli-hermes` — Hermes profile | Inspectez le profil agent natif de type Hermes. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-hermes.log); [Maillons vérifiés](preuves/verification-statique.md#cli-hermes) |
+| `cli-config` — Configuration | Inspectez la configuration effective et les réglages manquants. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-config-rejeu.log); [Maillons vérifiés](preuves/verification-statique.md#cli-config) |
+| `cli-run` — Run observability | Inspectez les traces et rejouez les exécutions de l’agent. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-run.log); [Maillons vérifiés](preuves/verification-statique.md#cli-run) |
+| `cli-cron` — Scheduled jobs | Créez et gérez des tâches planifiées. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-cron-rejeu.log); [Maillons vérifiés](preuves/verification-statique.md#cli-cron) |
+| `cli-insights` — Usage insights | Consultez les mesures de jetons, de coût et d’activité. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-insights-rejeu.log); [Maillons vérifiés](preuves/verification-statique.md#cli-insights) |
+| `cli-deploy` — Web deployment workflow | Préparez un déploiement web par un parcours CLI. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-deploy.log); [Maillons vérifiés](preuves/verification-statique.md#cli-deploy) |
+| `cli-provision` — Project provisioning | Préparez base de données et authentification d’un projet généré. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-provision.log); [Maillons vérifiés](preuves/verification-statique.md#cli-provision) |
+| `cli-update` — Update channels | Inspectez les canaux de mise à jour. | **Testée localement** | [Trace réelle](preuves/vitrine-cli-update.log); [Maillons vérifiés](preuves/verification-statique.md#cli-update) |
 
 ## Limites
 

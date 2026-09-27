@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "fleet-cli",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:09.480677Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "463f49a2b96b958139f70f1fc1941b4ad20bfdd60a34d44024b1fbfe633d6ef1",
+  "artifact": "docs/preuves/vitrine-fleet-cli.log",
+  "summary": "Inspected the fleet status; no peer dispatch was attempted."
+}

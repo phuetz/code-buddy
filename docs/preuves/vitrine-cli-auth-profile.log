@@ -1,0 +1,6 @@
+Command: buddy auth-profile list
+Exit code: 0
+Scope: Read the empty isolated authentication-profile store; no account was used.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No auth profiles configured.
+Use auth-profile add to register one.

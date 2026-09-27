@@ -1,0 +1,5 @@
+Command: buddy approvals list
+Exit code: 0
+Scope: Read the isolated approval queue; no approval decision was issued.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No approval requests found.

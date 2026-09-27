@@ -1,0 +1,13 @@
+Command: buddy try --model qwen3:4b-instruct (isolated HOME, local Ollama)
+Exit code: 1
+Output (paths sanitized):
+Code Buddy — coding-agent demo (~60 seconds)
+[1/3] Provider: Ollama local (qwen3:4b-instruct)
+[2/3] Sandbox: [REPOSITORY]/_qa/vitrine/tmp/code-buddy-try-s8q61Z
+      The agent is creating FizzBuzz, writing its tests, and running them…
+      Tools used: view_file, search, bash
+      Agent: Maximum tool execution rounds reached.
+[3/3] Independent verification: node --test fizzbuzz.test.js
+❌ The demo did not produce a green test. The sandbox is kept for inspection.
+Could not find 'fizzbuzz.test.js'
+   [REPOSITORY]/_qa/vitrine/tmp/code-buddy-try-s8q61Z

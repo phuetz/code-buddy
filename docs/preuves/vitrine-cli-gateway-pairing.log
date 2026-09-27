@@ -1,0 +1,5 @@
+Command: buddy gateway-pairing list
+Exit code: 0
+Scope: Read the empty isolated gateway device store; pairing was not attempted.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+No paired devices. Store: [ISOLATED_HOME]/.codebuddy/gateway/devices

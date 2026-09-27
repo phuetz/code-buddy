@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-widgets",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:09.878684Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "1ff66d162316db13ca38c2163169337be28c48f68ad72366ed81e60c5dc3eba5",
+  "artifact": "docs/preuves/vitrine-cli-widgets.log",
+  "summary": "Generated a curated weather widget preview in the isolated HOME; no live data source was queried."
+}

@@ -490,7 +490,7 @@ async function getDetectedProvider(): Promise<DetectedProvider | null> {
   }
 
   if (cachedProvider) {
-    logger.info(`Auto-detected provider: ${cachedProvider.provider} (model: ${cachedProvider.defaultModel})`);
+    logger.info(`Auto-detected provider: ${cachedProvider.provider}`);
   }
 
   return cachedProvider;

@@ -1,0 +1,122 @@
+Command: buddy tools list
+Exit code: 0
+Scope: Resolved the effective tool profile and allowlist; no tool was invoked by this command.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+Tool profile: fleet.hermes.balanced
+  Requested: hermes-balanced (normalized to balanced)
+  Policy: coding / confirm
+  Summary: Balanced coding posture: edit files, confirm command/git-write/dangerous actions.
+  Inspected tools: 229
+  Effective allow: view_file, read_file, create_file, write_file, str_replace_editor, patch, apply_patch, list_directory, bash, terminal, interactive_shell, self_describe, self_evolution, edit_file, search, search_files, find_symbols, find_references, find_definition, search_multi, workspace_search, workspace_read, create_todo_list, get_todo_list, update_todo_list, kanban_show, kanban_list, kanban_complete, kanban_block, kanban_heartbeat, kanban_comment, kanban_create, kanban_link, kanban_unblock, send_message, discord, discord_admin, yb_query_group_info, yb_query_group_members, yb_send_dm, yb_search_sticker, yb_send_sticker, ha_list_entities, ha_get_state, ha_list_services, ha_call_service, mixture_of_agents, spotify_playback, spotify_devices, spotify_queue, spotify_search, spotify_playlists, spotify_albums, spotify_library, x_search, feishu_doc_read, feishu_drive_list_comments, feishu_drive_list_comment_replies, feishu_drive_reply_comment, feishu_drive_add_comment, cronjob, web_search, web_fetch, web_scrape, web_extract, weather, stock_quote, community_search, deep_research, paper_qa, code_exec, meeting_notes, comfy_recipe, multi_edit, git, codebase_map, code_graph, spawn_subagent, docker, kubernetes, process, app_server, js_repl, reason, plan, execute_code, run_script, deploy, docs_search, knowledge_graph, pdf, audio, text_to_speech, image_generate, lisa_selfie, image_edit, video, video_analyze, understand_video, gpu_media_job, video_generate, video_stitch, video_quality_gate, video_long_form_plan, video_trailer_plan, video_flow_handoff, video_route, screenshot, camera_snapshot, camera_analyze, clipboard, document, ocr, vision_analyze, object_detect, diagram, export, qr, archive, markdown_convert, screen_memory, computer_control, internet_scout_run, internet_scout_plan, web_test, browser_navigate, browser_snapshot, browser_click, browser_type, browser_scroll, browser_back, browser_press, browser_vision, browser_console, browser_get_images, browser_dialog, browser, a2ui, canvas, todo_update, restore_context, knowledge_search, knowledge_add, ask_human, create_skill, extension_forge, skill_discover, skills_list, skill_view, skill_manage, device_manage, spawn_parallel_agents, remember, replace_memory, remind, memory_propose, recall, forget, relationship_context, lead_scout_plan, lead_scout_run, lead_scout_enrichment_plan, lead_scout_lesson_candidates, lessons_add, lessons_propose, lessons_search, lessons_list, lessons_graph, user_model_observe, user_model_recall, browser_operator, task_verify, firecrawl_search, firecrawl_scrape, lsp_definition, lsp_references, lsp_hover, lsp_symbols, lsp_diagnostics, lsp_rename, lsp_code_action, scan_secrets, advisor, verify, delegate_agent, find_bugs, generate_document, ask_user_question, exit_plan_mode, submit_plan, codebase_replace, resolve_conflicts, scan_vulnerabilities, sessions_list, sessions_history, session_search, sessions_send, sessions_spawn, ragchat_search, resource_catalog, a2a_call, fleet_room, peer_delegate, peer_tool_invoke, peer_chain, list_peers, route_peer, code_explorer_ask, office_macro_execute, scaffold_app, project_map, dep_inspect, code_stats, git_summary, todo_scan, json_query, csv_preview, env_doctor, port_check, lint_project, test_runner, format_project, bundle_analyze, build_project, license_check, sbom_generate, http_probe, file_search, diff_files
+  Effective deny: none
+
+Tool decisions:
+
+  view_file: allow  effect=read
+    Groups: group:fs, group:fs:read
+    Matched group: group:fs:read
+    Reason: Fleet dispatch profile "balanced" allows group:fs:read
+  read_file: allow  effect=read
+    Groups: group:fs, group:fs:read
+    Matched group: group:fs:read
+    Reason: Fleet dispatch profile "balanced" allows group:fs:read
+  create_file: allow  effect=reversible
+    Groups: group:fs, group:fs:write
+    Matched group: group:fs:write
+    Reason: Fleet dispatch profile "balanced" allows group:fs:write
+  write_file: allow  effect=reversible
+    Groups: group:fs, group:fs:write
+    Matched group: group:fs:write
+    Reason: Fleet dispatch profile "balanced" allows group:fs:write
+  str_replace_editor: allow  effect=reversible
+    Groups: group:fs, group:fs:write
+    Matched group: group:fs:write
+    Reason: Fleet dispatch profile "balanced" allows group:fs:write
+  patch: allow  effect=reversible
+    Groups: group:fs, group:fs:write
+    Matched group: group:fs:write
+    Reason: Fleet dispatch profile "balanced" allows group:fs:write
+  apply_patch: confirm  effect=reversible
+    Groups: none
+    Reason: No matching rule found, using default
+  list_directory: allow  effect=read
+    Groups: group:safe
+    Matched group: group:safe
+    Reason: Audited read-only and bounded tools are allowed
+  bash: confirm  effect=emission
+    Groups: group:runtime, group:runtime:shell
+    Matched group: group:runtime:shell
+    Reason: Fleet dispatch profile "balanced" confirms group:runtime:shell
+  terminal: confirm  effect=emission
+    Groups: group:runtime, group:runtime:shell
+    Matched group: group:runtime:shell
+    Reason: Fleet dispatch profile "balanced" confirms group:runtime:shell
+  interactive_shell: confirm  effect=emission
+    Groups: none
+    Reason: No matching rule found, using default
+  self_describe: allow  effect=read
+    Groups: group:safe
+    Matched group: group:safe
+    Reason: Audited read-only and bounded tools are allowed
+  self_evolution: confirm  effect=read
+    Groups: none
+    Reason: No matching rule found, using default
+  edit_file: allow  effect=reversible
+    Groups: group:fs, group:fs:write
+    Matched group: group:fs:write
+    Reason: Fleet dispatch profile "balanced" allows group:fs:write
+  search: allow  effect=read
+    Groups: group:fs, group:fs:read
+    Matched group: group:fs:read
+    Reason: Fleet dispatch profile "balanced" allows group:fs:read
+  search_files: allow  effect=read
+    Groups: group:fs, group:fs:read
+    Matched group: group:fs:read
+    Reason: Fleet dispatch profile "balanced" allows group:fs:read
+  find_symbols: allow  effect=read
+    Groups: group:fs, group:fs:read
+    Matched group: group:fs:read
+    Reason: Fleet dispatch profile "balanced" allows group:fs:read
+  find_references: allow  effect=read
+    Groups: group:fs, group:fs:read
+    Matched group: group:fs:read
+    Reason: Fleet dispatch profile "balanced" allows group:fs:read
+  find_definition: allow  effect=read
+    Groups: group:fs, group:fs:read
+    Matched group: group:fs:read
+    Reason: Fleet dispatch profile "balanced" allows group:fs:read
+  search_multi: allow  effect=read
+    Groups: group:safe
+    Matched group: group:safe
+    Reason: Audited read-only and bounded tools are allowed
+  workspace_search: allow  effect=read
+    Groups: group:safe
+    Matched group: group:safe
+    Reason: Audited read-only and bounded tools are allowed
+  workspace_read: allow  effect=read
+    Groups: group:safe
+    Matched group: group:safe
+    Reason: Audited read-only and bounded tools are allowed
+  create_todo_list: confirm  effect=reversible
+    Groups: none
+    Reason: No matching rule found, using default
+  get_todo_list: allow  effect=read
+    Groups: group:safe
+    Matched group: group:safe
+    Reason: Audited read-only and bounded tools are allowed
+  update_todo_list: confirm  effect=reversible
+    Groups: none
+    Reason: No matching rule found, using default
+  kanban_show: confirm  effect=read
+    Groups: none
+    Reason: No matching rule found, using default
+  kanban_list: confirm  effect=read
+    Groups: none
+    Reason: No matching rule found, using default
+  kanban_complete: confirm  effect=reversible
+    Groups: none
+    Reason: No matching rule found, using default
+  kanban_block: confirm  effect=reversible
+    Groups: none
+    Reason: No matching rule found, using defa
+[TRACE TRUNCATED AFTER 8000 CHARACTERS]

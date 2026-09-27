@@ -1,0 +1,9 @@
+Command: buddy improve status
+Exit code: 0
+Scope: Displayed self-improvement status; no learning cycle or application was run.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+Autonomy: propose-only
+Capability coverage: 0/15 (0%)
+Uncovered: npm-test-path-filter, esm-js-extension-imports, logger-not-console, atomic-write-state, git-add-named-files, subproc-bounded-timeout, no-secrets-in-repo, isolated-home-tests, str-replace-omission-block, verify-before-finishing, report-before-inspection, tests-live-in-tests-only, self-improvement-never-touch-src, peer-tool-fails-closed, batch-anti-tautology-guard
+Archive: 0 validated improvement(s), total Δ=0
+Store: 0 version(s); head —, best —

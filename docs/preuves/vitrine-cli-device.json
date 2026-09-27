@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-device",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:10.235083Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "811fcc881eafaffe31ab6413af6bcbd340413f7082d4b23ba41512ba25ad2283",
+  "artifact": "docs/preuves/vitrine-cli-device.log",
+  "summary": "Read the empty isolated device store; SSH and ADB were not connected."
+}

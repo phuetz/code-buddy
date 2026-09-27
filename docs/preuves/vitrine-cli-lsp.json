@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-lsp",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T16:54:12.359639Z",
+  "revision": "6b02d00c69dbf41dba38b0c8a6d019571c088c19",
+  "sourceDigest": "e745898b1068f98fff239481f465aa5ea65ae5ec657b67eeebae05af10a336c2",
+  "artifact": "docs/preuves/vitrine-cli-lsp.log",
+  "summary": "Detected installed and missing LSP servers; no diagnostics session was launched."
+}

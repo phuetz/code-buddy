@@ -1,0 +1,98 @@
+Command: buddy provision db-auth --target local --dir [REPOSITORY]/_qa/vitrine/fixture --json
+Exit code: 0
+Scope: Planned 14 local database/authentication files in simulation; no overlay was applied.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+[2026-09-27T16:54:12.713Z]  INFO  provision db-auth: dry-run 14 files for fixture (local)
+[2026-09-27T16:54:12.715Z]  INFO  {
+[2026-09-27T16:54:12.715Z]  INFO    "mode": "dry-run",
+[2026-09-27T16:54:12.715Z]  INFO    "target": "local",
+[2026-09-27T16:54:12.715Z]  INFO    "projectName": "fixture",
+[2026-09-27T16:54:12.715Z]  INFO    "projectDir": "[REPOSITORY]/_qa/vitrine/fixture",
+[2026-09-27T16:54:12.715Z]  INFO    "written": false,
+[2026-09-27T16:54:12.715Z]  INFO    "migrations": [
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "version": "0001_init",
+[2026-09-27T16:54:12.715Z]  INFO        "path": "db/migrations/0001_init.sql",
+[2026-09-27T16:54:12.715Z]  INFO        "status": "pending"
+[2026-09-27T16:54:12.715Z]  INFO      }
+[2026-09-27T16:54:12.715Z]  INFO    ],
+[2026-09-27T16:54:12.715Z]  INFO    "files": [
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": "db/migrations/0001_init.sql",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": "src/lib/database.ts",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": "src/auth/AuthApp.tsx",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": "src/auth/pages/SignIn.tsx",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": "src/auth/pages/SignUp.tsx",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": "src/auth/pages/SignOut.tsx",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": "src/auth/README.md",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": "src/main.tsx",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": ".gitignore",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": ".env.example",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": false
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": ".env.local",
+[2026-09-27T16:54:12.715Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.715Z]  INFO        "secret": true
+[2026-09-27T16:54:12.715Z]  INFO      },
+[2026-09-27T16:54:12.715Z]  INFO      {
+[2026-09-27T16:54:12.715Z]  INFO        "path": "src/index.css",
+[2026-09-27T16:54:12.716Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.716Z]  INFO        "secret": false
+[2026-09-27T16:54:12.716Z]  INFO      },
+[2026-09-27T16:54:12.716Z]  INFO      {
+[2026-09-27T16:54:12.716Z]  INFO        "path": "docker-compose.yml",
+[2026-09-27T16:54:12.716Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.716Z]  INFO        "secret": false
+[2026-09-27T16:54:12.716Z]  INFO      },
+[2026-09-27T16:54:12.716Z]  INFO      {
+[2026-09-27T16:54:12.716Z]  INFO        "path": "db/README.md",
+[2026-09-27T16:54:12.716Z]  INFO        "action": "create",
+[2026-09-27T16:54:12.716Z]  INFO        "secret": false
+[2026-09-27T16:54:12.716Z]  INFO      }
+[2026-09-27T16:54:12.716Z]  INFO    ],
+[2026-09-27T16:54:12.716Z]  INFO    "warnings": [
+[2026-09-27T16:54:12.716Z]  INFO      "Local compose file is written; containers are not started."
+[2026-09-27T16:54:12.716Z]  INFO    ],
+[2026-09-27T16:54:12.716Z]  INFO    "nextSteps": [
+[2026-09-27T16:54:12.716Z]  INFO      "Re-run with --apply to write these files (still no remote project, still no docker start).",
+[2026-09-27T16:54:12.716Z]  INFO      "Keys are never printed; .env.local is gitignored."
+[2026-09-27T16:54:12.716Z]  INFO    ]
+[2026-09-27T16:54:12.716Z]  INFO  }

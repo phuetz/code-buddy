@@ -1,0 +1,6 @@
+Command: buddy token --user fixture --ttl 15m --json
+Environment: isolated HOME, synthetic signing key
+Exit: 0
+Output token: [REDACTED]
+Independent HS256 verification: signature valid; subject fixture; lifetime 900 seconds.
+No server authentication was tested.

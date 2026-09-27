@@ -1,0 +1,25 @@
+Command: buddy run replay run_mujydc1p_edc8c6
+Exit code: 0
+Scope: Replayed a real Ollama agent read_file call and re-read the disposable package.json.
+Output (sanitized; [REPOSITORY] and [ISOLATED_HOME] replace local paths):
+Run: run_mujydc1p_edc8c6
+Status: [DONE]
+Objective: headless prompt
+Started: 2026-09-27 15:07:46
+Ended:   2026-09-27 15:07:56 (9.7s)
+
+── Metrics ─────────────────────────────
+  Duration:    9.7s
+  Tokens:      5,646
+  Cost:        $0.000000
+  Tool calls:  1
+
+── Timeline ────────────────────────────
+  [>] +0.00s  run_start      objective="headless prompt"
+  [T] +7.67s  tool_call      read_file path=package.json
+  [.] +7.68s  tool_result    read_file ok 15ms
+  [=] +9.70s  run_end        status=completed
+
+── Replayed reads ────────────────────────
+  read_file package.json
+{"name":"catalog-proof","version":"7.3.1"}
