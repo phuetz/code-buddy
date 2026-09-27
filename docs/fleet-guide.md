@@ -185,10 +185,11 @@ Connect to a peer Code Buddy's WebSocket and subscribe to its
 ```
 
 Options:
-- `--jwt <token>` — the usual credential: a JWT minted with
-  `buddy fleet token --scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke`
-  and the **peer's** `JWT_SECRET` (otherwise pulled from `CODEBUDDY_FLEET_TOKEN`).
+- `--jwt <token>` — the usual credential: a JWT minted with `buddy fleet token`
+  (which grants `fleet:listen` and `peer:invoke` by default, on top of the user
+  scopes) and the **peer's** `JWT_SECRET` (otherwise pulled from `CODEBUDDY_FLEET_TOKEN`).
   It must hold `fleet:listen`, plus `peer:invoke` for `/fleet send|chat|tool`.
+  `buddy token` (mobile PWA) does NOT include these fleet scopes.
 - `--api-key <key>` — alternative, otherwise pulled from
   `CODEBUDDY_FLEET_API_KEY`. `cb_sk_` keys live only in the peer server's
   memory (no command creates a durable one), so prefer `--jwt`.
