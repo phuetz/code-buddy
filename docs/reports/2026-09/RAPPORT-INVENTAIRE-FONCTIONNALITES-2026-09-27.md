@@ -1,6 +1,6 @@
 # Inventaire des fonctionnalités — 27 septembre 2026
 
-Branche : `sol/inventaire-fonctionnalites-2026-09-27`, départ `300496c3122db544c9a803d95ba7bce7784bbb66` (`origin/main`). Travail sous `_qa/inventaire/`, avec HOME et projet jetables. Seul Ollama local a été appelé comme fournisseur. Chaque serveur de preuve a écouté `127.0.0.1`, puis s'est arrêté.
+Branche : `sol/inventaire-fonctionnalites-2026-09-27`, départ `300496c3122db544c9a803d95ba7bce7784bbb66` (`origin/main`). Commits de contenu : `6ee17ced4` (catalogue, preuves et vitrine) et `c3875d0cd` (fixture de confidentialité). Travail sous `_qa/inventaire/`, avec HOME et projet jetables. Seul Ollama local a été appelé comme fournisseur. Chaque serveur de preuve a écouté `127.0.0.1`, puis s'est arrêté.
 
 ## Décompte
 
