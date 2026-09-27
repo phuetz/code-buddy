@@ -28,6 +28,11 @@ import {
 import type { ToolResult } from '../types/index.js';
 import type { FormalToolRegistry } from '../tools/registry/tool-registry.js';
 import type { ConfirmationService } from '../utils/confirmation-service.js';
+import {
+  futureCommitmentsEnabled,
+  guardFutureCommitments,
+  type RegisteredReminderProof,
+} from '../companion/future-commitments.js';
 
 export const COMPANION_CHANNEL_FAILOVER_SEAM = 'CodeBuddyClient.chat';
 export const MAX_COMPANION_TOOL_ROUNDS = 3;
@@ -175,7 +180,8 @@ export async function runCompanionChannelTurn(
       ...(input.signal ? { signal: input.signal } : {}),
       tool_choice: 'none',
     });
-    const text = response.choices[0]?.message?.content?.trim() ?? '';
+    const rawText = response.choices[0]?.message?.content?.trim() ?? '';
+    const text = futureCommitmentsEnabled(env) ? guardFutureCommitments(rawText).text : rawText;
     if (!text) {
       logger.warn('Companion channel turn returned empty content', {
         model: input.model,
@@ -209,6 +215,7 @@ export async function runCompanionChannelTurn(
   const mediaProduced: CompanionChannelMedia[] = [];
   const executedTools: CompanionExecutedTool[] = [];
   const historyNotes: string[] = [];
+  const registeredReminders: RegisteredReminderProof[] = [];
 
   let finalText = '';
   let finalModel = input.model;
@@ -288,7 +295,30 @@ export async function runCompanionChannelTurn(
         if (toolName === 'remind' && toolRes.success) {
           const label = typeof args.label === 'string' ? args.label.trim() : 'rappel';
           const time = typeof args.time === 'string' ? args.time.trim() : '';
-          historyNotes.push(`[Rappel créé : ${label}${time ? ` à ${time}` : ''}]`);
+          const verifiedBefore = registeredReminders.length;
+          if (futureCommitmentsEnabled(env)) {
+            const data = toolRes.data as { id?: unknown; label?: unknown } | undefined;
+            if (typeof data?.id === 'string' && typeof data.label === 'string') {
+              try {
+                const { loadReminders } = await import('../companion/reminders.js');
+                const stored = (await loadReminders()).find((r) =>
+                  r.id === data.id && r.label === data.label && r.enabled,
+                );
+                if (stored) {
+                  registeredReminders.push({
+                    kind: 'reminder', id: stored.id, label: stored.label, mechanism: 'remind',
+                  });
+                }
+              } catch (error) {
+                logger.warn('[companion-channel-turn] Reminder readback failed', {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+          }
+          if (!futureCommitmentsEnabled(env) || registeredReminders.length > verifiedBefore) {
+            historyNotes.push(`[Rappel créé : ${label}${time ? ` à ${time}` : ''}]`);
+          }
         }
 
         executedTools.push({
@@ -313,15 +343,36 @@ export async function runCompanionChannelTurn(
     }
   }
 
-  if (!finalText && executedTools.length > 0) {
-    const hasImage = mediaProduced.length > 0;
-    if (hasImage) {
-      finalText = 'Voilà, j’ai créé l’image pour toi !';
-    } else if (executedTools.every((tool) => !tool.success)) {
-      finalText = 'Je n’ai pas pu exécuter cette demande. Une confirmation du propriétaire peut être nécessaire.';
+  const unverifiedReminder = futureCommitmentsEnabled(env) &&
+    executedTools.filter((tool) => tool.name === 'remind').length > registeredReminders.length;
+  const failedTools = executedTools.filter((tool) => !tool.success || (tool.name === 'remind' && unverifiedReminder));
+  const succeededTools = executedTools.filter((tool) => !failedTools.includes(tool));
+  const genericSuccess = /^\s*(?:c['’]est fait|fait|done|terminé)[\s.!]*$/iu.test(finalText);
+  if (failedTools.length > 0) {
+    const successes = succeededTools.length > 0
+      ? `Réussi : ${succeededTools.map((tool) => tool.name).join(', ')}. ` : '';
+    const failures = failedTools.map((tool) => `${tool.name} (${tool.success
+      ? 'résultat non confirmé' : (tool.output ?? 'échec').slice(0, 160)})`).join(', ');
+    const allRefused = succeededTools.length === 0 && failedTools.every((tool) => !tool.success);
+    if (allRefused) {
+      // Rien n'a abouti : le dire d'abord (bdc7b1670), puis le détail de chaque échec.
+      const needsConfirmation = failedTools.some((tool) =>
+        /confirm|approv|approbation|permission|refus/i.test(tool.output ?? ''));
+      finalText = `Je n’ai pas pu exécuter cette demande. Échec : ${failures}.${needsConfirmation
+        ? ' Une confirmation du propriétaire peut être nécessaire.' : ''}`;
     } else {
-      finalText = 'C’est fait !';
+      finalText = `${successes}Échec : ${failures}.`;
     }
+  } else if ((!finalText && executedTools.length > 0) || genericSuccess) {
+    finalText = mediaProduced.length > 0
+      ? 'Voilà, j’ai créé l’image pour toi !'
+      : succeededTools.length > 0
+        ? `Réussi : ${succeededTools.map((tool) => tool.name).join(', ')}.`
+        : "Je n'ai pas de résultat confirmé pour cette demande.";
+  }
+
+  if (futureCommitmentsEnabled(env)) {
+    finalText = guardFutureCommitments(finalText, registeredReminders).text;
   }
 
   if (mediaProduced.length > 0) {
