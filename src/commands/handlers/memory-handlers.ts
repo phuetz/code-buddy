@@ -3,6 +3,7 @@ import { getEnhancedMemory, getMemoryManager } from "../../memory/index.js";
 import { getCommentWatcher } from "../../tools/comment-watcher.js";
 import { getErrorMessage } from "../../errors/index.js";
 import type { MemoryWriteResult } from "../../memory/persistent-memory.js";
+import { formatProvenance } from '../../memory/memory-provenance.js';
 import { failureFlag } from '../slash-failure.js';
 
 export interface MemoryCommandContext {
@@ -78,6 +79,7 @@ export async function handleMemory(args: string[], context?: MemoryCommandContex
 
   try {
     await persistentMemory.initialize();
+    const withProvenance = persistentMemory.isProvenanceEnabled?.() ?? false;
     let content: string;
 
     switch (action) {
@@ -97,13 +99,18 @@ export async function handleMemory(args: string[], context?: MemoryCommandContex
           } else {
             let formatted = "";
             if (persistentResult) {
-              formatted += `📁 **Persistent Memory (Markdown)**:\n- ${query}: ${persistentResult}\n\n`;
+              const memory = persistentMemory.get(query);
+              const display = memory && withProvenance
+                ? persistentMemory.formatMemoryForPrompt(memory) : `${query}: ${persistentResult}`;
+              formatted += `📁 **Persistent Memory (Markdown)**:\n- ${display}\n\n`;
             }
             if (enhancedResults.length > 0) {
               formatted += `🔍 **Enhanced Memory (Semantic)**:\n`;
               formatted += enhancedResults.map(r => {
                 const date = new Date(r.createdAt).toLocaleDateString();
-                return `- [${r.type}] ${r.content} (score: ${r.importance.toFixed(2)}, ${date})`;
+                const unknown = withProvenance
+                  ? ' [provenance inconnue ; fraîcheur inconnue]' : '';
+                return `- [${r.type}] ${r.content} (score: ${r.importance.toFixed(2)}, ${date})${unknown}`;
               }).join('\n');
             }
             content = formatted;
@@ -151,7 +158,9 @@ export async function handleMemory(args: string[], context?: MemoryCommandContex
         } else {
           const lines = archived.slice(0, 25).map((e) => {
             const when = e.forgottenAt.slice(0, 10);
-            return `- **${e.key}** (${e.category}, ${e.scope}, forgotten ${when}): ${e.value.slice(0, 80)}${e.value.length > 80 ? "…" : ""}`;
+            const attribution = withProvenance
+              ? ` [${formatProvenance(e.kind ?? 'hypothesis', e.provenance)}]` : '';
+            return `- **${e.key}** (${e.category}, ${e.scope}, forgotten ${when}): ${e.value.slice(0, 80)}${e.value.length > 80 ? "…" : ""}${attribution}`;
           });
           content =
             `🗄️ ${archived.length} forgotten memor${archived.length > 1 ? "ies" : "y"}` +
@@ -258,8 +267,10 @@ export async function handleMemory(args: string[], context?: MemoryCommandContex
           for (const m of recent) {
             const ago = formatTimeAgo(m.updatedAt);
             const valuePreview = m.value.length > 200 ? m.value.slice(0, 200) + "…" : m.value;
-            lines.push(`[${m.scope}] ${m.key} (${m.category}) — ${ago}`);
-            lines.push(`  ${valuePreview}`);
+            lines.push(`[${m.scope}] ${m.key} (${m.category}) — ${withProvenance ? 'stored ' : ''}${ago}`);
+            lines.push(withProvenance
+              ? `  ${persistentMemory.formatMemoryForPrompt({ ...m, value: valuePreview })}`
+              : `  ${valuePreview}`);
             lines.push("");
           }
           content = lines.join("\n").trimEnd();

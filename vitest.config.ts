@@ -136,6 +136,7 @@ export default defineConfig({
       '.git',
       '.cache',
       'tests/_archived/**',
+      'tests/e2e/**', // Playwright has its own runner.
       // Skip the slow, env-dependent real-integration tests unless opted in.
       ...(RUN_REAL_TESTS ? [] : ['**/*real*.test.ts']),
     ],

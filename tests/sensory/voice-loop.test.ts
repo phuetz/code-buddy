@@ -672,10 +672,10 @@ describe('voice loop — fast companion replies', () => {
     expect(fastCompanionReply('Lisa ?')).toBe('Coucou Patrice. Je suis là.');
     expect(fastCompanionReply('Lisa comment ça va ?')).toBe('Oui Patrice. Je suis contente de t’entendre.');
     expect(fastCompanionReply('Lisa je pars chez des amis')).toBe(
-      'Amuse-toi bien chez tes amis. Je continue en autonomie et je te ferai un résumé quand tu reviens.',
+      'Amuse-toi bien chez tes amis. Je reste là, tu me raconteras.',
     );
     expect(fastCompanionReply('Lisa, je parchais des amis.')).toBe(
-      'Amuse-toi bien chez tes amis. Je continue en autonomie et je te ferai un résumé quand tu reviens.',
+      'Amuse-toi bien chez tes amis. Je reste là, tu me raconteras.',
     );
     expect(fastCompanionReply('Bonne nuit Lisa')).toBe(
       'Bonne nuit Patrice. Repose-toi bien, je veille tranquillement.',

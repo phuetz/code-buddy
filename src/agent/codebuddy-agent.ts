@@ -43,7 +43,21 @@ import {
   readCliFlagValue,
   resolveSessionLimits,
 } from "../config/middleware-limits.js";
+import { realpathSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
+
+/**
+ * One identity per project directory, whatever path reached it: a symlink (macOS
+ * /var → /private/var, a linked checkout) must not look like another project.
+ */
+function projectIdentity(dir: string): string {
+  const resolved = resolvePath(dir);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
 import { resetPersonaManager } from "../personas/persona-manager.js";
 import { resetEnhancedMemory } from "../memory/enhanced-memory.js";
 import { resetPluginMarketplace } from "../plugins/marketplace.js";
@@ -213,7 +227,7 @@ export class CodeBuddyAgent extends BaseAgent {
     this.callerMaxToolRounds = typeof maxToolRounds === 'number' && Number.isFinite(maxToolRounds) && maxToolRounds > 0
       ? maxToolRounds
       : undefined;
-    this.limitsDirectory = resolvePath(initialWorkingDirectory);
+    this.limitsDirectory = projectIdentity(initialWorkingDirectory);
     this.fileMiddlewareLimits = loadExplicitMiddlewareLimits({ cwd: this.limitsDirectory });
     this.applySessionLimits(this.yoloMode);
     if (this.yoloMode) {
@@ -1704,7 +1718,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
    * donc sans effet.
    */
   private rebindProjectLimits(dir: string): void {
-    const next = resolvePath(dir);
+    const next = projectIdentity(dir);
     if (next === this.limitsDirectory) return;
     this.limitsDirectory = next;
     this.fileMiddlewareLimits = loadExplicitMiddlewareLimits({ cwd: next });
