@@ -11,6 +11,7 @@
 import type { ToolResult } from '../../types/index.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { checkSecretFileAccess, formatSecretRefusal } from '../../security/secret-files.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
 import {
   synthesizeTextToSpeech,
@@ -494,6 +495,8 @@ export class ImageEditTool implements ITool {
 
 async function loadBoundedWorkspaceImage(value: string, workspace: string, requirePng: boolean): Promise<string> {
   const resolved = path.resolve(workspace, value);
+  const verdict = checkSecretFileAccess(resolved, 'read');
+  if (verdict.secret) throw new Error(formatSecretRefusal(resolved, verdict));
   const [root, realPath] = await Promise.all([fs.realpath(workspace), fs.realpath(resolved)]);
   if (realPath !== root && !realPath.startsWith(`${root}${path.sep}`)) {
     throw new Error('image path escapes the current workspace');

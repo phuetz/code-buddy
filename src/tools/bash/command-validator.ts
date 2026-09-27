@@ -399,13 +399,13 @@ const RECURSIVE_READERS = new Set([
  * Return the first token of `command` that designates a credential file (or a
  * glob / recursive read over a credential root), or null.
  */
-export function findCredentialPathInCommand(command: string): string | null {
+export function findCredentialPathInCommand(command: string, platform: NodeJS.Platform = process.platform): string | null {
   if (typeof command !== 'string' || !command) return null;
   // Shell joins adjacent quoted fragments and removes escaping before opening
-  // paths. Normalize those static forms before looking for credential names.
+  // paths. On Windows backslashes are path separators, not POSIX escapes.
   const expanded = expandHomeReferences(command)
     .replace(/\$(?:""|'')/g, '')
-    .replace(/\\([^\n])/g, '$1')
+    .replace(/\\([^\n])/g, platform === 'win32' ? '/$1' : '$1')
     .replace(/["']/g, '');
   const roots = getHomeCredentialRoots();
   const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
@@ -413,6 +413,19 @@ export function findCredentialPathInCommand(command: string): string | null {
     tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
   );
   const usesRecursiveReader = Array.from(words).some((word) => RECURSIVE_READERS.has(word));
+
+  // A dynamic suffix under a credential root cannot be resolved statically.
+  // Refuse that narrow case for readers before tokenization splits `$()`.
+  if (usesRecursiveReader) {
+    const dynamicPath = expanded.split(/[\s;|&<>]+/).find((token) =>
+      roots.some((root) => {
+        const normalizedRoot = platform === 'win32' ? root.replace(/\\/g, '/') : root;
+        const separator = platform === 'win32' ? '/' : path.sep;
+        return token.includes(`${normalizedRoot}${separator}`) && /\$|`/.test(token);
+      }),
+    );
+    if (dynamicPath) return dynamicPath;
+  }
 
   // `cd <credential root>` then a RELATIVE name: resolve relative tokens
   // against the last `cd` target seen in the command text.

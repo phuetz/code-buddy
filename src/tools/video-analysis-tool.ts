@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 
 import type { MediaGenerationRuntime } from './media-generation-tool.js';
 
@@ -113,6 +114,7 @@ async function prepareVideo(
 
   const stripped = videoSource.startsWith('file://') ? videoSource.slice('file://'.length) : videoSource;
   const localPath = path.isAbsolute(stripped) ? path.resolve(stripped) : path.resolve(options.rootDir, stripped);
+  refuseSecretVideo(localPath);
   const stat = await fs.stat(localPath);
   const mimeType = detectVideoMimeType(localPath);
   if (!mimeType) {
@@ -129,8 +131,14 @@ function detectVideoMimeType(videoPath: string): string | undefined {
 }
 
 async function videoToBase64DataUrl(videoPath: string, mimeType: string): Promise<string> {
+  refuseSecretVideo(videoPath);
   const bytes = await fs.readFile(videoPath);
   return `data:${mimeType};base64,${bytes.toString('base64')}`;
+}
+
+function refuseSecretVideo(videoPath: string): void {
+  const verdict = checkSecretFileAccess(videoPath, 'read');
+  if (verdict.secret) throw new Error(formatSecretRefusal(videoPath, verdict));
 }
 
 function resolveVideoAnalysisConfig(env: NodeJS.ProcessEnv): { baseUrl: string; apiKey: string; model: string } {
