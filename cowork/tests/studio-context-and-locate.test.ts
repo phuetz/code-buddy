@@ -120,6 +120,14 @@ describe('StudioContextService', () => {
       component: 'TodoForm',
     });
     expect(res.ok && res.data).toMatchObject({ file: 'src/components/TodoForm.tsx', startLine: 7, endLine: 9, method: 'texte' });
+    // Vraie fenêtre : _debugSource annonçait la ligne 46 pour un bouton à la ligne 27 (décalage du plugin React).
+    const shifted = await service.locate(root, {
+      tag: 'button',
+      text: 'Ajouter',
+      component: 'TodoForm',
+      source: { fileName: path.join(root, 'src', 'components', 'TodoForm.tsx'), lineNumber: 26 },
+    });
+    expect(shifted.ok && shifted.data).toMatchObject({ file: 'src/components/TodoForm.tsx', startLine: 7, endLine: 9 });
     const byAria = await service.locate(root, { tag: 'button', html: '<button aria-label="Valider la tâche" class="x">✓</button>' });
     expect(byAria.ok && byAria.data).toBeNull(); // attribut absent du code : pas de faux positif
   });

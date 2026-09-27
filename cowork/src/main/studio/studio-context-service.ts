@@ -166,18 +166,26 @@ export class StudioContextService {
       if (!d || typeof d !== 'object' || typeof d.tag !== 'string') return { ok: false, error: 'élément invalide' };
       const tag = d.tag.toLowerCase().replace(/[^a-z0-9-]/g, '');
 
-      // 1. Source exacte (React en dev : _debugSource) — seulement si elle est DANS le projet.
-      if (d.source && typeof d.source.fileName === 'string' && typeof d.source.lineNumber === 'number') {
+      // 1. Source React (dev : _debugSource) — seulement si elle est DANS le projet.
+      // Le numéro de ligne n'est pas toujours celui du fichier sur disque (le
+      // plugin React de Vite peut le décaler) : il n'est pris tel quel que si
+      // la balise s'y trouve ; sinon le FICHIER guide la recherche ci-dessous.
+      let sourceFile: string | null = null;
+      let sourceLine = 0;
+      if (d.source && typeof d.source.fileName === 'string') {
         const abs = path.resolve(d.source.fileName.split('?')[0] ?? '');
         const rel = path.relative(real, abs);
         if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
           const posix = rel.split(path.sep).join('/');
           const content = await this.readSafe(real, posix);
           if (content !== null) {
+            sourceFile = posix;
             const lines = content.split(/\r?\n/);
-            const start = Math.max(1, Math.min(lines.length, d.source.lineNumber));
-            const end = elementExtent(lines, start, tag);
-            return { ok: true, data: { file: posix, startLine: start, endLine: end, excerpt: numbered(lines, start, end), method: 'source' } };
+            sourceLine = typeof d.source.lineNumber === 'number' ? d.source.lineNumber : 0;
+            if (sourceLine >= 1 && sourceLine <= lines.length && new RegExp(`<${tag}(?=[\\s>/]|$)`, 'i').test(lines[sourceLine - 1] ?? '')) {
+              const end = elementExtent(lines, sourceLine, tag);
+              return { ok: true, data: { file: posix, startLine: sourceLine, endLine: end, excerpt: numbered(lines, sourceLine, end), method: 'source' } };
+            }
           }
         }
       }
@@ -207,7 +215,8 @@ export class StudioContextService {
       }
       // Fichier du composant d'abord (quand le nom est connu), pour départager des textes identiques.
       const ordered = [...contents.entries()].sort(([a], [b]) => {
-        const hit = (f: string) => (d.component && path.basename(f).startsWith(`${d.component}.`) ? 0 : 1);
+        const hit = (f: string) =>
+          f === sourceFile ? 0 : d.component && path.basename(f).startsWith(`${d.component}.`) ? 1 : 2;
         return hit(a) - hit(b);
       });
       const openBefore = (lines: string[], idx: number): number | null => {
@@ -248,6 +257,19 @@ export class StudioContextService {
         if (fallback && !probe.textContent) {
           const { file, lines, idx } = fallback;
           return { ok: true, data: { file, startLine: idx + 1, endLine: idx + 1, excerpt: numbered(lines, idx + 1, idx + 1), method: probe.method } };
+        }
+      }
+      // Aucune sonde : la balise la plus proche de la ligne annoncée dans le fichier source.
+      if (sourceFile) {
+        const lines = contents.get(sourceFile) ?? [];
+        let best = -1;
+        for (let idx = 0; idx < lines.length; idx += 1) {
+          if (!new RegExp(`<${tag}(?=[\\s>/]|$)`, 'i').test(lines[idx] ?? '')) continue;
+          if (best < 0 || Math.abs(idx + 1 - sourceLine) < Math.abs(best + 1 - sourceLine)) best = idx;
+        }
+        if (best >= 0) {
+          const end = elementExtent(lines, best + 1, tag);
+          return { ok: true, data: { file: sourceFile, startLine: best + 1, endLine: end, excerpt: numbered(lines, best + 1, end), method: 'source' } };
         }
       }
       return { ok: true, data: null };

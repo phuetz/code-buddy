@@ -27,10 +27,10 @@ export function StudioContextPanel({ candidates, states, onCycle, onRefresh, tot
   const excluded = candidates.filter((c) => states[c.path] === 'exclu');
   const includedTokens = included.reduce((sum, c) => sum + c.tokens, 0);
   return (
-    <div className="max-h-56 overflow-y-auto border-t border-border bg-surface px-3 py-2 text-xs" data-testid="studio-context-panel">
+    <div className="max-h-48 shrink-0 overflow-y-auto border-t border-border bg-surface px-3 py-2 text-xs" data-testid="studio-context-panel">
       <div className="mb-1 flex items-center gap-2 text-muted-foreground">
         <span>
-          {included.length} inclus (~{includedTokens.toLocaleString('fr-FR')} jetons) · {excluded.length} exclu(s) · demande estimée{' '}
+          {included.length} inclus (~{includedTokens.toLocaleString('fr-FR')} jetons) · {excluded.length} exclu(s) · demande estimée (hors texte){' '}
           <strong className="text-foreground" data-testid="studio-context-total">~{totalTokens.toLocaleString('fr-FR')} jetons</strong>
         </span>
         <button type="button" onClick={onRefresh} className="ml-auto rounded p-0.5 hover:text-foreground" title="Actualiser la liste" aria-label="Actualiser">
