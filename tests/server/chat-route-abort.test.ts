@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -116,7 +117,7 @@ describe('HTTP SSE disconnect cancellation', () => {
     resetDatabaseManager();
     if (previousHome === undefined) delete process.env.CODEBUDDY_HOME;
     else process.env.CODEBUDDY_HOME = previousHome;
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   async function start(): Promise<string> {

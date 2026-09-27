@@ -13,6 +13,8 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { fetchGithubRepos, fetchHfModels, type DiscoverySort } from './discovery-sources.js';
+import { fetchBlogPosts } from './blog-sources.js';
 
 export interface Publication {
   /** Stable id, e.g. "arxiv:2501.13956" or "MED:39000000". */
@@ -23,7 +25,17 @@ export interface Publication {
   url?: string;
 }
 
-export type PublicationSource = 'arxiv' | 'europepmc' | 'both';
+export type PublicationSource = 'arxiv' | 'europepmc' | 'both' | 'github' | 'models' | 'blogs' | 'all';
+export interface PublicationFetchOptions {
+  source?: PublicationSource;
+  limit?: number;
+  minStars?: number;
+  pushedSince?: string;
+  sort?: DiscoverySort;
+  fetcher?: typeof fetch;
+  now?: Date;
+  feedsFile?: string;
+}
 
 const FETCH_TIMEOUT_MS = 30_000;
 const FETCH_RETRIES = 2;
@@ -100,14 +112,29 @@ async function fetchText(url: string): Promise<string | null> {
   return null;
 }
 
+/** `CODEBUDDY_RESEARCH_SORT=recent` : les publications les plus récentes d'abord (ingestion quotidienne). */
+export function researchSortRecent(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.CODEBUDDY_RESEARCH_SORT ?? '').trim().toLowerCase() === 'recent';
+}
+
+export function arxivQueryUrl(topic: string, limit: number, env: NodeJS.ProcessEnv = process.env): string {
+  const sort = researchSortRecent(env) ? '&sortBy=submittedDate&sortOrder=descending' : '';
+  return `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(topic)}&start=0&max_results=${limit}${sort}`;
+}
+
+export function europePmcQueryUrl(topic: string, limit: number, env: NodeJS.ProcessEnv = process.env): string {
+  const sort = researchSortRecent(env) ? `&sort=${encodeURIComponent('P_PDATE_D desc')}` : '';
+  return `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(topic)}&format=json&pageSize=${limit}&resultType=core${sort}`;
+}
+
 async function fetchArxiv(topic: string, limit: number): Promise<Publication[]> {
-  const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(topic)}&start=0&max_results=${limit}`;
+  const url = arxivQueryUrl(topic, limit);
   const xml = await fetchText(url);
   return xml ? parseArxivAtom(xml, limit) : [];
 }
 
 async function fetchEuropePmc(topic: string, limit: number): Promise<Publication[]> {
-  const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(topic)}&format=json&pageSize=${limit}&resultType=core`;
+  const url = europePmcQueryUrl(topic, limit);
   const text = await fetchText(url);
   if (!text) return [];
   try {
@@ -123,13 +150,16 @@ async function fetchEuropePmc(topic: string, limit: number): Promise<Publication
  */
 export async function fetchPublications(
   topic: string,
-  opts: { source?: PublicationSource; limit?: number } = {},
+  opts: PublicationFetchOptions = {},
 ): Promise<Publication[]> {
   const source = opts.source ?? 'both';
   const limit = Math.max(1, Math.min(50, opts.limit ?? 6));
   const jobs: Array<Promise<Publication[]>> = [];
-  if (source === 'arxiv' || source === 'both') jobs.push(fetchArxiv(topic, limit));
-  if (source === 'europepmc' || source === 'both') jobs.push(fetchEuropePmc(topic, limit));
+  if (source === 'arxiv' || source === 'both' || source === 'all') jobs.push(fetchArxiv(topic, limit));
+  if (source === 'europepmc' || source === 'both' || source === 'all') jobs.push(fetchEuropePmc(topic, limit));
+  if (source === 'github' || source === 'all') jobs.push(fetchGithubRepos(topic, { ...opts, limit }));
+  if (source === 'models' || source === 'all') jobs.push(fetchHfModels(topic, { ...opts, limit }));
+  if (source === 'blogs' || source === 'all') jobs.push(fetchBlogPosts(topic, { ...opts, limit }));
   const all = (await Promise.all(jobs)).flat();
   const seen = new Set<string>();
   const deduped: Publication[] = [];

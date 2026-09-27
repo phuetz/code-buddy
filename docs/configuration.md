@@ -262,6 +262,34 @@ maxTokens = 4096
 # Legacy pre-execution command rewriting; explicit opt-in only.
 rtk_enabled = false
 
+# Messaging sessions (Telegram, webchat, and the other channel adapters).
+# mode none is the default and keeps the current transcript.
+# both resets on the first of idle_minutes or the local at_hour boundary.
+# Each store the reset clears (agent cache, disk session, companion file,
+# in-memory companion map) is archived and read back on its own.
+# A later reset writes a new epoch file and does not replace the previous one.
+# A failed read is not an empty archive: the reset is cancelled.
+# A failed archive, or a failed companion-history wipe, cancels the clear.
+# CODEBUDDY_SESSION_RESET_ARCHIVE_DIR relocates the archive directory.
+# It must be absolute; a symlink or a non-directory at that path is refused.
+# A config file that is present but unreadable or unparseable cancels the reset.
+# So does a session_reset the files no longer describe since the config was
+# loaded (another current directory, an edit): restart to apply the new one.
+# The policy is read again right before the archive and before each erase;
+# an edit made while the reset runs stops it at that step.
+# The disk session is archived as a byte-for-byte copy of its file, read once
+# under the session lock: an encrypted file gives an encrypted copy. When the
+# session store would encrypt the session (encrypted flag, encrypted messages,
+# or SESSION_ENCRYPTION=true), the other stores are sealed with the same key
+# and reopened before anything is cleared; none is kept in clear. A session
+# still in clear on disk while encryption is required is neither archived nor
+# cleared until its next save encrypts it. The clear only runs if the file
+# still holds the archived bytes and the same encryption rule applies.
+[session_reset]
+mode = "none"
+idle_minutes = 1440
+at_hour = 4
+
 [profiles.fast]
 model = "grok-code-fast-1"
 temperature = 0.3
