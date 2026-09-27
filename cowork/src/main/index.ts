@@ -67,6 +67,7 @@ import { registerStudioFilesIpc } from './studio/studio-files-ipc';
 import { registerCommandRunnerIpc } from './studio/command-runner-ipc';
 import { CommandRunner } from './studio/command-runner';
 import { registerScaffoldIpc } from './studio/scaffold-ipc';
+import { registerPreviewProbeIpc } from './studio/preview-probe-ipc';
 import { registerGithubIpc } from './studio/github-ipc';
 import { registerOneClickDeployIpc } from './one-click-deploy-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
@@ -87,6 +88,7 @@ import { FilmService } from './film/film-service';
 import { registerAssistantIpc } from './assistant/assistant-ipc';
 import { AssistantService } from './assistant/assistant-service';
 import { ScaffoldService } from './studio/scaffold-service';
+import { PreviewProbeService } from './studio/preview-probe-service';
 import { registerPairingIpcHandlers } from './ipc/pairing-ipc';
 import { registerUserModelIpcHandlers } from './ipc/user-model-ipc';
 import { registerCompanionIpcHandlers } from './ipc/companion-ipc';
@@ -2803,6 +2805,25 @@ registerDevServerIpc(ipcMain, new StudioDevServer());
 registerStudioFilesIpc(ipcMain);
 registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null);
 registerScaffoldIpc(ipcMain, new ScaffoldService());
+// Preview health probe: a vite build pass + a hidden, sandboxed window on the
+// loopback preview, so the auto-fix loop sees errors the dev server hides.
+registerPreviewProbeIpc(
+  ipcMain,
+  new PreviewProbeService({
+    createWindow: () =>
+      new BrowserWindow({
+        show: false,
+        width: 1280,
+        height: 800,
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          partition: 'studio-preview-probe',
+        },
+      }),
+  }),
+);
 registerGithubIpc(ipcMain);
 registerOneClickDeployIpc(ipcMain);
 

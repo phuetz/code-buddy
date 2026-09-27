@@ -45,6 +45,13 @@ import { latestWebTestReport } from './studio/web-test-report-model';
 import { createStudioApis } from './studio/studio-api-bridge';
 import type { StudioScaffoldRequest } from './studio/StudioComposer';
 import { buildAiGenerationPrompt } from './studio/studio-ai-generation';
+import { getStarterFiles, shouldSeedStarter } from './studio/starter-templates';
+import {
+  buildPreviewFixPrompt,
+  collectPreviewHealth,
+  type PreviewHealthReport,
+  type PreviewSignals,
+} from './studio/preview-health-model';
 import { useIPC } from '../hooks/useIPC';
 import { getInitialSessionTitle } from '../../shared/session-title';
 import { ConversationHistoryDrawer } from './ConversationHistoryDrawer';
@@ -414,7 +421,17 @@ function StudioView() {
     const st = autoBuildRef.current;
     st.everBuilt = true;
     const result = await startDev();
-    if (result.ok) {
+    // "The dev server answers" is not "the app renders": probe the preview
+    // (vite build + hidden-window load) and treat a broken preview like a
+    // failed build, so the capped fix loop gets the real error.
+    let health: PreviewHealthReport | null = null;
+    if (result.ok && result.url) {
+      const probe = (await window.electronAPI?.studio?.preview
+        ?.probe({ cwd: sessionCwd, url: result.url })
+        .catch(() => null)) as { ok?: boolean; data?: PreviewSignals } | null | undefined;
+      if (probe?.ok && probe.data) health = collectPreviewHealth(probe.data);
+    }
+    if (result.ok && (!health || health.ok)) {
       st.awaitingFix = false;
       setAutoFixAttempt(null);
       return;
@@ -428,7 +445,12 @@ function StudioView() {
     st.attempts += 1;
     st.awaitingFix = true;
     setAutoFixAttempt(st.attempts);
-    void continueSession(activeSessionId, buildFixPrompt(result.error ?? '', terminalRef.current));
+    void continueSession(
+      activeSessionId,
+      health && !health.ok
+        ? buildPreviewFixPrompt(health)
+        : buildFixPrompt(result.error ?? '', terminalRef.current),
+    );
   }, [activeSessionId, sessionCwd, startDev, continueSession]);
 
   // Falling edge of the agent turn = generation (or a fix) just finished.
@@ -484,7 +506,26 @@ function StudioView() {
       const enrichedRequest = materialized?.ok && materialized.assets
         ? { ...request, materializedAssets: materialized.assets }
         : request;
-      const prompt = buildAiGenerationPrompt(enrichedRequest);
+      // bolt.diy-style starter: seed a known-good skeleton (package.json, Vite
+      // config, entry point) into an EMPTY target so the model only writes the
+      // app itself. Never overwrites an existing project.
+      let starterSeeded = false;
+      const studioFiles = window.electronAPI?.studio?.files;
+      if (cwd && studioFiles) {
+        const existing: string[] = [];
+        for (const name of ['package.json', 'index.html']) {
+          const read = (await studioFiles.read(cwd, name).catch(() => null)) as { ok?: boolean } | null;
+          if (read?.ok) existing.push(name);
+        }
+        if (shouldSeedStarter(request.stack, existing)) {
+          const files = getStarterFiles(request.stack);
+          const writes = await Promise.all(
+            files.map((f) => studioFiles.write(cwd, f.path, f.content).catch(() => null)),
+          );
+          starterSeeded = writes.every((w) => (w as { ok?: boolean } | null)?.ok === true);
+        }
+      }
+      const prompt = buildAiGenerationPrompt(enrichedRequest, { starterSeeded });
       const session = await startSession(
         getInitialSessionTitle(request.prompt),
         prompt,

@@ -1293,6 +1293,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       root: string
     ): Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
       ipcRenderer.invoke('studio.exportZip', { root }),
+    preview: {
+      probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) =>
+        ipcRenderer.invoke('studio.preview.probe', request),
+    },
     devServer: {
       start: (request: { cwd: string; command: string; url: string; timeoutMs?: number }) =>
         ipcRenderer.invoke('studio.dev.start', request),
@@ -6195,6 +6199,9 @@ declare global {
         exportZip: (
           root: string
         ) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
+        preview?: {
+          probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) => Promise<unknown>;
+        };
         devServer: {
           start: (request: {
             cwd: string;
