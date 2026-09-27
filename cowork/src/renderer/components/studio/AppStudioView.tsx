@@ -1,4 +1,4 @@
-import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon } from 'lucide-react';
+import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon, Globe, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import { useAppStore } from '../../store';
 import { BuildStatusStrip, type BuildPhase } from './BuildStatusStrip.js';
@@ -150,6 +150,33 @@ export function AppStudioView({
   const [seedPrompt, setSeedPrompt] = useState<string | undefined>(undefined);
   const [ghBusy, setGhBusy] = useState(false);
   const [ghResult, setGhResult] = useState<GithubPushOutcome | null>(null);
+  const [siteBusy, setSiteBusy] = useState(false);
+  const [siteResult, setSiteResult] = useState<{ ok: boolean; text: string; savedTo?: string; log?: string[] } | null>(null);
+
+  // « Site » : exporte le site CONSTRUIT (npm run build → dist) ou les fichiers
+  // du site statique dans un dossier choisi — prêt pour n'importe quel hébergeur.
+  const onExportSite = async () => {
+    if (!workingDir || siteBusy) return;
+    setSiteBusy(true);
+    setSiteResult(null);
+    try {
+      const res = await window.electronAPI?.studio?.exportSite?.(workingDir);
+      if (!res) setSiteResult({ ok: false, text: 'Export du site indisponible.' });
+      else if (res.ok) {
+        setSiteResult({
+          ok: true,
+          text: `Site ${res.data.kind === 'build' ? 'construit' : 'statique'} exporté (${res.data.files} fichiers) :`,
+          savedTo: res.data.savedTo,
+        });
+      } else if (!res.canceled) {
+        setSiteResult({ ok: false, text: res.error, ...(res.buildLog ? { log: res.buildLog } : {}) });
+      }
+    } catch (error) {
+      setSiteResult({ ok: false, text: String(error) });
+    } finally {
+      setSiteBusy(false);
+    }
+  };
   const hasProject = tree.length > 0 || Boolean(activeFile) || Boolean(previewUrl);
 
   // G3 — one-click push of the generated project to a new GitHub repo. Reuses
@@ -239,6 +266,17 @@ export function AppStudioView({
             </button>
             <button
               type="button"
+              onClick={() => void onExportSite()}
+              disabled={siteBusy || !workingDir}
+              title="Construire le site et l'exporter dans un dossier (prêt pour un hébergement statique)"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="studio-export-site"
+            >
+              <Globe className="h-4 w-4" aria-hidden="true" />
+              {siteBusy ? 'Construction…' : 'Site'}
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 const store = useAppStore.getState();
                 store.setOneClickDeployRoot(workingDir ?? null);
@@ -263,6 +301,41 @@ export function AppStudioView({
               {ghBusy ? 'Pushing…' : 'GitHub'}
             </button>
           </div>
+          {siteResult ? (
+            <div
+              className="flex items-start gap-2 border-b border-border bg-muted px-3 py-2 text-xs"
+              data-testid="studio-site-result"
+            >
+              <Globe className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0 flex-1 text-foreground">
+                <div className={siteResult.ok ? '' : 'text-destructive'}>{siteResult.text}</div>
+                {siteResult.savedTo ? (
+                  <button
+                    type="button"
+                    onClick={() => void window.electronAPI?.showItemInFolder?.(siteResult.savedTo ?? '')}
+                    className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] text-primary underline"
+                    data-testid="studio-site-open"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                    {siteResult.savedTo}
+                  </button>
+                ) : null}
+                {siteResult.log && siteResult.log.length > 0 ? (
+                  <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-background p-2 font-mono text-[11px] text-muted-foreground">
+                    {siteResult.log.join('\n')}
+                  </pre>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSiteResult(null)}
+                title="Fermer"
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
           {ghResult ? (
             <div
               className="flex items-start gap-2 border-b border-border bg-muted px-3 py-2 text-xs"

@@ -747,6 +747,9 @@ export function StudioView() {
     <AppStudioView
       {...viewProps}
       buildNote={buildNote}
+      {...(viewProps.previewUrl
+        ? { onOpenPreviewExternal: () => void window.electronAPI?.openExternal?.(viewProps.previewUrl ?? '') }
+        : {})}
       buildProblem={previewProblem?.summary ?? null}
       {...(previewProblem ? { onFixProblem } : {})}
       onGenerateWithAI={onGenerateWithAI}

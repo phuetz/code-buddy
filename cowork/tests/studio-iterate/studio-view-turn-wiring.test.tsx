@@ -258,3 +258,39 @@ describe.skipIf(!hasGit())('StudioView — tours, verrous, versions, discussion 
     expect(ipc.continueSession).toHaveBeenCalledTimes(5);
   }, 30_000);
 });
+
+describe('AppStudioView — bouton « Site »', () => {
+  it('appelle exportSite avec le dossier du projet, affiche le chemin et l’ouvre', async () => {
+    const { AppStudioView } = await import('../../src/renderer/components/studio/AppStudioView');
+    const exportSite = vi.fn(async () => ({ ok: true, data: { savedTo: '/tmp/exports/app-site', kind: 'build', files: 3 } }));
+    const showItemInFolder = vi.fn(async () => true);
+    (window as unknown as { electronAPI: unknown }).electronAPI = { studio: { exportSite }, showItemInFolder };
+    render(
+      <AppStudioView
+        tree={[{ name: 'index.html', path: 'index.html', type: 'file' }]}
+        activeFile={null}
+        fileContent=""
+        previewUrl={null}
+        previewStatus="idle"
+        terminalOutput={[]}
+        buildPhase="idle"
+        buildElapsedMs={0}
+        templates={[]}
+        workingDir="/tmp/projet"
+        onScaffold={() => {}}
+        onPrompt={() => {}}
+        onOpenFile={() => {}}
+        onChangeFileContent={() => {}}
+        onSaveFile={() => {}}
+        onStartPreview={() => {}}
+        onReloadPreview={() => {}}
+        onStopBuild={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('studio-export-site'));
+    expect(await screen.findByText(/Site construit exporté \(3 fichiers\)/)).toBeTruthy();
+    expect(exportSite).toHaveBeenCalledWith('/tmp/projet');
+    fireEvent.click(screen.getByTestId('studio-site-open'));
+    expect(showItemInFolder).toHaveBeenCalledWith('/tmp/exports/app-site');
+  });
+});

@@ -71,6 +71,7 @@ import { registerPreviewProbeIpc } from './studio/preview-probe-ipc';
 import { registerGithubIpc } from './studio/github-ipc';
 import { registerStudioVersionsIpc } from './studio/studio-versions-ipc';
 import { StudioVersionsService } from './studio/studio-versions-service';
+import { SiteExportService } from './studio/site-export-service';
 import { registerOneClickDeployIpc } from './one-click-deploy-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
 import { MediaGenService } from './media/media-gen-service';
@@ -2828,7 +2829,7 @@ registerPreviewProbeIpc(
 );
 registerGithubIpc(ipcMain);
 // Versions locales par projet (dépôt git séparé sous .codebuddy/) + verrous de fichiers.
-registerStudioVersionsIpc(ipcMain, new StudioVersionsService());
+registerStudioVersionsIpc(ipcMain, new StudioVersionsService({ trustedRoots: () => creativeWorkspaceRoots() }));
 registerOneClickDeployIpc(ipcMain);
 
 // Media generation surface delegates to the core image_generate tool. Local
@@ -3277,6 +3278,23 @@ ipcMain.handle('studio.exportZip', async (_event, input: unknown) => {
     return { ok: false, error: String(err) };
   }
 });
+
+// « Exporter le site » : le site CONSTRUIT (npm run build → dist) ou les
+// fichiers du site statique, copiés dans un dossier choisi par l'utilisateur.
+const siteExportService = new SiteExportService({
+  trustedRoots: () => creativeWorkspaceRoots(),
+  chooseDirectory: async (defaultPath) => {
+    const win = getMainWindow();
+    const options = {
+      title: 'Exporter le site dans…',
+      defaultPath,
+      properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>,
+    };
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  },
+});
+ipcMain.handle('studio.exportSite', (_event, input: unknown) => siteExportService.exportSite(input));
 
 // Media library (ChatGPT-library parity): every generated media across all
 // session roots; export = native Save-As dialog + copy.

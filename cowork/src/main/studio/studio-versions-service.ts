@@ -115,23 +115,52 @@ export function parseVersionLog(stdout: string): StudioVersion[] {
   return versions;
 }
 
+/**
+ * La racine demandée doit être (sous) l'un des espaces de travail de confiance
+ * (dossiers des sessions, projet actif…), comme pour l'export zip : le
+ * renderer ne peut pas faire versionner ou restaurer un dossier arbitraire.
+ */
+export async function assertTrustedRoot(root: unknown, trustedRoots?: () => string[]): Promise<string> {
+  if (typeof root !== 'string' || !path.isAbsolute(root) || root.includes('\0')) {
+    throw new Error('invalid project directory');
+  }
+  const real = await fs.realpath(root);
+  const st = await fs.stat(real);
+  if (!st.isDirectory()) throw new Error('not a directory');
+  if (trustedRoots) {
+    const trusted = (
+      await Promise.all(
+        trustedRoots().map(async (candidate) => {
+          try {
+            return await fs.realpath(candidate);
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).filter((c): c is string => Boolean(c));
+    const inside = trusted.some((candidate) => {
+      const child = path.relative(candidate, real);
+      return child === '' || (!child.startsWith('..') && !path.isAbsolute(child));
+    });
+    if (!inside) throw new Error('project is outside trusted workspaces');
+  }
+  return real;
+}
+
 export class StudioVersionsService {
   private readonly git: GitRun;
+  private readonly trustedRoots: (() => string[]) | undefined;
   /** Sérialise les opérations par projet (deux instantanés simultanés se marchent dessus). */
   private readonly queues = new Map<string, Promise<unknown>>();
 
-  constructor(git: GitRun = defaultGit) {
-    this.git = git;
+  constructor(options: { git?: GitRun; trustedRoots?: () => string[] } = {}) {
+    this.git = options.git ?? defaultGit;
+    this.trustedRoots = options.trustedRoots;
   }
 
-  private async resolveRoot(root: unknown): Promise<string> {
-    if (typeof root !== 'string' || !path.isAbsolute(root) || root.includes('\0')) {
-      throw new Error('invalid project directory');
-    }
-    const real = await fs.realpath(root);
-    const st = await fs.stat(real);
-    if (!st.isDirectory()) throw new Error('not a directory');
-    return real;
+  private resolveRoot(root: unknown): Promise<string> {
+    return assertTrustedRoot(root, this.trustedRoots);
   }
 
   private env(root: string): NodeJS.ProcessEnv {

@@ -138,6 +138,14 @@ describe.skipIf(!hasGit())('StudioVersionsService (git réel)', () => {
     expect((await service.restore(root, 'pas-un-id; rm -rf /')).ok).toBe(false);
   });
 
+  it('refuse une racine hors des espaces de travail de confiance', async () => {
+    const guarded = new StudioVersionsService({ trustedRoots: () => [path.join(root, 'src')] });
+    const res = await guarded.snapshot(root, 'x');
+    expect(res).toEqual({ ok: false, error: 'project is outside trusted workspaces' });
+    const inside = new StudioVersionsService({ trustedRoots: () => [path.dirname(root)] });
+    expect((await inside.snapshot(root, 'x')).ok).toBe(true);
+  });
+
   it('persiste les verrous, triés et sans doublon', async () => {
     expect(await service.getLocks(root)).toEqual({ ok: true, data: [] });
     const set = await service.setLocks(root, ['src/App.tsx', 'package.json', 'src/App.tsx', '../evil']);

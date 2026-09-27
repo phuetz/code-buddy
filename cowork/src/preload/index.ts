@@ -89,6 +89,7 @@ import type {
 } from '../main/missions/mission-types';
 import type { Studio2Result } from '../main/studio2/archive-utils';
 import type { StudioVersion, VersionsResult } from '../main/studio/studio-versions-service';
+import type { SiteExportOutcome } from '../main/studio/site-export-service';
 import type { CoworkResourceCatalogView } from '../main/fleet/resource-catalog-view';
 import type {
   DeployRequest,
@@ -1294,6 +1295,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       root: string
     ): Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
       ipcRenderer.invoke('studio.exportZip', { root }),
+    exportSite: (root: string): Promise<SiteExportOutcome> => ipcRenderer.invoke('studio.exportSite', { root }),
     preview: {
       probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) =>
         ipcRenderer.invoke('studio.preview.probe', request),
@@ -6212,6 +6214,7 @@ declare global {
         exportZip: (
           root: string
         ) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
+        exportSite?: (root: string) => Promise<SiteExportOutcome>;
         preview?: {
           probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) => Promise<unknown>;
         };
