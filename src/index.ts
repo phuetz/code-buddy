@@ -2871,6 +2871,11 @@ addLazyCommand(
   },
 );
 
+addLazyCommandGroup(program, 'catalog', 'Generate a source-code catalogue', async () => {
+  const { registerCatalogCommand } = await import('./commands/cli/catalog-command.js');
+  registerCatalogCommand(program);
+});
+
 addLazyCommand(
   program,
   'try',
@@ -3803,6 +3808,11 @@ program
 addLazyCommandGroup(program, 'daemon', 'Manage the Code Buddy daemon (background process)', async () => {
   const { registerDaemonCommands } = await import('./commands/cli/daemon-commands.js');
   registerDaemonCommands(program);
+});
+
+addLazyCommandGroup(program, 'ruche', 'Signed coordination prototype (opt-in)', async () => {
+  const { registerRucheCommand } = await import('./commands/cli/ruche-command.js');
+  registerRucheCommand(program);
 });
 
 addLazyCommandGroup(program, 'trigger', 'Manage event triggers for automated agent responses', async () => {
