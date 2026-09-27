@@ -57,6 +57,7 @@ describe('StudioDevServer', () => {
     tool.logs.mockResolvedValue({ success: true, output: 'VITE v5 ready\nclé=sk-projet-1234567890 fuite\n' });
     mockedLoadCoreModule.mockResolvedValue({ getAppServerTool: () => tool });
     process.env.FAKE_HOST_API_KEY = 'hote-secret-value';
+    process.env.FAKE_DATABASE_URL = 'postgres://hote/interne';
     const service = new StudioDevServer({
       projectEnv: async () => ({ VITE_API_KEY: 'sk-projet-1234567890' }),
       redact: async (_cwd, text) => text.split('sk-projet-1234567890').join('[secret masqué]'),
@@ -66,7 +67,10 @@ describe('StudioDevServer', () => {
       const env = (tool.start.mock.calls[0]?.[0] as { env: Record<string, string | undefined> }).env;
       expect('FAKE_HOST_API_KEY' in env).toBe(true);
       expect(env.FAKE_HOST_API_KEY).toBeUndefined(); // undefined = retirée par app_server
+      expect('FAKE_DATABASE_URL' in env && env.FAKE_DATABASE_URL === undefined).toBe(true);
       expect(env.VITE_API_KEY).toBe('sk-projet-1234567890');
+      // Liste blanche : une variable de l'hôte au nom anodin ne passe pas non plus.
+      expect('PATH' in env).toBe(false); // PATH conservé (non marqué undefined)
       // NODE_ENV=production de Cowork ne doit pas passer au serveur de DEV.
       expect('NODE_ENV' in env && env.NODE_ENV === undefined).toBe('NODE_ENV' in process.env);
       // Échec fermé : un pid inconnu de ce studio (projet inconnu) ne rend aucun journal.
@@ -76,7 +80,17 @@ describe('StudioDevServer', () => {
       expect(logs.ok && logs.data.lines).toContain('clé=[secret masqué] fuite');
     } finally {
       delete process.env.FAKE_HOST_API_KEY;
+      delete process.env.FAKE_DATABASE_URL;
     }
+  });
+
+  it('refuse de démarrer un serveur hors des espaces de confiance', async () => {
+    const tool = makeTool();
+    mockedLoadCoreModule.mockResolvedValue({ getAppServerTool: () => tool });
+    const service = new StudioDevServer({ assertRoot: async () => { throw new Error('project is outside trusted workspaces'); } });
+    const res = await service.start({ cwd: '/etc', command: 'rm -rf x', url: 'http://127.0.0.1:5173/' });
+    expect(res).toEqual({ ok: false, error: 'project is outside trusted workspaces' });
+    expect(tool.start).not.toHaveBeenCalled();
   });
 
   it('delegates stop, status, and logs without throwing', async () => {

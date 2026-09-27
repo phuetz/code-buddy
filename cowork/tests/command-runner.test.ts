@@ -71,3 +71,47 @@ describe('CommandRunner.runToCompletion', () => {
     });
   });
 });
+
+describe('CommandRunner — environnement (réserve des relectures de la vague 2)', () => {
+  it("npm install / terminal : aucune clé de l'hôte, liste blanche seulement", async () => {
+    process.env.FAKE_HOST_API_KEY_FOR_TEST = 'hote-secret-value';
+    try {
+      const events: CommandOutputEvent[] = [];
+      const runner = new CommandRunner((event) => events.push(event));
+      const res = await runner.runToCompletion({ cwd: process.cwd(), command: 'node -e "console.log(JSON.stringify(process.env))"', id: 'env' });
+      expect(res.ok).toBe(true);
+      const printed = events.filter((e) => e.stream === 'stdout').map((e) => e.line).join('');
+      const env = JSON.parse(printed) as Record<string, string>;
+      expect(env.FAKE_HOST_API_KEY_FOR_TEST).toBeUndefined();
+      expect(typeof (env.PATH ?? env.Path)).toBe('string');
+    } finally {
+      delete process.env.FAKE_HOST_API_KEY_FOR_TEST;
+    }
+  });
+
+  it("IPC : dossier hors confiance refusé, environnement fourni par le processus principal et jamais par le renderer", async () => {
+    const { registerCommandRunnerIpc } = await import('../src/main/studio/command-runner-ipc.js');
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
+    const runner = new CommandRunner();
+    const seen: unknown[] = [];
+    const fake = {
+      runCommand: (input: unknown) => {
+        seen.push(input);
+        return { ok: true, data: { id: 'x', pid: 1 } };
+      },
+      runToCompletion: async (input: unknown) => {
+        seen.push(input);
+        return { ok: true, data: { id: 'x', code: 0 } };
+      },
+      kill: runner.kill.bind(runner),
+    } as unknown as CommandRunner;
+    registerCommandRunnerIpc({ handle: (c: string, h: never) => handlers.set(c, h) } as never, fake, () => null, async (cwd) =>
+      cwd === '/projet' ? { ok: true, env: { PATH: '/bin', VITE_X: 'projet' } } : { ok: false, error: 'project is outside trusted workspaces' },
+    );
+    const refused = await handlers.get('studio.cmd.runToEnd')!({}, { cwd: '/ailleurs', command: 'npm install', id: 'a' });
+    expect(refused).toEqual({ ok: false, error: 'project is outside trusted workspaces' });
+    expect(seen).toHaveLength(0);
+    await handlers.get('studio.cmd.run')!({}, { cwd: '/projet', command: 'ls', id: 'b', env: { OPENAI_API_KEY: 'injecte-par-le-renderer' } });
+    expect(seen[0]).toEqual({ cwd: '/projet', command: 'ls', id: 'b', env: { PATH: '/bin', VITE_X: 'projet' } });
+  });
+});

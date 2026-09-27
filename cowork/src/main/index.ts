@@ -74,7 +74,8 @@ import { guardSiteExport, ProjectSecretsService, redactText, registerProjectSecr
 import { PreviewBridge, registerPreviewBridgeIpc } from './studio/preview-bridge';
 import { StudioContextService, registerStudioContextIpc } from './studio/studio-context-service';
 import { STUDIO_ZIP_IGNORE } from './studio/studio-export-excludes';
-import { StudioVersionsService } from './studio/studio-versions-service';
+import { buildStudioChildEnv } from './studio/child-env';
+import { assertTrustedRoot, StudioVersionsService } from './studio/studio-versions-service';
 import { SiteExportService } from './studio/site-export-service';
 import { registerOneClickDeployIpc } from './one-click-deploy-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
@@ -2819,14 +2820,27 @@ const redactProjectSecrets = async (root: string, text: string): Promise<string>
   redactText(text, await projectSecrets.valuesFor(root));
 registerDevServerIpc(
   ipcMain,
-  new StudioDevServer({ projectEnv: (cwd) => projectSecrets.envFor(cwd), redact: redactProjectSecrets }),
+  new StudioDevServer({
+    projectEnv: (cwd) => projectSecrets.envFor(cwd),
+    redact: redactProjectSecrets,
+    assertRoot: (cwd) => assertTrustedRoot(cwd, () => creativeWorkspaceRoots()),
+  }),
 );
 // Aperçu : console du navigateur (masquée) + sélection d'un élément ;
 // contexte joint aux demandes (fichiers choisis, élément → fichier/lignes).
 registerPreviewBridgeIpc(ipcMain, new PreviewBridge({ redact: redactProjectSecrets }));
 registerStudioContextIpc(ipcMain, new StudioContextService({ trustedRoots: () => creativeWorkspaceRoots() }));
 registerStudioFilesIpc(ipcMain);
-registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null);
+// Commandes du studio (npm install, terminal) : dossier de confiance exigé,
+// environnement en liste blanche + secrets du projet (jamais les clés de Cowork).
+registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null, async (cwd) => {
+  try {
+    const real = await assertTrustedRoot(cwd, () => creativeWorkspaceRoots());
+    return { ok: true as const, env: buildStudioChildEnv(await projectSecrets.envFor(real)) };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
+  }
+});
 registerScaffoldIpc(ipcMain, new ScaffoldService());
 // Preview health probe: a vite build pass + a hidden, sandboxed window on the
 // loopback preview, so the auto-fix loop sees errors the dev server hides.

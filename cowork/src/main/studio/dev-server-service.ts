@@ -8,6 +8,7 @@
  */
 
 import { loadCoreModule } from '../utils/core-loader.js';
+import { STUDIO_CHILD_ENV_ALLOWLIST } from './child-env.js';
 
 type ToolResult<TData = unknown> = {
   success: boolean;
@@ -95,24 +96,24 @@ function linesFromOutput(output: string): string[] {
   return output.split(/\r?\n/).filter((line) => line.length > 0);
 }
 
-/** Noms de variables de l'hôte qui ressemblent à un secret (clés d'API de Cowork, jetons…). */
-const HOST_SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE|SESSION)/i;
 
 /**
- * Environnement du serveur de dev : les secrets de l'HÔTE (clés d'API de
- * Cowork…) sont retirés — le code généré n'a pas à les voir —, les secrets
- * du PROJET (saisis dans App Studio, rangés hors du projet) sont ajoutés.
+ * Environnement du serveur de dev, en LISTE BLANCHE (comme les builds) : le
+ * cœur `app_server` fusionne `{ ...process.env, ...env }` puis retire les clés
+ * `undefined` ; toute variable de l'hôte hors liste blanche est donc marquée
+ * `undefined` (clés d'API, mais aussi `DATABASE_URL`, `*_DSN`…). `NODE_ENV`
+ * est retiré aussi : Cowork tourne souvent en production, et le serveur de DEV
+ * servirait alors l'app en mode production (constaté dans la vraie fenêtre).
+ * Les secrets du PROJET sont ajoutés par-dessus.
  */
 export function devServerEnv(
   projectEnv: Record<string, string>,
   base: NodeJS.ProcessEnv = process.env,
 ): Record<string, string | undefined> {
+  const allowed = new Set(STUDIO_CHILD_ENV_ALLOWLIST);
+  allowed.delete('NODE_ENV');
   const env: Record<string, string | undefined> = {};
-  for (const key of Object.keys(base)) if (HOST_SECRET_NAME.test(key)) env[key] = undefined;
-  // Cowork tourne souvent avec NODE_ENV=production : hérité, il ferait servir
-  // au serveur de DEV une app en mode production (React sans _debugSource ni
-  // avertissements) — constaté dans la vraie fenêtre. Le projet peut le fixer.
-  if ('NODE_ENV' in base) env.NODE_ENV = undefined;
+  for (const key of Object.keys(base)) if (!allowed.has(key)) env[key] = undefined;
   return { ...env, ...projectEnv };
 }
 
@@ -121,6 +122,8 @@ export interface StudioDevServerOptions {
   projectEnv?: (cwd: string) => Promise<Record<string, string>>;
   /** Masque les secrets du projet dans les journaux avant de les rendre au renderer. */
   redact?: (cwd: string, text: string) => Promise<string>;
+  /** Refuse un dossier hors des espaces de confiance (lève une erreur). */
+  assertRoot?: (cwd: string) => Promise<unknown>;
 }
 
 export class StudioDevServer {
@@ -138,6 +141,7 @@ export class StudioDevServer {
       if (!command) return { ok: false, error: 'command is required' };
       if (!url) return { ok: false, error: 'url is required' };
 
+      if (this.options.assertRoot) await this.options.assertRoot(cwd);
       const tool = await this.getTool();
       if (!tool) return { ok: false, error: 'Core app_server tool is unavailable' };
 
