@@ -3805,6 +3805,11 @@ addLazyCommandGroup(program, 'daemon', 'Manage the Code Buddy daemon (background
   registerDaemonCommands(program);
 });
 
+addLazyCommandGroup(program, 'ruche', 'Signed coordination prototype (opt-in)', async () => {
+  const { registerRucheCommand } = await import('./commands/cli/ruche-command.js');
+  registerRucheCommand(program);
+});
+
 addLazyCommandGroup(program, 'trigger', 'Manage event triggers for automated agent responses', async () => {
   const { registerTriggerCommands } = await import('./commands/cli/daemon-commands.js');
   registerTriggerCommands(program);
@@ -3982,7 +3987,10 @@ addLazyCommandGroup(program, 'tools', 'Inspect tool profiles and effective tool 
   registerToolsCommands(program);
 });
 
-addLazyCommandGroup(program, 'catalog', 'Inspect feature states and evidence', async () => {
+// One `catalog` group: feature states and evidence (#245) plus the source-code
+// catalogue, DGM coverage and article links (#239/#248). Two stubs with the same
+// name would load only the first implementation.
+addLazyCommandGroup(program, 'catalog', 'Inspect feature states, evidence and the source-code catalogue', async () => {
   const { registerCatalogCommands } = await import('./commands/cli/catalog-command.js');
   registerCatalogCommands(program);
 });
@@ -4332,6 +4340,11 @@ addLazyCommand(
 addLazyCommand(program, 'resources', 'Explicit network resource inventory and read-only health selection', async () => {
   const { createResourcesCommand } = await import('./commands/resources.js');
   return createResourcesCommand();
+});
+
+addLazyCommand(program, 'runtime', 'Inspect the installed code and active runtime evidence', async () => {
+  const { createRuntimeCommand } = await import('./commands/runtime.js');
+  return createRuntimeCommand();
 });
 
 // Spec — BMAD-inspired spec-driven, review-gated work pipeline
