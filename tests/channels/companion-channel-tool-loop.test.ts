@@ -165,7 +165,7 @@ describe('runCompanionChannelTurn with tools', () => {
       model: 'm',
       messages: [{ role: 'user', content: 'rappelle-moi le train demain à 9h' }],
       identity: ownerIdentity,
-      env: { CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true' },
+      env: { CODEBUDDY_COMPANION_TOOLS_ENABLED: 'true', CODEBUDDY_LISA_FUTURE_COMMITMENTS: 'false' },
       onWaitingWord: (w) => { waitingWords.push(w); },
       executeTool: async (name, args) => {
         expect(name).toBe('remind');
