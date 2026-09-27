@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-sessions",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.188Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "e48f8d8e0a10665e08b49c88db30364806f76a6456e00d08be2707dee05d2d2f",
+  "artifact": "docs/preuves/inventaire-http-sessions.log",
+  "summary": "Session factice créée puis listée par l’API locale."
+}

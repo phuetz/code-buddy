@@ -1,0 +1,6 @@
+Commande : buddy server --no-auth (loopback) ; POST /api/sessions ; GET /api/sessions
+Code de sortie : 0
+Sortie vérifiée :
+POST : HTTP 201, Inventory fixture session
+GET : HTTP 200, session de test retrouvée
+Arrêt gracieux serveur : code 0

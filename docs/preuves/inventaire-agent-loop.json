@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "agent-loop",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.185Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "9b8dadbb7cf82cccb5175c48673c14153227134be03d55af09e25f92cc3b0f8b",
+  "artifact": "docs/preuves/inventaire-agent-loop.log",
+  "summary": "Le tour agent a exécuté un outil puis fourni la valeur retournée."
+}

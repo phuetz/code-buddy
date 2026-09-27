@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-session",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.187Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "af2ebcdd5e66717422f77be7727c32b9fbda0166dab08f6a97a343551dadb85a",
+  "artifact": "docs/preuves/inventaire-cli-session.log",
+  "summary": "Session créée par un vrai tour Ollama, listée puis reprise avec réponse correcte."
+}

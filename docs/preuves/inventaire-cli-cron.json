@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-cron",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.186Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "f7b694b2ca60ac0936946a6d4d19f6f8ecdb5c97253dbdc06788481c779721dd",
+  "artifact": "docs/preuves/inventaire-cli-cron.log",
+  "summary": "Tâche planifiée créée, listée puis retirée dans un projet jetable ; aucune exécution en fond."
+}

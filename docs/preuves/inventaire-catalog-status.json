@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "catalog-status",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.182Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "cd1c316ee5282136a2e515097a751c02c873149f7c47bd1b8c4a3ce59c5eed27",
+  "artifact": "docs/preuves/inventaire-catalog-status.log",
+  "summary": "CLI compilée : JSON analysé, 91/91 entrées explicites trouvées et raccordées."
+}

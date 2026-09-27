@@ -1,0 +1,9 @@
+Commande : buddy server --host 127.0.0.1 --port <EPHEMERAL> ; GET http://127.0.0.1:<EPHEMERAL>/api/health
+Code de sortie : 0
+Sortie vérifiée :
+HTTP 200
+health.status=degraded
+health.version=2.2.0
+checks.database=ok
+checks.memory=ok
+Arrêt gracieux du serveur : code 0

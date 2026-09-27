@@ -56,6 +56,38 @@ afterEach(() => {
 });
 
 describe('catalog states and evidence', () => {
+  it('checks all curated user-facing domains without promoting static wiring to a live run', () => {
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+    const inventory = JSON.parse(readFileSync(path.join(root, 'docs/catalog/inventory.json'), 'utf8')) as {
+      features: Array<{ id: string; domain: string; benefit: { en: string; fr: string }; verificationLimit?: string }>;
+    };
+    expect(inventory.features).toHaveLength(91);
+    expect(new Set(inventory.features.map((feature) => feature.id)).size).toBe(91);
+    expect(new Set(inventory.features.map((feature) => feature.domain))).toEqual(new Set([
+      'agent-tools', 'providers', 'context-memory', 'fleet', 'server-api', 'cowork',
+      'dgm', 'sensory', 'media', 'security', 'cli',
+    ]));
+    const catalog = buildCatalog({ root, revision: REVISION });
+    for (const definition of inventory.features) {
+      const feature = catalog.features.find((item) => item.id === definition.id);
+      expect(feature, definition.id).toBeDefined();
+      expect(feature?.domain, definition.id).toBe(definition.domain);
+      expect(feature?.benefit, definition.id).toEqual(definition.benefit);
+      expect(definition.benefit.en.trim().length, definition.id).toBeGreaterThan(12);
+      expect(definition.benefit.fr.trim().length, definition.id).toBeGreaterThan(12);
+      expect(feature?.states.coded, definition.id).toBe('vrai');
+      expect(feature?.states.wired, definition.id).toBe('vrai');
+      expect(feature?.states.deployed, definition.id).toBe('inconnu');
+      if (feature?.states.testedInSituation !== 'vrai') {
+        expect(definition.verificationLimit, definition.id).toBeTruthy();
+        expect(feature?.reasons, definition.id).toContain(definition.verificationLimit);
+      }
+    }
+    const failedReplay = catalog.features.find((feature) => feature.id === 'cli-run');
+    expect(failedReplay?.states.testedInSituation).toBe('faux');
+    expect(failedReplay?.latestEvidence?.artifact).toBe('docs/preuves/inventaire-cli-run-echec.log');
+  });
+
   it('finds each declared entrypoint in the real source inventory', () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
     const catalog = buildCatalog({ root, revision: REVISION });

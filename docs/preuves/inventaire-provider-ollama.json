@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "provider-ollama",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.185Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "3ace908cb31659021864ef03b293ccdbf9b8a038fc0c01e4131cfc9e64c4284a",
+  "artifact": "docs/preuves/inventaire-provider-ollama.log",
+  "summary": "Le modèle Ollama local a répondu après un appel d’outil."
+}

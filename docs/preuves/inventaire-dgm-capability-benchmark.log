@@ -1,0 +1,7 @@
+Commande : buddy improve bench --run --provider ollama --models qwen3:4b-instruct --scenarios 1 --json (CODEBUDDY_SELF_BENCH=true)
+Code de sortie : 0
+Sortie vérifiée :
+kind : continuous_capability_benchmark
+fournisseur : ollama ; modèle : qwen3:4b-instruct
+scénarios : 1 ; status : ok ; score : 0
+Historique écrit sous HOME isolé

@@ -1,0 +1,8 @@
+Commande : buddy --model qwen3:4b-instruct --compact --ephemeral --enabled-tools read_file --permission-mode dontAsk --prompt <FIXTURE_PROMPT> (OLLAMA_HOST=localhost:11434, --directory <FIXTURE>)
+Code de sortie : 0
+Sortie vérifiée :
+Modèle local : qwen3:4b-instruct
+Appel outil : read_file({"path":"package.json"})
+Réponse outil : {"name":"catalog-proof","version":"7.3.1"}
+Réponse finale : 7.3.1
+Tours : user → assistant(tool call) → tool → assistant
