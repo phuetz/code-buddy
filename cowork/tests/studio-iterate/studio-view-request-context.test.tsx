@@ -338,6 +338,26 @@ describe.skipIf(!hasGit())('StudioView — élément ciblé, journaux, image, co
     expect(sent).toContain('VITE_API_KEY');
   }, 30_000);
 
+  it("réserve des relectures : « Ouvrir dans le navigateur » et le Stop du chat, de bout en bout", async () => {
+    const openExternal = vi.fn(async () => true);
+    (window as unknown as { electronAPI: Record<string, unknown> }).electronAPI.openExternal = openExternal;
+    const origin = await openPreview();
+    fireEvent.click(screen.getByLabelText('Open in browser'));
+    expect(openExternal).toHaveBeenCalledWith(`${origin}/`);
+    // Un tour qui ne finit pas : le Stop du chat appelle stopSession de la session active.
+    ipc.continueSession.mockImplementationOnce(async () => {
+      act(() =>
+        useAppStore.setState((st: { sessionStates: Record<string, object> }) => ({
+          sessionStates: { ...st.sessionStates, s1: { ...st.sessionStates.s1, activeTurn: { stepId: 't', userMessageId: 'u' } } },
+        }) as never),
+      );
+    });
+    fireEvent.change(screen.getByLabelText('Iteration message'), { target: { value: 'Long travail' } });
+    fireEvent.click(screen.getByText('Send'));
+    fireEvent.click(await screen.findByText('Stop', { selector: 'form button' }, { timeout: 5000 }));
+    expect(ipc.stopSession).toHaveBeenCalledWith('s1');
+  }, 30_000);
+
   it('secrets : jamais dans le prompt (masqués au point de passage unique) ; masquage impossible = rien ne part', async () => {
     render(
       <Suspense fallback={<div>chargement</div>}>
