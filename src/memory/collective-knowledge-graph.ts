@@ -417,6 +417,15 @@ export class CollectiveKnowledgeGraph {
     }
   }
 
+  /** Exact-prefix lookup for durable experiment keys; avoids top-k recall omissions. */
+  getCurrentEntitiesByNamePrefix(type: EntityType, prefix: string): CkgRecallResult[] {
+    this.load();
+    const normalized = normalizeName(prefix);
+    return [...this.current.values()]
+      .filter((entity) => entity.type === type && normalizeName(entity.name).startsWith(normalized))
+      .map((entity) => this.toResult(entity));
+  }
+
   /**
    * Ingest a DISCOVERY and auto-link it to its nearest existing discoveries — Patrice's
    * vision: "à chaque découverte, l'enregistrer et relier les découvertes aux plus proches"
