@@ -90,7 +90,7 @@ describe('helpers', () => {
   it('isLoopbackHttpUrl', () => {
     expect(isLoopbackHttpUrl('http://127.0.0.1:5173/')).toBe(true);
     expect(isLoopbackHttpUrl('http://localhost:3000')).toBe(true);
-    expect(isLoopbackHttpUrl('http://10.0.0.2:5173/')).toBe(false);
+    expect(isLoopbackHttpUrl('http://198.51.100.2:5173/')).toBe(false);
     expect(isLoopbackHttpUrl('file:///etc/passwd')).toBe(false);
     expect(isLoopbackHttpUrl('not a url')).toBe(false);
   });
