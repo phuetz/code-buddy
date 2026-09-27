@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { removeTmpDirStrict } from '../helpers/tmp.js';
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
@@ -22,20 +22,12 @@ vi.mock('../../src/utils/logger.js', () => ({
   },
 }));
 
-function generateIcons(): void {
-  execFileSync(process.execPath, ['scripts/generate-mobile-pwa-icons.mjs'], {
-    cwd: repoRoot,
-    stdio: 'pipe',
-  });
-}
-
 describe('Mobile PWA Router', () => {
   let app: express.Express;
   let server: http.Server;
   let baseUrl: string;
 
   beforeAll(async () => {
-    generateIcons();
     app = express();
     app.use('/__codebuddy__/mobile', mobilePwaRouter);
     server = await new Promise<http.Server>((resolve) => {
@@ -214,7 +206,7 @@ describe('Mobile PWA Router', () => {
 
     afterAll(async () => {
       await new Promise<void>((resolve) => dotServer.close(() => resolve()));
-      rmSync(tmpParent, { recursive: true, force: true });
+      removeTmpDirStrict(tmpParent);
     });
 
     it.each(['index.html', 'manifest.webmanifest', 'sw.js'])(
@@ -243,10 +235,6 @@ describe('Mobile PWA Router', () => {
 });
 
 describe('Mobile PWA Assets Validation', () => {
-  beforeAll(() => {
-    generateIcons();
-  });
-
   it('should have required PWA files', () => {
     const requiredFiles = [
       'index.html',
@@ -256,6 +244,7 @@ describe('Mobile PWA Assets Validation', () => {
       'sw.js',
       'manifest.webmanifest',
       'icon.svg',
+      'icon-72.png',
       'icon-96.png',
       'icon-192.png',
       'icon-512.png',
@@ -312,9 +301,9 @@ describe('Mobile PWA Assets Validation', () => {
 
   it('bumps the service worker cache whenever the shipped assets change', () => {
     // A stale cache serves the OLD app.js to an installed PWA, so the cache
-    // name must move with the assets. v12 = écran Reprendre (sessions CLI/Cowork).
+    // name must move with the assets. v14 = arrêt après refus d'authentification.
     const sw = readFileSync(path.join(assetsDir, 'sw.js'), 'utf-8');
-    expect(sw).toContain('codebuddy-mobile-v12');
+    expect(sw).toContain('codebuddy-mobile-v14');
     expect(sw).toContain('/__codebuddy__/mobile/assets/emoji-data.js');
     expect(sw).toContain('/__codebuddy__/mobile/assets/app.js');
   });

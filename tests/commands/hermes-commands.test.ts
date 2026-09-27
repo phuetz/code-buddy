@@ -13,6 +13,7 @@ import { RunStore } from '../../src/observability/run-store.js';
 import { resetDataRedactionEngine } from '../../src/security/data-redaction.js';
 import { SkillsHub } from '../../src/skills/hub.js';
 import { chromiumExecutableExists } from '../helpers/cifix2-dependencies.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 const nodeDisplayCommand = path.basename(process.execPath);
@@ -1027,6 +1028,7 @@ describe('Hermes CLI commands', () => {
       expect(serialized).not.toContain(runsDir.replace(/\\/g, '\\\\'));
     } finally {
       store?.dispose();
+      await store?.whenStreamsClosed();
       process.chdir(oldCwd);
       if (oldRunsDir === undefined) delete process.env.CODEBUDDY_RUNS_DIR;
       else process.env.CODEBUDDY_RUNS_DIR = oldRunsDir;
@@ -1898,11 +1900,11 @@ describe('Hermes CLI commands', () => {
       });
       expect(raw).not.toContain(secret);
     } finally {
-      await new Promise((resolve) => setTimeout(resolve, 60));
       store.dispose();
+      await store.whenStreamsClosed();
       (RunStore as unknown as { _instance: RunStore | null })._instance = previousInstance;
       resetDataRedactionEngine();
-      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTestDir(tempDir);
     }
   });
 

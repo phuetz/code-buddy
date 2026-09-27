@@ -20,6 +20,7 @@ import { createContextManager } from '../../src/context/context-manager-v2.js';
 import { resetLocalRuntimeContextProbeCache } from '../../src/config/local-runtime-context.js';
 import { resetRuntimeModelContextCache } from '../../src/config/model-tools.js';
 import { createIsolatedHome } from '../helpers/isolated-home.js';
+import { removeTestDirAsync } from '../helpers/tmp.js';
 
 const mockChat = jest.fn();
 const mockChatStream = jest.fn();
@@ -659,7 +660,7 @@ describe('CodeBuddyAgent', () => {
       } finally {
         cwdSpy.mockRestore();
         resetLessonCandidateQueues();
-        await fs.rm(procDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        await removeTestDirAsync(procDir);
         await fs.rm(projectDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
@@ -691,7 +692,7 @@ describe('CodeBuddyAgent', () => {
       } finally {
         cwdSpy.mockRestore();
         resetLessonCandidateQueues();
-        await fs.rm(procDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        await removeTestDirAsync(procDir);
       }
     });
 

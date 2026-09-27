@@ -1,3 +1,5 @@
+import { drainSessionTurnQueueForTests } from '../../src/server/mobile/resume-sessions.js';
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * The companion conversation must survive from one WS message to the next.
  *
@@ -60,7 +62,8 @@ afterEach(async () => {
     await new Promise<void>((resolve) => server!.close(() => resolve()));
   }
   server = undefined;
-  fs.rmSync(historyDir, { recursive: true, force: true });
+  await drainSessionTurnQueueForTests();
+  removeTmpDirStrict(historyDir);
   for (const key of ENV_KEYS) {
     if (saved[key] === undefined) delete process.env[key];
     else process.env[key] = saved[key];

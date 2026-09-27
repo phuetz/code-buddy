@@ -49,10 +49,10 @@ describe('reminder phrases and the address gate', () => {
     expect(bypassesAddressGate(phrase, Date.now())).toBe(false);
   });
 
-  it('an acknowledgement of a reminder that just fired still skips the gate', () => {
+  it('an acknowledgement of a reminder that just fired still needs an address and owner confirmation', () => {
     const now = Date.now();
     openAck({ id: 'r1', label: 'médicaments' }, now);
-    expect(bypassesAddressGate("c'est fait", now)).toBe(true);
+    expect(bypassesAddressGate("c'est fait", now)).toBe(false);
   });
 
   it('a question is never taken as an acknowledgement', () => {
