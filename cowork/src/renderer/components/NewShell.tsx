@@ -19,6 +19,9 @@ import { FileActivityPanel } from './FileActivityPanel';
 import { HomeView } from './HomeView';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStudio } from './studio/use-app-studio';
+import { useStudioRequestContext } from './studio/use-studio-request-context';
+import type { AttachedLogs } from './studio/request-context';
+import type { ContentBlock } from '../types';
 import { isNpmProject, isStaticProject } from './studio/static-project-model';
 import {
   IMPLEMENT_PLAN_PROMPT,
@@ -239,7 +242,7 @@ export function StudioView() {
   // Point the workbench at the active project session's dir so files/preview
   // populate as the app is generated (bolt.new-style unified workspace).
   // platform picks the static-serve python binary (win32 → python).
-  const { viewProps, actions } = useAppStudio({
+  const { viewProps, actions, state } = useAppStudio({
     apis,
     projectRoot: sessionCwd,
     platform: window.electronAPI?.platform ?? 'linux',
@@ -363,15 +366,68 @@ export function StudioView() {
     [sessionCwd, versionsApi],
   );
 
+  // Point de passage UNIQUE de tout ce qui part vers le modèle depuis App
+  // Studio : les valeurs des secrets du projet sont masquées par le processus
+  // principal (qui seul les connaît). Si le masquage échoue, rien ne part.
+  const secretsApi = window.electronAPI?.studio?.secrets;
+  const [sendNote, setSendNote] = useState<string | null>(null);
+  const redactForModel = useCallback(
+    async (root: string, text: string): Promise<string | null> => {
+      if (!secretsApi || !root) return text;
+      const res = await secretsApi.redact(root, text).catch(() => null);
+      return res?.ok ? res.data : null;
+    },
+    [secretsApi],
+  );
+
   const sendTurn = useCallback(
-    async (text: string, opts: { mode: IterationMode; label: string }) => {
+    async (content: string | ContentBlock[], opts: { mode: IterationMode; label: string }) => {
       if (!activeSessionId) return;
+      const blocks: ContentBlock[] = typeof content === 'string' ? [{ type: 'text', text: content }] : content;
+      const safe: ContentBlock[] = [];
+      for (const block of blocks) {
+        if (block.type !== 'text') {
+          safe.push(block);
+          continue;
+        }
+        const text = await redactForModel(sessionCwd, block.text);
+        if (text === null) {
+          setSendNote('Envoi annulé : impossible de masquer les secrets du projet.');
+          return;
+        }
+        safe.push({ type: 'text', text });
+      }
+      setSendNote(null);
       const preId = await takeVersion('Modifications manuelles');
       turnRef.current = { root: sessionCwd, preId, mode: opts.mode, label: opts.label };
-      await continueSession(activeSessionId, text);
+      const only = safe.length === 1 ? safe[0] : undefined;
+      await continueSession(activeSessionId, only && only.type === 'text' ? only.text : safe);
     },
-    [activeSessionId, continueSession, sessionCwd, takeVersion],
+    [activeSessionId, continueSession, sessionCwd, takeVersion, redactForModel],
   );
+
+  // Pièces jointes de la prochaine demande : élément ciblé, journaux, image,
+  // fichiers du contexte, noms des secrets (voir use-studio-request-context).
+  const appModel = useAppStore((state) => state.appConfig?.model ?? '');
+  const [contextRefresh, setContextRefresh] = useState(0);
+  const onFixWithLogsRef = useRef<(text: string, logs: AttachedLogs) => void>(() => undefined);
+  const requestCtx = useStudioRequestContext({
+    root: sessionCwd,
+    previewUrl: viewProps.previewUrl,
+    previewRunning: viewProps.previewStatus === 'running',
+    devPid: state.devPid,
+    model: activeSession?.model || appModel,
+    lockedFiles: () => lockedRef.current,
+    onFixWithLogs: (text, logs) => onFixWithLogsRef.current(text, logs),
+    refreshKey: contextRefresh,
+  });
+  const compose = requestCtx.compose;
+  onFixWithLogsRef.current = (text, logs) => {
+    autoBuildRef.current.attempts = 0;
+    void compose(text, 'build', { logs }).then((content) =>
+      sendTurn(content, { mode: 'build', label: 'Correction des erreurs de la console' }),
+    );
+  };
 
   interface AutoContinuationState {
     sessionId: string | null;
@@ -565,6 +621,7 @@ export function StudioView() {
         }
       }
       setTurnNote(note);
+      setContextRefresh((k) => k + 1);
       // 2. Une version par tour (aucune si rien n'a changé).
       if (turn.mode !== 'discuss') await takeVersion(`Tour : ${turn.label || 'modification'}`, root);
       // 3. Aperçu : correction en attente, sinon re-sonde après chaque tour de construction.
@@ -720,11 +777,18 @@ export function StudioView() {
       onSend: (text: string) => {
         // Nouveau message de l'utilisateur = nouveau budget de corrections automatiques.
         autoBuildRef.current.attempts = 0;
-        void sendTurn(buildIterationPrompt(text, { lockedFiles: lockedRef.current, mode: chatMode }), {
-          mode: chatMode,
-          label: text.slice(0, 80),
-        });
+        void compose(text, chatMode).then((content) =>
+          sendTurn(content, {
+            mode: chatMode,
+            label: text.slice(0, 80),
+          }),
+        );
       },
+      attachments: requestCtx.attachments,
+      onAttachImage: requestCtx.attachImage,
+      notice: sendNote ?? requestCtx.notice,
+      contextPanel: requestCtx.contextPanel(chatMode, 0),
+      estimateTokens: (draft: string) => requestCtx.estimate(draft, chatMode),
       onImplementPlan: () => {
         setChatMode('build');
         autoBuildRef.current.attempts = 0;
@@ -744,6 +808,9 @@ export function StudioView() {
     stopSession,
     chatMode,
     plan,
+    compose,
+    requestCtx,
+    sendNote,
   ]);
 
   return (
@@ -761,6 +828,9 @@ export function StudioView() {
       lockedPaths={lockedPaths}
       onToggleLock={onToggleLock}
       versionsKey={versionsKey}
+      previewSelect={{ selecting: requestCtx.selecting, onToggle: requestCtx.toggleSelect, onFrameLoad: requestCtx.onFrameLoad }}
+      console={{ ...requestCtx.consoleProps, busy: turnActive }}
+      onSecretsChange={requestCtx.setSecretNames}
       onVersionRestored={() => {
         if (sessionCwd) void refreshTreeForTurn(sessionCwd);
         setVersionsKey((k) => k + 1);

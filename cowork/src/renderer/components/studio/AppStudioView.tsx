@@ -1,5 +1,5 @@
-import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon, Globe, FolderOpen } from 'lucide-react';
-import { useState } from 'react';
+import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon, Globe, FolderOpen, KeyRound, SquareTerminal, ScrollText } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { useAppStore } from '../../store';
 import { BuildStatusStrip, type BuildPhase } from './BuildStatusStrip.js';
 import { CodeEditorPane } from './CodeEditorPane.js';
@@ -25,6 +25,9 @@ import type { EditorTab } from './editor-tabs-model.js';
 import { VerifyReportCard } from './VerifyReportCard.js';
 import type { WebTestReport } from './web-test-report-model.js';
 import type { IterationMode } from './iteration-prompt.js';
+import { StudioConsolePane, type StudioConsolePaneProps } from './StudioConsolePane.js';
+import { StudioSecretsPane } from './StudioSecretsPane.js';
+import type { StudioChatAttachment } from '../studio-iterate/StudioChatPanel.js';
 
 /** bolt.new-style iterate chat, driven by the active project session. */
 export interface StudioChatProps {
@@ -43,6 +46,11 @@ export interface StudioChatProps {
   mode?: IterationMode;
   onModeChange?: (mode: IterationMode) => void;
   onImplementPlan?: () => void;
+  attachments?: StudioChatAttachment[];
+  onAttachImage?: (file: File) => void;
+  notice?: string | null;
+  contextPanel?: ReactNode;
+  estimateTokens?: (draft: string) => number;
 }
 
 export interface AppStudioViewProps {
@@ -93,9 +101,15 @@ export interface AppStudioViewProps {
   versionsKey?: number;
   /** Après la restauration d'une version : recharger l'arbre et l'aperçu. */
   onVersionRestored?: () => void;
+  /** Mode sélection d'un élément dans l'aperçu. */
+  previewSelect?: { selecting: boolean; onToggle: () => void; onFrameLoad?: () => void };
+  /** Console du navigateur et journaux du serveur de dev (panneau du bas). */
+  console?: StudioConsolePaneProps;
+  /** Noms des secrets du projet (rappelés au modèle). */
+  onSecretsChange?: (names: string[]) => void;
 }
 
-type MainTab = 'editor' | 'preview' | 'versions';
+type MainTab = 'editor' | 'preview' | 'versions' | 'secrets';
 
 /** Result surfaced by the "Push to GitHub" button (G3). */
 interface GithubPushOutcome {
@@ -145,8 +159,12 @@ export function AppStudioView({
   onToggleLock,
   versionsKey,
   onVersionRestored,
+  previewSelect,
+  console: consolePane,
+  onSecretsChange,
 }: AppStudioViewProps) {
   const [tab, setTab] = useState<MainTab>('editor');
+  const [bottomTab, setBottomTab] = useState<'terminal' | 'console'>('terminal');
   const [seedPrompt, setSeedPrompt] = useState<string | undefined>(undefined);
   const [ghBusy, setGhBusy] = useState(false);
   const [ghResult, setGhResult] = useState<GithubPushOutcome | null>(null);
@@ -239,6 +257,15 @@ export function AppStudioView({
             >
               <HistoryIcon className="h-4 w-4" aria-hidden="true" />
               Versions
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('secrets')}
+              className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs ${tab === 'secrets' ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
+              data-testid="studio-tab-secrets"
+            >
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
+              Secrets
             </button>
             <button
               type="button"
@@ -405,6 +432,8 @@ export function AppStudioView({
                   )}
                 </div>
               </div>
+            ) : tab === 'secrets' ? (
+              <StudioSecretsPane {...(workingDir ? { cwd: workingDir } : {})} {...(onSecretsChange ? { onChange: onSecretsChange } : {})} />
             ) : tab === 'versions' ? (
               <StudioVersionsPane cwd={workingDir} refreshKey={versionsKey ?? 0} onRestored={onVersionRestored ?? onReloadPreview} />
             ) : (
@@ -420,13 +449,56 @@ export function AppStudioView({
                     onOpenExternal={onOpenPreviewExternal}
                     onStart={onStartPreview}
                     {...(onVerifyPreview ? { onVerify: onVerifyPreview } : {})}
+                    {...(previewSelect
+                      ? {
+                          selecting: previewSelect.selecting,
+                          onToggleSelect: previewSelect.onToggle,
+                          ...(previewSelect.onFrameLoad ? { onFrameLoad: previewSelect.onFrameLoad } : {}),
+                        }
+                      : {})}
                   />
                 </div>
               </div>
             )}
           </div>
         </div>
-        <TerminalPane output={terminalOutput} onInput={onTerminalInput} onClear={onClearTerminal} />
+        {consolePane ? (
+          <div className="flex min-h-0 flex-col">
+            <div className="flex shrink-0 gap-1 pb-1 text-xs" role="tablist" aria-label="Panneau du bas">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={bottomTab === 'terminal'}
+                onClick={() => setBottomTab('terminal')}
+                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 ${bottomTab === 'terminal' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <SquareTerminal className="h-3.5 w-3.5" aria-hidden="true" />
+                Terminal
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={bottomTab === 'console'}
+                onClick={() => setBottomTab('console')}
+                data-testid="studio-bottom-console"
+                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 ${bottomTab === 'console' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+                Console
+                {consolePane.browser.some((e) => e.level === 'error') ? <span className="h-1.5 w-1.5 rounded-full bg-red-500" aria-label="erreurs" /> : null}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              {bottomTab === 'console' ? (
+                <StudioConsolePane {...consolePane} />
+              ) : (
+                <TerminalPane output={terminalOutput} onInput={onTerminalInput} onClear={onClearTerminal} />
+              )}
+            </div>
+          </div>
+        ) : (
+          <TerminalPane output={terminalOutput} onInput={onTerminalInput} onClear={onClearTerminal} />
+        )}
       </section>
     </div>
   );
@@ -463,6 +535,11 @@ export function AppStudioView({
                 {...(chat.mode ? { mode: chat.mode } : {})}
                 {...(chat.onModeChange ? { onModeChange: chat.onModeChange } : {})}
                 {...(chat.onImplementPlan ? { onImplementPlan: chat.onImplementPlan } : {})}
+                {...(chat.attachments ? { attachments: chat.attachments } : {})}
+                {...(chat.onAttachImage ? { onAttachImage: chat.onAttachImage } : {})}
+                {...(chat.notice !== undefined ? { notice: chat.notice } : {})}
+                {...(chat.contextPanel ? { contextPanel: chat.contextPanel } : {})}
+                {...(chat.estimateTokens ? { estimateTokens: chat.estimateTokens } : {})}
               />
             </div>
             {chat.verifyReport ? (
