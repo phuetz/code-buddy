@@ -17,6 +17,8 @@ import {
   BLOCKED_PATHS,
 } from './security-patterns.js';
 import * as os from 'node:os';
+import * as path from 'node:path';
+import { classifySecretPath, getHomeCredentialRoots } from '../../security/secret-files.js';
 import { parseShellCommand } from '../../security/bash-parser.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
@@ -209,8 +211,10 @@ export function validateCommand(command: string, shell?: string): { valid: boole
     }
   }
 
-  // Check for access to blocked paths
-  const commandWithExpandedHome = command.replace(/~(?=[\\/])/g, os.homedir());
+  // Check for access to blocked paths. `~`, `$HOME`, `${HOME}` (quoted or
+  // not) are all expanded: a bare `.includes()` on the raw text missed
+  // `cat $HOME/.ssh/id_rsa`.
+  const commandWithExpandedHome = expandHomeReferences(command);
   for (const blockedPath of BLOCKED_PATHS) {
     const isWindowsPath = blockedPath.includes('\\');
     const commandVariants = [command, commandWithExpandedHome];
@@ -226,6 +230,20 @@ export function validateCommand(command: string, shell?: string): { valid: boole
         reason: `Access to protected path blocked: ${blockedPath}`
       };
     }
+  }
+
+  // Credential files (codex-auth.json, ~/.codebuddy/*.env, *auth*.json under
+  // the Code Buddy / sibling CLI homes, private keys…) — same deny list as the
+  // file tools (src/security/secret-files.ts). Best-effort on the command
+  // text: a path assembled at runtime by the interpreter is out of reach of
+  // any static filter; CODEBUDDY_NATIVE_SANDBOX is the containment for that.
+  const secretToken = findCredentialPathInCommand(command);
+  if (secretToken) {
+    auditLogger.logCommandValidation({ command, valid: false, reason: `Credential path: ${secretToken}`, source: 'command-validator' });
+    return {
+      valid: false,
+      reason: `Access to a credential/secret file blocked: ${secretToken}`
+    };
   }
 
   // Phase 2: AST-based validation via bash-parser
@@ -340,4 +358,68 @@ export function getFilteredEnv(): Record<string, string> {
   // apply it after getFilteredEnv() if needed.
 
   return filtered;
+}
+
+
+/**
+ * Replace `~`, `$HOME`, `${HOME}` with the home directory (POSIX shells).
+ * Only the forms a shell would expand to the home directory are handled.
+ */
+export function expandHomeReferences(command: string): string {
+  const home = os.homedir();
+  return command
+    .replace(/\$\{HOME\}/g, home)
+    .replace(/\$HOME(?![A-Za-z0-9_])/g, home)
+    .replace(/(^|[\s'"=:(])~(?=[\\/]|$|[\s'";|&)])/g, (_m, lead: string) => `${lead}${home}`);
+}
+
+/** Universal credential store names, dangerous even as a relative path in bash. */
+const BASH_CREDENTIAL_BASENAMES = new Set([
+  'codex-auth.json',
+  'xai-auth.json',
+  'gemini-auth.json',
+  'nous_auth.json',
+  'mcp-tokens.json',
+  'auth-profiles.json',
+  '.credentials.json',
+  'credentials.enc',
+  '.git-credentials',
+]);
+
+/** Readers that dump a whole directory tree when handed a credential root. */
+const RECURSIVE_READERS = new Set([
+  'grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'tar', 'zip', '7z', 'cp', 'rsync', 'scp',
+  'find', 'cat', 'xargs', 'base64', 'xxd', 'od', 'strings', 'head', 'tail', 'less', 'more',
+  'curl', 'wget', 'nc', 'ncat', 'socat', 'python', 'python3', 'node', 'perl', 'ruby',
+]);
+
+/**
+ * Return the first token of `command` that designates a credential file (or a
+ * glob / recursive read over a credential root), or null.
+ */
+export function findCredentialPathInCommand(command: string): string | null {
+  if (typeof command !== 'string' || !command) return null;
+  const expanded = expandHomeReferences(command);
+  const roots = getHomeCredentialRoots();
+  const tokens = expanded.split(/[\s'"`;|&<>()=,]+/).filter(Boolean);
+  const words = new Set(
+    tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
+  );
+  const usesRecursiveReader = Array.from(words).some((word) => RECURSIVE_READERS.has(word));
+
+  for (const raw of tokens) {
+    const token = raw.replace(/^--?[A-Za-z0-9-]+=/, '');
+    const base = path.basename(token).toLowerCase();
+    if (BASH_CREDENTIAL_BASENAMES.has(base)) return raw;
+    if (!path.isAbsolute(token)) continue;
+    const normalized = path.normalize(token).replace(/[\\/]+$/, '') || path.sep;
+    const underRoot = roots.find(
+      (root) => normalized === root || normalized.startsWith(root + path.sep),
+    );
+    if (!underRoot) continue;
+    if (/[*?[\]{}]/.test(normalized)) return raw;
+    if (normalized === underRoot && usesRecursiveReader) return raw;
+    if (classifySecretPath(normalized).secret) return raw;
+  }
+  return null;
 }

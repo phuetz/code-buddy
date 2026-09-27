@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
 import { getRipgrepPath } from '../utils/ripgrep-path.js';
+import { classifySecretPath, isSecretFileReadAllowedByOperator, SECRET_SEARCH_EXCLUDE_GLOBS } from '../security/secret-files.js';
 import { ToolResult } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import * as path from "path";
@@ -245,6 +246,14 @@ export class SearchTool {
         "!*.log"
       );
 
+      // Credential files never feed a search result (see security/secret-files.ts).
+      // Pushed AFTER the caller's globs so an include pattern cannot re-open them.
+      if (!isSecretFileReadAllowedByOperator()) {
+        for (const glob of SECRET_SEARCH_EXCLUDE_GLOBS) {
+          args.push("--glob", glob);
+        }
+      }
+
       // Add query and search directory
       args.push(query, this.currentDirectory);
 
@@ -318,6 +327,14 @@ export class SearchTool {
         const parsed = JSON.parse(line);
         if (parsed.type === "match") {
           const data = parsed.data;
+          // Second barrier: drop any match inside a credential file (covers
+          // names only a credential root makes secret, and symlinked files).
+          if (
+            !isSecretFileReadAllowedByOperator() &&
+            classifySecretPath(String(data.path.text), this.currentDirectory).secret
+          ) {
+            continue;
+          }
           results.push({
             file: data.path.text,
             line: data.line_number,

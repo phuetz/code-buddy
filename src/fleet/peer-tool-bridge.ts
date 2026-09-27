@@ -25,6 +25,7 @@
 
 import { spawn } from 'child_process';
 import { getRipgrepPath } from '../utils/ripgrep-path.js';
+import { classifySecretPath, SECRET_SEARCH_EXCLUDE_GLOBS } from '../security/secret-files.js';
 import * as fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import * as path from 'path';
@@ -211,12 +212,25 @@ async function readFilePrefix(filePath: string, limit: number): Promise<string> 
   }
 }
 
+/**
+ * A remote peer never reads a credential file, even inside the exposed root
+ * (a root set to $HOME would otherwise serve ~/.codebuddy/codex-auth.json).
+ * No operator opt-in here: the reader is another machine.
+ */
+function assertNotSecretFile(requested: string, resolved: string): void {
+  const verdict = classifySecretPath(resolved);
+  if (verdict.secret) {
+    throw new Error(`SECRET_FILE_REFUSED: ${requested} is a credential file (${verdict.reason ?? 'secret'})`);
+  }
+}
+
 async function execViewFile({ args, emitChunk }: ExecArgs): Promise<{ output: string; truncated: boolean }> {
   const filePath = args.file_path ?? args.path;
   if (typeof filePath !== 'string' || filePath.length === 0) {
     throw new Error('view_file: missing string file_path');
   }
   const resolved = await assertPathInsideWorkspace(filePath);
+  assertNotSecretFile(filePath, resolved);
   const stat = await fs.stat(resolved);
   if (!stat.isFile()) {
     throw new Error(`view_file: ${filePath} is not a regular file`);
@@ -278,6 +292,8 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
     throw new Error('search: path must be a string');
   }
   const resolved = await assertPathInsideWorkspace(dirPath);
+  // An explicit file path bypasses ripgrep's globs: check it directly.
+  assertNotSecretFile(dirPath, resolved);
 
   return await new Promise<{ output: string; truncated: boolean }>((resolve, reject) => {
     const rgArgs = [
@@ -285,6 +301,7 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
       '--line-number',
       '--color', 'never',
       '--max-count', '50',
+      ...SECRET_SEARCH_EXCLUDE_GLOBS.flatMap((glob) => ['--glob', glob]),
       '--', query, resolved,
     ];
     const proc = spawn(getRipgrepPath(), rgArgs, { stdio: ['ignore', 'pipe', 'pipe'] });

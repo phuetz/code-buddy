@@ -294,11 +294,11 @@ function preflightPatchPaths(ops: FileOp[], cwd: string): PatchPathPreflight {
 
   for (const op of ops) {
     const sourceCandidate = path.resolve(workspaceRoot, op.path);
-    const source = isolation.validatePath(sourceCandidate, `apply_patch ${op.type}`);
+    const source = isolation.validatePath(sourceCandidate, `apply_patch ${op.type}`, 'write');
     let destination: ReturnType<WorkspaceIsolation['validatePath']> | undefined;
     if (op.moveTo) {
       const destinationCandidate = path.resolve(workspaceRoot, op.moveTo);
-      destination = isolation.validatePath(destinationCandidate, 'apply_patch move destination');
+      destination = isolation.validatePath(destinationCandidate, 'apply_patch move destination', 'write');
     }
 
     if (!source.valid) {
