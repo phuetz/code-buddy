@@ -62,3 +62,25 @@ export async function encryptSessionContent(messages: SessionMessage[], keyPath?
     encryption.dispose();
   }
 }
+
+/**
+ * Seal a text copied out of a session (an archive, an export) with the same
+ * envelope and key as the session messages. The result never contains the text.
+ */
+export async function sealSessionText(text: string, keyPath?: string): Promise<string> {
+  const [sealed] = await encryptSessionContent(
+    [{ type: 'user', content: text, timestamp: new Date(0).toISOString() }],
+    keyPath,
+  );
+  if (!sealed || !hasEncryptedSessionContent([sealed])) throw new Error('Session text was not sealed');
+  return sealed.content;
+}
+
+/** Open what `sealSessionText` produced. A plain or damaged payload throws. */
+export function openSessionText(payload: string, keyPath?: string): string {
+  const wrapped: SessionMessage[] = [{ type: 'assistant', content: payload, timestamp: new Date(0).toISOString() }];
+  if (!hasEncryptedSessionContent(wrapped)) throw new SessionDecryptionError(new Error('Payload is not sealed'));
+  const opened = decryptSessionContent(wrapped, keyPath);
+  if (opened.length !== 1 || opened[0]?.type !== 'user') throw new SessionDecryptionError(new Error('Invalid sealed text'));
+  return opened[0].content;
+}

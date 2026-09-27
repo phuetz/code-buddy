@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 const CLI_TIMEOUT_MS = 30_000;
 
@@ -112,7 +113,7 @@ describe('CLI help output', () => {
   }, CLI_TIMEOUT_MS + 5_000);
 
   it('keeps help free of startup telemetry when persisted authored tools are reloaded', async () => {
-    const workDir = await mkdtemp(path.join(process.cwd(), '.tmp-help-output-'));
+    const workDir = await mkdtemp(path.join(repoScratchRoot(process.cwd()), '.tmp-help-output-'));
     const storeDir = path.join(workDir, '.codebuddy', 'self-improvement');
     await mkdir(storeDir, { recursive: true });
     await writeFile(path.join(storeDir, 'authored-tools.json'), JSON.stringify({

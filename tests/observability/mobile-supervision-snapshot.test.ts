@@ -9,6 +9,7 @@ import {
   renderMobileSupervisionSnapshot,
 } from '../../src/observability/mobile-supervision-snapshot.js';
 import { RunStore } from '../../src/observability/run-store.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 let tempDir: string;
 let store: RunStore;
@@ -20,9 +21,9 @@ describe('mobile supervision snapshot', () => {
   });
 
   afterEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 60));
     store.dispose();
-    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await store.whenStreamsClosed();
+    removeTestDir(tempDir);
   });
 
   it('builds a review-only redacted snapshot from matching run evidence', async () => {

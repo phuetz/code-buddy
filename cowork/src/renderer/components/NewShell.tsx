@@ -19,11 +19,23 @@ import { FileActivityPanel } from './FileActivityPanel';
 import { HomeView } from './HomeView';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStudio } from './studio/use-app-studio';
-import { isNpmProject } from './studio/static-project-model';
+import { useStudioRequestContext } from './studio/use-studio-request-context';
+import type { AttachedLogs } from './studio/request-context';
+import type { ContentBlock } from '../types';
+import { isNpmProject, isStaticProject } from './studio/static-project-model';
+import {
+  IMPLEMENT_PLAN_PROMPT,
+  buildIterationPrompt,
+  lockedPathsTouched,
+  revertNote,
+  toggleLock,
+  type IterationMode,
+} from './studio/iteration-prompt';
 import {
   shouldAutoBuild,
   canRetry,
   buildFixPrompt,
+  MAX_FIX_ATTEMPTS,
   autoFixNote,
 } from './studio/auto-build-model';
 import { sessionToStudioMessages } from './studio/studio-chat-adapter';
@@ -45,6 +57,13 @@ import { latestWebTestReport } from './studio/web-test-report-model';
 import { createStudioApis } from './studio/studio-api-bridge';
 import type { StudioScaffoldRequest } from './studio/StudioComposer';
 import { buildAiGenerationPrompt } from './studio/studio-ai-generation';
+import { getStarterFiles, shouldSeedStarter, starterProbePaths } from './studio/starter-templates';
+import {
+  buildPreviewFixPrompt,
+  collectPreviewHealth,
+  type PreviewHealthReport,
+  type PreviewSignals,
+} from './studio/preview-health-model';
 import { useIPC } from '../hooks/useIPC';
 import { getInitialSessionTitle } from '../../shared/session-title';
 import { ConversationHistoryDrawer } from './ConversationHistoryDrawer';
@@ -213,7 +232,7 @@ function themeGlyph(theme: string): string {
  * window.electronAPI.studio; with no project selected the view renders its own
  * calm empty state ("Décris une app pour commencer").
  */
-function StudioView() {
+export function StudioView() {
   const apis = useMemo(() => createStudioApis(), []);
   const activeSessionId = useAppStore((st) => st.activeSessionId);
   const sessions = useAppStore((st) => st.sessions);
@@ -223,12 +242,12 @@ function StudioView() {
   // Point the workbench at the active project session's dir so files/preview
   // populate as the app is generated (bolt.new-style unified workspace).
   // platform picks the static-serve python binary (win32 → python).
-  const { viewProps, actions } = useAppStudio({
+  const { viewProps, actions, state } = useAppStudio({
     apis,
     projectRoot: sessionCwd,
     platform: window.electronAPI?.platform ?? 'linux',
   });
-  const { startSession, continueSession, getSessionMessages, getSessionTraceSteps } = useIPC();
+  const { startSession, continueSession, stopSession, getSessionMessages, getSessionTraceSteps } = useIPC();
   const setActiveSession = useAppStore((st) => st.setActiveSession);
   const setMessages = useAppStore((st) => st.setMessages);
   const setTraceSteps = useAppStore((st) => st.setTraceSteps);
@@ -284,6 +303,138 @@ function StudioView() {
     changedPaths: changes.map((change) => change.path),
   });
 
+  // ── Tours, versions locales, verrous, mode discussion ─────────────────────
+  // Chaque tour envoyé par App Studio (génération, message, correction,
+  // continuation) passe par sendTurn : instantané de l'état avant le tour
+  // (sert de référence pour annuler ce qui est interdit), puis envoi. En fin
+  // de tour : annulation des fichiers verrouillés touchés (ou de TOUT en mode
+  // discussion), nouvelle version « Tour : … », puis sonde de l'aperçu.
+  const versionsApi = window.electronAPI?.studio?.versions;
+  const locksApi = window.electronAPI?.studio?.locks;
+  const [chatMode, setChatMode] = useState<IterationMode>('build');
+  const [lockedPaths, setLockedPaths] = useState<string[]>([]);
+  const lockedRef = useRef<string[]>([]);
+  lockedRef.current = lockedPaths;
+  // Jeton de chargement : un verrou posé par l'utilisateur pendant que la
+  // lecture initiale est en vol ne doit pas être écrasé par son résultat.
+  const locksLoadRef = useRef(0);
+  const [versionsKey, setVersionsKey] = useState(0);
+  const [turnNote, setTurnNote] = useState<string | null>(null);
+  const turnRef = useRef<{ root: string; preId: string | null; mode: IterationMode; label: string }>({
+    root: '',
+    preId: null,
+    mode: 'build',
+    label: '',
+  });
+
+  useEffect(() => {
+    setLockedPaths([]);
+    setChatMode('build');
+    setTurnNote(null);
+    // La génération prépare son tour AVANT que la session (et donc son cwd)
+    // n'existe : ne pas l'effacer quand le projet devient actif.
+    if (turnRef.current.root !== sessionCwd) turnRef.current = { root: sessionCwd, preId: null, mode: 'build', label: '' };
+    if (!sessionCwd || !locksApi) return;
+    const token = ++locksLoadRef.current;
+    void locksApi
+      .get(sessionCwd)
+      .then((res) => {
+        if (res.ok && locksLoadRef.current === token) setLockedPaths(res.data);
+      })
+      .catch(() => undefined);
+  }, [sessionCwd, locksApi]);
+
+  const onToggleLock = useCallback(
+    (path: string) => {
+      if (!sessionCwd || !locksApi) return;
+      locksLoadRef.current += 1;
+      const next = toggleLock(lockedRef.current, path);
+      setLockedPaths(next);
+      void locksApi.set(sessionCwd, next).catch(() => undefined);
+    },
+    [sessionCwd, locksApi],
+  );
+
+  const takeVersion = useCallback(
+    async (label: string, root = sessionCwd): Promise<string | null> => {
+      if (!root || !versionsApi) return null;
+      const res = await versionsApi.snapshot(root, label).catch(() => null);
+      if (!res?.ok) return null;
+      if (res.data.changed) setVersionsKey((k) => k + 1);
+      return res.data.id;
+    },
+    [sessionCwd, versionsApi],
+  );
+
+  // Point de passage UNIQUE de tout ce qui part vers le modèle depuis App
+  // Studio : les valeurs des secrets du projet sont masquées par le processus
+  // principal (qui seul les connaît). Si le masquage échoue, rien ne part.
+  const secretsApi = window.electronAPI?.studio?.secrets;
+  const [sendNote, setSendNote] = useState<string | null>(null);
+  const redactForModel = useCallback(
+    async (root: string, text: string): Promise<string | null> => {
+      if (!secretsApi || !root) return text;
+      const res = await secretsApi.redact(root, text).catch(() => null);
+      return res?.ok ? res.data : null;
+    },
+    [secretsApi],
+  );
+
+  const sendTurn = useCallback(
+    async (content: string | ContentBlock[], opts: { mode: IterationMode; label: string }): Promise<boolean> => {
+      if (!activeSessionId) return false;
+      const blocks: ContentBlock[] = typeof content === 'string' ? [{ type: 'text', text: content }] : content;
+      const safe: ContentBlock[] = [];
+      for (const block of blocks) {
+        if (block.type !== 'text') {
+          safe.push(block);
+          continue;
+        }
+        const text = await redactForModel(sessionCwd, block.text);
+        if (text === null) {
+          setSendNote('Envoi annulé : impossible de masquer les secrets du projet.');
+          return false;
+        }
+        safe.push({ type: 'text', text });
+      }
+      setSendNote(null);
+      // Le libellé (début de la demande) devient le nom de la version : masqué
+      // lui aussi ; s'il ne peut pas l'être, libellé neutre.
+      const label = (await redactForModel(sessionCwd, opts.label)) ?? 'modification';
+      const preId = await takeVersion('Modifications manuelles');
+      turnRef.current = { root: sessionCwd, preId, mode: opts.mode, label };
+      const only = safe.length === 1 ? safe[0] : undefined;
+      await continueSession(activeSessionId, only && only.type === 'text' ? only.text : safe);
+      return true;
+    },
+    [activeSessionId, continueSession, sessionCwd, takeVersion, redactForModel],
+  );
+
+  // Pièces jointes de la prochaine demande : élément ciblé, journaux, image,
+  // fichiers du contexte, noms des secrets (voir use-studio-request-context).
+  const appModel = useAppStore((state) => state.appConfig?.model ?? '');
+  const [contextRefresh, setContextRefresh] = useState(0);
+  const onFixWithLogsRef = useRef<(text: string, logs: AttachedLogs) => void>(() => undefined);
+  const requestCtx = useStudioRequestContext({
+    root: sessionCwd,
+    previewUrl: viewProps.previewUrl,
+    previewRunning: viewProps.previewStatus === 'running',
+    devPid: state.devPid,
+    model: activeSession?.model || appModel,
+    lockedFiles: () => lockedRef.current,
+    onFixWithLogs: (text, logs) => onFixWithLogsRef.current(text, logs),
+    refreshKey: contextRefresh,
+  });
+  const compose = requestCtx.compose;
+  onFixWithLogsRef.current = (text, logs) => {
+    autoBuildRef.current.attempts = 0;
+    void compose(text, 'build', { logs })
+      .then((content) => sendTurn(content, { mode: 'build', label: 'Correction des erreurs de la console' }))
+      .then((sent) => {
+        if (sent) requestCtx.clearOneShot();
+      });
+  };
+
   interface AutoContinuationState {
     sessionId: string | null;
     count: number;
@@ -329,6 +480,7 @@ function StudioView() {
       current.stopped ||
       !activeSessionId ||
       !llmPlan ||
+      turnRef.current.mode === 'discuss' ||
       !isAppStudioPlanSession(st?.messages ?? [])
     ) {
       return;
@@ -362,12 +514,12 @@ function StudioView() {
     current.count += 1;
     current.inFlight = true;
     current.baseline = snapshot;
-    void continueSession(activeSessionId, APP_STUDIO_AUTO_CONTINUE_PROMPT);
+    void sendTurn(APP_STUDIO_AUTO_CONTINUE_PROMPT, { mode: 'build', label: 'Suite du plan' });
   }, [
     activeSession?.status,
     activeSessionId,
     changes,
-    continueSession,
+    sendTurn,
     llmPlan,
     plan,
     st?.messages,
@@ -381,7 +533,7 @@ function StudioView() {
   // build/start fails, the error is fed back to the SAME session to fix (G2),
   // capped at MAX_FIX_ATTEMPTS so the loop can't run away. Static sites keep
   // auto-serving inside the hook — this only drives npm projects.
-  const startDev = actions.startDev;
+  const ensurePreview = actions.ensurePreview;
   const previewUrl = viewProps.previewUrl;
   const previewStatus = viewProps.previewStatus;
   const tree = viewProps.tree;
@@ -396,6 +548,9 @@ function StudioView() {
     pendingFirstBuild: false,
   });
   const [autoFixAttempt, setAutoFixAttempt] = useState<number | null>(null);
+  // Dernier problème d'aperçu quand le budget automatique est épuisé : affiché
+  // avec un bouton « Corriger » (une tentative à la demande, comme bolt.new).
+  const [previewProblem, setPreviewProblem] = useState<{ summary: string; prompt: string } | null>(null);
 
   // Fresh project → fresh auto-build state.
   useEffect(() => {
@@ -407,43 +562,86 @@ function StudioView() {
       pendingFirstBuild: false,
     };
     setAutoFixAttempt(null);
+    setPreviewProblem(null);
   }, [sessionCwd]);
 
   const runBuild = useCallback(async () => {
     if (!activeSessionId || !sessionCwd) return;
     const st = autoBuildRef.current;
     st.everBuilt = true;
-    const result = await startDev();
-    if (result.ok) {
+    // Premier build : installe et démarre. Tours suivants : l'aperçu tourne
+    // déjà (rechargement à chaud) — on le garde et on le SONDE à nouveau.
+    const result = await ensurePreview();
+    // "The dev server answers" is not "the app renders": probe the preview
+    // (vite build + hidden-window load) and treat a broken preview like a
+    // failed build, so the capped fix loop gets the real error.
+    let health: PreviewHealthReport | null = null;
+    if (result.ok && result.url) {
+      const probe = (await window.electronAPI?.studio?.preview
+        ?.probe({ cwd: sessionCwd, url: result.url })
+        .catch(() => null)) as { ok?: boolean; data?: PreviewSignals } | null | undefined;
+      if (probe?.ok && probe.data) health = collectPreviewHealth(probe.data);
+    }
+    if (result.ok && (!health || health.ok)) {
       st.awaitingFix = false;
       setAutoFixAttempt(null);
+      setPreviewProblem(null);
       return;
     }
+    const fixPrompt =
+      health && !health.ok ? buildPreviewFixPrompt(health) : buildFixPrompt(result.error ?? '', terminalRef.current);
+    const summary = health && !health.ok ? health.summary : (result.error ?? 'échec du démarrage').slice(0, 120);
     if (!canRetry(st.attempts)) {
       // Budget spent — leave the error visible and hand back to the user.
       st.awaitingFix = false;
       setAutoFixAttempt(null);
+      setPreviewProblem({ summary, prompt: fixPrompt });
       return;
     }
+    setPreviewProblem(null);
     st.attempts += 1;
     st.awaitingFix = true;
     setAutoFixAttempt(st.attempts);
-    void continueSession(activeSessionId, buildFixPrompt(result.error ?? '', terminalRef.current));
-  }, [activeSessionId, sessionCwd, startDev, continueSession]);
+    void sendTurn(fixPrompt, { mode: 'build', label: `Correction automatique ${st.attempts}` });
+  }, [activeSessionId, sessionCwd, ensurePreview, sendTurn]);
 
-  // Falling edge of the agent turn = generation (or a fix) just finished.
+  // Falling edge of the agent turn = generation, a message, or a fix just finished.
+  const refreshTreeForTurn = actions.refreshTree;
   useEffect(() => {
     const wasActive = prevTurnActiveRef.current;
     prevTurnActiveRef.current = turnActive;
     if (!(wasActive && !turnActive)) return;
-    const st = autoBuildRef.current;
-    if (st.awaitingFix) {
-      st.awaitingFix = false;
-      void runBuild();
-      return;
-    }
-    if (!st.everBuilt) st.pendingFirstBuild = true;
-  }, [turnActive, runBuild]);
+    const root = sessionCwd;
+    const turn = turnRef.current;
+    void (async () => {
+      // 1. Verrous et mode discussion : remettre en l'état ce que le tour n'avait pas le droit de toucher.
+      let note: string | null = null;
+      if (root && turn.preId && versionsApi && (turn.mode === 'discuss' || lockedRef.current.length > 0)) {
+        const changed = await versionsApi.changedSince(root, turn.preId).catch(() => null);
+        if (changed?.ok) {
+          const targets = turn.mode === 'discuss' ? changed.data : lockedPathsTouched(changed.data, lockedRef.current);
+          if (targets.length > 0) {
+            const reverted = await versionsApi.revertPaths(root, turn.preId, targets).catch(() => null);
+            if (reverted?.ok) note = revertNote(reverted.data, turn.mode);
+          }
+        }
+      }
+      setTurnNote(note);
+      setContextRefresh((k) => k + 1);
+      // 2. Une version par tour (aucune si rien n'a changé).
+      if (turn.mode !== 'discuss') await takeVersion(`Tour : ${turn.label || 'modification'}`, root);
+      // 3. Aperçu : correction en attente, sinon re-sonde après chaque tour de construction.
+      const st = autoBuildRef.current;
+      if (st.awaitingFix) {
+        st.awaitingFix = false;
+        void runBuild();
+      } else if (turn.mode !== 'discuss') {
+        if (st.everBuilt) void runBuild();
+        else st.pendingFirstBuild = true;
+      }
+      if (root) void refreshTreeForTurn(root);
+    })();
+  }, [turnActive, runBuild, sessionCwd, takeVersion, versionsApi, refreshTreeForTurn]);
 
   // First auto-build once the generated files are on disk (the tree refresh is
   // async, so the falling edge only ARMS the build; this fires it when the
@@ -453,6 +651,11 @@ function StudioView() {
     if (!st.pendingFirstBuild || turnActive) return;
     if (previewUrl) {
       st.pendingFirstBuild = false;
+      // Site statique : le hook le sert tout seul, mais personne ne le
+      // sondait (aucune correction automatique pour la pile par défaut).
+      if (!st.everBuilt && previewStatus === 'running' && isStaticProject(tree) && !isNpmProject(tree)) {
+        void runBuild();
+      }
       return;
     }
     if (
@@ -469,7 +672,17 @@ function StudioView() {
     }
   }, [turnActive, tree, previewUrl, previewStatus, runBuild]);
 
-  const buildNote = autoFixNote(autoFixAttempt);
+  const buildNote = [autoFixNote(autoFixAttempt), turnNote, activeSessionId ? null : sendNote].filter(Boolean).join(' · ') || null;
+  const onFixProblem = useCallback(() => {
+    const problem = previewProblem;
+    if (!problem) return;
+    const st = autoBuildRef.current;
+    // Une seule tentative : pas de relance automatique si elle échoue encore.
+    st.attempts = MAX_FIX_ATTEMPTS;
+    st.awaitingFix = true;
+    setPreviewProblem(null);
+    void sendTurn(problem.prompt, { mode: 'build', label: 'Correction demandée' });
+  }, [previewProblem, sendTurn]);
 
   // AI generation: start a project-scoped agent session and STAY in App Studio —
   // the bolt.new split shows the chat (left) driving the workbench (right) live.
@@ -484,9 +697,45 @@ function StudioView() {
       const enrichedRequest = materialized?.ok && materialized.assets
         ? { ...request, materializedAssets: materialized.assets }
         : request;
-      const prompt = buildAiGenerationPrompt(enrichedRequest);
+      // bolt.diy-style starter: seed a known-good skeleton (package.json, Vite
+      // config, entry point) into an EMPTY target so the model only writes the
+      // app itself. Never overwrites an existing project.
+      let starterSeeded = false;
+      const studioFiles = window.electronAPI?.studio?.files;
+      if (cwd && studioFiles) {
+        const existing: string[] = [];
+        for (const name of starterProbePaths(request.stack)) {
+          const read = (await studioFiles.read(cwd, name).catch(() => null)) as { ok?: boolean } | null;
+          if (read?.ok) existing.push(name);
+        }
+        if (shouldSeedStarter(request.stack, existing)) {
+          const files = getStarterFiles(request.stack);
+          const writes = await Promise.all(
+            files.map((f) => studioFiles.write(cwd, f.path, f.content).catch(() => null)),
+          );
+          starterSeeded = writes.every((w) => (w as { ok?: boolean } | null)?.ok === true);
+        }
+      }
+      // La demande de génération passe elle aussi par le masquage des secrets
+      // (l'utilisateur peut y coller une clé) ; rien ne part s'il échoue.
+      // Dossier cible relatif (« app-studio-project ») : résolu sous le dossier de travail.
+      const isAbs = (p: string) => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
+      const redactRoot = cwd && isAbs(cwd) ? cwd : cwd && workingDir ? `${workingDir.replace(/[\\/]+$/, '')}/${cwd}` : '';
+      const rawPrompt = buildAiGenerationPrompt(enrichedRequest, { starterSeeded });
+      const rawTitle = getInitialSessionTitle(request.prompt);
+      const prompt = redactRoot ? await redactForModel(redactRoot, rawPrompt) : rawPrompt;
+      const title = redactRoot ? await redactForModel(redactRoot, rawTitle) : rawTitle;
+      if (prompt === null || title === null) {
+        setSendNote('Génération annulée : impossible de masquer les secrets du projet.');
+        return;
+      }
+      setSendNote(null);
+      // Version de départ (squelette ou dossier existant) : on peut toujours y revenir.
+      const preId = cwd ? await takeVersion('État de départ', cwd) : null;
+      turnRef.current = { root: cwd ?? '', preId, mode: 'build', label: 'Génération' };
+      autoBuildRef.current.attempts = 0;
       const session = await startSession(
-        getInitialSessionTitle(request.prompt),
+        title,
         prompt,
         cwd,
         null,
@@ -500,7 +749,7 @@ function StudioView() {
       );
       if (session?.id) setActiveSession(session.id);
     },
-    [startSession, setActiveSession, workingDir]
+    [startSession, setActiveSession, workingDir, takeVersion, redactForModel]
   );
 
   // "Vérifier" taps Code Buddy's web_test through the agent session (which owns
@@ -509,15 +758,15 @@ function StudioView() {
   const onVerifyPreview = useCallback(() => {
     const url = viewProps.previewUrl;
     if (!activeSessionId || !url) return;
-    void continueSession(
-      activeSessionId,
+    void sendTurn(
       `Vérifie l'application web sur ${url} avec l'outil \`web_test\` : lance web_test avec cette URL, ` +
         `confirme qu'il n'y a aucune erreur console ni erreur de page et que l'interface principale s'affiche, ` +
         `puis résume le rapport (PASSED/FAILED + points clés). Corrige si tu détectes une erreur. ` +
         `Si \`web_test\` n'apparaît pas dans tes outils, appelle d'abord \`tool_search\` avec "web_test" pour le charger — ` +
-        `n'écris PAS ton propre script navigateur (le rapport web_test alimente la carte de vérification de l'interface).`
+        `n'écris PAS ton propre script navigateur (le rapport web_test alimente la carte de vérification de l'interface).`,
+      { mode: 'build', label: 'Vérification web_test' },
     );
-  }, [activeSessionId, viewProps.previewUrl, continueSession]);
+  }, [activeSessionId, viewProps.previewUrl, sendTurn]);
 
   // The bolt.new iterate chat, driven by the active project session (a session
   // with a cwd). Absent → App Studio shows its composer entry screen.
@@ -542,26 +791,74 @@ function StudioView() {
       plan,
       changes,
       verifyReport,
+      mode: chatMode,
+      onModeChange: setChatMode,
       onSend: (text: string) => {
-        void continueSession(activeSessionId, text);
+        // Nouveau message de l'utilisateur = nouveau budget de corrections automatiques.
+        autoBuildRef.current.attempts = 0;
+        void compose(text, chatMode)
+          .then((content) =>
+            sendTurn(content, {
+              mode: chatMode,
+              label: text.slice(0, 80),
+            }),
+          )
+          // Pièces jointes à usage unique vidées SEULEMENT si la demande est partie.
+          .then((sent) => {
+            if (sent) requestCtx.clearOneShot();
+          });
       },
+      attachments: requestCtx.attachments,
+      onAttachImage: requestCtx.attachImage,
+      notice: sendNote ?? requestCtx.notice,
+      contextPanel: requestCtx.contextPanel(chatMode, 0),
+      estimateTokens: (draft: string) => requestCtx.estimate(draft, chatMode),
+      onImplementPlan: () => {
+        setChatMode('build');
+        autoBuildRef.current.attempts = 0;
+        void sendTurn(buildIterationPrompt(IMPLEMENT_PLAN_PROMPT, { lockedFiles: lockedRef.current, mode: 'build' }), {
+          mode: 'build',
+          label: 'Implémentation du plan',
+        });
+      },
+      onStop: () => stopSession(activeSessionId),
     };
   }, [
     activeSessionId,
     changes,
     sessionCwd,
     sessionStates,
-    continueSession,
+    sendTurn,
+    stopSession,
+    chatMode,
     plan,
+    compose,
+    requestCtx,
+    sendNote,
   ]);
 
   return (
     <AppStudioView
       {...viewProps}
       buildNote={buildNote}
+      {...(viewProps.previewUrl
+        ? { onOpenPreviewExternal: () => void window.electronAPI?.openExternal?.(viewProps.previewUrl ?? '') }
+        : {})}
+      buildProblem={previewProblem?.summary ?? null}
+      {...(previewProblem ? { onFixProblem } : {})}
       onGenerateWithAI={onGenerateWithAI}
       onVerifyPreview={onVerifyPreview}
       onNewApp={() => setActiveSession(null)}
+      lockedPaths={lockedPaths}
+      onToggleLock={onToggleLock}
+      versionsKey={versionsKey}
+      previewSelect={{ selecting: requestCtx.selecting, onToggle: requestCtx.toggleSelect, onFrameLoad: requestCtx.onFrameLoad }}
+      console={{ ...requestCtx.consoleProps, busy: turnActive }}
+      onSecretsChange={requestCtx.setSecretNames}
+      onVersionRestored={() => {
+        if (sessionCwd) void refreshTreeForTurn(sessionCwd);
+        setVersionsKey((k) => k + 1);
+      }}
       {...(chat ? { chat } : {})}
     />
   );

@@ -10,11 +10,18 @@
  */
 
 import { spawn } from 'child_process';
+import { buildStudioChildEnv } from './child-env.js';
 
 export interface CommandRunInput {
   cwd: string;
   command: string;
   id: string;
+  /**
+   * Environnement du processus, fourni par le processus principal seulement
+   * (l'IPC ne le prend jamais du renderer). Absent : liste blanche, jamais le
+   * `process.env` complet de Cowork (clés d'API de l'hôte).
+   */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface CommandOutputEvent {
@@ -71,6 +78,7 @@ export class CommandRunner {
         cwd,
         detached: process.platform !== 'win32',
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: input.env ?? buildStudioChildEnv(),
       });
       if (child.pid === undefined) return { ok: false, error: `Failed to spawn command ${id}` };
 
@@ -137,6 +145,7 @@ export class CommandRunner {
           cwd,
           detached: process.platform !== 'win32',
           stdio: ['pipe', 'pipe', 'pipe'],
+          env: input.env ?? buildStudioChildEnv(),
         });
         if (child.pid === undefined) return finish({ ok: false, error: `Failed to spawn command ${id}` });
 

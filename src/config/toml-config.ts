@@ -5,7 +5,7 @@
  * Supports providers, models, tool configs, and user preferences.
  */
 
-import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
@@ -304,6 +304,33 @@ export interface LSPAICompletionConfig {
 export interface LSPConfig {
   /** AI-powered inline completion settings */
   aiCompletion?: LSPAICompletionConfig;
+}
+
+/** Copy a parsed [session_reset] table onto a config object. Invalid shapes are ignored. */
+export function assignSessionReset(
+  config: { session_reset?: SessionResetTomlConfig },
+  partial: { session_reset?: unknown },
+): void {
+  if (!partial.session_reset || typeof partial.session_reset !== 'object' || Array.isArray(partial.session_reset)) {
+    return;
+  }
+  config.session_reset = {
+    ...(config.session_reset ?? {}),
+    ...(partial.session_reset as SessionResetTomlConfig),
+  };
+}
+
+/**
+ * Automatic reset of messaging sessions (Telegram, webchat, and the other
+ * channel adapters). Absent or mode none keeps the current transcript.
+ */
+export interface SessionResetTomlConfig {
+  /** both | idle | daily | none. Default when omitted: none. */
+  mode?: string;
+  /** Inactivity before an idle reset, in minutes. Default 1440 when the mode needs it. */
+  idle_minutes?: number;
+  /** Local hour 0-23 of the daily boundary. Default 4 when the mode needs it. */
+  at_hour?: number;
 }
 
 /**
@@ -662,6 +689,11 @@ export interface CodeBuddyConfig {
   autonomous_fleet?: AutonomousFleetConfig;
   /** Daily reset scheduler settings — daily context boundary */
   daily_reset?: DailyResetConfig;
+  /**
+   * Messaging-channel session reset (both | idle | daily | none).
+   * Absent means none: channel transcripts stay until something else clears them.
+   */
+  session_reset?: SessionResetTomlConfig;
   /** Team session manager settings — TeamSessionManager wake (audit OpenClaw heritage) */
   team_session?: TeamSessionTomlConfig;
   /** Multi-agent system settings — MultiAgentSystem wake (audit OpenClaw heritage) */
@@ -1023,6 +1055,22 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 const UNSAFE_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
+ * Line the messaging-reset loader would skip. A skipped line can hide the
+ * mode that should have kept the transcript, so the reset must not guess.
+ */
+export function messagingResetConfigSyntaxError(content: string): string | null {
+  const lines = content.split('\n');
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = (lines[index] ?? '').trim();
+    if (line.length === 0 || line.startsWith('#')) continue;
+    if (/^\[([^\]]+)\]$/.test(line)) continue;
+    if (/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/.test(line)) continue;
+    return `unparseable line ${index + 1}`;
+  }
+  return null;
+}
+
+/**
  * Noms des profils déclarés. Le parseur historique range [profiles.nom.x]
  * sous la clé plate « nom.x » : le nom du profil est le premier segment.
  */
@@ -1375,6 +1423,23 @@ export function serializeTOML(config: CodeBuddyConfig, preserved?: PreservedUser
     rewriting,
     ['yolo_mode', 'parallel_tools', 'rag_tool_selection', 'self_healing', 'default_prompt'],
   );
+  if (config.session_reset) {
+    // Valeurs sûres : un mode inconnu redevient « none », les nombres sont
+    // tronqués, et une valeur non finie n'est pas écrite.
+    const reset = config.session_reset;
+    const mode = reset.mode;
+    const safeMode = mode === 'both' || mode === 'idle' || mode === 'daily' || mode === 'none' ? mode : 'none';
+    const whole = (value: unknown) => (typeof value === 'number' ? Math.trunc(value) : undefined);
+    emitFlatSection(
+      lines,
+      'session_reset',
+      { mode: safeMode, idle_minutes: whole(reset.idle_minutes), at_hour: whole(reset.at_hour) },
+      undefined,
+      sourceTable(source, 'session_reset'),
+      rewriting,
+      ['mode', 'idle_minutes', 'at_hour'],
+    );
+  }
   if (config.integrations) {
     emitFlatSection(
       lines,
@@ -1540,11 +1605,117 @@ function configFile(): string {
 const PROJECT_CONFIG_FILE = '.codebuddy/config.toml';
 
 /**
+ * User config, then project config, resolved against the current directory:
+ * the files `load` would read if it ran now.
+ */
+export function messagingResetConfigPaths(): readonly [string, string] {
+  return [configFile(), join(process.cwd(), PROJECT_CONFIG_FILE)];
+}
+
+type ConfigFileRead =
+  | { kind: 'absent' }
+  | { kind: 'unreadable'; error: string }
+  | { kind: 'unparseable'; error: string; content: string }
+  | { kind: 'ok'; content: string };
+
+/**
+ * Absent (`ENOENT`) is not a failure. A present file that is not a regular
+ * file, cannot be read, or contains a line `parseTOML` would drop is.
+ * One read serves both the verdict and the parse.
+ */
+function readConfigFile(filePath: string): ConfigFileRead {
+  let isFile = false;
+  try {
+    isFile = statSync(filePath).isFile();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { kind: 'absent' };
+    return { kind: 'unreadable', error: code ?? 'stat failed' };
+  }
+  if (!isFile) return { kind: 'unreadable', error: 'not a file' };
+  let content: string;
+  try {
+    content = readFileSync(filePath, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return { kind: 'unreadable', error: code ?? 'read failed' };
+  }
+  const syntax = messagingResetConfigSyntaxError(content);
+  if (syntax) return { kind: 'unparseable', error: syntax, content };
+  return { kind: 'ok', content };
+}
+
+export type MessagingResetConfigFailure = 'unreadable' | 'unparseable' | 'changed';
+
+export class MessagingResetConfigError extends Error {
+  readonly kind: MessagingResetConfigFailure;
+
+  constructor(kind: MessagingResetConfigFailure) {
+    super(`messaging reset config ${kind === 'changed' ? 'changed since load' : kind}`);
+    this.name = 'MessagingResetConfigError';
+    this.kind = kind;
+  }
+}
+
+/**
+ * The `[session_reset]` the config files describe now, merged the way `load`
+ * merges them. Throws when a present file is unreadable or unparseable.
+ */
+function sessionResetOnDisk(): SessionResetTomlConfig | undefined {
+  const merged: { session_reset?: SessionResetTomlConfig } = {};
+  for (const filePath of messagingResetConfigPaths()) {
+    const read = readConfigFile(filePath);
+    if (read.kind === 'absent') continue;
+    if (read.kind === 'unreadable' || read.kind === 'unparseable') {
+      throw new MessagingResetConfigError(read.kind);
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = parseTOML(read.content);
+    } catch {
+      throw new MessagingResetConfigError('unparseable');
+    }
+    assignSessionReset(merged, parsed);
+  }
+  return merged.session_reset;
+}
+
+function canonicalSessionReset(section: SessionResetTomlConfig | undefined): string {
+  if (section === undefined) return 'absent';
+  const entries = Object.entries(section).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return JSON.stringify(entries);
+}
+
+/**
+ * The `session_reset` section a messaging reset may act on. Throws when the
+ * loaded configuration was built from a file it could not read or parse,
+ * even if that file has been repaired since: the cached policy never saw it.
+ * Also throws when a file is unreadable or unparseable now, and when the
+ * files now describe another policy than the one loaded: the current
+ * directory moved to another project, or a file was edited, created or
+ * removed since the load.
+ */
+export function messagingResetSessionConfig(): SessionResetTomlConfig | undefined {
+  const manager = getConfigManager();
+  const config = manager.getConfig();
+  const failed = manager.getLoadFailures()[0];
+  if (failed) throw new MessagingResetConfigError(failed);
+  const onDisk = sessionResetOnDisk();
+  if (canonicalSessionReset(onDisk) !== canonicalSessionReset(manager.getLoadedFileSessionReset())) {
+    throw new MessagingResetConfigError('changed');
+  }
+  return config.session_reset;
+}
+
+/**
  * Configuration manager singleton
  */
 class ConfigManager {
   private config: CodeBuddyConfig;
   private loaded = false;
+  private loadFailures: Array<'unreadable' | 'unparseable'> = [];
+  /** `session_reset` as the files described it at load, before any profile. */
+  private loadedFileSessionReset: SessionResetTomlConfig | undefined;
   private preservedUser: PreservedUserConfig | null = null;
   /** Profils appliqués depuis le dernier chargement, dans l'ordre (CLI ou Cowork). */
   private appliedProfiles: string[] = [];
@@ -1566,30 +1737,37 @@ class ConfigManager {
     // Un chargement repart des fichiers : aucun profil n'y est réappliqué.
     this.appliedProfiles = [];
 
-    // Load user config
-    const userFile = configFile();
-    if (existsSync(userFile)) {
+    this.loadFailures = [];
+    for (const [label, filePath] of [
+      ['user', configFile()],
+      ['project', PROJECT_CONFIG_FILE],
+    ] as const) {
+      // Project config overrides user config.
+      const read = readConfigFile(filePath);
+      if (read.kind === 'absent') continue;
+      if (read.kind === 'unreadable') {
+        this.loadFailures.push('unreadable');
+        logger.warn(`Warning: Failed to parse ${label} config: ${read.error}`, { source: 'ConfigManager' });
+        continue;
+      }
+      // parseTOML skips the lines it cannot read; other settings keep that
+      // lenient merge, the messaging reset refuses it.
+      if (read.kind === 'unparseable') this.loadFailures.push('unparseable');
       try {
-        const content = readFileSync(userFile, 'utf-8');
-        const userConfig = parseTOML(content) as Partial<CodeBuddyConfig>;
-        this.preservedUser = extractPreservedUserConfig(userConfig as Record<string, unknown>);
-        this.mergeConfig(userConfig);
+        const parsed = parseTOML(read.content) as Partial<CodeBuddyConfig>;
+        if (label === 'user') {
+          this.preservedUser = extractPreservedUserConfig(parsed as Record<string, unknown>);
+        }
+        this.mergeConfig(parsed);
       } catch (error) {
-        logger.warn(`Warning: Failed to parse user config: ${error}`, { source: 'ConfigManager' });
+        this.loadFailures.push('unparseable');
+        logger.warn(`Warning: Failed to parse ${label} config: ${error}`, { source: 'ConfigManager' });
       }
     }
 
-    // Load project config (overrides user config)
-    if (existsSync(PROJECT_CONFIG_FILE)) {
-      try {
-        const content = readFileSync(PROJECT_CONFIG_FILE, 'utf-8');
-        const projectConfig = parseTOML(content) as Partial<CodeBuddyConfig>;
-        this.mergeConfig(projectConfig);
-      } catch (error) {
-        logger.warn(`Warning: Failed to parse project config: ${error}`, { source: 'ConfigManager' });
-      }
-    }
-
+    this.loadedFileSessionReset = this.config.session_reset
+      ? { ...this.config.session_reset }
+      : undefined;
     this.loaded = true;
     return this.config;
   }
@@ -1667,6 +1845,7 @@ class ConfigManager {
     if (partial.profiles) {
       this.config.profiles = { ...this.config.profiles, ...partial.profiles };
     }
+    assignSessionReset(this.config, partial);
   }
 
   /**
@@ -1675,6 +1854,18 @@ class ConfigManager {
   getConfig(): Readonly<CodeBuddyConfig> {
     if (!this.loaded) this.load();
     return this.config;
+  }
+
+  /** Config files the last load found present but could not read or parse. */
+  getLoadFailures(): ReadonlyArray<'unreadable' | 'unparseable'> {
+    if (!this.loaded) this.load();
+    return this.loadFailures;
+  }
+
+  /** `session_reset` as the config files described it at the last load. */
+  getLoadedFileSessionReset(): Readonly<SessionResetTomlConfig> | undefined {
+    if (!this.loaded) this.load();
+    return this.loadedFileSessionReset;
   }
 
   /**

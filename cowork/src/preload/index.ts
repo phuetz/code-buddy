@@ -88,6 +88,8 @@ import type {
   SubTask,
 } from '../main/missions/mission-types';
 import type { Studio2Result } from '../main/studio2/archive-utils';
+import type { StudioVersion, VersionsResult } from '../main/studio/studio-versions-service';
+import type { SiteExportOutcome } from '../main/studio/site-export-service';
 import type { CoworkResourceCatalogView } from '../main/fleet/resource-catalog-view';
 import type {
   DeployRequest,
@@ -1293,6 +1295,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
       root: string
     ): Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
       ipcRenderer.invoke('studio.exportZip', { root }),
+    exportSite: (root: string): Promise<SiteExportOutcome> => ipcRenderer.invoke('studio.exportSite', { root }),
+    preview: {
+      probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) =>
+        ipcRenderer.invoke('studio.preview.probe', request),
+      watch: (request: { url: string; root: string }) => ipcRenderer.invoke('studio.preview.watch', request),
+      inspect: (request: { url: string; enable: boolean }) => ipcRenderer.invoke('studio.preview.inspect', request),
+      locate: (root: string, element: unknown) => ipcRenderer.invoke('studio.preview.locate', root, element),
+      onConsole: (listener: (entry: StudioPreviewConsoleEntry) => void): (() => void) => {
+        const wrapped = (_event: Electron.IpcRendererEvent, entry: StudioPreviewConsoleEntry) => listener(entry);
+        ipcRenderer.on('studio.preview.console', wrapped);
+        return () => {
+          ipcRenderer.removeListener('studio.preview.console', wrapped);
+        };
+      },
+    },
+    context: {
+      candidates: (root: string) => ipcRenderer.invoke('studio.context.candidates', root),
+      read: (root: string, paths: string[]) => ipcRenderer.invoke('studio.context.read', root, paths),
+    },
+    secrets: {
+      list: (root: string) => ipcRenderer.invoke('studio.secrets.list', root),
+      set: (root: string, key: string, value: string) => ipcRenderer.invoke('studio.secrets.set', root, key, value),
+      remove: (root: string, key: string) => ipcRenderer.invoke('studio.secrets.remove', root, key),
+      redact: (root: string, text: string) => ipcRenderer.invoke('studio.secrets.redact', root, text),
+    },
     devServer: {
       start: (request: { cwd: string; command: string; url: string; timeoutMs?: number }) =>
         ipcRenderer.invoke('studio.dev.start', request),
@@ -1359,6 +1386,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     github: {
       push: (request: { root: string; name?: string; private?: boolean }) =>
         ipcRenderer.invoke('studio.github.push', request),
+    },
+    versions: {
+      snapshot: (root: string, label: string) => ipcRenderer.invoke('studio.versions.snapshot', root, label),
+      list: (root: string) => ipcRenderer.invoke('studio.versions.list', root),
+      restore: (root: string, id: string) => ipcRenderer.invoke('studio.versions.restore', root, id),
+      revertPaths: (root: string, id: string, paths: string[]) =>
+        ipcRenderer.invoke('studio.versions.revertPaths', root, id, paths),
+      changedSince: (root: string, id: string) => ipcRenderer.invoke('studio.versions.changedSince', root, id),
+    },
+    locks: {
+      get: (root: string) => ipcRenderer.invoke('studio.locks.get', root),
+      set: (root: string, paths: string[]) => ipcRenderer.invoke('studio.locks.set', root, paths),
     },
   },
 
@@ -5608,6 +5647,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
 });
 
 // Type declaration for the renderer process
+type StudioResult<T> = { ok: true; data: T } | { ok: false; error: string };
+interface StudioPreviewConsoleEntry {
+  level: 'debug' | 'info' | 'warning' | 'error';
+  message: string;
+  source: string;
+  line: number;
+  at: number;
+}
+interface StudioElementLocation {
+  file: string;
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+  method: 'source' | 'composant' | 'texte' | 'classe' | 'id';
+}
+
 declare global {
   interface Window {
     electronAPI: {
@@ -6195,6 +6250,24 @@ declare global {
         exportZip: (
           root: string
         ) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
+        exportSite?: (root: string) => Promise<SiteExportOutcome>;
+        preview?: {
+          probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) => Promise<unknown>;
+          watch?: (request: { url: string; root: string }) => Promise<{ ok: boolean; error?: string }>;
+          inspect?: (request: { url: string; enable: boolean }) => Promise<{ ok: boolean; error?: string }>;
+          locate?: (root: string, element: unknown) => Promise<StudioResult<StudioElementLocation | null>>;
+          onConsole?: (listener: (entry: StudioPreviewConsoleEntry) => void) => () => void;
+        };
+        context?: {
+          candidates: (root: string) => Promise<StudioResult<{ path: string; bytes: number; tokens: number }[]>>;
+          read: (root: string, paths: string[]) => Promise<StudioResult<{ path: string; content: string; tokens: number }[]>>;
+        };
+        secrets?: {
+          list: (root: string) => Promise<StudioResult<{ key: string; length: number }[]>>;
+          set: (root: string, key: string, value: string) => Promise<StudioResult<{ key: string; length: number }[]>>;
+          remove: (root: string, key: string) => Promise<StudioResult<{ key: string; length: number }[]>>;
+          redact: (root: string, text: string) => Promise<StudioResult<string>>;
+        };
         devServer: {
           start: (request: {
             cwd: string;
@@ -6242,6 +6315,17 @@ declare global {
             name?: string;
             private?: boolean;
           }) => Promise<unknown>;
+        };
+        versions?: {
+          snapshot: (root: string, label: string) => Promise<VersionsResult<{ id: string; changed: boolean }>>;
+          list: (root: string) => Promise<VersionsResult<StudioVersion[]>>;
+          restore: (root: string, id: string) => Promise<VersionsResult<{ id: string; backupId: string }>>;
+          revertPaths: (root: string, id: string, paths: string[]) => Promise<VersionsResult<string[]>>;
+          changedSince: (root: string, id: string) => Promise<VersionsResult<string[]>>;
+        };
+        locks?: {
+          get: (root: string) => Promise<VersionsResult<string[]>>;
+          set: (root: string, paths: string[]) => Promise<VersionsResult<string[]>>;
         };
       };
       studio2: {

@@ -1,5 +1,5 @@
-import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon } from 'lucide-react';
-import { useState } from 'react';
+import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon, Globe, FolderOpen, KeyRound, SquareTerminal, ScrollText } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { useAppStore } from '../../store';
 import { BuildStatusStrip, type BuildPhase } from './BuildStatusStrip.js';
 import { CodeEditorPane } from './CodeEditorPane.js';
@@ -24,6 +24,10 @@ import { EditorTabs } from './EditorTabs.js';
 import type { EditorTab } from './editor-tabs-model.js';
 import { VerifyReportCard } from './VerifyReportCard.js';
 import type { WebTestReport } from './web-test-report-model.js';
+import type { IterationMode } from './iteration-prompt.js';
+import { StudioConsolePane, type StudioConsolePaneProps } from './StudioConsolePane.js';
+import { StudioSecretsPane } from './StudioSecretsPane.js';
+import type { StudioChatAttachment } from '../studio-iterate/StudioChatPanel.js';
 
 /** bolt.new-style iterate chat, driven by the active project session. */
 export interface StudioChatProps {
@@ -38,6 +42,15 @@ export interface StudioChatProps {
   verifyReport?: WebTestReport | null;
   onSend: (text: string) => void;
   onStop?: () => void;
+  /** « Construire » ou « Discuter » (planifier sans modifier). */
+  mode?: IterationMode;
+  onModeChange?: (mode: IterationMode) => void;
+  onImplementPlan?: () => void;
+  attachments?: StudioChatAttachment[];
+  onAttachImage?: (file: File) => void;
+  notice?: string | null;
+  contextPanel?: ReactNode;
+  estimateTokens?: (draft: string) => number;
 }
 
 export interface AppStudioViewProps {
@@ -54,6 +67,9 @@ export interface AppStudioViewProps {
   buildError?: string | null;
   /** Extra build-strip status (auto-fix "Fixing… n/3"). */
   buildNote?: string | null;
+  /** Aperçu cassé après épuisement des corrections automatiques. */
+  buildProblem?: string | null;
+  onFixProblem?: () => void;
   templates: TemplateCard[];
   busy?: boolean;
   workingDir?: string;
@@ -78,9 +94,22 @@ export interface AppStudioViewProps {
   onTerminalInput?: (line: string) => void;
   onClearTerminal?: () => void;
   onStopBuild: () => void;
+  /** Fichiers verrouillés (annulés en fin de tour si l'agent les modifie). */
+  lockedPaths?: string[];
+  onToggleLock?: (path: string) => void;
+  /** Incrémenté à chaque nouvelle version locale du projet (recharge l'onglet Versions). */
+  versionsKey?: number;
+  /** Après la restauration d'une version : recharger l'arbre et l'aperçu. */
+  onVersionRestored?: () => void;
+  /** Mode sélection d'un élément dans l'aperçu. */
+  previewSelect?: { selecting: boolean; onToggle: () => void; onFrameLoad?: () => void };
+  /** Console du navigateur et journaux du serveur de dev (panneau du bas). */
+  console?: StudioConsolePaneProps;
+  /** Noms des secrets du projet (rappelés au modèle). */
+  onSecretsChange?: (names: string[]) => void;
 }
 
-type MainTab = 'editor' | 'preview' | 'versions';
+type MainTab = 'editor' | 'preview' | 'versions' | 'secrets';
 
 /** Result surfaced by the "Push to GitHub" button (G3). */
 interface GithubPushOutcome {
@@ -103,6 +132,8 @@ export function AppStudioView({
   buildElapsedMs,
   buildError,
   buildNote,
+  buildProblem,
+  onFixProblem,
   templates,
   busy = false,
   workingDir,
@@ -124,11 +155,46 @@ export function AppStudioView({
   onTerminalInput,
   onClearTerminal,
   onStopBuild,
+  lockedPaths,
+  onToggleLock,
+  versionsKey,
+  onVersionRestored,
+  previewSelect,
+  console: consolePane,
+  onSecretsChange,
 }: AppStudioViewProps) {
   const [tab, setTab] = useState<MainTab>('editor');
+  const [bottomTab, setBottomTab] = useState<'terminal' | 'console'>('terminal');
   const [seedPrompt, setSeedPrompt] = useState<string | undefined>(undefined);
   const [ghBusy, setGhBusy] = useState(false);
   const [ghResult, setGhResult] = useState<GithubPushOutcome | null>(null);
+  const [siteBusy, setSiteBusy] = useState(false);
+  const [siteResult, setSiteResult] = useState<{ ok: boolean; text: string; savedTo?: string; log?: string[] } | null>(null);
+
+  // « Site » : exporte le site CONSTRUIT (npm run build → dist) ou les fichiers
+  // du site statique dans un dossier choisi — prêt pour n'importe quel hébergeur.
+  const onExportSite = async () => {
+    if (!workingDir || siteBusy) return;
+    setSiteBusy(true);
+    setSiteResult(null);
+    try {
+      const res = await window.electronAPI?.studio?.exportSite?.(workingDir);
+      if (!res) setSiteResult({ ok: false, text: 'Export du site indisponible.' });
+      else if (res.ok) {
+        setSiteResult({
+          ok: true,
+          text: `Site ${res.data.kind === 'build' ? 'construit' : 'statique'} exporté (${res.data.files} fichiers) :`,
+          savedTo: res.data.savedTo,
+        });
+      } else if (!res.canceled) {
+        setSiteResult({ ok: false, text: res.error, ...(res.buildLog ? { log: res.buildLog } : {}) });
+      }
+    } catch (error) {
+      setSiteResult({ ok: false, text: String(error) });
+    } finally {
+      setSiteBusy(false);
+    }
+  };
   const hasProject = tree.length > 0 || Boolean(activeFile) || Boolean(previewUrl);
 
   // G3 — one-click push of the generated project to a new GitHub repo. Reuses
@@ -161,6 +227,8 @@ export function AppStudioView({
         onCreate={onCreateEntry}
         onRename={onRenameEntry}
         onDelete={onDeleteEntry}
+        {...(lockedPaths ? { lockedPaths } : {})}
+        {...(onToggleLock ? { onToggleLock } : {})}
       />
       <section className="grid min-h-0 grid-rows-[minmax(0,1fr)_220px] gap-2">
         <div className="flex min-h-0 flex-col border border-border bg-surface">
@@ -192,6 +260,15 @@ export function AppStudioView({
             </button>
             <button
               type="button"
+              onClick={() => setTab('secrets')}
+              className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs ${tab === 'secrets' ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
+              data-testid="studio-tab-secrets"
+            >
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
+              Secrets
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setTab('preview');
                 onStartPreview();
@@ -213,6 +290,17 @@ export function AppStudioView({
             >
               <Download className="h-4 w-4" aria-hidden="true" />
               Export
+            </button>
+            <button
+              type="button"
+              onClick={() => void onExportSite()}
+              disabled={siteBusy || !workingDir}
+              title="Construire le site et l'exporter dans un dossier (prêt pour un hébergement statique)"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="studio-export-site"
+            >
+              <Globe className="h-4 w-4" aria-hidden="true" />
+              {siteBusy ? 'Construction…' : 'Site'}
             </button>
             <button
               type="button"
@@ -240,6 +328,41 @@ export function AppStudioView({
               {ghBusy ? 'Pushing…' : 'GitHub'}
             </button>
           </div>
+          {siteResult ? (
+            <div
+              className="flex items-start gap-2 border-b border-border bg-muted px-3 py-2 text-xs"
+              data-testid="studio-site-result"
+            >
+              <Globe className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0 flex-1 text-foreground">
+                <div className={siteResult.ok ? '' : 'text-destructive'}>{siteResult.text}</div>
+                {siteResult.savedTo ? (
+                  <button
+                    type="button"
+                    onClick={() => void window.electronAPI?.showItemInFolder?.(siteResult.savedTo ?? '')}
+                    className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] text-primary underline"
+                    data-testid="studio-site-open"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                    {siteResult.savedTo}
+                  </button>
+                ) : null}
+                {siteResult.log && siteResult.log.length > 0 ? (
+                  <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-background p-2 font-mono text-[11px] text-muted-foreground">
+                    {siteResult.log.join('\n')}
+                  </pre>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSiteResult(null)}
+                title="Fermer"
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
           {ghResult ? (
             <div
               className="flex items-start gap-2 border-b border-border bg-muted px-3 py-2 text-xs"
@@ -309,8 +432,10 @@ export function AppStudioView({
                   )}
                 </div>
               </div>
+            ) : tab === 'secrets' ? (
+              <StudioSecretsPane {...(workingDir ? { cwd: workingDir } : {})} {...(onSecretsChange ? { onChange: onSecretsChange } : {})} />
             ) : tab === 'versions' ? (
-              <StudioVersionsPane cwd={workingDir} onRestored={onReloadPreview} />
+              <StudioVersionsPane cwd={workingDir} refreshKey={versionsKey ?? 0} onRestored={onVersionRestored ?? onReloadPreview} />
             ) : (
               <div className="flex h-full min-h-0 flex-col gap-1.5">
                 {tree.length > 0 ? (
@@ -324,13 +449,56 @@ export function AppStudioView({
                     onOpenExternal={onOpenPreviewExternal}
                     onStart={onStartPreview}
                     {...(onVerifyPreview ? { onVerify: onVerifyPreview } : {})}
+                    {...(previewSelect
+                      ? {
+                          selecting: previewSelect.selecting,
+                          onToggleSelect: previewSelect.onToggle,
+                          ...(previewSelect.onFrameLoad ? { onFrameLoad: previewSelect.onFrameLoad } : {}),
+                        }
+                      : {})}
                   />
                 </div>
               </div>
             )}
           </div>
         </div>
-        <TerminalPane output={terminalOutput} onInput={onTerminalInput} onClear={onClearTerminal} />
+        {consolePane ? (
+          <div className="flex min-h-0 flex-col">
+            <div className="flex shrink-0 gap-1 pb-1 text-xs" role="tablist" aria-label="Panneau du bas">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={bottomTab === 'terminal'}
+                onClick={() => setBottomTab('terminal')}
+                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 ${bottomTab === 'terminal' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <SquareTerminal className="h-3.5 w-3.5" aria-hidden="true" />
+                Terminal
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={bottomTab === 'console'}
+                onClick={() => setBottomTab('console')}
+                data-testid="studio-bottom-console"
+                className={`inline-flex items-center gap-1 rounded px-2 py-0.5 ${bottomTab === 'console' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+                Console
+                {consolePane.browser.some((e) => e.level === 'error') ? <span className="h-1.5 w-1.5 rounded-full bg-red-500" aria-label="erreurs" /> : null}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              {bottomTab === 'console' ? (
+                <StudioConsolePane {...consolePane} />
+              ) : (
+                <TerminalPane output={terminalOutput} onInput={onTerminalInput} onClear={onClearTerminal} />
+              )}
+            </div>
+          </div>
+        ) : (
+          <TerminalPane output={terminalOutput} onInput={onTerminalInput} onClear={onClearTerminal} />
+        )}
       </section>
     </div>
   );
@@ -353,7 +521,7 @@ export function AppStudioView({
             </button>
           </div>
         ) : null}
-        <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} onStop={onStopBuild} />
+        <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} problem={buildProblem ?? null} {...(onFixProblem ? { onFix: onFixProblem } : {})} onStop={onStopBuild} />
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col border-r border-border bg-surface">
             {chat.plan ? <DevPlanCard plan={chat.plan} /> : null}
@@ -364,6 +532,14 @@ export function AppStudioView({
                 suggestions={chat.suggestions}
                 onSend={chat.onSend}
                 onStop={chat.onStop}
+                {...(chat.mode ? { mode: chat.mode } : {})}
+                {...(chat.onModeChange ? { onModeChange: chat.onModeChange } : {})}
+                {...(chat.onImplementPlan ? { onImplementPlan: chat.onImplementPlan } : {})}
+                {...(chat.attachments ? { attachments: chat.attachments } : {})}
+                {...(chat.onAttachImage ? { onAttachImage: chat.onAttachImage } : {})}
+                {...(chat.notice !== undefined ? { notice: chat.notice } : {})}
+                {...(chat.contextPanel ? { contextPanel: chat.contextPanel } : {})}
+                {...(chat.estimateTokens ? { estimateTokens: chat.estimateTokens } : {})}
               />
             </div>
             {chat.verifyReport ? (
@@ -392,7 +568,7 @@ export function AppStudioView({
   return (
     <main className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <StudioComposer templates={templates} onScaffold={onScaffold} onGenerateWithAI={onGenerateWithAI} onPrompt={onPrompt} busy={busy} workingDir={workingDir} seedPrompt={seedPrompt} />
-      <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} onStop={onStopBuild} />
+      <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} problem={buildProblem ?? null} {...(onFixProblem ? { onFix: onFixProblem } : {})} onStop={onStopBuild} />
       {!hasProject ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
           <div className="mx-auto max-w-3xl text-center">

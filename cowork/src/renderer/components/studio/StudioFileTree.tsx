@@ -8,6 +8,8 @@ import {
   Folder,
   FolderOpen,
   Image,
+  Lock,
+  LockOpen,
   Pencil,
   Plus,
   Trash2,
@@ -15,6 +17,7 @@ import {
 import type { MouseEvent } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { fileIconName, sortTree, type TreeNode } from './utils/file-tree-model.js';
+import { isPathLocked } from './iteration-prompt.js';
 
 export interface StudioFileTreeProps {
   tree: TreeNode[];
@@ -23,6 +26,9 @@ export interface StudioFileTreeProps {
   onCreate?: (parentPath: string) => void;
   onRename?: (path: string) => void;
   onDelete?: (path: string) => void;
+  /** Fichiers/dossiers verrouillés : l'agent ne peut pas les modifier (annulé en fin de tour). */
+  lockedPaths?: readonly string[];
+  onToggleLock?: (path: string) => void;
 }
 
 interface TreeRowProps extends Omit<StudioFileTreeProps, 'tree'> {
@@ -57,8 +63,12 @@ function TreeRow({
   onRename,
   onDelete,
   onToggle,
+  lockedPaths,
+  onToggleLock,
 }: TreeRowProps) {
   const isDirectory = node.type === 'directory';
+  const locked = lockedPaths ? isPathLocked(node.path, lockedPaths) : false;
+  const directlyLocked = lockedPaths ? lockedPaths.includes(node.path) : false;
   const isExpanded = expanded.has(node.path);
   const isActive = activePath === node.path;
 
@@ -91,8 +101,26 @@ function TreeRow({
           )}
           <FileIcon node={node} expanded={isExpanded} />
           <span className="truncate">{node.name}</span>
+          {locked ? (
+            <Lock className="h-3 w-3 shrink-0 text-amber-500" aria-label="Verrouillé" data-testid={`studio-locked-${node.path}`} />
+          ) : null}
         </button>
         <div className="flex shrink-0 items-center opacity-0 group-hover:opacity-100">
+          {onToggleLock && (!locked || directlyLocked) && (
+            <button
+              type="button"
+              onClick={(event) => {
+                stop(event);
+                onToggleLock(node.path);
+              }}
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
+              title={directlyLocked ? 'Déverrouiller' : "Verrouiller (l'IA ne pourra plus le modifier)"}
+              aria-label={`${directlyLocked ? 'Déverrouiller' : 'Verrouiller'} ${node.name}`}
+              data-testid={`studio-lock-toggle-${node.path}`}
+            >
+              {directlyLocked ? <LockOpen className="h-3.5 w-3.5" aria-hidden="true" /> : <Lock className="h-3.5 w-3.5" aria-hidden="true" />}
+            </button>
+          )}
           {isDirectory && onCreate && (
             <button
               type="button"
@@ -151,6 +179,8 @@ function TreeRow({
               onRename={onRename}
               onDelete={onDelete}
               onToggle={onToggle}
+              lockedPaths={lockedPaths}
+              onToggleLock={onToggleLock}
             />
           ))}
         </ul>
@@ -159,7 +189,7 @@ function TreeRow({
   );
 }
 
-export function StudioFileTree({ tree, activePath, onOpen, onCreate, onRename, onDelete }: StudioFileTreeProps) {
+export function StudioFileTree({ tree, activePath, onOpen, onCreate, onRename, onDelete, lockedPaths, onToggleLock }: StudioFileTreeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const sortedTree = useMemo(() => sortTree(tree), [tree]);
 
@@ -203,6 +233,8 @@ export function StudioFileTree({ tree, activePath, onOpen, onCreate, onRename, o
                 onRename={onRename}
                 onDelete={onDelete}
                 onToggle={handleToggle}
+                lockedPaths={lockedPaths}
+                onToggleLock={onToggleLock}
               />
             ))}
           </ul>

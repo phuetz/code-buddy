@@ -13,6 +13,7 @@ import type { StudioScaffoldRequest } from './StudioComposer.js';
 import { findDesignSystem } from './design-systems-catalog.js';
 import { findStack } from './generation-stacks.js';
 import { APP_STUDIO_PLAN_PROMPT_MARKER } from './dev-plan.js';
+import { describeStarter } from './starter-templates.js';
 
 export const APP_STUDIO_DESIGN_GUIDE = `CONTRAT DE DESIGN — exécute chaque règle :
 - Direction et palette : définis une palette tirée du sujet (ou du système de design explicitement choisi), avec 3 à 5 couleurs sémantiques en variables CSS ; aucun choix générique par défaut.
@@ -26,8 +27,31 @@ export const APP_STUDIO_COMPONENT_CATALOG_GUIDE = `CATALOGUE DE COMPOSANTS (opti
 - Pour un composant React/Tailwind important, tu peux consulter le catalogue public https://21st.dev/community/components avec \`web_search\` (charge-le via \`tool_search("web_search")\` s'il est absent), puis adapter l'idée et le code aux jetons locaux.
 - Ne bloque jamais la génération sur 21st.dev, n'exige ni compte, ni clé, ni CLI, et n'ajoute aucune dépendance uniquement pour consulter le catalogue. Si le réseau, la recherche ou le composant est indisponible, continue immédiatement avec les primitives locales.`;
 
-export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
+/**
+ * Code contract for npm stacks (React/Vue + Vite), after bolt.diy's system
+ * prompt: full files, no placeholders, every import resolvable, deps declared.
+ * These are exactly the failures that break a Vite preview.
+ */
+export const APP_STUDIO_CODE_RULES = `RÈGLES DE CODE (le build échoue sinon) :
+- Écris chaque fichier en ENTIER, à chaque écriture : jamais de « // ... reste du code », jamais de code factice ou de TODO à la place d'une fonctionnalité demandée.
+- Chaque import doit pointer vers un fichier que tu crées réellement (même chemin, même casse) ou vers un paquet déclaré dans package.json. Crée les composants importés AVANT de terminer.
+- Paquet externe nécessaire (ex. graphique) : ajoute-le à "dependencies" de package.json avec une version majeure qui existe, sans retirer les dépendances existantes. N'utilise pas de paquet non déclaré.
+- Vérifie la cohérence des exports : export default pour App, exports nommés importés avec les mêmes noms.
+- Pas de module Node (fs, path, process) dans le code du navigateur ; pas d'appel réseau vers une API qui exige une clé : utilise des données locales.`;
+
+export interface AiGenerationPromptOptions {
+  /** App Studio already wrote the stack's starter skeleton into the target dir. */
+  starterSeeded?: boolean;
+}
+
+export function buildAiGenerationPrompt(req: StudioScaffoldRequest, opts: AiGenerationPromptOptions = {}): string {
   const stack = findStack(req.stack)!;
+  const starter = opts.starterSeeded ? describeStarter(stack.id) : null;
+  const scaffoldStep = starter
+    ? 'Remplacer le src/App provisoire par la structure de l\'app'
+    : stack.id === 'static' || stack.id === 'pwa'
+      ? 'Créer la structure (index.html, style.css, app.js)'
+      : 'Créer la structure du projet (package.json, index.html, point d\'entrée)';
   const lines: string[] = [];
   lines.push(`Génère une application complète et fonctionnelle (${stack.label}) : ${req.prompt}`);
   lines.push('');
@@ -39,7 +63,7 @@ export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
   lines.push('```plan');
   lines.push(
     '{"title":"<nom court de l\'app>","stack":"' + stack.planStack + '","steps":[' +
-      '{"id":"scaffold","title":"Créer la structure (index.html, style.css, app.js)"},' +
+      '{"id":"scaffold","title":"' + scaffoldStep + '"},' +
       '{"id":"<kebab-case>","title":"<étape fonctionnelle>","detail":"<détail court>","match":["<mot-clé de fichier>"]}]}',
   );
   lines.push('```');
@@ -74,6 +98,11 @@ export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
     lines.push('');
   }
 
+  if (starter) {
+    lines.push(starter);
+    lines.push('');
+  }
+
   lines.push('Contraintes STRICTES :');
   lines.push(
     "- N'utilise PAS l'outil bash / shell / terminal. Zéro commande. Crée l'app UNIQUEMENT en écrivant des fichiers.",
@@ -98,10 +127,15 @@ export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
       "En cas d'échec, dégrade proprement (image ou fond CSS à la place).",
   );
   lines.push(`- ${stack.guidance}`);
+  if (stack.id === 'react-vite' || stack.id === 'vue-vite') lines.push(APP_STUDIO_CODE_RULES);
   lines.push(`- Preview : ${stack.previewNote}`);
   lines.push(APP_STUDIO_DESIGN_GUIDE);
   if (stack.id === 'react-vite') lines.push(APP_STUDIO_COMPONENT_CATALOG_GUIDE);
-  lines.push("- Termine par un court résumé de ce que tu as créé et comment ouvrir l'app (ouvrir index.html).");
+  lines.push(
+    stack.runnable && (stack.id === 'react-vite' || stack.id === 'vue-vite')
+      ? "- Termine par un court résumé de ce que tu as créé (App Studio installe les dépendances et lance l'aperçu lui-même)."
+      : "- Termine par un court résumé de ce que tu as créé et comment ouvrir l'app (ouvrir index.html).",
+  );
 
   return lines.join('\n');
 }

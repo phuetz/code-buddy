@@ -67,7 +67,16 @@ import { registerStudioFilesIpc } from './studio/studio-files-ipc';
 import { registerCommandRunnerIpc } from './studio/command-runner-ipc';
 import { CommandRunner } from './studio/command-runner';
 import { registerScaffoldIpc } from './studio/scaffold-ipc';
+import { registerPreviewProbeIpc } from './studio/preview-probe-ipc';
 import { registerGithubIpc } from './studio/github-ipc';
+import { registerStudioVersionsIpc } from './studio/studio-versions-ipc';
+import { guardSiteExport, ProjectSecretsService, redactText, registerProjectSecretsIpc } from './studio/project-secrets-service';
+import { PreviewBridge, registerPreviewBridgeIpc } from './studio/preview-bridge';
+import { StudioContextService, registerStudioContextIpc } from './studio/studio-context-service';
+import { STUDIO_ZIP_IGNORE } from './studio/studio-export-excludes';
+import { buildStudioChildEnv } from './studio/child-env';
+import { assertTrustedRoot, StudioVersionsService } from './studio/studio-versions-service';
+import { SiteExportService } from './studio/site-export-service';
 import { registerOneClickDeployIpc } from './one-click-deploy-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
 import { MediaGenService } from './media/media-gen-service';
@@ -87,6 +96,7 @@ import { FilmService } from './film/film-service';
 import { registerAssistantIpc } from './assistant/assistant-ipc';
 import { AssistantService } from './assistant/assistant-service';
 import { ScaffoldService } from './studio/scaffold-service';
+import { PreviewProbeService } from './studio/preview-probe-service';
 import { registerPairingIpcHandlers } from './ipc/pairing-ipc';
 import { registerUserModelIpcHandlers } from './ipc/user-model-ipc';
 import { registerCompanionIpcHandlers } from './ipc/companion-ipc';
@@ -2799,11 +2809,69 @@ registerProfilesIpcHandlers();
 // output to whatever window is current via the lazy getMainWindow() getter; the
 // dev server delegates to the core `app_server` tool for loopback-gated spawns.
 // See src/main/studio/*.
-registerDevServerIpc(ipcMain, new StudioDevServer());
+// Secrets du projet : rangés HORS du projet (données de Cowork), injectés
+// seulement dans les processus du projet, masqués partout ailleurs.
+const projectSecrets = new ProjectSecretsService({
+  storeDir: join(app.getPath('userData'), 'studio-secrets'),
+  trustedRoots: () => creativeWorkspaceRoots(),
+});
+registerProjectSecretsIpc(ipcMain, projectSecrets);
+const redactProjectSecrets = async (root: string, text: string): Promise<string> =>
+  redactText(text, await projectSecrets.valuesFor(root));
+registerDevServerIpc(
+  ipcMain,
+  new StudioDevServer({
+    projectEnv: (cwd) => projectSecrets.envFor(cwd),
+    redact: redactProjectSecrets,
+    assertRoot: (cwd) => assertTrustedRoot(cwd, () => creativeWorkspaceRoots()),
+  }),
+);
+// Aperçu : console du navigateur (masquée) + sélection d'un élément ;
+// contexte joint aux demandes (fichiers choisis, élément → fichier/lignes).
+registerPreviewBridgeIpc(ipcMain, new PreviewBridge({ redact: redactProjectSecrets }));
+registerStudioContextIpc(ipcMain, new StudioContextService({ trustedRoots: () => creativeWorkspaceRoots() }));
 registerStudioFilesIpc(ipcMain);
-registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null);
+// Commandes du studio (npm install, terminal) : dossier de confiance exigé,
+// environnement en liste blanche + secrets du projet (jamais les clés de Cowork).
+registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null, async (cwd) => {
+  try {
+    const real = await assertTrustedRoot(cwd, () => creativeWorkspaceRoots());
+    return {
+      ok: true as const,
+      env: buildStudioChildEnv(await projectSecrets.envFor(real)),
+      redact: (line: string) => redactProjectSecrets(real, line),
+    };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
+  }
+});
 registerScaffoldIpc(ipcMain, new ScaffoldService());
+// Preview health probe: a vite build pass + a hidden, sandboxed window on the
+// loopback preview, so the auto-fix loop sees errors the dev server hides.
+registerPreviewProbeIpc(
+  ipcMain,
+  new PreviewProbeService({
+    createWindow: () =>
+      new BrowserWindow({
+        show: false,
+        width: 1280,
+        height: 800,
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+          partition: 'studio-preview-probe',
+        },
+      }),
+    resolveProjectEnv: (root) => projectSecrets.envFor(root),
+  }),
+);
 registerGithubIpc(ipcMain);
+// Versions locales par projet (dépôt git séparé sous .codebuddy/) + verrous de fichiers.
+registerStudioVersionsIpc(
+  ipcMain,
+  new StudioVersionsService({ trustedRoots: () => creativeWorkspaceRoots(), redact: redactProjectSecrets }),
+);
 registerOneClickDeployIpc(ipcMain);
 
 // Media generation surface delegates to the core image_generate tool. Local
@@ -3219,6 +3287,11 @@ ipcMain.handle('studio.exportZip', async (_event, input: unknown) => {
     if (!trusted) return { ok: false, error: 'project is outside trusted workspaces' };
     const st = await fs.promises.stat(root);
     if (!st.isDirectory()) return { ok: false, error: 'not a directory' };
+    // Un secret du projet écrit en clair dans un fichier exporté : export refusé.
+    const zipLeaks = await projectSecrets.findZipLeaks(root).catch(() => [] as string[]);
+    if (zipLeaks.length > 0) {
+      return { ok: false, error: `Export annulé : un secret du projet figure en clair dans ${zipLeaks.slice(0, 3).join(', ')}.` };
+    }
     const win = getMainWindow();
     const defaultName = `${basename(root) || 'projet'}.zip`;
     const result = win
@@ -3237,7 +3310,7 @@ ipcMain.handle('studio.exportZip', async (_event, input: unknown) => {
         cwd: root,
         dot: true,
         follow: false,
-        ignore: ['node_modules/**', '.git/**', '.codebuddy/**'],
+        ignore: [...STUDIO_ZIP_IGNORE],
       });
       archive.glob('.codebuddy/media-generation/{images,videos,audio}/**/*.{png,jpg,jpeg,webp,gif,avif,mp4,webm,mov,wav,mp3,ogg,flac}', {
         cwd: root,
@@ -3252,6 +3325,26 @@ ipcMain.handle('studio.exportZip', async (_event, input: unknown) => {
     return { ok: false, error: String(err) };
   }
 });
+
+// « Exporter le site » : le site CONSTRUIT (npm run build → dist) ou les
+// fichiers du site statique, copiés dans un dossier choisi par l'utilisateur.
+const siteExportService = new SiteExportService({
+  trustedRoots: () => creativeWorkspaceRoots(),
+  resolveProjectEnv: (root) => projectSecrets.envFor(root),
+  chooseDirectory: async (defaultPath) => {
+    const win = getMainWindow();
+    const options = {
+      title: 'Exporter le site dans…',
+      defaultPath,
+      properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>,
+    };
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  },
+});
+ipcMain.handle('studio.exportSite', async (_event, input: unknown) =>
+  guardSiteExport(projectSecrets, (input as { root?: unknown } | null)?.root, await siteExportService.exportSite(input)),
+);
 
 // Media library (ChatGPT-library parity): every generated media across all
 // session roots; export = native Save-As dialog + copy.
