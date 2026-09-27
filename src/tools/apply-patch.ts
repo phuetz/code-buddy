@@ -295,6 +295,9 @@ function preflightPatchPaths(ops: FileOp[], cwd: string): PatchPathPreflight {
   for (const op of ops) {
     const sourceCandidate = path.resolve(workspaceRoot, op.path);
     const source = isolation.validatePath(sourceCandidate, `apply_patch ${op.type}`, 'write');
+    const sourceRead = op.type === 'add'
+      ? undefined
+      : isolation.validatePath(sourceCandidate, `apply_patch ${op.type} source`, 'read');
     let destination: ReturnType<WorkspaceIsolation['validatePath']> | undefined;
     if (op.moveTo) {
       const destinationCandidate = path.resolve(workspaceRoot, op.moveTo);
@@ -303,6 +306,9 @@ function preflightPatchPaths(ops: FileOp[], cwd: string): PatchPathPreflight {
 
     if (!source.valid) {
       errors.push(`${op.type} ${op.path}: ${source.error ?? 'path is outside the patch workspace'}`);
+    }
+    if (sourceRead && !sourceRead.valid) {
+      errors.push(`${op.type} ${op.path}: ${sourceRead.error ?? 'source is not readable'}`);
     }
     if (op.moveTo && destination && !destination.valid) {
       errors.push(`move ${op.path} -> ${op.moveTo}: ${destination.error ?? 'destination is outside the patch workspace'}`);

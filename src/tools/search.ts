@@ -18,6 +18,7 @@ export interface SearchResult {
 }
 
 export interface TextSearchOptions {
+  includeHidden?: boolean;
   includePattern?: string;
   excludePattern?: string;
   caseSensitive?: boolean;
@@ -188,6 +189,7 @@ export class SearchTool {
         "--no-heading",
         "--color=never",
       ];
+      if (options.includeHidden) args.push('--hidden');
 
       // Add case sensitivity
       if (!options.caseSensitive) {

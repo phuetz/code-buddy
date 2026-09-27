@@ -70,6 +70,7 @@ beforeAll(() => {
   write(path.join(WORK, 'deploy', 'prod.env'), `API_KEY=${FAKE_TOKEN}\n`);
   write(path.join(WORK, '.env.example'), 'API_KEY=\n');
   write(path.join(WORK, '.env'), `API_KEY=${FAKE_TOKEN}\n`);
+  write(path.join(WORK, '.env.staging'), `API_KEY=${FAKE_TOKEN}\n`);
   write(path.join(WORK, 'notes.md'), `mention ${FAKE_TOKEN} dans un fichier ordinaire\n`);
   fs.symlinkSync(TOKEN_FILE, path.join(WORK, 'innocent.txt'));
   fs.mkdirSync(path.join(WORK, 'cfg'), { recursive: true });
@@ -207,6 +208,16 @@ describe('search (ripgrep) sur un projet qui contient des secrets', () => {
     expect(result.output).not.toContain('prod.env');
     expect(result.output).not.toMatch(/data\.json|innocent\.txt|\.env\b/);
   });
+
+  it('retrouve .env.example sans exposer .env', async () => {
+    const search = new SearchTool();
+    search.setCurrentDirectory(WORK);
+    const result = await search.search('API_KEY', { searchType: 'text', includeHidden: true });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('.env.example');
+    expect(result.output).not.toMatch(/(?:^|\n)[^\n]*\/\.env:/);
+    expect(result.output).not.toContain('.env.staging');
+  });
 });
 
 describe('bash : le validateur voit ~, $HOME et ${HOME}', () => {
@@ -284,6 +295,12 @@ describe('peer.tool.invoke avec une racine exposée = HOME', () => {
   it('search ciblant le fichier du jeton : refus', async () => {
     const res = await invoke('search', { query: 'access_token', path: '.codebuddy/codex-auth.json' });
     expect(res.ok).toBe(false);
+    expect(JSON.stringify(res)).not.toContain(FAKE_TOKEN);
+  });
+
+  it('search sur le dossier ne renvoie aucune ligne de key.pem', async () => {
+    const res = await invoke('search', { query: FAKE_TOKEN, path: '.codebuddy/skill-signing' });
+    expect(res.ok).toBe(true);
     expect(JSON.stringify(res)).not.toContain(FAKE_TOKEN);
   });
 

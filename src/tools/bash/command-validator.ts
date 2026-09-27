@@ -17,6 +17,7 @@ import {
   BLOCKED_PATHS,
 } from './security-patterns.js';
 import * as os from 'node:os';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { classifySecretPath, getHomeCredentialRoots } from '../../security/secret-files.js';
 import { parseShellCommand } from '../../security/bash-parser.js';
@@ -391,6 +392,7 @@ const RECURSIVE_READERS = new Set([
   'grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'tar', 'zip', '7z', 'cp', 'rsync', 'scp',
   'find', 'cat', 'xargs', 'base64', 'xxd', 'od', 'strings', 'head', 'tail', 'less', 'more',
   'curl', 'wget', 'nc', 'ncat', 'socat', 'python', 'python3', 'node', 'perl', 'ruby',
+  'awk', 'sed', 'diff', 'cmp', 'tee', 'openssl',
 ]);
 
 /**
@@ -399,9 +401,14 @@ const RECURSIVE_READERS = new Set([
  */
 export function findCredentialPathInCommand(command: string): string | null {
   if (typeof command !== 'string' || !command) return null;
-  const expanded = expandHomeReferences(command);
+  // Shell joins adjacent quoted fragments and removes escaping before opening
+  // paths. Normalize those static forms before looking for credential names.
+  const expanded = expandHomeReferences(command)
+    .replace(/\$(?:""|'')/g, '')
+    .replace(/\\([^\n])/g, '$1')
+    .replace(/["']/g, '');
   const roots = getHomeCredentialRoots();
-  const tokens = expanded.split(/[\s'"`;|&<>()=,]+/).filter(Boolean);
+  const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
   const words = new Set(
     tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
   );
@@ -409,29 +416,37 @@ export function findCredentialPathInCommand(command: string): string | null {
 
   // `cd <credential root>` then a RELATIVE name: resolve relative tokens
   // against the last `cd` target seen in the command text.
-  let cdTarget: string | null = null;
+  let cdTarget = process.cwd();
   for (let i = 0; i < tokens.length; i += 1) {
     const raw = tokens[i] ?? '';
     const token = raw.replace(/^--?[A-Za-z0-9-]+=/, '');
     const base = path.basename(token).toLowerCase();
     if (BASH_CREDENTIAL_BASENAMES.has(base)) return raw;
     if (i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd')) {
-      cdTarget = path.isAbsolute(token) ? path.normalize(token) : cdTarget ? path.resolve(cdTarget, token) : null;
+      cdTarget = path.isAbsolute(token) ? path.normalize(token) : path.resolve(cdTarget, token);
     }
     let candidate = token;
     if (!path.isAbsolute(token)) {
-      if (!cdTarget || token.startsWith('-')) continue;
+      if (token.startsWith('-')) continue;
       candidate = path.resolve(cdTarget, token);
     }
     const normalized = path.normalize(candidate).replace(/[\\/]+$/, '') || path.sep;
+    // A simple copy of a public template to a new .env is a supported
+    // scaffolding operation. The source remains subject to the read guard.
+    if (tokens[0] === 'cp' && i === tokens.length - 1 &&
+      tokens.length === 3 && !classifySecretPath(tokens[1] ?? '').secret) continue;
+    if (classifySecretPath(normalized).secret) return raw;
+    let canonical = normalized;
+    try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
     const underRoot = roots.find(
-      (root) => normalized === root || normalized.startsWith(root + path.sep),
+      (root) => canonical === root || canonical.startsWith(root + path.sep),
     );
     if (!underRoot) continue;
     if (/[*?[\]{}]/.test(normalized)) return raw;
     const isCdTarget = i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd');
-    if (normalized === underRoot && usesRecursiveReader && !isCdTarget) return raw;
-    if (classifySecretPath(normalized).secret) return raw;
+    let isDirectory = false;
+    try { isDirectory = fs.statSync(normalized).isDirectory(); } catch { /* missing path */ }
+    if (usesRecursiveReader && isDirectory && !isCdTarget) return raw;
   }
   return null;
 }

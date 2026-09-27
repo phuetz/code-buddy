@@ -64,12 +64,16 @@ export class UnifiedVfsRouter implements IVfsProvider {
    * File operations are wrapped with latency measurement for performance tracking.
    */
   async readFile(filePath: string, encoding: string = "utf-8"): Promise<string> {
+    const verdict = checkSecretFileAccess(filePath, 'read');
+    if (verdict.secret) throw new Error(formatSecretRefusal(filePath, verdict));
     return measureLatency('file_read', () =>
       fs.readFile(filePath, encoding as BufferEncoding)
     );
   }
 
   async readFileBuffer(filePath: string): Promise<Buffer> {
+    const verdict = checkSecretFileAccess(filePath, 'read');
+    if (verdict.secret) throw new Error(formatSecretRefusal(filePath, verdict));
     return measureLatency('file_read_buffer', () =>
       fs.readFile(filePath)
     );

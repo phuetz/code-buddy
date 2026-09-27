@@ -54,6 +54,10 @@ const HOME_CREDENTIAL_ROOTS: readonly string[] = [
   '.config',
 ];
 
+/** Historical isolation denials, also required for tools that bypass the VFS. */
+const HOME_PRIVATE_ROOTS: readonly string[] = ['.ssh', '.gnupg', '.aws', '.kube'];
+const HOME_PRIVATE_FILES: readonly string[] = ['.docker/config.json', '.config/gcloud/credentials.db'];
+
 /**
  * Basenames that are secrets wherever they live (workspace included).
  * `.env.example` / `.sample` / `.template` / `.dist` / `.defaults` are
@@ -66,6 +70,7 @@ function isUniversalSecretBasename(base: string): boolean {
     return !/^\.env\.(example|sample|template|dist|defaults?|schema)$/.test(lower);
   }
   if (lower.endsWith('.env')) return true;
+  if (/^(secrets?|credentials?|tokens?|passwords?)\.(csv|tsv|json|db|sqlite|sqlite3)$/.test(lower)) return true;
   if (
     lower === 'codex-auth.json' ||
     lower === 'xai-auth.json' ||
@@ -99,7 +104,7 @@ function isCredentialRootSecretBasename(base: string): boolean {
     return true;
   }
   if (/\.(pem|ppk)$/.test(lower)) return true;
-  if (lower === 'devices.json' || lower === 'hosts.yml' || lower === 'credentials.db') return true;
+  if (lower === 'devices.json' || lower === 'hosts.yml' || lower === 'credentials.db' || /\.(db|sqlite|sqlite3)$/.test(lower)) return true;
   return false;
 }
 
@@ -112,7 +117,7 @@ function homeDir(): string {
 export function getHomeCredentialRoots(): string[] {
   const home = homeDir();
   const roots = new Set<string>();
-  for (const rel of HOME_CREDENTIAL_ROOTS) {
+  for (const rel of [...HOME_CREDENTIAL_ROOTS, ...HOME_PRIVATE_ROOTS]) {
     const lexical = path.join(home, rel);
     roots.add(lexical);
     const canonical = canonicalize(lexical);
@@ -122,7 +127,9 @@ export function getHomeCredentialRoots(): string[] {
 }
 
 function isInside(candidate: string, root: string): boolean {
-  return candidate === root || candidate.startsWith(root + path.sep);
+  const a = process.platform === 'win32' || process.platform === 'darwin' ? candidate.toLowerCase() : candidate;
+  const b = process.platform === 'win32' || process.platform === 'darwin' ? root.toLowerCase() : root;
+  return a === b || a.startsWith(b + path.sep);
 }
 
 /** realpath through the nearest existing ancestor (null when nothing resolves). */
@@ -144,7 +151,18 @@ function canonicalize(p: string): string | null {
 
 function classify(absPath: string, roots: readonly string[]): string | null {
   const base = path.basename(absPath);
+  if (absPath === '/etc/shadow' || absPath === '/etc/gshadow') return 'system password database';
   if (isUniversalSecretBasename(base)) return `secret file name (${base})`;
+  const home = homeDir();
+  for (const rel of HOME_PRIVATE_ROOTS) {
+    const root = path.join(home, rel);
+    if (isInside(absPath, root) || isInside(absPath, canonicalize(root) ?? root)) {
+      return `private home directory (${rel})`;
+    }
+  }
+  for (const rel of HOME_PRIVATE_FILES) {
+    if (absPath === path.join(home, rel)) return `private home file (${rel})`;
+  }
   for (const root of roots) {
     if (isInside(absPath, root) && absPath !== root) {
       // Any path component below the root may name a secret store
@@ -224,7 +242,10 @@ export function formatSecretRefusal(filePath: string, verdict: SecretFileVerdict
  */
 export const SECRET_SEARCH_EXCLUDE_GLOBS: readonly string[] = [
   '!.env',
-  '!.env.*',
+  '!.env.production',
+  '!.env.local',
+  '!.env.development',
+  '!.env.test',
   '!*.env',
   '!codex-auth.json',
   '!xai-auth.json',
@@ -245,4 +266,7 @@ export const SECRET_SEARCH_EXCLUDE_GLOBS: readonly string[] = [
   '!*.key',
   '!*.p12',
   '!*.pfx',
+  '!*.pem',
+  '!devices.json',
+  '!hosts.yml',
 ];

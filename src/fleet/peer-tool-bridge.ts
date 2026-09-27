@@ -295,6 +295,11 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
   // An explicit file path bypasses ripgrep's globs: check it directly.
   assertNotSecretFile(dirPath, resolved);
 
+  const safeLine = (line: string): boolean => {
+    const match = line.match(/^(.+):(\d+):/);
+    return !!match && !classifySecretPath(match[1] ?? '').secret;
+  };
+
   return await new Promise<{ output: string; truncated: boolean }>((resolve, reject) => {
     const rgArgs = [
       '--no-heading',
@@ -325,6 +330,7 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
       stdoutBuffer = stdoutBuffer.slice(lastNl + 1);
       const lines = ready.split('\n').filter(Boolean);
       for (const line of lines) {
+        if (!safeLine(line)) continue;
         if (lineCount >= SEARCH_MAX_RESULTS) {
           truncated = true;
           continue;
@@ -346,9 +352,11 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
     proc.on('close', (code) => {
       clearTimeout(timer);
       if (stdoutBuffer.length > 0 && lineCount < SEARCH_MAX_RESULTS) {
-        const cleanBuf = stripAnsi(stdoutBuffer);
-        stdout += cleanBuf;
-        emitChunk?.(cleanBuf);
+        if (safeLine(stdoutBuffer)) {
+          const cleanBuf = stripAnsi(stdoutBuffer);
+          stdout += cleanBuf;
+          emitChunk?.(cleanBuf);
+        }
       }
       // ripgrep exit codes: 0 = matches found, 1 = no matches (still ok),
       // 2 = error. SIGTERM after truncation produces null code on some

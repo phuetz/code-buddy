@@ -2,6 +2,22 @@ import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { spawn } from 'child_process';
 import { ToolResult, getErrorMessage } from '../types/index.js';
+import * as fs from 'node:fs';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
+
+function findSecretSource(source: string, seen = new Set<string>()): string | null {
+  const verdict = checkSecretFileAccess(source, 'read');
+  if (verdict.secret) return formatSecretRefusal(source, verdict);
+  const canonical = fs.realpathSync(source);
+  if (seen.has(canonical)) return null;
+  seen.add(canonical);
+  if (!fs.statSync(source).isDirectory()) return null;
+  for (const entry of fs.readdirSync(source)) {
+    const refused = findSecretSource(path.join(source, entry), seen);
+    if (refused) return refused;
+  }
+  return null;
+}
 
 export interface ArchiveInfo {
   path: string;
@@ -384,6 +400,8 @@ export class ArchiveTool {
             error: `Source not found: ${p}`
           };
         }
+        const refused = findSecretSource(p);
+        if (refused) return { success: false, error: refused };
       }
 
       const format = options.format || 'zip';
