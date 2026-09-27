@@ -27,6 +27,7 @@ export interface ElementLocation {
   endLine: number;
   excerpt: string;
   method: 'source' | 'composant' | 'texte' | 'classe' | 'id';
+  dataOrigin?: { file: string; line: number };
 }
 
 export interface TargetElement {
@@ -105,6 +106,13 @@ export function targetBlock(target: TargetElement): string {
       `Modifie ce passage de ${location.file} (str_replace sur ces lignes) ; ne touche pas au reste de l'app sauf si la demande l'exige. ` +
         'Inutile de parcourir les autres fichiers.',
     );
+    if (location.dataOrigin && element.text) {
+      lines.push(
+        `Attention : ces lignes sont un composant RÉUTILISÉ ; le texte « ${element.text.slice(0, 60)} » de l'élément cliqué vient des données ` +
+          `(${location.dataOrigin.file}, ligne ${location.dataOrigin.line}). Si la demande ne vise que cet élément, ne change pas toutes les ` +
+          'instances : ajoute une prop ou une condition portée par cette donnée.',
+      );
+    }
   } else {
     lines.push("- source : non localisée — retrouve l'élément par son texte et ses classes, puis modifie-le lui seul.");
   }

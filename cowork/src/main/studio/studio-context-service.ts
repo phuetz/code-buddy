@@ -49,6 +49,11 @@ export interface ElementLocation {
   endLine: number;
   excerpt: string;
   method: 'source' | 'composant' | 'texte' | 'classe' | 'id';
+  /**
+   * Le texte affiché n'est pas écrit dans ces lignes (instance d'un composant
+   * réutilisé, texte venu des données) : où il est écrit.
+   */
+  dataOrigin?: { file: string; line: number };
 }
 
 const SKIP_DIRS = new Set(['node_modules', '.git', '.codebuddy', 'dist', 'build', '.next', '.vite', 'coverage', '.turbo']);
@@ -160,6 +165,25 @@ export class StudioContextService {
   }
 
   async locate(root: unknown, descriptor: unknown): Promise<ContextResult<ElementLocation | null>> {
+    const res = await this.locateRaw(root, descriptor);
+    if (!res.ok || !res.data) return res;
+    const text = ((descriptor as ElementDescriptor | null)?.text ?? '').replace(/\s+/g, ' ').trim();
+    if (text.length < 2 || res.data.excerpt.includes(text)) return res;
+    try {
+      const real = await this.root(root);
+      const files = (await walk(real)).filter((c) => SOURCE_EXT.has(path.extname(c.path).toLowerCase()));
+      for (const f of files) {
+        const content = await this.readSafe(real, f.path);
+        const idx = content?.split(/\r?\n/).findIndex((line) => line.includes(text)) ?? -1;
+        if (idx >= 0) return { ok: true, data: { ...res.data, dataOrigin: { file: f.path, line: idx + 1 } } };
+      }
+    } catch {
+      /* origine des données : indication facultative */
+    }
+    return res;
+  }
+
+  private async locateRaw(root: unknown, descriptor: unknown): Promise<ContextResult<ElementLocation | null>> {
     try {
       const real = await this.root(root);
       const d = descriptor as ElementDescriptor | null;

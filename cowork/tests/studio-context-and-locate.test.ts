@@ -132,6 +132,13 @@ describe('StudioContextService', () => {
     expect(byAria.ok && byAria.data).toBeNull(); // attribut absent du code : pas de faux positif
   });
 
+  it("instance d'un composant réutilisé : indique d'où vient le texte affiché", async () => {
+    writeFileSync(path.join(root, 'src', 'Kpi.tsx'), 'export function Kpi({ value }: { value: string }) {\n  return <strong className="kpi-value">{value}</strong>;\n}\n');
+    writeFileSync(path.join(root, 'src', 'data.ts'), "export const KPIS = [\n  { label: 'Revenus', value: '48 250 €' },\n];\n");
+    const res = await service.locate(root, { tag: 'strong', text: '48 250 €', classes: ['kpi-value'], component: 'Kpi' });
+    expect(res.ok && res.data).toMatchObject({ file: 'src/Kpi.tsx', startLine: 2, dataOrigin: { file: 'src/data.ts', line: 2 } });
+  });
+
   it('elementExtent : balise sur plusieurs lignes, auto-fermante, imbriquée', () => {
     const lines = ['<div>', '  <div>x</div>', '</div>', '<input />', '<img', '  src="a" />'];
     expect(elementExtent(lines, 1, 'div')).toBe(3);
