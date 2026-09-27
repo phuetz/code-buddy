@@ -70,6 +70,10 @@ import { registerScaffoldIpc } from './studio/scaffold-ipc';
 import { registerPreviewProbeIpc } from './studio/preview-probe-ipc';
 import { registerGithubIpc } from './studio/github-ipc';
 import { registerStudioVersionsIpc } from './studio/studio-versions-ipc';
+import { ProjectSecretsService, redactText, registerProjectSecretsIpc } from './studio/project-secrets-service';
+import { PreviewBridge, registerPreviewBridgeIpc } from './studio/preview-bridge';
+import { StudioContextService, registerStudioContextIpc } from './studio/studio-context-service';
+import { STUDIO_ZIP_IGNORE } from './studio/studio-export-excludes';
 import { StudioVersionsService } from './studio/studio-versions-service';
 import { SiteExportService } from './studio/site-export-service';
 import { registerOneClickDeployIpc } from './one-click-deploy-ipc';
@@ -2804,7 +2808,23 @@ registerProfilesIpcHandlers();
 // output to whatever window is current via the lazy getMainWindow() getter; the
 // dev server delegates to the core `app_server` tool for loopback-gated spawns.
 // See src/main/studio/*.
-registerDevServerIpc(ipcMain, new StudioDevServer());
+// Secrets du projet : rangés HORS du projet (données de Cowork), injectés
+// seulement dans les processus du projet, masqués partout ailleurs.
+const projectSecrets = new ProjectSecretsService({
+  storeDir: join(app.getPath('userData'), 'studio-secrets'),
+  trustedRoots: () => creativeWorkspaceRoots(),
+});
+registerProjectSecretsIpc(ipcMain, projectSecrets);
+const redactProjectSecrets = async (root: string, text: string): Promise<string> =>
+  redactText(text, await projectSecrets.valuesFor(root));
+registerDevServerIpc(
+  ipcMain,
+  new StudioDevServer({ projectEnv: (cwd) => projectSecrets.envFor(cwd), redact: redactProjectSecrets }),
+);
+// Aperçu : console du navigateur (masquée) + sélection d'un élément ;
+// contexte joint aux demandes (fichiers choisis, élément → fichier/lignes).
+registerPreviewBridgeIpc(ipcMain, new PreviewBridge({ redact: redactProjectSecrets }));
+registerStudioContextIpc(ipcMain, new StudioContextService({ trustedRoots: () => creativeWorkspaceRoots() }));
 registerStudioFilesIpc(ipcMain);
 registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null);
 registerScaffoldIpc(ipcMain, new ScaffoldService());
@@ -2825,6 +2845,7 @@ registerPreviewProbeIpc(
           partition: 'studio-preview-probe',
         },
       }),
+    resolveProjectEnv: (root) => projectSecrets.envFor(root),
   }),
 );
 registerGithubIpc(ipcMain);
@@ -3263,7 +3284,7 @@ ipcMain.handle('studio.exportZip', async (_event, input: unknown) => {
         cwd: root,
         dot: true,
         follow: false,
-        ignore: ['node_modules/**', '.git/**', '.codebuddy/**'],
+        ignore: [...STUDIO_ZIP_IGNORE],
       });
       archive.glob('.codebuddy/media-generation/{images,videos,audio}/**/*.{png,jpg,jpeg,webp,gif,avif,mp4,webm,mov,wav,mp3,ogg,flac}', {
         cwd: root,
@@ -3283,6 +3304,7 @@ ipcMain.handle('studio.exportZip', async (_event, input: unknown) => {
 // fichiers du site statique, copiés dans un dossier choisi par l'utilisateur.
 const siteExportService = new SiteExportService({
   trustedRoots: () => creativeWorkspaceRoots(),
+  resolveProjectEnv: (root) => projectSecrets.envFor(root),
   chooseDirectory: async (defaultPath) => {
     const win = getMainWindow();
     const options = {
@@ -3294,7 +3316,25 @@ const siteExportService = new SiteExportService({
     return result.canceled ? null : (result.filePaths[0] ?? null);
   },
 });
-ipcMain.handle('studio.exportSite', (_event, input: unknown) => siteExportService.exportSite(input));
+ipcMain.handle('studio.exportSite', async (_event, input: unknown) => {
+  const outcome = await siteExportService.exportSite(input);
+  // Un secret du projet ne doit JAMAIS sortir dans le site exporté (ex. une
+  // variable VITE_ intégrée au bundle) : export supprimé et refusé.
+  const root = (input as { root?: unknown } | null)?.root;
+  if (outcome.ok && typeof root === 'string') {
+    const leaks = await projectSecrets.findLeaks(root, outcome.data.savedTo).catch(() => [] as string[]);
+    if (leaks.length > 0) {
+      await fs.promises.rm(outcome.data.savedTo, { recursive: true, force: true }).catch(() => undefined);
+      return {
+        ok: false as const,
+        error:
+          `Export annulé : un secret du projet se retrouve dans le site construit (${leaks.slice(0, 3).join(', ')}). ` +
+          'Une variable VITE_ est publique une fois construite : ne l\'y mettez pas.',
+      };
+    }
+  }
+  return outcome;
+});
 
 // Media library (ChatGPT-library parity): every generated media across all
 // session roots; export = native Save-As dialog + copy.

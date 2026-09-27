@@ -17,7 +17,13 @@ type ToolResult<TData = unknown> = {
 };
 
 interface CoreAppServerTool {
-  start(input: { cwd: string; command: string; url: string; timeoutMs?: number }): Promise<ToolResult>;
+  start(input: {
+    cwd: string;
+    command: string;
+    url: string;
+    timeoutMs?: number;
+    env?: Record<string, string | undefined>;
+  }): Promise<ToolResult>;
   stop(pid: number): Promise<ToolResult>;
   status(): Promise<ToolResult>;
   logs(pid: number, opts?: { lines?: number; stderr?: boolean }): Promise<ToolResult>;
@@ -89,9 +95,35 @@ function linesFromOutput(output: string): string[] {
   return output.split(/\r?\n/).filter((line) => line.length > 0);
 }
 
+/** Noms de variables de l'hôte qui ressemblent à un secret (clés d'API de Cowork, jetons…). */
+const HOST_SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE|SESSION)/i;
+
+/**
+ * Environnement du serveur de dev : les secrets de l'HÔTE (clés d'API de
+ * Cowork…) sont retirés — le code généré n'a pas à les voir —, les secrets
+ * du PROJET (saisis dans App Studio, rangés hors du projet) sont ajoutés.
+ */
+export function devServerEnv(
+  projectEnv: Record<string, string>,
+  base: NodeJS.ProcessEnv = process.env,
+): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {};
+  for (const key of Object.keys(base)) if (HOST_SECRET_NAME.test(key)) env[key] = undefined;
+  return { ...env, ...projectEnv };
+}
+
+export interface StudioDevServerOptions {
+  /** Secrets du projet à injecter (processus principal seulement). */
+  projectEnv?: (cwd: string) => Promise<Record<string, string>>;
+  /** Masque les secrets du projet dans les journaux avant de les rendre au renderer. */
+  redact?: (cwd: string, text: string) => Promise<string>;
+}
+
 export class StudioDevServer {
   private readonly instances = new Map<number, StudioDevServerInstance>();
   private toolPromise: Promise<CoreAppServerTool | null> | null = null;
+
+  constructor(private readonly options: StudioDevServerOptions = {}) {}
 
   async start(input: StudioDevServerStartInput): Promise<StudioDevServerResult<StudioDevServerStartResult>> {
     try {
@@ -105,10 +137,12 @@ export class StudioDevServer {
       const tool = await this.getTool();
       if (!tool) return { ok: false, error: 'Core app_server tool is unavailable' };
 
+      const projectEnv = this.options.projectEnv ? await this.options.projectEnv(cwd).catch(() => ({})) : {};
       const result = await tool.start({
         cwd,
         command,
         url,
+        env: devServerEnv(projectEnv),
         ...(input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}),
       });
       if (!result.success) {
@@ -177,7 +211,9 @@ export class StudioDevServer {
       if (!result.success) {
         return { ok: false, error: result.error ?? result.output ?? 'app_server logs failed' };
       }
-      const output = result.output ?? '';
+      const cwd = this.instances.get(pid)?.cwd;
+      const raw = result.output ?? '';
+      const output = cwd && this.options.redact ? await this.options.redact(cwd, raw).catch(() => '') : raw;
       return { ok: true, data: { pid, output, lines: linesFromOutput(output) } };
     } catch (error) {
       return { ok: false, error: errorMessage(error) };

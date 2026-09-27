@@ -48,7 +48,31 @@ describe('StudioDevServer', () => {
       cwd: '/tmp/project',
       command: 'npm run dev',
       url: 'http://127.0.0.1:5173/',
+      env: expect.any(Object),
     });
+  });
+
+  it("retire les secrets de l'hôte, injecte ceux du projet et masque les journaux", async () => {
+    const tool = makeTool();
+    tool.logs.mockResolvedValue({ success: true, output: 'VITE v5 ready\nclé=sk-projet-1234567890 fuite\n' });
+    mockedLoadCoreModule.mockResolvedValue({ getAppServerTool: () => tool });
+    process.env.FAKE_HOST_API_KEY = 'hote-secret-value';
+    const service = new StudioDevServer({
+      projectEnv: async () => ({ VITE_API_KEY: 'sk-projet-1234567890' }),
+      redact: async (_cwd, text) => text.split('sk-projet-1234567890').join('[secret masqué]'),
+    });
+    try {
+      await service.start({ cwd: '/tmp/project', command: 'npm run dev', url: 'http://127.0.0.1:5173/' });
+      const env = (tool.start.mock.calls[0]?.[0] as { env: Record<string, string | undefined> }).env;
+      expect('FAKE_HOST_API_KEY' in env).toBe(true);
+      expect(env.FAKE_HOST_API_KEY).toBeUndefined(); // undefined = retirée par app_server
+      expect(env.VITE_API_KEY).toBe('sk-projet-1234567890');
+      const logs = await service.logs(1234);
+      expect(logs.ok && logs.data.output).not.toContain('sk-projet-1234567890');
+      expect(logs.ok && logs.data.lines).toContain('clé=[secret masqué] fuite');
+    } finally {
+      delete process.env.FAKE_HOST_API_KEY;
+    }
   });
 
   it('delegates stop, status, and logs without throwing', async () => {
