@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { removeTmpDirStrict } from '../helpers/tmp.js';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -42,7 +43,7 @@ describe('avatar renderer Gateway feedback', () => {
     else process.env.CODEBUDDY_HOME = previousHome;
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
-    rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(home);
   });
 
   async function start(): Promise<string> {
