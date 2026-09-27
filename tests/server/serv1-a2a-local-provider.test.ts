@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -28,7 +29,7 @@ describe('SERV1 A2A inbound uses the configured local provider', () => {
       delete previous[key];
     }
     if (tmpHome) {
-      fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTmpDirStrict(tmpHome);
       tmpHome = '';
     }
   });
