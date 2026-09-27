@@ -29,9 +29,11 @@ import {
   readEvolutionNotes,
 } from '../self-model/evolution-notes.js';
 import { wrapRecentPhotosBlock } from './untrusted-text.js';
+import { provenanceEnabled as isMemoryProvenanceEnabled } from '../memory/memory-provenance.js';
 
 export interface RelationalContextOptions {
   cwd?: string;
+  provenanceEnabled?: boolean;
   /** Include the accepted user-model facts block. Default true. */
   includeFacts?: boolean;
   /** Include Lisa's personality/mood summary. Default true. */
@@ -189,11 +191,15 @@ function safeEvolutionLines(value: string): string {
 }
 
 /** Read the consolidated recent conversation episode from persistent memory (see episodic-journal.ts). */
-async function defaultReadEpisode(): Promise<string | null> {
+async function defaultReadEpisode(withProvenance: boolean, cwd?: string): Promise<string | null> {
   try {
     const { getMemoryManager } = await import('../memory/persistent-memory.js');
-    const manager = getMemoryManager();
+    const manager = withProvenance && cwd ? getMemoryManager(undefined, undefined, cwd) : getMemoryManager();
     await manager.initialize();
+    if (withProvenance) {
+      const memory = manager.get('episode:recent', 'project');
+      return memory ? manager.formatMemoryForPrompt(memory, true) : null;
+    }
     return manager.recall('episode:recent', 'project');
   } catch {
     return null;
@@ -218,6 +224,7 @@ async function defaultReadPhotos(): Promise<string | null> {
 export async function buildRelationalContext(
   options: RelationalContextOptions = {}
 ): Promise<string> {
+  const withProvenance = options.provenanceEnabled ?? isMemoryProvenanceEnabled();
   // Every source is independent. Start them together, then preserve the deliberate prompt
   // order when joining their results. One slow memory/presence source now costs max(source),
   // not the sum of all asynchronous sources.
@@ -226,7 +233,7 @@ export async function buildRelationalContext(
     try {
       const value = options.factsBlock
         ? options.factsBlock()
-        : getUserModel(options.cwd ?? process.cwd()).summarize();
+        : getUserModel(options.cwd ?? process.cwd()).summarize({ provenanceEnabled: withProvenance });
       return value?.trim() ?? '';
     } catch {
       return '';
@@ -248,7 +255,7 @@ export async function buildRelationalContext(
     try {
       const value = options.episodeBlock
         ? await options.episodeBlock()
-        : await defaultReadEpisode();
+        : await defaultReadEpisode(withProvenance, options.cwd);
       return value?.trim() ? `<recent_episode>\n${value.trim()}\n</recent_episode>` : '';
     } catch {
       return '';

@@ -14,6 +14,7 @@ import {
 } from '../../src/observability/run-trajectory-export.js';
 import { RunStore } from '../../src/observability/run-store.js';
 import { resetToolFilter, setToolFilter } from '../../src/utils/tool-filter.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 function makeHandler(): {
   handler: ToolHandler;
@@ -55,8 +56,10 @@ describe('ToolHandler active tool filter enforcement', () => {
         }
       }
       item.store.dispose();
-      await new Promise((resolve) => setTimeout(resolve, 60));
-      fs.rmSync(item.dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      // endRun()/dispose() return before the journal file is closed; Windows CI
+      // then failed ENOTEMPTY on the run directory (PR #226, 2026-09-24).
+      await item.store.whenStreamsClosed();
+      removeTestDir(item.dir);
     }
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
   });

@@ -10,7 +10,7 @@
  * - Interaction/Session logging
  */
 
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { Logger, debug, getLogger, logger, resetLogger } from '../../src/utils/logger.js';
@@ -20,6 +20,7 @@ import { Logger, debug, getLogger, logger, resetLogger } from '../../src/utils/l
 // transformed by vitest and works on every Node version. The hoisted os mock below
 // still applies.
 import * as interactionLoggerModule from '../../src/logging/interaction-logger.js';
+import { makeTmpDir, removeTestDir } from '../helpers/tmp.js';
 
 // ============================================================================
 // Logger (src/utils/logger.ts) Tests
@@ -40,20 +41,16 @@ jest.mock('chalk', () => {
 // Store original env vars
 const originalEnv = { ...process.env };
 
-// Create temp directory for test logs
-const TEST_LOG_DIR = join(tmpdir(), 'grok-logger-tests');
+// Temp directory for test logs, unique per run
+let TEST_LOG_DIR: string;
 
 beforeAll(() => {
-  if (!existsSync(TEST_LOG_DIR)) {
-    mkdirSync(TEST_LOG_DIR, { recursive: true });
-  }
+  TEST_LOG_DIR = makeTmpDir('grok-logger-tests-', tmpdir());
 });
 
 afterAll(() => {
-  // Clean up test directory
-  if (existsSync(TEST_LOG_DIR)) {
-    rmSync(TEST_LOG_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-  }
+  // Every file logger below is awaited in close(): nothing holds the directory.
+  removeTestDir(TEST_LOG_DIR);
 });
 
 beforeEach(() => {
@@ -329,10 +326,7 @@ describe('File Logging', () => {
 
     logger.info('test message 1');
     logger.warn('test message 2');
-    logger.close();
-
-    // Give file system time to flush
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await logger.close();
 
     const content = readFileSync(logFile, 'utf-8');
     const lines = content.trim().split('\n');
@@ -357,10 +351,7 @@ describe('File Logging', () => {
     });
 
     logger.info('test message');
-    logger.close();
-
-    // Give file system time to flush
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await logger.close();
 
     expect(existsSync(nestedDir)).toBe(true);
     expect(existsSync(logFile)).toBe(true);
@@ -377,10 +368,7 @@ describe('File Logging', () => {
     });
 
     logger.info('new message');
-    logger.close();
-
-    // Give file system time to flush
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await logger.close();
 
     const content = readFileSync(logFile, 'utf-8');
     const lines = content.trim().split('\n');
@@ -399,10 +387,7 @@ describe('File Logging', () => {
     });
 
     logger.info('test message', { key: 'value' });
-    logger.close();
-
-    // Give file system time to flush
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await logger.close();
 
     const content = readFileSync(logFile, 'utf-8');
     const entry = JSON.parse(content.trim());
@@ -427,7 +412,7 @@ describe('File Logging', () => {
     consoleSpy.mockRestore();
   });
 
-  it('should close file stream on close()', () => {
+  it('should close file stream on close()', async () => {
     const logFile = join(TEST_LOG_DIR, 'test-log-5.jsonl');
     const logger = new Logger({
       silent: true,
@@ -435,7 +420,7 @@ describe('File Logging', () => {
     });
 
     logger.info('before close');
-    logger.close();
+    await logger.close();
 
     // Should not throw when logging after close (just won't write to file)
     logger.info('after close');
@@ -759,7 +744,7 @@ describe('Interaction Logger', () => {
 
   afterEach(() => {
     if (existsSync(MOCK_HOME)) {
-      rmSync(MOCK_HOME, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      removeTestDir(MOCK_HOME);
     }
   });
 

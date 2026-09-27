@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { removeTmpDir } from '../helpers/tmp.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 import {
   buildPolicyEvalManifest,
@@ -33,8 +33,8 @@ describe('policy evals', () => {
       }
     }
     store.dispose();
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    removeTmpDir(tempDir);
+    await store.whenStreamsClosed();
+    removeTestDir(tempDir);
   });
 
   function startRun(objective: string, metadata?: Parameters<RunStore['startRun']>[1]): string {

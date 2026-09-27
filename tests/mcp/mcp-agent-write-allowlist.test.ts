@@ -14,6 +14,7 @@ import type { AgentModelClient } from '../../src/agent/codebuddy-agent.js';
 import { CodeBuddyMCPServer } from '../../src/mcp/mcp-server.js';
 import { setSandboxCapabilityProbe } from '../../src/sandbox/os-sandbox.js';
 import { resetTextEditorInstance } from '../../src/tools/registry/text-editor-tools.js';
+import { removeTestDir } from '../helpers/tmp.js';
 
 const disposables: string[] = [];
 const noSandbox = {
@@ -112,7 +113,7 @@ describe.sequential('agent_task autorise les outils d ecriture, pas les noms de 
     else process.env.CODEBUDDY_DISABLE_MCP = previousDisable;
     try { process.chdir(originCwd); } catch { /* origin removed */ }
     resetTextEditorInstance();
-    for (const dir of disposables.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+    for (const dir of disposables.splice(0)) removeTestDir(dir);
   });
 
   async function callAgent(

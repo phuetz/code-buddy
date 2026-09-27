@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'fs/promises';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { repoScratchRoot } from '../helpers/tmp.js';
 
 const workerHarness = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void;
@@ -261,7 +262,7 @@ describe('speech reaction — persistent STT workers', () => {
   });
 
   it('does not choose sherpa-rs for an incomplete auto model directory', async () => {
-    const modelDir = await mkdtemp(path.join(process.cwd(), '.conv4-test-auto-model-'));
+    const modelDir = await mkdtemp(path.join(repoScratchRoot(process.cwd()), '.conv4-test-auto-model-'));
     vi.stubEnv('CODEBUDDY_SPEECH_STT_BIN', process.execPath);
     vi.stubEnv('CODEBUDDY_PARAKEET_MODEL_DIR', modelDir);
     vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
@@ -279,7 +280,7 @@ describe('speech reaction — persistent STT workers', () => {
   });
 
   it('logs an auto fallback caused by a missing Rust/model pair only once per process', async () => {
-    const modelDir = await mkdtemp(path.join(process.cwd(), '.conv4-test-auto-missing-'));
+    const modelDir = await mkdtemp(path.join(repoScratchRoot(process.cwd()), '.conv4-test-auto-missing-'));
     vi.stubEnv('CODEBUDDY_SPEECH_STT_BIN', process.execPath);
     vi.stubEnv('CODEBUDDY_PARAKEET_MODEL_DIR', modelDir);
     vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
