@@ -3805,6 +3805,11 @@ addLazyCommandGroup(program, 'daemon', 'Manage the Code Buddy daemon (background
   registerDaemonCommands(program);
 });
 
+addLazyCommandGroup(program, 'ruche', 'Signed coordination prototype (opt-in)', async () => {
+  const { registerRucheCommand } = await import('./commands/cli/ruche-command.js');
+  registerRucheCommand(program);
+});
+
 addLazyCommandGroup(program, 'trigger', 'Manage event triggers for automated agent responses', async () => {
   const { registerTriggerCommands } = await import('./commands/cli/daemon-commands.js');
   registerTriggerCommands(program);

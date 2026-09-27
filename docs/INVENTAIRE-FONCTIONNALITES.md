@@ -42,8 +42,8 @@ Le modèle décrit par Anthropic en septembre 2026. **Les cinq existent ici.**
 | Couche | Chez nous | Preuve |
 |---|---|---|
 | **Travail** — ce qu'il voit | `ContextManagerV2`, compression par fenêtre glissante | 🧪 |
-| **Travail étendue** — compaction réversible | Un segment compacté se redéplie (`context_expand`) au lieu d'être perdu | ❓ activé le 21/09 |
-| **Épisodique** — ce qui s'est passé | Journal des épisodes, chronologie par tour, rejouable | ❓ actif sur Lisa |
+| **Travail étendue** — compaction réversible | Un segment compacté se redéplie (`context_expand`) au lieu d'être perdu | 🧪 activé le 21/09 |
+| **Épisodique** — ce qui s'est passé | Chronologie par tour, rejouable ; journal des épisodes Lisa non couvert ici | 🧪 rejeu / ❓ journal Lisa |
 | **Sémantique** — ce qu'il sait | Graphe de connaissances collectif : nœuds typés, supersede bi-temporel, corroboration entre agents, moteur Rust + index HNSW | ✅ **4 119 entrées, rappel pertinent mesuré** |
 | **Procédurale** — comment faire | L'agent écrit ses propres outils et savoir-faire, sous garde empirique | ✅ **189 améliorations validées, Δ=138, couverture 15/15, mode `propose-only`** |
 | **Oubli** | Courbe d'Ebbinghaus, le rappel renforce, archivage avant suppression, restaurable | 🧪 actif sur Lisa |
@@ -67,7 +67,7 @@ Le modèle décrit par Anthropic en septembre 2026. **Les cinq existent ici.**
 | Outils distants | Un pair exécute un outil **en lecture seule**, derrière trois barrières | 🧪 |
 | Conseil de modèles | Plusieurs modèles délibèrent, un juge arbitre, un tableau de bord entraîne le routage | 🧪 💤 |
 | `/batch`, `/swarm`, `/team` | Décomposition en sous-agents parallèles | 🧪 |
-| Fédération de graphes | Un pair tire les leçons d'un autre, en lecture seule | ❓ 💤 |
+| Fédération de graphes | Un pair tire les leçons d'un autre, en lecture seule | 🧪 💤 |
 
 ## 5. Auto-amélioration — bornée par l'expérience
 
