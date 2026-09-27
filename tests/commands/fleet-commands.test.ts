@@ -271,8 +271,8 @@ describe('Fleet CLI commands', () => {
     ]);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Serveur Fleet indisponible sur http://127.0.0.1:39991 (fetch failed). ' +
-        'Lancez-le avec `buddy server` puis réessayez.',
+      'Fleet server unavailable at http://127.0.0.1:39991 (fetch failed). ' +
+        'Start it with `buddy server`, then try again.',
     );
     expect(process.exitCode).toBe(1);
   });
@@ -296,9 +296,9 @@ describe('Fleet CLI commands', () => {
     ]);
 
     const reported = consoleErrorSpy.mock.calls.map((call) => call.join(' ')).join('\n');
-    expect(reported).toContain('refusé la requête');
+    expect(reported).toContain('refused the request');
     expect(reported).toContain('buddy fleet token');
-    expect(reported).not.toContain('Lancez-le avec');
+    expect(reported).not.toContain('Start it with');
     expect(process.exitCode).toBe(1);
   });
 });

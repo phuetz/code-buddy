@@ -172,6 +172,38 @@ export async function resumeLastSession(): Promise<void> {
   );
 }
 
+export type SessionIdMatch<T extends { id: string }> =
+  | { kind: 'found'; session: T }
+  | { kind: 'ambiguous'; matches: T[] }
+  | { kind: 'none' };
+
+/**
+ * Resolve a user-typed session id. An exact id always wins; otherwise a
+ * prefix (then, for backward compatibility, a substring) must designate
+ * exactly one session. Several candidates is an ambiguity, never "the first".
+ */
+export function resolveSessionIdMatch<T extends { id: string }>(sessions: readonly T[], id: string): SessionIdMatch<T> {
+  const exact = sessions.find((s) => s.id === id);
+  if (exact) return { kind: 'found', session: exact };
+  for (const predicate of [(s: T) => s.id.startsWith(id), (s: T) => s.id.includes(id)]) {
+    const matches = sessions.filter(predicate);
+    if (matches.length === 1) return { kind: 'found', session: matches[0]! };
+    if (matches.length > 1) return { kind: 'ambiguous', matches };
+  }
+  return { kind: 'none' };
+}
+
+export function reportAmbiguousSessionId(
+  typedId: string,
+  matches: ReadonlyArray<{ id: string; name: string; messages: readonly unknown[] }>,
+): void {
+  logger.error(`Ambiguous session id: ${typedId} matches ${matches.length} sessions.`);
+  console.log('\nPaste more of the id (or the full id from `buddy session list`):');
+  matches.slice(0, 10).forEach((s) => {
+    console.log(`   ${s.id} - ${s.name} (${s.messages.length} messages)`);
+  });
+}
+
 /**
  * Resume a specific session by ID (--resume flag)
  */
@@ -186,7 +218,14 @@ export async function resumeSessionById(sessionId: string): Promise<void> {
   } catch {
     // Index is advisory: a missing Cowork DB must not block a SessionStore resume.
   }
-  const session = await sessionStore.getSessionByPartialId(resolvedId);
+  // Refuse an ambiguous abbreviated id instead of resuming the first loose
+  // match (same rule as materializeUnifiedSession).
+  const match = resolveSessionIdMatch(await sessionStore.listSessions(), resolvedId);
+  if (match.kind === 'ambiguous') {
+    reportAmbiguousSessionId(sessionId, match.matches);
+    process.exit(1);
+  }
+  const session = match.kind === 'found' ? match.session : null;
 
   if (!session) {
     logger.error(`Session not found: ${sessionId}`);

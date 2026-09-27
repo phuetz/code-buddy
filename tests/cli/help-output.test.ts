@@ -102,13 +102,13 @@ describe('CLI help output', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
-    expect(result.stdout.startsWith('Pour commencer — 6 démos')).toBe(true);
-    expect(result.stdout.indexOf('Pour commencer')).toBeLessThan(result.stdout.indexOf('Usage:'));
+    expect(result.stdout.startsWith('Getting started — 6 demos')).toBe(true);
+    expect(result.stdout.indexOf('Getting started')).toBeLessThan(result.stdout.indexOf('Usage:'));
     expect(result.stdout).toContain('1. buddy try');
-    expect(result.stdout).toContain('/loop "Corrige les tests en échec"');
-    expect(result.stdout).toContain('buddy research "Cartographie ce dépôt"');
-    expect(result.stdout).toContain('buddy dev pr "Ajoute une petite fonctionnalité"');
-    expect(result.stdout).toContain('/think deep "Propose le refactoring le plus sûr"');
+    expect(result.stdout).toContain('/loop "Fix the failing tests"');
+    expect(result.stdout).toContain('buddy research "Map this repository"');
+    expect(result.stdout).toContain('buddy dev pr "Add a small feature"');
+    expect(result.stdout).toContain('/think deep "Propose the safest refactoring"');
     expect(result.stdout).toContain('/share create demo');
   }, CLI_TIMEOUT_MS + 5_000);
 
@@ -154,7 +154,7 @@ describe('CLI help output', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
-    expect(result.stdout.startsWith('Pour commencer — 6 démos')).toBe(true);
+    expect(result.stdout.startsWith('Getting started — 6 demos')).toBe(true);
     expect(result.stdout).not.toContain('Applied config profile');
   }, CLI_TIMEOUT_MS + 5_000);
 

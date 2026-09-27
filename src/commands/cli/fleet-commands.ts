@@ -75,11 +75,11 @@ async function fetchFleetEndpoint(
     const isAuth = /HTTP 40[13]\b/.test(detail);
     throw new Error(
       isAuth
-        ? `Serveur Fleet joignable sur ${baseUrl} mais il a refusé la requête (${detail}). ` +
-            'Il tourne avec authentification : passez un jeton avec `--token`, ' +
-            'que vous frappez via `JWT_SECRET=<secret du serveur> buddy fleet token --user <nom>`.'
-        : `Serveur Fleet indisponible sur ${baseUrl} (${detail}). ` +
-            'Lancez-le avec `buddy server` puis réessayez.',
+        ? `Fleet server reachable at ${baseUrl} but it refused the request (${detail}). ` +
+            'It runs with authentication: pass a token with `--token`, ' +
+            'minted with `JWT_SECRET=<the server secret> buddy fleet token --user <name>`.'
+        : `Fleet server unavailable at ${baseUrl} (${detail}). ` +
+            'Start it with `buddy server`, then try again.',
     );
   }
 }

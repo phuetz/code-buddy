@@ -349,15 +349,15 @@ export function printMintedToken(
     }, null, 2));
   } else {
     console.log(minted.token);
-    console.log(`Expire le ${minted.expiresAt} (${minted.expiresIn})`);
-    console.log(`Ouvrir : ${minted.url}`);
+    console.log(`Expires ${minted.expiresAt} (${minted.expiresIn})`);
+    console.log(`Open: ${minted.url}`);
     if (qrAnsi) console.log(qrAnsi);
   }
 
   if (minted.qrHint) console.error(minted.qrHint);
   if (telegramError) console.error(telegramError);
   else if (result.telegramSent) {
-    console.error(`Telegram : lien envoyé (expire le ${minted.expiresAt}).`);
+    console.error(`Telegram: link sent (expires ${minted.expiresAt}).`);
   }
 
   if (minted.scopes.includes('peer:invoke')) {
