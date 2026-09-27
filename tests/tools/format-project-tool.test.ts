@@ -43,6 +43,6 @@ describe('FormatProjectTool', () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'format-project-tool-missing-'));
     const result = await new FormatProjectTool().execute({ root });
     expect(result.success).toBe(false);
-    expect((result as any).error).toContain('Prettier not found');
+    expect(result.error).toContain('Prettier not found');
   });
 });
