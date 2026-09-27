@@ -2836,7 +2836,11 @@ registerStudioFilesIpc(ipcMain);
 registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null, async (cwd) => {
   try {
     const real = await assertTrustedRoot(cwd, () => creativeWorkspaceRoots());
-    return { ok: true as const, env: buildStudioChildEnv(await projectSecrets.envFor(real)) };
+    return {
+      ok: true as const,
+      env: buildStudioChildEnv(await projectSecrets.envFor(real)),
+      redact: (line: string) => redactProjectSecrets(real, line),
+    };
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
   }

@@ -115,3 +115,31 @@ describe('CommandRunner — environnement (réserve des relectures de la vague 2
     expect(seen[0]).toEqual({ cwd: '/projet', command: 'ls', id: 'b', env: { PATH: '/bin', VITE_X: 'projet' } });
   });
 });
+
+describe('CommandRunner — sortie du terminal masquée (réserve de la 2e relecture)', () => {
+  it('chaque ligne relayée au renderer est masquée, dans l’ordre ; la valeur brute ne sort jamais', async () => {
+    const { registerCommandRunnerIpc } = await import('../src/main/studio/command-runner-ipc.js');
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>();
+    const sent: { line: string; stream: string }[] = [];
+    const secret = 'sk-terminal-VALEUR-0123456789';
+    registerCommandRunnerIpc(
+      { handle: (c: string, h: never) => handlers.set(c, h) } as never,
+      new CommandRunner(),
+      () => ({ send: (_c: string, e: { line: string; stream: string }) => sent.push(e) }),
+      async () => ({
+        ok: true,
+        env: { PATH: process.env.PATH ?? '', MA_CLE: secret },
+        redact: async (line: string) => line.split(secret).join('[secret masqué]'),
+      }),
+    );
+    const res = await handlers.get('studio.cmd.runToEnd')!({}, {
+      cwd: process.cwd(),
+      command: 'node -e "console.log(1); console.log(process.env.MA_CLE); console.log(3)"',
+      id: 'masque',
+    });
+    expect(res).toMatchObject({ ok: true });
+    const out = sent.filter((e) => e.stream === 'stdout').map((e) => e.line);
+    expect(out).toEqual(['1', '[secret masqué]', '3']);
+    expect(JSON.stringify(sent)).not.toContain(secret);
+  });
+});
