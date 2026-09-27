@@ -17,6 +17,7 @@ import { detectDevCommand } from '../studio-iterate/studio-preview-model.js';
 import { isStaticProject, isNpmProject, staticServePlan } from './static-project-model.js';
 import { openTab, closeTab as closeTabModel, nextActiveAfterClose, type EditorTab } from './editor-tabs-model.js';
 import type { AppStudioApis, CommandOutputEvent, StudioTemplateCard } from './studio-api.js';
+import { listDeclaredDependencies } from './preview-health-model.js';
 
 export interface UseAppStudioOptions {
   apis?: Partial<AppStudioApis>;
@@ -265,24 +266,34 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
     }
   }, [tree, activeFile, openFile]);
 
-  // Track projects whose `npm install` already succeeded this session so
-  // "Lancer" / preview reload doesn't reinstall on every click (G1).
-  const installedRootsRef = useRef<Set<string>>(new Set());
-
   // Real `npm install` for npm projects before the dev server starts (App
   // Studio G1). Streams output to the terminal, drives the "installing" build
   // phase, and resolves once the install exits — so a React/Vue app that the
   // agent wrote file-by-file actually gets its node_modules before preview.
+  //
+  // Skip rule: every DECLARED dependency is present in node_modules. The former
+  // rule ("installed once this session" / npm's .package-lock.json marker)
+  // skipped the install after an auto-fix that ADDED a package to
+  // package.json, so the retry hit the same unresolved import again.
+  const dependenciesMissing = useCallback(
+    async (cwd: string): Promise<boolean> => {
+      const pkg = await apis.files.read(cwd, 'package.json');
+      const declared = pkg.ok ? listDeclaredDependencies(pkg.data.content) : [];
+      if (declared.length === 0) {
+        return !(await apis.files.read(cwd, 'node_modules/.package-lock.json')).ok;
+      }
+      for (const dep of declared) {
+        if (!(await apis.files.read(cwd, `node_modules/${dep}/package.json`)).ok) return true;
+      }
+      return false;
+    },
+    [apis]
+  );
+
   const ensureInstalled = useCallback(
     async (cwd: string): Promise<{ ok: boolean; error?: string }> => {
-      if (installedRootsRef.current.has(cwd)) return { ok: true };
-      // Fast path across reloads: npm writes this marker after a successful
-      // install, so an already-installed project skips the reinstall.
-      const marker = await apis.files.read(cwd, 'node_modules/.package-lock.json');
-      if (marker.ok) {
-        installedRootsRef.current.add(cwd);
-        return { ok: true };
-      }
+      const missing = await dependenciesMissing(cwd);
+      if (!missing) return { ok: true };
       beginPhase('installing');
       appendTerminal('$ npm install');
       const id = (options.commandIdFactory ?? defaultCommandId)();
@@ -291,13 +302,12 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       if (result.data.code !== 0) {
         return { ok: false, error: `npm install exited with code ${result.data.code ?? 'null'}` };
       }
-      installedRootsRef.current.add(cwd);
       return { ok: true };
     },
-    [apis, appendTerminal, beginPhase, options.commandIdFactory]
+    [apis, appendTerminal, beginPhase, dependenciesMissing, options.commandIdFactory]
   );
 
-  const startDev = useCallback(async (input?: { cwd?: string; command?: string; url?: string }): Promise<{ ok: boolean; error?: string }> => {
+  const startDev = useCallback(async (input?: { cwd?: string; command?: string; url?: string }): Promise<{ ok: boolean; error?: string; url?: string }> => {
     const cwd = input?.cwd ?? projectRoot;
     if (!cwd) {
       const error = 'No project directory to start the server.';
@@ -383,7 +393,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       setPreviewStatus('running');
       setBuildPhase('running');
       appendTerminal(`Server ready: ${result.data.url}`);
-      return { ok: true };
+      return { ok: true, url: result.data.url };
     }
     setPreviewStatus('dead');
     setBuildError(result.error);
@@ -415,6 +425,18 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
     setBuildPhase('idle');
     setDevPid(null);
   }, [apis, appendTerminal, devPid]);
+
+  // Tours suivants : l'aperçu tourne déjà (Vite recharge à chaud, le serveur
+  // statique relit le disque) — inutile de le relancer, sauf si une dépendance
+  // déclarée manque (il faut alors installer puis redémarrer).
+  const ensurePreview = useCallback(async (): Promise<{ ok: boolean; error?: string; url?: string }> => {
+    if (projectRoot && previewStatus === 'running' && previewUrl) {
+      if (!isNpmProject(tree)) return { ok: true, url: previewUrl };
+      if (!(await dependenciesMissing(projectRoot))) return { ok: true, url: previewUrl };
+      await stopDev();
+    }
+    return startDev();
+  }, [dependenciesMissing, previewStatus, previewUrl, projectRoot, startDev, stopDev, tree]);
 
   const runCommand = useCallback(async (command: string) => {
     if (!projectRoot || !command.trim()) return;
@@ -481,6 +503,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       openFile,
       saveFile,
       startDev,
+      ensurePreview,
       stopDev,
       runCommand,
       refreshTree,
