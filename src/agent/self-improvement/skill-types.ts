@@ -37,7 +37,7 @@ export interface SkillProposal {
   spec: SkillSpec;
 }
 
-export type SkillGateRejection = 'static-scan' | 'firewall' | 'coverage-fail' | 'behavior-required';
+export type SkillGateRejection = 'static-scan' | 'firewall' | 'coverage-fail' | 'behavior-required' | 'name-invalid';
 
 export interface SkillGateOutcome {
   accepted: boolean;

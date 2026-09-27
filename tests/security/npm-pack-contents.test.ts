@@ -185,6 +185,20 @@ describe('Pack Contents Policy - Unit Tests', () => {
     );
   });
 
+  it('n’accepte sous docs/preuves que les JSON et traces .log de premier niveau', () => {
+    const result = auditPackContents([
+      'docs/catalog/inventory.json',
+      'docs/preuves/catalogue-status-2026-09-26.json',
+      'docs/preuves/catalogue-status-2026-09-26.log',
+      'docs/preuves/p2-brut/transcription-complete.log',
+      'docs/preuves/p1.md',
+    ]);
+    expect(result.violations.map((v) => v.file).sort()).toEqual([
+      'docs/preuves/p1.md',
+      'docs/preuves/p2-brut/transcription-complete.log',
+    ]);
+  });
+
   it('rejette tout fichier hors préfixes autorisés', () => {
     const files = ['package.json', 'secret-directory/payload.js', 'random_config.json'];
     const result = auditPackContents(files);

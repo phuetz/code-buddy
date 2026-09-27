@@ -35,6 +35,7 @@ import {
   promoteObservations,
 } from '../agent/learning-background-writes.js';
 import type { ChatEntry } from '../agent/types.js';
+import { formatProvenance, provenanceEnabled } from './memory-provenance.js';
 
 export const USER_MODEL_SCHEMA_VERSION = 1;
 
@@ -65,6 +66,10 @@ export interface UserObservationProvenance {
   runId?: string;
   sessionId?: string;
   note?: string;
+  machine?: string;
+  channel?: string;
+  verification?: string;
+  source?: string;
 }
 
 export interface UserObservation {
@@ -307,7 +312,7 @@ export class LocalUserModel {
    * Build a compact prompt-injection block from accepted observations, grouped
    * by kind. Returns null when the model is empty (avoids noisy injection).
    */
-  summarize(): string | null {
+  summarize(options: { provenanceEnabled?: boolean; now?: Date } = {}): string | null {
     this.load();
     const accepted = this.observations.filter((o) => o.status === 'accepted');
     if (accepted.length === 0) return null;
@@ -324,7 +329,24 @@ export class LocalUserModel {
       if (items.length === 0) continue;
       lines.push(`**${labels[kind]}:**`);
       for (const item of items) {
-        lines.push(`- ${item.content}`);
+        if (options.provenanceEnabled ?? provenanceEnabled()) {
+          const observedAt = Number.isFinite(item.createdAt)
+            ? new Date(item.createdAt).toISOString() : undefined;
+          const attribution = formatProvenance(
+            kind === 'preference' ? 'preference' : 'hypothesis',
+            {
+              ...(observedAt ? { observedAt } : {}),
+              channel: item.provenance?.channel ?? item.source,
+              machine: item.provenance?.machine,
+              verification: item.provenance?.verification ?? (item.reviewedAt ? 'validation humaine' : undefined),
+              source: item.provenance?.source ?? item.provenance?.note,
+            },
+            options.now,
+          );
+          lines.push(`- ${item.content} [${attribution}${item.provenance ? '' : ' ; provenance inconnue (entrée héritée)'}]`);
+        } else {
+          lines.push(`- ${item.content}`);
+        }
       }
     }
     lines.push('</user_model>');
@@ -417,7 +439,8 @@ function clampConfidence(value: number): number {
 }
 
 function hasProvenance(provenance: UserObservationProvenance): boolean {
-  return Boolean(provenance.runId || provenance.sessionId || provenance.note);
+  return Boolean(provenance.runId || provenance.sessionId || provenance.note || provenance.machine
+    || provenance.channel || provenance.verification || provenance.source);
 }
 
 function isValidObservation(value: unknown): value is UserObservation {

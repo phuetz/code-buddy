@@ -479,7 +479,8 @@ export class SessionRepository {
   }
 
   /**
-   * Delete messages from session
+   * Delete messages from session. The deletion and the count update are one
+   * transaction: a failure leaves every row in place.
    */
   deleteMessages(sessionId: string, fromId?: number): number {
     let sql = 'DELETE FROM messages WHERE session_id = ?';
@@ -490,14 +491,16 @@ export class SessionRepository {
       params.push(fromId);
     }
 
-    const stmt = this.db.prepare(sql);
-    const result = stmt.run(...params);
+    const purge = this.db.transaction((): number => {
+      const result = this.db.prepare(sql).run(...params);
 
-    // Update message count
-    const count = (this.db.prepare('SELECT COUNT(*) as count FROM messages WHERE session_id = ?').get(sessionId) as { count: number }).count;
-    this.db.prepare('UPDATE sessions SET message_count = ? WHERE id = ?').run(count, sessionId);
+      // Update message count
+      const count = (this.db.prepare('SELECT COUNT(*) as count FROM messages WHERE session_id = ?').get(sessionId) as { count: number }).count;
+      this.db.prepare('UPDATE sessions SET message_count = ? WHERE id = ?').run(count, sessionId);
 
-    return result.changes;
+      return result.changes;
+    });
+    return purge();
   }
 
   // ============================================================================

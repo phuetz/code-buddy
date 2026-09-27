@@ -7,6 +7,7 @@ import {
 import { EvolutionaryArchive } from '../../../src/agent/self-improvement/evolutionary-archive.js';
 import { SelfImprovementEngine } from '../../../src/agent/self-improvement/engine.js';
 import type { EvolutionNote } from '../../../src/self-model/evolution-notes.js';
+import { repoScratchRoot } from '../../helpers/tmp.js';
 
 const roots: string[] = [];
 
@@ -26,7 +27,7 @@ const note: EvolutionNote = {
 
 describe('evolution-notes experience source', () => {
   it('is opt-in, supplies repair context, and archives changelog provenance', async () => {
-    const root = await fs.mkdtemp(path.join(process.cwd(), '.evo1-test-'));
+    const root = await fs.mkdtemp(path.join(repoScratchRoot(process.cwd()), '.evo1-test-'));
     roots.push(root);
     const archive = new EvolutionaryArchive({ workDir: root });
     const source = new EvolutionNotesExperienceSource({
@@ -55,7 +56,7 @@ describe('evolution-notes experience source', () => {
   });
 
   it('does nothing by default and the engine never writes src/', async () => {
-    const root = await fs.mkdtemp(path.join(process.cwd(), '.evo1-test-'));
+    const root = await fs.mkdtemp(path.join(repoScratchRoot(process.cwd()), '.evo1-test-'));
     roots.push(root);
     const archive = new EvolutionaryArchive({ workDir: root });
     const source = new EvolutionNotesExperienceSource({

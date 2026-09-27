@@ -1,88 +1,112 @@
 /**
- * StudioVersionsPane — container wiring the presentational CheckpointTimeline
- * (vague Codex C) onto the REAL ghost-snapshot engine: checkpoint.list feeds
- * the timeline, restore goes through checkpoint.restore (ghost snapshots are
- * undo/redo-able, so a restore is never destructive), and « Diff » (vague
- * Codex D) compares the snapshot's git commit against HEAD through
- * checkpoint.compare. The caller refreshes the file tree after a restore.
+ * StudioVersionsPane — versions PROPRES au projet App Studio.
+ *
+ * Avant : branché sur la chronologie globale des instantanés du moteur
+ * (`checkpoint.list` sans cwd, donc une autre instance que celle du projet, et
+ * aucun instantané pour un dossier hors git) — l'onglet restait vide. Il lit
+ * maintenant `studio.versions.*` : un dépôt git séparé sous
+ * `<projet>/.codebuddy/studio-versions.git`, alimenté à chaque tour par
+ * NewShell. « Restaurer » garde d'abord l'état courant comme version, donc une
+ * restauration s'annule en restaurant la version « Avant restauration ».
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { CheckpointTimeline } from './CheckpointTimeline';
 import type { CheckpointEntry } from './checkpoint-timeline-model';
 import { CheckpointDiffView } from './CheckpointDiffView';
 import { sortDiff, type DiffFileEntry } from './checkpoint-diff-model';
 
-interface GhostSnapshotWire {
+interface VersionWire {
   id: string;
-  commitHash?: string;
-  description?: string;
-  timestamp?: string | Date;
-  turn?: number;
+  label: string;
+  createdAt: number;
+  files: string[];
+  changes?: DiffFileEntry[];
 }
 
-export function StudioVersionsPane({ cwd, onRestored }: { cwd?: string; onRestored?: () => void }) {
-  const [entries, setEntries] = useState<CheckpointEntry[] | null>(null);
+export function StudioVersionsPane({
+  cwd,
+  refreshKey = 0,
+  onRestored,
+}: {
+  cwd?: string;
+  /** Change à chaque nouvelle version prise par App Studio (recharge la liste). */
+  refreshKey?: number;
+  onRestored?: () => void;
+}) {
+  const [versions, setVersions] = useState<VersionWire[] | null>(null);
   const [diffEntries, setDiffEntries] = useState<DiffFileEntry[] | null>(null);
-  const commitsRef = useRef(new Map<string, string>());
+  const [note, setNote] = useState<string | null>(null);
+  const api = window.electronAPI?.studio?.versions;
 
   const refresh = useCallback(() => {
-    void window.electronAPI?.checkpoint
-      ?.list()
-      .then((raw: unknown) => {
-        const timeline = raw as { snapshots?: GhostSnapshotWire[] } | null;
-        const snapshots = timeline?.snapshots ?? [];
-        commitsRef.current = new Map(
-          snapshots.filter((snap) => snap.commitHash).map((snap) => [snap.id, snap.commitHash!]),
-        );
-        setEntries(
-          snapshots.map((snap) => ({
-            id: snap.id,
-            label: snap.turn !== undefined ? `Tour ${snap.turn} — ${snap.description ?? snap.id}` : (snap.description ?? snap.id),
-            createdAt: snap.timestamp ? new Date(snap.timestamp).getTime() : 0,
-            files: [],
-          })),
-        );
+    if (!cwd || !api) {
+      setVersions([]);
+      return;
+    }
+    void api
+      .list(cwd)
+      .then((res) => {
+        setVersions(res.ok ? res.data : []);
+        if (!res.ok) setNote(`Versions indisponibles : ${res.error}`);
       })
-      .catch(() => setEntries([]));
-  }, []);
+      .catch(() => setVersions([]));
+  }, [api, cwd]);
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, refreshKey]);
 
   const restore = useCallback(
     (id: string) => {
-      void window.electronAPI?.checkpoint?.restore?.(id).then(() => {
+      if (!cwd || !api) return;
+      void api.restore(cwd, id).then((res) => {
+        setNote(
+          res.ok
+            ? `Version ${id.slice(0, 7)} restaurée. L'état d'avant reste dans la liste : la restauration s'annule en le restaurant.`
+            : `Restauration impossible : ${res.error}`,
+        );
         refresh();
-        onRestored?.();
+        if (res.ok) onRestored?.();
       });
     },
-    [refresh, onRestored],
+    [api, cwd, refresh, onRestored],
   );
 
   const showDiff = useCallback(
     (id: string) => {
-      const commit = commitsRef.current.get(id);
-      if (!commit || !cwd) return;
-      void window.electronAPI?.checkpoint
-        ?.compare?.(cwd, commit, 'HEAD')
-        .then((raw: unknown) => {
-          const list = Array.isArray(raw) ? (raw as DiffFileEntry[]) : [];
-          setDiffEntries(sortDiff(list));
-        })
-        .catch(() => setDiffEntries([]));
+      const version = versions?.find((v) => v.id === id);
+      const changes = version?.changes ?? (version?.files ?? []).map((path) => ({ path, status: 'modified' as const }));
+      setDiffEntries(sortDiff(changes));
     },
-    [cwd],
+    [versions],
   );
 
-  if (entries === null) {
+  if (!api) {
+    return (
+      <div className="flex h-full items-center justify-center p-6 text-center text-xs text-muted-foreground">
+        Versions indisponibles dans cette version de Cowork.
+      </div>
+    );
+  }
+  if (versions === null) {
     return <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Chargement…</div>;
   }
+  const entries: CheckpointEntry[] = versions.map((v) => ({
+    id: v.id,
+    label: v.label || v.id.slice(0, 7),
+    createdAt: v.createdAt,
+    files: v.files,
+  }));
 
   return (
-    <div className="relative h-full overflow-y-auto p-3">
-      <CheckpointTimeline checkpoints={entries} onRestore={restore} {...(cwd ? { onDiff: showDiff } : {})} />
+    <div className="relative h-full overflow-y-auto p-3" data-testid="studio-versions">
+      {note ? (
+        <div className="mb-2 rounded-md border border-border bg-muted px-3 py-2 text-xs text-foreground" data-testid="studio-versions-note">
+          {note}
+        </div>
+      ) : null}
+      <CheckpointTimeline checkpoints={entries} onRestore={restore} onDiff={showDiff} />
       {diffEntries !== null ? (
         <div className="absolute inset-0 z-10 bg-background/95 p-3">
           <CheckpointDiffView entries={diffEntries} onClose={() => setDiffEntries(null)} />

@@ -88,6 +88,8 @@ import type {
   SubTask,
 } from '../main/missions/mission-types';
 import type { Studio2Result } from '../main/studio2/archive-utils';
+import type { StudioVersion, VersionsResult } from '../main/studio/studio-versions-service';
+import type { SiteExportOutcome } from '../main/studio/site-export-service';
 import type { CoworkResourceCatalogView } from '../main/fleet/resource-catalog-view';
 import type {
   DeployRequest,
@@ -1293,6 +1295,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       root: string
     ): Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
       ipcRenderer.invoke('studio.exportZip', { root }),
+    exportSite: (root: string): Promise<SiteExportOutcome> => ipcRenderer.invoke('studio.exportSite', { root }),
+    preview: {
+      probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) =>
+        ipcRenderer.invoke('studio.preview.probe', request),
+    },
     devServer: {
       start: (request: { cwd: string; command: string; url: string; timeoutMs?: number }) =>
         ipcRenderer.invoke('studio.dev.start', request),
@@ -1359,6 +1366,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     github: {
       push: (request: { root: string; name?: string; private?: boolean }) =>
         ipcRenderer.invoke('studio.github.push', request),
+    },
+    versions: {
+      snapshot: (root: string, label: string) => ipcRenderer.invoke('studio.versions.snapshot', root, label),
+      list: (root: string) => ipcRenderer.invoke('studio.versions.list', root),
+      restore: (root: string, id: string) => ipcRenderer.invoke('studio.versions.restore', root, id),
+      revertPaths: (root: string, id: string, paths: string[]) =>
+        ipcRenderer.invoke('studio.versions.revertPaths', root, id, paths),
+      changedSince: (root: string, id: string) => ipcRenderer.invoke('studio.versions.changedSince', root, id),
+    },
+    locks: {
+      get: (root: string) => ipcRenderer.invoke('studio.locks.get', root),
+      set: (root: string, paths: string[]) => ipcRenderer.invoke('studio.locks.set', root, paths),
     },
   },
 
@@ -6195,6 +6214,10 @@ declare global {
         exportZip: (
           root: string
         ) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
+        exportSite?: (root: string) => Promise<SiteExportOutcome>;
+        preview?: {
+          probe: (request: { cwd: string; url: string; build?: boolean; settleMs?: number }) => Promise<unknown>;
+        };
         devServer: {
           start: (request: {
             cwd: string;
@@ -6242,6 +6265,17 @@ declare global {
             name?: string;
             private?: boolean;
           }) => Promise<unknown>;
+        };
+        versions?: {
+          snapshot: (root: string, label: string) => Promise<VersionsResult<{ id: string; changed: boolean }>>;
+          list: (root: string) => Promise<VersionsResult<StudioVersion[]>>;
+          restore: (root: string, id: string) => Promise<VersionsResult<{ id: string; backupId: string }>>;
+          revertPaths: (root: string, id: string, paths: string[]) => Promise<VersionsResult<string[]>>;
+          changedSince: (root: string, id: string) => Promise<VersionsResult<string[]>>;
+        };
+        locks?: {
+          get: (root: string) => Promise<VersionsResult<string[]>>;
+          set: (root: string, paths: string[]) => Promise<VersionsResult<string[]>>;
         };
       };
       studio2: {

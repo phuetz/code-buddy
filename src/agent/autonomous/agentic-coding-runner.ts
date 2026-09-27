@@ -1894,8 +1894,9 @@ async function readJsonFile(filePath: string): Promise<unknown> {
 }
 
 interface AgenticCodingObservabilitySession {
-  end(report: AgenticCodingRunReport): AgenticCodingRunReport;
-  fail(error: unknown): void;
+  /** Resolves once the run journal this cell owns is closed on disk. */
+  end(report: AgenticCodingRunReport): Promise<AgenticCodingRunReport>;
+  fail(error: unknown): Promise<void>;
   runId: string;
   stepEnd(stepId: string, data?: Record<string, unknown>): void;
   stepStart(stepId: string, data?: Record<string, unknown>): void;
@@ -1958,8 +1959,8 @@ function startAgenticCodingObservability(
 ): AgenticCodingObservabilitySession {
   if (options.recordObservability === false) {
     return {
-      end: (report) => withRecursiveImprovement(report, options),
-      fail: () => {},
+      end: async (report) => withRecursiveImprovement(report, options),
+      fail: async () => {},
       runId: '',
       stepEnd: () => {},
       stepStart: () => {},
@@ -1994,7 +1995,7 @@ function startAgenticCodingObservability(
   });
 
   return {
-    end(report: AgenticCodingRunReport): AgenticCodingRunReport {
+    async end(report: AgenticCodingRunReport): Promise<AgenticCodingRunReport> {
       const reportWithRecursiveImprovement = withRecursiveImprovement(report, options);
       const progress = buildAgenticCodingWorkflowProgressSnapshot(reportWithRecursiveImprovement);
       artifacts.report = store.saveArtifact(
@@ -2024,7 +2025,10 @@ function startAgenticCodingObservability(
         // The cell owns this store: release its SQLite artifact index and event
         // streams now. A leaked handle keeps `runs/artifact-index.sqlite` locked
         // on Windows (EBUSY on cleanup) and leaks a descriptor everywhere else.
+        // Then wait for the journal: endRun() returns before its file is released,
+        // and a caller removing the runs directory would hit ENOTEMPTY on Windows.
         store.dispose();
+        await store.whenStreamsClosed();
       }
 
       return {
@@ -2037,7 +2041,7 @@ function startAgenticCodingObservability(
         },
       };
     },
-    fail(error: unknown): void {
+    async fail(error: unknown): Promise<void> {
       store.emit(runId, {
         type: 'error',
         data: {
@@ -2048,6 +2052,7 @@ function startAgenticCodingObservability(
       if (ownsRun) {
         store.endRun(runId, 'failed');
         store.dispose();
+        await store.whenStreamsClosed();
       }
     },
     runId,

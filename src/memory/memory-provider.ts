@@ -18,6 +18,7 @@
  */
 
 import type { Memory, MemoryCategory } from './persistent-memory.js';
+import type { MemoryKind, MemoryProvenance } from './memory-provenance.js';
 import { logger } from '../utils/logger.js';
 import { LocalMemoryProvider } from './local-memory-provider.js';
 
@@ -25,6 +26,8 @@ export interface MemoryRememberOptions {
   scope?: 'project' | 'user';
   category?: MemoryCategory;
   tags?: string[];
+  kind?: MemoryKind;
+  provenance?: MemoryProvenance;
 }
 
 export interface MemoryProvider {

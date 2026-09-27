@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Generate simple PNG icons for the mobile PWA (96 / 192 / 512).
+ * Generate simple PNG icons for the mobile PWA (72 / 96 / 192 / 512).
  * Pure zlib + CRC — no image library, no hand-made binaries.
  */
 import { deflateSync } from 'node:zlib';
@@ -81,7 +81,7 @@ export function buildPwaIconPng(size) {
 
 export function writeMobilePwaIcons(targetDir) {
   mkdirSync(targetDir, { recursive: true });
-  const sizes = [96, 192, 512];
+  const sizes = [72, 96, 192, 512];
   const written = [];
   for (const size of sizes) {
     const file = join(targetDir, `icon-${size}.png`);
