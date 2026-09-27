@@ -298,3 +298,20 @@ describe('classifySecretPath — ce qui n’est pas un secret', () => {
     },
   );
 });
+
+describe('ShellEnvPolicy — noms de jetons que le motif ne voyait pas (constat 5)', () => {
+  it('retire GH_PAT, OTEL_EXPORTER_OTLP_HEADERS et un proxy avec mot de passe', async () => {
+    const { ShellEnvPolicy } = await import('../../src/security/shell-env-policy.js');
+    const env = new ShellEnvPolicy().buildEnv({
+      PATH: '/usr/bin',
+      GH_PAT: FAKE_TOKEN,
+      GITHUB_PAT: FAKE_TOKEN,
+      OTEL_EXPORTER_OTLP_HEADERS: `Authorization=Bearer ${FAKE_TOKEN}`,
+      HTTPS_PROXY: `http://qa:${FAKE_TOKEN}@proxy.invalid:3128`,
+      HTTP_PROXY: 'http://proxy.invalid:3128',
+    });
+    expect(JSON.stringify(env)).not.toContain(FAKE_TOKEN);
+    expect(env.PATH).toBe('/usr/bin');
+    expect(env.HTTP_PROXY).toBe('http://proxy.invalid:3128');
+  });
+});
