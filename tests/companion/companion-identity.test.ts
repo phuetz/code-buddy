@@ -168,6 +168,18 @@ describe('companion-identity', () => {
   });
 
   describe('Voice robotNamed resolution via respond-decider', () => {
+    it('keeps a Visa weather request at guest role', async () => {
+      const { createResponseDecider } = await import('../../src/sensory/respond-decider.js');
+      const { resolveVoiceRobotNamed } = await import('../../src/sensory/voice-loop.js');
+      const named = await resolveVoiceRobotNamed('Visa, donne la météo', {
+        responseDecider: createResponseDecider({ robotName: 'Lisa' }),
+      });
+      expect(named).toBe(false);
+      expect(resolveCompanionIdentity({
+        channel: 'voice', isVoicePresence: true, robotNamed: named, env: {},
+      }).role).toBe('guest');
+    });
+
     it('resolves guest when phrase is spoken without robot name outside engagement window, and present when robot is named', async () => {
       const { createResponseDecider } = await import('../../src/sensory/respond-decider.js');
       const { resolveVoiceRobotNamed } = await import('../../src/sensory/voice-loop.js');
@@ -204,11 +216,12 @@ describe('companion-identity', () => {
       expect(identityPresent.role).toBe('present');
       expect(identityPresent.reason).toBe('voice_presence_and_robot_named');
 
-      // 3. Follow-up phrase inside engagement window without name => present
+      // 3. Follow-up phrase inside engagement window without name => guest
+      // robotNamed must be false (only 'addressed' reason counts for identity, not 'engaged')
       const namedFollowUp = await resolveVoiceRobotNamed('raconte une histoire', {
         responseDecider: decider,
       });
-      expect(namedFollowUp).toBe(true);
+      expect(namedFollowUp).toBe(false);
 
       const identityFollowUp = resolveCompanionIdentity({
         channel: 'voice',
@@ -216,7 +229,8 @@ describe('companion-identity', () => {
         robotNamed: namedFollowUp,
         env: {},
       });
-      expect(identityFollowUp.role).toBe('present');
+      expect(identityFollowUp.role).toBe('guest');
+      expect(identityFollowUp.reason).toBe('voice_unauthenticated_or_unnamed');
 
       // 4. Once window closed, phrase without name => guest again
       decider.close();

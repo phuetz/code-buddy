@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Lab RSS</title>
+  <item>
+    <title>Agent memory &amp; retrieval</title>
+    <link>https://example.org/blog/agent-memory/?utm_source=rss#intro</link>
+    <description><![CDATA[<p>Research on agent memory systems.</p>]]></description>
+  </item>
+  <item>
+    <title>Computer vision update</title>
+    <link>https://example.org/blog/vision</link>
+    <description>New image benchmarks.</description>
+  </item>
+</channel></rss>

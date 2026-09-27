@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -49,12 +49,14 @@ vi.mock('../../src/server/agent-adapter.js', () => ({
 }));
 
 import { SessionStore } from '../../src/persistence/session-store.js';
+import { enqueueSessionTurn } from '../../src/server/mobile/resume-sessions.js';
 import { createUserToken } from '../../src/server/auth/jwt.js';
 import { DEFAULT_SERVER_CONFIG } from '../../src/server/types.js';
 import {
   closeAllConnections,
   setupWebSocket,
 } from '../../src/server/websocket/handler.js';
+import { removeTestDirAsync } from '../helpers/tmp.js';
 
 const SECRET = 'mobile-ws-resume-test-secret-32b';
 
@@ -95,6 +97,7 @@ describe('Mobile WebSocket resume session handling', () => {
   let wsBase: string;
   let sessionsDir: string;
   let store: SessionStore;
+  const sessionIds: string[] = [];
 
   const previousSecret = process.env.JWT_SECRET;
   const previousSessionsDir = process.env.CODEBUDDY_SESSIONS_DIR;
@@ -140,6 +143,10 @@ describe('Mobile WebSocket resume session handling', () => {
     for (const client of wss.clients) client.terminate();
     await new Promise<void>((resolve) => wss.close(() => resolve()));
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    // The handler sends stream_end/chat_response BEFORE it persists the turn and
+    // re-reads the session file. Wait for that queued work: removing the files
+    // under it failed on Windows CI with ENOTEMPTY (PR #226, 2026-09-24).
+    await Promise.all(sessionIds.splice(0).map((id) => enqueueSessionTurn(id, async () => undefined)));
 
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
@@ -150,7 +157,7 @@ describe('Mobile WebSocket resume session handling', () => {
     if (previousCoworkDb === undefined) delete process.env.CODEBUDDY_COWORK_DB;
     else process.env.CODEBUDDY_COWORK_DB = previousCoworkDb;
 
-    rmSync(sessionsDir, { recursive: true, force: true });
+    await removeTestDirAsync(sessionsDir);
   });
 
   async function authedClient(userId: string): Promise<{ ws: WebSocket; events: Frame[] }> {
@@ -177,6 +184,7 @@ describe('Mobile WebSocket resume session handling', () => {
     ];
     await store.saveSession(session);
     const targetSessionId = session.id;
+    sessionIds.push(targetSessionId);
 
     // 2. Connect alice via WebSocket
     const { ws, events } = await authedClient('alice');
@@ -274,6 +282,7 @@ describe('Mobile WebSocket resume session handling', () => {
     ];
     await store.saveSession(session);
     const targetSessionId = session.id;
+    sessionIds.push(targetSessionId);
 
     // Bob tries to resume Alice's session
     const { ws, events } = await authedClient('bob');

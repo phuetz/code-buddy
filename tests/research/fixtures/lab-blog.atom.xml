@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Lab Atom</title>
+  <entry>
+    <title>Agent memory &amp; retrieval</title>
+    <id>tag:example.org,2026:one</id>
+    <link rel="self" href="https://example.net/feed/one" />
+    <link rel="alternate" href="https://example.org/blog/agent-memory/" />
+    <summary>Research on agent memory systems.</summary>
+  </entry>
+  <entry>
+    <title>Memory for agents in practice</title>
+    <link href="https://example.net/posts/memory-agents" />
+    <content type="html">&lt;p&gt;Agent memory in practice.&lt;/p&gt;</content>
+  </entry>
+</feed>

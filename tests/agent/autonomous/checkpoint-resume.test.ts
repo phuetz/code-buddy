@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { runAgenticCodingCell } from '../../../src/agent/autonomous/agentic-coding-runner.js';
 import { saveCheckpoint } from '../../../src/agent/autonomous/checkpoint-manager.js';
 import type { AgenticCodingTaskContract } from '../../../src/agent/autonomous/agentic-coding-contract.js';
+import { removeTestDirAsync } from '../../helpers/tmp.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -36,7 +37,7 @@ describe('runner checkpoint resume', () => {
       process.env.GROK_API_KEY = oldGrokKey;
     }
     // Retry: Windows may still hold a handle on just-closed files (AV/indexer).
-    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
+    await removeTestDirAsync(tempRoot);
   });
 
   async function createTempGitRepo(): Promise<string> {
