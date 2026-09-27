@@ -95,6 +95,7 @@ describe('shell, Git et archives sur secrets fictifs', () => {
     try {
       expect(findCredentialPathInCommand('git diff')).not.toBeNull();
       expect(validateCommand('git diff').valid).toBe(false);
+      expect(validateCommand('git diff -- .').valid).toBe(false);
       expect(findCredentialPathInCommand('git diff -- notes.txt')).toBeNull();
       expect(findCredentialPathInCommand('git blame secrets.json')).not.toBeNull();
     } finally {

@@ -423,13 +423,15 @@ function directoryContainsSecret(directory: string): boolean {
 
 function trackedSecretForGitDiff(command: string): string | null {
   const invocation = command.match(/(?:^|[;&|]\s*)git\s+(?:-C\s+([^\s;&|]+)\s+)?diff(?:\s|$)/i);
-  if (!invocation || /\s--\s+[^\s]/.test(command)) return null;
+  if (!invocation) return null;
   const prior = command.slice(0, invocation.index ?? 0);
   const cdMatches = Array.from(prior.matchAll(/(?:^|[;&|]\s*)cd\s+([^\s;&|]+)/g));
   const gitCwd = invocation[1] ?? cdMatches.at(-1)?.[1] ?? process.cwd();
   const cwd = path.resolve(process.cwd(), gitCwd);
+  const tail = command.slice((invocation.index ?? 0) + invocation[0].length).split(/[;&|]/, 1)[0] ?? '';
+  const pathspecs = tail.match(/(?:^|\s)--\s+(.+)$/)?.[1]?.trim().split(/\s+/).filter(Boolean) ?? [];
   try {
-    const names = execFileSync('git', ['ls-files', '--cached', '-z'], {
+    const names = execFileSync('git', ['ls-files', '--cached', '-z', ...(pathspecs.length ? ['--', ...pathspecs] : [])], {
       cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2_000,
     });
     return names.split('\0').find(file => file && checkSecretFileAccess(path.resolve(cwd, file), 'read').secret) ?? null;
