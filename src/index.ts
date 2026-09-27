@@ -3552,7 +3552,12 @@ program
   .description("Show current authentication status (email, plan, OAuth model)")
   .action(async () => {
     const { formatWhoamiStatus } = await import("./commands/whoami-status.js");
-    const { hasCodexCredentials, getChatGptAuth } = await import(
+    const {
+      hasCodexCredentials,
+      getChatGptAuth,
+      getLastChatGptRefreshFailure,
+      describeChatGptRefreshFailure,
+    } = await import(
       "./providers/codex-oauth.js"
     );
 
@@ -3590,7 +3595,11 @@ program
     try {
       const auth = await getChatGptAuth();
       if (!auth) {
-        cli.stdout("ChatGPT: token unreadable. Run `buddy logout` then `buddy login`.");
+        // Null also means a failed refresh: say which, never "unreadable" for it.
+        const refreshFailure = getLastChatGptRefreshFailure();
+        cli.stdout(refreshFailure
+          ? `ChatGPT: token refresh failed. ${describeChatGptRefreshFailure(refreshFailure)}`
+          : "ChatGPT: token unreadable. Run `buddy logout` then `buddy login`.");
         if (local) {
           for (const line of formatWhoamiStatus({ chatgpt: null, local }).filter((line) => line.startsWith('Local:'))) {
             cli.stdout(line);

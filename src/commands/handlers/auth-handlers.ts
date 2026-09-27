@@ -18,6 +18,8 @@ import {
   loginInteractive,
   clearCodexCredentials,
   getChatGptAuth,
+  getLastChatGptRefreshFailure,
+  describeChatGptRefreshFailure,
   hasCodexCredentials,
   getCodexAuthFilePath,
 } from '../../providers/codex-oauth.js';
@@ -153,8 +155,14 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
   try {
     const auth = await getChatGptAuth();
     if (!auth) {
-      lines.push('ChatGPT: token unreadable (file present but no access_token).');
-      lines.push('  Try `/logout chatgpt` then `/login chatgpt`.');
+      const refreshFailure = getLastChatGptRefreshFailure();
+      if (refreshFailure) {
+        lines.push('ChatGPT: token refresh failed.');
+        lines.push(`  ${describeChatGptRefreshFailure(refreshFailure)}`);
+      } else {
+        lines.push('ChatGPT: token unreadable (file present but no access_token).');
+        lines.push('  Try `/logout chatgpt` then `/login chatgpt`.');
+      }
       const unreadable = lines.join('\n');
       return { handled: true, failed: true, entry: makeEntry(unreadable) };
     }

@@ -39,6 +39,31 @@ const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 /** OAuth issuer — both authorize and token endpoints live under here. */
 const ISSUER = 'https://auth.openai.com';
 
+/**
+ * Token endpoint base. `CODEBUDDY_CHATGPT_OAUTH_ISSUER` exists only so tests
+ * can point the refresh at a local fake server; it is honoured for loopback
+ * URLs only, so a stray variable can never send a refresh token off-host.
+ */
+function tokenIssuer(): string {
+  const override = process.env.CODEBUDDY_CHATGPT_OAUTH_ISSUER;
+  if (!override) return ISSUER;
+  try {
+    const url = new URL(override);
+    const host = url.hostname.replace(/^\[|\]$/g, '');
+    if ((url.protocol === 'http:' || url.protocol === 'https:')
+      && (host === '127.0.0.1' || host === 'localhost' || host === '::1')) {
+      return override.replace(/\/+$/, '');
+    }
+  } catch { /* fall through */ }
+  logger.warn('CODEBUDDY_CHATGPT_OAUTH_ISSUER ignored: only loopback URLs are accepted');
+  return ISSUER;
+}
+
+/** How long a refresh waits for another process holding the refresh lock. */
+const REFRESH_LOCK_WAIT_MS = 45_000;
+/** A lock older than this is considered abandoned (crashed holder). */
+const REFRESH_LOCK_STALE_MS = 90_000;
+
 /** Hard ceiling on the token exchange/refresh fetches so a stalled IdP can't
  *  hang an inline refresh (runs on the first chat call when tokens are stale). */
 const OAUTH_TOKEN_TIMEOUT_MS = 30_000;
@@ -64,6 +89,210 @@ const TOKEN_REFRESH_AGE_MS = 60 * 60 * 1000; // 1 hour
 /** Coalesce in-process refreshes so a burst of concurrent 401s cannot spend
  * the same rotating refresh token more than once. */
 let refreshAuthInFlight: Promise<ChatGptAuth | null> | null = null;
+
+/** Why the last ChatGPT refresh failed — never contains token material. */
+export type ChatGptRefreshFailureKind =
+  | 'http'
+  | 'network'
+  | 'timeout'
+  | 'invalid-response'
+  | 'save-failed'
+  | 'no-refresh-token';
+
+export interface ChatGptRefreshFailure {
+  kind: ChatGptRefreshFailureKind;
+  /** HTTP status of the token endpoint, when it answered. */
+  status?: number;
+  /** OAuth error code (`invalid_grant`, `refresh_token_reused`…) or errno. */
+  code?: string;
+  /** Short, sanitized human detail (long token-like strings redacted). */
+  detail?: string;
+  /** Temporary failure (network, timeout, 429, 5xx): no re-login needed. */
+  transient: boolean;
+  at: string;
+}
+
+export class ChatGptRefreshError extends Error {
+  constructor(readonly failure: Omit<ChatGptRefreshFailure, 'at'>) {
+    super(describeChatGptRefreshFailure({ ...failure, at: '' }));
+    this.name = 'ChatGptRefreshError';
+  }
+}
+
+let lastRefreshFailure: ChatGptRefreshFailure | null = null;
+
+/** Last refresh failure in this process, or null after a success. */
+export function getLastChatGptRefreshFailure(): ChatGptRefreshFailure | null {
+  return lastRefreshFailure;
+}
+
+/** Redact anything that could be a token and bound the length. */
+function sanitizeOauthText(text: string): string {
+  return text
+    .replace(/[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+)*/g, '[redacted]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
+function safeCode(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value) ? value : undefined;
+}
+
+/** Parse an OAuth error body (RFC 6749 or OpenAI `{error:{code,message}}`). */
+function parseOauthErrorBody(body: string): { code?: string; detail?: string } {
+  try {
+    const json = JSON.parse(body) as Record<string, unknown>;
+    const err = json.error;
+    if (typeof err === 'string') {
+      const description = json.error_description;
+      return {
+        code: safeCode(err),
+        ...(typeof description === 'string' ? { detail: sanitizeOauthText(description) } : {}),
+      };
+    }
+    if (err && typeof err === 'object') {
+      const e = err as Record<string, unknown>;
+      const message = e.message;
+      return {
+        code: safeCode(e.code) ?? safeCode(e.type),
+        ...(typeof message === 'string' ? { detail: sanitizeOauthText(message) } : {}),
+      };
+    }
+  } catch { /* not JSON */ }
+  const text = sanitizeOauthText(body);
+  return text ? { detail: text } : {};
+}
+
+/** Classify a fetch() rejection without leaking its payload. */
+function classifyFetchError(err: unknown): ChatGptRefreshError {
+  const name = err instanceof Error ? err.name : '';
+  if (name === 'TimeoutError' || name === 'AbortError') {
+    return new ChatGptRefreshError({
+      kind: 'timeout',
+      detail: `no answer within ${OAUTH_TOKEN_TIMEOUT_MS / 1000} s`,
+      transient: true,
+    });
+  }
+  const cause = err instanceof Error ? (err as Error & { cause?: unknown }).cause : undefined;
+  const causeCode = cause && typeof cause === 'object'
+    ? safeCode((cause as { code?: unknown }).code) : undefined;
+  return new ChatGptRefreshError({
+    kind: 'network',
+    ...(causeCode ? { code: causeCode } : {}),
+    detail: sanitizeOauthText(err instanceof Error ? err.message : String(err)),
+    transient: true,
+  });
+}
+
+/** One line, token-free, saying what went wrong and what to do. */
+export function describeChatGptRefreshFailure(f: ChatGptRefreshFailure): string {
+  const extra = [f.code, f.detail].filter(Boolean).join(' — ');
+  const suffix = extra ? ` (${extra})` : '';
+  switch (f.kind) {
+    case 'http':
+      if (f.status !== undefined && (f.status === 429 || f.status >= 500)) {
+        return `OpenAI token endpoint unavailable (HTTP ${f.status})${suffix}. Try again later; no re-login needed.`;
+      }
+      return `OpenAI refused the refresh token (HTTP ${f.status ?? '?'})${suffix}: it was already used, expired or revoked. Run \`buddy login\` again.`;
+    case 'network':
+      return `Network error reaching the OpenAI token endpoint${suffix}. Check connectivity; no re-login needed.`;
+    case 'timeout':
+      return `The OpenAI token endpoint did not answer${suffix}. Try again later; no re-login needed.`;
+    case 'invalid-response':
+      return `Unexpected answer from the OpenAI token endpoint${suffix}. Try again later; if it persists, run \`buddy login\`.`;
+    case 'save-failed':
+      return `The refreshed tokens could not be saved${suffix}. Check permissions and disk space of ~/.codebuddy, then run \`buddy login\`.`;
+    case 'no-refresh-token':
+      return 'The credentials file has no refresh token. Run `buddy login` again.';
+  }
+}
+
+function recordRefreshFailure(err: unknown): void {
+  const failure: Omit<ChatGptRefreshFailure, 'at'> = err instanceof ChatGptRefreshError
+    ? err.failure
+    : {
+      kind: 'invalid-response',
+      detail: sanitizeOauthText(err instanceof Error ? `${err.name}: ${err.message}` : String(err)),
+      transient: false,
+    };
+  lastRefreshFailure = { ...failure, at: new Date().toISOString() };
+  // Status, OAuth code and a sanitized detail only — never a token or a raw body.
+  logger.error('ChatGPT token refresh failed', {
+    kind: failure.kind,
+    ...(failure.status !== undefined ? { status: failure.status } : {}),
+    ...(failure.code ? { code: failure.code } : {}),
+    ...(failure.detail ? { detail: failure.detail } : {}),
+    transient: failure.transient,
+  });
+}
+
+/** Seconds-since-epoch `exp` of a JWT access token, if decodable. */
+function accessTokenStillValid(accessToken: string, marginMs = 60_000): boolean {
+  try {
+    const payload = accessToken.split('.')[1];
+    if (!payload) return false;
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as { exp?: unknown };
+    return typeof claims.exp === 'number' && claims.exp * 1000 > Date.now() + marginMs;
+  } catch {
+    return false;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Cross-process refresh lock. The IdP rotates the refresh token on every
+ * use: two Code Buddy processes (server + CLI) refreshing the same stale
+ * token at once make the second one present an already-used token, which
+ * OpenAI answers with `refresh_token_reused` and may revoke the session.
+ * Holding a lock and re-reading the file after acquiring it lets the second
+ * process pick up the tokens the first one just saved.
+ */
+async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  const lockPath = `${AUTH_FILE_PATH}.refresh.lock`;
+  const deadline = Date.now() + REFRESH_LOCK_WAIT_MS;
+  let fd: number | null = null;
+  try {
+    fs.mkdirSync(path.dirname(AUTH_FILE_PATH), { recursive: true, mode: 0o700 });
+  } catch { /* the open below reports the real problem */ }
+  while (fd === null) {
+    try {
+      fd = fs.openSync(lockPath, 'wx', 0o600);
+      fs.writeSync(fd, String(process.pid));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
+        logger.warn('ChatGPT refresh lock unavailable; refreshing without it', {
+          code: (err as NodeJS.ErrnoException).code,
+        });
+        break;
+      }
+      try {
+        if (Date.now() - fs.statSync(lockPath).mtimeMs > REFRESH_LOCK_STALE_MS) {
+          fs.rmSync(lockPath, { force: true });
+          continue;
+        }
+      } catch {
+        continue; // released between open and stat
+      }
+      if (Date.now() > deadline) {
+        logger.warn('ChatGPT refresh lock still held by another process; refreshing anyway');
+        break;
+      }
+      await sleep(100);
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch { /* ignore */ }
+      try { fs.rmSync(lockPath, { force: true }); } catch { /* ignore */ }
+    }
+  }
+}
 
 const AUTH_FILE_PATH = path.join(os.homedir(), '.codebuddy', 'codex-auth.json');
 const CODEX_CLI_AUTH_PATH = path.join(os.homedir(), '.codex', 'auth.json');
@@ -267,7 +496,7 @@ async function exchangeCodeForTokens(
     code_verifier: codeVerifier,
   });
 
-  const response = await fetch(`${ISSUER}/oauth/token`, {
+  const response = await fetch(`${tokenIssuer()}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
@@ -286,24 +515,53 @@ async function exchangeCodeForTokens(
  *  OpenAI's contract. The IdP rotates the refresh_token on every call,
  *  so we always overwrite both. */
 async function refreshTokens(refreshToken: string): Promise<OauthTokens> {
-  const response = await fetch(`${ISSUER}/oauth/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: CLIENT_ID,
-    }),
-    // A stale-token refresh runs inline on the first chat call; bound it so a
-    // stalled IdP surfaces as a timeout error instead of an indefinite hang.
-    signal: AbortSignal.timeout(OAUTH_TOKEN_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`Token refresh failed (${response.status}): ${body.slice(0, 300)}`);
+  let response: Response;
+  try {
+    response = await fetch(`${tokenIssuer()}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: CLIENT_ID,
+      }),
+      // A stale-token refresh runs inline on the first chat call; bound it so a
+      // stalled IdP surfaces as a timeout error instead of an indefinite hang.
+      signal: AbortSignal.timeout(OAUTH_TOKEN_TIMEOUT_MS),
+    });
+  } catch (err) {
+    throw classifyFetchError(err);
   }
-  return (await response.json()) as OauthTokens;
+
+  const body = await response.text().catch(() => '');
+  if (!response.ok) {
+    throw new ChatGptRefreshError({
+      kind: 'http',
+      status: response.status,
+      ...parseOauthErrorBody(body),
+      transient: response.status === 429 || response.status >= 500,
+    });
+  }
+  let parsed: Partial<OauthTokens>;
+  try {
+    parsed = JSON.parse(body) as Partial<OauthTokens>;
+  } catch {
+    throw new ChatGptRefreshError({
+      kind: 'invalid-response',
+      status: response.status,
+      detail: `not JSON (${response.headers.get('content-type') ?? 'no content-type'})`,
+      transient: true,
+    });
+  }
+  if (!parsed || typeof parsed.access_token !== 'string' || !parsed.access_token) {
+    throw new ChatGptRefreshError({
+      kind: 'invalid-response',
+      status: response.status,
+      detail: 'no access_token in the answer',
+      transient: true,
+    });
+  }
+  return parsed as OauthTokens;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -607,7 +865,15 @@ export async function getChatGptAuth(): Promise<ChatGptAuth | null> {
   const ageMs = Date.now() - lastRefreshMs;
 
   if (ageMs > TOKEN_REFRESH_AGE_MS) {
-    return refreshChatGptAuth();
+    const refreshed = await refreshChatGptAuth();
+    if (refreshed) return refreshed;
+    // A routine (age-based) refresh that failed for a temporary reason must
+    // not lock the user out while the current access token is still valid.
+    if (lastRefreshFailure?.transient && accessTokenStillValid(file.tokens.access_token)) {
+      logger.warn('ChatGPT token refresh postponed; current access token still valid');
+      return chatGptAuthFromTokens(file.tokens);
+    }
+    return null;
   }
 
   return chatGptAuthFromTokens(file.tokens);
@@ -619,34 +885,59 @@ export async function getChatGptAuth(): Promise<ChatGptAuth | null> {
  * A 401 is authoritative: simply calling `getChatGptAuth()` used to reload
  * the same <1-hour-old access token and retry it unchanged. Responses
  * providers must call this function for their single 401 recovery attempt.
+ *
+ * On failure returns null and records the cause, readable through
+ * `getLastChatGptRefreshFailure()`.
  */
 export async function refreshChatGptAuth(): Promise<ChatGptAuth | null> {
   if (refreshAuthInFlight) return refreshAuthInFlight;
 
   refreshAuthInFlight = (async () => {
-    const file = loadAuthFile();
-    if (!file?.tokens?.refresh_token) return null;
-
-    try {
-      const refreshed = await refreshTokens(file.tokens.refresh_token);
-      const updated: CodexAuthDotJson = {
-        ...file,
-        tokens: {
-          ...file.tokens,
-          ...refreshed,
-        },
-        last_refresh: new Date().toISOString(),
-      };
-      saveAuthFile(updated);
-      return chatGptAuthFromTokens(updated.tokens!);
-    } catch (err) {
-      // Do not log token endpoint bodies or auth material. Status/name is
-      // sufficient for diagnosis; the caller provides the re-login action.
-      logger.error('ChatGPT token refresh failed', {
-        error: err instanceof Error ? err.name : 'unknown',
-      });
+    const observed = loadAuthFile()?.tokens?.refresh_token;
+    if (!observed) {
+      recordRefreshFailure(new ChatGptRefreshError({ kind: 'no-refresh-token', transient: false }));
       return null;
     }
+
+    return withRefreshLock(async () => {
+      // Re-read under the lock: another process may have rotated the token.
+      const file = loadAuthFile();
+      const current = file?.tokens;
+      if (!current?.refresh_token) {
+        recordRefreshFailure(new ChatGptRefreshError({ kind: 'no-refresh-token', transient: false }));
+        return null;
+      }
+      if (current.refresh_token !== observed && current.access_token) {
+        lastRefreshFailure = null;
+        return chatGptAuthFromTokens(current);
+      }
+
+      try {
+        const refreshed = await refreshTokens(current.refresh_token);
+        const updated: CodexAuthDotJson = {
+          ...file,
+          tokens: {
+            ...current,
+            ...refreshed,
+          },
+          last_refresh: new Date().toISOString(),
+        };
+        try {
+          saveAuthFile(updated);
+        } catch (err) {
+          throw new ChatGptRefreshError({
+            kind: 'save-failed',
+            detail: sanitizeOauthText(err instanceof Error ? err.message : String(err)),
+            transient: false,
+          });
+        }
+        lastRefreshFailure = null;
+        return chatGptAuthFromTokens(updated.tokens!);
+      } catch (err) {
+        recordRefreshFailure(err);
+        return null;
+      }
+    });
   })().finally(() => {
     refreshAuthInFlight = null;
   });
