@@ -69,6 +69,8 @@ describe('StudioDevServer', () => {
       expect(env.VITE_API_KEY).toBe('sk-projet-1234567890');
       // NODE_ENV=production de Cowork ne doit pas passer au serveur de DEV.
       expect('NODE_ENV' in env && env.NODE_ENV === undefined).toBe('NODE_ENV' in process.env);
+      // Échec fermé : un pid inconnu de ce studio (projet inconnu) ne rend aucun journal.
+      expect((await service.logs(9999)).ok).toBe(false);
       const logs = await service.logs(1234);
       expect(logs.ok && logs.data.output).not.toContain('sk-projet-1234567890');
       expect(logs.ok && logs.data.lines).toContain('clé=[secret masqué] fuite');

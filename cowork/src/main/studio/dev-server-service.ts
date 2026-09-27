@@ -217,6 +217,8 @@ export class StudioDevServer {
       }
       const cwd = this.instances.get(pid)?.cwd;
       const raw = result.output ?? '';
+      // Échec fermé : sans projet connu pour ce pid, impossible de masquer ses secrets → rien.
+      if (this.options.redact && !cwd) return { ok: false, error: 'journal indisponible : serveur inconnu de ce studio' };
       const output = cwd && this.options.redact ? await this.options.redact(cwd, raw).catch(() => '') : raw;
       return { ok: true, data: { pid, output, lines: linesFromOutput(output) } };
     } catch (error) {

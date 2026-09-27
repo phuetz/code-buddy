@@ -3266,6 +3266,11 @@ ipcMain.handle('studio.exportZip', async (_event, input: unknown) => {
     if (!trusted) return { ok: false, error: 'project is outside trusted workspaces' };
     const st = await fs.promises.stat(root);
     if (!st.isDirectory()) return { ok: false, error: 'not a directory' };
+    // Un secret du projet écrit en clair dans un fichier exporté : export refusé.
+    const zipLeaks = await projectSecrets.findZipLeaks(root).catch(() => [] as string[]);
+    if (zipLeaks.length > 0) {
+      return { ok: false, error: `Export annulé : un secret du projet figure en clair dans ${zipLeaks.slice(0, 3).join(', ')}.` };
+    }
     const win = getMainWindow();
     const defaultName = `${basename(root) || 'projet'}.zip`;
     const result = win

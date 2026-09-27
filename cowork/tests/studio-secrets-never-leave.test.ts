@@ -156,6 +156,27 @@ describe('secrets du projet App Studio', () => {
     expect(readFileSync(zipPath).includes(Buffer.from(DOTENV_SECRET))).toBe(false);
   });
 
+  it('export zip : sorties de build exclues, secret en clair dans un fichier source = refus', async () => {
+    await service.set(root, 'VITE_API_KEY', SECRET);
+    writeFileSync(path.join(root, '.env.local'), `VITE_API_KEY=${SECRET}\n`);
+    mkdirSync(path.join(root, 'dist', 'assets'), { recursive: true });
+    writeFileSync(path.join(root, 'dist', 'assets', 'index.js'), `const k="${SECRET}";`);
+    expect(await service.findZipLeaks(root)).toEqual([]); // .env et dist ne partent pas dans le zip
+    writeFileSync(path.join(root, 'src', 'config.ts'), `export const KEY = '${SECRET}';\n`);
+    expect(await service.findZipLeaks(root)).toEqual([path.join('src', 'config.ts')]);
+  });
+
+  it('refuse une valeur trop courte pour être masquée ; racine hors confiance : .env non lus', async () => {
+    expect((await service.set(root, 'PIN', '123')).ok).toBe(false);
+    const outside = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'hors-confiance-')));
+    try {
+      writeFileSync(path.join(outside, '.env'), `X=${DOTENV_SECRET}\n`);
+      expect(await service.valuesFor(outside)).toEqual([]);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it('repère un secret intégré à un site construit (export refusé par Cowork)', async () => {
     await service.set(root, 'VITE_API_KEY', SECRET);
     const dist = path.join(base, 'site-exporte');

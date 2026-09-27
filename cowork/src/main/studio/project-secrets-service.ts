@@ -84,6 +84,9 @@ export function redactText(text: string, values: readonly string[]): string {
   return out;
 }
 
+/** Dossiers jamais inclus dans l'export zip, donc inutiles à fouiller avant lui. */
+export const ZIP_SCAN_SKIP_DIRS = ['node_modules', '.git', '.codebuddy', 'dist', 'build', 'out', '.studio-probe-dist'];
+
 export interface ProjectSecretsOptions {
   /** Dossier de stockage (hors projet), ex. `<userData>/studio-secrets`. */
   storeDir: string;
@@ -150,6 +153,8 @@ export class ProjectSecretsService {
       if (!isValidSecretKey(key)) return { ok: false, error: 'nom de variable invalide (lettres, chiffres, _)' };
       if (typeof value !== 'string' || value.length === 0) return { ok: false, error: `valeur vide pour ${key}` };
       if (value.length > MAX_VALUE || /[\r\n\0]/.test(value)) return { ok: false, error: `valeur refusée pour ${key}` };
+      // Plus courte, elle ne pourrait pas être masquée sans abîmer le texte : refusée.
+      if (value.length < MIN_REDACT_LENGTH) return { ok: false, error: `valeur trop courte pour ${key} (${MIN_REDACT_LENGTH} caractères au moins)` };
       const vars = await this.readVars(real);
       if (!(key in vars) && Object.keys(vars).length >= MAX_KEYS) return { ok: false, error: 'trop de secrets' };
       vars[key] = value;
@@ -191,6 +196,9 @@ export class ProjectSecretsService {
       return [];
     }
     const values = Object.values(await this.readVars(real));
+    // Les .env* ne sont lus que dans un espace de confiance (la racine vient du renderer).
+    const trusted = await assertTrustedRoot(real, this.trustedRoots).then(() => true, () => false);
+    if (!trusted) return values;
     for (const name of PROJECT_ENV_FILES) {
       const text = await fs.readFile(path.join(real, name), 'utf8').catch(() => null);
       if (text) values.push(...Object.values(parseDotenv(text)));
@@ -209,10 +217,20 @@ export class ProjectSecretsService {
   }
 
   /**
+   * Fichiers qui partiraient dans l'export zip et contiennent une valeur
+   * secrète en clair (les `.env*`, exclus du zip, ne comptent pas).
+   */
+  async findZipLeaks(root: string): Promise<string[]> {
+    const leaks = await this.findLeaks(root, root, { skipDirs: ZIP_SCAN_SKIP_DIRS });
+    return leaks.filter((rel) => !/(^|[\\/])\.env(\.|$)/.test(rel));
+  }
+
+  /**
    * Cherche une valeur secrète dans les fichiers d'un dossier exporté (site
    * construit). Renvoie les chemins relatifs fautifs — jamais la valeur.
    */
-  async findLeaks(root: string, dir: string): Promise<string[]> {
+  async findLeaks(root: string, dir: string, options: { skipDirs?: readonly string[] } = {}): Promise<string[]> {
+    const skip = new Set(options.skipDirs ?? []);
     const values = (await this.valuesFor(root)).filter((v) => v.length >= MIN_REDACT_LENGTH);
     if (values.length === 0) return [];
     const leaks: string[] = [];
@@ -220,7 +238,9 @@ export class ProjectSecretsService {
       const entries = await fs.readdir(current, { withFileTypes: true }).catch(() => []);
       for (const entry of entries) {
         const abs = path.join(current, entry.name);
-        if (entry.isDirectory()) await walk(abs);
+        if (entry.isDirectory()) {
+          if (!skip.has(entry.name)) await walk(abs);
+        }
         else if (entry.isFile()) {
           const buf = await fs.readFile(abs).catch(() => null);
           if (!buf || buf.length > 20 * 1024 * 1024) continue;

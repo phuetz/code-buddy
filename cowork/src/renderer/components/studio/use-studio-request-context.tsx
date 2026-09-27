@@ -108,14 +108,16 @@ export function useStudioRequestContext(options: UseStudioRequestContextOptions)
     setImage(null);
     setNotice(null);
     setStates({});
+    serverClearedRef.current = null;
   }, [root]);
 
   // L'aperçu affiché est annoncé au processus principal (console de CETTE frame).
   const origin = originOf(previewUrl);
   useEffect(() => {
     setBrowser([]);
-    if (!previewUrl || !root || !previewApi?.watch) return;
-    void previewApi.watch({ url: previewUrl, root }).catch(() => undefined);
+    if (!previewApi?.watch) return;
+    // Sans aperçu : l'URL vide retire la surveillance (plus de console d'une ancienne origine).
+    void previewApi.watch({ url: previewUrl && root ? previewUrl : '', root }).catch(() => undefined);
   }, [previewUrl, root, previewApi]);
 
   useEffect(() => {
