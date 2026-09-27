@@ -1,0 +1,324 @@
+/**
+ * Contexte envoyé au modèle par App Studio, côté processus principal :
+ * - `candidates` : fichiers texte du projet pouvant être joints à une demande,
+ *   avec leur taille et une estimation en jetons (≈ 4 caractères par jeton) ;
+ * - `read` : contenu des fichiers choisis ;
+ * - `locate` : l'élément cliqué dans l'aperçu → fichier et lignes sources.
+ *
+ * Tout est confiné au dossier du projet (racine de confiance, chemins
+ * relatifs sûrs, pas de lien symbolique suivi) et les fichiers `.env*` ne sont
+ * JAMAIS proposés ni lus : un secret ne part pas dans le prompt par ce chemin.
+ *
+ * @module main/studio/studio-context-service
+ */
+
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { assertTrustedRoot, isSafeRelativePath } from './studio-versions-service.js';
+
+export type ContextResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export interface ContextCandidate {
+  path: string;
+  bytes: number;
+  tokens: number;
+}
+
+export interface ContextFile {
+  path: string;
+  content: string;
+  tokens: number;
+}
+
+/** Ce que le script injecté dans l'aperçu rapporte de l'élément cliqué. */
+export interface ElementDescriptor {
+  tag: string;
+  id?: string;
+  classes?: string[];
+  text?: string;
+  selector?: string;
+  html?: string;
+  component?: string;
+  /** React (dev) : `_debugSource` de la fibre, chemin absolu sur le disque. */
+  source?: { fileName: string; lineNumber?: number; columnNumber?: number };
+}
+
+export interface ElementLocation {
+  file: string;
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+  method: 'source' | 'composant' | 'texte' | 'classe' | 'id';
+  /**
+   * Le texte affiché n'est pas écrit dans ces lignes (instance d'un composant
+   * réutilisé, texte venu des données) : où il est écrit.
+   */
+  dataOrigin?: { file: string; line: number };
+}
+
+const SKIP_DIRS = new Set(['node_modules', '.git', '.codebuddy', 'dist', 'build', '.next', '.vite', 'coverage', '.turbo']);
+const TEXT_EXT = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.svelte', '.html', '.htm', '.css', '.scss', '.less',
+  '.json', '.md', '.txt', '.yml', '.yaml', '.toml', '.svg',
+]);
+const SOURCE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js', '.vue', '.svelte', '.html', '.htm']);
+const MAX_FILE_BYTES = 200 * 1024;
+const MAX_FILES = 400;
+const MAX_EXCERPT_LINES = 40;
+
+/** `.env`, `.env.local`, `sub/.env.production`… à tout niveau. */
+export function isEnvFile(rel: string): boolean {
+  const base = rel.replace(/\\/g, '/').split('/').pop() ?? '';
+  return base === '.env' || base.startsWith('.env.');
+}
+
+export function estimateTokens(text: string | number): number {
+  const chars = typeof text === 'number' ? text : text.length;
+  return Math.ceil(chars / 4);
+}
+
+async function walk(root: string, rel = '', out: ContextCandidate[] = []): Promise<ContextCandidate[]> {
+  if (out.length >= MAX_FILES) return out;
+  const entries = await fs.readdir(path.join(root, rel), { withFileTypes: true }).catch(() => []);
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  for (const entry of entries) {
+    if (out.length >= MAX_FILES) break;
+    const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      if (!SKIP_DIRS.has(entry.name)) await walk(root, childRel, out);
+      continue;
+    }
+    if (!entry.isFile() || isEnvFile(childRel)) continue;
+    if (!TEXT_EXT.has(path.extname(entry.name).toLowerCase())) continue;
+    if (entry.name === 'package-lock.json' || entry.name.endsWith('.lock')) continue;
+    const st = await fs.stat(path.join(root, childRel)).catch(() => null);
+    if (!st || st.size > MAX_FILE_BYTES) continue;
+    out.push({ path: childRel, bytes: st.size, tokens: estimateTokens(st.size) });
+  }
+  return out;
+}
+
+function numbered(lines: string[], start: number, end: number): string {
+  const out: string[] = [];
+  for (let n = start; n <= end; n += 1) out.push(`${n}| ${lines[n - 1] ?? ''}`);
+  return out.join('\n');
+}
+
+/** Étendue d'un élément JSX/HTML qui s'ouvre à la ligne `start` (1-based), bornée. */
+export function elementExtent(lines: string[], start: number, tag: string): number {
+  const name = tag.toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!name) return start;
+  const openRe = new RegExp(`<${name}(?=[\\s>/]|$)`, 'g');
+  const closeRe = new RegExp(`</${name}\\s*>`, 'g');
+  let opens = 0;
+  let closes = 0;
+  const last = Math.min(lines.length, start + MAX_EXCERPT_LINES - 1);
+  for (let n = start; n <= last; n += 1) {
+    const line = (lines[n - 1] ?? '').toLowerCase();
+    const o = (line.match(openRe) ?? []).length;
+    opens += o;
+    closes += (line.match(closeRe) ?? []).length;
+    if (n === start && opens === 0) return start;
+    if (n === start && o > 0 && closes === 0 && /\/>\s*$/.test(line)) return start;
+    if (opens > 0 && closes >= opens) return n;
+  }
+  return Math.min(lines.length, start + 8);
+}
+
+export class StudioContextService {
+  constructor(private readonly options: { trustedRoots?: () => string[] } = {}) {}
+
+  private root(root: unknown): Promise<string> {
+    return assertTrustedRoot(root, this.options.trustedRoots);
+  }
+
+  async candidates(root: unknown): Promise<ContextResult<ContextCandidate[]>> {
+    try {
+      return { ok: true, data: await walk(await this.root(root)) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  private async readSafe(real: string, rel: string): Promise<string | null> {
+    if (!isSafeRelativePath(rel) || isEnvFile(rel)) return null;
+    const abs = path.join(real, rel);
+    const st = await fs.lstat(abs).catch(() => null);
+    if (!st || !st.isFile() || st.size > MAX_FILE_BYTES) return null;
+    // Un DOSSIER intermédiaire peut être un lien symbolique : le chemin réel
+    // doit rester dans le projet.
+    const resolved = await fs.realpath(abs).catch(() => null);
+    const inside = resolved ? path.relative(real, resolved) : '..';
+    if (!resolved || inside.startsWith('..') || path.isAbsolute(inside)) return null;
+    return fs.readFile(abs, 'utf8');
+  }
+
+  async read(root: unknown, paths: unknown): Promise<ContextResult<ContextFile[]>> {
+    try {
+      const real = await this.root(root);
+      if (!Array.isArray(paths)) return { ok: false, error: 'liste de fichiers invalide' };
+      const out: ContextFile[] = [];
+      for (const rel of paths.slice(0, 50)) {
+        if (typeof rel !== 'string') continue;
+        const content = await this.readSafe(real, rel);
+        if (content !== null) out.push({ path: rel, content, tokens: estimateTokens(content) });
+      }
+      return { ok: true, data: out };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async locate(root: unknown, descriptor: unknown): Promise<ContextResult<ElementLocation | null>> {
+    const res = await this.locateRaw(root, descriptor);
+    if (!res.ok || !res.data) return res;
+    const text = ((descriptor as ElementDescriptor | null)?.text ?? '').replace(/\s+/g, ' ').trim();
+    if (text.length < 2 || res.data.excerpt.includes(text)) return res;
+    try {
+      const real = await this.root(root);
+      const files = (await walk(real)).filter((c) => SOURCE_EXT.has(path.extname(c.path).toLowerCase()));
+      for (const f of files) {
+        const content = await this.readSafe(real, f.path);
+        const idx = content?.split(/\r?\n/).findIndex((line) => line.includes(text)) ?? -1;
+        if (idx >= 0) return { ok: true, data: { ...res.data, dataOrigin: { file: f.path, line: idx + 1 } } };
+      }
+    } catch {
+      /* origine des données : indication facultative */
+    }
+    return res;
+  }
+
+  private async locateRaw(root: unknown, descriptor: unknown): Promise<ContextResult<ElementLocation | null>> {
+    try {
+      const real = await this.root(root);
+      const d = descriptor as ElementDescriptor | null;
+      if (!d || typeof d !== 'object' || typeof d.tag !== 'string') return { ok: false, error: 'élément invalide' };
+      const tag = d.tag.toLowerCase().replace(/[^a-z0-9-]/g, '');
+
+      // 1. Source React (dev : _debugSource) — seulement si elle est DANS le projet.
+      // Le numéro de ligne n'est pas toujours celui du fichier sur disque (le
+      // plugin React de Vite peut le décaler) : il n'est pris tel quel que si
+      // la balise s'y trouve ; sinon le FICHIER guide la recherche ci-dessous.
+      let sourceFile: string | null = null;
+      let sourceLine = 0;
+      if (d.source && typeof d.source.fileName === 'string') {
+        const abs = path.resolve(d.source.fileName.split('?')[0] ?? '');
+        const rel = path.relative(real, abs);
+        if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+          const posix = rel.split(path.sep).join('/');
+          const content = await this.readSafe(real, posix);
+          if (content !== null) {
+            sourceFile = posix;
+            const lines = content.split(/\r?\n/);
+            sourceLine = typeof d.source.lineNumber === 'number' ? d.source.lineNumber : 0;
+            if (sourceLine >= 1 && sourceLine <= lines.length && new RegExp(`<${tag}(?=[\\s>/]|$)`, 'i').test(lines[sourceLine - 1] ?? '')) {
+              const end = elementExtent(lines, sourceLine, tag);
+              return { ok: true, data: { file: posix, startLine: sourceLine, endLine: end, excerpt: numbered(lines, sourceLine, end), method: 'source' } };
+            }
+          }
+        }
+      }
+
+      // 2. Recherche dans les sources : texte visible, puis id, classes, composant.
+      const files = (await walk(real)).filter((c) => SOURCE_EXT.has(path.extname(c.path).toLowerCase()));
+      const contents = new Map<string, string[]>();
+      for (const f of files) {
+        const text = await this.readSafe(real, f.path);
+        if (text !== null) contents.set(f.path, text.split(/\r?\n/));
+      }
+      const probes: { needle: string; method: ElementLocation['method']; textContent?: boolean }[] = [];
+      const text = (d.text ?? '').replace(/\s+/g, ' ').trim();
+      // Attributs distinctifs de la balise ouvrante (aria-label, id, name, data-testid…).
+      const opening = /^<[^>]*>/.exec(d.html ?? '')?.[0] ?? '';
+      for (const m of opening.matchAll(/\s((?:aria-label|id|name|data-testid|title|alt|href))="([^"]{2,80})"/g)) {
+        probes.push({ needle: `${m[1]}="${m[2]}"`, method: m[1] === 'id' ? 'id' : 'texte' });
+      }
+      if (text.length >= 2) probes.push({ needle: text.slice(0, 60), method: 'texte', textContent: true });
+      if (d.id) probes.push({ needle: `id="${d.id}"`, method: 'id' });
+      const cls = (d.classes ?? []).filter((c) => c.length > 2).slice(0, 3);
+      if (cls.length) probes.push({ needle: cls.join(' '), method: 'classe' });
+      for (const c of cls) probes.push({ needle: c, method: 'classe' });
+      if (d.component && /^[A-Z][A-Za-z0-9_]*$/.test(d.component)) {
+        probes.push({ needle: `function ${d.component}`, method: 'composant' });
+        probes.push({ needle: `const ${d.component} `, method: 'composant' });
+      }
+      // Fichier du composant d'abord (quand le nom est connu), pour départager des textes identiques.
+      const ordered = [...contents.entries()].sort(([a], [b]) => {
+        const hit = (f: string) =>
+          f === sourceFile ? 0 : d.component && path.basename(f).startsWith(`${d.component}.`) ? 1 : 2;
+        return hit(a) - hit(b);
+      });
+      const openBefore = (lines: string[], idx: number): number | null => {
+        for (let n = idx + 1; n >= Math.max(1, idx - 7); n -= 1) {
+          if (new RegExp(`<${tag}(?=[\\s>/]|$)`, 'i').test(lines[n - 1] ?? '')) return n;
+        }
+        return null;
+      };
+      for (const probe of probes) {
+        let fallback: { file: string; lines: string[]; idx: number } | null = null;
+        for (const [file, lines] of ordered) {
+          for (let idx = 0; idx < lines.length; idx += 1) {
+            const line = lines[idx] ?? '';
+            if (!line.includes(probe.needle)) continue;
+            if (probe.method === 'composant') {
+              const end = Math.min(lines.length, idx + 21);
+              return { ok: true, data: { file, startLine: idx + 1, endLine: end, excerpt: numbered(lines, idx + 1, end), method: 'composant' } };
+            }
+            // Texte visible : il doit être du CONTENU (entre balises ou seul sur sa ligne),
+            // pas une valeur d'attribut (placeholder="Ajouter une tâche…").
+            if (probe.textContent) {
+              const trimmed = line.trim();
+              const asContent = trimmed === probe.needle || line.includes(`>${probe.needle}`) || trimmed.startsWith(`${probe.needle}<`);
+              if (!asContent) {
+                fallback ??= { file, lines, idx };
+                continue;
+              }
+            }
+            const start = openBefore(lines, idx);
+            if (start === null) {
+              fallback ??= { file, lines, idx };
+              continue;
+            }
+            const end = Math.max(start, elementExtent(lines, start, tag));
+            return { ok: true, data: { file, startLine: start, endLine: end, excerpt: numbered(lines, start, end), method: probe.method } };
+          }
+        }
+        if (fallback && !probe.textContent) {
+          const { file, lines, idx } = fallback;
+          return { ok: true, data: { file, startLine: idx + 1, endLine: idx + 1, excerpt: numbered(lines, idx + 1, idx + 1), method: probe.method } };
+        }
+      }
+      // Aucune sonde : la balise la plus proche de la ligne annoncée dans le fichier source.
+      if (sourceFile) {
+        const lines = contents.get(sourceFile) ?? [];
+        let best = -1;
+        for (let idx = 0; idx < lines.length; idx += 1) {
+          if (!new RegExp(`<${tag}(?=[\\s>/]|$)`, 'i').test(lines[idx] ?? '')) continue;
+          if (best < 0 || Math.abs(idx + 1 - sourceLine) < Math.abs(best + 1 - sourceLine)) best = idx;
+        }
+        if (best >= 0) {
+          const end = elementExtent(lines, best + 1, tag);
+          return { ok: true, data: { file: sourceFile, startLine: best + 1, endLine: end, excerpt: numbered(lines, best + 1, end), method: 'source' } };
+        }
+      }
+      return { ok: true, data: null };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+}
+
+export const STUDIO_CONTEXT_CHANNELS = {
+  candidates: 'studio.context.candidates',
+  read: 'studio.context.read',
+  locate: 'studio.preview.locate',
+} as const;
+
+export function registerStudioContextIpc(
+  ipcMain: { handle: (channel: string, listener: (event: unknown, ...args: unknown[]) => unknown) => void },
+  service: StudioContextService,
+): void {
+  ipcMain.handle(STUDIO_CONTEXT_CHANNELS.candidates, (_e, root) => service.candidates(root));
+  ipcMain.handle(STUDIO_CONTEXT_CHANNELS.read, (_e, root, paths) => service.read(root, paths));
+  ipcMain.handle(STUDIO_CONTEXT_CHANNELS.locate, (_e, root, descriptor) => service.locate(root, descriptor));
+}
