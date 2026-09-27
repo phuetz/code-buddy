@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import fs from 'fs';
 import { createServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
@@ -21,7 +22,7 @@ describe('memory HTTP persistence failures', () => {
     testRoot = path.join(process.cwd(), '.test-r21', `memory-${process.pid}`);
     const projectPath = path.join(testRoot, 'project-memory-is-a-directory');
     const userPath = path.join(testRoot, 'user-memory.md');
-    fs.rmSync(testRoot, { recursive: true, force: true });
+    removeTmpDirStrict(testRoot);
     fs.mkdirSync(projectPath, { recursive: true });
 
     resetMemoryManagerForTests();
@@ -46,7 +47,7 @@ describe('memory HTTP persistence failures', () => {
       server.close((error) => error ? reject(error) : resolve());
     });
     resetMemoryManagerForTests();
-    fs.rmSync(testRoot, { recursive: true, force: true });
+    removeTmpDirStrict(testRoot);
   });
 
   it('répond 503 quand le magasin refuse la sauvegarde', async () => {

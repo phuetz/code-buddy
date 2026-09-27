@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -26,7 +27,7 @@ describe('native status report HTTP routes', () => {
     } else {
       process.env.CODEBUDDY_HOME = previousHome;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   it('serves raw and report-shaped daemon and heartbeat status over real HTTP', async () => {
