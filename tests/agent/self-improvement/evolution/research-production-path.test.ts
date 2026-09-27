@@ -31,6 +31,9 @@ describe('production research selection', () => {
   });
 
   it('uses the real CKG, BM25, semantic recall and goal path with one shared query', async () => {
+    vi.stubEnv('CODEBUDDY_DGM_RESEARCH_RETRIEVAL', '');
+    vi.stubEnv('CODEBUDDY_DGM_RESEARCH_FILTER', '');
+    vi.stubEnv('CODEBUDDY_DGM_RESEARCH_QUERY', '');
     const dir = mkdtempSync(join(tmpdir(), 'dgm-research-'));
     try {
       const ckg = new CollectiveKnowledgeGraph({ ledgerPath: join(dir, 'ledger.jsonl'),
@@ -42,8 +45,7 @@ describe('production research selection', () => {
       ckg.remember({ type: 'discovery', source: 'arxiv', name: 'arxiv:2501.00002v1',
         text: 'Graph database indexing for large archives.' });
       const linksPath = join(dir, 'links.jsonl');
-      const selected = await retrieveResearchMatches({ features: [feature], ckg, linksPath,
-        retrievalMode: 'hybrid', filterMode: 'legacy' });
+      const selected = await retrieveResearchMatches({ features: [feature], ckg, linksPath });
       expect(selected).toHaveLength(1);
       expect(selected[0]!.hit.name).toBe('arxiv:2501.00001v1');
       const links = readArticleLinks(linksPath);
@@ -51,8 +53,7 @@ describe('production research selection', () => {
       expect(links.find((link) => link.article.arxiv === '2501.00001')?.method).toContain('rrf');
       writeFileSync(linksPath, links.map((link) => JSON.stringify(link.article.arxiv === '2501.00001'
         ? { ...link, humanStatus: 'rejected' } : link)).join('\n') + '\n');
-      expect(await retrieveResearchMatches({ features: [feature], ckg, linksPath,
-        retrievalMode: 'hybrid', filterMode: 'legacy' })).toEqual([]);
+      expect(await retrieveResearchMatches({ features: [feature], ckg, linksPath })).toEqual([]);
       const goals = await fetchResearchGoals({ features: [feature], persistLinks: false,
         recall: async (query) => {
           expect(query).toBe(feature.description);

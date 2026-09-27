@@ -1,5 +1,7 @@
 # Reprise du banc de rappel DGM — 27 septembre 2026
 
+> **État après fusion de `main` (#239 et #248).** Ce rapport décrit la reprise antérieure à l'arrivée de l'identité bibliographique, des liens persistants et du plancher de similarité 0,45. La réconciliation conserve ces trois garanties, le RRF et le banc partagé. Sur le contrôle du banc réconcilié, RRF avec et sans plancher retrouvent chacun 1 positif connu sur 16 ; le plancher reste donc actif par défaut. Les anciens chiffres ci-dessous restent des résultats historiques et ne décrivent plus le code courant. Voir le rapport de réconciliation remis dans le partage.
+
 Relecture indépendante reçue. La mesure précédente ne suivait pas le chemin de production ; résultats de cette reprise consignés après réévaluation.
 
 ## Protocole figé avant la nouvelle mesure
