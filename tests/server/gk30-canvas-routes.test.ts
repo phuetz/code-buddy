@@ -1,3 +1,4 @@
+import { removeTmpDirStrict } from '../helpers/tmp.js';
 /**
  * GK30 — canvas routes must be mounted on the live buddy server.
  * A widget is not "rendered" until HTML is served by GET /__codebuddy__/canvas/:id.
@@ -40,7 +41,7 @@ describe('GK30 canvas routes on buddy server', () => {
     } else {
       process.env.CODEBUDDY_HOME = previousHome;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDirStrict(tmpHome);
   });
 
   async function start(): Promise<string> {

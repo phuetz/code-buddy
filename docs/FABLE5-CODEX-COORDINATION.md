@@ -4,6 +4,8 @@ Dernière consolidation : 2026-09-06, Europe/Paris. Ce fichier est la source de 
 
 ## Protocole obligatoire
 
+Passation 2026-09-27 — Codex (Sol) : patch Jules intégré sur `jules/cb-ws-resume-enotempty-20260927`, commit `93ccefc6d`, zone `tests/server/` et `tests/helpers/tmp.ts`. Worktree propre au départ. Les 34 fichiers de tests existants gardent leurs cas et leurs noms ; helper strict ajouté pour conserver l'échec sur nettoyage persistant. Rouge 1/1 du mutant qui absorbe `ENOTEMPTY`, vert 1/1 ; typecheck, build, lint ciblé et `git diff --check` verts. La suite HTTP/WebSocket ne peut pas être validée ici : `listen 127.0.0.1` retourne `EPERM` ; test annoncé par Jules en timeout avec et sans patch. Windows et Docker non exécutés ; rapport détaillé dans le partage. Verdict : À REPRENDRE pour validation sur machine autorisant les sockets et en CI Windows. Aucun push.
+
 1. Lire ce tableau avant toute modification et inscrire son nom dans la colonne `Propriétaire` avant de commencer.
 2. Un seul propriétaire actif par chantier et par worktree. Si un répertoire est sale, ne pas l'éditer sans passation explicite.
 3. Ne jamais nettoyer, supprimer, réinitialiser ou fusionner en bloc un worktree pour « repartir propre ».
