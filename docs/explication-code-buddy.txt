@@ -1,0 +1,72 @@
+Code Buddy — explication simple
+================================
+
+Code Buddy est un agent de codage IA qui tourne d'abord sur ta propre machine.
+Il lit ton dépôt, écrit du code, lance des commandes, et tu peux le regarder
+travailler — sans facture API si tu utilises Ollama ou un abonnement ChatGPT.
+
+En une phrase : c'est un agent qui transforme une idée en code vérifié, en
+local, avec des garde-fous.
+
+Ce qu'il sait faire
+-------------------
+- Lire un dépôt de code et comprendre sa structure.
+- Écrire et modifier des fichiers, puis exécuter tes commandes de test.
+- Router entre 64 fournisseurs de modèles (cloud, passerelle, ou local).
+- Tourner en flotte : plusieurs instances se parlent et s'appellent entre elles.
+- Proposer ses propres améliorations (leçons, outils, compétences), mais chaque
+  proposition est testée sur un instantané avant d'être gardée.
+- Un « conseil » de modèles : plusieurs répondent, un juge les note, et le
+  scoreboard retient lequel est le plus fiable sur quel type de tâche.
+
+Les interfaces
+--------------
+- Terminal : l'agent en ligne de commande (commande `buddy`).
+- Cowork : une application bureau Electron avec un éditeur de workflows visuel.
+- PWA, chat, voix, App Studio : d'autres façons de lui parler.
+
+Installation (trois commandes, Node.js 20 minimum)
+--------------------------------------------------
+  npm i -g @phuetz/code-buddy
+  buddy login          # abonnement ChatGPT, zéro coût marginal
+  buddy                # démarrer
+
+Pour rester 100 % local : saute `buddy login`, lance Ollama, puis `buddy onboard`.
+`buddy doctor` te dit en une ligne si tout est prêt.
+
+Premier vrai test
+----------------
+  buddy loop "make the failing tests pass" --verify-cmd "npm test"
+
+Il planifie, modifie, lance ta commande de vérification, et ne s'arrête que
+quand elle renvoie zéro — la parole du modèle ne suffit pas, il faut la preuve.
+
+Les options restent éteintes par défaut
+--------------------------------------
+Rien de tout ça n'est nécessaire pour discuter avec un modèle local. Chaque
+fonctionnalité avancée (mémoire, flotte, perception, auto-amélioration) se
+active par une variable d'environnement explicite, et la plupart échouent
+fermées si mal configurées.
+
+Limites honnêtes
+----------------
+- La version npm peut prendre du retard sur le dépôt source.
+- Cowork est une installation séparée (Node.js 22 minimum).
+- La voix et la robotique demandent des binaires locaux supplémentaires.
+- `buddy loop` a besoin d'un modèle qui appelle vraiment des outils.
+- La flotte, c'est deux processus et un jeton JWT, pas un simple drapeau.
+
+Licence
+-------
+Business Source License 1.1 : usage personnel et auto-hébergement gratuits ;
+le fournir comme service commercial à des tiers n'est pas autorisé. Elle passe
+en Apache 2.0 le 31 août 2030.
+
+Dans l'écosystème
+-----------------
+Code Buddy est l'agent. Deux outils frères portent le travail de contexte :
+- lm-resizer : filtre le bruit des sorties de commandes avant qu'elles
+  n'atteignent le modèle (Rust, Apache-2.0).
+- Code Explorer : indexe un dépôt en graphe de connaissances interrogeable
+  via MCP.
+Comprendre, compresser, agir.
