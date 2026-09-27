@@ -190,6 +190,10 @@ chemins = ["~"]
 plafond_par_jour = 3
 expire = "2026-12-31"
 `);
+    // loadMandates refuses a group/other-writable file or directory: do not
+    // inherit the host umask (0002 on many Linux desktops, 0022 on CI).
+    chmodSync(path.dirname(file), 0o700);
+    chmodSync(file, 0o600);
     const configured = mandatesFilePath({ CODEBUDDY_LISA_MANDATES_FILE: file }, home);
     const loaded = loadMandates(configured);
     expect(loaded.problems).toEqual([]);
