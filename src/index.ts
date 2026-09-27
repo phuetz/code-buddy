@@ -2871,11 +2871,6 @@ addLazyCommand(
   },
 );
 
-addLazyCommandGroup(program, 'catalog', 'Generate a source-code catalogue', async () => {
-  const { registerCatalogCommand } = await import('./commands/cli/catalog-command.js');
-  registerCatalogCommand(program);
-});
-
 addLazyCommand(
   program,
   'try',
@@ -3990,6 +3985,14 @@ addLazyCommandGroup(program, 'acp', 'Run Code Buddy as an ACP (Agent Client Prot
 addLazyCommandGroup(program, 'tools', 'Inspect tool profiles and effective tool availability', async () => {
   const { registerToolsCommands } = await import('./commands/cli/tools-commands.js');
   registerToolsCommands(program);
+});
+
+// One `catalog` group: feature states and evidence (#245) plus the source-code
+// catalogue, DGM coverage and article links (#239/#248). Two stubs with the same
+// name would load only the first implementation.
+addLazyCommandGroup(program, 'catalog', 'Inspect feature states, evidence and the source-code catalogue', async () => {
+  const { registerCatalogCommands } = await import('./commands/cli/catalog-command.js');
+  registerCatalogCommands(program);
 });
 
 addLazyCommandGroup(program, 'autonomous-code', 'Run a guarded Agentic Coding Cell task contract', async () => {
