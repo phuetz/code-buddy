@@ -1,0 +1,5 @@
+Commande : buddy config show
+Code de sortie : 0
+Sortie vérifiée :
+Code Buddy Environment Configuration
+GROK_API_KEY=(not set)

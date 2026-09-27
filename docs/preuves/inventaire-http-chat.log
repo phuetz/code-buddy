@@ -1,0 +1,7 @@
+Commande : buddy server --host 127.0.0.1 --port <EPHEMERAL> --no-auth ; POST /api/chat (Ollama local)
+Code de sortie : 0
+Sortie vérifiée :
+HTTP 200
+model : qwen3:4b-instruct
+content : READY
+Arrêt gracieux serveur : code 0

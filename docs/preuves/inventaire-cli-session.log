@@ -1,0 +1,6 @@
+Commande : buddy --prompt <FIXTURE>; buddy session list; buddy --resume <SESSION_ID> --prompt <FOLLOWUP> (Ollama local, HOME isolé)
+Code de sortie : 0
+Sortie vérifiée :
+Première session enregistrée : Recent sessions (1)
+Reprise : journal « Resuming session »
+Réponse après reprise : 7.3.1

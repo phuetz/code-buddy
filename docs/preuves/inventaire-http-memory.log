@@ -1,0 +1,6 @@
+Commande : buddy server --no-auth (loopback) ; POST /api/memory ; GET /api/memory?scope=project
+Code de sortie : 0
+Sortie vérifiée :
+POST : HTTP 201, id inventory_fixture_note
+GET : HTTP 200, entrée de test retrouvée
+Arrêt gracieux serveur : code 0

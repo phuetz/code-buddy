@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-config",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.184Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "dee2d01a618ce2610b03137174a179077a215850a1a4edad71936e19bffb0524",
+  "artifact": "docs/preuves/inventaire-cli-config.log",
+  "summary": "Configuration effective affichée sans clés utilisateur."
+}

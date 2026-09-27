@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-skills",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.184Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "a007ae05b416f5f8d56b56bd7b3c18a5f615249071fb114e250620a8a5878c9c",
+  "artifact": "docs/preuves/inventaire-cli-skills.log",
+  "summary": "Inventaire des skills locaux affiché dans un HOME isolé."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-chat",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.187Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "559cf1c1f8d36ad85c320d396d9aba9a75505e9e7a7170c92166bf6adf3666eb",
+  "artifact": "docs/preuves/inventaire-http-chat.log",
+  "summary": "POST /api/chat exécuté sur serveur local avec réponse Ollama READY."
+}

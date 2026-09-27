@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-read-file",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.185Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "6ceea8a99499da9d0fa65c1e882d9eb1f992a03705d7639a5668c66ca3fdbd61",
+  "artifact": "docs/preuves/inventaire-tool-read-file.log",
+  "summary": "read_file a retourné la version du package de test."
+}

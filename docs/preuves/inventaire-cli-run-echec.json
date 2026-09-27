@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-run",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-27T13:35:15.188Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "eed747673644718d5ed0e52f52924564e90b173b50ea53e247da0d27de1e1555",
+  "artifact": "docs/preuves/inventaire-cli-run-echec.log",
+  "summary": "Rejeu non fonctionnel pour un tour réel avec read_file : événement présent dans show, absent de replay."
+}

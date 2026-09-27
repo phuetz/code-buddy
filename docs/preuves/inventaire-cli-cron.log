@@ -1,0 +1,6 @@
+Commande : buddy -d <FIXTURE> cron add inventory-fixture --at 2031-01-01T00:00:00Z --message <FIXTURE>; buddy cron list; buddy cron remove <ID>
+Code de sortie : 0
+Sortie vérifiée :
+Création : Cron job created: [<ID>] inventory-fixture (message, at)
+Liste : Cron jobs (1), inventory-fixture, prochaine échéance 2031-01-01
+Retrait : Cron job removed: [<ID>] inventory-fixture

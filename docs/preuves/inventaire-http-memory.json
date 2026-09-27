@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-memory",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-27T13:35:15.188Z",
+  "revision": "300496c3122db544c9a803d95ba7bce7784bbb66",
+  "sourceDigest": "d6f3045f8fb16fe6cbb4729bb5cd10c822ab99e432c41b1b76294840d5b38e4e",
+  "artifact": "docs/preuves/inventaire-http-memory.log",
+  "summary": "Entrée mémoire factice créée puis relue par l’API locale."
+}

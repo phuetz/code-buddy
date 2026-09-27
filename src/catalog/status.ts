@@ -18,6 +18,9 @@ export interface CatalogProof {
 interface FeatureDefinition {
   id: string;
   title: string;
+  domain?: string;
+  benefit?: { en: string; fr: string };
+  verificationLimit?: string;
   discoveryKey?: string;
   codePaths?: string[];
   entrypoint?: { kind: EntryKind; checks: Array<{ file: string; contains: string }> };
@@ -30,6 +33,8 @@ interface Inventory { schemaVersion: number; features: FeatureDefinition[] }
 export interface CatalogFeature {
   id: string;
   title: string;
+  domain: string | null;
+  benefit: { en: string; fr: string } | null;
   entryKind: EntryKind | null;
   states: { coded: CatalogState; wired: CatalogState; testedInSituation: CatalogState; deployed: CatalogState };
   lastProof: CatalogProof | null;
@@ -278,8 +283,11 @@ export function buildCatalog(options: CatalogOptions): CatalogStatus {
     if (!feature.codePaths?.length) reasons.push('Aucun chemin de code déclaré.');
     if (!feature.entrypoint?.checks.length) reasons.push('Aucun point d’entrée déclaré.');
     if (!latestEvidence) reasons.push('Aucune preuve d’exécution valide.');
+    if (testedInSituation === 'faux' && latestEvidence) reasons.push(`Échec observé : ${latestEvidence.summary}`);
+    if (testedInSituation !== 'vrai' && feature.verificationLimit) reasons.push(feature.verificationLimit);
     if (!installed) reasons.push('Version installée non confirmée.');
-    return { id: feature.id, title: feature.title, entryKind: feature.entrypoint?.kind ?? null,
+    return { id: feature.id, title: feature.title, domain: feature.domain ?? null,
+      benefit: feature.benefit ?? null, entryKind: feature.entrypoint?.kind ?? null,
       states: { coded, wired, testedInSituation, deployed }, lastProof, latestEvidence, reasons };
   });
   const declared = new Set(inventory.features.flatMap((feature) => [feature.id, feature.discoveryKey ?? '']));
@@ -296,7 +304,8 @@ export function buildCatalog(options: CatalogOptions): CatalogStatus {
       const testedInSituation: CatalogState = latestEvidence && revision && latestEvidence.revision === revision
         ? latestEvidence.result === 'passed' ? 'vrai' : 'faux' : 'inconnu';
       features.push({
-        id, title: `${kind === 'cli' ? 'Commande' : 'Outil'} ${name}`, entryKind: kind,
+        id, title: `${kind === 'cli' ? 'Commande' : 'Outil'} ${name}`,
+        domain: null, benefit: null, entryKind: kind,
         states: { coded: 'inconnu', wired: kind === 'cli' ? 'vrai' : 'inconnu', testedInSituation,
           deployed: installed && kind === 'cli' ? 'vrai' : 'inconnu' },
         lastProof, latestEvidence,
@@ -319,13 +328,13 @@ export function renderCatalogMarkdown(catalog: CatalogStatus): string {
     '# État des fonctionnalités', '',
     `Révision source : ${catalog.sourceRevision ?? 'inconnue'}  `,
     `Version installée confirmée : ${catalog.installedVersion ?? 'inconnue'}`, '',
-    '| Fonctionnalité | CODÉE | RACCORDÉE | TESTÉE EN SITUATION | DÉPLOYÉE | Dernière preuve de fonctionnement |',
-    '|---|---|---|---|---|---|',
+    '| Fonctionnalité | Domaine | CODÉE | RACCORDÉE | TESTÉE EN SITUATION | DÉPLOYÉE | Dernière preuve de fonctionnement | Limite de vérification |',
+    '|---|---|---|---|---|---|---|---|',
   ];
   for (const feature of catalog.features) {
     const proof = feature.lastProof;
     const proofText = proof ? `${proof.date} · ${proof.revision} · ${proof.artifact}` : 'inconnue';
-    lines.push(`| ${escaped(feature.title)} | ${feature.states.coded} | ${feature.states.wired} | ${feature.states.testedInSituation} | ${feature.states.deployed} | ${escaped(proofText)} |`);
+    lines.push(`| ${escaped(feature.title)} | ${escaped(feature.domain ?? '—')} | ${feature.states.coded} | ${feature.states.wired} | ${feature.states.testedInSituation} | ${feature.states.deployed} | ${escaped(proofText)} | ${escaped(feature.reasons.find((reason) => reason !== 'Aucune preuve d’exécution valide.' && reason !== 'Version installée non confirmée.') ?? '—')} |`);
   }
   if (catalog.warnings.length) lines.push('', '## Preuves ignorées', '', ...catalog.warnings.map((warning) => `- ${warning}`));
   return `${lines.join('\n')}\n`;
