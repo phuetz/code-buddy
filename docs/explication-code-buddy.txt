@@ -125,16 +125,19 @@ faillle unique et ça complique les déploiements multi-sites.
 - Une authentification plus légère pour le lab : le JWT partagé fonctionne,
   mais un couplage par clés rotatives ou un mesh Tailscale intégré réduirait
   la friction.
-- De la persistance de l'historique fleet : aujourd'hui il meurt avec la
-  session. Un journal durable (même simple) permettrait l'audit et le
-  rattrapage après déconnexion.
+- De la persistance du journal des événements de la flotte : aujourd'hui,
+  `/fleet history` lit un tampon en mémoire qui disparaît avec la session
+  (les conversations entre pairs, elles, sont déjà enregistrées sur disque,
+  dans ~/.codebuddy/peer-sessions/). Un journal d'événements durable
+  permettrait l'audit et le rattrapage après déconnexion.
 
 4. L'auto-amélioration : prouver la valeur
 ------------------------------------------
 C'est la fonctionnalité la plus ambitieuse et la plus fragile. Le système
-propose des leçons, des outils, des compétences, des variantes de code — mais
-tout reste proposé, jamais appliqué tout seul, et les gains mesurés sont
-limiteés à leurs critères.
+propose des leçons, des outils, des compétences, des variantes de code. Par
+défaut tout reste proposé ; le mode d'application automatique existe, mais
+il n'applique qu'un changement validé par la porte empirique, et les gains
+mesurés sont limités aux critères de cette porte.
 
 - Des métriques d'impact réelles : pour chaque changement accepté, enregistrer
   le coût, le temps gagné, et un cas de régression tenu à l'écart. Aujourd'hui
@@ -194,7 +197,7 @@ que celle d'un Claude Code Desktop ou d'un Cursor.
 
 En résumé
 --------
-Code Buddy a déjà l'architecture la plus ambitieuse du marché : multi-
+Code Buddy a déjà une architecture très ambitieuse : multi-
 fournisseurs, flotte, auto-amélioration, sécurité en profondeur. Le travail
 maintenant, c'est de la rendre aussi simple à adopter qu'un outil à un seul
 modèle. La complexité doit devenir un atout caché, pas un mur à l'entrée.
