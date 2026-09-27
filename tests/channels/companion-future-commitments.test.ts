@@ -24,15 +24,15 @@ function reply(content: string) {
 }
 
 describe('channel future commitment gate', () => {
-  it('guards a no-tool guest reply by default before storing it', async () => {
+  it('guards a no-tool guest reply when enabled, and leaves it untouched by default', async () => {
     const base = {
       apiKey: 'k', baseUrl: 'http://localhost', model: 'm',
       messages: [{ role: 'user' as const, content: 'Et le traitement ?' }],
       identity: guest,
       chat: async () => reply('Je vais surveiller ce traitement.'),
     };
-    const off = await runCompanionChannelTurn({ ...base, env: { CODEBUDDY_LISA_FUTURE_COMMITMENTS: 'false' } });
-    const on = await runCompanionChannelTurn({ ...base, env: {} });
+    const off = await runCompanionChannelTurn({ ...base, env: {} });
+    const on = await runCompanionChannelTurn({ ...base, env: { CODEBUDDY_LISA_FUTURE_COMMITMENTS: 'true' } });
     expect(off.text).toBe('Je vais surveiller ce traitement.');
     expect(on.text).toBe('Je ne surveille pas cela pour le moment.');
   });

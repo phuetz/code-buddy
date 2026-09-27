@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { futureCommitmentsEnabled, guardFutureCommitments } from '../../src/companion/future-commitments.js';
 
 describe('future commitments in French', () => {
-  it('guards by default unless explicitly disabled', () => {
-    expect(futureCommitmentsEnabled({})).toBe(true);
+  it('is opt-in, as documented: unset keeps the streaming voice path untouched', () => {
+    expect(futureCommitmentsEnabled({})).toBe(false);
     expect(futureCommitmentsEnabled({ CODEBUDDY_LISA_FUTURE_COMMITMENTS: 'false' })).toBe(false);
+    expect(futureCommitmentsEnabled({ CODEBUDDY_LISA_FUTURE_COMMITMENTS: 'true' })).toBe(true);
   });
 
   it.each([

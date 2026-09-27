@@ -89,5 +89,5 @@ export function guardFutureCommitments(
 }
 
 export function futureCommitmentsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.CODEBUDDY_LISA_FUTURE_COMMITMENTS !== 'false';
+  return env.CODEBUDDY_LISA_FUTURE_COMMITMENTS === 'true';
 }
