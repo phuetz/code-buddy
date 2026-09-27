@@ -845,6 +845,58 @@ describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () 
     expect(document.getElementById('presence-line')?.textContent).toBe('en ligne');
   });
 
+  it('abandons une connexion WebSocket bloquée avant authentification', () => {
+    const first = sockets[0]!;
+    first.readyState = 3;
+    first.emit('close');
+    vi.advanceTimersByTime(1000);
+    const stalled = sockets[1]!;
+    stalled.readyState = 1;
+    stalled.emit('open');
+    expect(JSON.parse(stalled.sent[0]!).type).toBe('authenticate');
+
+    // A server can accept the socket yet never answer authentication.
+    // No close event arrives, so backoff alone cannot recover.
+    vi.advanceTimersByTime(6000);
+    expect(stalled.readyState).toBe(3);
+    vi.advanceTimersByTime(5000);
+    expect(sockets.length).toBeGreaterThan(2);
+  });
+
+  it.each(['AUTH_FAILED', 'UNAUTHORIZED', 'RATE_LIMITED'])('arrête les reconnexions après %s', (code) => {
+    const first = sockets[0]!;
+    first.readyState = 3;
+    first.emit('close');
+    vi.advanceTimersByTime(1000);
+    const rejected = sockets[1]!;
+    rejected.readyState = 1;
+    rejected.emit('open');
+    rejected.emit('message', {
+      data: JSON.stringify({ type: 'error', error: { code, message: 'Jeton refusé' } }),
+    });
+
+    expect(rejected.readyState).toBe(3);
+    expect((api.state as { token: string }).token).toBe('');
+    expect(sessionStorage.getItem('codebuddy_mobile_token')).toBeNull();
+    expect((document.getElementById('token-input') as HTMLTextAreaElement).value).toBe('');
+    expect(document.getElementById('error-message')?.textContent).toBe('Jeton refusé');
+    const count = sockets.length;
+    rejected.emit('close');
+    vi.advanceTimersByTime(60000);
+    expect(sockets.length).toBe(count);
+  });
+
+  it('ignore une authentification tardive provenant du socket remplacé', () => {
+    const old = sockets[0]!;
+    old.readyState = 3;
+    old.emit('close');
+    vi.advanceTimersByTime(1000);
+    const current = sockets[1]!;
+    expect(current.readyState).toBe(0);
+    old.emit('message', { data: JSON.stringify({ type: 'authenticated' }) });
+    expect((api.state as { connected: boolean }).connected).toBe(false);
+  });
+
   it('queues a message sent while disconnected and replays it once re-authenticated', () => {
     const first = sockets[0]!;
     first.readyState = 3;
@@ -862,7 +914,7 @@ describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () 
     expect((api.state as { outbox: unknown[] }).outbox).toHaveLength(0);
   });
 
-  it('backs off exponentially up to 30 s and resets after a successful auth', () => {
+  it('backs off exponentially up to 5 s and resets after a successful auth', () => {
     const delays: number[] = [];
     for (let i = 0; i < 7; i += 1) {
       const ws = sockets[sockets.length - 1]!;
@@ -872,12 +924,22 @@ describe('Mobile chat UI — reconnexion automatique (serveur redémarré)', () 
       vi.advanceTimersByTime(30000);
     }
     expect(delays[0]).toBe(2000);
-    expect(Math.max(...delays)).toBe(30000);
+    expect(Math.max(...delays)).toBe(5000);
     const ws = sockets[sockets.length - 1]!;
     ws.readyState = 1;
     ws.emit('open');
     api.handleFrame({ type: 'authenticated', payload: { userId: 'u', scopes: ['chat'] } });
     expect((api.state as { reconnectAttempt: number }).reconnectAttempt).toBe(0);
+  });
+
+  it('retries within five seconds after several failures during a server restart', () => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const ws = sockets[sockets.length - 1]!;
+      ws.readyState = 3;
+      ws.emit('close');
+      vi.advanceTimersByTime(30000);
+    }
+    expect((api as unknown as { reconnectDelayMs: () => number }).reconnectDelayMs()).toBeLessThanOrEqual(5000);
   });
 
   it('does not reconnect after an explicit logout', () => {

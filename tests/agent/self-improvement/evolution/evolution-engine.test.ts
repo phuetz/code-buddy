@@ -14,6 +14,24 @@ import type { EvolutionCycleResult } from '../../../../src/agent/self-improvemen
 import { CodeVariantStore, type VariantRecord } from '../../../../src/agent/self-improvement/evolution/code-variant-store.js';
 import type { FitnessReport } from '../../../../src/agent/self-improvement/evolution/variant-fitness.js';
 
+describe('research articles remain experiment-only', () => {
+  it('refuses a research weakness before planning, branching or mutation', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'research-guard-'));
+    let planned = 0;
+    let mutated = 0;
+    try {
+      await expect(runEvolutionCycle({
+        baselineRef: 'HEAD', basePath: dir, store: new CodeVariantStore(join(dir, 'v.json')),
+        weakness: { id: 'article-1', kind: 'research', goal: 'Try a paper method' },
+        components: [], planner: async () => { planned++; return null; },
+        mutate: async () => { mutated++; return { changed: true }; },
+      })).rejects.toThrow('experiment fiche');
+      expect(planned).toBe(0);
+      expect(mutated).toBe(0);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
 function report(over: Partial<FitnessReport>): FitnessReport {
   return { score: 1, passedAll: true, regressions: [], components: [], ...over };
 }
