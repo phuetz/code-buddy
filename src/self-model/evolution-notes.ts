@@ -1,8 +1,8 @@
 /**
  * Structured, local notes about Code Buddy's own released changes.
  *
- * Parsing is deliberately pure. The asynchronous loader only reads the
- * project's CHANGELOG.md and maintains a cache below `.codebuddy/`, never in
+ * Parsing uses the configured user name and package author for privacy masking.
+ * The asynchronous loader only reads the project's CHANGELOG.md and maintains a cache below `.codebuddy/`, never in
  * the user's home directory. This makes the self-model useful to the CLI,
  * Lisa, and the self-improvement loop without making any provider request.
  *
@@ -10,6 +10,7 @@
  */
 
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { readTextAtomic, writeFileAtomic } from '../utils/atomic-write.js';
 
@@ -89,12 +90,31 @@ function normalizeText(value: string): string {
     .trim();
 }
 
+const projectAuthorFirstName = (() => {
+  try {
+    const manifest = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+      author?: string | { name?: string };
+    };
+    const author = typeof manifest.author === 'string' ? manifest.author : manifest.author?.name;
+    return author?.split('<', 1)[0]?.trim().split(/\s+/u)[0];
+  } catch {
+    return undefined;
+  }
+})();
+
 function privacySafe(value: string): string {
-  const configuredName = process.env.CODEBUDDY_USER_NAME?.trim();
-  const escapedName = configuredName?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const withoutName = escapedName
-    ? value.replace(new RegExp(`(?<![\\p{L}\\p{N}_])${escapedName}(?![\\p{L}\\p{N}_])`, 'giu'), 'la personne utilisatrice')
-    : value;
+  const names = new Set(
+    [process.env.CODEBUDDY_USER_NAME?.trim(), projectAuthorFirstName]
+      .filter((name): name is string => Boolean(name)),
+  );
+  let withoutName = value;
+  for (const name of names) {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    withoutName = withoutName.replace(
+      new RegExp(`(?<![\\p{L}\\p{N}_])${escapedName}(?![\\p{L}\\p{N}_])`, 'giu'),
+      'la personne utilisatrice',
+    );
+  }
   return withoutName
     .replace(/\/home\/[^\s`),]+/g, 'un chemin local')
     .replace(/\b[0-9a-f]{12,}\b/gi, 'une révision');

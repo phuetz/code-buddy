@@ -32,6 +32,22 @@ afterEach(async () => {
 });
 
 describe('evolution notes self-model', () => {
+  it('masks the project author when the user name is not configured', async () => {
+    const previous = process.env.CODEBUDDY_USER_NAME;
+    delete process.env.CODEBUDDY_USER_NAME;
+    try {
+      const manifest = JSON.parse(await fs.readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { author: string };
+      const firstName = manifest.author.split('<', 1)[0]?.trim().split(/\s+/u)[0];
+      expect(firstName).toBeTruthy();
+      const notes = parseEvolutionNotes(`## [2.0.0] (2026-08-26)\n\n### Décision ${firstName} — 2026-09-01\n\n- ${firstName} confirme le test.\n`);
+      expect(JSON.stringify(notes)).not.toContain(firstName);
+      expect(notes[0]?.facts).toContain('la personne utilisatrice confirme le test.');
+    } finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_USER_NAME;
+      else process.env.CODEBUDDY_USER_NAME = previous;
+    }
+  });
+
   it('masks the configured user name in release notes', () => {
     const previous = process.env.CODEBUDDY_USER_NAME;
     process.env.CODEBUDDY_USER_NAME = 'Alex';
