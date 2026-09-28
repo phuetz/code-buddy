@@ -549,8 +549,9 @@ describe('Core Handlers', () => {
     test('should show task-to-model mapping', () => {
       const result = handleModelRouter(['status']);
 
-      expect(result.entry?.content).toContain('grok-code-fast-1');
-      expect(result.entry?.content).toContain('grok-4-latest');
+      expect(result.entry?.content).toContain('Task-to-Model Mapping:');
+      expect(result.entry?.content).toContain('search');
+      expect(result.entry?.content).toContain('No provider configured');
     });
 
     test('should show available commands in status', () => {

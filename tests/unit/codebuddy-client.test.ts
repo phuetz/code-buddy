@@ -103,6 +103,8 @@ describe('CodeBuddyClient', () => {
 
     // Reset environment variables
     delete process.env.GROK_BASE_URL;
+    delete process.env.CODEBUDDY_BASE_URL;
+    delete process.env.CODEBUDDY_MODEL;
     delete process.env.CODEBUDDY_MAX_TOKENS;
     delete process.env.GROK_FORCE_TOOLS;
     delete process.env.GROK_CONVERT_TOOL_MESSAGES;
@@ -116,19 +118,19 @@ describe('CodeBuddyClient', () => {
 
         expect(MockedOpenAI).toHaveBeenCalledWith({
           apiKey: mockApiKey,
-          baseURL: 'https://api.x.ai/v1',
+          baseURL: 'https://api.openai.com/v1',
           timeout: 360000,
         });
       });
 
-      it('should use default model grok-code-fast-1', () => {
+      it('should use a generic compatibility model without provider context', () => {
         client = new CodeBuddyClient(mockApiKey);
-        expect(client.getCurrentModel()).toBe('grok-code-fast-1');
+        expect(client.getCurrentModel()).toBe('gpt-4o');
       });
 
-      it('should use default base URL https://api.x.ai/v1', () => {
+      it('should use generic OpenAI-compatible base URL', () => {
         client = new CodeBuddyClient(mockApiKey);
-        expect(client.getBaseURL()).toBe('https://api.x.ai/v1');
+        expect(client.getBaseURL()).toBe('https://api.openai.com/v1');
       });
 
       it('should configure 360 second timeout', () => {
@@ -1234,7 +1236,7 @@ describe('CodeBuddyClient', () => {
   describe('Model Management', () => {
     it('should get current model', () => {
       client = new CodeBuddyClient(mockApiKey);
-      expect(client.getCurrentModel()).toBe('grok-code-fast-1');
+      expect(client.getCurrentModel()).toBe('gpt-4o');
     });
 
     it('should set new model', () => {
@@ -1893,7 +1895,7 @@ describe('CodeBuddyClient', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'grok-code-fast-1',
+          model: 'gpt-4o',
           temperature: 0.7,
         })
       );

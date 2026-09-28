@@ -46,7 +46,7 @@ describe('Subagents Module', () => {
       const agent = new Subagent(apiKey, config, baseURL);
       expect(agent).toBeDefined();
       expect(agent.getConfig().name).toBe(config.name);
-      expect(CodeBuddyClient).toHaveBeenCalledWith(apiKey, 'grok-code-fast-1', baseURL);
+      expect(CodeBuddyClient).toHaveBeenCalledWith(apiKey, 'gpt-4o', baseURL);
     });
 
     it('should run a task successfully without tool calls', async () => {

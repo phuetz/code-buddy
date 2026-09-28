@@ -14,7 +14,7 @@ describe('resolveMultiAgentModel', () => {
     ).toBe('claude-opus');
   });
 
-  it('falls back to grok-3-latest when nothing is configured', () => {
-    expect(resolveMultiAgentModel(undefined, undefined, undefined)).toBe('grok-3-latest');
+  it('uses the generic compatibility model when no provider is configured', () => {
+    expect(resolveMultiAgentModel(undefined, undefined, undefined)).toBe('gpt-4o');
   });
 });

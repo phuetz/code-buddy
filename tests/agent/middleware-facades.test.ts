@@ -151,7 +151,7 @@ describe('middleware — aucune source', () => {
     const manager = agent.contextManager as unknown as {
       config?: { autoCompactThreshold?: number };
     };
-    expect(manager.config?.autoCompactThreshold).toBe(200000);
+    expect(manager.config?.autoCompactThreshold).toBe(128000);
   });
 
   it('garde 400 tours et 100 dollars en YOLO, et le plafond dur à 1000', () => {
@@ -400,7 +400,7 @@ describe('middleware — seuil de compactage après setModel', () => {
   it('sans clé dans le fichier, setModel recalcule encore le seuil sur la fenêtre', () => {
     freshHome();
     const agent = spawn();
-    expect(threshold(agent)).toBe(200000);
+    expect(threshold(agent)).toBe(128000);
     agent.setModel('llama3');
     expect(threshold(agent)).toBe(8192);
   });
@@ -525,7 +525,7 @@ describe('middleware — le projet change après la construction', () => {
     expect(agent.sessionCostLimit).toBe(10);
     expect(agent.turnWarningRatio).toBe(0.8);
     expect(agent.costWarningRatio).toBe(0.8);
-    expect(threshold(agent)).toBe(200000);
+    expect(threshold(agent)).toBe(128000);
   });
 
   it('l\'option de construction garde la priorité après le changement de projet', () => {

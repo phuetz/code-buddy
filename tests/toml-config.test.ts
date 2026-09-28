@@ -118,7 +118,7 @@ describe('TOML Serializer', () => {
   it('should serialize default config', () => {
     const toml = serializeTOML(DEFAULT_CONFIG);
 
-    expect(toml).toContain('active_model = "grok-code-fast"');
+    expect(toml).toContain('active_model = "auto"');
     expect(toml).toContain('[providers.xai]');
     expect(toml).toContain('[models.grok-code-fast]');
     expect(toml).toContain('[tool_config.bash]');
@@ -226,13 +226,9 @@ describe('ConfigManager', () => {
     expect(config.models).toBeDefined();
   });
 
-  it('should get active model', () => {
+  it('should explain an unresolved automatic model', () => {
     const manager = getConfigManager();
-    const model = manager.getActiveModel();
-
-    expect(model.name).toBe(DEFAULT_CONFIG.active_model);
-    expect(model.provider).toBeDefined();
-    expect(model.max_context_tokens).toBeGreaterThan(0);
+    expect(() => manager.getActiveModel()).toThrow('No model selected');
   });
 
   it('should get provider for model', () => {
@@ -240,7 +236,7 @@ describe('ConfigManager', () => {
     const provider = manager.getProviderForModel('grok-code-fast');
 
     expect(provider.name).toBe('xai');
-    expect(provider.api_key_env).toBe('GROK_API_KEY');
+    expect(provider.api_key_env).toBe('XAI_API_KEY');
     expect(provider.type).toBe('xai');
   });
 

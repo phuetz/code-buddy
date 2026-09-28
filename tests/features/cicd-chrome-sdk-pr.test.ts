@@ -422,7 +422,7 @@ describe('AgentSDK', () => {
     it('should use defaults when no config', () => {
       const defaultSdk = new AgentSDK();
       const config = defaultSdk.getConfig();
-      expect(config.model).toBe('grok-3-mini');
+      expect(config.model).toBe('gpt-4o');
       expect(config.maxTurns).toBe(10);
       expect(config.systemPrompt).toBeDefined();
     });

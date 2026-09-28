@@ -138,7 +138,7 @@ describe('ConfigResolver', () => {
     });
 
     it('should use defaults when nothing else available', () => {
-      process.env.CODEBUDDY_PROVIDER = 'grok';
+      delete process.env.CODEBUDDY_PROVIDER;
       const config: ConnectionConfig = {
         profiles: [],
         activeProfileId: 'nonexistent',
@@ -148,8 +148,8 @@ describe('ConfigResolver', () => {
       const resolver = new ConfigResolver(config);
       const result = resolver.resolve();
 
-      expect(result.baseURL).toBe('https://api.x.ai/v1');
-      expect(result.model).toBe('grok-code-fast-1');
+      expect(result.baseURL).toBe('https://api.openai.com/v1');
+      expect(result.model).toBe('gpt-4o');
       expect(result.source).toBe('default');
     });
 
@@ -239,7 +239,7 @@ describe('ConfigResolver', () => {
     it('should switch active profile', () => {
       const resolver = new ConfigResolver();
 
-      expect(resolver.getActiveProfileId()).toBe('grok');
+      expect(resolver.getActiveProfileId()).toBe('');
 
       const success = resolver.setActiveProfile('lmstudio');
       expect(success).toBe(true);
@@ -255,7 +255,7 @@ describe('ConfigResolver', () => {
 
       const success = resolver.setActiveProfile('nonexistent');
       expect(success).toBe(false);
-      expect(resolver.getActiveProfileId()).toBe('grok'); // Unchanged
+      expect(resolver.getActiveProfileId()).toBe(''); // Unchanged
     });
 
     it('should add new profile', () => {
@@ -414,11 +414,10 @@ describe('ConfigResolver', () => {
       }
     });
 
-    it('should default to grok for unknown URLs', () => {
+    it('should not infer xAI for unknown URLs', () => {
       const resolver = new ConfigResolver();
       const result = resolver.resolve({ baseURL: 'http://192.168.1.1:8080/v1', apiKey: 'test' });
-      // Unknown URLs default to grok
-      expect(result.provider).toBe('grok');
+      expect(result.provider).toBe('openai');
     });
   });
 

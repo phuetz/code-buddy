@@ -262,7 +262,7 @@ denylist = ["rm -rf /", "sudo .*"]
       it('should serialize default config', () => {
         const toml = serializeTOML(DEFAULT_CONFIG);
 
-        expect(toml).toContain('active_model = "grok-code-fast"');
+        expect(toml).toContain('active_model = "auto"');
         expect(toml).toContain('[providers.xai]');
         expect(toml).toContain('[models.grok-code-fast]');
         expect(toml).toContain('[tool_config.bash]');
@@ -281,7 +281,7 @@ denylist = ["rm -rf /", "sudo .*"]
         const toml = serializeTOML(DEFAULT_CONFIG);
 
         expect(toml).toContain('base_url = "https://api.x.ai/v1"');
-        expect(toml).toContain('api_key_env = "GROK_API_KEY"');
+        expect(toml).toContain('api_key_env = "XAI_API_KEY"');
         expect(toml).toContain('type = "xai"');
       });
 
@@ -371,7 +371,7 @@ denylist = ["rm -rf /", "sudo .*"]
       it('should have xAI provider configured', () => {
         expect(DEFAULT_CONFIG.providers.xai).toBeDefined();
         expect(DEFAULT_CONFIG.providers.xai.type).toBe('xai');
-        expect(DEFAULT_CONFIG.providers.xai.api_key_env).toBe('GROK_API_KEY');
+        expect(DEFAULT_CONFIG.providers.xai.api_key_env).toBe('XAI_API_KEY');
         expect(DEFAULT_CONFIG.providers.xai.base_url).toBe('https://api.x.ai/v1');
         expect(DEFAULT_CONFIG.providers.xai.enabled).toBe(true);
       });
@@ -402,8 +402,8 @@ denylist = ["rm -rf /", "sudo .*"]
     });
 
     describe('Model defaults', () => {
-      it('should have grok-code-fast as default active model', () => {
-        expect(DEFAULT_CONFIG.active_model).toBe('grok-code-fast');
+      it('should resolve the active model automatically', () => {
+        expect(DEFAULT_CONFIG.active_model).toBe('auto');
       });
 
       it('should have grok-code-fast model configured', () => {
@@ -766,13 +766,9 @@ denylist = ["rm -rf /", "sudo .*"]
     });
 
     describe('getActiveModel', () => {
-      it('should get active model', () => {
+      it('should explain an unresolved automatic model', () => {
         const manager = getConfigManager();
-        const model = manager.getActiveModel();
-
-        expect(model.name).toBe(DEFAULT_CONFIG.active_model);
-        expect(model.provider).toBeDefined();
-        expect(model.max_context_tokens).toBeGreaterThan(0);
+        expect(() => manager.getActiveModel()).toThrow('No model selected');
       });
     });
 
@@ -782,7 +778,7 @@ denylist = ["rm -rf /", "sudo .*"]
         const provider = manager.getProviderForModel('grok-code-fast');
 
         expect(provider.name).toBe('xai');
-        expect(provider.api_key_env).toBe('GROK_API_KEY');
+        expect(provider.api_key_env).toBe('XAI_API_KEY');
         expect(provider.type).toBe('xai');
       });
 
@@ -870,12 +866,10 @@ denylist = ["rm -rf /", "sudo .*"]
     describe('reload', () => {
       it('should reload configuration', () => {
         const manager = getConfigManager();
-        const config1 = manager.getConfig();
-
         const config2 = manager.reload();
 
         expect(config2).toBeDefined();
-        expect(config2.active_model).toBe(config1.active_model);
+        expect(config2.active_model).toBe('auto');
       });
     });
   });
@@ -1383,8 +1377,8 @@ languages:
         expect(DEFAULT_CONFIG.providers.xai.base_url).toBe('https://api.x.ai/v1');
       });
 
-      it('should use GROK_API_KEY environment variable', () => {
-        expect(DEFAULT_CONFIG.providers.xai.api_key_env).toBe('GROK_API_KEY');
+      it('should use XAI_API_KEY for the xAI provider', () => {
+        expect(DEFAULT_CONFIG.providers.xai.api_key_env).toBe('XAI_API_KEY');
       });
 
       it('should have correct provider type', () => {
@@ -1578,8 +1572,9 @@ languages:
     });
 
     describe('Active model validation', () => {
-      it('should have active_model reference a valid model', () => {
-        expect(DEFAULT_CONFIG.models[DEFAULT_CONFIG.active_model]).toBeDefined();
+      it('should leave the active model unresolved until a provider is selected', () => {
+        expect(DEFAULT_CONFIG.active_model).toBe('auto');
+        expect(DEFAULT_CONFIG.models['grok-code-fast']).toBeDefined();
       });
     });
   });

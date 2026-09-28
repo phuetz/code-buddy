@@ -189,7 +189,7 @@ describe('validateEnv', () => {
     const result = validateEnv(env);
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors.some(e => e.includes('GROK_API_KEY'))).toBe(true);
+    expect(result.errors.some(e => e.includes('CODEBUDDY_API_KEY'))).toBe(true);
   });
 
   it('should pass when required variables are set', () => {
@@ -293,7 +293,7 @@ describe('validateEnv', () => {
     };
     const result = validateEnv(env);
     expect(result.valid).toBe(false);
-    expect(result.errors.some(e => e.includes('GROK_API_KEY'))).toBe(true);
+    expect(result.errors.some(e => e.includes('CODEBUDDY_API_KEY'))).toBe(true);
   });
 });
 
@@ -405,9 +405,9 @@ describe('getEnvSummary', () => {
 });
 
 describe('schema defaults', () => {
-  it('should have sensible defaults for core variables', () => {
+  it('should not prescribe a Grok model while retaining safety defaults', () => {
     const model = getEnvDef('GROK_MODEL');
-    expect(model?.default).toBeDefined();
+    expect(model?.default).toBeUndefined();
 
     const yolo = getEnvDef('YOLO_MODE');
     expect(yolo?.default).toBe('false');

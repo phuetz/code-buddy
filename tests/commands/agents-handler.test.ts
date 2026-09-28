@@ -1,7 +1,7 @@
 /**
  * /agents slash handler tests (MultiAgentSystem wake — top 4 audit OpenClaw).
  *
- * Covers: action validation, status output, env GROK_API_KEY guard,
+ * Covers: action validation, status output, provider availability guard,
  * fire-and-forget run lifecycle (single workflow at a time), strategy
  * setter validation, stop/disable propagation.
  *
@@ -181,7 +181,7 @@ describe('handleAgents (/agents)', () => {
   it('enable instantiates the singleton', async () => {
     const r = await handleAgents(['enable']);
     expect(r.entry?.content).toContain('Multi-agent system started');
-    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith('test-key', undefined);
+    expect(mocks.getMultiAgentSystemMock).toHaveBeenCalledWith('test-key', 'https://api.x.ai/v1');
 
     const status = await handleAgents(['status']);
     expect(status.entry?.content).toMatch(/Enabled:\s+yes/);
@@ -193,12 +193,12 @@ describe('handleAgents (/agents)', () => {
     expect(r.entry?.content).toContain('already enabled');
   });
 
-  it('enable without GROK_API_KEY returns clear error', async () => {
+  it('enable without a provider returns clear guidance', async () => {
     delete process.env.GROK_API_KEY;
     delete process.env.CODEBUDDY_PROVIDER;
     delete process.env.OLLAMA_HOST;
     const r = await handleAgents(['enable']);
-    expect(r.entry?.content).toContain('GROK_API_KEY is not set');
+    expect(r.entry?.content).toContain('Run buddy login');
   });
 
   it('enable with CODEBUDDY_PROVIDER=ollama does not require GROK_API_KEY', async () => {

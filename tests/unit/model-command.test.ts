@@ -268,11 +268,11 @@ describe('Model Router Status Display', () => {
     expect(content).toContain('coding');
   });
 
-  it('should display model names', () => {
+  it('should explain when no provider is configured', () => {
     const result = handleModelRouter([]);
 
     const content = result.entry?.content || '';
-    expect(content).toContain('grok');
+    expect(content).toContain('No provider configured');
   });
 
   it('should show commands section', () => {

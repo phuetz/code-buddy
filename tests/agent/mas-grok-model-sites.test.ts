@@ -52,11 +52,11 @@ describe('GROK_MODEL at MAS twin sites', () => {
     expect(clientCtor).toHaveBeenCalledWith('test-key', 'qwen3.8:27b', undefined);
   });
 
-  it('code-review and LSP default model prefer GROK_MODEL', () => {
+  it('code-review and LSP use the active model resolver', () => {
     const review = readFileSync(new URL('../../src/tools/code-review.ts', import.meta.url), 'utf8');
     const lsp = readFileSync(new URL('../../src/lsp/server.ts', import.meta.url), 'utf8');
-    expect(review).toContain('process.env.GROK_MODEL');
-    expect(lsp).toContain('process.env.GROK_MODEL');
+    expect(review).toContain('runtimeDefaultModel()');
+    expect(lsp).toContain('runtimeDefaultModel()');
   });
 
   it('CodeReviewTool constructor prefers GROK_MODEL over grok-3-latest', async () => {
