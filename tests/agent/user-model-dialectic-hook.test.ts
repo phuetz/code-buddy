@@ -21,17 +21,23 @@ vi.mock('../../src/config/feature-flags.js', () => ({
 import { CodeBuddyAgent } from '../../src/agent/codebuddy-agent.js';
 import { createIsolatedHome } from '../helpers/isolated-home.js';
 
-// Every CodeBuddyAgent fires initializeMemory() without awaiting, creating ~/.codebuddy/memory.md:
-// run this file with a throwaway HOME and wait for that in-flight init before cleaning up.
+// CodeBuddyAgent starts memory and persona initialization asynchronously.
+// Keep their isolated HOME until both have finished and the persona watcher is closed.
 const isolatedHome = createIsolatedHome('dialectic-hook-home-');
 beforeAll(() => {
   isolatedHome.enter();
 });
 afterAll(async () => {
   const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
-  await getMemoryManager().initialize().catch(() => undefined);
-  resetMemoryManagerForTests();
-  isolatedHome.leave();
+  const { getPersonaManager, resetPersonaManager } = await import('../../src/personas/persona-manager.js');
+  try {
+    await getMemoryManager().initialize().catch(() => undefined);
+    await getPersonaManager().ready();
+  } finally {
+    resetMemoryManagerForTests();
+    resetPersonaManager();
+    isolatedHome.leave();
+  }
 });
 
 describe('User Model Dialectic Hook on Session End (GAP-11)', () => {
