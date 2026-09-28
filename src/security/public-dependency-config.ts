@@ -17,7 +17,8 @@ export function isPublicDependencyConfig(file: string): boolean {
   const segments = path.normalize(file).split(path.sep);
   if (!segments.includes('node_modules')) return false;
   const basename = path.basename(file).toLowerCase();
-  if (basename !== '.env' && basename !== '.npmrc') return false;
+  const envConfig = /^(?:\.env(?:\..+)?|.+\.env)$/.test(basename);
+  if (!envConfig && basename !== '.npmrc') return false;
   try {
     const stat = fs.lstatSync(file);
     if (!stat.isFile() || stat.size > 4_096) return false;

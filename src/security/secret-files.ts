@@ -64,7 +64,7 @@ const HOME_PRIVATE_FILES: readonly string[] = ['.docker/config.json', '.config/g
  * committed templates and stay readable.
  */
 export function isUniversalSecretBasename(base: string): boolean {
-  const lower = base.toLowerCase();
+  const lower = sqliteStoreBasename(base.toLowerCase());
   if (lower === '.env') return true;
   if (lower.startsWith('.env.')) {
     return !/^\.env\.(example|sample|template|dist|defaults?|schema)$/.test(lower);
@@ -92,13 +92,18 @@ export function isUniversalSecretBasename(base: string): boolean {
   return false;
 }
 
+/** SQLite stores may keep uncheckpointed rows in these sibling files. */
+function sqliteStoreBasename(base: string): string {
+  return base.replace(/(\.(?:db|sqlite|sqlite3))-(?:wal|shm|journal)$/i, '$1');
+}
+
 /**
  * Broader rules applied only inside a home credential root: anything named
  * like an auth/token/credential/secret store, env files, key material and the
  * paired-device registry.
  */
 function isCredentialRootSecretBasename(base: string): boolean {
-  const lower = base.toLowerCase();
+  const lower = sqliteStoreBasename(base.toLowerCase());
   if (isUniversalSecretBasename(lower)) return true;
   if (/(^|[-_.])(auth|oauth|credentials?|tokens?|secrets?|passwords?|login-pending)([-_.]|$)/.test(lower)) {
     return true;

@@ -22,6 +22,7 @@ const clean = path.join(qa.root, 'clean');
 const probe = path.join(qa.root, 'probe');
 const protectedRepo = path.join(qa.root, 'protected');
 const secretDependency = path.join(qa.root, 'secret-dependency');
+const variantSecretDependency = path.join(qa.root, 'variant-secret-dependency');
 const numericDependency = path.join(qa.root, 'numeric-dependency');
 const trackedDependency = path.join(qa.root, 'tracked-dependency');
 const token = 'FAKE-VOISIN-REPRISE-16';
@@ -40,7 +41,7 @@ function write(file: string, content: string): void {
 
 beforeAll(() => {
   fs.mkdirSync(path.join(qa.root, 'home'), { recursive: true });
-  for (const repo of [clean, probe, protectedRepo, secretDependency, numericDependency, trackedDependency]) {
+  for (const repo of [clean, probe, protectedRepo, secretDependency, variantSecretDependency, numericDependency, trackedDependency]) {
     fs.mkdirSync(repo, { recursive: true });
     git(repo, 'init', '-q');
     write(path.join(repo, '.gitignore'), 'node_modules/\n');
@@ -54,13 +55,19 @@ beforeAll(() => {
     'REDIS_HOST=127.0.0.1\nREDIS_PORT=6379\n');
   write(path.join(clean, 'node_modules', 'nerf-dart', '.npmrc'),
     '//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n');
+  for (const name of ['.env.test', '.env.local', '.env.production']) {
+    write(path.join(clean, 'node_modules', 'fixture', name),
+      'REDIS_HOST=127.0.0.1\nREDIS_PORT=6379\n');
+  }
   write(path.join(secretDependency, 'node_modules', 'evil', '.env'),
+    `TOKEN=${token}\n`);
+  write(path.join(variantSecretDependency, 'node_modules', 'evil', '.env.test'),
     `TOKEN=${token}\n`);
   write(path.join(numericDependency, 'node_modules', 'evil', '.env'),
     'AWS_ACCESS_ID=1234\n');
-  write(path.join(trackedDependency, 'node_modules', 'bottleneck', '.env'),
+  write(path.join(trackedDependency, 'node_modules', 'bottleneck', '.env.test'),
     'REDIS_HOST=127.0.0.1\nREDIS_PORT=6379\n');
-  git(trackedDependency, 'add', '-f', 'node_modules/bottleneck/.env');
+  git(trackedDependency, 'add', '-f', 'node_modules/bottleneck/.env.test');
   ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
 });
 
@@ -79,10 +86,12 @@ describe('B15 — dépendances et dépôt voisin', () => {
     expect(runProtectedWorkspaceCommand('echo public', clean)).toBeNull();
     expect(checkSecretFileAccess(path.join(clean, 'node_modules', 'bottleneck', '.env'), 'read').secret).toBe(true);
     expect(checkSecretFileAccess(path.join(clean, 'node_modules', 'nerf-dart', '.npmrc'), 'read').secret).toBe(true);
+    expect(checkSecretFileAccess(path.join(clean, 'node_modules', 'fixture', '.env.test'), 'read').secret).toBe(true);
   });
 
   it('conserve la frontière pour une vraie valeur de jeton dans une dépendance', () => {
     expect(hasProtectedGitWorkspace(secretDependency)).toBe(true);
+    expect(hasProtectedGitWorkspace(variantSecretDependency)).toBe(true);
   });
 
   it('ne présume pas publique une valeur numérique sous une clé inconnue', () => {
