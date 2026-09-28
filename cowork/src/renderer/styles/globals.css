@@ -17,20 +17,24 @@
     --color-surface-muted: #2d2d2d;
     --color-border: #404040;
     --color-border-muted: #333333;
+    --color-border-strong: #898379;
     --color-border-subtle: rgba(255, 255, 255, 0.04);
     --color-mcp: #8b5cf6; /* Keep a nice purple for tools */
     --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.3);
     --shadow-card: 0 2px 4px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);
     --shadow-elevated: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --color-accent: #d67a52;
-    --color-accent-hover: #e08b66;
+    --color-accent: #e08a5f;
+    --color-accent-hover: #e99a72;
+    --color-on-accent: #1a0e08;
     --color-accent-muted: rgba(214, 122, 82, 0.18);
     --color-text-primary: #e5e5e5;
-    --color-text-secondary: #a3a3a3;
+    --color-text-secondary: #b8b3a8;
+    /* Decorative only. Tailwind text-text-muted uses the AA secondary token. */
     --color-text-muted: #737373;
-    --color-success: #10a37f;
-    --color-warning: #d97706;
-    --color-error: #ef4444;
+    --color-success: #4cc38a;
+    --color-warning: #e5b454;
+    --color-error: #ff7b6b;
+    --color-info: #86b3ff;
   }
 
   /* Light theme override — Minimalist clean gray */
@@ -44,20 +48,23 @@
     --color-surface-muted: #f9fafb;
     --color-border: #e5e5e5;
     --color-border-muted: #f3f3f3;
+    --color-border-strong: #8c867b;
     --color-border-subtle: rgba(0, 0, 0, 0.03);
     --color-mcp: #7c3aed;
     --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.05);
     --shadow-card: 0 2px 5px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
     --shadow-elevated: 0 10px 25px rgba(0, 0, 0, 0.1);
-    --color-accent: #d67a52;
-    --color-accent-hover: #c56c46;
+    --color-accent: #a8461f;
+    --color-accent-hover: #963d1b;
+    --color-on-accent: #ffffff;
     --color-accent-muted: rgba(214, 122, 82, 0.12);
     --color-text-primary: #171717;
-    --color-text-secondary: #525252;
+    --color-text-secondary: #5c574e;
     --color-text-muted: #a3a3a3;
-    --color-success: #10a37f;
-    --color-warning: #d97706;
-    --color-error: #ef4444;
+    --color-success: #17754a;
+    --color-warning: #8a5300;
+    --color-error: #b42318;
+    --color-info: #1f5fd6;
   }
 
   /* Ember theme — warm charcoal/orange aesthetic */
@@ -71,6 +78,7 @@
     --color-surface-muted: rgba(30, 28, 25, 0.6);
     --color-border: rgba(59, 55, 50, 0.5);
     --color-border-muted: rgba(47, 44, 40, 0.4);
+    --color-border-strong: #898379;
     --color-border-subtle: rgba(255, 255, 255, 0.06);
     --color-mcp: #c88d6b;
     --shadow-soft: 0 4px 14px 0 rgba(0, 0, 0, 0.3);
@@ -78,6 +86,7 @@
     --shadow-elevated: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 0 20px rgba(214, 122, 82, 0.15);
     --color-accent: #d67a52;
     --color-accent-hover: #e08b66;
+    --color-on-accent: #1a0e08;
     --color-accent-muted: rgba(214, 122, 82, 0.2);
     --color-text-primary: #f8f4ed;
     --color-text-secondary: #c9bbae;
@@ -85,6 +94,7 @@
     --color-success: #82b575;
     --color-warning: #e0b45d;
     --color-error: #db7676;
+    --color-info: #86b3ff;
   }
 
   /* Genspark theme — electric violet/indigo on deep space */
@@ -98,6 +108,7 @@
     --color-surface-muted: #17142e;
     --color-border: #332d5c;
     --color-border-muted: #26214a;
+    --color-border-strong: #8176a7;
     --color-border-subtle: rgba(255, 255, 255, 0.06);
     --color-mcp: #a78bfa;
     --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.4);
@@ -105,6 +116,7 @@
     --shadow-elevated: 0 20px 48px rgba(10, 5, 30, 0.6), 0 0 24px rgba(124, 92, 255, 0.2);
     --color-accent: #7c5cff;
     --color-accent-hover: #8f72ff;
+    --color-on-accent: #0d0b1f;
     --color-accent-muted: rgba(124, 92, 255, 0.2);
     --color-text-primary: #ece9ff;
     --color-text-secondary: #b4a9e0;
@@ -112,6 +124,7 @@
     --color-success: #34d399;
     --color-warning: #fbbf24;
     --color-error: #f87171;
+    --color-info: #86b3ff;
   }
 
   /* Codex theme — OpenAI teal-green on GitHub slate */
@@ -125,6 +138,7 @@
     --color-surface-muted: #161b22;
     --color-border: #30363d;
     --color-border-muted: #21262d;
+    --color-border-strong: #8b949e;
     --color-border-subtle: rgba(255, 255, 255, 0.05);
     --color-mcp: #2dd4bf;
     --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.4);
@@ -132,6 +146,7 @@
     --shadow-elevated: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(16, 163, 127, 0.15);
     --color-accent: #10a37f;
     --color-accent-hover: #1fb894;
+    --color-on-accent: #0d1117;
     --color-accent-muted: rgba(16, 163, 127, 0.18);
     --color-text-primary: #e6edf3;
     --color-text-secondary: #9da7b3;
@@ -139,6 +154,7 @@
     --color-success: #10a37f;
     --color-warning: #d29922;
     --color-error: #f85149;
+    --color-info: #86b3ff;
   }
 
   /* Anthropic theme — Claude cream + terracotta (light) */
@@ -152,13 +168,15 @@
     --color-surface-muted: #f5f3ee;
     --color-border: #e3ded3;
     --color-border-muted: #efece4;
+    --color-border-strong: #8c867b;
     --color-border-subtle: rgba(40, 30, 20, 0.05);
     --color-mcp: #d4a27f;
     --shadow-soft: 0 1px 3px rgba(60, 50, 40, 0.06);
     --shadow-card: 0 2px 6px rgba(60, 50, 40, 0.06), 0 1px 2px rgba(60, 50, 40, 0.03);
     --shadow-elevated: 0 12px 28px rgba(60, 50, 40, 0.12);
-    --color-accent: #cc785c;
-    --color-accent-hover: #b8664a;
+    --color-accent: #a8461f;
+    --color-accent-hover: #963d1b;
+    --color-on-accent: #ffffff;
     --color-accent-muted: rgba(204, 120, 92, 0.14);
     --color-text-primary: #2d2a26;
     --color-text-secondary: #6b6560;
@@ -166,6 +184,7 @@
     --color-success: #10a37f;
     --color-warning: #d97706;
     --color-error: #ef4444;
+    --color-info: #1f5fd6;
   }
 
   * {
@@ -276,7 +295,8 @@
   }
 
   .btn-primary {
-    @apply text-white shadow-soft border border-transparent;
+    @apply shadow-soft border border-transparent;
+    color: var(--color-on-accent);
     background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-hover) 100%);
     box-shadow: 0 4px 15px var(--color-accent-muted), 0 0 0 1px rgba(255,255,255,0.1) inset;
   }

@@ -1,3 +1,14 @@
+// Tailwind's plain `var(...)` colors do not generate slash-opacity utilities.
+// Keep every color tied to the active theme while supporting bg-accent/10, etc.
+const themeColor = (variable) => ({ opacityValue }) =>
+  opacityValue === undefined
+    ? `var(${variable})`
+    : `color-mix(in srgb, var(${variable}) calc(${opacityValue} * 100%), transparent)`;
+const currentColor = ({ opacityValue }) =>
+  opacityValue === undefined
+    ? 'currentColor'
+    : `color-mix(in srgb, currentColor calc(${opacityValue} * 100%), transparent)`;
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: 'class',
@@ -8,38 +19,61 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Use CSS variables for theme-aware colors
+        // Existing tokens and compatibility aliases share the same theme source.
         background: {
-          DEFAULT: 'var(--color-background)',
-          secondary: 'var(--color-background-secondary)',
+          DEFAULT: themeColor('--color-background'),
+          secondary: themeColor('--color-background-secondary'),
         },
         surface: {
-          DEFAULT: 'var(--color-surface)',
-          hover: 'var(--color-surface-hover)',
-          active: 'var(--color-surface-active)',
-          muted: 'var(--color-surface-muted)',
+          DEFAULT: themeColor('--color-surface'),
+          hover: themeColor('--color-surface-hover'),
+          active: themeColor('--color-surface-active'),
+          muted: themeColor('--color-surface-muted'),
+          secondary: themeColor('--color-background-secondary'),
         },
         border: {
-          DEFAULT: 'var(--color-border)',
-          muted: 'var(--color-border-muted)',
-          subtle: 'var(--color-border-subtle)',
+          DEFAULT: themeColor('--color-border'),
+          muted: themeColor('--color-border-muted'),
+          subtle: themeColor('--color-border-subtle'),
+          strong: themeColor('--color-border-strong'),
         },
         accent: {
-          DEFAULT: 'var(--color-accent)',
-          hover: 'var(--color-accent-hover)',
-          muted: 'var(--color-accent-muted)',
+          DEFAULT: themeColor('--color-accent'),
+          hover: themeColor('--color-accent-hover'),
+          muted: themeColor('--color-accent-muted'),
+          foreground: themeColor('--color-on-accent'),
+          contrast: themeColor('--color-on-accent'),
+          primary: themeColor('--color-accent'),
         },
         mcp: {
-          DEFAULT: 'var(--color-mcp)',
+          DEFAULT: themeColor('--color-mcp'),
         },
         text: {
-          primary: 'var(--color-text-primary)',
-          secondary: 'var(--color-text-secondary)',
-          muted: 'var(--color-text-muted)',
+          DEFAULT: themeColor('--color-text-primary'),
+          primary: themeColor('--color-text-primary'),
+          secondary: themeColor('--color-text-secondary'),
+          // Historical text-text-muted classes remain readable; the raw CSS
+          // variable stays available for decorative lines and icons only.
+          muted: themeColor('--color-text-secondary'),
+          tertiary: themeColor('--color-text-secondary'),
         },
-        success: 'var(--color-success)',
-        warning: 'var(--color-warning)',
-        error: 'var(--color-error)',
+        primary: themeColor('--color-accent'),
+        'primary-foreground': themeColor('--color-on-accent'),
+        muted: themeColor('--color-surface-muted'),
+        'muted-foreground': themeColor('--color-text-secondary'),
+        foreground: themeColor('--color-text-primary'),
+        destructive: themeColor('--color-error'),
+        danger: themeColor('--color-error'),
+        secondary: themeColor('--color-text-secondary'),
+        info: themeColor('--color-info'),
+        current: currentColor,
+        success: themeColor('--color-success'),
+        warning: themeColor('--color-warning'),
+        error: themeColor('--color-error'),
+      },
+      opacity: {
+        8: '0.08', 12: '0.12', 18: '0.18', 35: '0.35', 45: '0.45',
+        55: '0.55', 65: '0.65', 88: '0.88', 92: '0.92',
       },
       fontFamily: {
         sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
