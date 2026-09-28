@@ -46,6 +46,11 @@ import {
 } from './execution-policy.js';
 import { confineSpawn } from '../../security/native-sandbox.js';
 import { refusedUnconfinedEscalationResult } from './unconfined-escalation.js';
+import {
+  redactTrackedGitOutput,
+  redactTrackedGitResult,
+  withheldTrackedGitOutput,
+} from '../../security/tracked-git-output-redactor.js';
 
 /**
  * Vrai seulement pour un `cd` SEUL, qui doit changer le répertoire de la session.
@@ -153,12 +158,31 @@ export class BashTool implements Disposable {
     signal?: AbortSignal,
     options?: { refuseUnconfinedEscalation?: boolean },
   ): AsyncGenerator<string, ToolResult, undefined> {
-    return yield* executeStreamingImpl(command, timeout, {
+    const effectiveCwd = cwd ?? this.currentDirectory;
+    const stream = executeStreamingImpl(command, timeout, {
       getCurrentDirectory: () => cwd ?? this.currentDirectory,
       getSandboxManager: () => this.sandboxManager,
       getRunningProcesses: () => this.runningProcesses,
       refuseUnconfinedEscalation: options?.refuseUnconfinedEscalation === true,
     }, signal);
+    const chunks: string[] = [];
+    let bytes = 0;
+    let overflow = false;
+    let step = await stream.next();
+    while (!step.done) {
+      bytes += Buffer.byteLength(step.value, 'utf8');
+      if (bytes <= 2 * 1024 * 1024) chunks.push(step.value);
+      else overflow = true;
+      step = await stream.next();
+    }
+    // A secret can straddle child-process chunks or be added by the command
+    // itself. Release no progress chunk until the final inventory is ready.
+    const visible = overflow
+      ? withheldTrackedGitOutput()
+      : redactTrackedGitOutput(chunks.join(''), effectiveCwd, command);
+    if (visible) yield visible;
+    const result = redactTrackedGitResult(step.value, effectiveCwd, command);
+    return overflow ? { ...result, output: withheldTrackedGitOutput() } : result;
   }
 
   /**
@@ -354,7 +378,9 @@ export class BashTool implements Disposable {
     signal?: AbortSignal,
     options?: { refuseUnconfinedEscalation?: boolean },
   ): Promise<ToolResult> {
-    return this.executeInternal(command, timeout, cwd, true, signal, options);
+    const effectiveCwd = cwd ?? this.currentDirectory;
+    const result = await this.executeInternal(command, timeout, cwd, true, signal, options);
+    return redactTrackedGitResult(result, effectiveCwd, command);
   }
 
   private async executeInternal(
@@ -472,6 +498,7 @@ export class BashTool implements Disposable {
               sandboxed.result.stderr,
               sandboxed.result.exitCode,
               `sandbox:${sandboxed.result.backend}`,
+              effectiveCwd,
             );
           }
           if (!isSandboxBoundaryFailure(sandboxed.result)) {
@@ -480,10 +507,11 @@ export class BashTool implements Disposable {
               sandboxed.result.stderr,
               sandboxed.result.exitCode,
               `sandbox:${sandboxed.result.backend}`,
+              effectiveCwd,
             );
           }
           requiresDirectApproval = true;
-          escalationReason = `Sandbox boundary denied the command: ${sandboxed.result.stderr || sandboxed.result.stdout}`;
+          escalationReason = `Sandbox boundary denied the command: ${redactTrackedGitOutput(sandboxed.result.stderr || sandboxed.result.stdout, effectiveCwd, executionCommand)}`;
         } else {
           requiresDirectApproval = true;
           escalationReason = sandboxed.reason || 'Workspace sandbox unavailable';
@@ -543,7 +571,7 @@ export class BashTool implements Disposable {
       });
 
       if (result.exitCode !== 0) {
-        const errorMessage = result.stderr || `Command exited with code ${result.exitCode}`;
+        const errorMessage = redactTrackedGitOutput(result.stderr || `Command exited with code ${result.exitCode}`, effectiveCwd, executionCommand);
 
         if (signal?.aborted || result.exitCode === 130) {
           return { success: false, error: 'Command aborted by user', output: result.stdout };
@@ -559,7 +587,8 @@ export class BashTool implements Disposable {
               // of the approved one. Route it through validation, RTK freeze,
               // policy, sandbox and exact approval again; only disable nested
               // healing to keep the retry budget bounded.
-              return this.executeInternal(fixCmd, timeout * 2, effectiveCwd, false, signal, options);
+              const repaired = await this.executeInternal(fixCmd, timeout * 2, effectiveCwd, false, signal, options);
+              return redactTrackedGitResult(repaired, effectiveCwd, fixCmd);
             }
           );
 
@@ -635,12 +664,13 @@ export class BashTool implements Disposable {
     stderr: string,
     exitCode: number,
     source: string,
+    cwd: string,
   ): ToolResult {
     if (exitCode !== 0) {
       const diagnostic = stderr.trim() || stdout.trim() || `Command exited with code ${exitCode}`;
       return {
         success: false,
-        error: `${diagnostic}\n[${source}; exit code ${exitCode}]`,
+        error: `${redactTrackedGitOutput(diagnostic, cwd)}\n[${source}; exit code ${exitCode}]`,
       };
     }
 
@@ -730,7 +760,7 @@ export class BashTool implements Disposable {
       ...CONTROLLED_SUBPROCESS_ENV,
     };
 
-    return new Promise((resolve) => {
+    const result = await new Promise<ToolResult>((resolve) => {
       let stdout = '';
       let stderr = '';
       let timedOut = false;
@@ -782,6 +812,7 @@ export class BashTool implements Disposable {
         resolve({ success: false, error: err.message });
       });
     });
+    return redactTrackedGitResult(result, workDir, argv.join(' '));
   }
 
   /**
@@ -897,7 +928,7 @@ export class BashTool implements Disposable {
     }
 
     // Use ripgrep for ultra-fast searching
-    return new Promise((resolve) => {
+    const result = await new Promise<ToolResult>((resolve) => {
       const args = [
         '--no-heading',
         '--line-number',
@@ -946,5 +977,6 @@ export class BashTool implements Disposable {
         });
       });
     });
+    return redactTrackedGitResult(result, this.currentDirectory, `rg ${pattern} ${files}`);
   }
 }

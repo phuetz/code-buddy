@@ -63,7 +63,7 @@ const HOME_PRIVATE_FILES: readonly string[] = ['.docker/config.json', '.config/g
  * `.env.example` / `.sample` / `.template` / `.dist` / `.defaults` are
  * committed templates and stay readable.
  */
-function isUniversalSecretBasename(base: string): boolean {
+export function isUniversalSecretBasename(base: string): boolean {
   const lower = base.toLowerCase();
   if (lower === '.env') return true;
   if (lower.startsWith('.env.')) {

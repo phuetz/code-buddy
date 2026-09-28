@@ -1,0 +1,251 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+const qa = vi.hoisted(() => {
+  const oldHome = process.env.HOME;
+  const root = `${process.cwd()}/_qa/securite-reprise-9`;
+  process.env.HOME = `${root}/home`;
+  delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
+  return { root, home: `${root}/home`, oldHome };
+});
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { BashTool } from '../../src/tools/bash/bash-tool.js';
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
+import { validateCommand } from '../../src/tools/bash/command-validator.js';
+import { redactTrackedGitOutput, redactTrackedGitResult } from '../../src/security/tracked-git-output-redactor.js';
+
+const repo = path.join(qa.root, 'tracked');
+const deletedRepo = path.join(qa.root, 'deleted');
+const emptyRepo = path.join(qa.root, 'empty');
+const mutableRepo = path.join(qa.root, 'mutable');
+const older = 'FAKE-GIT-OLD-SECRET-259';
+const current = 'FAKE-GIT-NEW-SECRET-259';
+const stashed = 'FAKE-GIT-STASH-SECRET-259';
+
+function git(...args: string[]): string {
+  return execFileSync('git', ['-C', repo, ...args], {
+    encoding: 'utf8', env: { ...process.env, HOME: qa.home, GIT_CONFIG_NOSYSTEM: '1' },
+  });
+}
+
+function gitIn(where: string, ...args: string[]): string {
+  return execFileSync('git', ['-C', where, ...args], {
+    encoding: 'utf8', env: { ...process.env, HOME: qa.home, GIT_CONFIG_NOSYSTEM: '1' },
+  });
+}
+
+function commit(message: string): void {
+  git('add', '--all');
+  git('-c', 'user.name=Essai', '-c', 'user.email=essai@example.invalid', 'commit', '-qm', message);
+}
+
+beforeAll(() => {
+  fs.mkdirSync(qa.home, { recursive: true });
+  fs.mkdirSync(repo, { recursive: true });
+  git('init', '-q');
+  fs.writeFileSync(path.join(repo, '.env'), `API_KEY=${older}\n`);
+  fs.writeFileSync(path.join(repo, 'credentials.json'), JSON.stringify({ token: older }));
+  fs.writeFileSync(path.join(repo, '.npmrc'), 'engine-strict=false\n');
+  fs.writeFileSync(path.join(repo, 'notes.txt'), 'bonjour\n');
+  commit('secret ancien');
+  fs.writeFileSync(path.join(repo, '.env'), `API_KEY=${current}\n`);
+  fs.writeFileSync(path.join(repo, 'credentials.json'), JSON.stringify({ token: current }));
+  commit('secret nouveau');
+  fs.writeFileSync(path.join(repo, '.env'), `API_KEY=${stashed}\n`);
+  git('stash', 'push', '-qm', 'secret temporaire');
+  fs.mkdirSync(deletedRepo, { recursive: true });
+  gitIn(deletedRepo, 'init', '-q');
+  fs.writeFileSync(path.join(deletedRepo, '.env'), `API_KEY=${older}\n`);
+  gitIn(deletedRepo, 'add', '.env');
+  gitIn(deletedRepo, '-c', 'user.name=Essai', '-c', 'user.email=essai@example.invalid', 'commit', '-qm', 'avant suppression');
+  fs.rmSync(path.join(deletedRepo, '.env'));
+  gitIn(deletedRepo, 'add', '--all');
+  gitIn(deletedRepo, '-c', 'user.name=Essai', '-c', 'user.email=essai@example.invalid', 'commit', '-qm', 'suppression');
+  fs.mkdirSync(emptyRepo, { recursive: true });
+  gitIn(emptyRepo, 'init', '-q');
+  fs.mkdirSync(mutableRepo, { recursive: true });
+  gitIn(mutableRepo, 'init', '-q');
+  fs.writeFileSync(path.join(mutableRepo, 'notes.txt'), 'bonjour\n');
+  gitIn(mutableRepo, 'add', 'notes.txt');
+  gitIn(mutableRepo, '-c', 'user.name=Essai', '-c', 'user.email=essai@example.invalid', 'commit', '-qm', 'départ');
+  ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
+});
+
+afterAll(() => {
+  fs.rmSync(qa.root, { recursive: true, force: true });
+  if (qa.oldHome === undefined) delete process.env.HOME;
+  else process.env.HOME = qa.oldHome;
+});
+
+describe('seconde barrière sur la sortie shell', () => {
+  it.each([
+    'env git show', 'nice git show', 'timeout 5 git show',
+    'stdbuf -o0 git show', 'nohup git show', '\\git show',
+    'env GIT_DIR=.git git show', 'env sh -c "git show"',
+    'env git show HEAD~1', 'env git show HEAD~1:.env',
+    'env git show HEAD:credentials.json',
+    'command git show', 'exec git show',
+    'printf "show\\n" | xargs git',
+    'env git log -p -1', 'env git grep API_KEY',
+    'env git archive HEAD', 'env git format-patch -1 --stdout',
+    'env git whatchanged -p', 'env git diff-tree -p HEAD~1 HEAD',
+    'env git stash show -p',
+    'printf "show\\n" | xargs git',
+    'git -p show', 'git --paginate log -p -1',
+    'git --namespace=essai show', 'git --literal-pathspecs show',
+    'git --no-replace-objects show', 'git --exec-path=. show',
+    'git -C . show', 'git -c core.pager=cat show',
+  ])('masque les valeurs suivies, indépendamment du préfixe : %s', async (command) => {
+    const result = await new BashTool().execute(command, 3_000, repo);
+    expect(JSON.stringify(result)).not.toContain(older);
+    expect(JSON.stringify(result)).not.toContain(current);
+    expect(JSON.stringify(result)).not.toContain(stashed);
+  });
+
+  it('laisse passer une commande enveloppée et masque sa sortie', async () => {
+    const command = 'env sh -c "git show"';
+    expect(validateCommand(command, undefined, repo).valid).toBe(true);
+    const result = await new BashTool().execute(command, 3_000, repo);
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('[REDACTED]');
+    expect(result.output).not.toContain(current);
+  });
+
+  it('masque aussi les événements de sortie et le résultat final en flux', async () => {
+    const stream = new BashTool().executeStreaming('env git show', 3_000, repo);
+    const chunks: string[] = [];
+    let result = await stream.next();
+    while (!result.done) {
+      chunks.push(result.value);
+      result = await stream.next();
+    }
+    const visible = JSON.stringify({ chunks, result: result.value });
+    expect(visible).toContain('[REDACTED]');
+    expect(visible).not.toContain(current);
+    expect(visible).not.toContain(older);
+    expect(visible).not.toContain(stashed);
+  });
+
+  it('conserve une sortie ordinaire et le mot clef sans sa valeur', async () => {
+    const result = await new BashTool().execute('env git show', 3_000, repo);
+    expect(result.output).toContain('API_KEY=');
+    expect(result.output).toContain('diff --git a/.env b/.env');
+  });
+
+  it('masque la valeur historique après suppression du fichier de travail', async () => {
+    const result = await new BashTool().execute('env git show HEAD~1', 3_000, deletedRepo);
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('[REDACTED]');
+    expect(result.output).not.toContain(older);
+  });
+
+  it('l’enveloppe sh -c avec un chemin explicite ne rend pas la valeur', async () => {
+    const result = await new BashTool().execute('sh -c "git show HEAD:.env"', 3_000, repo);
+    expect(JSON.stringify(result)).not.toContain(current);
+  });
+
+  it('masque le blob lu par hash avec git cat-file, même via un préfixe', async () => {
+    const oid = git('rev-parse', 'HEAD:.env').trim();
+    const command = `env git cat-file -p ${oid}`;
+    expect(validateCommand(command, undefined, repo).valid).toBe(true);
+    const result = await new BashTool().execute(command, 3_000, repo);
+    expect(result.success).toBe(true);
+    expect(result.output).toBe('API_KEY=[REDACTED]');
+  });
+
+  it('masque un chemin de projet composé au moment de l’exécution', async () => {
+    const command = 'Z=; cat .en${Z}v';
+    expect(validateCommand(command, undefined, repo).valid).toBe(true);
+    const result = await new BashTool().execute(command, 3_000, repo);
+    expect(result.success).toBe(true);
+    expect(result.output).toBe('API_KEY=[REDACTED]');
+  });
+
+  it('préserve la sortie dans un dépôt Git neuf sans secret suivi', async () => {
+    const result = await new BashTool().execute('printf bonjour', 3_000, emptyRepo);
+    expect(result.success).toBe(true);
+    expect(result.output).toBe('bonjour');
+  });
+
+  it('ne masque pas une valeur publique du .npmrc suivi', async () => {
+    const result = await new BashTool().execute('printf false', 3_000, repo);
+    expect(result.success).toBe(true);
+    expect(result.output).toBe('false');
+  });
+
+  it('masque une valeur répartie entre deux émissions du processus', async () => {
+    const stream = new BashTool().executeStreaming(
+      'env sh -c "printf FAKE-GIT-NEW-; sleep 0.1; printf SECRET-259"', 3_000, repo,
+    );
+    const chunks: string[] = [];
+    let step = await stream.next();
+    while (!step.done) {
+      chunks.push(step.value);
+      step = await stream.next();
+    }
+    expect(chunks.join('')).toContain('[REDACTED]');
+    expect(chunks.join('')).not.toContain(current);
+  });
+
+  it('masque aussi le champ error du résultat', () => {
+    const result = redactTrackedGitResult({ success: false, error: `échec: ${current}` }, repo);
+    expect(result.error).toBe('échec: [REDACTED]');
+  });
+
+  it('actualise les empreintes après un nouveau commit', () => {
+    expect(redactTrackedGitResult({ success: true, output: 'bonjour' }, mutableRepo).output).toBe('bonjour');
+    const value = 'FAKE-GIT-AJOUT-259';
+    fs.writeFileSync(path.join(mutableRepo, '.env'), `API_KEY=${value}\n`);
+    gitIn(mutableRepo, 'add', '.env');
+    gitIn(mutableRepo, '-c', 'user.name=Essai', '-c', 'user.email=essai@example.invalid', 'commit', '-qm', 'nouveau secret');
+    expect(redactTrackedGitResult({ success: true, output: value }, mutableRepo).output).toBe('[REDACTED]');
+  });
+
+  it('masque GIT_DIR même si le répertoire de lancement est hors du dépôt', async () => {
+    const result = await new BashTool().execute('env GIT_DIR=tracked/.git git show', 3_000, qa.root);
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('[REDACTED]');
+    expect(result.output).not.toContain(current);
+  });
+
+  it.each([
+    'env -C tracked git show',
+    'env --chdir=tracked git show',
+    'env GIT_DIR=tracked/.git GIT_WORK_TREE=tracked git show',
+  ])('masque aussi un dépôt désigné depuis un répertoire parent : %s', async (command) => {
+    const result = await new BashTool().execute(command, 3_000, qa.root);
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('[REDACTED]');
+    expect(result.output).not.toContain(current);
+  });
+
+  it('masque aussi la sortie du chemin shellFreeExec', async () => {
+    const result = await new BashTool().shellFreeExec(['git', 'show'], 3_000, repo);
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('[REDACTED]');
+    expect(result.output).not.toContain(current);
+  });
+
+  it('masque la sortie du ripgrep direct de BashTool', async () => {
+    const bash = new BashTool();
+    await bash.execute('cd ' + repo, 3_000, repo);
+    const result = await bash.grep('FAKE-GIT', 'credentials.json');
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('[REDACTED]');
+    expect(result.output).not.toContain(current);
+  });
+
+  it('retient une sortie trop volumineuse', () => {
+    expect(redactTrackedGitOutput('x'.repeat(2 * 1024 * 1024 + 1), repo))
+      .toContain('tracked secret inventory incomplete');
+  });
+
+  it('retient la sortie si un secret suivi dépasse la limite d’inventaire', () => {
+    fs.writeFileSync(path.join(mutableRepo, '.env'), 'API_KEY=' + 'x'.repeat(256 * 1024));
+    gitIn(mutableRepo, 'add', '.env');
+    expect(redactTrackedGitOutput('bonjour', mutableRepo))
+      .toContain('tracked secret inventory incomplete');
+  });
+});
