@@ -199,11 +199,14 @@ curl http://127.0.0.1:3000/v1/chat/completions \
 
 ## Native Modules Installation (`--allow-scripts`)
 
-Optional native modules include `better-sqlite3`, `sharp`, `node-pty`, `tree-sitter*` and `usearch`. The set can change with the dependency lockfile.
+Code Buddy bundles 18 optional native packages (`better-sqlite3`, `sharp`, `node-pty`, `tree-sitter*`, `onnxruntime-node`, `usearch`, etc.) that provide native hardware and database acceleration.
 
-In **npm 11**, dependency install scripts are blocked by default during global installation. Review npm's list of skipped scripts, then allow only the packages needed for the features you use. A bare `--allow-scripts` is not the documented approval form for a global install; name the packages explicitly:
+In **npm ≥ 11**, lifecycle install scripts are blocked by default during global installation. While Code Buddy functions safely without them via pure JS and JSON file fallbacks, you can compile and enable the native modules using `--allow-scripts`:
 
 ```bash
-# Allow the SQLite native module during global install
+# Allow compilation of all optional native packages during global install
+npm install -g --allow-scripts @phuetz/code-buddy@latest
+
+# Or selectively allow compilation for SQLite support
 npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
 ```

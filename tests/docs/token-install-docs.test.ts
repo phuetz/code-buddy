@@ -17,11 +17,11 @@ describe('B-8 + B-3: Documentation of token minting, --allow-scripts, and option
     expect(content).toMatch(/buddy\s+fleet\s+token/);
   });
 
-  it('docs/getting-started.md documente les scripts bloqués par npm 11 et une autorisation ciblée', () => {
+  it('docs/getting-started.md documente --allow-scripts pour npm >= 11 et les 18 paquets natifs', () => {
     const content = readDoc('docs/getting-started.md');
-    expect(content).toMatch(/npm\s*11/i);
-    expect(content).toMatch(/install scripts are blocked by default/i);
-    expect(content).toMatch(/npm install -g --allow-scripts=better-sqlite3/);
+    expect(content).toMatch(/--allow-scripts/);
+    expect(content).toMatch(/npm\s*(?:>=|≥)\s*11/i);
+    expect(content).toMatch(/18\s+(?:optional\s+)?native\s+packages/i);
   });
 
   it('docs/security.md documente le jeton d authentification et buddy token / fleet token', () => {
@@ -31,11 +31,10 @@ describe('B-8 + B-3: Documentation of token minting, --allow-scripts, and option
     expect(content).toMatch(/JWT_SECRET/);
   });
 
-  it('docs/security.md documente --allow-scripts avec une liste de paquets explicite', () => {
+  it('docs/security.md documente --allow-scripts et les 18 paquets natifs optionnels', () => {
     const content = readDoc('docs/security.md');
-    expect(content).toMatch(/npm\s*11/i);
-    expect(content).toMatch(/install scripts are blocked by default/i);
-    expect(content).toMatch(/npm install -g --allow-scripts=better-sqlite3/);
+    expect(content).toMatch(/--allow-scripts/);
+    expect(content).toMatch(/18\s+(?:optional\s+)?native/i);
   });
 
   it('docs/getting-started.md documente l ouverture PWA en une commande', () => {

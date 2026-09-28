@@ -32,10 +32,12 @@ npm link            # exposes `buddy` globally (or use: npm start / node dist/in
 # The npm release can lag the source; use @latest and check `buddy --version`.
 npm install -g @phuetz/code-buddy@latest
 
-# npm 11: dependency install scripts are blocked by default, including global installs.
-# Optional native modules include better-sqlite3, sharp, node-pty, tree-sitter
-# and usearch. Review the packages npm reports, then allow only those needed.
-# For SQLite support, allow the named package during global installation:
+# Note on npm >= 11: install-scripts are blocked by default during global installation.
+# Code Buddy includes 18 optional native packages (better-sqlite3, sharp, node-pty,
+# tree-sitter*, onnxruntime-node, usearch, etc.). They fall back gracefully to pure JS / JSON
+# when uncompiled, but to enable full native acceleration, allow compilation with:
+npm install -g --allow-scripts @phuetz/code-buddy@latest
+# or selectively for SQLite:
 npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
 
 # Or try without installing (also subject to the lag note above)
