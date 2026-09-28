@@ -52,7 +52,8 @@ npx @phuetz/code-buddy@latest
 
 If a source installation fails because `@vscode/ripgrep` receives HTTP 403
 from GitHub, see the [system-ripgrep workaround](install.md#ripgrep-download-blocked-during-npm-ci).
-Its `--ignore-scripts` option also skips native add-on installation.
+Its `--ignore-scripts` option also skips native add-on installation. Follow the
+full workaround, including `npm link` (or run `node dist/index.js` directly).
 
 For an install from source, configure npm's `allowScripts` policy in the project's
 `package.json` or `.npmrc`; the command-line `--allow-scripts` option is for
@@ -109,7 +110,8 @@ chat, but Code Buddy treats them as chat-only, so `buddy try` cannot go green wi
 
 `buddy onboard` also needs a terminal because it asks questions. In a pipe or CI
 job, configure provider environment variables and use `buddy doctor` for a
-non-interactive check.
+non-interactive check. Without a configured provider, `buddy doctor` can report
+zero errors but still exit with status 1 because chatting is not ready.
 
 ### The two $0 paths in detail
 
@@ -449,11 +451,11 @@ export JWT_SECRET="$(openssl rand -hex 32)"
 buddy server --port 3000 --host 127.0.0.1   # REST + the fleet WebSocket on /ws (use your LAN/VPN address for another machine)
 ```
 
-Mint a token with the **same** `JWT_SECRET` and the fleet scopes (the default
-`user` role only carries `chat`, `chat:stream`, `sessions` and `tools`):
+Mint a token with the **same** `JWT_SECRET`. `buddy fleet token` adds
+`fleet:listen` and `peer:invoke` to the default `user` scopes; `buddy token`
+keeps the four basic scopes. Use `--scopes` only when you need a custom set:
 ```bash
-JWT_SECRET="<the same secret>" buddy fleet token --user demo --ttl 24h \
-  --scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke
+JWT_SECRET="<the same secret>" buddy fleet token --user demo --ttl 24h
 ```
 
 On the instance that connects:
@@ -503,7 +505,8 @@ buddy fleet policy review bash
 route. In production it requires a `JWT_SECRET` and a signed bearer token
 (see [Security](security.md)).
 
-You can mint a signed bearer token with `buddy token` (or its fleet alias `buddy fleet token`):
+You can mint a signed bearer token with `buddy token`, or use `buddy fleet token`
+when the default token also needs `fleet:listen` and `peer:invoke`:
 
 ```bash
 # Mint a token for local or peer use (prints JWT, expiry, PWA open URL)
@@ -613,7 +616,7 @@ Run `buddy doctor` to verify which keys are detected. Check the active provider 
 Code Buddy is ESM-only. From source, ensure Node.js ≥ 20.0.0 and that you ran `npm install && npm run build` in the project root. Imports of `.ts` files need a `.js` extension at the import site (the build handles this for you).
 
 ### Slow startup (> 5s) or noticeable cold-start cost
-Set `PERF_TIMING=true` to see which lazy-loaded modules dominate startup. Most heavy features (voice, browser automation, desktop) are loaded on-demand only when first invoked, so a vanilla `buddy` should warm up in 1-2 seconds.
+Set `PERF_TIMING=true` to see which lazy-loaded modules dominate startup. Most heavy features (voice, browser automation, desktop) are loaded on demand when first invoked; startup time varies by machine and installation.
 
 ### "Lock file exists" / stale session
 ```bash

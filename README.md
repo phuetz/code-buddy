@@ -93,7 +93,7 @@ version and its integration limits.
 
 ## Install
 
-Three commands (Node.js ≥ 20):
+Three commands (Node.js 22 or 24 recommended; 20 is the declared minimum):
 
 ```bash
 npm i -g @phuetz/code-buddy   # the package is scoped; `code-buddy` alone is not on npm
@@ -227,8 +227,9 @@ Honest limits for a first-time visitor:
   Check `buddy --version`, the npm dist-tag and the corresponding Git tag when identifying a build.
 - **CI gates all three operating systems.** Linux, macOS and Windows run Node.js 20 and 22
   jobs. A local pass or an earlier platform recipe does not replace the candidate’s CI results.
-- **Node ≥ 20 is the real floor**, for the CLI and for the test toolchain alike (`engines` says
-  so since 2.0.0).
+- **Node ≥ 20 is the declared CLI floor** (`engines.node`); Node 22 or 24 is
+  recommended when working from source. Some ancillary packages can warn about
+  their own Node ≥ 22 requirement during installation. The CI runs Node 20 and 22.
 - **Cowork** is a separate install (Node.js ≥ 22, `buddy install-gui`), not part of the three
   commands above.
 - **Film production** needs `ffmpeg`; without a local voice binary, scenes stay silent rather than

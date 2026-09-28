@@ -157,7 +157,9 @@ npm link            # exposes `buddy` globally
 ```
 
 > **Requirements:** Node.js **≥ 20** for the CLI (`package.json` declares
-> `engines.node: >=20.0.0`; Node 18 is not supported, and npm only warns about it). The **Cowork desktop app needs
+> `engines.node: >=20.0.0`; Node 18 is not supported). For a source checkout,
+> Node 22 or 24 is recommended to avoid engine warnings from ancillary packages.
+> The **Cowork desktop app needs
 > Node ≥ 22** plus a C++ toolchain for native modules (`better-sqlite3`).
 > Run **`buddy doctor`** anytime to check your environment (`--fix` to remediate).
 
@@ -190,11 +192,14 @@ that `rg --version` works on `PATH`. Then, from the source checkout, run:
 ```bash
 npm ci --ignore-scripts --no-audit --no-fund
 npm run build
+npm link                 # expose `buddy`, or use `node dist/index.js`
 ```
 
 Code Buddy can select the system `rg` when the bundled binary is unavailable.
 `--ignore-scripts` also skips **all** dependency install scripts, including
 native add-ons; functions requiring those binaries may remain unavailable.
+The text-only CLI defers semantic indexing until a search requests it; image
+features and local embeddings can still fail without their native modules.
 Use a normal installation after GitHub access is restored if you need them.
 This workaround was reported for an HTTP 403; it is not a substitute for a
 successful native-module installation on every platform.
