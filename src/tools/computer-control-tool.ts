@@ -1000,9 +1000,14 @@ export class ComputerControlTool {
     const clicked = await this.click({ ...input, ref: match.element.ref });
     if (!clicked.success) return clicked;
 
+    // Région visuelle : la re-capture après le clic (textes apparus/disparus)
+    // est la seule vérification dont dispose le modèle ; ne pas la perdre.
+    const recapture = match.element.attributes?.source === 'visual-region' && clicked.output
+      ? `\n${clicked.output}`
+      : '';
     return {
       success: true,
-      output: `${successVerb} ${this.describeElement(match.element)}`,
+      output: `${successVerb} ${this.describeElement(match.element)}${recapture}`,
       data: { element: match.element, refreshedSnapshot: match.refreshed },
     };
   }

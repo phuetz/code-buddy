@@ -129,8 +129,10 @@ describe("computer use par régions visuelles (arbre d'accessibilité vide)", ()
     setVisionGroundingProvider(vi.fn().mockResolvedValue(503));
     const tool = new ComputerControlTool() as unknown as { delay(ms: number): Promise<void> } & ComputerControlTool;
     tool.delay = async () => {};
-    await tool.execute({ action: 'click_button', name: 'le bouton qui confirme' });
-    // clickNamedRole résume l'élément ; le détail de la re-capture est dans click()
+    // Par click_button (mesuré en E2E le 28/09 : le résumé perdait la re-capture)…
+    const named = await tool.execute({ action: 'click_button', name: 'le bouton qui confirme' });
+    expect(named.output).toMatch(/appeared \["Compteur : 1"\]/);
+    // … et par click direct sur le numéro.
     const direct = await tool.execute({ action: 'click', ref: 503 });
     expect(direct.success).toBe(true);
     expect(direct.output).toContain('Compteur : 1');
