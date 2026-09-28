@@ -839,7 +839,7 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
     return {
       name: 'AI provider ready',
       status: 'warn',
-      message: 'Ollama is running but has no model — run `buddy onboard`, or --fix to pull qwen2.5-coder:7b ($0)',
+      message: `Ollama is running but has no model — run \`buddy onboard\`, or --fix to pull ${DOCTOR_PULL_MODEL} ($0, can call tools)`,
       fixable: true,
       fix: async () => fixPullAndSelectOllama(baseURL),
     };
@@ -871,15 +871,22 @@ async function fixSelectRunningOllama(baseURL: string, model: string, reason?: s
   }
 }
 
-/** Pull a small coding model with Ollama, then select it. */
+/**
+ * Model pulled by `buddy doctor --fix` when Ollama has none. It must call
+ * tools: the qwen2.5 family under 14B is chat-only in model-tools.ts, so
+ * `buddy try` could never go green with it.
+ */
+export const DOCTOR_PULL_MODEL = 'qwen3:8b';
+
+/** Pull a small tool-capable model with Ollama, then select it. */
 async function fixPullAndSelectOllama(baseURL: string): Promise<FixResult> {
-  const model = 'qwen2.5-coder:7b';
+  const model = DOCTOR_PULL_MODEL;
   try {
     execSync(`ollama pull ${model}`, { stdio: 'inherit' });
   } catch (err) {
     return {
       success: false,
-      message: `Failed to pull ${model}: ${err instanceof Error ? err.message : String(err)}. Install Ollama from https://ollama.ai`,
+      message: `Failed to pull ${model}: ${err instanceof Error ? err.message : String(err)}. Install Ollama from https://ollama.com`,
       action: 'pull-ollama-model',
     };
   }
