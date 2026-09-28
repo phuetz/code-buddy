@@ -9,8 +9,8 @@
  *   0. CODEBUDDY_PROVIDER override (always wins when set + valid)
  *   1. ChatGPT OAuth credentials present (~/.codebuddy/codex-auth.json)
  *      → explicit "I logged in" act beats ambient env vars
- *   2. Local providers (Ollama / LM Studio / vLLM)
- *   3. Cloud providers in catalog priority order
+ *   2. Configured cloud providers in catalog priority order
+ *   3. Local providers (Ollama / LM Studio / vLLM)
  *   else null (no provider available)
  */
 
