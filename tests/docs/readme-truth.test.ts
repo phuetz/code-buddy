@@ -84,6 +84,12 @@ function commandNamesFromHelp(help: string): Set<string> {
 }
 
 function sourceReadsEnv(name: string): boolean {
+  // codeBuddyEnv reads the three neutral names through a computed property;
+  // a literal process.env.NAME search cannot see that real runtime read.
+  if (/^CODEBUDDY_(API_KEY|BASE_URL|MODEL)$/.test(name)) {
+    const helper = fs.readFileSync(path.join(repoRoot, 'src', 'config', 'legacy-env.ts'), 'utf8');
+    if (helper.includes('env[`CODEBUDDY_${suffix}`]')) return true;
+  }
   const needles = [`process.env.${name}`, `process.env['${name}']`, `process.env["${name}"]`];
   for (const needle of needles) {
     try {
