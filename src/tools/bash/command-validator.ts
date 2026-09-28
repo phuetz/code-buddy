@@ -420,6 +420,28 @@ function isPublicProjectNpmrc(file: string): boolean {
   } catch { return false; }
 }
 
+/** Only explicit public placeholders may be traversed in classified env files. */
+function isPublicProjectEnvPlaceholder(file: string): boolean {
+  const base = path.basename(file).toLowerCase();
+  if (base !== '.env.test' && base !== '.env.local') return false;
+  if (base === '.env.test' && !path.normalize(file).split(path.sep).includes('node_modules')) return false;
+  try {
+    const real = fs.realpathSync(file);
+    const home = path.resolve(os.homedir());
+    if (real === home || real.startsWith(home + path.sep)) return false;
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.size > 4_096) return false;
+    const content = fs.readFileSync(file, 'utf8');
+    if (content.includes('\uFFFD')) return false;
+    return content.split(/\r?\n/).every((line) => {
+      const entry = line.trim();
+      if (!entry) return true;
+      const match = entry.match(/^([A-Z][A-Z0-9_]*)=(world|test|example|dummy|localhost|true|false|[0-9]+)$/i);
+      return !!match && !/(?:KEY|TOKEN|SECRET|PASS|PWD|AUTH|CREDENTIAL)/i.test(match[1]!);
+    });
+  } catch { return false; }
+}
+
 function directoryContainsSecret(directory: string): boolean {
   const pending = [directory];
   const seen = new Set<string>();
@@ -433,7 +455,8 @@ function directoryContainsSecret(directory: string): boolean {
     try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { return true; }
     for (const entry of entries) {
       const child = path.join(current, entry.name);
-      if (checkSecretFileAccess(child, 'read').secret && !isPublicProjectNpmrc(child)) return true;
+      if (checkSecretFileAccess(child, 'read').secret &&
+          !isPublicProjectNpmrc(child) && !isPublicProjectEnvPlaceholder(child)) return true;
       if (entry.isDirectory()) pending.push(child);
       else if (entry.isSymbolicLink()) {
         try { if (fs.statSync(child).isDirectory()) pending.push(child); } catch { return true; }
@@ -461,22 +484,168 @@ function globContainsSecret(candidate: string): boolean {
 }
 
 function trackedSecretForGitDiff(command: string, baseDir: string): string | null {
-  const invocation = command.match(/(?:^|[;&|]\s*)git\s+(?:-C\s+([^\s;&|]+)\s+)?diff(?:\s|$)/i);
-  if (!invocation) return null;
-  const prior = command.slice(0, invocation.index ?? 0);
-  const cdMatches = Array.from(prior.matchAll(/(?:^|[;&|]\s*)cd\s+([^\s;&|]+)/g));
-  const gitCwd = invocation[1] ?? cdMatches.at(-1)?.[1] ?? baseDir;
-  const cwd = path.resolve(baseDir, gitCwd);
-  const tail = command.slice((invocation.index ?? 0) + invocation[0].length).split(/[;&|]/, 1)[0] ?? '';
-  const pathspecs = tail.match(/(?:^|\s)--\s+(.+)$/)?.[1]?.trim().split(/\s+/).filter(Boolean) ?? [];
-  try {
-    const names = execFileSync('git', ['ls-files', '--cached', '-z', ...(pathspecs.length ? ['--', ...pathspecs] : [])], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2_000,
-    });
-    return names.split('\0').find(file => file && checkSecretFileAccess(path.resolve(cwd, file), 'read').secret) ?? null;
-  } catch {
-    return null;
+  let segmentCwd = baseDir;
+  for (const parsed of parseShellCommand(command).commands) {
+    if ((parsed.command === 'cd' || parsed.command === 'pushd') && parsed.args[0]) {
+      segmentCwd = path.resolve(segmentCwd, parsed.args[0]);
+      continue;
+    }
+    if (path.basename(parsed.command) !== 'git') continue;
+    const args = [...parsed.args];
+    let gitCwd = segmentCwd;
+    while (args.length > 0) {
+      if (args[0] === '-C' && args[1]) {
+        gitCwd = path.resolve(gitCwd, args[1]);
+        args.splice(0, 2);
+      } else if (args[0] === '-c' && args[1]) {
+        args.splice(0, 2);
+      } else if (args[0] === '--no-pager') args.shift();
+      else break;
+    }
+    if (args.shift() !== 'diff') continue;
+    const unsupported = 'Git diff could not be checked';
+    const metadataOnly = args.some((arg) =>
+      ['--name-only', '--name-status', '--stat', '--numstat', '--check', '--quiet'].includes(arg));
+    if (metadataOnly && !args.some((arg) => ['-p', '--patch', '--binary'].includes(arg))) continue;
+    const queryArgs = args.filter((arg) => !['-p', '--patch', '--binary', '--raw', '--stat'].includes(arg));
+    if (queryArgs.some((arg) => ['--ext-diff', '--textconv'].includes(arg))) return unsupported;
+    try {
+      const root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+        cwd: gitCwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2_000,
+      }).trim();
+      const names = execFileSync('git', ['diff', '--name-only', '-z', ...queryArgs], {
+        cwd: gitCwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3_000,
+      });
+      const secret = names.split('\0').find((file) =>
+        file && checkSecretFileAccess(path.resolve(root, file), 'read').secret);
+      if (secret) return secret;
+    } catch { return unsupported; }
   }
+  return null;
+}
+
+/** Inspect Git path metadata before allowing commands that print file contents. */
+function trackedSecretForGitContent(command: string, baseDir: string): string | null {
+  let segmentCwd = baseDir;
+  for (const parsed of parseShellCommand(command).commands) {
+    if ((parsed.command === 'cd' || parsed.command === 'pushd') && parsed.args[0]) {
+      segmentCwd = path.resolve(segmentCwd, parsed.args[0]);
+      continue;
+    }
+    if (path.basename(parsed.command) !== 'git') continue;
+    const args = [...parsed.args];
+    let gitCwd = segmentCwd;
+    while (args.length > 0) {
+      if (args[0] === '-C' && args[1]) {
+        gitCwd = path.resolve(gitCwd, args[1]);
+        args.splice(0, 2);
+      } else if (args[0] === '-c' && args[1]) {
+        args.splice(0, 2);
+      } else if (args[0] === '--no-pager') {
+        args.shift();
+      } else break;
+    }
+    const subcommand = args.shift();
+    const stashShow = subcommand === 'stash' && args.shift() === 'show';
+    if (!['show', 'log', 'grep'].includes(subcommand ?? '') && !stashShow) continue;
+    const unsupported = 'Git content command could not be checked';
+    let root: string;
+    try {
+      root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+        cwd: gitCwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2_000,
+      }).trim();
+    } catch { return unsupported; }
+    const secretInNames = (output: string): string | null => {
+      for (const raw of output.split(/[\0\n]/)) {
+        const name = raw.trim();
+        if (!name) continue;
+        // `git grep <revision>` prefixes paths with `<revision>:`.
+        const relative = name.includes(':') ? name.slice(name.indexOf(':') + 1) : name;
+        if (checkSecretFileAccess(path.resolve(root, relative), 'read').secret) return relative;
+      }
+      return null;
+    };
+    const gitNames = (query: string[], noMatchesAllowed = false): string | null => {
+      try {
+        return execFileSync('git', query, {
+          cwd: gitCwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 3_000, maxBuffer: 2 * 1024 * 1024,
+        });
+      } catch (error) {
+        if (noMatchesAllowed && (error as { status?: number }).status === 1) return '';
+        return null;
+      }
+    };
+
+    if (subcommand === 'show') {
+      const pathspecAt = args.indexOf('--');
+      const revisions = (pathspecAt < 0 ? args : args.slice(0, pathspecAt))
+        .filter((arg) => !arg.startsWith('-'));
+      for (const revision of revisions.length ? revisions : ['HEAD']) {
+        if (revision.includes(':')) {
+          const file = revision.slice(revision.lastIndexOf(':') + 1);
+          if (checkSecretFileAccess(path.resolve(root, file), 'read').secret) return file;
+          continue;
+        }
+        // `git show <blob hash>` prints raw blob bytes even with `--stat`.
+        const type = gitNames(['cat-file', '-t', `${revision}^{}`]);
+        if (type?.trim() !== 'commit') return unsupported;
+      }
+      if (revisions.length > 0 && revisions.every((revision) => revision.includes(':')) && pathspecAt < 0) continue;
+      const patchRequested = args.some((arg) => arg === '-p' || arg === '--patch');
+      if (!patchRequested && args.some((arg) =>
+        ['--no-patch', '--stat', '--name-only', '--name-status', '--summary'].includes(arg))) continue;
+      const queryArgs = args.filter((arg) => !['-p', '--patch', '--stat'].includes(arg));
+      if (queryArgs.some((arg) => arg.startsWith('-') && !['--', '--root'].includes(arg))) return unsupported;
+      const output = gitNames(['show', '--format=', '--name-only', '-z', ...(queryArgs.length ? queryArgs : ['HEAD'])]);
+      if (output === null) return unsupported;
+      const secret = secretInNames(output);
+      if (secret) return secret;
+    } else if (subcommand === 'log') {
+      if (!args.some((arg) => ['-p', '--patch', '--word-diff'].includes(arg))) continue;
+      const queryArgs = args.filter((arg) => !['-p', '--patch', '--word-diff'].includes(arg));
+      if (queryArgs.some((arg) => arg.startsWith('-') &&
+        !['--all', '--branches', '--tags', '--remotes', '--first-parent', '--reverse', '--'].includes(arg) &&
+        !/^-[0-9]+$/.test(arg))) return unsupported;
+      const output = gitNames(['log', '--format=', '--name-only', '-z', ...queryArgs]);
+      if (output === null) return unsupported;
+      const secret = secretInNames(output);
+      if (secret) return secret;
+    } else if (subcommand === 'grep') {
+      const queryArgs: string[] = [];
+      for (let i = 0; i < args.length; i += 1) {
+        const arg = args[i] ?? '';
+        if (arg === '-f' || arg === '--file') {
+          const patternFile = args[i + 1];
+          if (!patternFile) return unsupported;
+          if (checkSecretFileAccess(path.resolve(gitCwd, patternFile), 'read').secret) return patternFile;
+        } else if (arg.startsWith('-f') && arg.length > 2) {
+          const patternFile = arg.slice(2);
+          if (checkSecretFileAccess(path.resolve(gitCwd, patternFile), 'read').secret) return patternFile;
+        } else if (arg.startsWith('--file=')) {
+          const patternFile = arg.slice('--file='.length);
+          if (checkSecretFileAccess(path.resolve(gitCwd, patternFile), 'read').secret) return patternFile;
+        }
+        if (['-h', '-n', '-c', '-o', '--line-number', '--count', '--only-matching'].includes(arg)) continue;
+        if (arg.startsWith('-') && !arg.startsWith('-f') && !arg.startsWith('--file=') &&
+          !['--cached', '-i', '-F', '-E', '-P', '-e', '--file', '--', '--ignore-case', '--fixed-strings'].includes(arg)) {
+          return unsupported;
+        }
+        queryArgs.push(arg);
+      }
+      const output = gitNames(['grep', '-l', '-z', ...queryArgs], true);
+      if (output === null) return unsupported;
+      const secret = secretInNames(output);
+      if (secret) return secret;
+    } else if (stashShow && args.some((arg) => arg === '-p' || arg === '--patch')) {
+      const refs = args.filter((arg) => !arg.startsWith('-'));
+      const output = gitNames(['stash', 'show', '--name-only', '-z', ...refs]);
+      if (output === null) return unsupported;
+      const secret = secretInNames(output);
+      if (secret) return secret;
+    }
+  }
+  return null;
 }
 
 /**
@@ -488,12 +657,15 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
   // Shell joins adjacent quoted fragments and removes escaping before opening
   // paths. A backslash-newline (LF or CRLF) disappears before tokenization.
   // On Windows backslashes are path separators, not POSIX escapes.
-  const expanded = expandHomeReferences(command.replace(/\\\r?\n/g, ''))
+  const joined = expandHomeReferences(command.replace(/\\\r?\n/g, ''));
+  const expanded = joined
     .replace(/\$(?:""|'')/g, '')
     .replace(/\\([^\n])/g, platform === 'win32' ? '/$1' : '$1')
     .replace(/["']/g, '');
-  const trackedSecret = trackedSecretForGitDiff(expanded, cwd);
+  const trackedSecret = trackedSecretForGitDiff(joined, cwd);
   if (trackedSecret) return trackedSecret;
+  const gitContentSecret = trackedSecretForGitContent(joined, cwd);
+  if (gitContentSecret) return gitContentSecret;
   const roots = getHomeCredentialRoots();
   const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
   const words = new Set(
