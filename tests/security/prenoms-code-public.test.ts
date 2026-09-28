@@ -2,7 +2,8 @@
  * Public source name guard. Set CODEBUDDY_EXCLUDED_NAMES to a comma/newline-separated
  * list, or CODEBUDDY_EXCLUDED_NAMES_FILE to an untracked UTF-8 file with one name
  * per line. Without either, the local `git config user.name` supplies the names.
- * CI should set an explicit value: Git identity is optional and may be a bot.
+ * CI writes an untracked list derived from package.json's author metadata.
+ * Missing names fail the test instead of silently disabling the guard.
  * The exclusion list itself must never be committed to the public repository.
  */
 import { execFileSync } from 'node:child_process';
@@ -13,20 +14,34 @@ import { describe, expect, it } from 'vitest';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
+function explicitNames(raw: string): string[] {
+  return [...new Set(raw.split(/[,;\r\n]+/u).map((name) => name.trim()).filter(Boolean))];
+}
+
+function gitIdentityNames(raw: string): string[] {
+  const identity = raw.trim();
+  if (!identity) return [];
+  const words = identity.split(/\s+/u);
+  const first = words[0] ?? '';
+  const generic = new Set(['code', 'buddy', 'dev', 'developer', 'bot', 'github', 'actions', 'test', 'user', 'utilisateur']);
+  // Preserve the full identity. Add its first name only when it is not a
+  // common account label, so identities such as "Le Dev" do not match prose.
+  return words.length > 1 && first.length >= 4 && !generic.has(first.toLowerCase())
+    ? [identity, first]
+    : [identity];
+}
+
 function configuredNames(env: NodeJS.ProcessEnv = process.env): string[] {
   const explicit = env.CODEBUDDY_EXCLUDED_NAMES;
   const file = env.CODEBUDDY_EXCLUDED_NAMES_FILE;
-  let raw: string;
   if (explicit !== undefined || file !== undefined) {
-    raw = [explicit ?? '', file ? readFileSync(file, 'utf8') : ''].join('\n');
-  } else {
-    try {
-      raw = execFileSync('git', ['config', '--get', 'user.name'], { cwd: root, encoding: 'utf8' });
-    } catch {
-      raw = '';
-    }
+    return explicitNames([explicit ?? '', file ? readFileSync(file, 'utf8') : ''].join('\n'));
   }
-  return [...new Set(raw.split(/[,;\r\n\s]+/u).map((name) => name.trim()).filter(Boolean))];
+  try {
+    return gitIdentityNames(execFileSync('git', ['config', '--get', 'user.name'], { cwd: root, encoding: 'utf8' }));
+  } catch {
+    return [];
+  }
 }
 
 function escaped(value: string): string {
@@ -53,11 +68,13 @@ describe('noms personnels hors du code public', () => {
       .toEqual(['NomTemoin', 'AutreNom']);
     expect(foundNames('Bonjour NomTemoin, bienvenue.', ['NomTemoin'])).toEqual(['NomTemoin']);
     expect(foundNames('prefixeNomTemoin', ['NomTemoin'])).toEqual([]);
+    expect(gitIdentityNames('Le Dev')).toEqual(['Le Dev']);
+    expect(gitIdentityNames('NomTemoin FAMILLE')).toEqual(['NomTemoin FAMILLE', 'NomTemoin']);
   });
 
   it('ne laisse aucun nom exclu dans src/ ou cowork/src/', () => {
     const names = configuredNames();
-    if (names.length === 0) return;
+    expect(names.length, 'Configure CODEBUDDY_EXCLUDED_NAMES_FILE, CODEBUDDY_EXCLUDED_NAMES, or git user.name').toBeGreaterThan(0);
     const violations = sourceFiles().flatMap((path) => {
       const content = readFileSync(join(root, path), 'utf8');
       const matches = foundNames(content, names);
