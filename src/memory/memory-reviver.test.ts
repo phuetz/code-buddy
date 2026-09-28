@@ -14,7 +14,7 @@ function seedWorkspace(root: string) {
   fs.mkdirSync(agentDir, { recursive: true });
   fs.writeFileSync(
     path.join(agentDir, 'MEMORY.md'),
-    ['## 2026-04-06', '', 'done', '', '## 2026-04-07', '', 'done', '', '## 2026-09-03', '', 'Patrice préfère les tests en français.', '', '## 2026-09-04', '', 'Utilise toujours pnpm, jamais npm.', ''].join('\n'),
+    ['## 2026-04-06', '', 'done', '', '## 2026-04-07', '', 'done', '', '## 2026-09-03', '', 'La personne préfère les tests en français.', '', '## 2026-09-04', '', 'Utilise toujours pnpm, jamais npm.', ''].join('\n'),
     'utf8',
   );
   fs.mkdirSync(path.join(root, '.codebuddy'), { recursive: true });
@@ -35,7 +35,7 @@ describe('memory-reviver', () => {
 
   it('detects placeholder entries', () => {
     expect(isPlaceholderEntry('## 2026-04-06\n\ndone\n')).toBe(true);
-    expect(isPlaceholderEntry('## 2026-09-03\n\nPatrice préfère les tests.\n')).toBe(false);
+    expect(isPlaceholderEntry('## 2026-09-03\n\nLa personne préfère les tests.\n')).toBe(false);
   });
 
   it('extracts only real entries', () => {

@@ -32,6 +32,19 @@ afterEach(async () => {
 });
 
 describe('evolution notes self-model', () => {
+  it('masks the configured user name in release notes', () => {
+    const previous = process.env.CODEBUDDY_USER_NAME;
+    process.env.CODEBUDDY_USER_NAME = 'Alex';
+    try {
+      const notes = parseEvolutionNotes('## [2.0.0] (2026-08-26)\n\n### Décision Alex — 2026-09-01\n\n- Alex confirme le test.\n');
+      expect(JSON.stringify(notes)).not.toContain('Alex');
+      expect(notes[0]?.facts).toContain('la personne utilisatrice confirme le test.');
+    } finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_USER_NAME;
+      else process.env.CODEBUDDY_USER_NAME = previous;
+    }
+  });
+
   it('parses dated sections, facts, variables, commands, and activation', () => {
     const notes = parseEvolutionNotes(fixture);
     expect(notes).toHaveLength(2);

@@ -253,7 +253,7 @@ export function EnrollmentDialog({ isOpen, onClose, onEnrolled }: EnrollmentDial
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={t('enrollment.namePlaceholder', 'Patrice')}
+                placeholder={t('enrollment.namePlaceholder', 'Nom de la personne')}
                 className="block w-full rounded border border-border bg-surface px-2 py-1 text-text-primary"
               />
             </label>

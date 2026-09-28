@@ -722,7 +722,7 @@ export function createResearchCommand(): Command {
     });
 
   // `buddy research ingest|recall|stats` — feed/query the collective knowledge graph with
-  // real scientific publications (Patrice's vision). Subcommands take precedence over the
+  // real scientific publications (the intended research workflow). Subcommands take precedence over the
   // default <topic> action, so `research "topic"` still runs Wide Research.
   addKnowledgeSubcommands(cmd);
 

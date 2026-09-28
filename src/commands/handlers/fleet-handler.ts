@@ -117,7 +117,7 @@ Actions:
                                       list_directory, search}. With
                                       --stream, prints peer:chunk frames
                                       live (uses peer.tool.invoke.stream).
-                                      Example: /fleet tool gpuNode
+                                      Example: /fleet tool <pair>
                                       view_file {"file_path":"README.md"}
   route <prompt>                      Choose the best peer/model for a task
             [--privacy public|sensitive]

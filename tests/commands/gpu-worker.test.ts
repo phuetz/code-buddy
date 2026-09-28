@@ -80,5 +80,6 @@ describe('gpu-worker command', () => {
     expect(parseGpuRunnerArgs('["runner.py", "--safe"]', 'ARGS')).toEqual(['runner.py', '--safe']);
     expect(() => parseGpuRunnerArgs('{"bad":true}', 'ARGS')).toThrow(/JSON array/);
     expect(createGpuWorkerCommand().name()).toBe('gpu-worker');
+    expect(createGpuWorkerCommand().opts().workerId).toBeUndefined();
   });
 });

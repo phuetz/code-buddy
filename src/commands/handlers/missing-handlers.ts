@@ -1075,7 +1075,7 @@ export async function handleStatus(activeModel?: string): Promise<CommandHandler
   }
 
   // Persistent memory (project + user counts + last update)
-  // Surfaces the auto-memory writeback shipped in a2a4f72 — Patrice can
+  // Surfaces the auto-memory writeback shipped in a2a4f72 — the user can
   // see at a glance whether the LLM is persisting facts across sessions
   // without having to type `/memory recent`.
   try {

@@ -15,7 +15,7 @@
  *     made by `client.setCircuitBreakerConfig()` after construction
  *     propagate (advisor catch — guards against snapshot staleness)
  *
- * Known gap preserved (will close in Phase C4 if Patrice opts in):
+ * Known gap preserved (will close in Phase C4 if the owner opts in):
  *   - chatStream() does NOT call the Anthropic hooks. The chat() side
  *     does. Same asymmetry as before extraction. Documented in commit
  *     7f6853b's body.

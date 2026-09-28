@@ -28,6 +28,7 @@ import {
 import { getActiveRunStore } from '../observability/run-store.js';
 import { getPermissionModeManager } from '../security/permission-modes.js';
 import { logger } from '../utils/logger.js';
+import { resolveUserName } from '../companion/user-name.js';
 import {
   getDesktopAutomation,
   getPermissionManager,
@@ -614,9 +615,10 @@ export class ComputerControlTool {
       
       // Phase 7: Rétroaction Vocale sur Erreur
       try {
-        const { exec } = await import('child_process');
-        const script = `Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak("Patrice, j'ai rencontré une erreur inattendue sur l'action ${action.replace(/_/g, ' ')}")`;
-        exec(`powershell -NoProfile -Command "${script}"`); // fire and forget
+        const spokenText = `${resolveUserName()}, j'ai rencontré une erreur inattendue sur l'action ${action.replace(/_/g, ' ')}`;
+        const encodedText = Buffer.from(spokenText, 'utf16le').toString('base64');
+        const script = `Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${encodedText}')))`;
+        execFile('powershell', ['-NoProfile', '-Command', script], () => {}); // fire and forget
       } catch (e) {
         logger.debug('Failed to speak error', { error: e });
       }

@@ -1,5 +1,5 @@
 /**
- * Safe client for Patrice's Rust `lm-resizer`.
+ * Safe client for the Rust `lm-resizer`.
  *
  * The preferred transport is the local HTTP sidecar. When it is unavailable,
  * Code Buddy falls back to `lm-resizer tool-output --request-json`, sending the

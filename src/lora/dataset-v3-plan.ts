@@ -167,7 +167,7 @@ const DRAFTS: readonly SlotDraft[] = [
   { slotId: 'back-straight', framing: 'back', angle: 'back', expression: 'pensive', lighting: 'studio-soft', outfitTag: 'navy-dress', settingTag: 'gray-studio', focalHint: '50mm', pose: 'standing fully turned away from camera', overgenCount: 3 },
   { slotId: 'back-threequarter-right', framing: 'back', angle: 'threequarter-back-right', expression: 'smile-closed', lighting: 'golden-hour', outfitTag: 'denim-casual', settingTag: 'garden-path', focalHint: '50mm', pose: 'walking away in a rear three-quarter right pose', overgenCount: 3 },
 
-  // Extension 2026-07-20 (demande Patrice) : plus de jambes visibles et de dos —
+  // Extension 2026-07-20 (demande du propriétaire) : plus de jambes visibles et de dos —
   // toujours tier couvert (jupes/robes/short, dos nu élégant = fashion, pas d'explicite).
   { slotId: 'full-skirt-walk-legs', framing: 'full', angle: 'front', expression: 'smile-closed', lighting: 'golden-hour', outfitTag: 'knee-skirt-blouse', settingTag: 'urban-overcast', focalHint: '35mm', pose: 'walking toward camera in a knee-length skirt, full legs and heels clearly visible', overgenCount: 4 },
   { slotId: 'full-shorts-standing-legs', framing: 'full', angle: 'threequarter-right', expression: 'smile-open', lighting: 'window-daylight', outfitTag: 'tailored-shorts', settingTag: 'modern-interior', focalHint: '50mm', pose: 'standing relaxed in tailored shorts, long bare legs fully visible, one knee slightly bent', overgenCount: 4 },

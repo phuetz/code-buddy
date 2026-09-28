@@ -90,8 +90,12 @@ function normalizeText(value: string): string {
 }
 
 function privacySafe(value: string): string {
-  return value
-    .replace(/\bpatrice\b/gi, 'la personne utilisatrice')
+  const configuredName = process.env.CODEBUDDY_USER_NAME?.trim();
+  const escapedName = configuredName?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const withoutName = escapedName
+    ? value.replace(new RegExp(`(?<![\\p{L}\\p{N}_])${escapedName}(?![\\p{L}\\p{N}_])`, 'giu'), 'la personne utilisatrice')
+    : value;
+  return withoutName
     .replace(/\/home\/[^\s`),]+/g, 'un chemin local')
     .replace(/\b[0-9a-f]{12,}\b/gi, 'une révision');
 }

@@ -4,8 +4,8 @@
  * The marquee MySoulmate mechanism (`services/proactiveMessageService.ts` + `ProactiveEngine.js`),
  * adapted honestly for a terminal companion: a small closed set of triggers, each scored by
  * priority; the single top candidate wins; it's throttled so she never harasses; and — crucially —
- * it's INDEPENDENT of the camera. When Patrice is present she speaks it (Piper); when he's away she
- * reaches him with a Telegram voice note. That's what makes return feel noticed and absence feel
+ * it's INDEPENDENT of the camera. When the user is present Lisa speaks it (Piper); when away, she
+ * reaches the user with a Telegram voice note. That's what makes return feel noticed and absence feel
  * cared about, instead of a companion that only exists when you're in frame.
  *
  * Design principles kept from MySoulmate: templates-first / LLM-optional (works offline, an LLM only
@@ -65,7 +65,7 @@ export interface ProactiveContext {
   now: number;
   /** Local hour 0-23. */
   hour: number;
-  /** Whole days since the companion first saw Patrice (0 if never). */
+  /** Whole days since the companion first saw the user (0 if never). */
   daysTogether: number;
   /** Whole days since the last confirmed sighting (0 if never / present). */
   daysSinceLastSeen: number;
