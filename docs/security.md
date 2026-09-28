@@ -210,4 +210,3 @@ npm install -g --allow-scripts @phuetz/code-buddy@latest
 # Or selectively allow compilation for SQLite support
 npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
 ```
-
