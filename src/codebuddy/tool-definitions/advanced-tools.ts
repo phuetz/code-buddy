@@ -734,7 +734,7 @@ export const EXECUTE_CODE_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "execute_code",
-    description: "Execute a bounded code snippet as a real local subprocess and save script/stdout/stderr/result artifacts under .codebuddy/execute-code.",
+    description: "Execute a bounded code snippet in a confined local subprocess and save artifacts under .codebuddy/execute-code. Requires Linux Landlock/seccomp; refuses execution when confinement is unavailable. The snippet cannot read the host workspace or credentials.",
     parameters: {
       type: "object",
       properties: {

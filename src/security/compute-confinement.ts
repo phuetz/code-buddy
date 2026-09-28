@@ -84,6 +84,7 @@ os.execv(executable, [executable] + args)
 
 export function confineComputeInvocation(command: string, args: string[], root: string): { command: string; args: string[] } {
   if (process.platform !== 'linux') throw new Error('Compute confinement requires Linux Landlock/seccomp; refusing unrestricted execution');
-  const executable = realpathSync(command === 'python3' ? '/usr/bin/python3' : command);
+  const executable = realpathSync(command === 'python3' ? '/usr/bin/python3' :
+    command === 'sh' ? '/bin/sh' : command);
   return { command: '/usr/bin/python3', args: ['-I', '-c', BOOTSTRAP, realpathSync(root), executable, ...args] };
 }

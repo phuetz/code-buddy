@@ -27,6 +27,12 @@ export class ExecuteCodeTool implements ITool {
       const result = await executeCode(parseInput(input), {
         ...this.options,
         rootDir,
+        // This is the model-facing arbitrary-code tool. A redirected HOME
+        // alone is insufficient: code can name the host path directly. The
+        // compute sandbox exposes only the throwaway run directory and fails
+        // closed on platforms without its kernel confinement.
+        envMode: 'isolate',
+        confinement: 'compute',
         // Always wire the invoker; the runner keeps the channel OFF unless
         // the master flag (CODEBUDDY_EXECUTE_CODE_TOOL_RPC) is enabled.
         rpcInvoke: this.options.rpcInvoke ?? createExecuteCodeRpcInvoker({ workspaceRoot: rootDir }),

@@ -515,7 +515,12 @@ function executableName(value: string): string {
 
 /** A literal Git executable anywhere in a shell segment needs a proved-safe parse. */
 function containsGitExecutable(text: string): boolean {
-  return /(?:^|[^\w.-])\\?git(?:\.exe)?(?=$|[^\w.-])/i.test(text);
+  const executable = /(?:^|[^\w.-])\\?git(?:\.exe)?(?=$|[^\w.-])/i;
+  // POSIX shell removes backslashes from executable words before lookup.
+  // Apply that lexical rule to *all* escaped characters, rather than adding
+  // special cases for each spelling of Git. Keep the raw check for Windows
+  // paths, whose backslashes are separators instead.
+  return executable.test(text) || executable.test(text.replace(/\\([^\r\n])/g, '$1'));
 }
 
 function hasActiveShellSyntax(text: string): boolean {
