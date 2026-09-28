@@ -103,6 +103,10 @@ describe('B15 — dépendances et dépôt voisin', () => {
     'git -C ../protected show HEAD:.env',
     'git --git-dir=../protected/.git show HEAD:.env',
     'GIT_DIR=../protected/.git git show HEAD:.env',
+    'cd ../protected && git show HEAD',
+    'git -C ../protected show HEAD',
+    'git --git-dir=../protected/.git show HEAD',
+    'GIT_DIR=../protected/.git git show HEAD',
   ];
   it.each(commands)('refuse depuis un dépôt propre : %s', async (command) => {
     expect(findCredentialPathInCommand(command, process.platform, probe)).not.toBeNull();
@@ -125,13 +129,14 @@ describe('B15 — dépendances et dépôt voisin', () => {
     bash.dispose();
   });
 
-  it('ne transmet pas un GIT_DIR hérité vers le dépôt voisin', async () => {
+  it('refuse un GIT_DIR hérité vers le dépôt voisin', async () => {
     const previous = process.env.GIT_DIR;
     process.env.GIT_DIR = path.join(protectedRepo, '.git');
     const bash = new BashTool();
     try {
-      const result = await bash.execute('git show HEAD:.env', 3000, probe);
+      const result = await bash.execute('git show HEAD', 3000, probe);
       expect(result.success).toBe(false);
+      expect(result.error).toMatch(/credential\/secret/);
       expect(JSON.stringify(result)).not.toContain(token);
     } finally {
       bash.dispose();
