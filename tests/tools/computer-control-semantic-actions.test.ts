@@ -93,6 +93,9 @@ const {
     toTextRepresentation: vi.fn(),
     findElements: vi.fn(),
     toAnnotatedScreenshot: vi.fn(),
+    // Régions visuelles : aucune ici (ces tests portent sur l'arbre d'accessibilité).
+    addVisualRegionsToSnapshot: vi.fn().mockResolvedValue([]),
+    detectVisualRegionElements: vi.fn().mockResolvedValue([]),
   };
 
   return {
@@ -652,8 +655,10 @@ describe('ComputerControlTool semantic actions', () => {
     const { ComputerControlTool, setVisionGroundingProvider } = await import('../../src/tools/computer-control-tool.js');
     const tool = new ComputerControlTool();
 
-    // Enable grounding fallback
+    // Enable grounding fallback. Depuis le 28/09/2026 le repli en coordonnées
+    // est derrière son propre drapeau (les régions visuelles passent d'abord).
     process.env.CODEBUDDY_VISION_GROUNDING = '1';
+    process.env.CODEBUDDY_VISION_GROUNDING_COORDS = '1';
 
     // Mock annotated screenshot
     mockSnapshotManager.toAnnotatedScreenshot.mockResolvedValue({ image: 'fake-base64-data' });
@@ -686,5 +691,6 @@ describe('ComputerControlTool semantic actions', () => {
     // Clean up
     setVisionGroundingProvider(null);
     delete process.env.CODEBUDDY_VISION_GROUNDING;
+    delete process.env.CODEBUDDY_VISION_GROUNDING_COORDS;
   });
 });

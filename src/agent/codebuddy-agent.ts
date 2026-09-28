@@ -656,90 +656,64 @@ export class CodeBuddyAgent extends BaseAgent {
     );
 
     // Wire visual grounding fallback provider into computer-control-tool
-    import('../tools/computer-control-tool.js').then(({ setVisionGroundingProvider }) => {
+    import('../tools/computer-control-tool.js').then(async ({ setVisionGroundingProvider }) => {
+      const prompts = await import('../desktop-automation/grounding-prompts.js');
       setVisionGroundingProvider(async (req) => {
         try {
+          // Un ancreur séparé (souvent un petit modèle local) peut servir la liste
+          // fermée pendant que le modèle principal reste celui de la session.
+          const client = await this.getVisionGroundingClient();
+          const modelOverride = this.visionGroundingModel ? { model: this.visionGroundingModel } : undefined;
+          const imagePart = { type: 'image_url' as const, image_url: { url: `data:image/png;base64,${req.imageBase64}` } };
+
           if (req.candidates.length === 0) {
-            // Coordinate-based visual grounding fallback for empty UIA tree (e.g., Skia, Avalonia, Canvas)
-            const prompt = `You are a visual grounding agent. Your task is to find the pixel coordinate of the element matching the user's intent: "${req.intent}".${req.roleHint ? ` Expected role hint: "${req.roleHint}".` : ''}
-
-Identify the target element in the provided screenshot. Return the target's center coordinates on a relative scale from 0 to 1000, where (0, 0) is the top-left corner and (1000, 1000) is the bottom-right corner of the image.
-
-Output ONLY a JSON object in this exact format:
-{
-  "x": <integer between 0 and 1000>,
-  "y": <integer between 0 and 1000>
-}
-Do not write any other text or explanations.`;
-
-            const response = await this.codebuddyClient.chat(
-              [
-                {
-                  role: 'user',
-                  content: [
-                    { type: 'text', text: prompt },
-                    { type: 'image_url', image_url: { url: `data:image/png;base64,${req.imageBase64}` } }
-                  ]
-                }
-              ],
+            // Repli en coordonnées 0-1000 (arbre ET régions vides). Fragile : la
+            // tool ne l'appelle que sous CODEBUDDY_VISION_GROUNDING_COORDS=1.
+            const response = await client.chat(
+              [{ role: 'user', content: [{ type: 'text' as const, text: prompts.buildCoordinatePrompt(req.intent, req.roleHint) }, imagePart] }],
               undefined,
-              this.visionGroundingModel ? { model: this.visionGroundingModel } : undefined
+              modelOverride,
             );
-            const reply = response.choices[0]?.message?.content?.trim();
-            if (!reply) return null;
-
-            try {
-              const { parseJsonResponse } = await import('../utils/llm-retry.js');
-              const parsed = parseJsonResponse(reply);
-              if (parsed && typeof parsed.x === 'number' && typeof parsed.y === 'number') {
-                return { x: parsed.x, y: parsed.y };
-              }
-            } catch (e) {
-              logger.warn('Failed to parse coordinate response as JSON, trying regex fallback', { reply, error: String(e) });
-              const xMatch = reply.match(/"x"\s*:\s*(\d+)/i);
-              const yMatch = reply.match(/"y"\s*:\s*(\d+)/i);
-              const xStr = xMatch?.[1];
-              const yStr = yMatch?.[1];
-              if (xStr !== undefined && yStr !== undefined) {
-                return { x: parseInt(xStr, 10), y: parseInt(yStr, 10) };
-              }
-            }
-            return null;
+            return prompts.parseCoordinateReply(response.choices[0]?.message?.content);
           }
 
-          // Traditional Set-of-Marks badging flow if candidates are available
-          const prompt = `You are a visual grounding agent. Your task is to identify the unique [ref] number of the interactive element in the provided screenshot that matches the user's intent: "${req.intent}".${req.roleHint ? ` Expected role hint: "${req.roleHint}".` : ''}
-
-Here are the candidate elements present in the screenshot:
-${req.candidates.map(c => `[${c.ref}] role="${c.role}" name="${c.name}"`).join('\n')}
-
-Look at the screenshot and find the element matching the user's intent. Output only the reference number (e.g. 42) or "none" if no matching element can be found. Do not write any explanations or other text.`;
-
-          const response = await this.codebuddyClient.chat(
-            [
-              {
-                role: 'user',
-                content: [
-                  { type: 'text', text: prompt },
-                  { type: 'image_url', image_url: { url: `data:image/png;base64,${req.imageBase64}` } }
-                ]
-              }
-            ],
+          // Liste fermée : le modèle rend un numéro PRÉSENT dans la liste. Avec des
+          // régions visuelles libellées, un modèle texte seul suffit
+          // (CODEBUDDY_VISION_GROUNDING_TEXT_ONLY=1 : aucune image envoyée).
+          const textOnly = process.env.CODEBUDDY_VISION_GROUNDING_TEXT_ONLY === '1';
+          const prompt = prompts.buildClosedListPrompt(req.intent, req.candidates, req.roleHint, !textOnly);
+          const response = await client.chat(
+            [{ role: 'user', content: textOnly ? prompt : [{ type: 'text' as const, text: prompt }, imagePart] }],
             undefined,
-            this.visionGroundingModel ? { model: this.visionGroundingModel } : undefined
+            modelOverride,
           );
-          const reply = response.choices[0]?.message?.content?.trim();
-          if (!reply) return null;
-          const match = reply.match(/\b\d+\b/);
-          if (match) {
-            return parseInt(match[0], 10);
-          }
+          return prompts.parseClosedListReply(
+            response.choices[0]?.message?.content,
+            req.candidates.map((c) => c.ref),
+          );
         } catch (err) {
           logger.error('Error in VisionGroundingProvider execution', { error: err });
         }
         return null;
       });
     }).catch((e) => { logger.debug('setVisionGroundingProvider setup failed', { error: String(e) }); });
+  }
+
+  private visionGroundingClient: CodeBuddyClient | null = null;
+
+  /**
+   * Client de l'ancrage visuel : celui de la session, sauf si
+   * `CODEBUDDY_VISION_GROUNDING_BASE_URL` désigne un serveur séparé (par exemple
+   * Ollama local avec `CODEBUDDY_VISION_GROUNDING_MODEL=qwen3:4b-instruct`).
+   */
+  private async getVisionGroundingClient(): Promise<CodeBuddyClient> {
+    const baseURL = process.env.CODEBUDDY_VISION_GROUNDING_BASE_URL?.trim();
+    if (!baseURL) return this.codebuddyClient;
+    if (!this.visionGroundingClient) {
+      const apiKey = process.env.CODEBUDDY_VISION_GROUNDING_API_KEY?.trim() || 'ollama';
+      this.visionGroundingClient = new CodeBuddyClient(apiKey, this.visionGroundingModel, baseURL);
+    }
+    return this.visionGroundingClient;
   }
 
   /** Resolves when the system prompt has been loaded (or failed gracefully). */

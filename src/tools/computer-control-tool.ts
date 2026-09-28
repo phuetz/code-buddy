@@ -42,6 +42,19 @@ import {
   type WindowInfo,
 } from '../desktop-automation/index.js';
 import { OmniParserRunner } from "../desktop-automation/omniparser-runner.js";
+import {
+  isCoordinateGroundingEnabled,
+  isVisualRegionsEnabled,
+  type GroundingCandidate,
+} from '../desktop-automation/grounding-prompts.js';
+import {
+  isPointInsideCapture,
+  loadRawImage,
+  regionSignature,
+  signatureDistance,
+  REGION_SIGNATURE_MAX_DISTANCE,
+  type RegionBox,
+} from '../desktop-automation/visual-regions.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -53,12 +66,40 @@ export interface VisionGroundingRequest {
   imageBase64: string;
   intent: string;
   roleHint?: string;
-  candidates: { ref: number; role: string; name: string }[];
+  candidates: GroundingCandidate[];
+}
+
+/**
+ * Garde d'une région visuelle au moment d'agir : le point doit être DANS la
+ * capture qui a produit la région, et l'écran ne doit pas avoir changé à cet
+ * endroit depuis (signature de contours). Rend un message d'erreur, ou null.
+ */
+export function checkVisualRegionGuard(
+  element: Pick<UIElement, 'center' | 'bounds' | 'attributes'>,
+  current: { width: number; height: number; signature: number[] } | null,
+): string | null {
+  const attrs = element.attributes ?? {};
+  const capture = { width: Number(attrs.captureWidth), height: Number(attrs.captureHeight) };
+  if (!isPointInsideCapture(element.center, capture)) {
+    return `Visual region center (${element.center.x}, ${element.center.y}) is outside its ${capture.width}x${capture.height} capture; refusing to click.`;
+  }
+  if (!current) return 'Could not re-capture the screen to check the visual region; take a new snapshot.';
+  if (current.width !== capture.width || current.height !== capture.height) {
+    return `Screen size changed since the capture (${capture.width}x${capture.height} -> ${current.width}x${current.height}); take a new snapshot.`;
+  }
+  const before = Array.isArray(attrs.signature) ? (attrs.signature as number[]) : null;
+  if (before && signatureDistance(before, current.signature) > REGION_SIGNATURE_MAX_DISTANCE) {
+    return 'The screen changed at this visual region since the capture; take a new snapshot before clicking.';
+  }
+  return null;
 }
 
 export type VisionGroundingProvider = (req: VisionGroundingRequest) => Promise<number | { x: number; y: number } | null>;
 
 let visionGroundingProvider: VisionGroundingProvider | null = null;
+
+/** Sortie propre du repli d'ancrage (pas une erreur). */
+class SkipGrounding extends Error {}
 
 /**
  * Intentions qui affirment l'EXISTENCE d'un texte ou d'un élément. Pour elles,
@@ -2307,12 +2348,28 @@ if ($clickButtonName) {
   // ============================================================================
 
   private async click(input: ComputerControlInput): Promise<ToolResult> {
+    const regionElement = input.ref !== undefined ? this.snapshotManager.getElement(input.ref) : undefined;
+    const isVisualRegion = regionElement?.attributes?.source === 'visual-region';
+    if (regionElement && isVisualRegion) {
+      const guardError = await this.guardVisualRegion(regionElement);
+      if (guardError) return { success: false, error: guardError };
+    }
+
     const point = await this.resolvePoint(input);
     if (!point) {
       return { success: false, error: 'Position required (x,y or element ref)' };
     }
     if (point.browserError) {
       return { success: false, error: point.browserError };
+    }
+
+    if (regionElement && isVisualRegion) {
+      await this.automation.click(point.x, point.y, { button: input.button || 'left' });
+      const after = await this.describeScreenAfterRegionClick(regionElement);
+      return {
+        success: true,
+        output: `Clicked visual region [${regionElement.ref}] "${regionElement.name}" at (${point.x}, ${point.y}).\n${after}`,
+      };
     }
 
     let bufferBefore: Buffer | null = null;
@@ -3363,6 +3420,50 @@ if ($clickButtonName) {
   /**
    * Capture screenshot buffer for visual verification loops
    */
+  /** Re-capture l'écran et vérifie qu'une région visuelle est toujours là. */
+  private async guardVisualRegion(element: UIElement): Promise<string | null> {
+    let current: { width: number; height: number; signature: number[] } | null = null;
+    try {
+      const { ScreenshotTool } = await import('./screenshot-tool.js');
+      const capture = await new ScreenshotTool().capture({ fullscreen: true, format: 'png' });
+      const capturePath = (capture.data as { path?: string } | undefined)?.path;
+      if (capture.success && capturePath) {
+        const raw = await loadRawImage(capturePath);
+        current = { width: raw.width, height: raw.height, signature: regionSignature(raw, element.bounds as RegionBox) };
+      }
+    } catch (err) {
+      logger.debug('Visual region guard: re-capture failed', { error: String(err) });
+    }
+    return checkVisualRegionGuard(element, current);
+  }
+
+  /**
+   * Après un clic sur une région visuelle : nouvelle capture, nouvelles régions,
+   * et les textes apparus/disparus — le modèle voit le résultat sans deviner.
+   */
+  private async describeScreenAfterRegionClick(clicked: UIElement): Promise<string> {
+    const beforeLabels = new Set(
+      (this.snapshotManager.getCurrentSnapshot()?.elements ?? [])
+        .filter((e) => e.attributes?.source === 'visual-region' && e.name)
+        .map((e) => e.name),
+    );
+    if (beforeLabels.size === 0 && clicked.name) beforeLabels.add(clicked.name);
+    await this.delay(500);
+    const regions = await this.snapshotManager.detectVisualRegionElements();
+    if (regions.length === 0) return 'Re-capture after click: no visual region detected (cannot verify).';
+    const afterLabels = new Set(regions.filter((e) => e.name).map((e) => e.name));
+    const appeared = [...afterLabels].filter((l) => !beforeLabels.has(l));
+    const disappeared = [...beforeLabels].filter((l) => !afterLabels.has(l));
+    const list = regions
+      .slice(0, 20)
+      .map((e) => `  [${e.ref}] ${e.role} "${e.name}" center=(${e.center.x},${e.center.y})`)
+      .join('\n');
+    const change = appeared.length || disappeared.length
+      ? `Text changed: appeared ${JSON.stringify(appeared)}, disappeared ${JSON.stringify(disappeared)}.`
+      : 'No text change detected in the regions.';
+    return `Re-capture after click (${regions.length} regions): ${change}\n${list}`;
+  }
+
   private async captureScreenBuffer(): Promise<Buffer | null> {
     try {
       const { ScreenshotTool } = await import('./screenshot-tool.js');
@@ -5052,6 +5153,16 @@ $value.SetValue($targetText)
       }
     }
 
+    // Rien trouvé par nom : si l'arbre ne donne rien d'utile, découper la capture
+    // en régions numérotées (OCR ×3 + contours) et réessayer par nom.
+    if (elements.length === 0 && !input.simulateOnly && isVisualRegionsEnabled()) {
+      const added = await this.snapshotManager.addVisualRegionsToSnapshot();
+      if (added.length > 0) {
+        refreshed = true;
+        elements = this.findElementsByIntent(query, options);
+      }
+    }
+
     if (elements.length === 0) {
       // Try Visual Grounding Fallback if enabled and registered
       const isGroundingEnabled = process.env.CODEBUDDY_VISION_GROUNDING === '1' || process.env.CODEBUDDY_REAL_COMPUTER_USE === '1';
@@ -5059,13 +5170,30 @@ $value.SetValue($targetText)
         try {
           logger.info('Attempting visual grounding fallback for query', { query });
           const currentSnap = this.snapshotManager.getCurrentSnapshot();
-          const candidates = (currentSnap?.elements ?? [])
-            .filter((e) => e.interactive)
+          const allInteractive = (currentSnap?.elements ?? []).filter((e) => e.interactive);
+          // Quand des régions visuelles existent, la liste fermée ne porte que sur
+          // elles : ce sont les seules cibles tirées de CETTE capture.
+          const regionElements = allInteractive.filter((e) => e.attributes?.source === 'visual-region');
+          const candidates: GroundingCandidate[] = (regionElements.length > 0 ? regionElements : allInteractive)
             .map((e) => ({
               ref: e.ref,
               role: e.role,
               name: e.name,
+              ...(e.attributes?.source === 'visual-region'
+                ? {
+                    center: { x: e.center.x, y: e.center.y },
+                    size: { width: e.bounds.width, height: e.bounds.height },
+                    source: 'visual-region',
+                  }
+                : {}),
             }));
+
+          if (candidates.length === 0 && !isCoordinateGroundingEnabled()) {
+            // Sans liste fermée, seul le repli en coordonnées resterait : il est
+            // derrière CODEBUDDY_VISION_GROUNDING_COORDS=1.
+            logger.info('Visual grounding skipped: no candidate and coordinate fallback disabled', { query });
+            throw new SkipGrounding();
+          }
 
           const ann = await this.snapshotManager.toAnnotatedScreenshot({
             interactiveOnly: candidates.length > 0,
@@ -5131,7 +5259,12 @@ $value.SetValue($targetText)
                 const matchedEl = this.snapshotManager.getElement(matchedRef);
                 if (matchedEl) {
                   // Validate matched element role if options.roles is specified
-                  if (options.roles && !options.roles.includes(matchedEl.role)) {
+                  // Le rôle d'une région visuelle est une estimation (un bouton plat
+                  // sans fond est lu comme du texte) : le choix dans la liste fermée prime.
+                  if (
+                    options.roles && !options.roles.includes(matchedEl.role)
+                    && matchedEl.attributes?.source !== 'visual-region'
+                  ) {
                     logger.warn('Visual grounding matched element with invalid role', {
                       matchedRef,
                       matchedRole: matchedEl.role,
@@ -5149,7 +5282,9 @@ $value.SetValue($targetText)
             }
           }
         } catch (err) {
-          logger.error('Failed executing visual grounding fallback', { error: err });
+          if (!(err instanceof SkipGrounding)) {
+            logger.error('Failed executing visual grounding fallback', { error: err });
+          }
         }
       }
 
