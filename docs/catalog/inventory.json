@@ -30,7 +30,8 @@
       "benefit": {
         "en": "Inspect the evidence level of tracked features before presenting them.",
         "fr": "Consultez le niveau de preuve des fonctionnalités avant de les présenter."
-      }
+      },
+      "verificationLimit": "Preuve de commande à confirmer pour cette révision."
     },
     {
       "id": "resource-catalog-tool",
@@ -91,7 +92,8 @@
       "benefit": {
         "en": "Check the HTTP server health endpoint.",
         "fr": "Vérifiez la santé du serveur HTTP."
-      }
+      },
+      "verificationLimit": "La route HTTP doit être revérifiée sur la révision courante."
     },
     {
       "id": "telegram-channel",
