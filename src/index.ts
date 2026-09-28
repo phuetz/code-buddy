@@ -186,6 +186,19 @@ async function ensureEnvLoaded(): Promise<void> {
     }
     envLoaded = true;
 
+    // Named profile (`--profile local|cloud|fleet|max`): fill the advanced
+    // variables it groups — only those still unset, AFTER .env, so exported
+    // variables and .env values keep priority.
+    try {
+      const { applyRequestedProfileEnv } = await import('./cli/profile-env.js');
+      const { profile, applied } = applyRequestedProfileEnv(process.argv);
+      if (profile && Object.keys(applied).length > 0) {
+        logger.debug(`Profile ${profile} set: ${Object.entries(applied).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+      }
+    } catch (_profileErr) {
+      // A profile error is already reported by preloadRequestedProfile.
+    }
+
     // Configure HTTP proxy from env vars (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
     try {
       const { configureProxy } = await import('./utils/proxy-support.js');
@@ -583,6 +596,88 @@ function profilActif(): { baseURL?: string; model?: string } {
   } catch (_err) {
     return {};
   }
+}
+
+/**
+ * Zero-configuration fallback, tried only once nothing explicit resolved a
+ * provider (no key, no login, no onboarded settings, no stored credential).
+ * An explicit `CODEBUDDY_PROVIDER`, `--base-url` or `--profile` endpoint that
+ * failed to resolve is NOT silently replaced: the user asked for something
+ * specific. `CODEBUDDY_ZERO_CONFIG=false` turns the fallback off.
+ */
+async function tryZeroConfigProvider(options: { baseUrl?: string; model?: string }): Promise<{
+  launched: { apiKey: string; baseURL: string; model: string } | null;
+  decision?: import('./cli/zero-config.js').ZeroConfigDecision;
+}> {
+  const zeroConfig = await import('./cli/zero-config.js');
+  if (
+    zeroConfig.isZeroConfigDisabled() ||
+    options.baseUrl ||
+    profilActif().baseURL ||
+    process.env.CODEBUDDY_PROVIDER?.trim()
+  ) {
+    return { launched: null };
+  }
+  const decision = await zeroConfig.detectZeroConfigLocal();
+  if (decision.kind !== 'ollama') return { launched: null, decision };
+  const model = options.model?.trim() || decision.model;
+  cachedProvider = {
+    provider: 'ollama',
+    apiKey: 'ollama', // placeholder — ignored by Ollama's OpenAI-compatible API
+    baseURL: decision.baseURL,
+    defaultModel: model,
+    source: 'environment',
+  };
+  // In-process only (nothing for the user to export): keeps every consumer that
+  // reads OLLAMA_HOST — native /api/chat routing, context discovery — aligned.
+  if (!process.env.OLLAMA_HOST) {
+    process.env.OLLAMA_HOST = decision.baseURL.replace(/\/v1\/?$/, '');
+  }
+  cli.info(zeroConfig.formatZeroConfigChoice(decision, options.model));
+  return { launched: { apiKey: 'ollama', baseURL: decision.baseURL, model }, decision };
+}
+
+/**
+ * `buddy --profile local` (or `CODEBUDDY_PREFER_LOCAL=true`): take the local
+ * Ollama and its best installed tool-capable model, even when a cloud login
+ * exists. Explicit `--api-key`, `--base-url` or `CODEBUDDY_PROVIDER` still win.
+ * Returns false when the preference does not apply; exits with the exact
+ * install commands when it applies but no usable local model is found.
+ */
+async function applyPreferredLocalProvider(options: {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+}): Promise<boolean> {
+  const raw = process.env.CODEBUDDY_PREFER_LOCAL?.trim().toLowerCase();
+  if (!(raw === 'true' || raw === '1' || raw === 'on' || raw === 'yes')) return false;
+  if (options.apiKey || options.baseUrl || process.env.CODEBUDDY_PROVIDER?.trim()) return false;
+  const zeroConfig = await import('./cli/zero-config.js');
+  const decision = await zeroConfig.detectZeroConfigLocal();
+  if (decision.kind !== 'ollama') {
+    logger.error(
+      `Local profile: no usable local model (${decision.detail}).\n` +
+        zeroConfig.buildNoProviderGuidance(decision),
+    );
+    process.exit(1);
+  }
+  const model = options.model?.trim() || decision.model;
+  cachedProvider = {
+    provider: 'ollama',
+    apiKey: 'ollama',
+    baseURL: decision.baseURL,
+    defaultModel: model,
+    source: 'environment',
+  };
+  if (!process.env.OLLAMA_HOST) {
+    process.env.OLLAMA_HOST = decision.baseURL.replace(/\/v1\/?$/, '');
+  }
+  cli.info(
+    zeroConfig
+      .formatZeroConfigChoice(decision, options.model)
+      .replace('Zero-config: no provider configured, using', 'Local profile: using'),
+  );
+  return true;
 }
 
 async function loadBaseURL(): Promise<string> {
@@ -2098,7 +2193,8 @@ program
       // line must not throw away a subscription login. The sync resolver is blind
       // to `buddy login xai`, so `--model grok-4.3` used to fall back to an
       // ambient XAI_API_KEY — dead, in the case measured on 2026-09-02.
-      const explicitProvider = options.model && !options.apiKey && !options.baseUrl
+      const preferredLocal = await applyPreferredLocalProvider(options);
+      const explicitProvider = !preferredLocal && options.model && !options.apiKey && !options.baseUrl
         ? await (
             await import('./commands/llm-provider-resolution.js')
           ).resolveCommandProviderWithOAuth({ explicitModel: options.model })
@@ -2125,6 +2221,17 @@ program
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
 
+      // Zero-config: nothing configured → a local Ollama that already serves a
+      // tool-capable model is used as-is, without any variable to export.
+      let zeroConfigDecision: import('./cli/zero-config.js').ZeroConfigDecision | undefined;
+      if (!apiKey) {
+        const zero = await tryZeroConfigProvider(options);
+        zeroConfigDecision = zero.decision;
+        if (zero.launched) {
+          ({ apiKey, baseURL, model } = zero.launched);
+        }
+      }
+
       if (!apiKey) {
         // The shortest first-run path is a direct ChatGPT OAuth login. Keep the
         // full wizard available, but do not make a new user navigate provider,
@@ -2134,6 +2241,10 @@ program
           !options.prompt && !options.print &&
           process.env.CI !== 'true' && process.env.GITHUB_ACTIONS !== 'true';
 
+        if (interactive && zeroConfigDecision?.kind === 'none') {
+          // Say why the local path was not taken before offering the login.
+          cli.info(`Zero-config: no local model usable (${zeroConfigDecision.detail}).`);
+        }
         const { recoverFirstRunWithChatGpt } = await import('./cli/first-run.js');
         const recoveredProvider = await recoverFirstRunWithChatGpt({
           interactive,
@@ -2186,8 +2297,8 @@ program
         }
 
         if (!recoveredProvider) {
-          const { NO_PROVIDER_GUIDANCE } = await import('./cli/first-run.js');
-          logger.error(NO_PROVIDER_GUIDANCE);
+          const { buildNoProviderGuidance } = await import('./cli/zero-config.js');
+          logger.error(buildNoProviderGuidance(zeroConfigDecision));
           process.exit(1);
         }
       }
@@ -2795,17 +2906,22 @@ gitCommand
         ...(options.apiKey ? { apiKey: options.apiKey } : {}),
         ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
       });
-      const apiKey = launched.apiKey;
-      const baseURL = launched.baseURL;
-      const model = launched.model;
+      let apiKey = launched.apiKey;
+      let baseURL = launched.baseURL;
+      let model = launched.model;
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
 
       if (!apiKey) {
-        const { NO_PROVIDER_GUIDANCE } = await import('./cli/first-run.js');
-        logger.error(NO_PROVIDER_GUIDANCE);
-        process.exit(1);
+        const zero = await tryZeroConfigProvider(options);
+        if (zero.launched) {
+          ({ apiKey, baseURL, model } = zero.launched);
+        } else {
+          const { buildNoProviderGuidance } = await import('./cli/zero-config.js');
+          logger.error(buildNoProviderGuidance(zero.decision));
+          process.exit(1);
+        }
       }
 
       // Save API key and base URL to user settings if provided via command line
