@@ -303,9 +303,8 @@ export function createProviderCommand(): Command {
         }
       }
 
-      if (configured.length === 0 && configuredPluginProviders.length === 0) {
-        console.log('⚠️  No providers configured. Set an API key environment variable.');
-        console.log('   Example: export ANTHROPIC_API_KEY="your-key"');
+      if (configured.length === 0 && configuredPluginProviders.length === 0 && runtimeActive.size === 0) {
+        console.log('⚠️  No providers configured. Run `buddy onboard` or `buddy login`.');
       }
     });
 
