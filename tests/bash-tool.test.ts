@@ -5,6 +5,7 @@
 import { BashTool } from '../src/tools/bash';
 import path from 'path';
 import os from 'os';
+import fs from 'node:fs';
 
 const isWin = process.platform === 'win32';
 const itUnix = isWin ? it.skip : it;
@@ -28,10 +29,19 @@ jest.mock('../src/security/sandbox', () => ({
 
 describe('BashTool', () => {
   let bashTool: BashTool;
+  const cleanCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-bash-tool-'));
+  fs.writeFileSync(path.join(cleanCwd, 'package.json'), '{"name":"public-test"}\n');
+  fs.writeFileSync(path.join(cleanCwd, 'notes.txt'), 'test\n');
 
-  beforeEach(() => {
+  afterAll(() => fs.rmSync(cleanCwd, { recursive: true, force: true }));
+
+  beforeEach(async () => {
     bashTool = new BashTool();
+    const moved = await bashTool.execute(`cd "${cleanCwd}"`);
+    expect(moved.success).toBe(true);
   });
+
+  afterEach(() => bashTool.dispose());
 
   describe('Command Validation', () => {
     it('should block rm -rf / command', async () => {

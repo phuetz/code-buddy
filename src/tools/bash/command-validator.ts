@@ -21,6 +21,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { checkSecretFileAccess, classifySecretPath, getHomeCredentialRoots } from '../../security/secret-files.js';
+import { isPublicProjectNpmrc } from '../../security/public-project-npmrc.js';
 import { parseShellCommand } from '../../security/bash-parser.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
@@ -395,30 +396,6 @@ const RECURSIVE_READERS = new Set([
   'curl', 'wget', 'nc', 'ncat', 'socat', 'python', 'python3', 'node', 'perl', 'ruby',
   'awk', 'sed', 'diff', 'cmp', 'tee', 'openssl',
 ]);
-
-/** Only a narrow set of public npm settings may be traversed in a project. */
-function isPublicProjectNpmrc(file: string): boolean {
-  if (path.basename(file).toLowerCase() !== '.npmrc') return false;
-  try {
-    const real = fs.realpathSync(file);
-    const home = path.resolve(os.homedir());
-    if (real === home || real.startsWith(home + path.sep)) return false;
-    const stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.size > 16_384) return false;
-    const content = fs.readFileSync(file, 'utf8');
-    if (content.includes('\uFFFD')) return false;
-    return content.split(/\r?\n/).every((line) => {
-      const entry = line.trim();
-      if (!entry) return true;
-      if (entry.startsWith('#')) {
-        return !/(?:auth|token|secret|pass(?:word)?|pwd|api|bearer|cookie|session|private|credential|key)/i.test(entry) &&
-          !/[A-Za-z0-9+/_=-]{24,}/.test(entry);
-      }
-      return /^(?:engine-strict|package-lock|save-exact|legacy-peer-deps|audit|fund|progress|update-notifier)=(?:true|false)$/i.test(entry) ||
-        /^registry=https:\/\/registry\.npmjs\.org\/?$/i.test(entry);
-    });
-  } catch { return false; }
-}
 
 /** Only explicit public placeholders may be traversed in classified env files. */
 function isPublicProjectEnvPlaceholder(file: string): boolean {
