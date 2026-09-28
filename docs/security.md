@@ -197,6 +197,16 @@ curl http://127.0.0.1:3000/v1/chat/completions \
   -d '{"model":"qwen3:4b-instruct","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
+## Telemetry and remote endpoints
+
+The default telemetry setting is `enabled: true`, `level: full`. This permits
+collection **if you configure an exporter**; it does not supply a destination.
+Sentry starts only when `SENTRY_DSN` is set, and OpenTelemetry tracing starts
+only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. With neither variable set,
+these exporters do not start. Use `/telemetry status` to see the setting and
+whether either endpoint is configured; `/telemetry off` disables both even
+when an endpoint is present. Changes may require a restart.
+
 ## Native Modules Installation (`--allow-scripts`)
 
 Code Buddy declares optional native add-ons such as `better-sqlite3`, `sharp`, `node-pty`, `tree-sitter*`, and `usearch`. The optional-dependency list also contains non-native packages, so its size is not a native-package count.
@@ -213,3 +223,6 @@ passing `--allow-scripts` on that command is an error. See npm's
 [version 11](https://docs.npmjs.com/cli/v11/commands/npm-install/#strict-allow-scripts)
 and [version 12](https://docs.npmjs.com/cli/v12/commands/npm-install/#strict-allow-scripts)
 install policies.
+
+If a source install fails while fetching `@vscode/ripgrep` from GitHub, see
+the [system-ripgrep workaround](install.md#ripgrep-download-blocked-during-npm-ci).

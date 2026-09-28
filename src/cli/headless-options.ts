@@ -32,7 +32,7 @@ export function isHeadlessFinalResponseEmpty(resultText: string): boolean {
 
 export function formatEmptyHeadlessResponseError(info: EmptyHeadlessResponseInfo): string {
   const seconds = Math.max(0, Math.round(info.durationMs / 1000));
-  return `le modèle n'a rien renvoyé ; provider=${info.provider} modèle=${info.model} durée=${seconds}s`;
+  return `The model returned no response; provider=${info.provider} model=${info.model} duration=${seconds}s. Check the model and provider logs, then retry.`;
 }
 
 export function resolveHeadlessResultExitCode(resultText: string): number {

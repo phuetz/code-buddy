@@ -1,29 +1,38 @@
 ## [Unreleased]
 
-- **research:** `buddy research ingest --source blogs` lit des flux RSS/Atom configurés en JSON, filtre les billets par mots du thème et utilise leur URL canonique pour la déduplication CKG. `--feeds-file` sélectionne la liste ; les erreurs de flux échouent ouvertement.
-- **research:** `buddy research ingest --source github|models|all` ajoute les dépôts GitHub populaires et les modèles de génération Hugging Face au CKG, avec filtres, tri, identifiants stables et ingestion idempotente. `both` conserve arXiv et Europe PMC.
+## [2.3.0] (2026-10-01)
 
-## [2.3.0] (unreleased)
+### Sécurité
 
-### Added
+- `buddy security audit` vérifie les réglages de sécurité du profil, des skills et de MCP ; son option `--fix` resserre les permissions des fichiers après sauvegarde des modes. Les audits incomplets ou portant sur des fichiers spéciaux échouent explicitement (`36fac9ed1`, `16aa191df`, `aed8b35c9`).
+- Un serveur MCP ne peut plus lancer librement un shell ni écrire hors des emplacements autorisés ; ses outils d'écriture doivent être explicitement listés (`0d9c5b2c9`, `48adb3f31`, `1d713a409`, `c7e4066ca`).
+- L'App Studio limite l'environnement transmis aux commandes et masque les clés dans la console, le chat et l'historique des versions (`a508f43d4`, `ec47c2103`, `5390cb1d2`).
 
-- **agent:** `[tool_loop_guardrails]` in `config.toml` sets `warn_after` and `hard_stop_after` for `exact_failure`, `same_tool_failure`, and `idempotent_no_progress` on the existing tool-loop guard. Unset keys keep the historical 5-then-3 behaviour; the two failure counters stay off until set.
-- **security:** `buddy security audit [--fix] [--json]` reports stable `checkId`s for the skill firewall, profile modes, plaintext configuration secrets, the native sandbox, and MCP guards. Accepted suppressions live in configuration (`checkId` plus a reason). `--fix` only tightens file modes, and only after a mode backup.
-- **deploy:** `buddy deploy run` provides one-click web publishing for static and build projects targeting Cloudflare Pages (`wrangler`) and Netlify (`netlify-cli`). Simulation is active by default; `--apply` uploads with credentials strictly confined to the child environment. `buddy deploy platforms` lists upload targets versus config generators.
-- **provision:** `buddy provision db-auth` overlays versioned SQL migrations, a typed TypeScript client, and authentication views (`SignIn`, `SignUp`, `SignOut`) for local Docker Postgres (`--target local`) or hosted Supabase (`--target supabase`). Simulation by default; requires `--apply` to write files.
-- **sessions:** Unified recents index (`recents-index.json`) bridging CLI sessions, Cowork SQLite threads, and mobile conversations. Supported commands: `buddy session list` (with origin markers), `buddy session resume <id>`, `buddy session search`, and `buddy session last`. Cowork sessions can be resumed from CLI via automatic lazy bridge files.
-- **figma:** `buddy figma import` converts Figma REST API JSON exports or live Figma files into React components and CSS tokens. Supports offline execution via `--json`, token-at-call-time security, and prevents companion tool access.
-- **templates:** `expo-rn` mobile template added to the scaffolding engine and Cowork App Studio, generating an Expo SDK 52 / React Native starter with Expo Router tabs, theming, Vitest tests, and EAS configuration.
-- **cowork:** Folder instructions tab in Settings (`SettingsFolderInstructions`) displaying hierarchical context resolution (`AGENTS.md`, `CODEBUDDY.md`) between root and current directory with in-app editing and preview.
-- **skills:** Authored skill trigger derivation at write time ensures self-improvement skills are discoverable in `SkillRegistry.search`.
-- **perf:** Thin startup entrypoint (`dist/cli-boot.js`) accelerates CLI execution for `--version` (−68%) and `--help` (−29%).
+### Premier contact et commandes
 
-### Fixed
+- L'aide du terminal et les erreurs d'entrée donnent des indications plus utiles ; les guides d'installation et de démarrage concordent avec les commandes réellement disponibles (`959dd8e75`, `aa434d58a`).
+- Le premier démarrage avec Ollama recommande un modèle capable d'appeler des outils (`175dd0b84`).
+- `buddy fleet token` accorde les droits nécessaires pour écouter la flotte et appeler un outil distant dans son usage par défaut (`c727be659`).
+- `buddy config set`, `patch` et `unset` permettent de modifier la configuration sans ouvrir une session interactive (`80f34be1c`).
 
-- **security:** `buddy security audit` takes `--profile-dir` so it no longer collides with the global `--profile` name. A missing or unreadable profile or project fails the audit instead of being reported as passed. `--fix` only removes permission bits, refuses symlinks, and writes its mode backup inside the profile (never the project). A critical finding cannot be suppressed into a passed result. Incomplete config and skill scans fail the audit. A directory or other non-regular config file fails the audit. A symlink or special file inside a skill fails the audit and is not opened. Profile and project paths in the report are passed through the same secret redaction as finding details. The tool-loop guard reads `config.toml` only when it is a regular file within 512 KiB, and refuses a fifo or other special file instead of blocking the turn. `hasWarned` is true after an `exact_failure` or `same_tool_failure` warning.
-- **skills:** File watcher resilience against kernel inotify table exhaustion (`ENOSPC` / `EMFILE` / `ENFILE`). Falls back to synchronous on-demand reads and degrades health reporting gracefully without crashing.
-- **sessions:** Strict prefix disambiguation in `materializeUnifiedSession` refuses ambiguous abbreviated IDs to prevent resuming incorrect sessions.
-- **deploy:** Filesystem sandboxing prevents `outputDir` from escaping the project root in `buddy deploy run`.
+### Travail quotidien
+
+- L'historique récent rassemble les sessions du terminal, de Cowork et du mobile ; les sessions de messagerie peuvent être remises à zéro avec archivage (`8268c410c`, `256f4a7ef`, `ed6532b02`).
+- L'App Studio peut corriger une génération, conserver des versions par projet, cibler un élément de l'aperçu, montrer les journaux du serveur de développement et exporter le site construit (`4275a2c7e`, `88ea45717`, `9bcbeb11a`).
+- `buddy research ingest` accepte des flux RSS/Atom, des dépôts GitHub et des modèles Hugging Face comme sources de recherche (`1cad66387`, `e53a94b15`).
+- `buddy deploy run` prépare le déploiement d'un site vers Cloudflare Pages ou Netlify en simulation par défaut ; `buddy provision db-auth` prépare une base Postgres et des vues d'authentification avec application explicite (`5efa2012b`, `b4dca6c68`).
+- `buddy figma import` convertit une maquette Figma en composants React ; un gabarit Expo est disponible dans l'atelier d'applications (`df56fa031`, `5f5f92969`).
+
+### Fiabilité et visibilité
+
+- Le navigateur reconnaît mieux certaines consignes d'action en français, vérifiées dans Chromium réel (`e01e83cc3`).
+- Le renouvellement de connexion ChatGPT indique la cause effective de l'échec ; la vidéo expose la réponse du service et évite un blocage de téléchargement (`feb9e2072`, `2069d6007`).
+- L'interface affiche l'état réel d'une exécution et les outils de projet signalent leurs échecs au lieu de laisser croire qu'ils ont réussi (`eb7c32aaf`, `ab11749d8`).
+- La PWA mobile cesse les reconnexions après un refus d'authentification ; la déconnexion Telegram attend la fin du traitement en cours (`74a96cd82`, `d848352fb`).
+
+### Documentation
+
+- Le catalogue décrit 91 fonctionnalités avec un état et des preuves graduées ; les documents de prise en main et l'explication française ont été précisés (`6ee17ced4`, `de496d5c3`, `aa434d58a`, `5e42b991d`).
 
 ## [2.2.0] (2026-09-17)
 

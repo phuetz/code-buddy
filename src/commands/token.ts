@@ -406,7 +406,7 @@ function attachTokenOptions(command: Command, deps: TokenCommandDependencies = {
 export function createTokenCommand(deps: TokenCommandDependencies = {}): Command {
   return attachTokenOptions(
     new Command('token')
-      .description('Mint a JWT for the API and the mobile PWA (alias of buddy fleet token)'),
+      .description('Mint a JWT for the API and the mobile PWA (basic user scopes by default)'),
     deps,
   );
 }
