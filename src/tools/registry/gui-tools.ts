@@ -6,13 +6,15 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
-import { guiControl } from '../gui-tool.js';
+import { guiControl, type GuiElementTreeProvider } from '../gui-tool.js';
 
 // ============================================================================
 // GuiControlTool
 // ============================================================================
 
 export class GuiControlTool implements ITool {
+  constructor(private readonly elementTreeProvider?: GuiElementTreeProvider) {}
+
   readonly name = 'gui_control';
   readonly description =
     'Control the desktop GUI: take screenshots, click buttons, type text, press key ' +
@@ -20,7 +22,7 @@ export class GuiControlTool implements ITool {
     'action="click" with x/y coordinates to interact. Supports Windows, macOS, and Linux.';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
-    return guiControl(input);
+    return guiControl(input, { elementTreeProvider: this.elementTreeProvider });
   }
 
   getSchema(): ToolSchema {

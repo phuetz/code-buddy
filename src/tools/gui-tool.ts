@@ -54,6 +54,62 @@ export interface GuiToolResult {
   error?: string;
 }
 
+/** A provider supplies a fresh accessibility tree for one find_element call. */
+export interface GuiElementNode {
+  role: string;
+  name: string;
+  bounds?: { x: number; y: number; width: number; height: number };
+  children?: GuiElementNode[];
+}
+
+export type GuiElementTreeProvider = () => Promise<GuiElementNode | null> | GuiElementNode | null;
+
+export interface GuiToolOptions {
+  elementTreeProvider?: GuiElementTreeProvider;
+}
+
+/** Match only an unambiguous element with valid, nonzero bounds. */
+function resolveElementFromTree(tree: GuiElementNode | null, description: string): GuiToolResult {
+  const target = description.trim().toLowerCase().replace(/\s+/g, ' ');
+  const stack: { value: unknown; depth: number }[] = [{ value: tree, depth: 0 }];
+  const seen = new WeakSet<object>();
+  const matches: { x: number; y: number }[] = [];
+  let visited = 0;
+
+  while (stack.length > 0 && visited < 1000) {
+    const item = stack.pop()!;
+    if (item.depth > 32 || !item.value || typeof item.value !== 'object' || seen.has(item.value)) continue;
+    seen.add(item.value);
+    visited++;
+
+    const node = item.value as Partial<GuiElementNode>;
+    if (typeof node.name === 'string' && typeof node.role === 'string') {
+      const name = node.name.trim().toLowerCase().replace(/\s+/g, ' ');
+      const role = node.role.trim().toLowerCase().replace(/\s+/g, ' ');
+      if (name && (target === name || target === `${name} ${role}` || target === `${role} ${name}`)) {
+        const bounds = node.bounds;
+        if (bounds && [bounds.x, bounds.y, bounds.width, bounds.height].every(
+          (value) => typeof value === 'number' && Number.isSafeInteger(value),
+        ) && bounds.x >= 0 && bounds.y >= 0 && bounds.width > 0 && bounds.height > 0) {
+          const x = bounds.x + bounds.width / 2;
+          const y = bounds.y + bounds.height / 2;
+          if (Number.isSafeInteger(Math.round(x)) && Number.isSafeInteger(Math.round(y))) {
+            matches.push({ x: Math.round(x), y: Math.round(y) });
+          }
+        }
+      }
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) stack.push({ value: child, depth: item.depth + 1 });
+    }
+  }
+
+  if (matches.length !== 1 || stack.length > 0) {
+    return { success: false, error: 'Element not found or ambiguous in element tree' };
+  }
+  return { success: true, elementFound: { ...matches[0]!, confidence: 1 } };
+}
+
 // ============================================================================
 // Key-combo parser
 // ============================================================================
@@ -165,12 +221,19 @@ export function captureScreenshotNative(region?: GuiToolInput['region']): string
       const hasImport = ((): boolean => {
         try { execFileSync('which', ['import'], { stdio: 'ignore' }); return true; } catch { return false; }
       })();
-      if (hasScrot) {
-        execFileSync('scrot', [outPath], { timeout: 10000 });
-      } else if (hasImport) {
-        execFileSync('import', ['-window', 'root', outPath], { timeout: 10000 });
-      } else {
-        execFileSync('gnome-screenshot', ['-f', outPath], { timeout: 10000 });
+      try {
+        if (hasScrot) {
+          execFileSync('scrot', [outPath], { timeout: 10000 });
+        } else if (hasImport) {
+          execFileSync('import', ['-window', 'root', outPath], { timeout: 10000 });
+        } else {
+          execFileSync('gnome-screenshot', ['-f', outPath], { timeout: 10000 });
+        }
+      } catch (error: unknown) {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+          throw new Error('GUI backend not available: no screenshot tool found');
+        }
+        throw error;
       }
     }
 
@@ -356,7 +419,7 @@ async function performScroll(x: number, y: number, direction: 'up' | 'down' | 'l
 /**
  * Execute a GUI automation action.
  */
-export async function executeGuiAction(input: GuiToolInput): Promise<GuiToolResult> {
+export async function executeGuiAction(input: GuiToolInput, options: GuiToolOptions = {}): Promise<GuiToolResult> {
   try {
     // S4 — mutating GUI actions must respect the active permission mode (a
     // read-only posture blocks them); screenshot/find_element are read-only.
@@ -424,6 +487,9 @@ export async function executeGuiAction(input: GuiToolInput): Promise<GuiToolResu
         if (!input.description) {
           return { success: false, error: 'find_element requires description' };
         }
+        if (options.elementTreeProvider) {
+          return resolveElementFromTree(await options.elementTreeProvider(), input.description);
+        }
         // Capture screenshot and return it — the LLM uses vision to locate the element
         const b64 = captureScreenshotNative();
         return { success: true, screenshot: b64 };
@@ -446,9 +512,9 @@ export async function executeGuiAction(input: GuiToolInput): Promise<GuiToolResu
 /**
  * Entry point called by the tool registry adapter.
  */
-export async function guiControl(input: Record<string, unknown>): Promise<ToolResult> {
+export async function guiControl(input: Record<string, unknown>, options: GuiToolOptions = {}): Promise<ToolResult> {
   const typedInput = input as unknown as GuiToolInput;
-  const result = await executeGuiAction(typedInput);
+  const result = await executeGuiAction(typedInput, options);
 
   if (!result.success) {
     return { success: false, error: result.error ?? 'GUI action failed' };
