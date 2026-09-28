@@ -276,7 +276,7 @@ function formatDuration(value: number | undefined): string {
 
 /** Render privacy-safe latency percentiles from the turn journal. */
 export function formatLatencyReport(aggregates: readonly TurnMetricsAggregate[]): string {
-  if (aggregates.length === 0) return 'Aucune mesure de latence LLM enregistrée.';
+  if (aggregates.length === 0) return 'No LLM latency measurements recorded.';
   const rows = [...aggregates]
     .sort(
       (left, right) =>
@@ -293,10 +293,10 @@ export function formatLatencyReport(aggregates: readonly TurnMetricsAggregate[])
       formatInteger(aggregate.totalTokens),
     ]);
   return [
-    'Code Buddy — Latence LLM mesurée',
+    'Code Buddy — measured LLM latency',
     '='.repeat(34),
     renderTable(
-      ['Provider', 'Modèle', 'Tours', 'TTFT p50', 'TTFT p95', 'TTFM p50', 'TTFM p95', 'Tokens'],
+      ['Provider', 'Model', 'Turns', 'TTFT p50', 'TTFT p95', 'TTFM p50', 'TTFM p95', 'Tokens'],
       rows,
       new Set([2, 3, 4, 5, 6, 7]),
     ),
@@ -395,7 +395,7 @@ export function createCostCommand(dependencies: CostCommandDependencies = {}): C
     .option('--session <id>', 'Limiter le rapport à un ID de session')
     .option('--since <7d|YYYY-MM-DD>', 'Limiter les tours à une période', validateSince)
     .option('--by <model|provider|day>', 'Ventilation du tableau', parseGroupBy, 'model')
-    .option('--latency', 'Afficher les p50/p95 TTFT et TTFM mesurés par modèle', false)
+    .option('--latency', 'Show measured TTFT and TTFM p50/p95 by model', false)
     .option('--json', 'Produire un JSON lisible par machine', false)
     .action(async (options: CostCommandOptions) => {
       const write =

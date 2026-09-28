@@ -1923,7 +1923,7 @@ export class AgentExecutor {
             });
             continue;
           }
-          throw new Error('réponse vide du fournisseur');
+          throw new Error('Empty provider response: no text or tool calls. Check the model and provider logs, then retry.');
         }
 
         if (

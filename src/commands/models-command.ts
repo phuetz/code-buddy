@@ -132,12 +132,12 @@ export function renderModelShow(model: string, options: ModelsCommandIO = {}): s
 
 export function createModelsCommand(): Command {
   const models = new Command('models')
-    .description('Lister ou afficher le catalogue de modèles');
+    .description('List or inspect the model catalog');
 
   models.command('list')
-    .description('Affiche le catalogue fusionné et le modèle principal')
-    .option('--config <path>', 'Fichier de configuration TOML')
-    .option('--profile <name>', 'Profil nommé')
+    .description('Show the merged catalog and primary model')
+    .option('--config <path>', 'TOML configuration file')
+    .option('--profile <name>', 'Named profile')
     .action((options: { config?: string; profile?: string }) => {
       try {
         process.stdout.write(renderModelsList({
@@ -150,10 +150,10 @@ export function createModelsCommand(): Command {
     });
 
   models.command('show')
-    .argument('<model>', 'Nom, alias ou identifiant')
-    .description('Affiche la fiche réellement appliquée d\'un modèle')
-    .option('--config <path>', 'Fichier de configuration TOML')
-    .option('--profile <name>', 'Profil nommé')
+    .argument('<model>', 'Name, alias or identifier')
+    .description('Show the effective model details')
+    .option('--config <path>', 'TOML configuration file')
+    .option('--profile <name>', 'Named profile')
     .action((model: string, options: { config?: string; profile?: string }) => {
       try {
         process.stdout.write(renderModelShow(model, {

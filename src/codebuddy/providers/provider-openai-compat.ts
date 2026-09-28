@@ -93,7 +93,7 @@ type ReasoningCompatiblePayload = {
   max_completion_tokens?: number | null;
 };
 
-const EMPTY_PROVIDER_RESPONSE_ERROR = 'réponse vide du fournisseur';
+const EMPTY_PROVIDER_RESPONSE_ERROR = 'Empty provider response: no text or tool calls. Check the model and provider logs, then retry.';
 
 /** `CODEBUDDY_STREAM_USAGE=false` (or `0`/`off`) opts out of `stream_options`. */
 function streamUsageRequested(): boolean {
