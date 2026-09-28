@@ -11,7 +11,9 @@ Les boutons historiques `bg-accent text-white` utilisent désormais le premier
 plan d'accent du thème. Les statuts Anthropic et les accents Genspark et Codex
 ont été ajustés pour atteindre AA sur les surfaces de Cowork.
 
-Le test des couleurs couvre six thèmes, y compris les surfaces translucides
-d'Ember et les fonds d'accent à 90 %. Les mesures du bouton réel sous Electron
-donnent 5,90:1 à 7,52:1 suivant le thème. La garde vie privée (40 tests), les
+Le sélecteur ne s'applique pas aux contrôles désactivés, qui gardent leurs
+classes `disabled:text-*`. Le test des couleurs couvre six thèmes, y compris
+les surfaces translucides d'Ember et les fonds d'accent à 90 %. Les mesures
+du bouton réel sous Electron donnent 5,90:1 à 7,52:1 suivant le thème.
+La garde vie privée (40 tests), les
 tests Cowork ciblés (17), les typechecks et le build Vite passent.
