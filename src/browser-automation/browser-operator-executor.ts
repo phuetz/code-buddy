@@ -1012,7 +1012,7 @@ export class BrowserOperatorExecutor {
       throw new Error('BrowserOperatorTargetInspectionRequired: semantic act has no locally bound target selector.');
     }
     const locator = page.locator?.(selector);
-    if (/(?:\bclick\b|\bopen\b|\bchoose\b|\bcontinue\b|cliquer|ouvrir|choisir|continuer)/i.test(instruction)) {
+    if (/(?:\bclick\b|\bopen\b|\bchoose\b|\bcontinue\b|clique(?:r|z)?|ouvrir|choisir|continuer)/i.test(instruction)) {
       if (locator?.click) {
         await locator.click({ button: 'left', clickCount: 1 });
       } else if (page.click) {
@@ -1023,7 +1023,7 @@ export class BrowserOperatorExecutor {
       return `Performed locally bound semantic click on ${selector}`;
     }
     const value = getString(inputs.value) || (inputs.instruction ? getString(inputs.text) : '');
-    if (value && /(?:\btype\b|\bfill\b|\benter\b|saisir|remplir)/i.test(instruction)) {
+    if (value && /(?:\btype\b|\bfill\b|\benter\b|saisir|rempli(?:r|s|ssez))/i.test(instruction)) {
       if (locator?.fill) {
         await locator.fill(value);
       } else if (page.fill) {
