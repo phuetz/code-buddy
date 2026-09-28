@@ -508,6 +508,95 @@ const GIT_GLOBAL_VALUES = new Set([
   '--super-prefix', '--attr-source', '--list-cmds',
 ]);
 
+function executableName(value: string): string {
+  return path.win32.basename(value.replace(/^\\+/, '')).replace(/\.exe$/i, '').toLowerCase();
+}
+
+/** Follow command prefixes that execute their remaining arguments as a program. */
+function unwrapGitPrefix(parsed: { command: string; args: string[]; raw: string }, cwd: string):
+  { command: string; args: string[]; cwd: string; unsafe: boolean; dynamic: boolean; shellPayload?: string } | null {
+  let command = parsed.command;
+  let args = [...parsed.args];
+  let directory = cwd;
+  let unsafe = /(?:^|\s)GIT_(?:DIR|WORK_TREE|NAMESPACE)=/.test(parsed.raw);
+  for (let depth = 0; depth < 12; depth += 1) {
+    const name = executableName(command);
+    if (name === 'git') return { command, args, cwd: directory, unsafe, dynamic: false };
+    if (['sh', 'bash', 'zsh'].includes(name) && /^-[a-z]*c$/i.test(args[0] ?? '')) {
+      // The fallback parser strips redirections even inside the quoted -c
+      // payload. Recover the shell's complete argument from the raw segment.
+      const quoted = parsed.raw.match(/\b(?:sh|bash|zsh)\s+-[a-z]*c\s+(["'])([\s\S]*)\1\s*$/i);
+      return { command, args, cwd: directory, unsafe, dynamic: false,
+        shellPayload: quoted?.[2] ?? args[1] };
+    }
+    if (name === 'env') {
+      while (args.length) {
+        const first = args[0]!;
+        if (first === '--') { args.shift(); break; }
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(first)) {
+          if (/^GIT_(?:DIR|WORK_TREE|NAMESPACE)=/.test(first)) unsafe = true;
+          args.shift(); continue;
+        }
+        if (first === '-C' || first === '--chdir' || first.startsWith('--chdir=') ||
+            first.startsWith('-C') && first.length > 2) {
+          const value = first === '-C' || first === '--chdir' ? args[1] :
+            first.startsWith('--chdir=') ? first.slice(8) : first.slice(2);
+          if (!value) return /\bgit\b/i.test(parsed.raw)
+            ? { command, args, cwd: directory, unsafe: true, dynamic: true } : null;
+          directory = path.resolve(directory, value);
+          args.splice(0, first === '-C' || first === '--chdir' ? 2 : 1);
+          continue;
+        }
+        if (['-i', '--ignore-environment', '-0', '--null'].includes(first)) { args.shift(); continue; }
+        if (['-u', '--unset'].includes(first)) { args.splice(0, 2); continue; }
+        if (first.startsWith('-')) return /\bgit\b/i.test(parsed.raw)
+          ? { command, args, cwd: directory, unsafe: true, dynamic: true } : null;
+        break;
+      }
+    } else if (name === 'nice') {
+      if (['-n', '--adjustment'].includes(args[0] ?? '')) {
+        args.shift();
+        // tree-sitter omits numeric arguments from ParsedCommand.args.
+        if (/^[+-]?\d+$/.test(args[0] ?? '')) args.shift();
+      }
+      else if (/^(?:-n|--adjustment=)/.test(args[0] ?? '')) args.shift();
+    } else if (name === 'timeout') {
+      while (args[0]?.startsWith('-')) {
+        const option = args.shift()!;
+        if (['-s', '--signal', '-k', '--kill-after'].includes(option) &&
+            args[0] && executableName(args[0]) !== 'git') args.shift();
+      }
+      // The grammar also omits a bare numeric duration. Consume it only when
+      // present, leaving the executable intact in either parser mode.
+      if (/^\d+(?:\.\d+)?[smhd]?$/.test(args[0] ?? '')) args.shift();
+    } else if (name === 'stdbuf') {
+      while (/^-(?:[ioe].*|--(?:input|output|error)=.*)$/.test(args[0] ?? '')) args.shift();
+    } else if (name === 'command') {
+      if (args[0] === '-p') args.shift();
+    } else if (name === 'exec') {
+      while (['-c', '-l'].includes(args[0] ?? '')) args.shift();
+      if (args[0] === '-a') args.splice(0, 2);
+      if (args[0] === '--') args.shift();
+    } else if (name === 'nohup') {
+      if (args[0] === '--') args.shift();
+    } else if (name === 'xargs') {
+      while (args[0]?.startsWith('-')) {
+        const option = args.shift()!;
+        if (['-I', '-L', '-n', '-P', '-d', '-s', '-a', '--replace', '--max-lines',
+          '--max-args', '--max-procs', '--delimiter', '--max-chars', '--arg-file'].includes(option)) args.shift();
+      }
+      if (executableName(args[0] ?? '') === 'git') {
+        args.shift();
+        return { command: 'git', args, cwd: directory, unsafe: true, dynamic: args.length === 0 };
+      }
+      return null;
+    } else return null;
+    if (!args.length) return null;
+    command = args.shift()!;
+  }
+  return { command, args, cwd: directory, unsafe: true, dynamic: true };
+}
+
 /** Parse Git's global-option prefix once, before interpreting its subcommand. */
 function parseGitInvocations(command: string, baseDir: string): { commands: GitInvocation[]; error: string | null } {
   const commands: GitInvocation[] = [];
@@ -517,11 +606,21 @@ function parseGitInvocations(command: string, baseDir: string): { commands: GitI
       segmentCwd = path.resolve(segmentCwd, parsed.args[0]);
       continue;
     }
-    if (path.basename(parsed.command) !== 'git') continue;
-    const args = [...parsed.args];
-    let gitCwd = segmentCwd;
+    const unwrapped = unwrapGitPrefix(parsed, segmentCwd);
+    if (!unwrapped) continue;
+    if (unwrapped.shellPayload) {
+      const nested = parseGitInvocations(unwrapped.shellPayload, unwrapped.cwd);
+      if (nested.error) return { commands, error: nested.error };
+      commands.push(...nested.commands.map((item) => ({
+        ...item, unsafeConfiguration: item.unsafeConfiguration || unwrapped.unsafe,
+      })));
+      continue;
+    }
+    if (unwrapped.dynamic) return { commands, error: 'Dynamic Git command could not be checked' };
+    const args = [...unwrapped.args];
+    let gitCwd = unwrapped.cwd;
     const preflight: string[] = [];
-    let unsafeConfiguration = false;
+    let unsafeConfiguration = unwrapped.unsafe;
     let informationOnly = false;
     while (args.length > 0) {
       const arg = args[0]!;

@@ -17,6 +17,7 @@ import { BashTool } from '../../src/tools/bash/bash-tool.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import { validateCommand } from '../../src/tools/bash/command-validator.js';
 import { redactTrackedGitOutput, redactTrackedGitResult } from '../../src/security/tracked-git-output-redactor.js';
+import { ViewFileTool } from '../../src/tools/registry/text-editor-tools.js';
 
 function findGitExecutable(): string {
   const names = process.platform === 'win32' ? ['git.exe'] : ['git'];
@@ -107,6 +108,67 @@ afterAll(() => {
 });
 
 describe('seconde barrière sur la sortie shell', () => {
+  it.skipIf(!posixShell)('refuse une redirection Git enveloppée avant la création d’un fichier lisible', async () => {
+    const leak = path.join(repo, '_leak.txt');
+    fs.rmSync(leak, { force: true });
+    const command = 'env git show > _leak.txt';
+    expect(validateCommand(command, undefined, repo).valid).toBe(false);
+    const result = await new BashTool().execute(command, 3_000, repo);
+    expect(result.success).toBe(false);
+    expect(fs.existsSync(leak)).toBe(false);
+    fs.writeFileSync(leak, 'texte ordinaire\n');
+    const readable = await new ViewFileTool().execute({ path: leak });
+    expect(readable.success).toBe(true);
+    expect(JSON.stringify(readable)).toContain('texte ordinaire');
+    fs.rmSync(leak, { force: true });
+  });
+
+  it.each([
+    'env git show > _leak.txt',
+    'env git show | tee _leak.txt > /dev/null',
+    'env git show | sed -n "w _leak.txt"',
+    'nice git show > _leak.txt',
+    'nice -n 5 git show > _leak.txt',
+    'timeout 5 git show > _leak.txt',
+    'stdbuf -o0 git show > _leak.txt',
+    'command git show > _leak.txt',
+    'nohup git show > _leak.txt',
+    'exec git show > _leak.txt',
+    'exec -a alias git show > _leak.txt',
+    'printf "show\\n" | xargs git > _leak.txt',
+    'env git show | base64 > _leak.txt',
+    'env sh -c "git show > _leak.txt"',
+    'env -C . git show > _leak.txt',
+    'env --chdir=. git show > _leak.txt',
+    'env GIT_DIR=.git git show > _leak.txt',
+    'GIT_DIR=.git git show > _leak.txt',
+    '\\git show > _leak.txt',
+  ])('refuse Git suivi derrière un préfixe avant toute écriture : %s', (command) => {
+    expect(validateCommand(command, undefined, repo).valid).toBe(false);
+  });
+
+  it.each([
+    'env git status', 'nice git status', 'nice -n 5 git status', 'timeout 5 git status',
+    'stdbuf -o0 git status', 'command git status', 'nohup git status',
+    'exec git status', 'env sh -c "git status"',
+    'env --unknown echo bonjour', 'env -S node --version',
+  ])('préserve un Git de métadonnées enveloppé : %s', (command) => {
+    expect(validateCommand(command, undefined, repo).valid).toBe(true);
+  });
+
+  it.each([
+    'env -C tracked git show > _leak.txt',
+    'env --chdir=tracked git show > _leak.txt',
+    'env GIT_DIR=tracked/.git git show > _leak.txt',
+    'GIT_DIR=tracked/.git git show > _leak.txt',
+  ])('refuse un dépôt désigné depuis son parent : %s', (command) => {
+    expect(validateCommand(command, undefined, qa.root).valid).toBe(false);
+  });
+
+  it('préserve git status après env -C depuis le parent', () => {
+    expect(validateCommand('env -C tracked git status', undefined, qa.root).valid).toBe(true);
+  });
+
   it('garde le HOME fictif et le Git réel accessibles aux sous-processus', () => {
     expect(process.env.USERPROFILE).toBe(qa.home);
     expect(process.env.PATH?.split(path.delimiter)).toContain(path.dirname(gitExecutable));
