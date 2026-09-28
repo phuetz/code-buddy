@@ -20,6 +20,7 @@ import type { Session } from '../types';
 import { LivingBriefing } from './LivingBriefing';
 import { MaisonHomeCard } from './home/MaisonHomeCard';
 import { ScreenHelpButton } from './ScreenHelpButton';
+import { isSubmitEnter } from '../utils/submit-key';
 
 interface QuickAction {
   id: string;
@@ -137,7 +138,7 @@ export function HomeView() {
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (isSubmitEnter(e)) {
       e.preventDefault();
       void send();
     }

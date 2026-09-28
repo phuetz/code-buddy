@@ -377,8 +377,8 @@
     },
     "tunnel": "Réseau / tunnel",
     "tunnelDesc": "Configurer un accès public par tunnel Ngrok",
-    "audio": "Audio et synthèse vocale",
-    "audioDesc": "Configurer la voix locale, les modèles Piper TTS et le débit de parole"
+    "audioTab": "Audio et synthèse vocale",
+    "audioTabDesc": "Configurer la voix locale, les modèles Piper TTS et le débit de parole"
   },
   "general": {
     "appearance": "Apparence",
@@ -3682,7 +3682,8 @@
     "newAppTitle": "Commencer une nouvelle application",
     "filesPlaceholder": "Les fichiers, le code et l’aperçu de votre application apparaîtront ici pendant la génération.",
     "emptyTitle": "Que voulez-vous créer ?",
-    "emptyHint": "Choisissez un type ci-dessous (aperçu de ce qui sera créé) ou décrivez votre application plus haut : les fichiers, le code et l’aperçu apparaîtront ici."
+    "emptyHint": "Choisissez un type ci-dessous (aperçu de ce qui sera créé) ou décrivez votre application plus haut : les fichiers, le code et l’aperçu apparaîtront ici.",
+    "composerPlaceholder": "Décrivez l’application à créer — ex. « une app de tâches React avec filtres, thème sombre et sauvegarde locale »."
   },
   "studioChat": {
     "regionLabel": "Discussion d’itération d’App Studio",

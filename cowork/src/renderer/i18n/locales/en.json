@@ -377,8 +377,8 @@
     },
     "tunnel": "Network / Tunnel",
     "tunnelDesc": "Configure public tunnel access via Ngrok",
-    "audio": "Audio & TTS",
-    "audioDesc": "Configure local voice, Piper TTS models and speech rates"
+    "audioTab": "Audio & TTS",
+    "audioTabDesc": "Configure local voice, Piper TTS models and speech rates"
   },
   "general": {
     "appearance": "Appearance",
@@ -3682,7 +3682,8 @@
     "newAppTitle": "Start a new app",
     "filesPlaceholder": "Your app's files, code, and preview will appear here during generation.",
     "emptyTitle": "What would you like to create?",
-    "emptyHint": "Pick a type below (preview of what will be created) or describe your app above — the files, code, and preview will appear here."
+    "emptyHint": "Pick a type below (preview of what will be created) or describe your app above — the files, code, and preview will appear here.",
+    "composerPlaceholder": "Describe the app to build — e.g. “a React todo app with filters, dark theme, and local persistence”."
   },
   "studioChat": {
     "regionLabel": "App Studio iteration chat",

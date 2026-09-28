@@ -4,6 +4,7 @@ import { Bot, Crosshair, Hammer, ImagePlus, Layers, MessagesSquare, ScrollText, 
 import type { IterationMode } from '../studio/iteration-prompt.js';
 import type { StudioMessage } from './iterate-model.js';
 import { lastAssistantMessage } from './iterate-model.js';
+import { isSubmitEnter } from '../../utils/submit-key.js';
 
 export interface StudioChatPanelProps {
   messages: StudioMessage[];
@@ -132,7 +133,7 @@ export function StudioChatPanel({
   // Même loi que l'accueil : Entrée envoie, Maj+Entrée va à la ligne (et une
   // composition IME en cours n'envoie pas).
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+    if (isSubmitEnter(event)) {
       event.preventDefault();
       send(draft);
     }

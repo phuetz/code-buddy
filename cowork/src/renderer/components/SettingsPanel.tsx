@@ -468,9 +468,9 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
     },
     {
       id: 'audio' as TabId,
-      label: t('settings.audio', 'Audio & TTS'),
+      label: t('settings.audioTab', 'Audio & TTS'),
       icon: Volume2,
-      description: t('settings.audioDesc', 'Configure local voice, Piper TTS models and speech rates'),
+      description: t('settings.audioTabDesc', 'Configure local voice, Piper TTS models and speech rates'),
     },
     {
       id: 'general' as TabId,

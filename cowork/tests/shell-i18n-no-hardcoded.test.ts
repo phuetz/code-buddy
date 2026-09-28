@@ -48,6 +48,8 @@ import { useAppStore } from '../src/renderer/store';
 import { NewShell, studioSuggestions } from '../src/renderer/components/NewShell';
 import { AppStudioView } from '../src/renderer/components/studio/AppStudioView';
 import { StudioChatPanel } from '../src/renderer/components/studio-iterate/StudioChatPanel';
+import { StudioComposer } from '../src/renderer/components/studio/StudioComposer';
+import { isSubmitEnter } from '../src/renderer/utils/submit-key';
 
 const localesDir = path.resolve(process.cwd(), 'src/renderer/i18n/locales');
 type Json = Record<string, unknown>;
@@ -277,6 +279,52 @@ describe('E2 — une seule langue par écran', () => {
     expect(screen.getByTestId('studio-key-hint').textContent).toContain('Shift+Enter');
   });
 
+  it('isSubmitEnter : Entrée envoie, ni Maj+Entrée ni une validation IME', () => {
+    expect(isSubmitEnter({ key: 'Enter', shiftKey: false, keyCode: 13, nativeEvent: { isComposing: false } })).toBe(true);
+    expect(isSubmitEnter({ key: 'Enter', shiftKey: true })).toBe(false);
+    expect(isSubmitEnter({ key: 'Enter', shiftKey: false, nativeEvent: { isComposing: true } })).toBe(false);
+    expect(isSubmitEnter({ key: 'Enter', shiftKey: false, keyCode: 229 })).toBe(false);
+    expect(isSubmitEnter({ key: 'a', shiftKey: false })).toBe(false);
+  });
+
+  it('le champ principal d’App Studio suit la même loi et l’écrit, dans la langue active', async () => {
+    await act(async () => {
+      await i18n.changeLanguage('fr');
+    });
+    const onScaffold = vi.fn();
+    render(
+      React.createElement(StudioComposer, {
+        templates: [],
+        onScaffold,
+        onPrompt: () => {},
+        workingDir: '/tmp/projet',
+      }),
+    );
+    // Premier champ du composer, sélectionné sans s'appuyer sur un attribut ajouté par E2.
+    const box = document.querySelector('textarea') as HTMLTextAreaElement;
+    expect(box.placeholder.startsWith('Décrivez')).toBe(true);
+    expect(box.placeholder).not.toContain('Ctrl');
+    expect(screen.getByTestId('studio-composer-key-hint').textContent).toContain('Maj+Entrée');
+    fireEvent.change(box, { target: { value: 'une app de tâches' } });
+    fireEvent.keyDown(box, { key: 'Enter', shiftKey: true });
+    fireEvent.keyDown(box, { key: 'Enter', keyCode: 229 });
+    expect(onScaffold).not.toHaveBeenCalled();
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(onScaffold).toHaveBeenCalledTimes(1);
+    expect(onScaffold.mock.calls[0]![0].prompt).toBe('une app de tâches');
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+  });
+
+  it('settings.audio reste un espace de clés (onglet renommé audioTab)', () => {
+    for (const lang of ['en', 'fr', 'zh']) {
+      const settings = readLocale(lang).settings as Json;
+      expect(typeof settings.audio).not.toBe('string');
+      expect(typeof settings.audioTab).toBe('string');
+    }
+  });
+
   it('les nouvelles clés existent dans les trois locales', () => {
     const flatten = (value: unknown, prefix = ''): string[] =>
       value && typeof value === 'object'
@@ -290,7 +338,14 @@ describe('E2 — une seule langue par écran', () => {
         recipes: locale.recipes,
         studio: locale.studio,
         studioChat: locale.studioChat,
-        settings: { tabGroup: settings.tabGroup, tunnel: settings.tunnel, tunnelDesc: settings.tunnelDesc },
+        automations: locale.automations,
+        settings: {
+          tabGroup: settings.tabGroup,
+          tunnel: settings.tunnel,
+          tunnelDesc: settings.tunnelDesc,
+          audioTab: settings.audioTab,
+          audioTabDesc: settings.audioTabDesc,
+        },
       }).sort();
     };
     const en = pick(readLocale('en'));

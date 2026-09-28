@@ -329,8 +329,8 @@
     },
     "tunnel": "网络 / 隧道",
     "tunnelDesc": "通过 Ngrok 配置公共隧道访问",
-    "audio": "音频与语音合成",
-    "audioDesc": "配置本地语音、Piper TTS 模型和语速"
+    "audioTab": "音频与语音合成",
+    "audioTabDesc": "配置本地语音、Piper TTS 模型和语速"
   },
   "general": {
     "appearance": "外观",
@@ -3491,7 +3491,8 @@
     "newAppTitle": "开始一个新应用",
     "filesPlaceholder": "生成过程中，应用的文件、代码和预览会显示在这里。",
     "emptyTitle": "你想创建什么？",
-    "emptyHint": "在下方选择一种类型（预览将要创建的内容），或在上方描述你的应用——文件、代码和预览会显示在这里。"
+    "emptyHint": "在下方选择一种类型（预览将要创建的内容），或在上方描述你的应用——文件、代码和预览会显示在这里。",
+    "composerPlaceholder": "描述要构建的应用——例如“一个带筛选、深色主题和本地持久化的 React 待办应用”。"
   },
   "studioChat": {
     "regionLabel": "应用工作室迭代对话",
