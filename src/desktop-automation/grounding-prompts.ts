@@ -74,8 +74,9 @@ export function parseClosedListReply(reply: string | null | undefined, allowedRe
     const n = pick(m[1]);
     if (n !== null) return n;
   }
-  // 3. Une désignation explicite.
-  const named = text.match(/\b(?:answer|ref(?:erence)?|element|region|région|number|numéro|id)\b\s*(?:is|est|:|=|#|n°)?\s*(\d+)\b/i);
+  // 3. Une réponse annoncée comme telle. Pas « number 1 » ni « element 1 » :
+  // moondream écrit « the top left button is positioned at the number 1 ».
+  const named = text.match(/\b(?:answer|réponse)\b\s*(?:is|est|:|=)?\s*(\d+)\b/i);
   return pick(named?.[1]);
 }
 

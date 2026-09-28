@@ -52,6 +52,7 @@ describe('parseClosedListReply', () => {
     expect(parseClosedListReply('The numbers range from 1 to 5, which are the buttons of an interactive website.', refs)).toBeNull();
     expect(parseClosedListReply('The numbers range from 2 to 5 and are positioned in an ascending order.', refs)).toBeNull();
     expect(parseClosedListReply('center=(288,161) so 4', refs)).toBeNull();
+    expect(parseClosedListReply('The top left button is positioned at the number 1, while the bottom right button is located at 5.', refs)).toBeNull();
   });
 
   it('ignore le raisonnement d’un modèle « thinking »', () => {
