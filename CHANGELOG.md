@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- **Changement de comportement (2.4) :** aucun modèle Grok n'est choisi ou écrit par défaut. ChatGPT connecté, fournisseur configuré, puis Ollama local capable d'outils déterminent le modèle ; sinon `buddy` explique comment se connecter. L'ancien couple modèle/liste Grok dans `user-settings.json` est ignoré sans réécriture. `CODEBUDDY_API_KEY`, `CODEBUDDY_BASE_URL` et `CODEBUDDY_MODEL` sont les noms principaux ; les anciens `GROK_*` restent des alias dépréciés. `-k`/`-u` ne persistent plus sans `--save`, y compris avec `-p`.
+
 - **research:** `buddy research ingest --source blogs` lit des flux RSS/Atom configurés en JSON, filtre les billets par mots du thème et utilise leur URL canonique pour la déduplication CKG. `--feeds-file` sélectionne la liste ; les erreurs de flux échouent ouvertement.
 - **research:** `buddy research ingest --source github|models|all` ajoute les dépôts GitHub populaires et les modèles de génération Hugging Face au CKG, avec filtres, tri, identifiants stables et ingestion idempotente. `both` conserve arXiv et Europe PMC.
 

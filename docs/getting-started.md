@@ -137,16 +137,22 @@ non-interactive check.
 
 ### Advanced: bring your own API key
 
-Code Buddy auto-detects a provider from API-key environment variables when one
-is set — any of `GROK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-`GOOGLE_API_KEY`, `MISTRAL_API_KEY`, etc. This is entirely optional; the free
-paths above need none of them.
+Code Buddy uses a connected ChatGPT session first, then a configured provider,
+then a local Ollama model that supports tools. It accepts provider-specific keys
+such as `XAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`GOOGLE_API_KEY`, and `MISTRAL_API_KEY`. For a custom OpenAI-compatible endpoint,
+use `CODEBUDDY_API_KEY` with `CODEBUDDY_BASE_URL` and optionally
+`CODEBUDDY_MODEL`. The free paths above need no key. `GROK_API_KEY`,
+`GROK_BASE_URL`, and `GROK_MODEL` are deprecated aliases.
 
 ```bash
-export GROK_API_KEY=your_api_key   # optional — only if you prefer a paid API
+export XAI_API_KEY=your_api_key   # optional — only if you choose xAI
 buddy
 buddy --yolo                       # full autonomy (see Special Modes)
 ```
+
+`-k` and `-u` apply only to the current command. Add `--save` to persist them;
+this also applies to `buddy -p`.
 
 ## The 8 commands that matter (everything else is optional)
 
@@ -605,7 +611,7 @@ Short operator checklists (archived, for maintainers):
 
 ### "API key required" or "401 Unauthorized" at startup
 Most providers need an env var **and** the matching base URL. Common pairs:
-- Grok / xAI: `export GROK_API_KEY=...` (default base URL works)
+- Grok / xAI: `export XAI_API_KEY=...` (xAI base URL is selected)
 - Anthropic: `export ANTHROPIC_API_KEY=...`
 - Google Gemini: `export GOOGLE_API_KEY=...` or `GEMINI_API_KEY=...`
 - OpenAI: `export OPENAI_API_KEY=...`

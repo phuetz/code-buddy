@@ -107,6 +107,13 @@ buddy                         # start chatting
 line whether you are ready, and `buddy doctor --fix` can point a running Ollama at a suitable
 installed model and say why it chose it.
 
+Without a model choice, Code Buddy uses a connected ChatGPT session, then a
+configured provider, then a local Ollama model that supports tools. If none is
+available, it prints setup commands. For a custom OpenAI-compatible endpoint,
+set `CODEBUDDY_API_KEY`, `CODEBUDDY_BASE_URL`, and optionally `CODEBUDDY_MODEL`.
+CLI `-k` and `-u` apply only to the current run; add `--save` to keep them.
+Legacy `GROK_API_KEY`, `GROK_BASE_URL`, and `GROK_MODEL` remain deprecated aliases.
+
 The published package can lag this repository. To track the source instead:
 
 ```bash
