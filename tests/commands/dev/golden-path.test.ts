@@ -25,7 +25,7 @@ import {
 const temps: string[] = [];
 
 function tmpDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gk18-golden-'));
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'gk18-golden-')));
   temps.push(dir);
   return dir;
 }

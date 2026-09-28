@@ -31,7 +31,7 @@ let previousCwd: string;
 let logSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), `cb-improve-skills-${randomUUID().slice(0, 8)}-`));
+  tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), `cb-improve-skills-${randomUUID().slice(0, 8)}-`)));
   previousCwd = process.cwd();
   process.chdir(tmp);
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
