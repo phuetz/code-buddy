@@ -8,7 +8,7 @@ Plus/Pro subscription — OAuth, `$0` marginal cost, no API key).
 | :----------------------------------------------------------------------- | :-------------------------------------- | :------------------------------------------------------------------------------------- |
 | [1. One command](#1-one-command-curl--sh)                                | A laptop / workstation                  | `curl -fsSL https://raw.githubusercontent.com/phuetz/code-buddy/main/install.sh \| sh` |
 | [2. Docker / VPS](#2-docker--vps-247)                                    | A server that runs 24/7                 | `docker compose up -d`                                                                 |
-| [3. npm](#3-npm)                                                         | You already have Node ≥ 18              | `npm install -g @phuetz/code-buddy@latest`                                             |
+| [3. npm](#3-npm)                                                         | You already have Node ≥ 20              | `npm install -g @phuetz/code-buddy@latest`                                             |
 | [4. From source](#4-from-source-linux-including-remote-desktop-sessions) | Newest features, Linux / remote desktop | `git clone … && npm install && npm run build && npm link`                              |
 
 ---
@@ -135,7 +135,7 @@ tokens persist in the mounted volume.
 
 ## 3. npm
 
-If you already have **Node.js ≥ 18** (`node --version`):
+If `node --version` prints **v20 or newer**:
 
 ```sh
 npm install -g @phuetz/code-buddy@latest
@@ -156,7 +156,8 @@ npm run build
 npm link            # exposes `buddy` globally
 ```
 
-> **Requirements:** Node.js **≥ 18** for the CLI. The **Cowork desktop app needs
+> **Requirements:** Node.js **≥ 20** for the CLI (`package.json` declares
+> `engines.node: >=20.0.0`; Node 18 is not supported, and npm only warns about it). The **Cowork desktop app needs
 > Node ≥ 22** plus a C++ toolchain for native modules (`better-sqlite3`).
 > Run **`buddy doctor`** anytime to check your environment (`--fix` to remediate).
 

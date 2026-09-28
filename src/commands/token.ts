@@ -349,15 +349,15 @@ export function printMintedToken(
     }, null, 2));
   } else {
     console.log(minted.token);
-    console.log(`Expire le ${minted.expiresAt} (${minted.expiresIn})`);
-    console.log(`Ouvrir : ${minted.url}`);
+    console.log(`Expires ${minted.expiresAt} (${minted.expiresIn})`);
+    console.log(`Open: ${minted.url}`);
     if (qrAnsi) console.log(qrAnsi);
   }
 
   if (minted.qrHint) console.error(minted.qrHint);
   if (telegramError) console.error(telegramError);
   else if (result.telegramSent) {
-    console.error(`Telegram : lien envoyé (expire le ${minted.expiresAt}).`);
+    console.error(`Telegram: link sent (expires ${minted.expiresAt}).`);
   }
 
   if (minted.scopes.includes('peer:invoke')) {
@@ -369,19 +369,27 @@ export function printMintedToken(
   }
 }
 
-function attachTokenOptions(command: Command, deps: TokenCommandDependencies = {}): Command {
+/** Scopes added by default to `buddy fleet token` (user role, no --scopes): a fleet token can listen to peers and invoke them. */
+export const FLEET_TOKEN_EXTRA_SCOPES = ['fleet:listen', 'peer:invoke'] as const;
+
+function attachTokenOptions(command: Command, deps: TokenCommandDependencies = {}, fleet = false): Command {
   return command
     .option('--env <file>', 'Read JWT_SECRET (and Telegram keys) from a service env file')
     .option('--user <id>', 'token subject / user id', DEFAULT_USER)
     .option('--role <role>', 'user or admin', 'user')
     .option('--days <n>', `lifetime in days (1-${MAX_DAYS}); overrides --ttl`, (value: string) => Number(value))
     .option('--ttl <dur>', 'expiry, e.g. 15m / 24h / 30d', DEFAULT_TTL)
-    .option('--scopes <csv>', 'override scopes (default: those of --role)')
+    .option('--scopes <csv>', fleet
+      ? `override scopes (default: those of --role, plus ${FLEET_TOKEN_EXTRA_SCOPES.join(', ')} for --role user)`
+      : 'override scopes (default: those of --role)')
     .option('--url <base>', 'public base URL of buddy server (default: CODEBUDDY_SERVER_URL or http://127.0.0.1:<port>)')
     .option('--qr', 'print an ANSI QR (qrencode -t ANSIUTF8)')
     .option('--json', 'machine-readable JSON on stdout')
     .option('--telegram', 'send the open URL via Telegram (CODEBUDDY_SENSORY_ALERT_TOKEN/_CHAT)')
     .action(async (options: TokenMintOptions) => {
+      if (fleet && (options.scopes === undefined || options.scopes.trim() === '') && parseRole(options.role) === 'user') {
+        options.scopes = [...defaultScopesForRole('user'), ...FLEET_TOKEN_EXTRA_SCOPES].join(',');
+      }
       const result = await mintBuddyToken(options, deps);
       if (!result.ok) {
         console.error(result.error);
@@ -407,7 +415,8 @@ export function registerFleetTokenCommand(fleet: Command, deps: TokenCommandDepe
   attachTokenOptions(
     fleet
       .command('token')
-      .description('Mint a JWT for the API, Fleet, and the mobile PWA'),
+      .description('Mint a JWT for the API, Fleet, and the mobile PWA (includes fleet:listen and peer:invoke by default)'),
     deps,
+    true,
   );
 }

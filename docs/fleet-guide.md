@@ -44,6 +44,11 @@ in priority over cloud providers**, so a peer with a local Ollama
 serves as the LLM endpoint of choice — for coding tasks, reasoning,
 classification, anything you'd otherwise pay tokens for.
 
+> This priority applies to `peer.chat` inside `buddy server` only. The
+> interactive `buddy` command uses a different order: a ChatGPT login
+> (`~/.codebuddy/codex-auth.json`) wins over `OLLAMA_HOST`. Force the local
+> model in the terminal with `CODEBUDDY_PROVIDER=ollama`.
+
 **Today this is operational**: set `OLLAMA_HOST=http://localhost:11434`
 on a peer, start its `buddy server`, and any other peer can
 `/fleet send <peer-with-ollama> peer.chat {"prompt":"..."}` to get a
@@ -57,7 +62,7 @@ Gemini peer, all from the same fleet topology.
 
 The fleet **requires a token** for `peer:invoke` (the LLM/tool RPC). **`--no-auth` deliberately does
 NOT grant `peer:invoke`** — it only grants `chat/tools/sessions/memory`. So a `buddy server
---no-auth` (like the autonomy-queue service `~/DEV/ai-stack/codebuddy-fleet.service`) serves the
+--no-auth` (for example an autonomy-queue service) serves the
 event bus and the autonomous queue, but **not** cross-machine `peer.chat`. For collaboration, run
 the servers **auth-enabled with a shared `JWT_SECRET`** and mint a scoped token.
 
@@ -67,7 +72,9 @@ JWT_SECRET=<shared-secret> CODEBUDDY_PEER_MODEL=qwen3.6:27b \
   buddy server --port 3010 --host 0.0.0.0          # exposes ws://<this-host>:3010/ws
 
 # Mint a token to hand to the coordinator (same JWT_SECRET as the server):
-JWT_SECRET=<shared-secret> buddy fleet token --ttl 30d   # prints a JWT (peer:invoke + fleet:listen)
+# The default `user` role carries chat/chat:stream/sessions/tools only: ask for the fleet scopes.
+JWT_SECRET=<shared-secret> buddy fleet token --ttl 30d \
+  --scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke
 
 # On the coordinator machine (A), connect to each worker (Tailscale / LAN address), then ask all:
 /fleet listen ws://192.0.2.42:3010/ws --jwt <token> --name gpuNode
@@ -171,16 +178,22 @@ Connect to a peer Code Buddy's WebSocket and subscribe to its
 
 ```bash
 /fleet listen ws://203.0.113.10:3000/ws \
-  --api-key cb_sk_xxx \
+  --jwt <token-from-buddy-fleet-token> \
   --auto-reconnect \
   --max-attempts 5 \
   --name hub-linux
 ```
 
 Options:
-- `--api-key <key>` — required. Override per-call; otherwise pulled
-  from `CODEBUDDY_FLEET_API_KEY` env. The key on the **peer's** side
-  must hold the `fleet:listen` scope.
+- `--jwt <token>` — the usual credential: a JWT minted with `buddy fleet token`
+  (which grants `fleet:listen` and `peer:invoke` by default, on top of the user
+  scopes) and the **peer's** `JWT_SECRET` (otherwise pulled from `CODEBUDDY_FLEET_TOKEN`).
+  It must hold `fleet:listen`, plus `peer:invoke` for `/fleet send|chat|tool`.
+  `buddy token` (mobile PWA) does NOT include these fleet scopes.
+- `--api-key <key>` — alternative, otherwise pulled from
+  `CODEBUDDY_FLEET_API_KEY`. `cb_sk_` keys live only in the peer server's
+  memory (no command creates a durable one), so prefer `--jwt`.
+- The URL must end with `/ws`: the client opens it exactly as typed.
 - `--name <id>` — stable peer id used by `/fleet stop`, `/fleet send`,
   `/fleet history --peer`. Default = host:port of the WS URL with
   dots → dashes (`203.0.113.10:3000` → `203-0-113-10:3000`).
@@ -604,12 +617,16 @@ provider is selected.
 
 ### Authentication
 
+- **JWT (recommended).** Start every server with the same `JWT_SECRET`, then
+  `JWT_SECRET=<secret> buddy fleet token --scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke`.
+  Pass it with `--jwt` or `CODEBUDDY_FLEET_TOKEN`. Without `JWT_SECRET` a
+  non-production server uses a random secret that changes on every restart.
 - **`CODEBUDDY_FLEET_API_KEY`** (caller side) — default key passed
-  to `/fleet listen` when `--api-key` is omitted.
-- API keys are configured server-side via the existing key management
-  (see `docs/security.md`). Keys for fleet usage need the
-  `fleet:listen` scope (read-only events) and/or `peer:invoke` scope
-  (active RPC).
+  to `/fleet listen` when `--api-key` is omitted. The server does not read
+  this variable: `cb_sk_` keys exist only in the server's in-memory store, so
+  a key pasted from an example is refused with `AUTH_FAILED`.
+- Fleet usage needs the `fleet:listen` scope (read-only events) and/or
+  `peer:invoke` (active RPC).
 
 Scope matrix:
 
@@ -666,21 +683,22 @@ future roadmap idea.
 export GOOGLE_API_KEY="AIza..."         # → cloud fallback when needed
 export OLLAMA_HOST="http://localhost:11434"   # → priority 1
 export CODEBUDDY_FLEET_HOSTNAME="hub-ubuntu"
-export CODEBUDDY_FLEET_API_KEY="cb_sk_xxx"
+export JWT_SECRET="<shared-secret>"          # same value on every machine; mint tokens with it
 
 buddy server --port 3000
-# log: [fleet] peer.chat wired: ollama (qwen2.5-coder:7b, local)
+# log: [fleet] peer.chat wired: ollama (<model>, local)
+#   <model> is OLLAMA_MODEL, else the built-in default qwen2.5-coder:7b (fine for peer.chat;
+#   for agent work set CODEBUDDY_PEER_MODEL to a tool-capable model such as a qwen3 tag)
 ```
 
 ### Connect from HUB (Windows G7 PT)
 
 ```bash
-# In D:\CascadeProjects\grok-cli
-# .env already loads the keys
+# In your code-buddy checkout; CODEBUDDY_FLEET_TOKEN holds a JWT minted with the hub's JWT_SECRET
 buddy
-> /fleet listen ws://203.0.113.10:3000/ws --auto-reconnect --name hub-linux --api-key $env:CODEBUDDY_FLEET_API_KEY
+> /fleet listen ws://203.0.113.10:3000/ws --auto-reconnect --name hub-linux --jwt $env:CODEBUDDY_FLEET_TOKEN
 > /fleet status
-# → 1 active. Provider on remote = ollama qwen2.5-coder:7b.
+# → 1 active. Provider on remote = ollama <model>.
 
 > /fleet send hub-linux peer.chat {"prompt":"Refactor this for clarity:\n\nfunction f(x) { return x.split(',').map(s => s.trim()).filter(Boolean) }"}
 # → REAL response from local Qwen on the Linux host. Zero cloud cost.
@@ -706,12 +724,14 @@ After deploying / restart, validate the fleet end-to-end:
 
 ```bash
 # Terminal 1 — start a server with peer.chat wired
+export JWT_SECRET="<secret>"   # also export it in terminal 2, then:
+# export CODEBUDDY_FLEET_TOKEN="$(buddy fleet token --scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke | head -1)"
 GOOGLE_API_KEY="..." buddy server --port 3001
 # → wait for the boot log: "[fleet] peer.chat wired: gemini (gemini-2.5-flash)"
 
 # Terminal 2 — connect + smoke
 buddy
-> /fleet listen ws://localhost:3001/ws --auto-reconnect --api-key $env:CODEBUDDY_FLEET_API_KEY --name self
+> /fleet listen ws://localhost:3001/ws --auto-reconnect --jwt $env:CODEBUDDY_FLEET_TOKEN --name self
 > /fleet send self peer.ping
 # → { pong: true, serverTime: ... } < 50ms
 > /fleet send self peer.describe
