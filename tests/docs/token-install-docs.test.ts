@@ -17,11 +17,11 @@ describe('B-8 + B-3: Documentation of token minting, --allow-scripts, and option
     expect(content).toMatch(/buddy\s+fleet\s+token/);
   });
 
-  it('docs/getting-started.md documente --allow-scripts pour npm >= 11 et les 18 paquets natifs', () => {
+  it('docs/getting-started.md documente npm 11 et une autorisation ciblée des scripts', () => {
     const content = readDoc('docs/getting-started.md');
-    expect(content).toMatch(/--allow-scripts/);
-    expect(content).toMatch(/npm\s*(?:>=|≥)\s*11/i);
-    expect(content).toMatch(/18\s+(?:optional\s+)?native\s+packages/i);
+    expect(content).toMatch(/npm\s*11/i);
+    expect(content).toMatch(/scripts still run by default/i);
+    expect(content).toMatch(/--allow-scripts=better-sqlite3,sharp,node-pty/);
   });
 
   it('docs/security.md documente le jeton d authentification et buddy token / fleet token', () => {
