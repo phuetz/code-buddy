@@ -3,9 +3,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 const qa = vi.hoisted(() => {
   const root = `${process.cwd()}/_qa/securite-reprise`;
   const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
   process.env.HOME = `${root}/home`;
+  process.env.USERPROFILE = `${root}/home`;
   delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
-  return { root, home: `${root}/home`, previousHome };
+  return { root, home: `${root}/home`, previousHome, previousUserProfile };
 });
 
 import * as fs from 'node:fs';
@@ -41,16 +43,26 @@ beforeAll(() => {
   write(path.join(work, '.env.example'), 'KEY=example\n');
   write(path.join(work, 'notes.txt'), 'ordinary searchable text\n');
   write(path.join(cb, 'skill-signing', 'key.pem'), `PRIVATE ${fake}\n`);
-  fs.symlinkSync(cb, path.join(qa.home, '.CodeBuddy'), process.platform === 'win32' ? 'junction' : 'dir');
+  if (process.platform !== 'win32') fs.symlinkSync(cb, path.join(qa.home, '.CodeBuddy'), 'dir');
 });
 
 afterAll(() => {
   fs.rmSync(qa.root, { recursive: true, force: true });
   if (qa.previousHome === undefined) delete process.env.HOME;
   else process.env.HOME = qa.previousHome;
+  if (qa.previousUserProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = qa.previousUserProfile;
 });
 
 describe('reprise des lecteurs autonomes', () => {
+  it('utilise le même HOME fictif pour os.homedir sur chaque plateforme', () => {
+    expect(process.env.USERPROFILE).toBe(qa.home);
+  });
+
+  it('résout la variante de casse du dossier Code Buddy vers le même jeton fictif', () => {
+    expect(fs.realpathSync(path.join(qa.home, '.CodeBuddy'))).toBe(fs.realpathSync(cb));
+  });
+
   it('json_query refuse le jeton OAuth mais lit un JSON ordinaire', async () => {
     expect((await new JsonQueryTool().execute({ file: oauth, path: 'access_token' })).success).toBe(false);
     const ordinary = path.join(work, 'data.json');
@@ -127,7 +139,7 @@ describe('classification et shell', () => {
     expect(checkSecretFileAccess(file, 'read').secret).toBe(true);
   });
 
-  it('distingue /etc/shadow de /etc/passwd sans lire ces fichiers', () => {
+  it.skipIf(process.platform === 'win32')('distingue les deux fichiers Unix /etc/shadow et /etc/passwd sans les lire', () => {
     expect(classifySecretPath('/etc/shadow').secret).toBe(true);
     expect(classifySecretPath('/etc/passwd').secret).toBe(false);
   });

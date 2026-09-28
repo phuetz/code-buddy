@@ -2,10 +2,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const qa = vi.hoisted(() => {
   const oldHome = process.env.HOME;
+  const oldUserProfile = process.env.USERPROFILE;
   const root = `${process.cwd()}/_qa/securite-reprise-9`;
   process.env.HOME = `${root}/home`;
+  process.env.USERPROFILE = `${root}/home`;
   delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
-  return { root, home: `${root}/home`, oldHome };
+  return { root, home: `${root}/home`, oldHome, oldUserProfile };
 });
 
 import fs from 'node:fs';
@@ -16,6 +18,24 @@ import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import { validateCommand } from '../../src/tools/bash/command-validator.js';
 import { redactTrackedGitOutput, redactTrackedGitResult } from '../../src/security/tracked-git-output-redactor.js';
 
+function findGitExecutable(): string {
+  const names = process.platform === 'win32' ? ['git.exe'] : ['git'];
+  for (const directory of (process.env.PATH ?? '').split(path.delimiter).filter(Boolean)) {
+    for (const name of names) {
+      const candidate = path.join(directory, name);
+      try {
+        if (fs.statSync(candidate).isFile()) return candidate;
+      } catch { /* Try the next PATH directory. */ }
+    }
+  }
+  throw new Error('Git executable not found in the test runner PATH');
+}
+
+const gitExecutable = findGitExecutable();
+const previousPath = process.env.PATH;
+// BashTool uses PowerShell on Windows; these are POSIX-shell attack spellings.
+// The direct shellFreeExec and fingerprint tests below still run on Windows.
+const posixShell = process.platform !== 'win32';
 const repo = path.join(qa.root, 'tracked');
 const deletedRepo = path.join(qa.root, 'deleted');
 const emptyRepo = path.join(qa.root, 'empty');
@@ -25,13 +45,13 @@ const current = 'FAKE-GIT-NEW-SECRET-259';
 const stashed = 'FAKE-GIT-STASH-SECRET-259';
 
 function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repo, ...args], {
+  return execFileSync(gitExecutable, ['-C', repo, ...args], {
     encoding: 'utf8', env: { ...process.env, HOME: qa.home, GIT_CONFIG_NOSYSTEM: '1' },
   });
 }
 
 function gitIn(where: string, ...args: string[]): string {
-  return execFileSync('git', ['-C', where, ...args], {
+  return execFileSync(gitExecutable, ['-C', where, ...args], {
     encoding: 'utf8', env: { ...process.env, HOME: qa.home, GIT_CONFIG_NOSYSTEM: '1' },
   });
 }
@@ -42,6 +62,9 @@ function commit(message: string): void {
 }
 
 beforeAll(() => {
+  // BashTool and the output inventory launch `git` by name. CI may give the
+  // shell a narrower PATH than the process that found the executable.
+  process.env.PATH = [path.dirname(gitExecutable), previousPath].filter(Boolean).join(path.delimiter);
   fs.mkdirSync(qa.home, { recursive: true });
   fs.mkdirSync(repo, { recursive: true });
   git('init', '-q');
@@ -77,10 +100,19 @@ afterAll(() => {
   fs.rmSync(qa.root, { recursive: true, force: true });
   if (qa.oldHome === undefined) delete process.env.HOME;
   else process.env.HOME = qa.oldHome;
+  if (qa.oldUserProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = qa.oldUserProfile;
+  if (previousPath === undefined) delete process.env.PATH;
+  else process.env.PATH = previousPath;
 });
 
 describe('seconde barrière sur la sortie shell', () => {
-  it.each([
+  it('garde le HOME fictif et le Git réel accessibles aux sous-processus', () => {
+    expect(process.env.USERPROFILE).toBe(qa.home);
+    expect(process.env.PATH?.split(path.delimiter)).toContain(path.dirname(gitExecutable));
+  });
+
+  it.skipIf(!posixShell).each([
     'env git show', 'nice git show', 'timeout 5 git show',
     'stdbuf -o0 git show', 'nohup git show', '\\git show',
     'env GIT_DIR=.git git show', 'env sh -c "git show"',
@@ -92,20 +124,32 @@ describe('seconde barrière sur la sortie shell', () => {
     'env git archive HEAD', 'env git format-patch -1 --stdout',
     'env git whatchanged -p', 'env git diff-tree -p HEAD~1 HEAD',
     'env git stash show -p',
-    'printf "show\\n" | xargs git',
+  ])('masque les valeurs suivies, indépendamment du préfixe : %s', async (command) => {
+    // The CI Docker fallback uses node:22-slim, which has no Git. Run the
+    // actual host Git through BashTool's protected direct subprocess path.
+    const result = await new BashTool().shellFreeExec(['bash', '-c', command], 3_000, repo);
+    expect(result.success).toBe(true);
+    expect(JSON.stringify(result)).toContain('[REDACTED]');
+    expect(JSON.stringify(result)).not.toContain(older);
+    expect(JSON.stringify(result)).not.toContain(current);
+    expect(JSON.stringify(result)).not.toContain(stashed);
+  });
+
+  it.each([
     'git -p show', 'git --paginate log -p -1',
     'git --namespace=essai show', 'git --literal-pathspecs show',
     'git --no-replace-objects show', 'git --exec-path=. show',
     'git -C . show', 'git -c core.pager=cat show',
   ])('masque les valeurs suivies, indépendamment du préfixe : %s', async (command) => {
+    expect(validateCommand(command, undefined, repo).valid).toBe(false);
     const result = await new BashTool().execute(command, 3_000, repo);
     expect(JSON.stringify(result)).not.toContain(older);
     expect(JSON.stringify(result)).not.toContain(current);
     expect(JSON.stringify(result)).not.toContain(stashed);
   });
 
-  it('laisse passer une commande enveloppée et masque sa sortie', async () => {
-    const command = 'env sh -c "git show"';
+  it.skipIf(!posixShell)('laisse passer une commande enveloppée et masque sa sortie', async () => {
+    const command = `env sh -c "printf ${current}"`;
     expect(validateCommand(command, undefined, repo).valid).toBe(true);
     const result = await new BashTool().execute(command, 3_000, repo);
     expect(result.success).toBe(true);
@@ -113,8 +157,8 @@ describe('seconde barrière sur la sortie shell', () => {
     expect(result.output).not.toContain(current);
   });
 
-  it('masque aussi les événements de sortie et le résultat final en flux', async () => {
-    const stream = new BashTool().executeStreaming('env git show', 3_000, repo);
+  it.skipIf(!posixShell)('masque aussi les événements de sortie et le résultat final en flux', async () => {
+    const stream = new BashTool().executeStreaming(`env sh -c "printf ${current}"`, 3_000, repo);
     const chunks: string[] = [];
     let result = await stream.next();
     while (!result.done) {
@@ -129,53 +173,61 @@ describe('seconde barrière sur la sortie shell', () => {
   });
 
   it('conserve une sortie ordinaire et le mot clef sans sa valeur', async () => {
-    const result = await new BashTool().execute('env git show', 3_000, repo);
+    const result = await new BashTool().shellFreeExec(['git', 'show'], 3_000, repo);
     expect(result.output).toContain('API_KEY=');
     expect(result.output).toContain('diff --git a/.env b/.env');
   });
 
   it('masque la valeur historique après suppression du fichier de travail', async () => {
-    const result = await new BashTool().execute('env git show HEAD~1', 3_000, deletedRepo);
+    const result = await new BashTool().shellFreeExec(['git', 'show', 'HEAD~1'], 3_000, deletedRepo);
     expect(result.success).toBe(true);
     expect(result.output).toContain('[REDACTED]');
     expect(result.output).not.toContain(older);
   });
 
-  it('l’enveloppe sh -c avec un chemin explicite ne rend pas la valeur', async () => {
+  it.skipIf(!posixShell)('l’enveloppe sh -c avec un chemin explicite ne rend pas la valeur', async () => {
     const result = await new BashTool().execute('sh -c "git show HEAD:.env"', 3_000, repo);
     expect(JSON.stringify(result)).not.toContain(current);
   });
 
-  it('masque le blob lu par hash avec git cat-file, même via un préfixe', async () => {
+  it('masque le blob lu par hash avec git cat-file sur toutes les plateformes', async () => {
+    const oid = git('rev-parse', 'HEAD:.env').trim();
+    const result = await new BashTool().shellFreeExec(['git', 'cat-file', '-p', oid], 3_000, repo);
+    expect(result.success).toBe(true);
+    expect(result.output).toBe('API_KEY=[REDACTED]');
+  });
+
+  it.skipIf(!posixShell)('masque git cat-file préfixé par env', async () => {
     const oid = git('rev-parse', 'HEAD:.env').trim();
     const command = `env git cat-file -p ${oid}`;
     expect(validateCommand(command, undefined, repo).valid).toBe(true);
-    const result = await new BashTool().execute(command, 3_000, repo);
+    const result = await new BashTool().shellFreeExec(['bash', '-c', command], 3_000, repo);
     expect(result.success).toBe(true);
     expect(result.output).toBe('API_KEY=[REDACTED]');
   });
 
-  it('masque un chemin de projet composé au moment de l’exécution', async () => {
+  it('repère le dossier Git nommé dans la commande depuis un parent', () => {
+    expect(redactTrackedGitOutput(current, qa.root, 'GIT_DIR=tracked/.git git show'))
+      .toBe('[REDACTED]');
+  });
+
+  it.skipIf(!posixShell)('masque un chemin de projet composé au moment de l’exécution', async () => {
     const command = 'Z=; cat .en${Z}v';
     expect(validateCommand(command, undefined, repo).valid).toBe(true);
-    const result = await new BashTool().execute(command, 3_000, repo);
+    const result = await new BashTool().shellFreeExec(['bash', '-c', command], 3_000, repo);
     expect(result.success).toBe(true);
     expect(result.output).toBe('API_KEY=[REDACTED]');
   });
 
-  it('préserve la sortie dans un dépôt Git neuf sans secret suivi', async () => {
-    const result = await new BashTool().execute('printf bonjour', 3_000, emptyRepo);
-    expect(result.success).toBe(true);
-    expect(result.output).toBe('bonjour');
+  it('préserve la sortie dans un dépôt Git neuf sans secret suivi', () => {
+    expect(redactTrackedGitOutput('bonjour', emptyRepo)).toBe('bonjour');
   });
 
-  it('ne masque pas une valeur publique du .npmrc suivi', async () => {
-    const result = await new BashTool().execute('printf false', 3_000, repo);
-    expect(result.success).toBe(true);
-    expect(result.output).toBe('false');
+  it('ne masque pas une valeur publique du .npmrc suivi', () => {
+    expect(redactTrackedGitOutput('false', repo)).toBe('false');
   });
 
-  it('masque une valeur répartie entre deux émissions du processus', async () => {
+  it.skipIf(!posixShell)('masque une valeur répartie entre deux émissions du processus', async () => {
     const stream = new BashTool().executeStreaming(
       'env sh -c "printf FAKE-GIT-NEW-; sleep 0.1; printf SECRET-259"', 3_000, repo,
     );
@@ -203,19 +255,19 @@ describe('seconde barrière sur la sortie shell', () => {
     expect(redactTrackedGitResult({ success: true, output: value }, mutableRepo).output).toBe('[REDACTED]');
   });
 
-  it('masque GIT_DIR même si le répertoire de lancement est hors du dépôt', async () => {
-    const result = await new BashTool().execute('env GIT_DIR=tracked/.git git show', 3_000, qa.root);
+  it.skipIf(!posixShell)('masque GIT_DIR même si le répertoire de lancement est hors du dépôt', async () => {
+    const result = await new BashTool().shellFreeExec(['bash', '-c', 'env GIT_DIR=tracked/.git git show'], 3_000, qa.root);
     expect(result.success).toBe(true);
     expect(result.output).toContain('[REDACTED]');
     expect(result.output).not.toContain(current);
   });
 
-  it.each([
+  it.skipIf(!posixShell).each([
     'env -C tracked git show',
     'env --chdir=tracked git show',
     'env GIT_DIR=tracked/.git GIT_WORK_TREE=tracked git show',
   ])('masque aussi un dépôt désigné depuis un répertoire parent : %s', async (command) => {
-    const result = await new BashTool().execute(command, 3_000, qa.root);
+    const result = await new BashTool().shellFreeExec(['bash', '-c', command], 3_000, qa.root);
     expect(result.success).toBe(true);
     expect(result.output).toContain('[REDACTED]');
     expect(result.output).not.toContain(current);

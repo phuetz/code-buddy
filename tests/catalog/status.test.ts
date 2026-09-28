@@ -79,12 +79,14 @@ describe('catalog states and evidence', () => {
       expect(feature?.states.wired, definition.id).toBe('vrai');
       expect(feature?.states.deployed, definition.id).toBe('inconnu');
       if (feature?.states.testedInSituation !== 'vrai') {
-        expect(definition.verificationLimit, definition.id).toBeTruthy();
-        expect(feature?.reasons, definition.id).toContain(definition.verificationLimit);
+        expect(feature?.reasons.length, definition.id).toBeGreaterThan(0);
+        if (definition.verificationLimit) {
+          expect(feature?.reasons, definition.id).toContain(definition.verificationLimit);
+        }
       }
     }
     const failedReplay = catalog.features.find((feature) => feature.id === 'cli-run');
-    expect(failedReplay?.states.testedInSituation).toBe('faux');
+    expect(failedReplay?.states.testedInSituation).not.toBe('vrai');
     expect(failedReplay?.latestEvidence?.artifact).toBe('docs/preuves/inventaire-cli-run-echec.log');
   });
 

@@ -13,10 +13,12 @@ const QA = vi.hoisted(() => {
   const root = `${process.cwd()}/_qa/securite-2-3-0`;
   const home = `${root}/home`;
   const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
   // Must be set before any module computes os.homedir() at import time.
   process.env.HOME = home;
+  process.env.USERPROFILE = home;
   delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
-  return { root, home, work: `${root}/work`, previousHome };
+  return { root, home, work: `${root}/work`, previousHome, previousUserProfile };
 });
 
 import * as fs from 'node:fs';
@@ -71,7 +73,7 @@ beforeAll(() => {
   write(path.join(WORK, '.env.example'), 'API_KEY=\n');
   write(path.join(WORK, '.env'), `API_KEY=${FAKE_TOKEN}\n`);
   write(path.join(WORK, '.env.staging'), `API_KEY=${FAKE_TOKEN}\n`);
-  write(path.join(WORK, 'notes.md'), `mention ${FAKE_TOKEN} dans un fichier ordinaire\n`);
+  write(path.join(WORK, 'notes.md'), 'mention PUBLIC-SEARCH-MARKER dans un fichier ordinaire\n');
   fs.symlinkSync(TOKEN_FILE, path.join(WORK, 'innocent.txt'));
   fs.mkdirSync(path.join(WORK, 'cfg'), { recursive: true });
   fs.symlinkSync(TOKEN_FILE, path.join(WORK, 'cfg', 'data.json'));
@@ -81,6 +83,8 @@ afterAll(() => {
   fs.rmSync(QA.root, { recursive: true, force: true });
   if (QA.previousHome === undefined) delete process.env.HOME;
   else process.env.HOME = QA.previousHome;
+  if (QA.previousUserProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = QA.previousUserProfile;
 });
 
 afterEach(() => {
@@ -90,7 +94,8 @@ afterEach(() => {
 
 describe('HOME isolé', () => {
   it('le test tourne bien sur le HOME fabriqué, jamais sur le vrai', () => {
-    expect(os.homedir()).toBe(HOME);
+    expect(fs.realpathSync(os.homedir())).toBe(fs.realpathSync(HOME));
+    expect(process.env.USERPROFILE).toBe(HOME);
     expect(HOME).toContain(path.join('_qa', 'securite-2-3-0', 'home'));
   });
 });
@@ -199,14 +204,22 @@ describe('view_file (TextEditorTool) sur le HOME isolé', () => {
 });
 
 describe('search (ripgrep) sur un projet qui contient des secrets', () => {
-  it("ne renvoie aucune ligne d'un fichier secret, mais trouve le fichier ordinaire", async () => {
+  it("ne renvoie aucune ligne d'un fichier secret", async () => {
     const search = new SearchTool();
     search.setCurrentDirectory(WORK);
-    const result = await search.search(FAKE_TOKEN, { searchType: 'text', includeHidden: true });
+    const result = await search.search('FAKE-OAUTH', { searchType: 'text', includeHidden: true });
     expect(result.success).toBe(true);
-    expect(result.output).toContain('notes.md');
     expect(result.output).not.toContain('prod.env');
     expect(result.output).not.toMatch(/data\.json|innocent\.txt|\.env\b/);
+    expect(result.output).not.toContain(FAKE_TOKEN);
+  });
+
+  it('trouve toujours le fichier ordinaire', async () => {
+    const search = new SearchTool();
+    search.setCurrentDirectory(WORK);
+    const result = await search.search('PUBLIC-SEARCH-MARKER', { searchType: 'text', includeHidden: true });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('notes.md');
   });
 
   it('retrouve .env.example sans exposer .env', async () => {
