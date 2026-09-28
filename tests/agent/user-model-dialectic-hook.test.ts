@@ -24,8 +24,12 @@ import { createIsolatedHome } from '../helpers/isolated-home.js';
 // CodeBuddyAgent starts memory and persona initialization asynchronously.
 // Keep their isolated HOME until both have finished and the persona watcher is closed.
 const isolatedHome = createIsolatedHome('dialectic-hook-home-');
-beforeAll(() => {
+beforeAll(async () => {
   isolatedHome.enter();
+  // The headless case calls resetPersonaManager() synchronously from dispose().
+  // Finish startup before that reset can orphan an in-flight readdir().
+  const { getPersonaManager } = await import('../../src/personas/persona-manager.js');
+  await getPersonaManager().ready();
 });
 afterAll(async () => {
   const { getMemoryManager, resetMemoryManagerForTests } = await import('../../src/memory/persistent-memory.js');
