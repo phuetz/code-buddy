@@ -21,6 +21,7 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 import { logger } from '../utils/logger.js';
 import type { ToolResult } from '../types/index.js';
 
@@ -93,6 +94,8 @@ export class MarkdownConvertTool {
     // the sidecar fail would surface a Python traceback instead of a clear cause.
     if (!isRemote(source)) {
       const resolved = path.resolve(source);
+      const verdict = checkSecretFileAccess(resolved, 'read');
+      if (verdict.secret) return { success: false, error: formatSecretRefusal(resolved, verdict) };
       if (!fs.existsSync(resolved)) {
         return { success: false, error: `Fichier introuvable : ${resolved}` };
       }
@@ -101,9 +104,20 @@ export class MarkdownConvertTool {
       }
     }
 
+    if (opts.outputPath) {
+      const destination = path.resolve(opts.outputPath);
+      const verdict = checkSecretFileAccess(destination, 'write');
+      if (verdict.secret) return { success: false, error: formatSecretRefusal(destination, verdict) };
+    }
+
     const maxChars = opts.maxChars ?? DEFAULT_MAX_CHARS;
     const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const args = buildMarkitdownArgs(source, opts.outputPath);
+
+    if (!isRemote(source)) {
+      const verdict = checkSecretFileAccess(path.resolve(source), 'read');
+      if (verdict.secret) return { success: false, error: formatSecretRefusal(source, verdict) };
+    }
 
     return new Promise<ToolResult>((resolve) => {
       let stdout = '';
