@@ -396,10 +396,33 @@ const RECURSIVE_READERS = new Set([
   'awk', 'sed', 'diff', 'cmp', 'tee', 'openssl',
 ]);
 
+/** Only a narrow set of public npm settings may be traversed in a project. */
+function isPublicProjectNpmrc(file: string): boolean {
+  if (path.basename(file).toLowerCase() !== '.npmrc') return false;
+  try {
+    const real = fs.realpathSync(file);
+    const home = path.resolve(os.homedir());
+    if (real === home || real.startsWith(home + path.sep)) return false;
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.size > 16_384) return false;
+    const content = fs.readFileSync(file, 'utf8');
+    if (content.includes('\uFFFD')) return false;
+    return content.split(/\r?\n/).every((line) => {
+      const entry = line.trim();
+      if (!entry) return true;
+      if (entry.startsWith('#')) {
+        return !/(?:auth|token|secret|pass(?:word)?|pwd|api|bearer|cookie|session|private|credential|key)/i.test(entry) &&
+          !/[A-Za-z0-9+/_=-]{24,}/.test(entry);
+      }
+      return /^(?:engine-strict|package-lock|save-exact|legacy-peer-deps|audit|fund|progress|update-notifier)=(?:true|false)$/i.test(entry) ||
+        /^registry=https:\/\/registry\.npmjs\.org\/?$/i.test(entry);
+    });
+  } catch { return false; }
+}
+
 function directoryContainsSecret(directory: string): boolean {
   const pending = [directory];
   const seen = new Set<string>();
-  let inspected = 0;
   while (pending.length > 0) {
     const current = pending.pop()!;
     let canonical: string;
@@ -409,9 +432,8 @@ function directoryContainsSecret(directory: string): boolean {
     let entries: fs.Dirent[];
     try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { return true; }
     for (const entry of entries) {
-      if (++inspected > 10_000) return true;
       const child = path.join(current, entry.name);
-      if (checkSecretFileAccess(child, 'read').secret) return true;
+      if (checkSecretFileAccess(child, 'read').secret && !isPublicProjectNpmrc(child)) return true;
       if (entry.isDirectory()) pending.push(child);
       else if (entry.isSymbolicLink()) {
         try { if (fs.statSync(child).isDirectory()) pending.push(child); } catch { return true; }
@@ -464,8 +486,9 @@ function trackedSecretForGitDiff(command: string, baseDir: string): string | nul
 export function findCredentialPathInCommand(command: string, platform: NodeJS.Platform = process.platform, cwd: string = process.cwd()): string | null {
   if (typeof command !== 'string' || !command) return null;
   // Shell joins adjacent quoted fragments and removes escaping before opening
-  // paths. On Windows backslashes are path separators, not POSIX escapes.
-  const expanded = expandHomeReferences(command)
+  // paths. A backslash-newline (LF or CRLF) disappears before tokenization.
+  // On Windows backslashes are path separators, not POSIX escapes.
+  const expanded = expandHomeReferences(command.replace(/\\\r?\n/g, ''))
     .replace(/\$(?:""|'')/g, '')
     .replace(/\\([^\n])/g, platform === 'win32' ? '/$1' : '$1')
     .replace(/["']/g, '');
@@ -477,6 +500,37 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
   );
   const usesRecursiveReader = Array.from(words).some((word) => RECURSIVE_READERS.has(word));
+  const usesSearchReader = ['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack'].some((word) => words.has(word));
+  const searchPatterns = new Set<number>();
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (!['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack'].includes(tokens[i]?.toLowerCase() ?? '')) continue;
+    let patternFromOption = false;
+    for (let j = i + 1; j < tokens.length; j += 1) {
+      const arg = tokens[j] ?? '';
+      if (arg === '-e' || arg === '--regexp') {
+        searchPatterns.add(j + 1);
+        patternFromOption = true;
+        j += 1;
+        continue;
+      }
+      if (arg === '-f' || arg === '--file') {
+        patternFromOption = true;
+        j += 1; // This argument is a file to read, not a search expression.
+        continue;
+      }
+      if (arg.startsWith('-e') && arg.length > 2) {
+        patternFromOption = true;
+        continue;
+      }
+      if (arg.startsWith('-f') && arg.length > 2) {
+        patternFromOption = true;
+        continue;
+      }
+      if (arg.startsWith('-')) continue;
+      if (!patternFromOption) searchPatterns.add(j);
+      break;
+    }
+  }
   const compact = expanded.replace(/[\s+]/g, '').toLowerCase();
   if (usesRecursiveReader &&
       /(?:\.codebuddy|\.codex|\.claude|\.grok|\.gemini|\.ssh|\.aws)/.test(compact) &&
@@ -508,8 +562,12 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
   // against the last `cd` target seen in the command text.
   let cdTarget = cwd;
   for (let i = 0; i < tokens.length; i += 1) {
+    // The search expression is data, even when it is `.` or a directory name.
+    if (searchPatterns.has(i)) continue;
     const raw = tokens[i] ?? '';
-    const token = raw.replace(/^--?[A-Za-z0-9-]+=/, '');
+    const token = usesSearchReader && /^-f[^-]/.test(raw)
+      ? raw.slice(2) // grep/rg `-fFILE` reads FILE as a pattern file.
+      : raw.replace(/^--?[A-Za-z0-9-]+=/, '');
     const base = path.basename(token).toLowerCase();
     if (BASH_CREDENTIAL_BASENAMES.has(base)) return raw;
     if (i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd')) {
