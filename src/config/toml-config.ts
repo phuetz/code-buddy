@@ -630,6 +630,12 @@ export type ProfileConfig = Partial<Omit<CodeBuddyConfig, 'profiles'>> & {
    */
   baseURL?: string;
   model?: string;
+  /**
+   * Environment defaults the profile turns on (`[profiles.<name>.env]`).
+   * Applied only to variables that are NOT already set: an exported variable
+   * (or one from `.env`) always keeps priority over a profile.
+   */
+  env?: Record<string, string>;
 };
 
 /**
@@ -642,13 +648,15 @@ export type ProfileConfig = Partial<Omit<CodeBuddyConfig, 'profiles'>> & {
  * à la main diverge de ce qu'elle décrit ; celle-ci se corrige en même temps
  * que `CodeBuddyConfig`.
  */
-export const PROFILE_KNOWN_KEYS = new Set<keyof CodeBuddyConfig | 'baseURL' | 'model'>([
+export const PROFILE_KNOWN_KEYS = new Set<keyof CodeBuddyConfig | 'baseURL' | 'model' | 'env'>([
   'active_model', 'providers', 'models', 'tool_config', 'middleware', 'ui',
   'agent', 'integrations', 'surface', 'model_pairs', 'llm', 'agent_defaults',
   'advisor', 'lsp', 'heartbeat', 'autonomous_fleet', 'daily_reset',
   'team_session', 'multi_agent_system', 'enterprise_modules',
   // Les deux que ProfileConfig ajoute pour designer un fournisseur directement.
   'baseURL', 'model',
+  // Réglages avancés regroupés : variables d'environnement par défaut.
+  'env',
 ]) as ReadonlySet<string>;
 
 /**
@@ -939,6 +947,46 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
     all: {
       surface: {
         hidden_capabilities: [],
+      },
+    },
+    // Named profiles that group the advanced settings (`buddy --profile <name>`).
+    // Their `env` entries only fill variables that are not already set.
+    // Documented in docs/profiles.md.
+    local: {
+      env: {
+        // Use the local Ollama (best installed tool-capable model), never a cloud login.
+        CODEBUDDY_PREFER_LOCAL: 'true',
+        // Declared failover never walks a cloud provider.
+        CODEBUDDY_LOCAL_ONLY: 'true',
+      },
+    },
+    cloud: {
+      env: {
+        // No silent switch to a local model when no cloud provider is signed in.
+        CODEBUDDY_ZERO_CONFIG: 'false',
+        // Fail over across signed-in providers on quota / overload / outage.
+        CODEBUDDY_PROVIDER_FALLBACK: 'true',
+      },
+    },
+    fleet: {
+      env: {
+        CODEBUDDY_PROVIDER_FALLBACK: 'true',
+        // Report live utilization in heartbeats and apply saturation backpressure.
+        CODEBUDDY_FLEET_MAX_CONCURRENCY: '2',
+      },
+    },
+    max: {
+      surface: {
+        hidden_capabilities: [],
+      },
+      env: {
+        CODEBUDDY_PROVIDER_FALLBACK: 'true',
+        // Shared cross-agent memory injected into context.
+        CODEBUDDY_COLLECTIVE_MEMORY: 'true',
+        // Lossless-recoverable compaction + the context_expand tool.
+        CODEBUDDY_CONTEXT_ZOOM: 'true',
+        // Deterministic pre-application diff review (no extra LLM cost).
+        CODEBUDDY_DIFF_REVIEW: 'static',
       },
     },
   },
