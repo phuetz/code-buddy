@@ -13,7 +13,7 @@ describe('buddy exchange', () => {
   let log: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'exchange-command-'));
+    dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'exchange-command-')));
     previousHome = process.env.CODEBUDDY_HOME;
     process.env.CODEBUDDY_HOME = dir;
     resetGoalManagers(new GoalStore({ storeDir: path.join(dir, 'goals') }));

@@ -1611,19 +1611,19 @@ program
   // --context ci` silently lost both to the root `-c, --context <patterns>`.
   .enablePositionalOptions()
   .description(
-    "A conversational AI CLI tool powered by AI with text editor capabilities"
+    "Terminal coding agent. No API key needed: start with `buddy login` (ChatGPT) or `buddy onboard` (local Ollama); `buddy doctor` says if you are ready."
   )
   .version(packageJson.version)
   .argument("[message...]", "Initial message to send to Code Buddy")
   .option("-d, --directory <dir>", "set working directory", process.cwd())
-  .option("-k, --api-key <key>", "CodeBuddy API key (or set GROK_API_KEY env var)")
+  .option("-k, --api-key <key>", "API key for a metered provider (optional; or set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)")
   .option(
     "-u, --base-url <url>",
-    "CodeBuddy API base URL (or set GROK_BASE_URL env var)"
+    "OpenAI-compatible base URL (optional; or set GROK_BASE_URL)"
   )
   .option(
     "-m, --model <model>",
-    "AI model to use (e.g., grok-code-fast-1, grok-4-latest) (or set GROK_MODEL env var)"
+    "model id (optional; defaults to the configured provider's model, or set GROK_MODEL)"
   )
   .option(
     "-p, --prompt <prompt>",
@@ -1754,7 +1754,7 @@ program
   )
   .option(
     "--setup",
-    "run interactive setup wizard for API key and configuration"
+    "API-key setup wizard (for keyless setup use `buddy login` or `buddy onboard`)"
   )
   .option(
     "--vim",
@@ -1966,7 +1966,7 @@ program
         });
       }
 
-      cli.stdout("\n💡 Usage: codebuddy --system-prompt <id>");
+      cli.stdout("\n💡 Usage: buddy --system-prompt <id>");
       cli.stdout("   Create custom prompts in ~/.codebuddy/prompts/<name>.md");
       process.exit(0);
     }
@@ -1995,7 +1995,7 @@ program
         cli.stdout(`\n  Total: ${agents.length} agent(s)`);
       }
 
-      cli.info("\n💡 Usage: codebuddy --agent <id>");
+      cli.info("\n💡 Usage: buddy --agent <id>");
       process.exit(0);
     }
 
@@ -2033,7 +2033,13 @@ program
     if (options.resume) {
       const { getSessionStore } = await import("./persistence/session-store.js");
       const sessionStore = getSessionStore();
-      const session = await sessionStore.getSessionByPartialId(options.resume);
+      const { resolveSessionIdMatch, reportAmbiguousSessionId } = await import("./cli/session-commands.js");
+      const match = resolveSessionIdMatch(await sessionStore.listSessions(), options.resume);
+      if (match.kind === 'ambiguous') {
+        reportAmbiguousSessionId(options.resume, match.matches);
+        process.exit(1);
+      }
+      const session = match.kind === 'found' ? match.session : null;
 
       if (!session) {
         logger.error(`❌ Session not found: ${options.resume}`);
@@ -2752,14 +2758,14 @@ gitCommand
   .command("commit-and-push")
   .description("Generate AI commit message and push to remote")
   .option("-d, --directory <dir>", "set working directory", process.cwd())
-  .option("-k, --api-key <key>", "CodeBuddy API key (or set GROK_API_KEY env var)")
+  .option("-k, --api-key <key>", "API key for a metered provider (optional; or set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)")
   .option(
     "-u, --base-url <url>",
-    "CodeBuddy API base URL (or set GROK_BASE_URL env var)"
+    "OpenAI-compatible base URL (optional; or set GROK_BASE_URL)"
   )
   .option(
     "-m, --model <model>",
-    "AI model to use (e.g., grok-code-fast-1, grok-4-latest) (or set GROK_MODEL env var)"
+    "model id (optional; defaults to the configured provider's model, or set GROK_MODEL)"
   )
   .option(
     "--max-tool-rounds <rounds>",
@@ -2864,7 +2870,7 @@ function addLazyCommand(
 addLazyCommand(
   program,
   'models',
-  'Lister, afficher ou rafraîchir le catalogue de modèles',
+  'List, show or refresh the model catalog',
   async () => {
     const { createModelsCommand } = await import('./commands/models-command.js');
     return createModelsCommand();
@@ -2874,7 +2880,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'try',
-  'Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)',
+  'Run an isolated coding-agent demo that must end with a green test (ChatGPT OAuth or local Ollama)',
   async () => {
     const { createTryCommand } = await import('./commands/try.js');
     return createTryCommand();
@@ -3467,7 +3473,7 @@ program
   .command("login [provider]")
   .description("Authenticate with a provider (chatgpt | xai — uses your subscription, no API key)")
   .option("--code <code>", "Complete an xAI login with the code shown in the browser")
-  .option("--no-browser", "Fail immediately instead of waiting for a browser callback")
+  .option("--no-browser", "Do not start the ChatGPT browser sign-in (there is no device-code mode); prints what to do instead")
   .action(async (provider: string | undefined, options: { code?: string; browser?: boolean }) => {
     const target = (provider ?? "chatgpt").toLowerCase();
     if (target === "xai" || target === "grok" || target === "xai-oauth") {
@@ -3479,10 +3485,14 @@ program
       cli.stdout("Other providers (Gemini, Anthropic) authenticate via API key env vars.");
       process.exit(1);
     }
-    const { canAttemptInteractiveLogin, LOGIN_NEEDS_BROWSER_MESSAGE } = await import(
+    const { canAttemptInteractiveLogin, LOGIN_NEEDS_BROWSER_MESSAGE, LOGIN_NO_BROWSER_FLAG_MESSAGE } = await import(
       "./commands/login-prerequisites.js"
     );
-    if (options.browser === false || !canAttemptInteractiveLogin()) {
+    if (options.browser === false) {
+      cli.error(LOGIN_NO_BROWSER_FLAG_MESSAGE);
+      process.exit(1);
+    }
+    if (!canAttemptInteractiveLogin()) {
       cli.error(LOGIN_NEEDS_BROWSER_MESSAGE);
       process.exit(1);
     }
@@ -4020,7 +4030,7 @@ addLazyCommandGroup(program, 'config', 'Show environment variable configuration 
   registerConfigCommand(program);
 });
 
-addLazyCommandGroup(program, 'policy', 'Constats et réparation des politiques par domaine', async () => {
+addLazyCommandGroup(program, 'policy', 'Per-domain policy findings and repair', async () => {
   const { registerPolicyCommand } = await import('./commands/cli/policy-command.js');
   registerPolicyCommand(program);
 });
@@ -4544,14 +4554,14 @@ function isRootHelpRequest(argv: readonly string[]): boolean {
 // It is fully registered here: write it once and let Node drain stdout naturally.
 if (process.exitCode !== 1) {
   attachUnknownOptionHint(program, program);
-  program.addHelpText('before', `Pour commencer — 6 démos qui montrent le cœur agent de code :
+  program.addHelpText('before', `Getting started — 6 demos of the coding-agent core:
   1. buddy try
-     Crée FizzBuzz, écrit son test et l’exécute dans un bac à sable.
-  2. /loop "Corrige les tests en échec"              (dans une session buddy)
-  3. buddy research "Cartographie ce dépôt"
-  4. buddy dev pr "Ajoute une petite fonctionnalité"
-  5. /think deep "Propose le refactoring le plus sûr" (dans une session buddy)
-  6. /share create demo                              (dans une session buddy)
+     Writes FizzBuzz and its test, then runs it in a sandbox.
+  2. /loop "Fix the failing tests"                    (inside a buddy session)
+  3. buddy research "Map this repository"
+  4. buddy dev pr "Add a small feature"
+  5. /think deep "Propose the safest refactoring"     (inside a buddy session)
+  6. /share create demo                               (inside a buddy session)
 
 `);
   removeCommands(program, getHiddenCliCommands());

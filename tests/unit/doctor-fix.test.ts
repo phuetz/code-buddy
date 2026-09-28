@@ -101,7 +101,7 @@ describe('doctor --fix', () => {
       expect(providerCheck).toBeDefined();
       expect(providerCheck!.status).toBe('warn');
       expect(providerCheck!.fixable).toBe(true);
-      expect(providerCheck!.message).toContain('qwen2.5-coder:7b');
+      expect(providerCheck!.message).toContain('qwen3:8b');
     });
 
     it('should pull the model with `ollama pull` then select it', async () => {
@@ -109,20 +109,20 @@ describe('doctor --fix', () => {
       const results = await runFixes(checks);
 
       // VERIF3 T16 : remplacer `ollama pull` par `ollama run` restait vert.
-      expect(execSync).toHaveBeenCalledWith('ollama pull qwen2.5-coder:7b', {
+      expect(execSync).toHaveBeenCalledWith('ollama pull qwen3:8b', {
         stdio: 'inherit',
       });
       expect(mockSaveUserSettings).toHaveBeenCalledWith({
         provider: 'ollama',
         baseURL: 'http://127.0.0.1:11434',
-        model: 'qwen2.5-coder:7b',
-        defaultModel: 'qwen2.5-coder:7b',
+        model: 'qwen3:8b',
+        defaultModel: 'qwen3:8b',
       });
 
       const selection = results.find(r => r.action === 'select-running-ollama');
       expect(selection).toBeDefined();
       expect(selection!.success).toBe(true);
-      expect(selection!.message).toContain('qwen2.5-coder:7b');
+      expect(selection!.message).toContain('qwen3:8b');
     });
 
     it('should report a failure and select nothing when the pull fails', async () => {
@@ -139,7 +139,7 @@ describe('doctor --fix', () => {
       const pullFix = results.find(r => r.action === 'pull-ollama-model');
       expect(pullFix).toBeDefined();
       expect(pullFix!.success).toBe(false);
-      expect(pullFix!.message).toContain('Failed to pull qwen2.5-coder:7b');
+      expect(pullFix!.message).toContain('Failed to pull qwen3:8b');
       expect(mockSaveUserSettings).not.toHaveBeenCalled();
     });
   });

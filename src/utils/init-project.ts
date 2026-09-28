@@ -802,14 +802,9 @@ Safety checks:
   // Create settings.json (model aligned with SettingsManager default)
   const settingsPath = path.join(codebuddyDir, 'settings.json');
   if (!fs.existsSync(settingsPath) || options.force) {
-    const settingsContent = {
-      model: 'grok-code-fast-1',
-      // 50 is the real non-YOLO runtime default; the scaffold previously wrote
-      // 400 (the YOLO cap), which both misrepresented behavior and — if a future
-      // path wires settings.json into the agent — would silently 8× the budget.
-      maxToolRounds: 50,
-      theme: 'default'
-    };
+    // Keep the file valid for SettingsSchema and let provider/model detection
+    // choose a default. The old maxToolRounds and theme keys were rejected.
+    const settingsContent = {};
     writeJsonAtomicSync(settingsPath, settingsContent, { mode: 0o600 });
     result.created.push('.codebuddy/settings.json');
   } else {

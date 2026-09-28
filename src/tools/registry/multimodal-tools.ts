@@ -634,6 +634,7 @@ export class UnderstandVideoTool implements ITool {
           source: result.source,
           method: result.method,
           ...(result.cloud ? { cloud: result.cloud } : {}),
+          ...(result.cloud?.answer ? { answer: result.cloud.answer } : {}),
         },
       };
     } catch (error) {

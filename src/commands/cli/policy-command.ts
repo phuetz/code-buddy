@@ -45,7 +45,7 @@ function emit(report: PolicyCycleReport, json: boolean): void {
 export function registerPolicyCommand(program: Command): void {
   const policy = program
     .command('policy')
-    .description('Constats et réparation des politiques par domaine. Une politique ne fait que restreindre.');
+    .description('Per-domain policy findings and repair. A policy can only restrict.');
 
   const paths = () => ({
     systemPath: '/etc/codebuddy/managed-settings.json',

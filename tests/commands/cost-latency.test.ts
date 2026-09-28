@@ -30,7 +30,7 @@ describe('buddy cost --latency', () => {
       .exitOverride()
       .parseAsync(['node', 'cost', '--latency']);
 
-    expect(output[0]).toContain('Latence LLM mesurée');
+    expect(output[0]).toContain('measured LLM latency');
     expect(output[0]).toContain('qwen3:4b-instruct');
     expect(output[0]).toContain('120ms');
     expect(output[0]).toContain('190ms');
@@ -67,6 +67,6 @@ describe('buddy cost --latency', () => {
       .exitOverride()
       .parseAsync(['node', 'cost', '--latency']);
 
-    expect(output).toEqual(['Aucune mesure de latence LLM enregistrée.']);
+    expect(output).toEqual(['No LLM latency measurements recorded.']);
   });
 });

@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { Command } from 'commander';
 import type { ChatEntry } from '../agent/types.js';
 import { normalizeOllamaBaseUrl } from './ollama.js';
+import { getModelToolConfig } from '../config/model-tools.js';
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import { resolveProviderFromCatalog } from '../providers/provider-catalog.js';
 
@@ -95,8 +96,11 @@ export const NO_TRY_PROVIDER_MESSAGE = [
   '',
   '2. Or run a model locally with Ollama (install it from https://ollama.com first):',
   '   ollama serve',
-  '   ollama pull qwen2.5-coder:7b',
+  '   ollama pull qwen3:8b',
   '   buddy try',
+  '',
+  'The demo edits files, so the model must be able to call tools. qwen2.5 under 14B',
+  '(including qwen2.5-coder:7b) is chat-only in Code Buddy and cannot pass the demo.',
 ].join('\n');
 
 /** Pick a coding-oriented local model without assuming one exact Ollama tag. */
@@ -108,11 +112,24 @@ export function chooseOllamaModel(models: readonly string[], requested?: string)
     if (exact) return exact;
   }
 
-  for (const pattern of [/qwen.*coder/i, /devstral/i, /codestral/i, /coder/i, /code/i]) {
-    const match = usable.find((model) => pattern.test(model));
-    if (match) return match;
+  // The demo edits files: a model that Code Buddy treats as chat-only
+  // (supportsToolCalls: false, e.g. qwen2.5-coder:7b) cannot pass it, so a
+  // tool-capable model is preferred whenever one is installed.
+  const toolCapable = usable.filter((model) => getModelToolConfig(model).supportsToolCalls !== false);
+  for (const pool of [toolCapable, usable]) {
+    for (const pattern of [/qwen.*coder/i, /devstral/i, /codestral/i, /coder/i, /code/i]) {
+      const match = pool.find((model) => pattern.test(model));
+      if (match) return match;
+    }
+    if (pool.length > 0) return pool[0] ?? null;
   }
-  return usable[0] ?? null;
+  return null;
+}
+
+/** True when Code Buddy treats this model as chat-only (no structured tool calls). */
+export function isChatOnlyModel(model: string | undefined): boolean {
+  if (!model) return false;
+  return getModelToolConfig(model).supportsToolCalls === false;
 }
 
 function normalizeTryOllamaHost(rawHost?: string): string {
@@ -374,7 +391,7 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   ];
   let agent: TryDemoAgent | undefined;
 
-  write('Code Buddy — coding-agent demo (~60 seconds)');
+  write('Code Buddy — coding-agent demo (duration depends on the model and hardware)');
   write(`[1/3] Provider: ${provider.label}`);
   write(`[2/3] Sandbox: ${workspace}`);
   write('      The agent is creating FizzBuzz, writing its tests, and running them…');
@@ -392,6 +409,12 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
     const verification = await verify(workspace);
     if (!verification.success) {
       writeError('❌ The demo did not produce a green test. The sandbox is kept for inspection.');
+      if (isChatOnlyModel(provider.model)) {
+        writeError(
+          `   Likely cause: ${provider.model} is chat-only in Code Buddy (it cannot call tools, so it cannot edit files).\n` +
+            '   Pull a tool-capable model (for example `ollama pull qwen3:8b`) and run `buddy try` again.',
+        );
+      }
       if (verification.output) writeError(verification.output);
       writeError(`   ${workspace}`);
       return 1;
@@ -417,7 +440,7 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
 export function createTryCommand(dependencies: TryCommandDependencies = {}): Command {
   const executeTryDemo = dependencies.runTryDemo ?? runTryDemo;
   return new Command('try')
-    .description('Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)')
+    .description('Run an isolated coding-agent demo that must end with a green test (ChatGPT OAuth or local Ollama)')
     .option('--verbose', 'Show agent telemetry during the demo')
     .option('--base-url <url>', 'Use this Ollama/OpenAI-compatible endpoint for the demo')
     .option('--model <model>', 'Use this model for the demo')

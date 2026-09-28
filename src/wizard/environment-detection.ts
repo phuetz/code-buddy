@@ -123,8 +123,8 @@ export async function detectOllama(): Promise<DetectedCapability> {
     modelDetails,
     detail: models.length
       ? `running · ${models.length} model${models.length === 1 ? '' : 's'}`
-      : 'running · no model pulled yet (run: ollama pull qwen2.5-coder:7b)',
-    setupCommand: models.length ? undefined : 'ollama pull qwen2.5-coder:7b',
+      : 'running · no model pulled yet (run: ollama pull qwen3:8b)',
+    setupCommand: models.length ? undefined : 'ollama pull qwen3:8b',
   };
 }
 

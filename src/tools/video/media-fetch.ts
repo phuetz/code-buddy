@@ -228,7 +228,7 @@ function runYtdlpOnce(
     let stderr = '';
     let child: ReturnType<typeof realSpawn>;
     try {
-      child = spawn(invocation.cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(invocation.cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     } catch (err) {
       resolve({
         ok: false,
