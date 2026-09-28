@@ -10,6 +10,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 import type {
   LSPDiagnostic,
   LSPHoverInfo,
@@ -171,6 +172,8 @@ abstract class LspReadOnlyTool implements ITool {
     if (!isPathInside(workspaceRoot, resolvedFile)) {
       return { success: false, error: `LSP target is outside the active workspace: ${requestedFile}` };
     }
+    const secret = checkSecretFileAccess(resolvedFile, 'read');
+    if (secret.secret) return { success: false, error: formatSecretRefusal(resolvedFile, secret) };
 
     try {
       const stat = await fs.stat(resolvedFile);
