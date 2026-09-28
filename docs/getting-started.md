@@ -85,6 +85,22 @@ buddy                # Start chatting once a provider is configured.
 buddy --prompt "analyze the codebase structure"   # one-shot / headless
 ```
 
+**Zero configuration (2.4).** If nothing is configured, plain `buddy` looks for a
+local Ollama that already serves a model able to call tools and uses it — no
+environment variable to export — and prints which model it chose and why:
+
+```text
+Zero-config: no provider configured, using the local Ollama at http://localhost:11434
+  model: qwen3:8b (tool-calling, 5.2 GiB < 40.0 GiB free RAM, instruct/coder family)
+```
+
+Otherwise it offers `buddy login`, then prints the exact commands to install
+Ollama and `qwen3:8b` for your platform. Anything you configured yourself (an API
+key, `buddy login`, `buddy onboard`, `CODEBUDDY_PROVIDER`, `OLLAMA_HOST`,
+`--base-url`) keeps priority. `CODEBUDDY_ZERO_CONFIG=false` turns the detection off.
+Named profiles group the advanced settings: `buddy --profile local`, `cloud`,
+`fleet` or `max` — see [profiles.md](profiles.md).
+
 `buddy login` needs an interactive terminal and a browser. If the browser does
 not open automatically, copy the complete URL printed in the terminal into its
 address bar and keep the terminal open until sign-in finishes. The link expires
@@ -109,8 +125,8 @@ non-interactive check.
   `buddy onboard` — it detects the running server, offers to pull `qwen3:8b` (a
   small model that can call tools) if you have none, and saves the choice.
   Nothing leaves your machine. If you already ran `buddy login`, the ChatGPT login
-  wins over `OLLAMA_HOST` in the terminal: set `CODEBUDDY_PROVIDER=ollama` to force
-  the local model.
+  wins over `OLLAMA_HOST` in the terminal: run `buddy --profile local` (or set
+  `CODEBUDDY_PROVIDER=ollama`) to force the local model.
 - **ChatGPT subscription.** `buddy login` reuses your existing ChatGPT plan
   through the Codex backend at **$0 marginal cost** — no key, no billing setup.
 
