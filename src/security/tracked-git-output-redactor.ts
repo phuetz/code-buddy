@@ -226,22 +226,26 @@ function trackedSecretFingerprints(cwd: string): Fingerprints | null {
   }
 }
 
-function candidateDirectories(cwd: string, command: string): string[] {
+function candidateDirectories(cwd: string, command: string, paths: string[] = []): string[] {
   const directories = new Set([cwd]);
+  const addCandidate = (raw: string): void => {
+    if (!raw || /[$*?{}()]/.test(raw)) return;
+    const candidate = path.resolve(cwd, raw);
+    let stat: fs.Stats;
+    try { stat = fs.statSync(candidate); } catch { return; }
+    const directory = stat.isDirectory() ? candidate : path.dirname(candidate);
+    directories.add(path.basename(directory) === '.git' ? path.dirname(directory) : directory);
+    if (directories.size > 64) throw new Error('too many output inventory candidates');
+  };
   // Probe literal directory arguments without depending on a list of shell
   // wrappers. This covers changed worktrees and GIT_DIR while the session
   // worktree remains the primary inventory.
   for (const match of command.matchAll(/"[^"]*"|'[^']*'|[^\s;|&<>]+/g)) {
     const token = match[0];
     const raw = token.slice(token.lastIndexOf('=') + 1).replace(/^(['"])(.*)\1$/, '$2');
-    if (!raw || /[$*?{}()]/.test(raw)) continue;
-    const candidate = path.resolve(cwd, raw);
-    try {
-      if (!fs.statSync(candidate).isDirectory()) continue;
-    } catch { continue; }
-    directories.add(path.basename(candidate) === '.git' ? path.dirname(candidate) : candidate);
-    if (directories.size > 64) throw new Error('too many output inventory candidates');
+    addCandidate(raw);
   }
+  for (const candidate of paths) addCandidate(candidate);
   return [...directories];
 }
 
@@ -259,6 +263,41 @@ export function redactTrackedGitOutput(value: string, cwd: string, command = '')
     return WITHHELD;
   }
   return visible;
+}
+
+/** Registry boundary: cover a copied literal secret on every tool result field. */
+export function redactTrackedGitToolResult(result: ToolResult, cwd: string, paths: string[] = []): ToolResult {
+  let indexes: Fingerprints[] | null | undefined;
+  const redact = (value: string): string => {
+    if (!value) return value;
+    if (Buffer.byteLength(value, 'utf8') > MAX_OUTPUT_BYTES) return WITHHELD;
+    if (indexes === undefined) {
+      try {
+        const collected = candidateDirectories(cwd, '', paths).map((directory) =>
+          trackedSecretFingerprints(directory));
+        indexes = collected.some((index) => index === null) ? null : collected as Fingerprints[];
+      } catch { indexes = null; }
+    }
+    if (!indexes) return WITHHELD;
+    return indexes.reduce((visible, index) => index.redact(visible), value);
+  };
+  const visited = new WeakSet<object>();
+  const resultFields = new Set(['success', 'output', 'error', 'content', 'data', 'metadata']);
+  const visit = (value: unknown, depth: number): unknown => {
+    if (typeof value === 'string') return redact(value);
+    if (!value || typeof value !== 'object') return value;
+    if (depth > 20 || visited.has(value)) return WITHHELD;
+    if (Buffer.isBuffer(value) || ArrayBuffer.isView(value)) return WITHHELD;
+    if (value instanceof Date) return value;
+    visited.add(value);
+    if (Array.isArray(value)) return value.map((entry) => visit(entry, depth + 1));
+    if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
+      return WITHHELD;
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+      depth === 0 && resultFields.has(key) ? key : redact(key), visit(entry, depth + 1),
+    ]));
+  };
+  return visit(result, 0) as ToolResult;
 }
 
 export function redactTrackedGitResult(result: ToolResult, cwd: string, command = ''): ToolResult {

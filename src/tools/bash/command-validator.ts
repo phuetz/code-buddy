@@ -489,6 +489,7 @@ interface GitInvocation {
   preflight: string[];
   /** The option was parsed, but its effect on content cannot be reproduced safely. */
   unsafeConfiguration: boolean;
+  unsafePager: boolean;
   informationOnly: boolean;
   subcommand: string;
   args: string[];
@@ -512,13 +513,41 @@ function executableName(value: string): string {
   return path.win32.basename(value.replace(/^\\+/, '')).replace(/\.exe$/i, '').toLowerCase();
 }
 
+/** A literal Git executable anywhere in a shell segment needs a proved-safe parse. */
+function containsGitExecutable(text: string): boolean {
+  return /(?:^|[^\w.-])\\?git(?:\.exe)?(?=$|[^\w.-])/i.test(text);
+}
+
+function hasActiveShellSyntax(text: string): boolean {
+  let quote: 'single' | 'double' | null = null;
+  let escaped = false;
+  for (const char of text) {
+    if (escaped) { escaped = false; continue; }
+    if (char === '\\' && quote !== 'single') { escaped = true; continue; }
+    if (quote === 'single') { if (char === "'") quote = null; continue; }
+    if (quote === 'double') {
+      if (char === '"') quote = null;
+      else if (char === '$' || char === '`') return true;
+      continue;
+    }
+    if (char === "'") quote = 'single';
+    else if (char === '"') quote = 'double';
+    else if (/[|;&<>`$()]/.test(char)) return true;
+  }
+  return quote !== null;
+}
+
+function hasUnsafeGitEnvironment(text: string): boolean {
+  return /(?:^|\s)GIT_(?!OPTIONAL_LOCKS=|CONFIG_NOSYSTEM=|TERMINAL_PROMPT=)[A-Z0-9_]+=/i.test(text);
+}
+
 /** Follow command prefixes that execute their remaining arguments as a program. */
 function unwrapGitPrefix(parsed: { command: string; args: string[]; raw: string }, cwd: string):
   { command: string; args: string[]; cwd: string; unsafe: boolean; dynamic: boolean; shellPayload?: string } | null {
   let command = parsed.command;
   let args = [...parsed.args];
   let directory = cwd;
-  let unsafe = /(?:^|\s)GIT_(?:DIR|WORK_TREE|NAMESPACE)=/.test(parsed.raw);
+  let unsafe = hasUnsafeGitEnvironment(parsed.raw);
   for (let depth = 0; depth < 12; depth += 1) {
     const name = executableName(command);
     if (name === 'git') return { command, args, cwd: directory, unsafe, dynamic: false };
@@ -534,7 +563,7 @@ function unwrapGitPrefix(parsed: { command: string; args: string[]; raw: string 
         const first = args[0]!;
         if (first === '--') { args.shift(); break; }
         if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(first)) {
-          if (/^GIT_(?:DIR|WORK_TREE|NAMESPACE)=/.test(first)) unsafe = true;
+          if (hasUnsafeGitEnvironment(first)) unsafe = true;
           args.shift(); continue;
         }
         if (first === '-C' || first === '--chdir' || first.startsWith('--chdir=') ||
@@ -601,16 +630,29 @@ function unwrapGitPrefix(parsed: { command: string; args: string[]; raw: string 
 function parseGitInvocations(command: string, baseDir: string): { commands: GitInvocation[]; error: string | null } {
   const commands: GitInvocation[] = [];
   let segmentCwd = baseDir;
-  for (const parsed of parseShellCommand(command).commands) {
+  const parsedCommands = parseShellCommand(command).commands;
+  for (const parsed of parsedCommands) {
     if ((parsed.command === 'cd' || parsed.command === 'pushd') && parsed.args[0]) {
       segmentCwd = path.resolve(segmentCwd, parsed.args[0]);
       continue;
     }
     const unwrapped = unwrapGitPrefix(parsed, segmentCwd);
-    if (!unwrapped) continue;
+    if (!unwrapped) {
+      // A shell, eval, time, xargs or other wrapper may execute Git without
+      // being understood by this parser. Do not treat that as absence of Git.
+      if (containsGitExecutable(parsed.raw) &&
+          !(parsedCommands.length === 1 &&
+            ['echo', 'printf'].includes(executableName(parsed.command)) &&
+            !hasActiveShellSyntax(command))) {
+        return { commands, error: 'Git invocation could not be checked' };
+      }
+      continue;
+    }
     if (unwrapped.shellPayload) {
       const nested = parseGitInvocations(unwrapped.shellPayload, unwrapped.cwd);
       if (nested.error) return { commands, error: nested.error };
+      if (containsGitExecutable(unwrapped.shellPayload) && nested.commands.length === 0)
+        return { commands, error: 'Git invocation could not be checked' };
       commands.push(...nested.commands.map((item) => ({
         ...item, unsafeConfiguration: item.unsafeConfiguration || unwrapped.unsafe,
       })));
@@ -621,6 +663,7 @@ function parseGitInvocations(command: string, baseDir: string): { commands: GitI
     let gitCwd = unwrapped.cwd;
     const preflight: string[] = [];
     let unsafeConfiguration = unwrapped.unsafe;
+    let unsafePager = false;
     let informationOnly = false;
     while (args.length > 0) {
       const arg = args[0]!;
@@ -628,7 +671,8 @@ function parseGitInvocations(command: string, baseDir: string): { commands: GitI
       if (GIT_GLOBAL_FLAGS.has(arg)) {
         args.shift();
         if (GIT_INFORMATION_FLAGS.has(arg)) informationOnly = true;
-        else if (!['-p', '--paginate', '-P', '--no-pager'].includes(arg)) preflight.push(arg);
+        else if (arg === '-p' || arg === '--paginate') unsafePager = true;
+        else if (!['-P', '--no-pager'].includes(arg)) preflight.push(arg);
         continue;
       }
       if (arg === '-C' || arg.startsWith('-C') && !arg.startsWith('--')) {
@@ -645,7 +689,8 @@ function parseGitInvocations(command: string, baseDir: string): { commands: GitI
         // Parse all -c forms, including common commit identity overrides.
         // Content inspection fails closed if the configuration can alter Git's
         // object lookup or launch a helper during preflight.
-        if (!/^(?:core\.pager|color\.ui|color\.pager|core\.quotePath)=[^\r\n]*$/i.test(value))
+        if (!/^(?:user\.(?:name|email)|color\.ui|color\.pager|core\.quotePath)=[^\r\n]*$/i.test(value) &&
+            !/^core\.pager=cat$/i.test(value))
           unsafeConfiguration = true;
         args.splice(0, arg === '-c' ? 2 : 1);
         continue;
@@ -659,10 +704,12 @@ function parseGitInvocations(command: string, baseDir: string): { commands: GitI
         if (name === '--config-env') {
           if (!/^[A-Za-z][A-Za-z0-9.-]*=[A-Za-z_][A-Za-z0-9_]*$/.test(value))
             return { commands, error: 'Invalid Git global configuration' };
-          if (!value.startsWith('core.pager=')) unsafeConfiguration = true;
+          unsafeConfiguration = true;
         } else if (name === '--list-cmds') {
           informationOnly = true;
-        } else if (name !== '--exec-path') {
+        } else if (name === '--exec-path') {
+          unsafePager = true;
+        } else {
           preflight.push(`${name}=${value}`);
         }
         continue;
@@ -671,7 +718,7 @@ function parseGitInvocations(command: string, baseDir: string): { commands: GitI
     }
     const subcommand = args.shift();
     if (!subcommand) continue;
-    commands.push({ cwd: gitCwd, preflight, unsafeConfiguration, informationOnly, subcommand, args });
+    commands.push({ cwd: gitCwd, preflight, unsafeConfiguration, unsafePager, informationOnly, subcommand, args });
   }
   return { commands, error: null };
 }
@@ -686,6 +733,96 @@ function gitOutput(invocation: GitInvocation, query: string[], noMatchesAllowed 
     if (noMatchesAllowed && (error as { status?: number }).status === 1) return '';
     return null;
   }
+}
+
+/** A null answer is unsafe: history or the selected worktree could not be inventoried. */
+function hasTrackedSecretPath(invocation: GitInvocation): boolean | null {
+  const root = gitOutput(invocation, ['rev-parse', '--show-toplevel'])?.trim();
+  if (!root) return null;
+  const index = gitOutput(invocation, ['ls-files', '-z']);
+  const history = gitOutput(invocation, ['log', '--all', '--reflog', '--name-only', '-z', '--format=']);
+  if (index === null || history === null) return null;
+  for (const relative of index.split('\0')) {
+    if (relative && checkSecretFileAccess(path.resolve(root, relative), 'read').secret) return true;
+  }
+  for (const relative of history.split('\0')) {
+    if (relative && checkSecretFileAccess(path.resolve(root, relative), 'read').secret) return true;
+  }
+  return false;
+}
+
+/** Only these forms cannot print a tracked blob or materialize it elsewhere. */
+function isGitMetadataOnly(invocation: GitInvocation): boolean {
+  const { subcommand, args } = invocation;
+  if (['status', 'rev-parse', 'ls-files', 'ls-tree', 'rev-list'].includes(subcommand)) return true;
+  if (subcommand === 'cat-file') return ['-t', '-s', '--batch-check'].includes(args[0] ?? '');
+  if (subcommand === 'stash') return args[0] === 'list';
+  return false;
+}
+
+/** Prove a cat-file blob belongs only to public tracked paths. */
+function isPublicGitBlob(invocation: GitInvocation): boolean {
+  const { args } = invocation;
+  const spec = args.length === 2 && (args[0] === '-p' || args[0] === 'blob') ? args[1] : undefined;
+  if (!spec) return false;
+  const root = gitOutput(invocation, ['rev-parse', '--show-toplevel'])?.trim();
+  const oid = gitOutput(invocation, ['rev-parse', '--verify', `${spec}^{object}`])?.trim();
+  if (!root || !oid || gitOutput(invocation, ['cat-file', '-t', oid])?.trim() !== 'blob') return false;
+  const history = gitOutput(invocation, ['rev-list', '--objects', '--all', '--reflog']);
+  // rev-list --objects names an object only once. A blob shared by a public
+  // file and a secret file can therefore look public there. Inspect every
+  // historical file change before accepting that provenance.
+  const rawChanges = gitOutput(invocation, [
+    'log', '--all', '--reflog', '--root', '-m', '--no-renames', '--raw', '--no-abbrev', '-z', '--format=',
+  ]);
+  const index = gitOutput(invocation, ['ls-files', '--stage', '-z']);
+  if (history === null || rawChanges === null || index === null) return false;
+  const changePattern = /:[0-7]{6} [0-7]{6} [0-9a-f]{40,64} ([0-9a-f]{40,64}) [A-Z][0-9]*\0([^\0]*)\0/g;
+  for (const match of rawChanges.matchAll(changePattern)) {
+    if (match[1] === oid && checkSecretFileAccess(path.resolve(root, match[2]!), 'read').secret)
+      return false;
+  }
+  if (rawChanges.replace(changePattern, '').replace(/[\0\r\n]/g, '') !== '') return false;
+  const paths: string[] = [];
+  for (const line of history.split('\n')) {
+    if (line.startsWith(`${oid} `)) paths.push(line.slice(oid.length + 1));
+  }
+  for (const entry of index.split('\0')) {
+    const match = entry.match(/^[0-7]{6} ([0-9a-f]+) \d+\t([\s\S]+)$/);
+    if (match?.[1] === oid) paths.push(match[2]!);
+  }
+  return paths.length > 0 && paths.every((relative) =>
+    !checkSecretFileAccess(path.resolve(root, relative), 'read').secret);
+}
+
+function isPublicGitBlame(invocation: GitInvocation): boolean {
+  if (invocation.args.length === 0 || invocation.args.some((arg) =>
+    arg.startsWith('-') && !['--', '-p', '--porcelain', '--line-porcelain', '-w'].includes(arg))) return false;
+  const relative = invocation.args.at(-1)!;
+  if (relative === '--' || relative.startsWith('-')) return false;
+  const root = gitOutput(invocation, ['rev-parse', '--show-toplevel'])?.trim();
+  return !!root && !checkSecretFileAccess(path.resolve(invocation.cwd, relative), 'read').secret;
+}
+
+const CHECKED_GIT_CONTENT = new Set([
+  'show', 'log', 'grep', 'archive', 'format-patch', 'whatchanged', 'diff-tree', 'diff',
+]);
+
+function unverifiedGitContent(invocation: GitInvocation): string | null {
+  if (invocation.unsafeConfiguration) return 'Git configuration could not be checked';
+  if (invocation.unsafePager && hasTrackedSecretPath(invocation) !== false)
+    return 'Git pager or executable path could expose a tracked secret';
+  if (invocation.subcommand === 'cat-file') return isGitMetadataOnly(invocation) ||
+    isPublicGitBlob(invocation) ? null : 'Git cat-file blob could not be proven public';
+  if (invocation.subcommand === 'blame') return isPublicGitBlame(invocation) ? null :
+    'Git blame path could not be proven public';
+  if (invocation.informationOnly || isGitMetadataOnly(invocation) ||
+      CHECKED_GIT_CONTENT.has(invocation.subcommand) ||
+      invocation.subcommand === 'stash' && invocation.args[0] === 'show') return null;
+  // Git aliases, plumbing and future subcommands are content-capable until
+  // proven otherwise. This also covers hashes obtained in an earlier turn.
+  return hasTrackedSecretPath(invocation) === false ? null :
+    `Git subcommand ${invocation.subcommand} could expose a tracked secret`;
 }
 
 function trackedSecretForGitDiff(invocation: GitInvocation): string | null {
@@ -850,11 +987,19 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
   const gitInvocations = parseGitInvocations(joined, cwd);
   if (gitInvocations.error) return gitInvocations.error;
   for (const invocation of gitInvocations.commands) {
+    const unchecked = unverifiedGitContent(invocation);
+    if (unchecked) return unchecked;
     const trackedSecret = trackedSecretForGitDiff(invocation);
     if (trackedSecret) return trackedSecret;
     const gitContentSecret = trackedSecretForGitContent(invocation);
     if (gitContentSecret) return gitContentSecret;
   }
+  // A single Git metadata command names a path without reading its bytes.
+  // Keep `rev-parse HEAD:.env` and `cat-file -t/-s` usable for inspection;
+  // compound commands still pass through the ordinary secret-path checks.
+  if (gitInvocations.commands.length === 1 &&
+      parseShellCommand(joined).commands.length === 1 &&
+      isGitMetadataOnly(gitInvocations.commands[0]!)) return null;
   const roots = getHomeCredentialRoots();
   const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
   const words = new Set(

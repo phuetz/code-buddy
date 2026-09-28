@@ -16,8 +16,10 @@ import { execFileSync } from 'node:child_process';
 import { BashTool } from '../../src/tools/bash/bash-tool.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import { validateCommand } from '../../src/tools/bash/command-validator.js';
-import { redactTrackedGitOutput, redactTrackedGitResult } from '../../src/security/tracked-git-output-redactor.js';
+import { redactTrackedGitOutput, redactTrackedGitResult, redactTrackedGitToolResult } from '../../src/security/tracked-git-output-redactor.js';
 import { ViewFileTool } from '../../src/tools/registry/text-editor-tools.js';
+import { createTestToolRegistry } from '../../src/tools/registry/tool-registry.js';
+import { registerBuiltinTools } from '../../src/tools/registry/index.js';
 
 function findGitExecutable(): string {
   const names = process.platform === 'win32' ? ['git.exe'] : ['git'];
@@ -41,6 +43,7 @@ const repo = path.join(qa.root, 'tracked');
 const deletedRepo = path.join(qa.root, 'deleted');
 const emptyRepo = path.join(qa.root, 'empty');
 const mutableRepo = path.join(qa.root, 'mutable');
+const duplicateRepo = path.join(qa.root, 'duplicate');
 const older = 'FAKE-GIT-OLD-SECRET-259';
 const current = 'FAKE-GIT-NEW-SECRET-259';
 const stashed = 'FAKE-GIT-STASH-SECRET-259';
@@ -94,6 +97,15 @@ beforeAll(() => {
   fs.writeFileSync(path.join(mutableRepo, 'notes.txt'), 'bonjour\n');
   gitIn(mutableRepo, 'add', 'notes.txt');
   gitIn(mutableRepo, '-c', 'user.name=Essai', '-c', 'user.email=essai@example.invalid', 'commit', '-qm', 'départ');
+  fs.mkdirSync(duplicateRepo, { recursive: true });
+  gitIn(duplicateRepo, 'init', '-q');
+  fs.writeFileSync(path.join(duplicateRepo, 'a-public.txt'), `API_KEY=${current}\n`);
+  fs.writeFileSync(path.join(duplicateRepo, 'z-secret.env'), `API_KEY=${current}\n`);
+  gitIn(duplicateRepo, 'add', 'a-public.txt', 'z-secret.env');
+  gitIn(duplicateRepo, '-c', 'user.name=Essai', '-c', 'user.email=essai@example.invalid', 'commit', '-qm', 'même blob');
+  fs.rmSync(path.join(duplicateRepo, 'z-secret.env'));
+  gitIn(duplicateRepo, 'add', '--all');
+  gitIn(duplicateRepo, '-c', 'user.name=Essai', '-c', 'user.email=essai@example.invalid', 'commit', '-qm', 'secret supprimé');
   ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
 });
 
@@ -108,6 +120,140 @@ afterAll(() => {
 });
 
 describe('seconde barrière sur la sortie shell', () => {
+  it('masque aussi un secret suivi recopié dans un fichier ordinaire lu par le registre', async () => {
+    const derived = path.join(repo, '_derived.txt');
+    fs.writeFileSync(derived, `API_KEY=${current}\n`);
+    try {
+      const registry = createTestToolRegistry();
+      registerBuiltinTools(registry);
+      for (const cwd of [repo, qa.root]) {
+        for (const name of ['read_file', 'view_file']) {
+          const result = await registry.execute(name, { path: derived }, { cwd });
+          expect(result.success).toBe(true);
+          expect(result.output).toContain('[REDACTED]');
+          expect(JSON.stringify(result)).not.toContain(current);
+        }
+      }
+    } finally {
+      fs.rmSync(derived, { force: true });
+    }
+  });
+
+  it('masque les champs structurés rendus par le registre sans changer les métadonnées publiques', () => {
+    const result = redactTrackedGitToolResult({
+      success: true, content: current, data: { token: current, public: 'bonjour', [current]: 'clef' },
+      metadata: { source: 'test', nested: [current] },
+    }, repo);
+    expect(JSON.stringify(result)).not.toContain(current);
+    expect(result.content).toBe('[REDACTED]');
+    expect(result.data).toEqual({ token: '[REDACTED]', public: 'bonjour', '[REDACTED]': 'clef' });
+    expect(result.metadata).toEqual({ source: 'test', nested: ['[REDACTED]'] });
+  });
+
+  it.each([
+    'dash -c "git show > _leak.txt"',
+    'ash -c "git show > _leak.txt"',
+    'ksh -c "git show > _leak.txt"',
+    'sh -e -c "git show > _leak.txt"',
+    'sh -ce "git show > _leak.txt"',
+    'bash -e -c "git show > _leak.txt"',
+    'time git show > _leak.txt',
+    'eval "git show" > _leak.txt',
+    'setsid git show > _leak.txt',
+    'ionice git show > _leak.txt',
+    'chrt -b 0 git show > _leak.txt',
+    'taskset -c 0 git show > _leak.txt',
+    'sudo git show > _leak.txt',
+    'doas git show > _leak.txt',
+    'printf "git show > _leak.txt\\n" | xargs -I{} sh -c {}',
+    'busybox git show > _leak.txt',
+    'parallel git show ::: 1 > _leak.txt',
+    'chpst git show > _leak.txt',
+  ])('refuse par défaut un préfixe Git non prouvé sûr : %s', (command) => {
+    expect(validateCommand(command, undefined, repo).valid).toBe(false);
+  });
+
+  it('refuse une redirection de cat-file par hash avant toute création de fichier', async () => {
+    const oid = git('rev-parse', 'HEAD:.env').trim();
+    const leak = path.join(repo, '_cat-file-leak.txt');
+    fs.rmSync(leak, { force: true });
+    for (const command of [`git cat-file -p ${oid} > _cat-file-leak.txt`,
+      `env git cat-file -p ${oid} > _cat-file-leak.txt`,
+      `git cat-file blob ${oid} > _cat-file-leak.txt`]) {
+      expect(validateCommand(command, undefined, repo).valid).toBe(false);
+      const result = await new BashTool().execute(command, 3_000, repo);
+      expect(result.success).toBe(false);
+      expect(fs.existsSync(leak)).toBe(false);
+    }
+  });
+
+  it('préserve cat-file pour un blob public prouvé et blame sur un fichier ordinaire', () => {
+    const publicOid = git('rev-parse', 'HEAD:notes.txt').trim();
+    expect(validateCommand(`git cat-file -p ${publicOid}`, undefined, repo).valid).toBe(true);
+    expect(validateCommand('git blame notes.txt', undefined, repo).valid).toBe(true);
+    expect(validateCommand('git blame .env', undefined, repo).valid).toBe(false);
+  });
+
+  it('refuse un OID partagé par un chemin public et un chemin secret', () => {
+    const oid = gitIn(duplicateRepo, 'rev-parse', 'HEAD:a-public.txt').trim();
+    expect(gitIn(duplicateRepo, 'rev-parse', 'HEAD~1:z-secret.env').trim()).toBe(oid);
+    expect(validateCommand(`git cat-file -p ${oid}`, undefined, duplicateRepo).valid).toBe(false);
+  });
+
+  it('refuse la plomberie après suppression du secret et l’admet dans un dépôt sans secret', () => {
+    expect(validateCommand('git bundle create _leak.bundle --all', undefined, deletedRepo).valid).toBe(false);
+    expect(validateCommand('git bundle create archive.bundle --all', undefined, mutableRepo).valid).toBe(true);
+  });
+
+  it('refuse la matérialisation et la configuration d’un blob désigné seulement par hash', () => {
+    const oid = git('rev-parse', 'HEAD:.env').trim();
+    for (const command of [
+      'git checkout-index --temp --all',
+      `git unpack-file ${oid}`,
+      `git config --blob ${oid} --list`,
+    ]) {
+      expect(validateCommand(command, undefined, repo).valid).toBe(false);
+    }
+  });
+
+  it.skipIf(!posixShell)('empêche dash de créer un fichier que view_file lirait', async () => {
+    const leak = path.join(repo, '_dash-leak.txt');
+    fs.rmSync(leak, { force: true });
+    const result = await new BashTool().execute('dash -c "git show > _dash-leak.txt"', 3_000, repo);
+    expect(result.success).toBe(false);
+    expect(fs.existsSync(leak)).toBe(false);
+  });
+
+  it.each([
+    'git bundle create _leak.bundle --all',
+    'git merge-tree HEAD~1 HEAD',
+    'git checkout-index --temp .env',
+    'git unpack-file HEAD:.env',
+    'git config --blob HEAD:.env --list',
+    'git notes show HEAD',
+    'git for-each-ref --format=%(contents)',
+    'git fast-export --all > _leak.txt',
+    'git worktree add _copie HEAD',
+    'git stash apply',
+    'git -c alias.leak=!git show leak',
+    'git -c core.fsmonitor=sh status',
+    'git -p status',
+    'git --exec-path=. status',
+    'env GIT_PAGER=sh git status',
+    'git commande-inconnue',
+  ])('refuse par défaut la plomberie, les alias et la configuration Git : %s', (command) => {
+    expect(validateCommand(command, undefined, repo).valid).toBe(false);
+  });
+
+  it.each([
+    'git status', 'git status --short', 'git log --oneline -1',
+    'git rev-parse HEAD:.env', 'git ls-tree HEAD', 'git rev-list HEAD',
+    'git cat-file -t HEAD:.env', 'git cat-file -s HEAD:.env',
+    "printf 'git show > fichier.txt'", 'echo git status',
+  ])('admet la métadonnée Git sans contenu : %s', (command) => {
+    expect(validateCommand(command, undefined, repo).valid).toBe(true);
+  });
+
   it.skipIf(!posixShell)('refuse une redirection Git enveloppée avant la création d’un fichier lisible', async () => {
     const leak = path.join(repo, '_leak.txt');
     fs.rmSync(leak, { force: true });
@@ -259,10 +405,10 @@ describe('seconde barrière sur la sortie shell', () => {
     expect(result.output).toBe('API_KEY=[REDACTED]');
   });
 
-  it.skipIf(!posixShell)('masque git cat-file préfixé par env', async () => {
+  it.skipIf(!posixShell)('refuse cat-file par le validateur et masque aussi le lancement direct', async () => {
     const oid = git('rev-parse', 'HEAD:.env').trim();
     const command = `env git cat-file -p ${oid}`;
-    expect(validateCommand(command, undefined, repo).valid).toBe(true);
+    expect(validateCommand(command, undefined, repo).valid).toBe(false);
     const result = await new BashTool().shellFreeExec(['bash', '-c', command], 3_000, repo);
     expect(result.success).toBe(true);
     expect(result.output).toBe('API_KEY=[REDACTED]');
