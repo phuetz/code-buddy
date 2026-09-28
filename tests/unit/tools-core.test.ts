@@ -132,12 +132,14 @@ const multilineOutputCommand = isWindows
   : 'echo -e "line1\nline2\nline3"';
 
 const TEST_DIR = path.join(os.tmpdir(), 'grok-cli-tests-' + Date.now());
+const SOURCE_DIR = process.cwd();
 
 beforeAll(async () => {
   await fs.ensureDir(TEST_DIR);
 });
 
 afterAll(async () => {
+  process.chdir(SOURCE_DIR);
   await fs.remove(TEST_DIR);
 });
 
@@ -147,6 +149,13 @@ afterAll(async () => {
 
 describe('BashTool', () => {
   let bashTool: BashTool;
+
+  beforeAll(async () => {
+    await fs.writeFile(path.join(TEST_DIR, 'sample.txt'), 'test fixture\n');
+    process.chdir(TEST_DIR);
+  });
+
+  afterAll(() => { process.chdir(SOURCE_DIR); });
 
   beforeEach(() => {
     bashTool = new BashTool();
@@ -284,19 +293,20 @@ describe('BashTool', () => {
   });
 
   describe('Directory Changes', () => {
-    const originalCwd = process.cwd();
+    const originalCwd = TEST_DIR;
+    const targetDirectory = path.join(TEST_DIR, 'cd-target');
+
+    beforeAll(async () => { await fs.ensureDir(targetDirectory); });
 
     afterEach(() => {
       process.chdir(originalCwd);
     });
 
-    // /tmp is a Unix-only path; on macOS it is a symlink to /private/tmp and
-    // `cd` tracks the canonical (realpath) directory.
     (isWindows ? test.skip : test)('should change to valid directory', async () => {
-      const result = await bashTool.execute('cd /tmp');
+      const result = await bashTool.execute(`cd ${targetDirectory}`);
       expect(result.success).toBe(true);
-      expect(result.output).toContain('/tmp');
-      expect(bashTool.getCurrentDirectory()).toBe(fs.realpathSync('/tmp'));
+      expect(result.output).toContain('cd-target');
+      expect(bashTool.getCurrentDirectory()).toBe(fs.realpathSync(targetDirectory));
     });
 
     test('should fail for non-existent directory', async () => {
@@ -305,15 +315,13 @@ describe('BashTool', () => {
       expect(result.error).toContain('Cannot change directory');
     });
 
-    // /tmp is a Unix-only path
     (isWindows ? test.skip : test)('should handle cd with quoted path', async () => {
-      const result = await bashTool.execute('cd "/tmp"');
+      const result = await bashTool.execute(`cd "${targetDirectory}"`);
       expect(result.success).toBe(true);
     });
 
-    // /tmp is a Unix-only path
     (isWindows ? test.skip : test)('should handle cd with single quotes', async () => {
-      const result = await bashTool.execute("cd '/tmp'");
+      const result = await bashTool.execute(`cd '${targetDirectory}'`);
       expect(result.success).toBe(true);
     });
   });

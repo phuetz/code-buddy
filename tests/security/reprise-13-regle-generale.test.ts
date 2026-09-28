@@ -31,7 +31,8 @@ import { AppServerTool } from '../../src/tools/app-server-tool.js';
 const workspace = path.join(qa.root, 'workspace');
 const nested = path.join(workspace, 'vendor', 'sub');
 const renameRepo = path.join(qa.root, 'rename');
-const secret = 'FAKE-NESTED-REGLE-13';
+// Plausible but synthetic bytes: an explicit FAKE marker now denotes a public fixture.
+const secret = 'q7M2pR9x'.repeat(8);
 
 function gitExe(): string {
   const name = process.platform === 'win32' ? 'git.exe' : 'git';
@@ -274,10 +275,11 @@ describe('règle générale sur les secrets suivis', () => {
   });
 
   it('un diff ne contenant que le secret est vide et reste une commande réussie', async () => {
-    fs.writeFileSync(path.join(nested, '.env'), 'NESTED_TOKEN=FAKE-NESTED-SECOND-13\n');
+    const changedSecret = 'k8Q4nT2v'.repeat(8);
+    fs.writeFileSync(path.join(nested, '.env'), `NESTED_TOKEN=${changedSecret}\n`);
     const result = await new BashTool().execute('git diff', 3_000, nested);
     expect(result.success).toBe(true);
-    expect(result.output).not.toContain('FAKE-NESTED-SECOND-13');
+    expect(result.output).not.toContain(changedSecret);
     expect(result.output).not.toContain('NESTED_TOKEN=');
   });
 

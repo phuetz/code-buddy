@@ -25,7 +25,7 @@ const secretDependency = path.join(qa.root, 'secret-dependency');
 const variantSecretDependency = path.join(qa.root, 'variant-secret-dependency');
 const numericDependency = path.join(qa.root, 'numeric-dependency');
 const trackedDependency = path.join(qa.root, 'tracked-dependency');
-const token = 'FAKE-VOISIN-REPRISE-16';
+const token = 'v9R2mQ7p'.repeat(8);
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync('git', ['-C', cwd, ...args], {

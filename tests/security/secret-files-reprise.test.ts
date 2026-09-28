@@ -1,13 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-const qa = vi.hoisted(() => {
-  const root = `${process.cwd()}/_qa/securite-reprise`;
+const qa = await vi.hoisted(async () => {
+  const path = await import('node:path');
+  const root = path.join(process.cwd(), '_qa', 'securite-reprise');
+  const home = path.join(root, 'home');
   const previousHome = process.env.HOME;
   const previousUserProfile = process.env.USERPROFILE;
-  process.env.HOME = `${root}/home`;
-  process.env.USERPROFILE = `${root}/home`;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
   delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
-  return { root, home: `${root}/home`, previousHome, previousUserProfile };
+  return { root, home, previousHome, previousUserProfile };
 });
 
 import * as fs from 'node:fs';
@@ -60,7 +62,9 @@ describe('reprise des lecteurs autonomes', () => {
   });
 
   it('résout la variante de casse du dossier Code Buddy vers le même jeton fictif', () => {
-    expect(fs.realpathSync(path.join(qa.home, '.CodeBuddy'))).toBe(fs.realpathSync(cb));
+    const variant = path.join(qa.home, '.CodeBuddy', 'codex-auth.json');
+    expect(fs.existsSync(variant)).toBe(true);
+    expect(checkSecretFileAccess(variant, 'read').secret).toBe(true);
   });
 
   it('json_query refuse le jeton OAuth mais lit un JSON ordinaire', async () => {

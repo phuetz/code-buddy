@@ -1,12 +1,18 @@
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { describeUnixOnly, describeWindowsOnly } from '../test-utils.js';
 import { getShellConfiguration } from '../../src/utils/shell-configuration.js';
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
 }));
+let shellWorkspace: string;
+beforeAll(() => { shellWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-stream-spawn-')); });
+afterAll(() => { fs.rmSync(shellWorkspace, { recursive: true, force: true }); });
 
 vi.mock('child_process', () => ({
   spawn: mocks.spawn,
@@ -64,7 +70,7 @@ async function assertStreamingSpawn(): Promise<void> {
   const { executeStreaming } = await import('../../src/tools/bash/streaming-executor.js');
   const command = 'Write-Output "spawn arguments"';
   const generator = executeStreaming(command, 1000, {
-    getCurrentDirectory: () => process.cwd(),
+    getCurrentDirectory: () => shellWorkspace,
     getSandboxManager: () => ({ validateCommand: () => ({ valid: true }) }),
     getRunningProcesses: () => new Set<ChildProcess>(),
   });

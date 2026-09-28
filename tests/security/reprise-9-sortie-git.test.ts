@@ -44,9 +44,9 @@ const deletedRepo = path.join(qa.root, 'deleted');
 const emptyRepo = path.join(qa.root, 'empty');
 const mutableRepo = path.join(qa.root, 'mutable');
 const duplicateRepo = path.join(qa.root, 'duplicate');
-const older = 'FAKE-GIT-OLD-SECRET-259';
-const current = 'FAKE-GIT-NEW-SECRET-259';
-const stashed = 'FAKE-GIT-STASH-SECRET-259';
+const older = 'h7N2vP9m'.repeat(8);
+const current = 'j4Q8rT2z'.repeat(8);
+const stashed = 'b9K3wR6p'.repeat(8);
 
 function git(...args: string[]): string {
   return execFileSync(gitExecutable, ['-C', repo, ...args], {

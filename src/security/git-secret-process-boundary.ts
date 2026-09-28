@@ -16,6 +16,7 @@ import {
 } from './secret-files.js';
 import { isPublicNpmrcContent, isPublicWorkspaceNpmrc } from './public-project-npmrc.js';
 import { isPublicDependencyConfig } from './public-dependency-config.js';
+import { isPublicEnvFixtureContent, isPublicEnvFixtureFile } from './public-env-fixture.js';
 import { redactTrackedGitOutput } from './tracked-git-output-redactor.js';
 
 const MAX_DIRECTORIES = 100_000;
@@ -54,14 +55,18 @@ function gitRoot(cwd: string): string | null {
 }
 
 /** The working file, index and every reachable historical version must be public. */
-function publicNpmrcInGit(root: string, name: string): boolean {
+function publicFileInGit(
+  root: string, name: string,
+  publicFile: (file: string) => boolean,
+  publicContent: (content: string) => boolean,
+): boolean {
   const file = path.resolve(root, name);
-  if (!isPublicWorkspaceNpmrc(file)) return false;
+  if (fs.existsSync(file) && !publicFile(file)) return false;
   const inspectBlob = (oid: string): boolean => {
     if (!/^[0-9a-f]{40,64}$/.test(oid) || /^0+$/.test(oid)) return false;
     const size = Number(git(root, ['cat-file', '-s', oid]).trim());
     return Number.isSafeInteger(size) && size <= 16_384 &&
-      isPublicNpmrcContent(git(root, ['cat-file', 'blob', oid]), true);
+      publicContent(git(root, ['cat-file', 'blob', oid]));
   };
   const index = git(root, ['ls-files', '--stage', '-z', '--', name]);
   for (const entry of index.split('\0').filter(Boolean)) {
@@ -84,16 +89,24 @@ function secretInRepo(root: string): boolean {
   try {
     const names = git(root, ['ls-files', '-z']) +
       git(root, ['log', '--all', '--reflog', '--name-only', '-z', '--format=']);
-    const publicNpmrc = new Map<string, boolean>();
+    const publicFiles = new Map<string, boolean>();
     const canonicalRoot = fs.realpathSync(root);
     const homeCredentialRepo = getHomeCredentialRoots().some((candidate) =>
       inside(root, candidate) || inside(canonicalRoot, candidate));
     return names.split('\0').some((name) => {
       if (!name || !homeCredentialRepo && !isUniversalSecretBasename(path.basename(name))) return false;
       if (!checkSecretFileAccess(path.resolve(root, name), 'read').secret) return false;
-      if (path.basename(name).toLowerCase() !== '.npmrc') return true;
-      if (!publicNpmrc.has(name)) publicNpmrc.set(name, publicNpmrcInGit(root, name));
-      return !publicNpmrc.get(name);
+      if (!publicFiles.has(name)) {
+        const basename = path.basename(name).toLowerCase();
+        if (basename === '.npmrc')
+          publicFiles.set(name, publicFileInGit(root, name, isPublicWorkspaceNpmrc,
+            (content) => isPublicNpmrcContent(content, true)));
+        else if (/^(?:\.env(?:\..+)?|.+\.env)$/.test(basename) && !homeCredentialRepo)
+          publicFiles.set(name, publicFileInGit(root, name, isPublicEnvFixtureFile,
+            isPublicEnvFixtureContent));
+        else publicFiles.set(name, false);
+      }
+      return !publicFiles.get(name);
     });
   } catch {
     // A partial inventory cannot justify spawning a shell.
@@ -152,7 +165,8 @@ export function hasProtectedGitWorkspace(cwd: string): boolean {
           !(real === home && privateHomeDirectories.has(entry.name))) return false;
       const candidate = path.join(real, entry.name);
       return checkSecretFileAccess(candidate, 'read').secret &&
-        !isPublicWorkspaceNpmrc(candidate) && !isPublicDependencyConfig(candidate);
+        !isPublicWorkspaceNpmrc(candidate) && !isPublicDependencyConfig(candidate) &&
+        (sensitiveDirectory || !isPublicEnvFixtureFile(candidate));
     })) return protect();
     if (entries.some((entry) => entry.name === '.git') && secretInRepo(real)) return protect();
     for (const entry of entries) {

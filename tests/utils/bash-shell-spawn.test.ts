@@ -1,12 +1,25 @@
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { describeUnixOnly, describeWindowsOnly } from '../test-utils.js';
 import { getShellConfiguration } from '../../src/utils/shell-configuration.js';
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
 }));
+const sourceDirectory = process.cwd();
+let shellWorkspace: string;
+beforeAll(() => {
+  shellWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-shell-spawn-'));
+  process.chdir(shellWorkspace);
+});
+afterAll(() => {
+  process.chdir(sourceDirectory);
+  fs.rmSync(shellWorkspace, { recursive: true, force: true });
+});
 
 vi.mock('child_process', () => ({
   spawn: mocks.spawn,

@@ -9,16 +9,17 @@
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 
-const QA = vi.hoisted(() => {
-  const root = `${process.cwd()}/_qa/securite-2-3-0`;
-  const home = `${root}/home`;
+const QA = await vi.hoisted(async () => {
+  const path = await import('node:path');
+  const root = path.join(process.cwd(), '_qa', 'securite-2-3-0');
+  const home = path.join(root, 'home');
   const previousHome = process.env.HOME;
   const previousUserProfile = process.env.USERPROFILE;
   // Must be set before any module computes os.homedir() at import time.
   process.env.HOME = home;
   process.env.USERPROFILE = home;
   delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
-  return { root, home, work: `${root}/work`, previousHome, previousUserProfile };
+  return { root, home, work: path.join(root, 'work'), previousHome, previousUserProfile };
 });
 
 import * as fs from 'node:fs';
