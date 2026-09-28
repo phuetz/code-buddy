@@ -46,6 +46,25 @@ describe('resolvePoint coordinate handling (P3)', () => {
     expect(pt).toEqual({ x: 960, y: 540 }); // 500/1000 * 1920 = 960, * 1080 = 540
   });
 
+  it("clique la cible d'ancrage visuel (ref -999) même si le snapshot a expiré, une seule fois", async () => {
+    (tool as unknown as { groundedVirtualElement: unknown }).groundedVirtualElement = {
+      ref: -999,
+      role: 'button',
+      name: 'Valider',
+      bounds: { x: 220, y: 158, width: 0, height: 0 },
+      center: { x: 220, y: 158 },
+      interactive: true,
+      focused: false,
+      enabled: true,
+      visible: true,
+      attributes: { source: 'visual-coordinates-grounding' },
+    };
+    // getElement (mock) rend undefined : c'est le cas du snapshot expiré.
+    expect(await resolve(tool, { action: 'click', ref: -999 })).toEqual({ x: 220, y: 158 });
+    // Consommée : un second clic sur -999 ne rejoue pas une cible périmée.
+    expect(await resolve(tool, { action: 'click', ref: -999 })).toBeNull();
+  });
+
   it('clamps negative coordinates to 0', async () => {
     const pt = await resolve(tool, { action: 'click', x: -50, y: -10 });
     expect(pt).toEqual({ x: 0, y: 0 });
