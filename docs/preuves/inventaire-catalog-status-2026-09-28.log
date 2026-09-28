@@ -1,0 +1,9 @@
+Date UTC : 2026-09-28T02:53:22.155Z
+Commande : HOME=_qa/ci-main/home node dist/index.js catalog status --json
+Code de sortie : 0
+Sortie : _qa/ci-main/catalog-live.json (artefact local non versionné)
+SHA-256 de la sortie JSON : cd1ffa944d641462aba7865a4c22053b45f690ed92824fab0b02c77f105629bf
+Entrées explicites : 91
+Entrées totales avec découverte : 338
+Entrées explicites codées et raccordées : 91/91
+Avertissements : 0

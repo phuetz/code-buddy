@@ -84,7 +84,8 @@ describe('catalog states and evidence', () => {
       }
     }
     const failedReplay = catalog.features.find((feature) => feature.id === 'cli-run');
-    expect(failedReplay?.states.testedInSituation).toBe('faux');
+    expect(failedReplay?.states.testedInSituation).toBe('inconnu');
+    expect(failedReplay?.reasons).toContain('Preuve ancienne ou révision courante inconnue.');
     expect(failedReplay?.latestEvidence?.artifact).toBe('docs/preuves/inventaire-cli-run-echec.log');
   });
 
