@@ -41,14 +41,19 @@ npm install -g @phuetz/code-buddy@latest
 # Native add-ons (better-sqlite3, sharp, node-pty, tree-sitter, usearch, …) are
 # optional dependencies. If one fails to compile, the matching feature falls back;
 # the CLI still starts.
-# npm 11 lists packages whose install scripts were not reviewed; per the npm 11
-# docs those scripts still run by default. If a future npm blocks them, allow the
-# ones you need by name (a bare `--allow-scripts` is not the documented form):
+# npm 11 warns about unreviewed install scripts but still runs them by default.
+# npm 12 blocks unreviewed dependency install scripts with a warning by default. To enable a
+# native add-on you need, allow it by name during a global install:
 #   npm install -g --allow-scripts=better-sqlite3,sharp,node-pty @phuetz/code-buddy@latest
 
 # Or try without installing (also subject to the lag note above)
 npx @phuetz/code-buddy@latest
 ```
+
+For an install from source, configure npm's `allowScripts` policy in the project's
+`package.json` or `.npmrc`; the command-line `--allow-scripts` option is for
+global installs and one-off execution. See the [npm 11 install policy](https://docs.npmjs.com/cli/v11/commands/npm-install/#strict-allow-scripts)
+and [npm 12 install policy](https://docs.npmjs.com/cli/v12/commands/npm-install/#strict-allow-scripts).
 
 ## Interactive terminal
 
