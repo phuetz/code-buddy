@@ -6,6 +6,7 @@
  */
 
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
+import { codeBuddyEnv } from './legacy-env.js';
 import {
   getDirectRuntimeProviderCatalog,
   getPluginNativeRuntimeProviderCatalog,
@@ -83,22 +84,20 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'GROK_API_KEY',
     type: 'string',
-    description: 'xAI / Grok API key (one of several supported provider authentications)',
+    description: 'Deprecated alias for CODEBUDDY_API_KEY (historically xAI); use XAI_API_KEY for xAI',
     sensitive: true,
     category: 'core',
   },
   {
     name: 'GROK_BASE_URL',
     type: 'string',
-    default: 'https://api.x.ai/v1',
-    description: 'Custom API endpoint for Grok',
+    description: 'Deprecated alias for CODEBUDDY_BASE_URL',
     category: 'core',
   },
   {
     name: 'GROK_MODEL',
     type: 'string',
-    default: 'grok-3-fast',
-    description: 'Default LLM model to use',
+    description: 'Deprecated alias for CODEBUDDY_MODEL',
     category: 'core',
   },
   {
@@ -405,7 +404,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'XAI_API_KEY',
     type: 'string',
-    description: 'Alias for GROK_API_KEY (xAI provider)',
+    description: 'xAI provider API key',
     sensitive: true,
     category: 'provider',
   },
@@ -1606,8 +1605,8 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   providerStringEnv('LMSTUDIO_BASE_URL', 'Alias for LMSTUDIO_HOST'),
   providerStringEnv('LM_STUDIO_BASE_URL', 'Alias for LM_STUDIO_HOST'),
   providerStringEnv('LM_STUDIO_MODEL', 'Alias for LMSTUDIO_MODEL'),
-  providerStringEnv('XAI_BASE_URL', 'Alias for GROK_BASE_URL'),
-  providerStringEnv('XAI_MODEL', 'Alias for GROK_MODEL'),
+  providerStringEnv('XAI_BASE_URL', 'xAI provider base URL'),
+  providerStringEnv('XAI_MODEL', 'xAI provider model'),
   providerStringEnv('GEMINI_BASE_URL', 'Custom Gemini API endpoint'),
   providerStringEnv('GOOGLE_AI_BASE_URL', 'Alias for GEMINI_BASE_URL'),
   providerStringEnv('GOOGLE_MODEL', 'Alias for GEMINI_MODEL'),
@@ -2180,8 +2179,8 @@ export function hasActiveProvider(env: Record<string, string | undefined> = proc
 export function resolveActiveProviderApiKey(
   env: Record<string, string | undefined> = process.env,
 ): string | undefined {
-  const grok = env.GROK_API_KEY?.trim();
-  if (grok) return grok;
+  const configured = codeBuddyEnv('API_KEY', env);
+  if (configured) return configured;
   for (const entry of getDirectRuntimeProviderCatalog()) {
     for (const key of entry.apiKeyEnvKeys) {
       const value = env[key]?.trim();
@@ -2203,7 +2202,7 @@ export function validateEnv(env: Record<string, string | undefined> = process.en
 
   if (!hasActiveProvider(env)) {
     errors.push(
-      'No AI provider is configured. Set ChatGPT OAuth or an API key such as GROK_API_KEY.',
+      'No AI provider is configured. Run buddy login, use local Ollama, or set CODEBUDDY_API_KEY.',
     );
   }
 

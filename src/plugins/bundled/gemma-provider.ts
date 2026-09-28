@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Gemma 4 Provider Plugin (Bundled)
  *
@@ -118,7 +119,7 @@ export class GemmaProviderPlugin implements PluginProvider {
     }
     
     // Default to the 9b model if none is specified by the router context
-    const modelName = process.env.GROK_MODEL || 'gemma-4-9b-it';
+    const modelName = codeBuddyEnv('MODEL') || 'gemma-4-9b-it';
     const model = this.genAI.getGenerativeModel({ model: modelName });
 
     // Format messages for the Gemini SDK (Gemma 4 uses the same interface via AI Studio)
@@ -142,7 +143,7 @@ export class GemmaProviderPlugin implements PluginProvider {
     if (!this.genAI) {
       throw new Error('Gemma Provider requires GEMINI_API_KEY to be set.');
     }
-    const modelName = process.env.GROK_MODEL || 'gemma-4-9b-it';
+    const modelName = codeBuddyEnv('MODEL') || 'gemma-4-9b-it';
     const model = this.genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     return result.response.text();

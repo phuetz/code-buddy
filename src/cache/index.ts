@@ -36,7 +36,7 @@
  * );
  *
  * // Cache LLM response
- * cache.setLLMResponse(messages, response, 'grok-code-fast-1');
+ * cache.setLLMResponse(messages, response, client.getCurrentModel());
  *
  * // Get cached search results
  * const results = cache.getSearchResults(query, 'text');

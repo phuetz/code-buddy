@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * MCP Server - expose Code Buddy's real tool registry over stdio.
  *
@@ -589,8 +590,8 @@ export class CodeBuddyMCPServer {
       const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
       this.agent = new CodeBuddyAgent(
         injected ? 'local-model' : apiKey,
-        process.env.GROK_BASE_URL,
-        process.env.GROK_MODEL,
+        codeBuddyEnv('BASE_URL'),
+        codeBuddyEnv('MODEL'),
         undefined,
         true,
         undefined,

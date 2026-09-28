@@ -12,6 +12,7 @@ import { speakChannelProviderFailure } from '../channels/provider-failure-speech
 import { prependUserFacingFailoverNotice } from '../providers/provider-failover-user-notice.js';
 import type { CodeBuddyMessage, CodeBuddyResponse } from '../codebuddy/client.js';
 import { logger } from '../utils/logger.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 import {
   attachPhotoParts,
   looksLikeVisionRefusal,
@@ -93,7 +94,7 @@ async function defaultResolveProvider(
   const { resolveCommandProvider } = await import('../commands/llm-provider-resolution.js');
   const resolved = resolveCommandProvider({});
   if (!resolved) return null;
-  const model = resolved.model || env.CODEBUDDY_MODEL || env.GROK_MODEL || '';
+  const model = resolved.model || codeBuddyEnv('MODEL', env) || '';
   if (!model) return null;
   return {
     apiKey: resolved.apiKey || 'local',

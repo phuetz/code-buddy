@@ -30,7 +30,7 @@ function ApiKeyInputInner({ onApiKeySet }: ApiKeyInputProps) {
       const agent = new CodeBuddyAgent(apiKey);
 
       // Set environment variable for current process
-      process.env.GROK_API_KEY = apiKey;
+      process.env.CODEBUDDY_API_KEY = apiKey;
 
       // Save to user settings
       try {

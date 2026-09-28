@@ -149,7 +149,7 @@ export function buildNoProviderGuidance(
     '      (qwen2.5 under 14B, including qwen2.5-coder:7b, is chat-only: it cannot edit files.)',
     '   3. More providers — run the full wizard or set an API key:',
     '      buddy onboard',
-    '      GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY',
+    '      CODEBUDDY_API_KEY (+ CODEBUDDY_BASE_URL / CODEBUDDY_MODEL), or a provider key',
     '   After option 1 or 2, run  buddy try  for the one-minute coding demo.',
     '   Named profiles group the advanced settings:  buddy --profile local|cloud|fleet|max',
     '   Check anytime:  buddy doctor',

@@ -717,12 +717,12 @@ export interface CodeBuddyConfig {
 // ============================================================================
 
 export const DEFAULT_CONFIG: CodeBuddyConfig = {
-  active_model: 'grok-code-fast',
+  active_model: 'auto',
 
   providers: {
     xai: {
       base_url: 'https://api.x.ai/v1',
-      api_key_env: 'GROK_API_KEY',
+      api_key_env: 'XAI_API_KEY',
       type: 'xai',
       enabled: true,
     },
@@ -1923,6 +1923,9 @@ class ConfigManager {
     const config = this.getConfig();
     const model = ownValue<ModelConfig>(config.models, config.active_model);
     if (!model) {
+      if (config.active_model === 'auto') {
+        throw new Error('No model selected. Run buddy login, configure a provider, or start a tool-capable local Ollama.');
+      }
       throw new Error(`Model "${config.active_model}" not found in config`);
     }
     return { ...model, name: config.active_model };

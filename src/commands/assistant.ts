@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * `buddy assistant` — manage the voice assistant (Lisa).
  *
@@ -743,7 +744,7 @@ export function registerAssistantCommand(program: Command): void {
           model =
             model ||
             process.env.CODEBUDDY_SENSORY_SPEAK_MODEL?.trim() ||
-            process.env.GROK_MODEL?.trim() ||
+            codeBuddyEnv('MODEL')?.trim() ||
             'qwen3.6:35b-a3b-q4_K_M';
           provider = 'ollama';
           generate = createOllamaConversationGenerator({

@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 import { CodeBuddyClient, CodeBuddyToolCall } from "../codebuddy/client.js";
 import type { CodeBuddyMessage, CodeBuddyTool } from "../codebuddy/client.js";
 import { ToolSelectionResult } from "../codebuddy/tools.js";
@@ -5,6 +6,7 @@ import { ToolResult } from "../types/index.js";
 import { createTokenCounter } from "../utils/token-counter.js";
 import { loadCustomInstructions } from "../utils/custom-instructions.js";
 import { getSettingsManager } from "../utils/settings-manager.js";
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
 import { getChatOnlySystemPrompt } from "../prompts/index.js";
 import { getAutonomyManager } from "../utils/autonomy-manager.js";
 import { logger } from "../utils/logger.js";
@@ -185,7 +187,7 @@ export class CodeBuddyAgent extends BaseAgent {
    *
    * @param apiKey - API key for authentication
    * @param baseURL - Optional base URL for the API endpoint
-   * @param model - Optional model name (defaults to saved model or grok-code-fast-1)
+   * @param model - Optional model name (defaults to saved or active provider model)
    * @param maxToolRounds - Maximum tool execution rounds (default: depends on YOLO mode)
    * @param useRAGToolSelection - Enable RAG-based tool selection (default: true)
    */
@@ -210,7 +212,7 @@ export class CodeBuddyAgent extends BaseAgent {
     // Determine model to use
     const manager = getSettingsManager();
     const savedModel = manager.getCurrentModel();
-    const modelToUse = model || savedModel || "grok-code-fast-1";
+    const modelToUse = model || savedModel || runtimeDefaultModel();
 
     // YOLO mode: requires BOTH env var AND explicit config confirmation
     const autonomyManager = getAutonomyManager();
@@ -1132,7 +1134,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
       }
       try {
         const { getMultiAgentSystem } = await import('../agent/multi-agent/multi-agent-system.js');
-        getMultiAgentSystem(apiKey, process.env.GROK_BASE_URL);
+        getMultiAgentSystem(apiKey, codeBuddyEnv('BASE_URL'));
         logger.info('MultiAgentSystem auto-instantiated from TOML config', {
           default_strategy: masCfg.default_strategy ?? 'hierarchical',
         });

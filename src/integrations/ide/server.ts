@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
 import { readFile } from 'fs/promises';
 import * as net from 'net';
 import type {
@@ -466,7 +467,7 @@ Return a focused replacement for the problematic range only.`,
     }
 
     const { CodeBuddyClient } = await import('../../codebuddy/client.js');
-    this.codebuddyClient = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || 'grok-code-fast-1') as IDEChatClient;
+    this.codebuddyClient = new CodeBuddyClient(apiKey, runtimeDefaultModel()) as IDEChatClient;
     return this.codebuddyClient;
   }
 

@@ -1,3 +1,4 @@
+import { xaiApiKey } from '../config/legacy-env.js';
 /**
  * Provider Manager
  *
@@ -240,9 +241,10 @@ export async function autoConfigureProviders(): Promise<ProviderManager> {
   const manager = getProviderManager();
 
   // Grok (xAI)
-  if (process.env.GROK_API_KEY || process.env.XAI_API_KEY) {
+  const xaiKey = xaiApiKey();
+  if (xaiKey) {
     await manager.registerProvider('grok', {
-      apiKey: process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
+      apiKey: xaiKey,
     });
   }
 

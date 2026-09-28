@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * `buddy doctor` — Integrations section (comparatif plan P3).
  *
@@ -165,7 +166,7 @@ async function codeExecPolicyCheck(deps: IntegrationDeps): Promise<IntegrationCh
       : await (async () => {
         const { getSettingsManager } = await import('../utils/settings-manager.js');
         const settings = getSettingsManager().readUserSettingsIfPresent() as { model?: string; defaultModel?: string } | undefined;
-        return settings?.defaultModel ?? settings?.model ?? process.env.GROK_MODEL;
+        return settings?.defaultModel ?? settings?.model ?? codeBuddyEnv('MODEL');
       })();
     const { resolveCodeExecPolicy } = await import('../config/code-exec-policy.js');
     const resolved = resolveCodeExecPolicy(model);

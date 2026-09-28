@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from './legacy-env.js';
 /**
  * Settings Migration
  *
@@ -110,7 +111,7 @@ export function migrateSettings(oldSettings: LegacyUserSettings): ModernUserSett
 
   // Check if there's meaningful custom configuration
   const hasCustomConfig = !!(
-    (oldSettings.apiKey && oldSettings.apiKey !== process.env.GROK_API_KEY) ||
+    (oldSettings.apiKey && oldSettings.apiKey !== codeBuddyEnv('API_KEY')) ||
     (oldSettings.baseURL && !oldSettings.baseURL.includes('api.x.ai'))
   );
 

@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Embedding Provider
  *
@@ -373,7 +374,8 @@ export class EmbeddingProvider extends EventEmitter {
   }
 
   private async embedBatchGrok(texts: string[]): Promise<BatchEmbeddingResult> {
-    const apiKey = this.config.apiKey || process.env.GROK_API_KEY;
+    const apiKey = this.config.apiKey || process.env.XAI_API_KEY ||
+      (process.env.GROK_API_KEY ? codeBuddyEnv('API_KEY') : undefined);
     if (!apiKey) {
       throw new Error('CodeBuddy API key required for embeddings');
     }

@@ -13,6 +13,9 @@
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
 import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { codeBuddyEnv } from './legacy-env.js';
+import { FALLBACK_MODEL } from './model-defaults.js';
+import { DEFAULT_BASE_URL } from '../utils/base-url.js';
 import {
   ConnectionConfig,
   ConnectionProfile,
@@ -48,7 +51,7 @@ export class ConfigResolver extends EventEmitter {
     };
 
     this.profiles = new Map(mergedConfig.profiles.map(p => [p.id, p]));
-    this.activeProfileId = mergedConfig.activeProfileId || 'grok';
+    this.activeProfileId = mergedConfig.activeProfileId;
     this.envVarsFallback = mergedConfig.envVarsFallback ?? true;
     this.autoSwitchLocal = mergedConfig.autoSwitchLocal ?? false;
 
@@ -100,7 +103,7 @@ export class ConfigResolver extends EventEmitter {
     // 4. Environment variables as fallback (if enabled)
     if (this.envVarsFallback) {
       const envConfig = this.resolveFromEnv();
-      if (envConfig.apiKey) {
+      if (envConfig.apiKey || process.env.CODEBUDDY_PROVIDER?.trim()) {
         return envConfig;
       }
     }
@@ -120,10 +123,10 @@ export class ConfigResolver extends EventEmitter {
    */
   private resolveFromCLI(cli: CLIOverrides): ResolvedConfig {
     return {
-      baseURL: cli.baseURL || process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
-      apiKey: cli.apiKey || process.env.GROK_API_KEY || '',
-      model: cli.model || process.env.GROK_MODEL || 'grok-code-fast-1',
-      provider: cli.provider || this.detectProvider(cli.baseURL) || 'grok',
+      baseURL: cli.baseURL || codeBuddyEnv('BASE_URL') || DEFAULT_BASE_URL,
+      apiKey: cli.apiKey || codeBuddyEnv('API_KEY') || '',
+      model: cli.model || codeBuddyEnv('MODEL') || FALLBACK_MODEL,
+      provider: cli.provider || this.detectProvider(cli.baseURL) || 'openai',
       source: 'cli',
     };
   }
@@ -142,7 +145,7 @@ export class ConfigResolver extends EventEmitter {
     return {
       baseURL: cli?.baseURL || profile.baseURL,
       apiKey: cli?.apiKey || profile.apiKey || '',
-      model: cli?.model || profile.model || 'grok-code-fast-1',
+      model: cli?.model || profile.model || FALLBACK_MODEL,
       provider: cli?.provider || profile.provider,
       profileId: profile.id,
       profileName: profile.name,
@@ -168,20 +171,19 @@ export class ConfigResolver extends EventEmitter {
       };
     }
 
-    // Fallback to Grok defaults (no key)
-    const baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
+    const baseURL = codeBuddyEnv('BASE_URL') || DEFAULT_BASE_URL;
     return {
       baseURL,
       apiKey: '',
-      model: process.env.GROK_MODEL || 'grok-code-fast-1',
-      provider: this.detectProvider(baseURL) || 'grok',
+      model: codeBuddyEnv('MODEL') || FALLBACK_MODEL,
+      provider: this.detectProvider(baseURL) || 'openai',
       source: 'environment',
     };
   }
 
   private normalizeDetectedProvider(provider: string): ProviderType {
     if (provider === 'anthropic') return 'claude';
-    if (provider === 'unknown') return 'grok';
+    if (provider === 'unknown') return 'openai';
     return provider as ProviderType;
   }
 
@@ -190,10 +192,10 @@ export class ConfigResolver extends EventEmitter {
    */
   private getBuiltinDefault(): ResolvedConfig {
     return {
-      baseURL: 'https://api.x.ai/v1',
+      baseURL: DEFAULT_BASE_URL,
       apiKey: '',
-      model: 'grok-code-fast-1',
-      provider: 'grok',
+      model: FALLBACK_MODEL,
+      provider: 'openai',
       source: 'default',
     };
   }

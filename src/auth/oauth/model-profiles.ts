@@ -1,3 +1,4 @@
+import { xaiApiKey, xaiBaseURL } from '../../config/legacy-env.js';
 /**
  * Model Profile Manager
  *
@@ -379,12 +380,12 @@ export class ModelProfileManager extends EventEmitter {
       name: 'Grok (xAI)',
       providerId: 'grok',
       authType: 'api_key',
-      apiKey: process.env.GROK_API_KEY,
-      baseUrl: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
+      apiKey: xaiApiKey(),
+      baseUrl: xaiBaseURL() || 'https://api.x.ai/v1',
       priority: 100,
       models: ['grok-4-latest', 'grok-3', 'grok-code-fast-1', 'grok-*'],
       defaultModel: 'grok-code-fast-1',
-      enabled: !!process.env.GROK_API_KEY,
+      enabled: !!xaiApiKey(),
     });
 
     // OpenAI profile

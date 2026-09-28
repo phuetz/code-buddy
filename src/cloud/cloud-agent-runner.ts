@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Cloud Agent Runner — Headless background agent task execution
  *
@@ -435,8 +437,8 @@ export class CloudAgentRunner extends EventEmitter {
       const tools = await getAllCodeBuddyTools();
 
       // Create client
-      const apiKey = process.env.GROK_API_KEY || process.env.OPENAI_API_KEY || '';
-      const model = config.model || process.env.GROK_MODEL || 'grok-3-latest';
+      const apiKey = codeBuddyEnv('API_KEY') || process.env.OPENAI_API_KEY || '';
+      const model = config.model || runtimeDefaultModel();
       const client = new CodeBuddyClient(apiKey, model);
       const maxRounds = config.maxToolRounds ?? MAX_TOOL_ROUNDS_DEFAULT;
 

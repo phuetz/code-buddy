@@ -11,6 +11,7 @@
  */
 
 import { BaseAgent, createId } from "../base-agent.js";
+import { runtimeDefaultModel } from '../../../config/runtime-default-model.js';
 import {
   AgentConfig,
   AgentTask,
@@ -95,7 +96,7 @@ Always check for test configuration files (jest.config.js, vitest.config.ts, etc
     "search",
     "bash",
   ],
-  model: "grok-code-fast-1",
+  model: runtimeDefaultModel(),
   maxRounds: 30,
   temperature: 0.3,
 };

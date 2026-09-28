@@ -6,6 +6,8 @@
  */
 
 import { EventEmitter } from "events";
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 import { randomUUID } from "crypto";
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from "../../codebuddy/client.js";
 import { formatToolResultForRecovery } from "../../context/restorable-compression.js";
@@ -29,13 +31,12 @@ import {
 
 /**
  * Resolve the model a MAS agent should call.
- * An explicit per-agent override wins; otherwise GROK_MODEL (local Ollama)
- * beats the hardcoded grok-3-latest defaults on Coder/Reviewer/etc.
+ * An explicit per-agent override wins; otherwise use the active provider model.
  */
 export function resolveMultiAgentModel(
   configModel: string | undefined,
   overrideModel: string | undefined,
-  envModel: string | undefined = process.env.GROK_MODEL,
+  envModel: string | undefined = codeBuddyEnv('MODEL'),
 ): string {
   const fromOverride = overrideModel?.trim();
   if (fromOverride) return fromOverride;
@@ -43,7 +44,7 @@ export function resolveMultiAgentModel(
   if (fromEnv) return fromEnv;
   const fromConfig = configModel?.trim();
   if (fromConfig) return fromConfig;
-  return 'grok-3-latest';
+  return runtimeDefaultModel();
 }
 
 /**

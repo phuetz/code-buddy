@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Interactive Setup - Inspired by Mistral Vibe CLI
  *
@@ -120,10 +122,10 @@ export async function runSetup(): Promise<SetupConfig> {
   // Step 1: API Key
   console.log('Step 1/4: API Key Configuration');
   console.log('--------------------------------');
-  console.log('You need a CodeBuddy API key from https://x.ai');
+  console.log('An API key is optional. Use buddy login for ChatGPT or local Ollama without one.');
   console.log('The key will be stored in ~/.codebuddy/user-settings.json\n');
 
-  const existingKey = process.env.GROK_API_KEY || loadExistingApiKey();
+  const existingKey = codeBuddyEnv('API_KEY') || loadExistingApiKey();
   if (existingKey) {
     const masked = existingKey.slice(0, 8) + '...' + existingKey.slice(-4);
     console.log(`Existing API key found: ${masked}`);
@@ -140,7 +142,7 @@ export async function runSetup(): Promise<SetupConfig> {
 
     if (!config.apiKey) {
       console.log('No API key provided. You can set it later with:');
-      console.log('  export GROK_API_KEY=your-key');
+      console.log('  export CODEBUDDY_API_KEY=your-key');
       console.log('  or in ~/.codebuddy/user-settings.json\n');
     }
 
@@ -154,7 +156,7 @@ export async function runSetup(): Promise<SetupConfig> {
   // Step 2: Base URL
   console.log('\nStep 2/4: API Base URL');
   console.log('----------------------');
-  console.log('Default: https://api.x.ai/v1');
+  console.log('Default: resolved from your configured provider');
   console.log('For local models (LM Studio, Ollama), use: http://localhost:1234/v1\n');
 
   const baseURL = await question(rl3, 'Base URL (press Enter for default): ');
@@ -165,35 +167,9 @@ export async function runSetup(): Promise<SetupConfig> {
   // Step 3: Model
   console.log('\nStep 3/4: Default Model');
   console.log('-----------------------');
-  console.log('Available models:');
-  console.log('  1. grok-3-latest (most capable)');
-  console.log('  2. grok-4-latest (latest)');
-  console.log('  3. grok-code-fast-1 (fast code generation)');
-  console.log('  4. Custom model name\n');
-
-  const modelChoice = await question(rl3, 'Select model (1-4, or press Enter for grok-3-latest): ');
-
-  switch (modelChoice) {
-    case '1':
-    case '':
-      config.model = 'grok-3-latest';
-      break;
-    case '2':
-      config.model = 'grok-4-latest';
-      break;
-    case '3':
-      config.model = 'grok-3-fast';
-      break;
-    case '4':
-      config.model = await question(rl3, 'Enter custom model name: ');
-      break;
-    default:
-      if (modelChoice) {
-        config.model = modelChoice;
-      } else {
-        config.model = 'grok-3-latest';
-      }
-  }
+  console.log('Press Enter to use the model resolved from your provider.\n');
+  const modelChoice = await question(rl3, 'Model ID (optional): ');
+  if (modelChoice.trim()) config.model = modelChoice.trim();
 
   // Step 4: Theme
   console.log('\nStep 4/4: UI Theme');
@@ -293,7 +269,7 @@ async function saveConfig(config: SetupConfig): Promise<void> {
           error: err instanceof Error ? err.message : String(err),
         });
       }
-      if (!process.env.GROK_API_KEY) process.env.GROK_API_KEY = config.apiKey;
+      if (!codeBuddyEnv('API_KEY')) process.env.CODEBUDDY_API_KEY = config.apiKey;
     }
     // Migrate any legacy plaintext key out of the settings file.
     if (typeof settings.apiKey === 'string') {
@@ -313,8 +289,8 @@ async function saveConfig(config: SetupConfig): Promise<void> {
     writeJsonAtomicSync(settingsPath, settings);
 
     console.log('  API Key: ' + (config.apiKey ? 'Saved' : 'Not set'));
-    console.log('  Base URL: ' + (config.baseURL || 'https://api.x.ai/v1 (default)'));
-    console.log('  Model: ' + (config.model || 'grok-3-latest'));
+    console.log('  Base URL: ' + (config.baseURL || 'provider default'));
+    console.log('  Model: ' + (config.model || runtimeDefaultModel()));
     console.log('  Theme: ' + (config.theme || 'default'));
   } catch (error) {
     logger.error('Failed to save configuration:', error as Error);
@@ -325,7 +301,7 @@ async function saveConfig(config: SetupConfig): Promise<void> {
  * Check if setup is needed (no API key configured)
  */
 export function needsSetup(): boolean {
-  if (process.env.GROK_API_KEY) {
+  if (codeBuddyEnv('API_KEY')) {
     return false;
   }
 

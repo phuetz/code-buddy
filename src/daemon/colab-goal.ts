@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Goal-mode for fleet colab tasks — port of Hermes Agent's kanban goal-mode.
  *
@@ -71,7 +72,7 @@ export function createColabGoalJudge(): ColabGoalJudge {
   return async (task, result, model) => {
     try {
       const config = resolveGoalsConfig();
-      const apiKey = process.env.GROK_API_KEY || process.env.OPENAI_API_KEY || 'local';
+      const apiKey = codeBuddyEnv('API_KEY') || process.env.OPENAI_API_KEY || 'local';
       const baseClient = new CodeBuddyClient(
         apiKey,
         model.model,

@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Unified Script Built-in Functions
  *
@@ -33,7 +35,7 @@ async function getOrCreateAgent(config: CodeBuddyScriptConfig): Promise<ScriptAg
     return cachedAgent;
   }
 
-  const apiKey = process.env.GROK_API_KEY;
+  const apiKey = codeBuddyEnv('API_KEY');
   if (!apiKey) {
     logger.warn('GROK_API_KEY not set, AI operations will not be available');
     return null;
@@ -43,8 +45,8 @@ async function getOrCreateAgent(config: CodeBuddyScriptConfig): Promise<ScriptAg
     const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
     cachedAgent = new CodeBuddyAgent(
       apiKey,
-      process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL || 'grok-3-latest'
+      codeBuddyEnv('BASE_URL'),
+      runtimeDefaultModel()
     ) as unknown as ScriptAgentInterface;
     return cachedAgent;
   } catch (error) {

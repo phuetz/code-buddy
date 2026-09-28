@@ -1,3 +1,6 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../../config/legacy-env.js';
+import { DEFAULT_BASE_URL } from '../../utils/base-url.js';
 /**
  * Health Routes
  *
@@ -101,7 +104,7 @@ function getConfiguredProviderStatus(): { ready: boolean; message: string } {
   };
 }
 
-function getGrokModelsUrl(baseURL: string): string {
+function getModelsUrl(baseURL: string): string {
   return `${baseURL.replace(/\/+$/, '')}/models`;
 }
 
@@ -115,8 +118,8 @@ function isLocalRuntimeProvider(provider: string | undefined): boolean {
 
 async function probeProviderApi(): Promise<{ ready: boolean; message: string; latencyMs: number } | undefined> {
   const provider = detectProviderFromEnv();
-  const apiKey = process.env.GROK_API_KEY?.trim()
-    || provider?.apiKey?.trim()
+  const apiKey = provider?.apiKey?.trim()
+    || codeBuddyEnv('API_KEY')?.trim()
     || undefined;
   if (!apiKey) {
     const configured = process.env.CODEBUDDY_PROVIDER?.trim() || provider?.provider;
@@ -129,13 +132,13 @@ async function probeProviderApi(): Promise<{ ready: boolean; message: string; la
       latencyMs: 0,
     };
   }
-  const baseURL = process.env.GROK_BASE_URL?.trim()
+  const baseURL = codeBuddyEnv('BASE_URL')?.trim()
     || provider?.baseURL
-    || 'https://api.x.ai/v1';
+    || DEFAULT_BASE_URL;
   const apiStart = Date.now();
   const label = provider?.provider ?? 'provider';
   try {
-    const response = await fetch(getGrokModelsUrl(baseURL), {
+    const response = await fetch(getModelsUrl(baseURL), {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -507,8 +510,8 @@ router.get(
   '/config',
   asyncHandler(async (_req: Request, res: Response) => {
     res.json({
-      model: process.env.GROK_MODEL || 'grok-3-latest',
-      baseUrl: process.env.GROK_BASE_URL ? '(custom)' : 'https://api.x.ai',
+      model: runtimeDefaultModel(),
+      baseUrl: codeBuddyEnv('BASE_URL') ? '(custom)' : 'https://api.x.ai',
       features: {
         yoloMode: process.env.YOLO_MODE === 'true',
         maxCost: process.env.MAX_COST ? parseFloat(process.env.MAX_COST) : 10,

@@ -181,7 +181,6 @@ export const DEFAULT_PROFILES: ConnectionProfile[] = [
     provider: 'grok',
     baseURL: 'https://api.x.ai/v1',
     model: 'grok-code-fast-1',
-    isDefault: true,
     icon: '🤖',
     description: 'xAI Grok API - production-ready AI inference',
     enabled: true,
@@ -253,7 +252,7 @@ export const DEFAULT_PROFILES: ConnectionProfile[] = [
  */
 export const DEFAULT_CONNECTION_CONFIG: ConnectionConfig = {
   profiles: [...DEFAULT_PROFILES],
-  activeProfileId: 'grok',
+  activeProfileId: '',
   envVarsFallback: true,
   autoSwitchLocal: false,
   rememberPerProject: false,

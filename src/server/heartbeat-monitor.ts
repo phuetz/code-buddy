@@ -9,6 +9,7 @@
  * fetch errors mean "down".
  */
 import { logger } from '../utils/logger.js';
+import { codeBuddyEnv, xaiBaseURL } from '../config/legacy-env.js';
 import { updateApiHeartbeat } from './routes/health.js';
 
 interface HeartbeatTimer {
@@ -22,7 +23,7 @@ let activeTimer: HeartbeatTimer | null = null;
  * 1. Explicit `OLLAMA_BASE_URL` or `OLLAMA_HOST` (Ollama-only).
  * 2. `OPENAI_BASE_URL` (OpenAI / Ollama-via-OAI / LM Studio / …).
  * 3. `ANTHROPIC_BASE_URL`.
- * 4. `GROK_BASE_URL` / `XAI_BASE_URL`.
+ * 4. `CODEBUDDY_BASE_URL`, then the xAI endpoint when selected.
  * 5. `GEMINI_BASE_URL`.
  * 6. Skip — no probe.
  */
@@ -47,9 +48,14 @@ function pickProbeUrl(): { url: string; label: string } | null {
   if (env.ANTHROPIC_BASE_URL) {
     return { url: `${env.ANTHROPIC_BASE_URL.replace(/\/$/, '')}/v1/me`, label: 'anthropic' };
   }
-  if (env.GROK_BASE_URL || env.XAI_BASE_URL) {
-    const base = (env.GROK_BASE_URL || env.XAI_BASE_URL || '').replace(/\/$/, '');
-    return { url: `${base}/v1/models`, label: 'xai' };
+  const neutralBase = codeBuddyEnv('BASE_URL', env);
+  if (env.CODEBUDDY_BASE_URL && neutralBase) {
+    return { url: `${neutralBase.replace(/\/$/, '')}/models`, label: 'openai-compat' };
+  }
+  const xaiBase = xaiBaseURL(env);
+  if (xaiBase) {
+    const base = xaiBase.replace(/\/$/, '');
+    return { url: `${base}${base.endsWith('/v1') ? '' : '/v1'}/models`, label: 'xai' };
   }
   if (env.GEMINI_BASE_URL) {
     return { url: `${env.GEMINI_BASE_URL.replace(/\/$/, '')}/v1beta/models`, label: 'gemini' };

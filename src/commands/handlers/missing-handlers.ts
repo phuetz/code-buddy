@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Missing Handlers
  *
@@ -160,7 +161,7 @@ Use /model auto off to disable, or /model <name> to switch to a specific model.`
 
   if (suggestions.length === 0) {
     // Try to set it anyway (might be a custom model)
-    process.env.GROK_MODEL = modelName;
+    process.env.CODEBUDDY_MODEL = modelName;
     settingsManager.updateUserSetting('model', modelName);
 
     return {
@@ -191,7 +192,7 @@ Use /model list to see supported models.`,
   const targetModel = exactMatch || (suggestions.length === 1 ? suggestions[0] : null);
 
   if (targetModel) {
-    process.env.GROK_MODEL = targetModel;
+    process.env.CODEBUDDY_MODEL = targetModel;
     settingsManager.updateUserSetting('model', targetModel);
 
     const modelInfo = getModelInfo(targetModel);
@@ -1121,10 +1122,10 @@ export async function handleNew(args: string[]): Promise<CommandHandlerResult> {
       const { getSettingsManager } = await import('../../utils/settings-manager.js');
       const settingsManager = getSettingsManager();
       settingsManager.setCurrentModel(modelArg);
-      process.env.GROK_MODEL = modelArg;
+      process.env.CODEBUDDY_MODEL = modelArg;
     } catch (_err) {
       // Best-effort model switch: at minimum set the env var
-      process.env.GROK_MODEL = modelArg;
+      process.env.CODEBUDDY_MODEL = modelArg;
     }
 
     return {

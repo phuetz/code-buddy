@@ -428,7 +428,7 @@ function sectionShape(mode: ObjectMode): Record<string, ZodTypeAny> {
 function buildTomlSchema(mode: ObjectMode): ZodTypeAny {
   return asObject({
     ...sectionShape(mode),
-    active_model: z.string().default('grok-code-fast').describe('Modèle actif. La valeur du fichier généré ne masque pas le fournisseur détecté'),
+    active_model: z.string().default('auto').describe('Modèle actif. auto utilise le fournisseur détecté'),
     profiles: z.record(asObject(sectionShape(mode), mode)).optional().describe('Profils nommés, activés avec --profile'),
   }, mode);
 }

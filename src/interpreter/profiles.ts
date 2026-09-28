@@ -11,6 +11,8 @@
  */
 
 import type { InterpreterProfile } from './types.js';
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { detectProviderFromEnv } from '../utils/provider-detector.js';
 
 // ============================================================================
 // Default Profile
@@ -20,8 +22,8 @@ export const DEFAULT_PROFILE: InterpreterProfile = {
   id: 'default',
   name: 'Default',
   description: 'General purpose assistant',
-  provider: 'grok',
-  model: 'grok-3-mini',
+  provider: detectProviderFromEnv()?.provider || 'auto',
+  model: runtimeDefaultModel(),
   autoRun: false,
   safeMode: 'ask',
   maxBudget: 5.00,
@@ -110,8 +112,8 @@ export const SAFE_PROFILE: InterpreterProfile = {
   id: 'safe',
   name: 'Safe',
   description: 'Maximum security with approval for all actions',
-  provider: 'grok',
-  model: 'grok-3-mini',
+  provider: detectProviderFromEnv()?.provider || 'auto',
+  model: runtimeDefaultModel(),
   autoRun: false,
   safeMode: 'auto',
   maxBudget: 2.00,
@@ -217,8 +219,8 @@ export const RESEARCH_PROFILE: InterpreterProfile = {
   id: 'research',
   name: 'Research',
   description: 'Web research and information gathering',
-  provider: 'grok',
-  model: 'grok-3',
+  provider: detectProviderFromEnv()?.provider || 'auto',
+  model: runtimeDefaultModel(),
   autoRun: true,
   safeMode: 'auto',
   maxBudget: 5.00,

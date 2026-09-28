@@ -1,4 +1,5 @@
-export const DEFAULT_BASE_URL = 'https://api.x.ai/v1';
+/** Generic OpenAI-compatible fallback for callers without provider detection. */
+export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 
 export function normalizeBaseURL(input: string): string {
   if (typeof input !== 'string') {

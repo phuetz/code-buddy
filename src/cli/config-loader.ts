@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Configuration loader for Code Buddy CLI
  *
@@ -52,7 +53,7 @@ export function loadBaseURL(): string {
 export function loadModel(): string | undefined {
   // First check environment variables. CODEBUDDY_MODEL is the catalogue-wide
   // name; GROK_MODEL stays the historical override.
-  let model = process.env.CODEBUDDY_MODEL || process.env.GROK_MODEL;
+  let model = process.env.CODEBUDDY_MODEL || codeBuddyEnv('MODEL');
 
   if (!model) {
     // Use the unified model loading from settings manager

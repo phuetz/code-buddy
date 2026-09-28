@@ -1,3 +1,5 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
+
 /**
  * Active-LLM registry — the set of providers/models the user is actually
  * authenticated to (and that are reachable), used to drive auto-failover and
@@ -136,7 +138,7 @@ async function resolveXaiOAuthProvider(
       authMode: entry.authMode,
       apiKey: token,
       baseURL: 'https://api.x.ai/v1',
-      defaultModel: env.GROK_MODEL || 'grok-4-latest',
+      defaultModel: env.XAI_MODEL || codeBuddyEnv('MODEL', env) || 'grok-4-latest',
       source: 'override',
     };
   } catch (err) {

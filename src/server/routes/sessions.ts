@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Sessions Routes
  *
@@ -270,7 +272,7 @@ router.post(
 
     const session = await store.createSession(
       name || `Session ${Date.now()}`,
-      model || process.env.GROK_MODEL || 'grok-3-latest',
+      model || runtimeDefaultModel(),
     );
     session.description = description;
     session.metadata = metadata;

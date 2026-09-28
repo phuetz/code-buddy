@@ -1,3 +1,4 @@
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 /**
  * Agents (MultiAgentSystem) slash command handler — `/agents`
  *
@@ -18,7 +19,7 @@
  *   /agents strategy <name>        — set default strategy for next run
  *
  * **V0.1 design decisions** (see plan idempotent-meandering-giraffe.md):
- * - apiKey from `process.env.GROK_API_KEY` (think-handlers.ts pattern).
+ * - Credentials from the active provider detection.
  *   V0.2 = inject the configured Code Buddy client via `setAgentsClient`.
  * - Fire-and-forget for `run`: singleton + 1 workflow at a time. If user
  *   `run`s while one is active → refuse politely.
@@ -95,7 +96,7 @@ Configure defaults in TOML under [multi_agent_system]:
 
 Cost note: a workflow runs 4 agents (orchestrator + coder + reviewer + tester)
 with up to N iterations of LLM calls each. Use /agents plan first to preview.
-Requires GROK_API_KEY, or CODEBUDDY_PROVIDER=ollama (local, $0).
+Requires buddy login, a configured provider, or local Ollama.
 In headless mode (buddy -p), /agents run and /swarm wait for the workflow
 and print the summary instead of returning immediately.`;
 
@@ -120,11 +121,8 @@ export interface AgentsInvocationOptions {
 }
 
 export function _resolveAgentsCredentials(): { apiKey: string; baseURL?: string } | { error: string } {
-  const grok = process.env.GROK_API_KEY?.trim();
-  const grokBase = process.env.GROK_BASE_URL?.trim();
-  if (grok) {
-    return grokBase ? { apiKey: grok, baseURL: grokBase } : { apiKey: grok };
-  }
+  const detected = detectProviderFromEnv();
+  if (detected) return { apiKey: detected.apiKey, baseURL: detected.baseURL };
   const provider = (process.env.CODEBUDDY_PROVIDER ?? '').trim().toLowerCase();
   const ollamaHost = process.env.OLLAMA_HOST?.trim();
   if (provider === 'ollama' || ollamaHost) {
@@ -136,8 +134,7 @@ export function _resolveAgentsCredentials(): { apiKey: string; baseURL?: string 
   }
   return {
     error:
-      'Error: GROK_API_KEY is not set. Cannot run multi-agent workflow. ' +
-      'For a local model set CODEBUDDY_PROVIDER=ollama and OLLAMA_HOST.',
+      'Error: No LLM provider available. Run buddy login, configure CODEBUDDY_API_KEY/CODEBUDDY_BASE_URL, or start local Ollama.',
   };
 }
 

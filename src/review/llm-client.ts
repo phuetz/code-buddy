@@ -6,7 +6,7 @@
  * judge). Lazy imports keep this graph out of the tool's off path; any
  * failure → null → the engine fails closed.
  *
- * Pinning: `CODEBUDDY_DIFF_REVIEW_MODEL` wins, then `GROK_MODEL` if it is in
+ * Pinning: `CODEBUDDY_DIFF_REVIEW_MODEL` wins, then `CODEBUDDY_MODEL` if it is in
  * the pool. Local strong models (qwen3.5+/devstral/…) beat a cloud gateway
  * so `CODEBUDDY_DIFF_REVIEW=full` works on an Ollama-only box.
  *
@@ -15,6 +15,7 @@
 
 import type { CouncilChatClient } from '../council/types.js';
 import type { ActiveLlmModelPoolEntry } from '../providers/active-llm-model-pool.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 
 /**
  * Cloud frontier names plus local models that reliably emit the JSON verdict
@@ -70,9 +71,9 @@ export function pickReviewerPoolEntry(
     }
   }
 
-  const grok = env.GROK_MODEL?.trim();
-  if (grok) {
-    const named = matchPoolModel(alive, grok);
+  const selectedModel = codeBuddyEnv('MODEL', env);
+  if (selectedModel) {
+    const named = matchPoolModel(alive, selectedModel);
     if (named) return named;
   }
 

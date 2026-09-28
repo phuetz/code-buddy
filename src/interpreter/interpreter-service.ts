@@ -1,3 +1,4 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
 /**
  * Interpreter Service
  *
@@ -533,7 +534,7 @@ export class InterpreterService extends EventEmitter {
    * Calculate cost for tokens
    */
   calculateCost(model: string, tokens: TokenUsage): number {
-    const pricing = this.config.pricing[model] ?? DEFAULT_MODEL_PRICING['grok-3-mini'];
+    const pricing = this.config.pricing[model] ?? this.config.pricing[runtimeDefaultModel()] ?? { input: 3, output: 15 };
     if (!pricing) {
       throw new Error(`No pricing available for model "${model}" and no default fallback pricing found`);
     }
@@ -747,7 +748,7 @@ export class InterpreterService extends EventEmitter {
       };
 
       // Calculate cost using existing method
-      const cost = this.calculateCost(model || 'grok-3-mini', tokens);
+      const cost = this.calculateCost(model || runtimeDefaultModel(), tokens);
 
       // Extract tool calls if present
       const toolCalls = choice?.message?.tool_calls?.map(tc => ({

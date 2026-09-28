@@ -123,11 +123,11 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     id: 'grok',
     label: 'Grok / xAI API key',
     authMode: 'api-key',
-    envVar: 'GROK_API_KEY',
+    envVar: 'XAI_API_KEY',
     defaultModel: 'grok-3',
     baseURL: 'https://api.x.ai/v1',
     verifyCommand: 'buddy doctor',
-    help: 'Set GROK_API_KEY in your shell or secret manager.',
+    help: 'Set XAI_API_KEY in your shell or secret manager.',
   },
   {
     id: 'claude',

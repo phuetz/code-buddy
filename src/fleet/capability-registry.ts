@@ -1,3 +1,4 @@
+import { xaiApiKey } from '../config/legacy-env.js';
 /**
  * Fleet — capability registry (Fleet P2).
  *
@@ -130,7 +131,7 @@ async function buildCapabilitySnapshot(): Promise<PeerCapability> {
     models.push(...buildGeminiCliCatalog());
   }
   models.push(...await probeAgyCli());
-  if (process.env.GROK_API_KEY || process.env.XAI_API_KEY) {
+  if (xaiApiKey()) {
     models.push(...buildGrokCatalog());
   }
   if (process.env.MISTRAL_API_KEY) {

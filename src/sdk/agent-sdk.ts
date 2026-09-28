@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Agent SDK
  *
@@ -75,7 +77,7 @@ export class AgentSDK {
 
   constructor(config: AgentSDKConfig = {}) {
     this.config = {
-      model: config.model ?? 'grok-3-mini',
+      model: config.model ?? runtimeDefaultModel(),
       tools: config.tools ?? [],
       maxTurns: config.maxTurns ?? 10,
       systemPrompt: config.systemPrompt ?? 'You are a helpful coding assistant.',
@@ -187,7 +189,7 @@ export class AgentSDK {
       return this.client;
     }
 
-    const apiKey = process.env.GROK_API_KEY?.trim();
+    const apiKey = codeBuddyEnv('API_KEY')?.trim();
     if (!apiKey) {
       return null;
     }

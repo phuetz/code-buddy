@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Configuration Validators
  *
@@ -918,7 +920,7 @@ export async function validateStartupConfigWithZod(
   }
 
   // Check for required API key
-  if (!validatedConfigs.userSettings?.apiKey && !process.env.GROK_API_KEY) {
+  if (!validatedConfigs.userSettings?.apiKey && !codeBuddyEnv('API_KEY')) {
     warnings.push(
       'No API key configured. Set GROK_API_KEY environment variable or configure apiKey in user-settings.json'
     );
@@ -953,7 +955,7 @@ export async function loadValidatedSettings(filePath: string): Promise<Settings>
   if (!await fs.pathExists(filePath)) {
     // Return defaults if file doesn't exist
     return validator.getDefaults<Settings>('settings.json') || {
-      model: 'grok-3-latest',
+      model: runtimeDefaultModel(),
       maxRounds: 30,
       autonomyLevel: 'confirm',
       enableRAG: true,
@@ -976,7 +978,7 @@ export async function loadValidatedSettings(filePath: string): Promise<Settings>
   }
 
   return validator.getDefaults<Settings>('settings.json') || {
-    model: 'grok-3-latest',
+    model: runtimeDefaultModel(),
     maxRounds: 30,
     autonomyLevel: 'confirm',
     enableRAG: true,
@@ -995,9 +997,6 @@ export async function loadValidatedUserSettings(filePath: string): Promise<UserS
 
   if (!await fs.pathExists(filePath)) {
     return validator.getDefaults<UserSettings>('user-settings.json') || {
-      defaultModel: 'grok-code-fast-1',
-      models: ['grok-code-fast-1', 'grok-4-latest', 'grok-3-latest'],
-      provider: 'grok',
       theme: 'auto',
       language: 'en',
     };
@@ -1010,9 +1009,6 @@ export async function loadValidatedUserSettings(filePath: string): Promise<UserS
 
   logger.warn(`Invalid user settings at ${filePath}, using defaults`);
   return validator.getDefaults<UserSettings>('user-settings.json') || {
-    defaultModel: 'grok-code-fast-1',
-    models: ['grok-code-fast-1', 'grok-4-latest', 'grok-3-latest'],
-    provider: 'grok',
     theme: 'auto',
     language: 'en',
   };

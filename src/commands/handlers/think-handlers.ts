@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Think Command Handlers
  *
@@ -222,8 +223,8 @@ async function runReasoning(
   problemText: string,
 ): Promise<CommandHandlerResult> {
   const mode = activeThinkingMode ?? 'medium';
-  const apiKey = process.env.GROK_API_KEY ?? '';
-  const baseURL = process.env.GROK_BASE_URL;
+  const apiKey = codeBuddyEnv('API_KEY') ?? '';
+  const baseURL = codeBuddyEnv('BASE_URL');
 
   if (!apiKey) {
     return {
@@ -237,7 +238,7 @@ async function runReasoning(
     };
   }
 
-  const model = process.env.GROK_MODEL?.trim();
+  const model = codeBuddyEnv('MODEL')?.trim();
   const reasoner: TreeOfThoughtReasoner = getTreeOfThoughtReasoner(
     apiKey,
     baseURL,
