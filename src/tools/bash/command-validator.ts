@@ -483,7 +483,34 @@ function globContainsSecret(candidate: string): boolean {
   );
 }
 
-function trackedSecretForGitDiff(command: string, baseDir: string): string | null {
+interface GitInvocation {
+  cwd: string;
+  /** Global options that affect Git's object or path resolution in preflight. */
+  preflight: string[];
+  /** The option was parsed, but its effect on content cannot be reproduced safely. */
+  unsafeConfiguration: boolean;
+  informationOnly: boolean;
+  subcommand: string;
+  args: string[];
+}
+
+const GIT_GLOBAL_FLAGS = new Set([
+  '-p', '--paginate', '-P', '--no-pager', '--bare', '--no-replace-objects',
+  '--literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs',
+  '--icase-pathspecs', '--no-optional-locks', '--no-lazy-fetch',
+  '-v', '--version', '-h', '--help', '--html-path', '--man-path', '--info-path',
+]);
+const GIT_INFORMATION_FLAGS = new Set([
+  '-v', '--version', '-h', '--help', '--html-path', '--man-path', '--info-path',
+]);
+const GIT_GLOBAL_VALUES = new Set([
+  '--git-dir', '--work-tree', '--namespace', '--exec-path', '--config-env',
+  '--super-prefix', '--attr-source', '--list-cmds',
+]);
+
+/** Parse Git's global-option prefix once, before interpreting its subcommand. */
+function parseGitInvocations(command: string, baseDir: string): { commands: GitInvocation[]; error: string | null } {
+  const commands: GitInvocation[] = [];
   let segmentCwd = baseDir;
   for (const parsed of parseShellCommand(command).commands) {
     if ((parsed.command === 'cd' || parsed.command === 'pushd') && parsed.args[0]) {
@@ -493,157 +520,216 @@ function trackedSecretForGitDiff(command: string, baseDir: string): string | nul
     if (path.basename(parsed.command) !== 'git') continue;
     const args = [...parsed.args];
     let gitCwd = segmentCwd;
+    const preflight: string[] = [];
+    let unsafeConfiguration = false;
+    let informationOnly = false;
     while (args.length > 0) {
-      if (args[0] === '-C' && args[1]) {
-        gitCwd = path.resolve(gitCwd, args[1]);
-        args.splice(0, 2);
-      } else if (args[0] === '-c' && args[1]) {
-        args.splice(0, 2);
-      } else if (args[0] === '--no-pager') args.shift();
-      else break;
+      const arg = args[0]!;
+      if (!arg.startsWith('-')) break;
+      if (GIT_GLOBAL_FLAGS.has(arg)) {
+        args.shift();
+        if (GIT_INFORMATION_FLAGS.has(arg)) informationOnly = true;
+        else if (!['-p', '--paginate', '-P', '--no-pager'].includes(arg)) preflight.push(arg);
+        continue;
+      }
+      if (arg === '-C' || arg.startsWith('-C') && !arg.startsWith('--')) {
+        const value = arg === '-C' ? args[1] : arg.slice(2);
+        if (!value) return { commands, error: 'Git global option -C needs a path' };
+        gitCwd = path.resolve(gitCwd, value);
+        args.splice(0, arg === '-C' ? 2 : 1);
+        continue;
+      }
+      if (arg === '-c' || arg.startsWith('-c') && !arg.startsWith('--')) {
+        const value = arg === '-c' ? args[1] : arg.slice(2);
+        if (!value || !/^[A-Za-z][A-Za-z0-9.-]*=[^\r\n]*$/.test(value))
+          return { commands, error: 'Invalid Git global configuration' };
+        // Parse all -c forms, including common commit identity overrides.
+        // Content inspection fails closed if the configuration can alter Git's
+        // object lookup or launch a helper during preflight.
+        if (!/^(?:core\.pager|color\.ui|color\.pager|core\.quotePath)=[^\r\n]*$/i.test(value))
+          unsafeConfiguration = true;
+        args.splice(0, arg === '-c' ? 2 : 1);
+        continue;
+      }
+      const name = arg.split('=', 1)[0]!;
+      if (GIT_GLOBAL_VALUES.has(name)) {
+        const inline = arg.startsWith(`${name}=`);
+        const value = inline ? arg.slice(name.length + 1) : args[1];
+        if (!value) return { commands, error: `Git global option ${name} needs a value` };
+        args.splice(0, inline ? 1 : 2);
+        if (name === '--config-env') {
+          if (!/^[A-Za-z][A-Za-z0-9.-]*=[A-Za-z_][A-Za-z0-9_]*$/.test(value))
+            return { commands, error: 'Invalid Git global configuration' };
+          if (!value.startsWith('core.pager=')) unsafeConfiguration = true;
+        } else if (name === '--list-cmds') {
+          informationOnly = true;
+        } else if (name !== '--exec-path') {
+          preflight.push(`${name}=${value}`);
+        }
+        continue;
+      }
+      return { commands, error: `Unknown Git global option: ${arg}` };
     }
-    if (args.shift() !== 'diff') continue;
-    const unsupported = 'Git diff could not be checked';
-    const metadataOnly = args.some((arg) =>
-      ['--name-only', '--name-status', '--stat', '--numstat', '--check', '--quiet'].includes(arg));
-    if (metadataOnly && !args.some((arg) => ['-p', '--patch', '--binary'].includes(arg))) continue;
-    const queryArgs = args.filter((arg) => !['-p', '--patch', '--binary', '--raw', '--stat'].includes(arg));
-    if (queryArgs.some((arg) => ['--ext-diff', '--textconv'].includes(arg))) return unsupported;
-    try {
-      const root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-        cwd: gitCwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2_000,
-      }).trim();
-      const names = execFileSync('git', ['diff', '--name-only', '-z', ...queryArgs], {
-        cwd: gitCwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3_000,
-      });
-      const secret = names.split('\0').find((file) =>
-        file && checkSecretFileAccess(path.resolve(root, file), 'read').secret);
-      if (secret) return secret;
-    } catch { return unsupported; }
+    const subcommand = args.shift();
+    if (!subcommand) continue;
+    commands.push({ cwd: gitCwd, preflight, unsafeConfiguration, informationOnly, subcommand, args });
   }
-  return null;
+  return { commands, error: null };
+}
+
+function gitOutput(invocation: GitInvocation, query: string[], noMatchesAllowed = false): string | null {
+  try {
+    return execFileSync('git', [...invocation.preflight, ...query], {
+      cwd: invocation.cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 3_000, maxBuffer: 2 * 1024 * 1024,
+    });
+  } catch (error) {
+    if (noMatchesAllowed && (error as { status?: number }).status === 1) return '';
+    return null;
+  }
+}
+
+function trackedSecretForGitDiff(invocation: GitInvocation): string | null {
+  if (invocation.informationOnly) return null;
+  if (invocation.subcommand !== 'diff') return null;
+  if (invocation.unsafeConfiguration) return 'Git diff configuration could not be checked';
+  const args = invocation.args;
+  const unsupported = 'Git diff could not be checked';
+  const metadataOnly = args.some((arg) =>
+    ['--name-only', '--name-status', '--stat', '--numstat', '--check', '--quiet'].includes(arg));
+  if (metadataOnly && !args.some((arg) => ['-p', '--patch', '--binary'].includes(arg))) return null;
+  const queryArgs = args.filter((arg) => !['-p', '--patch', '--binary', '--raw', '--stat'].includes(arg));
+  if (queryArgs.some((arg) => ['--ext-diff', '--textconv'].includes(arg))) return unsupported;
+  const root = gitOutput(invocation, ['rev-parse', '--show-toplevel'])?.trim();
+  const names = gitOutput(invocation, ['diff', '--name-only', '-z', ...queryArgs]);
+  if (!root || names === null) return unsupported;
+  return names.split('\0').find((file) =>
+    file && checkSecretFileAccess(path.resolve(root, file), 'read').secret) ?? null;
 }
 
 /** Inspect Git path metadata before allowing commands that print file contents. */
-function trackedSecretForGitContent(command: string, baseDir: string): string | null {
-  let segmentCwd = baseDir;
-  for (const parsed of parseShellCommand(command).commands) {
-    if ((parsed.command === 'cd' || parsed.command === 'pushd') && parsed.args[0]) {
-      segmentCwd = path.resolve(segmentCwd, parsed.args[0]);
-      continue;
+function trackedSecretForGitContent(invocation: GitInvocation): string | null {
+  if (invocation.informationOnly) return null;
+  const { subcommand, args } = invocation;
+  const stashShow = subcommand === 'stash' && args.shift() === 'show';
+  if (!['show', 'log', 'grep', 'archive', 'format-patch', 'whatchanged', 'diff-tree'].includes(subcommand) && !stashShow) return null;
+  const unsupported = 'Git content command could not be checked';
+  if (invocation.unsafeConfiguration) return unsupported;
+  const root = gitOutput(invocation, ['rev-parse', '--show-toplevel'])?.trim();
+  if (!root) return unsupported;
+  const secretInNames = (output: string): string | null => {
+    for (const raw of output.split(/[\0\n]/)) {
+      const name = raw.trim();
+      if (!name) continue;
+      // `git grep <revision>` prefixes paths with `<revision>:`.
+      const relative = name.includes(':') ? name.slice(name.indexOf(':') + 1) : name;
+      if (checkSecretFileAccess(path.resolve(root, relative), 'read').secret) return relative;
     }
-    if (path.basename(parsed.command) !== 'git') continue;
-    const args = [...parsed.args];
-    let gitCwd = segmentCwd;
-    while (args.length > 0) {
-      if (args[0] === '-C' && args[1]) {
-        gitCwd = path.resolve(gitCwd, args[1]);
-        args.splice(0, 2);
-      } else if (args[0] === '-c' && args[1]) {
-        args.splice(0, 2);
-      } else if (args[0] === '--no-pager') {
-        args.shift();
-      } else break;
-    }
-    const subcommand = args.shift();
-    const stashShow = subcommand === 'stash' && args.shift() === 'show';
-    if (!['show', 'log', 'grep'].includes(subcommand ?? '') && !stashShow) continue;
-    const unsupported = 'Git content command could not be checked';
-    let root: string;
-    try {
-      root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-        cwd: gitCwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2_000,
-      }).trim();
-    } catch { return unsupported; }
-    const secretInNames = (output: string): string | null => {
-      for (const raw of output.split(/[\0\n]/)) {
-        const name = raw.trim();
-        if (!name) continue;
-        // `git grep <revision>` prefixes paths with `<revision>:`.
-        const relative = name.includes(':') ? name.slice(name.indexOf(':') + 1) : name;
-        if (checkSecretFileAccess(path.resolve(root, relative), 'read').secret) return relative;
-      }
-      return null;
-    };
-    const gitNames = (query: string[], noMatchesAllowed = false): string | null => {
-      try {
-        return execFileSync('git', query, {
-          cwd: gitCwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-          timeout: 3_000, maxBuffer: 2 * 1024 * 1024,
-        });
-      } catch (error) {
-        if (noMatchesAllowed && (error as { status?: number }).status === 1) return '';
-        return null;
-      }
-    };
+    return null;
+  };
+  const gitNames = (query: string[], noMatchesAllowed = false): string | null =>
+    gitOutput(invocation, query, noMatchesAllowed);
 
-    if (subcommand === 'show') {
-      const pathspecAt = args.indexOf('--');
-      const revisions = (pathspecAt < 0 ? args : args.slice(0, pathspecAt))
-        .filter((arg) => !arg.startsWith('-'));
-      for (const revision of revisions.length ? revisions : ['HEAD']) {
-        if (revision.includes(':')) {
-          const file = revision.slice(revision.lastIndexOf(':') + 1);
-          if (checkSecretFileAccess(path.resolve(root, file), 'read').secret) return file;
-          continue;
-        }
-        // `git show <blob hash>` prints raw blob bytes even with `--stat`.
-        const type = gitNames(['cat-file', '-t', `${revision}^{}`]);
-        if (type?.trim() !== 'commit') return unsupported;
+  if (subcommand === 'show') {
+    const pathspecAt = args.indexOf('--');
+    const revisions = (pathspecAt < 0 ? args : args.slice(0, pathspecAt))
+      .filter((arg) => !arg.startsWith('-'));
+    for (const revision of revisions.length ? revisions : ['HEAD']) {
+      if (revision.includes(':')) {
+        const file = revision.slice(revision.lastIndexOf(':') + 1);
+        if (checkSecretFileAccess(path.resolve(root, file), 'read').secret) return file;
+        continue;
       }
-      if (revisions.length > 0 && revisions.every((revision) => revision.includes(':')) && pathspecAt < 0) continue;
-      const patchRequested = args.some((arg) => arg === '-p' || arg === '--patch');
-      if (!patchRequested && args.some((arg) =>
-        ['--no-patch', '--stat', '--name-only', '--name-status', '--summary'].includes(arg))) continue;
-      const queryArgs = args.filter((arg) => !['-p', '--patch', '--stat'].includes(arg));
-      if (queryArgs.some((arg) => arg.startsWith('-') && !['--', '--root'].includes(arg))) return unsupported;
-      const output = gitNames(['show', '--format=', '--name-only', '-z', ...(queryArgs.length ? queryArgs : ['HEAD'])]);
-      if (output === null) return unsupported;
-      const secret = secretInNames(output);
-      if (secret) return secret;
-    } else if (subcommand === 'log') {
-      if (!args.some((arg) => ['-p', '--patch', '--word-diff'].includes(arg))) continue;
-      const queryArgs = args.filter((arg) => !['-p', '--patch', '--word-diff'].includes(arg));
-      if (queryArgs.some((arg) => arg.startsWith('-') &&
-        !['--all', '--branches', '--tags', '--remotes', '--first-parent', '--reverse', '--'].includes(arg) &&
-        !/^-[0-9]+$/.test(arg))) return unsupported;
-      const output = gitNames(['log', '--format=', '--name-only', '-z', ...queryArgs]);
-      if (output === null) return unsupported;
-      const secret = secretInNames(output);
-      if (secret) return secret;
-    } else if (subcommand === 'grep') {
-      const queryArgs: string[] = [];
-      for (let i = 0; i < args.length; i += 1) {
-        const arg = args[i] ?? '';
-        if (arg === '-f' || arg === '--file') {
-          const patternFile = args[i + 1];
-          if (!patternFile) return unsupported;
-          if (checkSecretFileAccess(path.resolve(gitCwd, patternFile), 'read').secret) return patternFile;
-        } else if (arg.startsWith('-f') && arg.length > 2) {
-          const patternFile = arg.slice(2);
-          if (checkSecretFileAccess(path.resolve(gitCwd, patternFile), 'read').secret) return patternFile;
-        } else if (arg.startsWith('--file=')) {
-          const patternFile = arg.slice('--file='.length);
-          if (checkSecretFileAccess(path.resolve(gitCwd, patternFile), 'read').secret) return patternFile;
-        }
-        if (['-h', '-n', '-c', '-o', '--line-number', '--count', '--only-matching'].includes(arg)) continue;
-        if (arg.startsWith('-') && !arg.startsWith('-f') && !arg.startsWith('--file=') &&
-          !['--cached', '-i', '-F', '-E', '-P', '-e', '--file', '--', '--ignore-case', '--fixed-strings'].includes(arg)) {
-          return unsupported;
-        }
-        queryArgs.push(arg);
-      }
-      const output = gitNames(['grep', '-l', '-z', ...queryArgs], true);
-      if (output === null) return unsupported;
-      const secret = secretInNames(output);
-      if (secret) return secret;
-    } else if (stashShow && args.some((arg) => arg === '-p' || arg === '--patch')) {
-      const refs = args.filter((arg) => !arg.startsWith('-'));
-      const output = gitNames(['stash', 'show', '--name-only', '-z', ...refs]);
-      if (output === null) return unsupported;
-      const secret = secretInNames(output);
-      if (secret) return secret;
+      // `git show <blob hash>` prints raw blob bytes even with `--stat`.
+      const type = gitNames(['cat-file', '-t', `${revision}^{}`]);
+      if (type?.trim() !== 'commit') return unsupported;
     }
+    if (revisions.length > 0 && revisions.every((revision) => revision.includes(':')) && pathspecAt < 0) return null;
+    const patchRequested = args.some((arg) => arg === '-p' || arg === '--patch');
+    if (!patchRequested && args.some((arg) =>
+      ['--no-patch', '--stat', '--name-only', '--name-status', '--summary'].includes(arg))) return null;
+    const queryArgs = args.filter((arg) => !['-p', '--patch', '--stat'].includes(arg));
+    if (queryArgs.some((arg) => arg.startsWith('-') && !['--', '--root'].includes(arg))) return unsupported;
+    const output = gitNames(['show', '--format=', '--name-only', '-z', ...(queryArgs.length ? queryArgs : ['HEAD'])]);
+    if (output === null) return unsupported;
+    const secret = secretInNames(output);
+    if (secret) return secret;
+  } else if (subcommand === 'log') {
+    if (!args.some((arg) => ['-p', '--patch', '--word-diff'].includes(arg))) return null;
+    const queryArgs = args.filter((arg) => !['-p', '--patch', '--word-diff'].includes(arg));
+    if (queryArgs.some((arg) => arg.startsWith('-') &&
+      !['--all', '--branches', '--tags', '--remotes', '--first-parent', '--reverse', '--'].includes(arg) &&
+      !/^-[0-9]+$/.test(arg))) return unsupported;
+    const output = gitNames(['log', '--format=', '--name-only', '-z', ...queryArgs]);
+    if (output === null) return unsupported;
+    const secret = secretInNames(output);
+    if (secret) return secret;
+  } else if (subcommand === 'grep') {
+    const queryArgs: string[] = [];
+    for (let i = 0; i < args.length; i += 1) {
+      const arg = args[i] ?? '';
+      if (arg === '-f' || arg === '--file') {
+        const patternFile = args[i + 1];
+        if (!patternFile) return unsupported;
+        if (checkSecretFileAccess(path.resolve(invocation.cwd, patternFile), 'read').secret) return patternFile;
+      } else if (arg.startsWith('-f') && arg.length > 2) {
+        const patternFile = arg.slice(2);
+        if (checkSecretFileAccess(path.resolve(invocation.cwd, patternFile), 'read').secret) return patternFile;
+      } else if (arg.startsWith('--file=')) {
+        const patternFile = arg.slice('--file='.length);
+        if (checkSecretFileAccess(path.resolve(invocation.cwd, patternFile), 'read').secret) return patternFile;
+      }
+      if (['-h', '-n', '-c', '-o', '--line-number', '--count', '--only-matching'].includes(arg)) continue;
+      if (arg.startsWith('-') && !arg.startsWith('-f') && !arg.startsWith('--file=') &&
+        !['--cached', '-i', '-F', '-E', '-P', '-e', '--file', '--', '--ignore-case', '--fixed-strings'].includes(arg)) {
+        return unsupported;
+      }
+      queryArgs.push(arg);
+    }
+    const output = gitNames(['grep', '-l', '-z', ...queryArgs], true);
+    if (output === null) return unsupported;
+    const secret = secretInNames(output);
+    if (secret) return secret;
+  } else if (stashShow && args.some((arg) => arg === '-p' || arg === '--patch')) {
+    const refs = args.filter((arg) => !arg.startsWith('-'));
+    const output = gitNames(['stash', 'show', '--name-only', '-z', ...refs]);
+    if (output === null) return unsupported;
+    const secret = secretInNames(output);
+    if (secret) return secret;
+  } else if (subcommand === 'archive') {
+    const tree = args.find((arg) => !arg.startsWith('-'));
+    if (!tree || args.some((arg) => arg.startsWith('-') &&
+      !['--', '--worktree-attributes'].includes(arg) &&
+      !/^--(?:format|prefix|output)=/.test(arg))) return unsupported;
+    const pathspecAt = args.indexOf('--');
+    const paths = pathspecAt < 0 ? args.slice(args.indexOf(tree) + 1).filter((arg) => !arg.startsWith('-')) : args.slice(pathspecAt + 1);
+    const output = gitNames(['ls-tree', '-r', '--name-only', '-z', tree, ...(paths.length ? ['--', ...paths] : [])]);
+    if (output === null) return unsupported;
+    const secret = secretInNames(output);
+    if (secret) return secret;
+  } else if (subcommand === 'format-patch') {
+    const queryArgs = args.filter((arg) => !['--stdout', '--no-signature'].includes(arg));
+    if (queryArgs.some((arg) => arg.startsWith('-') && arg !== '--' && !/^-[0-9]+$/.test(arg))) return unsupported;
+    const output = gitNames(['log', '--format=', '--name-only', '-z', ...queryArgs]);
+    if (output === null) return unsupported;
+    const secret = secretInNames(output);
+    if (secret) return secret;
+  } else if (subcommand === 'whatchanged') {
+    if (!args.some((arg) => ['-p', '--patch'].includes(arg))) return null;
+    const queryArgs = args.filter((arg) => !['-p', '--patch'].includes(arg));
+    if (queryArgs.some((arg) => arg.startsWith('-') && arg !== '--' && !/^-[0-9]+$/.test(arg))) return unsupported;
+    const output = gitNames(['log', '--format=', '--name-only', '-z', ...queryArgs]);
+    if (output === null) return unsupported;
+    const secret = secretInNames(output);
+    if (secret) return secret;
+  } else if (subcommand === 'diff-tree') {
+    if (!args.some((arg) => ['-p', '--patch'].includes(arg))) return null;
+    const queryArgs = args.filter((arg) => !['-p', '--patch'].includes(arg));
+    if (queryArgs.some((arg) => arg.startsWith('-') && !['--', '--root', '-r', '--recursive'].includes(arg))) return unsupported;
+    const output = gitNames(['diff-tree', '--name-only', '--root', '-r', '-z', ...queryArgs]);
+    if (output === null) return unsupported;
+    const secret = secretInNames(output);
+    if (secret) return secret;
   }
   return null;
 }
@@ -662,10 +748,14 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     .replace(/\$(?:""|'')/g, '')
     .replace(/\\([^\n])/g, platform === 'win32' ? '/$1' : '$1')
     .replace(/["']/g, '');
-  const trackedSecret = trackedSecretForGitDiff(joined, cwd);
-  if (trackedSecret) return trackedSecret;
-  const gitContentSecret = trackedSecretForGitContent(joined, cwd);
-  if (gitContentSecret) return gitContentSecret;
+  const gitInvocations = parseGitInvocations(joined, cwd);
+  if (gitInvocations.error) return gitInvocations.error;
+  for (const invocation of gitInvocations.commands) {
+    const trackedSecret = trackedSecretForGitDiff(invocation);
+    if (trackedSecret) return trackedSecret;
+    const gitContentSecret = trackedSecretForGitContent(invocation);
+    if (gitContentSecret) return gitContentSecret;
+  }
   const roots = getHomeCredentialRoots();
   const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
   const words = new Set(
