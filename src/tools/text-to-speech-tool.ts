@@ -1,7 +1,10 @@
 import { spawn } from 'child_process';
+import { randomUUID } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import fs from 'fs/promises';
 import path from 'path';
 
+import { checkSecretFileAccess, formatSecretRefusal, getHomeCredentialRoots } from '../security/secret-files.js';
 import { commandExists } from '../utils/command-exists.js';
 
 export type TextToSpeechProvider = 'auto' | 'system' | 'edge-tts' | 'espeak' | 'say' | 'audioreader' | 'piper';
@@ -79,31 +82,54 @@ export async function synthesizeTextToSpeech(
   const format = resolveOutputFormat(input.format, provider, input.outputPath);
   validateProviderFormat(provider, format);
   const rootDir = path.resolve(options.rootDir ?? process.cwd());
-  const outputPath = resolveOutputPath(rootDir, input.outputPath, format, options);
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  const rootReal = await fs.realpath(rootDir);
+  const mediaLocation = path.join(rootReal, '.codebuddy', 'tts');
+  if (getHomeCredentialRoots().some((root) => isInside(mediaLocation, root))) {
+    throw new Error('TTS output cannot be placed in a home credential directory');
+  }
+  const mediaDir = await ensureTtsMediaDirectory(rootDir, rootReal);
+  const outputPath = resolveOutputPath(rootDir, mediaDir, input.outputPath, format, options);
+  const verdict = checkSecretFileAccess(outputPath, 'write');
+  if (verdict.secret) throw new Error(formatSecretRefusal(outputPath, verdict));
+  // A TTS result is a new asset, never a replacement for an existing file.
+  try {
+    await fs.lstat(outputPath);
+    throw new Error('TTS output already exists');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const providerOutput = path.join(mediaDir, `.tts-${randomUUID()}.${format}`);
 
   const command = buildProviderCommand(provider, {
     ...input,
     text,
-    outputPath,
+    outputPath: providerOutput,
     format,
   }, options);
 
-  if (command.kind === 'node') {
-    await command.run();
-  } else {
-    await runCommand(command.command, command.args, {
-      env: command.env,
-      stdin: command.stdin,
-      timeoutMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      spawnImpl: options.runtime?.spawn ?? spawn,
-    });
-  }
+  try {
+    if (command.kind === 'node') {
+      await command.run();
+    } else {
+      await runCommand(command.command, command.args, {
+        env: command.env,
+        stdin: command.stdin,
+        timeoutMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        spawnImpl: options.runtime?.spawn ?? spawn,
+      });
+    }
 
-  const stat = await fs.stat(outputPath);
-  if (stat.size <= 0) {
-    throw new Error(`TTS provider ${provider} produced empty output at ${outputPath}`);
+    const produced = await fs.lstat(providerOutput);
+    if (!produced.isFile() || produced.isSymbolicLink() || produced.size <= 0) {
+      throw new Error(`TTS provider ${provider} produced no regular audio file`);
+    }
+    // COPYFILE_EXCL refuses a target created between validation and publish.
+    // The provider never opens the requested final path.
+    await fs.copyFile(providerOutput, outputPath, fsConstants.COPYFILE_EXCL);
+  } finally {
+    await fs.rm(providerOutput, { force: true });
   }
+  const stat = await fs.stat(outputPath);
 
   const result: TextToSpeechResult = {
     kind: 'text_to_speech_result',
@@ -228,6 +254,7 @@ function validateProviderFormat(provider: Exclude<TextToSpeechProvider, 'auto'>,
 
 function resolveOutputPath(
   rootDir: string,
+  mediaDir: string,
   outputPath: string | undefined,
   format: TextToSpeechResult['format'],
   options: TextToSpeechOptions,
@@ -236,10 +263,54 @@ function resolveOutputPath(
     if (hasTraversal(outputPath)) {
       throw new Error(`output_path contains '..' traversal component: ${outputPath}`);
     }
-    return path.isAbsolute(outputPath) ? path.resolve(outputPath) : path.resolve(rootDir, outputPath);
+    const requested = path.isAbsolute(outputPath)
+      ? path.resolve(outputPath)
+      : path.dirname(outputPath) === '.'
+        ? path.join(rootDir, '.codebuddy', 'tts', outputPath)
+        : path.resolve(rootDir, outputPath);
+    const expected = path.join(rootDir, '.codebuddy', 'tts');
+    if (!samePath(path.dirname(requested), expected) && !samePath(path.dirname(requested), mediaDir)) {
+      throw new Error('output_path must be inside the workspace .codebuddy/tts directory');
+    }
+    if (path.extname(requested).toLowerCase() !== `.${format}`) {
+      throw new Error(`output_path must end with .${format}`);
+    }
+    return path.join(mediaDir, path.basename(requested));
   }
   const id = sanitizeId(options.createId?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  return path.join(rootDir, '.codebuddy', 'tts', `tts-${id}.${format}`);
+  return path.join(mediaDir, `tts-${id}.${format}`);
+}
+
+function samePath(a: string, b: string): boolean {
+  const first = path.resolve(a);
+  const second = path.resolve(b);
+  return process.platform === 'win32' || process.platform === 'darwin'
+    ? first.toLowerCase() === second.toLowerCase()
+    : first === second;
+}
+
+function isInside(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || relative !== '..' && !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative);
+}
+
+async function ensureTtsMediaDirectory(rootDir: string, rootReal: string): Promise<string> {
+  let cursor = rootDir;
+  for (const segment of ['.codebuddy', 'tts']) {
+    cursor = path.join(cursor, segment);
+    try { await fs.mkdir(cursor, { mode: 0o700 }); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    const metadata = await fs.lstat(cursor);
+    if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+      throw new Error('TTS output directory contains a symbolic link');
+    }
+    const real = await fs.realpath(cursor);
+    if (!isInside(real, rootReal)) throw new Error('TTS output directory escapes its workspace');
+  }
+  return fs.realpath(cursor);
 }
 
 function hasTraversal(candidate: string): boolean {

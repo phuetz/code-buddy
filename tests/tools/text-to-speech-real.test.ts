@@ -26,7 +26,7 @@ describe('Hermes text_to_speech real integration', () => {
       return;
     }
 
-    const outputPath = path.join(tempWorkspace, `hello.${provider.format}`);
+    const outputPath = path.join(tempWorkspace, '.codebuddy', 'tts', `hello.${provider.format}`);
     const tool = new TextToSpeechTool({
       rootDir: tempWorkspace,
       now: () => new Date('2026-05-30T21:00:00.000Z'),
