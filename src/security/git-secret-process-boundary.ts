@@ -103,7 +103,7 @@ function secretInRepo(root: string): boolean {
             (content) => isPublicNpmrcContent(content, true)));
         else if (/^(?:\.env(?:\..+)?|.+\.env)$/.test(basename) && !homeCredentialRepo)
           publicFiles.set(name, publicFileInGit(root, name, isPublicEnvFixtureFile,
-            isPublicEnvFixtureContent));
+            (content) => isPublicEnvFixtureContent(content, path.resolve(root, name))));
         else publicFiles.set(name, false);
       }
       return !publicFiles.get(name);

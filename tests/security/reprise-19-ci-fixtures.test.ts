@@ -79,7 +79,7 @@ describe('frontière shell : contenu des .env', () => {
     expect(hasProtectedGitWorkspace(dir)).toBe(true);
   });
 
-  it.each(['TEST-MODE-AUTH-KEY', 'FAKE-' + 'A7q2P9v4'.repeat(8) + '-FIXTURE'])(
+  it.each(['TEST-MODE-AUTH-KEY', 'FAKE-GENERIC-TOKEN', 'FAKE-' + 'A7q2P9v4'.repeat(8) + '-FIXTURE'])(
     'ne classe pas automatiquement une valeur %s comme fixture publique', (value) => {
       const dir = repo(`marqueur-${value.length}-${value.charCodeAt(0)}`);
       fs.writeFileSync(path.join(dir, '.env'), `API_KEY=${value}\n`);
