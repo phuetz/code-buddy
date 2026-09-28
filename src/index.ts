@@ -186,6 +186,19 @@ async function ensureEnvLoaded(): Promise<void> {
     }
     envLoaded = true;
 
+    // Named profile (`--profile local|cloud|fleet|max`): fill the advanced
+    // variables it groups — only those still unset, AFTER .env, so exported
+    // variables and .env values keep priority.
+    try {
+      const { applyRequestedProfileEnv } = await import('./cli/profile-env.js');
+      const { profile, applied } = applyRequestedProfileEnv(process.argv);
+      if (profile && Object.keys(applied).length > 0) {
+        logger.debug(`Profile ${profile} set: ${Object.entries(applied).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+      }
+    } catch (_profileErr) {
+      // A profile error is already reported by preloadRequestedProfile.
+    }
+
     // Configure HTTP proxy from env vars (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
     try {
       const { configureProxy } = await import('./utils/proxy-support.js');
@@ -583,6 +596,88 @@ function profilActif(): { baseURL?: string; model?: string } {
   } catch (_err) {
     return {};
   }
+}
+
+/**
+ * Zero-configuration fallback, tried only once nothing explicit resolved a
+ * provider (no key, no login, no onboarded settings, no stored credential).
+ * An explicit `CODEBUDDY_PROVIDER`, `--base-url` or `--profile` endpoint that
+ * failed to resolve is NOT silently replaced: the user asked for something
+ * specific. `CODEBUDDY_ZERO_CONFIG=false` turns the fallback off.
+ */
+async function tryZeroConfigProvider(options: { baseUrl?: string; model?: string }): Promise<{
+  launched: { apiKey: string; baseURL: string; model: string } | null;
+  decision?: import('./cli/zero-config.js').ZeroConfigDecision;
+}> {
+  const zeroConfig = await import('./cli/zero-config.js');
+  if (
+    zeroConfig.isZeroConfigDisabled() ||
+    options.baseUrl ||
+    profilActif().baseURL ||
+    process.env.CODEBUDDY_PROVIDER?.trim()
+  ) {
+    return { launched: null };
+  }
+  const decision = await zeroConfig.detectZeroConfigLocal();
+  if (decision.kind !== 'ollama') return { launched: null, decision };
+  const model = options.model?.trim() || decision.model;
+  cachedProvider = {
+    provider: 'ollama',
+    apiKey: 'ollama', // placeholder — ignored by Ollama's OpenAI-compatible API
+    baseURL: decision.baseURL,
+    defaultModel: model,
+    source: 'environment',
+  };
+  // In-process only (nothing for the user to export): keeps every consumer that
+  // reads OLLAMA_HOST — native /api/chat routing, context discovery — aligned.
+  if (!process.env.OLLAMA_HOST) {
+    process.env.OLLAMA_HOST = decision.baseURL.replace(/\/v1\/?$/, '');
+  }
+  cli.info(zeroConfig.formatZeroConfigChoice(decision, options.model));
+  return { launched: { apiKey: 'ollama', baseURL: decision.baseURL, model }, decision };
+}
+
+/**
+ * `buddy --profile local` (or `CODEBUDDY_PREFER_LOCAL=true`): take the local
+ * Ollama and its best installed tool-capable model, even when a cloud login
+ * exists. Explicit `--api-key`, `--base-url` or `CODEBUDDY_PROVIDER` still win.
+ * Returns false when the preference does not apply; exits with the exact
+ * install commands when it applies but no usable local model is found.
+ */
+async function applyPreferredLocalProvider(options: {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+}): Promise<boolean> {
+  const raw = process.env.CODEBUDDY_PREFER_LOCAL?.trim().toLowerCase();
+  if (!(raw === 'true' || raw === '1' || raw === 'on' || raw === 'yes')) return false;
+  if (options.apiKey || options.baseUrl || process.env.CODEBUDDY_PROVIDER?.trim()) return false;
+  const zeroConfig = await import('./cli/zero-config.js');
+  const decision = await zeroConfig.detectZeroConfigLocal();
+  if (decision.kind !== 'ollama') {
+    logger.error(
+      `Local profile: no usable local model (${decision.detail}).\n` +
+        zeroConfig.buildNoProviderGuidance(decision),
+    );
+    process.exit(1);
+  }
+  const model = options.model?.trim() || decision.model;
+  cachedProvider = {
+    provider: 'ollama',
+    apiKey: 'ollama',
+    baseURL: decision.baseURL,
+    defaultModel: model,
+    source: 'environment',
+  };
+  if (!process.env.OLLAMA_HOST) {
+    process.env.OLLAMA_HOST = decision.baseURL.replace(/\/v1\/?$/, '');
+  }
+  cli.info(
+    zeroConfig
+      .formatZeroConfigChoice(decision, options.model)
+      .replace('Zero-config: no provider configured, using', 'Local profile: using'),
+  );
+  return true;
 }
 
 async function loadBaseURL(): Promise<string> {
@@ -1611,19 +1706,19 @@ program
   // --context ci` silently lost both to the root `-c, --context <patterns>`.
   .enablePositionalOptions()
   .description(
-    "A conversational AI CLI tool powered by AI with text editor capabilities"
+    "Terminal coding agent. No API key needed: start with `buddy login` (ChatGPT) or `buddy onboard` (local Ollama); `buddy doctor` says if you are ready."
   )
   .version(packageJson.version)
   .argument("[message...]", "Initial message to send to Code Buddy")
   .option("-d, --directory <dir>", "set working directory", process.cwd())
-  .option("-k, --api-key <key>", "CodeBuddy API key (or set GROK_API_KEY env var)")
+  .option("-k, --api-key <key>", "API key for a metered provider (optional; or set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)")
   .option(
     "-u, --base-url <url>",
-    "CodeBuddy API base URL (or set GROK_BASE_URL env var)"
+    "OpenAI-compatible base URL (optional; or set GROK_BASE_URL)"
   )
   .option(
     "-m, --model <model>",
-    "AI model to use (e.g., grok-code-fast-1, grok-4-latest) (or set GROK_MODEL env var)"
+    "model id (optional; defaults to the configured provider's model, or set GROK_MODEL)"
   )
   .option(
     "-p, --prompt <prompt>",
@@ -1754,7 +1849,7 @@ program
   )
   .option(
     "--setup",
-    "run interactive setup wizard for API key and configuration"
+    "API-key setup wizard (for keyless setup use `buddy login` or `buddy onboard`)"
   )
   .option(
     "--vim",
@@ -1966,7 +2061,7 @@ program
         });
       }
 
-      cli.stdout("\n💡 Usage: codebuddy --system-prompt <id>");
+      cli.stdout("\n💡 Usage: buddy --system-prompt <id>");
       cli.stdout("   Create custom prompts in ~/.codebuddy/prompts/<name>.md");
       process.exit(0);
     }
@@ -1995,7 +2090,7 @@ program
         cli.stdout(`\n  Total: ${agents.length} agent(s)`);
       }
 
-      cli.info("\n💡 Usage: codebuddy --agent <id>");
+      cli.info("\n💡 Usage: buddy --agent <id>");
       process.exit(0);
     }
 
@@ -2033,7 +2128,13 @@ program
     if (options.resume) {
       const { getSessionStore } = await import("./persistence/session-store.js");
       const sessionStore = getSessionStore();
-      const session = await sessionStore.getSessionByPartialId(options.resume);
+      const { resolveSessionIdMatch, reportAmbiguousSessionId } = await import("./cli/session-commands.js");
+      const match = resolveSessionIdMatch(await sessionStore.listSessions(), options.resume);
+      if (match.kind === 'ambiguous') {
+        reportAmbiguousSessionId(options.resume, match.matches);
+        process.exit(1);
+      }
+      const session = match.kind === 'found' ? match.session : null;
 
       if (!session) {
         logger.error(`❌ Session not found: ${options.resume}`);
@@ -2092,7 +2193,8 @@ program
       // line must not throw away a subscription login. The sync resolver is blind
       // to `buddy login xai`, so `--model grok-4.3` used to fall back to an
       // ambient XAI_API_KEY — dead, in the case measured on 2026-09-02.
-      const explicitProvider = options.model && !options.apiKey && !options.baseUrl
+      const preferredLocal = await applyPreferredLocalProvider(options);
+      const explicitProvider = !preferredLocal && options.model && !options.apiKey && !options.baseUrl
         ? await (
             await import('./commands/llm-provider-resolution.js')
           ).resolveCommandProviderWithOAuth({ explicitModel: options.model })
@@ -2119,6 +2221,17 @@ program
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
 
+      // Zero-config: nothing configured → a local Ollama that already serves a
+      // tool-capable model is used as-is, without any variable to export.
+      let zeroConfigDecision: import('./cli/zero-config.js').ZeroConfigDecision | undefined;
+      if (!apiKey) {
+        const zero = await tryZeroConfigProvider(options);
+        zeroConfigDecision = zero.decision;
+        if (zero.launched) {
+          ({ apiKey, baseURL, model } = zero.launched);
+        }
+      }
+
       if (!apiKey) {
         // The shortest first-run path is a direct ChatGPT OAuth login. Keep the
         // full wizard available, but do not make a new user navigate provider,
@@ -2128,6 +2241,10 @@ program
           !options.prompt && !options.print &&
           process.env.CI !== 'true' && process.env.GITHUB_ACTIONS !== 'true';
 
+        if (interactive && zeroConfigDecision?.kind === 'none') {
+          // Say why the local path was not taken before offering the login.
+          cli.info(`Zero-config: no local model usable (${zeroConfigDecision.detail}).`);
+        }
         const { recoverFirstRunWithChatGpt } = await import('./cli/first-run.js');
         const recoveredProvider = await recoverFirstRunWithChatGpt({
           interactive,
@@ -2180,8 +2297,8 @@ program
         }
 
         if (!recoveredProvider) {
-          const { NO_PROVIDER_GUIDANCE } = await import('./cli/first-run.js');
-          logger.error(NO_PROVIDER_GUIDANCE);
+          const { buildNoProviderGuidance } = await import('./cli/zero-config.js');
+          logger.error(buildNoProviderGuidance(zeroConfigDecision));
           process.exit(1);
         }
       }
@@ -2752,14 +2869,14 @@ gitCommand
   .command("commit-and-push")
   .description("Generate AI commit message and push to remote")
   .option("-d, --directory <dir>", "set working directory", process.cwd())
-  .option("-k, --api-key <key>", "CodeBuddy API key (or set GROK_API_KEY env var)")
+  .option("-k, --api-key <key>", "API key for a metered provider (optional; or set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)")
   .option(
     "-u, --base-url <url>",
-    "CodeBuddy API base URL (or set GROK_BASE_URL env var)"
+    "OpenAI-compatible base URL (optional; or set GROK_BASE_URL)"
   )
   .option(
     "-m, --model <model>",
-    "AI model to use (e.g., grok-code-fast-1, grok-4-latest) (or set GROK_MODEL env var)"
+    "model id (optional; defaults to the configured provider's model, or set GROK_MODEL)"
   )
   .option(
     "--max-tool-rounds <rounds>",
@@ -2789,17 +2906,22 @@ gitCommand
         ...(options.apiKey ? { apiKey: options.apiKey } : {}),
         ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
       });
-      const apiKey = launched.apiKey;
-      const baseURL = launched.baseURL;
-      const model = launched.model;
+      let apiKey = launched.apiKey;
+      let baseURL = launched.baseURL;
+      let model = launched.model;
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
 
       if (!apiKey) {
-        const { NO_PROVIDER_GUIDANCE } = await import('./cli/first-run.js');
-        logger.error(NO_PROVIDER_GUIDANCE);
-        process.exit(1);
+        const zero = await tryZeroConfigProvider(options);
+        if (zero.launched) {
+          ({ apiKey, baseURL, model } = zero.launched);
+        } else {
+          const { buildNoProviderGuidance } = await import('./cli/zero-config.js');
+          logger.error(buildNoProviderGuidance(zero.decision));
+          process.exit(1);
+        }
       }
 
       // Save API key and base URL to user settings if provided via command line
@@ -2864,7 +2986,7 @@ function addLazyCommand(
 addLazyCommand(
   program,
   'models',
-  'Lister, afficher ou rafraîchir le catalogue de modèles',
+  'List, show or refresh the model catalog',
   async () => {
     const { createModelsCommand } = await import('./commands/models-command.js');
     return createModelsCommand();
@@ -2874,7 +2996,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'try',
-  'Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)',
+  'Run an isolated coding-agent demo that must end with a green test (ChatGPT OAuth or local Ollama)',
   async () => {
     const { createTryCommand } = await import('./commands/try.js');
     return createTryCommand();
@@ -3466,7 +3588,7 @@ program
   .command("login [provider]")
   .description("Authenticate with a provider (chatgpt | xai — uses your subscription, no API key)")
   .option("--code <code>", "Complete an xAI login with the code shown in the browser")
-  .option("--no-browser", "Fail immediately instead of waiting for a browser callback")
+  .option("--no-browser", "Do not start the ChatGPT browser sign-in (there is no device-code mode); prints what to do instead")
   .action(async (provider: string | undefined, options: { code?: string; browser?: boolean }) => {
     const target = (provider ?? "chatgpt").toLowerCase();
     if (target === "xai" || target === "grok" || target === "xai-oauth") {
@@ -3478,10 +3600,14 @@ program
       cli.stdout("Other providers (Gemini, Anthropic) authenticate via API key env vars.");
       process.exit(1);
     }
-    const { canAttemptInteractiveLogin, LOGIN_NEEDS_BROWSER_MESSAGE } = await import(
+    const { canAttemptInteractiveLogin, LOGIN_NEEDS_BROWSER_MESSAGE, LOGIN_NO_BROWSER_FLAG_MESSAGE } = await import(
       "./commands/login-prerequisites.js"
     );
-    if (options.browser === false || !canAttemptInteractiveLogin()) {
+    if (options.browser === false) {
+      cli.error(LOGIN_NO_BROWSER_FLAG_MESSAGE);
+      process.exit(1);
+    }
+    if (!canAttemptInteractiveLogin()) {
       cli.error(LOGIN_NEEDS_BROWSER_MESSAGE);
       process.exit(1);
     }
@@ -4019,7 +4145,7 @@ addLazyCommandGroup(program, 'config', 'Show environment variable configuration 
   registerConfigCommand(program);
 });
 
-addLazyCommandGroup(program, 'policy', 'Constats et réparation des politiques par domaine', async () => {
+addLazyCommandGroup(program, 'policy', 'Per-domain policy findings and repair', async () => {
   const { registerPolicyCommand } = await import('./commands/cli/policy-command.js');
   registerPolicyCommand(program);
 });
@@ -4543,14 +4669,14 @@ function isRootHelpRequest(argv: readonly string[]): boolean {
 // It is fully registered here: write it once and let Node drain stdout naturally.
 if (process.exitCode !== 1) {
   attachUnknownOptionHint(program, program);
-  program.addHelpText('before', `Pour commencer — 6 démos qui montrent le cœur agent de code :
+  program.addHelpText('before', `Getting started — 6 demos of the coding-agent core:
   1. buddy try
-     Crée FizzBuzz, écrit son test et l’exécute dans un bac à sable.
-  2. /loop "Corrige les tests en échec"              (dans une session buddy)
-  3. buddy research "Cartographie ce dépôt"
-  4. buddy dev pr "Ajoute une petite fonctionnalité"
-  5. /think deep "Propose le refactoring le plus sûr" (dans une session buddy)
-  6. /share create demo                              (dans une session buddy)
+     Writes FizzBuzz and its test, then runs it in a sandbox.
+  2. /loop "Fix the failing tests"                    (inside a buddy session)
+  3. buddy research "Map this repository"
+  4. buddy dev pr "Add a small feature"
+  5. /think deep "Propose the safest refactoring"     (inside a buddy session)
+  6. /share create demo                               (inside a buddy session)
 
 `);
   removeCommands(program, getHiddenCliCommands());

@@ -13,9 +13,15 @@ brew install ripgrep
 # Ubuntu/Debian
 sudo apt-get install ripgrep
 
-# Windows
+# Windows — ripgrep is optional (search is slower without it)
+winget install BurntSushi.ripgrep.MSVC
+# or, if Chocolatey is already installed:
 choco install ripgrep
 ```
+
+The one-command installer (`install.sh`) runs on Linux and macOS only. On
+Windows, use WSL2, or install with npm from PowerShell / cmd (Node.js 20 or
+newer): `npm install -g @phuetz/code-buddy@latest`.
 
 ## Installation
 
@@ -32,13 +38,13 @@ npm link            # exposes `buddy` globally (or use: npm start / node dist/in
 # The npm release can lag the source; use @latest and check `buddy --version`.
 npm install -g @phuetz/code-buddy@latest
 
-# Note on npm >= 11: install-scripts are blocked by default during global installation.
-# Code Buddy includes 18 optional native packages (better-sqlite3, sharp, node-pty,
-# tree-sitter*, onnxruntime-node, usearch, etc.). They fall back gracefully to pure JS / JSON
-# when uncompiled, but to enable full native acceleration, allow compilation with:
-npm install -g --allow-scripts @phuetz/code-buddy@latest
-# or selectively for SQLite:
-npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
+# Native add-ons (better-sqlite3, sharp, node-pty, tree-sitter, usearch, …) are
+# optional dependencies. If one fails to compile, the matching feature falls back;
+# the CLI still starts.
+# npm 11 lists packages whose install scripts were not reviewed; per the npm 11
+# docs those scripts still run by default. If a future npm blocks them, allow the
+# ones you need by name (a bare `--allow-scripts` is not the documented form):
+#   npm install -g --allow-scripts=better-sqlite3,sharp,node-pty @phuetz/code-buddy@latest
 
 # Or try without installing (also subject to the lag note above)
 npx @phuetz/code-buddy@latest
@@ -57,7 +63,7 @@ The compact Ink interface shows the active provider/model, edit permissions and 
 
 Starting `buddy` in your home directory or a drive root no longer runs deep cartography or starts background semantic indexing over your personal files. Open a project directory to enable project profiling. A ChatGPT subscription uses its Codex model family; stale API-only defaults such as GPT-4o are ignored in favor of the detected subscription default.
 
-## First Run — free, in under 2 minutes
+## First Run — free, once a provider answers
 
 You do **not** need an API key, and you do **not** need to edit any environment
 variable. `buddy try` is a real coding-agent smoke test: before running it, you
@@ -67,7 +73,7 @@ run an offline AI demo.
 
 ```bash
 buddy login          # ChatGPT subscription, no API key (opens a browser)
-buddy try            # ← after login: a 60-second coding demo.
+buddy try            # ← after login: a real coding demo (about a minute on a fast model).
                      #    Writes FizzBuzz + tests, runs them, and independently verifies them.
 
 buddy onboard        # Interactive guided setup. If a free provider is detected,
@@ -79,11 +85,35 @@ buddy                # Start chatting once a provider is configured.
 buddy --prompt "analyze the codebase structure"   # one-shot / headless
 ```
 
+**Zero configuration (2.4).** If nothing is configured, plain `buddy` looks for a
+local Ollama that already serves a model able to call tools and uses it — no
+environment variable to export — and prints which model it chose and why:
+
+```text
+Zero-config: no provider configured, using the local Ollama at http://localhost:11434
+  model: qwen3:8b (tool-calling, 5.2 GiB < 40.0 GiB free RAM, instruct/coder family)
+```
+
+Otherwise it offers `buddy login`, then prints the exact commands to install
+Ollama and `qwen3:8b` for your platform. Anything you configured yourself (an API
+key, `buddy login`, `buddy onboard`, `CODEBUDDY_PROVIDER`, `OLLAMA_HOST`,
+`--base-url`) keeps priority. `CODEBUDDY_ZERO_CONFIG=false` turns the detection off.
+Named profiles group the advanced settings: `buddy --profile local`, `cloud`,
+`fleet` or `max` — see [profiles.md](profiles.md).
+
 `buddy login` needs an interactive terminal and a browser. If the browser does
 not open automatically, copy the complete URL printed in the terminal into its
 address bar and keep the terminal open until sign-in finishes. The link expires
-when the login attempt ends (after five minutes). `--no-browser` skips the attempt
-and exits with an explanation; it is not a device-code login mode.
+when the login attempt ends (after five minutes). `--no-browser` does not start
+the sign-in at all and exits with an explanation; there is no device-code mode
+for ChatGPT. Without a display, use a local model instead (`buddy onboard`).
+
+`buddy try` is a real coding demo, not a timer: there is no 60-second cutoff. On a
+fast ChatGPT or Qwen3 model it often finishes in about a minute; on a small or cold
+local model it can take several minutes. The model must be able to **call tools**
+(edit files, run commands): use a `qwen3` tag such as `qwen3:8b`, `devstral`, or
+`qwen2.5-coder:14b` and above. `qwen2.5:7b`, `qwen2.5-coder:7b` and `llama3` 8B can
+chat, but Code Buddy treats them as chat-only, so `buddy try` cannot go green with them.
 
 `buddy onboard` also needs a terminal because it asks questions. In a pipe or CI
 job, configure provider environment variables and use `buddy doctor` for a
@@ -91,14 +121,19 @@ non-interactive check.
 
 ### The two $0 paths in detail
 
-- **Local & private (Ollama).** Install [Ollama](https://ollama.ai), then run
-  `buddy onboard` — it detects the running server, offers to pull a small coding
-  model if you have none, and saves the choice. Nothing leaves your machine.
+- **Local & private (Ollama).** Install [Ollama](https://ollama.com), then run
+  `buddy onboard` — it detects the running server, offers to pull `qwen3:8b` (a
+  small model that can call tools) if you have none, and saves the choice.
+  Nothing leaves your machine. If you already ran `buddy login`, the ChatGPT login
+  wins over `OLLAMA_HOST` in the terminal: run `buddy --profile local` (or set
+  `CODEBUDDY_PROVIDER=ollama`) to force the local model.
 - **ChatGPT subscription.** `buddy login` reuses your existing ChatGPT plan
   through the Codex backend at **$0 marginal cost** — no key, no billing setup.
 
-> Stuck? `buddy doctor` tells you in one line whether you're ready to chat, and
-> **`buddy doctor --fix`** auto-configures a running Ollama for you.
+> Stuck? `buddy doctor` prints a ready / not-ready verdict first, then the checks.
+> **`buddy doctor --fix`** points a running Ollama at a suitable model **already
+> installed** and saves that choice; only when Ollama has no model at all does it
+> pull `qwen3:8b`. It does not install Ollama itself.
 
 ### Advanced: bring your own API key
 
@@ -122,7 +157,7 @@ are opt-in and stay out of your way until you go looking for them.
 
 | Command | What it does |
 | ---------------------- | ------------------------------------------------------------ |
-| `buddy try` | Proof the configured free provider works (60-second coding demo). |
+| `buddy try` | Proof the configured free provider works (real coding demo, about a minute on a fast model). |
 | `buddy onboard` | Interactive setup; uses a detected free path or asks you to choose one. |
 | `buddy login` | Sign in with a ChatGPT subscription ($0, no API key). |
 | `buddy` | Start an interactive session. |
@@ -182,7 +217,8 @@ downloads standalone Node/Python runtimes and electron-builder installers.
 Follow [`cowork/DEV-LINUX.md`](../cowork/DEV-LINUX.md) (`npx vite build`, then
 `buddy gui`). On first launch a guided
 wizard takes you from zero to your first chat. Here is the full journey against a **local Ollama**
-model (`qwen2.5:7b-instruct`) — no API key, $0. _(Screenshots are real captures from the
+model — no API key, $0. (The captures used `qwen2.5:7b-instruct`, which is fine for
+chat; for coding tasks pick a model that can call tools, such as a `qwen3` tag.) _(Screenshots are real captures from the
 Electron app, generated by `cowork/e2e/onboarding-ollama-screens.spec.ts`.)_
 
 1. **Welcome.** Pick your language and **Quick start** (that is the path that opens the
@@ -216,13 +252,17 @@ Electron app, generated by `cowork/e2e/onboarding-ollama-screens.spec.ts`.)_
 
    ![Onboarding — first prompt](assets/onboarding/06-first-prompt.png)
 
-7. **First response — real, local, $0.** The reply streams back from `qwen2.5:7b-instruct` running
-   on local Ollama (here: 33 output tokens, ~6 s, cost **$0.0000**).
+7. **First response — real, local, $0.** The reply streams back from the model you saved, running
+   on local Ollama (in this capture `qwen2.5:7b-instruct`: 33 output tokens, ~6 s, cost **$0.0000**).
+   For coding tasks that edit files, the model must be able to call tools: a `qwen3` tag, or
+   `qwen2.5-coder:14b` and above. `qwen2.5:7b` and `qwen2.5-coder:7b` can chat, but they cannot edit files.
 
    ![Onboarding — first response](assets/onboarding/07-first-response.png)
 
-> The CLI has the same guided flow: run `buddy onboard`. It probes `/v1/models`, lists the real
-> models your endpoint serves, and verifies the key before saving (see **First Run** above).
+> The CLI has the same guided flow: run `buddy onboard`. For an API key it calls the provider's
+> `/models` endpoint before saving the key. For Ollama it uses the local server's model list and
+> does not ask for a key; it downloads a model only if you accept the pull question
+> (see **First Run** above).
 
 ## Headless Mode (CI / Scripting)
 
@@ -270,7 +310,8 @@ buddy session list --limit 25
 # Search saved sessions by content
 buddy session search "database migration"
 
-# Resume a specific session by ID (supports partial matching)
+# Resume by the id printed by `buddy session list`. A unique prefix works;
+# a prefix shared by several sessions is refused and the candidates are listed.
 buddy session resume abc123
 
 # Resume the most recent session
@@ -279,7 +320,7 @@ buddy session last
 # Continue the most recent session
 buddy --continue
 
-# Resume a specific session by ID (supports partial matching)
+# Same rule: full id or unique prefix
 buddy --resume abc123
 
 # Legacy flag form for scripts
@@ -302,9 +343,9 @@ historical `GROK_HOME` alias still works.
 
 ```bash
 # 1. First-time setup
-buddy --setup                # Quick API key setup wizard
-buddy onboard                # Full interactive config wizard
-buddy doctor                 # Verify environment and dependencies
+buddy onboard                # Interactive wizard. No API key needed for ChatGPT or Ollama.
+buddy doctor                 # Ready or not, then the failing checks
+buddy --setup                # Only if you want to paste an API key for a metered provider
 buddy --init                 # Scaffold .codebuddy/ + AGENTS.md in current project
 
 # 2. Start coding
@@ -399,22 +440,40 @@ To inspect what's been persisted:
 
 Same UX pattern as Claude Code's auto-managed `MEMORY.md`. The agent re-reads these files into the system prompt at the start of every session, so what it learned yesterday stays available today. Edit the markdown by hand any time — Code Buddy parses it on next launch.
 
-## Talking to other Claudes (Fleet)
+## Talking to other Code Buddy instances (Fleet)
 
-Code Buddy can connect to other Code Buddy instances over your network so multiple agents can share events live and invoke each other's LLMs. This is the **Fleet Hub** (Phases (d).1 → (d).16a, May 2026).
+Code Buddy can connect to other Code Buddy instances over your network so multiple agents can share events live and invoke each other's LLMs. This is the **Fleet Hub**. Skip it until `buddy try` has exited 0.
 
-### 30-second quickstart
+### Quickstart
 
-On the **listener** instance (the one that wants to be observable):
+A fleet peer is a second `buddy server` process plus a shared secret. `--no-auth`
+does not enable `peer.chat`.
+
+On the instance that should be observed and called:
 ```bash
-buddy server --port 3000          # One process, one port: REST + the fleet WebSocket on /ws
+export JWT_SECRET="$(openssl rand -hex 32)"
+# Keep this value: without JWT_SECRET the server picks a new random secret on every start,
+# and every token minted before the restart stops working.
+buddy server --port 3000 --host 127.0.0.1   # REST + the fleet WebSocket on /ws (use your LAN/VPN address for another machine)
 ```
 
-On the **peer** instance (the one connecting):
+Mint a token with the **same** `JWT_SECRET` and the fleet scopes (the default
+`user` role only carries `chat`, `chat:stream`, `sessions` and `tools`):
+```bash
+JWT_SECRET="<the same secret>" buddy fleet token --user demo --ttl 24h \
+  --scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke
+```
+
+On the instance that connects:
 ```bash
 buddy
-> /fleet listen ws://other-host:3000 --api-key <fleet:listen-scoped-key>
+> /fleet listen ws://127.0.0.1:3000/ws --jwt <that-token> --name local
 ```
+
+The `/ws` path is required: the client opens the URL exactly as typed.
+`cb_sk_...` API keys are held only in the server's memory; no command creates a
+durable one, and the server never reads `CODEBUDDY_FLEET_API_KEY` (that variable
+only sets what the client sends). Use the JWT above.
 
 You're now streaming the peer's `fleet:agent:tool_started`, `fleet:workflow:event`, `fleet:session:message` events live in your own session.
 
@@ -536,11 +595,11 @@ Each member gets an independent full agent. Tasks for the same member remain FIF
 
 ### Full guide
 
-See [`docs/fleet-guide.md`](fleet-guide.md) for: provider auto-detection (Ollama priority), all peer-rpc methods, env vars (`CODEBUDDY_FLEET_*`), Tailscale lab examples, security model, hub-vs-spoke topology, and the V1.x roadmap.
+See [`docs/fleet-guide.md`](fleet-guide.md) for: provider auto-detection (two different orders: CLI vs server), all peer-rpc methods, env vars (`CODEBUDDY_FLEET_*`), security model, hub-vs-spoke topology, and the V1.x roadmap. Its lab narrative and phase numbers are project history, not install steps.
 
-For the reprise path, use the short operator checklists:
-[`docs/reprise/cli-smoke.md`](archive/internal/reprise/cli-smoke.md) and
-[`docs/reprise/fleet-minimal.md`](archive/internal/reprise/fleet-minimal.md).
+Short operator checklists (archived, for maintainers):
+[`cli-smoke.md`](archive/internal/reprise/cli-smoke.md) and
+[`fleet-minimal.md`](archive/internal/reprise/fleet-minimal.md).
 
 ## Troubleshooting
 
@@ -550,7 +609,11 @@ Most providers need an env var **and** the matching base URL. Common pairs:
 - Anthropic: `export ANTHROPIC_API_KEY=...`
 - Google Gemini: `export GOOGLE_API_KEY=...` or `GEMINI_API_KEY=...`
 - OpenAI: `export OPENAI_API_KEY=...`
-- Ollama (local): no key needed, but pass `--base-url http://localhost:11434/v1 --model llama3`
+- Ollama (local): no key needed. Install from https://ollama.com, then
+  `ollama pull qwen3:8b`, `export OLLAMA_HOST=http://127.0.0.1:11434`,
+  `export CODEBUDDY_PROVIDER=ollama` (needed if you ever ran `buddy login`), and
+  `buddy doctor --fix`. Avoid `llama3` 8B and `qwen2.5` under 14B for coding: Code
+  Buddy treats them as chat-only (no tool calls).
 
 Run `buddy doctor` to verify which keys are detected. Check the active provider mid-session with `/status`.
 
@@ -576,21 +639,19 @@ Or use `/yolo on` mid-session.
 ### Memory not persisting across sessions
 Confirm `.codebuddy/CODEBUDDY_MEMORY.md` exists in your project. If not, run `buddy --init`. Then run `/memory recent` to confirm the agent is actually persisting (auto-memory shipped in 1.0.0-rc.2). If `/memory recent` shows "never", make sure `memoryEnabled` is on in your config (default).
 
-### Fleet: "AUTH_FAILED" when connecting to a peer
-The peer's API key needs the `fleet:listen` scope for `/fleet listen`.
-If you also call `/fleet send`, `/fleet chat`, or `/fleet tool`, the
-same key also needs `peer:invoke`.
-
-On the peer, regenerate or reconfigure a server-side key with the
-required scopes. On the connecting instance, pass that key with
-`--api-key` or store it in `CODEBUDDY_FLEET_API_KEY`:
-
-```
-CODEBUDDY_FLEET_API_KEY=cb_sk_...
-```
+### Fleet: "AUTH_FAILED" or "Invalid credentials" when connecting to a peer
+1. The URL must end with `/ws` (`ws://host:3000/ws`).
+2. Both sides must use the same `JWT_SECRET`, exported before `buddy server` and
+   before `buddy fleet token`. Without it the server uses a random secret that
+   changes on every restart.
+3. Pass the token with `/fleet listen <url> --jwt <token>` (or
+   `CODEBUDDY_FLEET_TOKEN`). `/fleet listen` needs the `fleet:listen` scope, and
+   `/fleet send`, `/fleet chat` and `/fleet tool` need `peer:invoke`: mint it with
+   `--scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke`.
+4. `--no-auth` never grants `peer:invoke`. Restart the server with authentication on.
 
 ### Fleet: connection drops repeatedly
-Auto-reconnect is opt-in (`autoReconnect: true` in the listener options). Without it, a single drop ends the session. With it, the listener uses exponential backoff. Check `/fleet status` for the current state. Persistent drops usually indicate an apiKey scope issue or a network/firewall problem (Tailscale ACLs, port 3000 reachable?).
+Auto-reconnect is opt-in (`autoReconnect: true` in the listener options). Without it, a single drop ends the session. With it, the listener uses exponential backoff. Check `/fleet status` for the current state. Persistent drops usually indicate a token scope issue or a network/firewall problem (Tailscale ACLs, port 3000 reachable?).
 
 ### Cannot find ripgrep / search is slow
 Install ripgrep (see Prerequisites). Without it, Code Buddy falls back to a slower Node-based search.

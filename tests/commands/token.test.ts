@@ -108,6 +108,28 @@ describe('buddy token (PWA / API JWT)', () => {
     expect(payload.url).toContain('/__codebuddy__/mobile/#token=');
   });
 
+  it('buddy fleet token grants fleet:listen and peer:invoke by default, buddy token does not', async () => {
+    process.env.JWT_SECRET = SECRET;
+    const fleetProgram = createProgram({ homedir: () => QA_HOME });
+    await fleetProgram.parseAsync(['node', 'buddy', 'fleet', 'token', '--user', 'peer-b', '--json']);
+    const fleetPayload = JSON.parse(captured(logSpy)) as { token: string };
+    const fleetScopes = verifyToken(fleetPayload.token, SECRET)?.scopes ?? [];
+    expect(fleetScopes).toEqual(expect.arrayContaining([...TOKEN_ROLE_SCOPES.user, 'fleet:listen', 'peer:invoke']));
+    logSpy.mockClear();
+    const mobileProgram = createProgram({ homedir: () => QA_HOME });
+    await mobileProgram.parseAsync(['node', 'buddy', 'token', '--user', 'phone', '--json']);
+    const mobilePayload = JSON.parse(captured(logSpy)) as { token: string };
+    expect(verifyToken(mobilePayload.token, SECRET)?.scopes).toEqual([...TOKEN_ROLE_SCOPES.user]);
+  });
+
+  it('buddy fleet token keeps an explicit --scopes untouched', async () => {
+    process.env.JWT_SECRET = SECRET;
+    const program = createProgram({ homedir: () => QA_HOME });
+    await program.parseAsync(['node', 'buddy', 'fleet', 'token', '--user', 'peer-c', '--scopes', 'chat', '--json']);
+    const payload = JSON.parse(captured(logSpy)) as { token: string };
+    expect(verifyToken(payload.token, SECRET)?.scopes).toEqual(['chat']);
+  });
+
   it('defaults user to mobile, role user, 30 days, role scopes, and prints expiry + PWA URL', async () => {
     process.env.JWT_SECRET = SECRET;
     const program = createProgram({ homedir: () => QA_HOME });

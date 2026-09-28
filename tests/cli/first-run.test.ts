@@ -17,6 +17,11 @@ describe('first-run provider recovery', () => {
     expect(ollama).toBeLessThan(grokKey);
     expect(NO_PROVIDER_GUIDANCE).toContain('buddy try');
     expect(NO_PROVIDER_GUIDANCE).toContain('$0 marginal cost');
+    expect(NO_PROVIDER_GUIDANCE).toContain('ollama pull qwen3:8b');
+    // 2.4 zero-config: a running Ollama is detected, nothing to export.
+    expect(NO_PROVIDER_GUIDANCE).toContain('detected automatically, nothing to export');
+    expect(NO_PROVIDER_GUIDANCE).not.toContain('export CODEBUDDY_PROVIDER');
+    expect(NO_PROVIDER_GUIDANCE).not.toContain('ollama pull qwen2.5');
   });
 
   it('defaults the interactive recommendation to yes', () => {
