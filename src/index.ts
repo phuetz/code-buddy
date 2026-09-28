@@ -3381,7 +3381,8 @@ async function probeXaiInference(): Promise<void> {
     cli.error("❌ Could not load a valid token after login.");
     return;
   }
-  const probeModel = codeBuddyEnv('MODEL') || 'gpt-4o';
+  const { xaiProbeModel } = await import('./config/legacy-env.js');
+  const probeModel = xaiProbeModel();
   try {
     const res = await fetch(`${XAI_OAUTH_BASE_URL}/chat/completions`, {
       method: "POST",

@@ -1,4 +1,4 @@
-import { codeBuddyEnv } from '../config/legacy-env.js';
+import { xaiApiKey, xaiBaseURL } from '../config/legacy-env.js';
 /**
  * Embedding Provider
  *
@@ -374,13 +374,13 @@ export class EmbeddingProvider extends EventEmitter {
   }
 
   private async embedBatchGrok(texts: string[]): Promise<BatchEmbeddingResult> {
-    const apiKey = this.config.apiKey || process.env.XAI_API_KEY ||
-      (process.env.GROK_API_KEY ? codeBuddyEnv('API_KEY') : undefined);
+    const xaiEnv = { ...process.env, CODEBUDDY_PROVIDER: 'xai' };
+    const apiKey = this.config.apiKey || xaiApiKey(xaiEnv);
     if (!apiKey) {
       throw new Error('CodeBuddy API key required for embeddings');
     }
 
-    const endpoint = this.config.apiEndpoint || 'https://api.x.ai/v1/embeddings';
+    const endpoint = this.config.apiEndpoint || `${(xaiBaseURL(xaiEnv) || 'https://api.x.ai/v1').replace(/\/$/, '')}/embeddings`;
 
     const response = await fetch(endpoint, {
       method: 'POST',

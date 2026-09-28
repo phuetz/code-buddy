@@ -28,6 +28,8 @@ const ENV_KEYS_TO_PRESERVE = [
   'CODEBUDDY_PEER_PROVIDER',
   'CODEBUDDY_PEER_MODEL',
   'CODEBUDDY_PROVIDER',
+  'CODEBUDDY_API_KEY',
+  'CODEBUDDY_BASE_URL',
   'CODEBUDDY_MODEL',
   'CODEBUDDY_FALLBACK_PROVIDERS',
   'CODEBUDDY_FALLBACK_PROVIDER',
@@ -116,6 +118,22 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
   });
 
   describe('CODEBUDDY_PEER_PROVIDER override', () => {
+    it('uses neutral credentials when xAI is explicitly selected', () => {
+      process.env.CODEBUDDY_PEER_PROVIDER = 'grok';
+      process.env.CODEBUDDY_API_KEY = 'neutral-xai-key';
+      process.env.CODEBUDDY_BASE_URL = 'https://xai.example/v1';
+      const selected = resolveProviderFromEnv('grok');
+      expect(selected).toMatchObject({
+        provider: 'grok', apiKey: 'neutral-xai-key', baseUrl: 'https://xai.example/v1',
+      });
+    });
+
+    it('prefers XAI_MODEL over the deprecated GROK_MODEL alias', () => {
+      process.env.XAI_API_KEY = 'xai-key';
+      process.env.GROK_MODEL = 'grok-3';
+      process.env.XAI_MODEL = 'grok-4-latest';
+      expect(resolveProviderFromEnv('grok')?.model).toBe('grok-4-latest');
+    });
     it('honors an explicit override even when other providers are configured', () => {
       // Both Ollama (priority 1) and Gemini are set, but the override picks Gemini.
       process.env.OLLAMA_HOST = 'localhost:11434';

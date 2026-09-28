@@ -546,6 +546,32 @@ describe('EmbeddingProvider', () => {
       );
     });
 
+    it('uses neutral credentials for an explicitly selected xAI embedding provider', async () => {
+      const previousKey = process.env.CODEBUDDY_API_KEY;
+      const previousBase = process.env.CODEBUDDY_BASE_URL;
+      delete process.env.GROK_API_KEY;
+      process.env.CODEBUDDY_API_KEY = 'neutral-xai-key';
+      process.env.CODEBUDDY_BASE_URL = 'https://xai.example/v1';
+      try {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ data: [{ embedding: Array(384).fill(0.1), index: 0 }] }),
+        });
+        await provider.embed('test');
+        expect(mockFetch).toHaveBeenCalledWith(
+          'https://xai.example/v1/embeddings',
+          expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: 'Bearer neutral-xai-key' }),
+          }),
+        );
+      } finally {
+        if (previousKey === undefined) delete process.env.CODEBUDDY_API_KEY;
+        else process.env.CODEBUDDY_API_KEY = previousKey;
+        if (previousBase === undefined) delete process.env.CODEBUDDY_BASE_URL;
+        else process.env.CODEBUDDY_BASE_URL = previousBase;
+      }
+    });
+
     it('should use custom API endpoint', async () => {
       const providerCustomEndpoint = new EmbeddingProvider({
         provider: 'grok',

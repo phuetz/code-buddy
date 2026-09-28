@@ -1,4 +1,4 @@
-import { codeBuddyEnv } from '../config/legacy-env.js';
+import { codeBuddyEnv, xaiApiKey, xaiBaseURL } from '../config/legacy-env.js';
 /**
  * Peer chat client factory (Phase (d).16a V0.4.1).
  *
@@ -197,12 +197,13 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
     defaultModel: 'grok-3',
     defaultBaseUrl: 'https://api.x.ai/v1',
     isLocal: false,
-    resolve: () => {
-      const apiKey = process.env.XAI_API_KEY || (process.env.GROK_API_KEY ? codeBuddyEnv('API_KEY') : undefined);
+    resolve: (explicit = false) => {
+      const env = explicit ? { ...process.env, CODEBUDDY_PROVIDER: 'xai' } : process.env;
+      const apiKey = xaiApiKey(env);
       if (!apiKey) return null;
       return {
         apiKey,
-        baseUrl: codeBuddyEnv('BASE_URL') || process.env.XAI_BASE_URL || SPECS.grok.defaultBaseUrl,
+        baseUrl: xaiBaseURL(env) || SPECS.grok.defaultBaseUrl,
       };
     },
   },
@@ -358,7 +359,10 @@ function providerModel(id: PeerChatProviderId): string | undefined {
     case 'lmstudio': return process.env.LMSTUDIO_MODEL || process.env.LM_STUDIO_MODEL;
     case 'lemonade': return process.env.LEMONADE_MODEL;
     case 'openrouter': return process.env.OPENROUTER_MODEL;
-    case 'grok': return codeBuddyEnv('MODEL') || process.env.XAI_MODEL;
+    case 'grok': {
+      if (process.env.GROK_MODEL) codeBuddyEnv('MODEL');
+      return process.env.CODEBUDDY_MODEL || process.env.XAI_MODEL || process.env.GROK_MODEL;
+    }
     case 'mistral': return process.env.MISTRAL_MODEL;
     case 'gemini': return process.env.GEMINI_MODEL;
     case 'openai': return process.env.OPENAI_MODEL;

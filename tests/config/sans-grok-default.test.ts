@@ -38,7 +38,25 @@ describe('unselected model migration', () => {
     const loaded = manager.loadUserSettings();
     expect(loaded.defaultModel).toBeUndefined();
     expect(loaded.models).toBeUndefined();
+    expect(loaded.baseURL).toBeUndefined();
+    const { resetConfigResolver } = await import('../../src/config/config-resolver.js');
+    resetConfigResolver();
+    const resolved = manager.getResolvedConfig();
+    expect(resolved.provider).not.toBe('grok');
+    expect(resolved.model).not.toBe('grok-code-fast-1');
     expect(fs.readFileSync(userSettingsPath, 'utf8')).toBe(old);
+  });
+
+  it('keeps an explicitly selected xAI profile usable without rewriting settings', async () => {
+    const { manager, userSettingsPath } = await managerInTemporaryDirectory();
+    const chosen = JSON.stringify({ provider: 'grok', apiKey: 'xai-key', model: 'grok-4-latest' });
+    fs.writeFileSync(userSettingsPath, chosen);
+    const { resetConfigResolver } = await import('../../src/config/config-resolver.js');
+    resetConfigResolver();
+    expect(manager.getResolvedConfig()).toMatchObject({
+      provider: 'grok', model: 'grok-4-latest', baseURL: 'https://api.x.ai/v1', apiKey: 'xai-key',
+    });
+    expect(fs.readFileSync(userSettingsPath, 'utf8')).toBe(chosen);
   });
 
   it('respects a Grok model explicitly chosen with a different list', async () => {
@@ -61,6 +79,11 @@ describe('unselected model migration', () => {
 });
 
 describe('provider resolution', () => {
+  it('probes xAI with an xAI model even when a generic model is configured', async () => {
+    const { xaiProbeModel } = await import('../../src/config/legacy-env.js');
+    expect(xaiProbeModel({ CODEBUDDY_MODEL: 'gpt-4o' })).toBe('grok-3');
+    expect(xaiProbeModel({ XAI_MODEL: 'grok-4-1-fast' })).toBe('grok-4-1-fast');
+  });
   it('prioritizes an authenticated ChatGPT session over configured providers', async () => {
     const { resolveProviderFromCatalog } = await import('../../src/providers/provider-catalog.js');
     const found = resolveProviderFromCatalog({

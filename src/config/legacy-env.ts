@@ -30,3 +30,10 @@ export function xaiBaseURL(env: NodeJS.ProcessEnv = process.env): string | undef
   const selected = ['xai', 'grok'].includes(env.CODEBUDDY_PROVIDER?.trim().toLowerCase() || '');
   return (selected ? env.CODEBUDDY_BASE_URL?.trim() : undefined) || env.XAI_BASE_URL?.trim() || legacy || undefined;
 }
+
+/** Login probes xAI inference with an xAI model, independent of a generic session model. */
+export function xaiProbeModel(env: NodeJS.ProcessEnv = process.env): string {
+  const legacy = env.GROK_MODEL?.trim();
+  if (legacy) codeBuddyEnv('MODEL', env);
+  return env.XAI_MODEL?.trim() || legacy || 'grok-3';
+}
