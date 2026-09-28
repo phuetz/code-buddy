@@ -80,6 +80,10 @@ function within(root: string, path: string): boolean {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
+function canonicalPath(path: string): string | null {
+  try { return realpathSync(path); } catch { return null; }
+}
+
 /** Same bounded dist-tree digest as the build manifest; no symlinks or map files. */
 function distDigest(root: string): { value: string; fileCount: number } | null {
   try {
@@ -131,8 +135,10 @@ function git(cwd: string, args: string[]): string | null {
 type GitReader = (cwd: string, args: string[]) => string | null;
 
 function repositoryAt(path: string, runGit: GitReader): boolean {
-  return record(safeJson(join(path, 'package.json')))?.name === '@phuetz/code-buddy'
-    && runGit(path, ['rev-parse', '--show-toplevel']) === realpathSync(path);
+  if (record(safeJson(join(path, 'package.json')))?.name !== '@phuetz/code-buddy') return false;
+  const topLevel = runGit(path, ['rev-parse', '--show-toplevel']);
+  const canonicalRoot = canonicalPath(path);
+  return topLevel !== null && canonicalRoot !== null && canonicalPath(topLevel) === canonicalRoot;
 }
 
 function profilePath(env: NodeJS.ProcessEnv = process.env): string {
@@ -293,7 +299,7 @@ export function collectRuntimeStatus(options: {
     repository.revision = safeRevision(runGit(repositoryPath, ['rev-parse', 'HEAD']));
     const state = runGit(repositoryPath, ['status', '--porcelain=v1', '--untracked-files=normal']);
     repository.dirty = state === null ? null : state.length > 0;
-    if (kind === 'source' && repositoryPath === root && repository.dirty !== false) {
+    if (kind === 'source' && repositoryPath === canonicalPath(root) && repository.dirty !== false) {
       execution.verified = false;
     }
     if (execution.revision && repository.revision && execution.revision !== repository.revision) {
