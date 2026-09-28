@@ -21,7 +21,7 @@ beforeEach(() => {
   process.exitCode = undefined;
   logs = vi.spyOn(console, 'log').mockImplementation(() => {});
   errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'buddy-mission-cli-'));
+  root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'buddy-mission-cli-')));
   workspace = path.join(root, 'workspace');
   directory = path.join(root, 'state');
   manifest = path.join(root, 'manifest.json');

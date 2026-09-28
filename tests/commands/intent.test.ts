@@ -16,7 +16,7 @@ describe('buddy intent', () => {
   let log: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'intent-command-'));
+    dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'intent-command-')));
     resetGoalManagers(new GoalStore({ storeDir: dir }));
     log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
   });
