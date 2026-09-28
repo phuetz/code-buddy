@@ -64,7 +64,7 @@ const HOME_PRIVATE_FILES: readonly string[] = ['.docker/config.json', '.config/g
  * committed templates and stay readable.
  */
 export function isUniversalSecretBasename(base: string): boolean {
-  const lower = sqliteStoreBasename(base.toLowerCase());
+  const lower = underlyingStoreBasename(base);
   if (lower === '.env') return true;
   if (lower.startsWith('.env.')) {
     return !/^\.env\.(example|sample|template|dist|defaults?|schema)$/.test(lower);
@@ -92,9 +92,15 @@ export function isUniversalSecretBasename(base: string): boolean {
   return false;
 }
 
-/** SQLite stores may keep uncheckpointed rows in these sibling files. */
-function sqliteStoreBasename(base: string): string {
-  return base.replace(/(\.(?:db|sqlite|sqlite3))-(?:wal|shm|journal)$/i, '$1');
+/** Backups and SQLite sidecars retain the bytes of the original store. */
+function underlyingStoreBasename(base: string): string {
+  let name = base.toLowerCase();
+  while (true) {
+    const original = name;
+    name = name.replace(/\.(?:bak|old|orig|save|tmp|swp)$/, '');
+    name = name.replace(/(\.(?:db|sqlite|sqlite3))-(?:wal|shm|journal)$/, '$1');
+    if (name === original) return name;
+  }
 }
 
 /**
@@ -103,7 +109,7 @@ function sqliteStoreBasename(base: string): string {
  * paired-device registry.
  */
 function isCredentialRootSecretBasename(base: string): boolean {
-  const lower = sqliteStoreBasename(base.toLowerCase());
+  const lower = underlyingStoreBasename(base);
   if (isUniversalSecretBasename(lower)) return true;
   if (/(^|[-_.])(auth|oauth|credentials?|tokens?|secrets?|passwords?|login-pending)([-_.]|$)/.test(lower)) {
     return true;
@@ -176,9 +182,9 @@ function classify(absPath: string, roots: readonly string[]): string | null {
   for (const root of roots) {
     if (isInside(absPath, root) && absPath !== root) {
       const relative = path.relative(root, absPath);
-      if (path.basename(root) === '.codebuddy' &&
-        /^(sessions|peer-sessions)[\\/]/.test(relative)) {
-        return `private Code Buddy session under ${root}`;
+      if (path.basename(root).toLowerCase() === '.codebuddy' &&
+        /^(sessions|peer-sessions|backups)(?:[\\/]|$)/i.test(relative)) {
+        return `private Code Buddy session or backup under ${root}`;
       }
       // Any path component below the root may name a secret store
       // (e.g. `~/.config/gh/hosts.yml`, `~/.codebuddy/skill-signing/key.pem`).
