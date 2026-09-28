@@ -47,31 +47,36 @@ ${look} Output only the reference number (e.g. 42) or "none" if no matching elem
 
 /**
  * Lit la réponse d'une liste fermée. Seul un numéro PRÉSENT dans la liste est
- * accepté : l'ancienne lecture prenait le premier entier venu, si bien qu'un
- * petit modèle qui répond « 220 » (une coordonnée) ou « Element 4 at (288,161) »
- * désignait un élément inexistant.
+ * accepté, et seulement sous une forme qui DÉSIGNE un choix : un numéro seul,
+ * un numéro entre crochets, ou « answer/ref/element/region … N ».
+ *
+ * L'ancienne lecture prenait le premier entier venu : « (288, 161) is [4] »
+ * désignait 288, et un modèle qui décrit l'image au lieu de répondre (mesuré le
+ * 28/09/2026 : moondream, « numbers range from 1 to 5… ») faisait cliquer sur
+ * un chiffre de sa prose — deux mauvais boutons en dix essais. Une prose
+ * ambiguë rend null : ne pas cliquer vaut mieux que cliquer au hasard.
  */
 export function parseClosedListReply(reply: string | null | undefined, allowedRefs: Iterable<number>): number | null {
   if (!reply) return null;
   const allowed = new Set(allowedRefs);
-  const text = reply.trim();
-  if (/^\s*["'`]?none["'`]?\s*\.?\s*$/i.test(text)) return null;
-  // Retire le raisonnement éventuel d'un modèle « thinking », puis tout ce qui
-  // ressemble à une position ou à une taille : « (288, 161) », « x=288 », « 62x31 ».
-  const cleaned = text
-    .replace(/<think>[\s\S]*?<\/think>/gi, ' ')
-    .replace(/\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\)/g, ' ')
-    .replace(/\b\d+\s*x\s*\d+\b/gi, ' ')
-    .replace(/\b[xy]\s*[:=]\s*-?\d+(?:\.\d+)?/gi, ' ')
-    .replace(/\d+\.\d+/g, ' ');
-  // Priorité à un numéro entre crochets, puis à un numéro isolé.
-  for (const re of [/\[(\d+)\]/g, /\b(\d+)\b/g]) {
-    for (const m of cleaned.matchAll(re)) {
-      const n = Number.parseInt(m[1]!, 10);
-      if (allowed.has(n)) return n;
-    }
+  const text = reply.replace(/<think>[\s\S]*?<\/think>/gi, ' ').trim();
+  if (/^\W*none\W*$/i.test(text)) return null;
+  const pick = (raw: string | undefined): number | null => {
+    if (raw === undefined) return null;
+    const n = Number.parseInt(raw, 10);
+    return allowed.has(n) ? n : null;
+  };
+  // 1. La réponse n'est qu'un numéro (éventuellement entre crochets, guillemets, point final).
+  const bare = text.match(/^[\s"'`*[(#]*(\d+)[\s"'`*\]).]*$/);
+  if (bare) return pick(bare[1]);
+  // 2. Un numéro entre crochets, la notation de la liste.
+  for (const m of text.matchAll(/\[(\d+)\]/g)) {
+    const n = pick(m[1]);
+    if (n !== null) return n;
   }
-  return null;
+  // 3. Une désignation explicite.
+  const named = text.match(/\b(?:answer|ref(?:erence)?|element|region|région|number|numéro|id)\b\s*(?:is|est|:|=|#|n°)?\s*(\d+)\b/i);
+  return pick(named?.[1]);
 }
 
 export function buildCoordinatePrompt(intent: string, roleHint?: string): string {

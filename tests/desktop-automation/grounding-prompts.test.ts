@@ -23,6 +23,8 @@ describe('parseClosedListReply', () => {
     expect(parseClosedListReply('4', refs)).toBe(4);
     expect(parseClosedListReply('[4]', refs)).toBe(4);
     expect(parseClosedListReply('The answer is 4.', refs)).toBe(4);
+    expect(parseClosedListReply('4.', refs)).toBe(4);
+    expect(parseClosedListReply('"[4]"', refs)).toBe(4);
   });
 
   it('rend null pour « none » ou une réponse vide', () => {
@@ -41,7 +43,15 @@ describe('parseClosedListReply', () => {
   it('préfère le numéro entre crochets à une position citée avant', () => {
     // L'ancienne lecture rendait 288.
     expect(parseClosedListReply('The Valider button at (288, 161) is [4].', refs)).toBe(4);
-    expect(parseClosedListReply('center=(288,161) so 4', refs)).toBe(4);
+    expect(parseClosedListReply('Answer: 4', refs)).toBe(4);
+  });
+
+  it('refuse une prose ambiguë plutôt que de cliquer sur un chiffre au hasard', () => {
+    // Réponses réelles de moondream (28/09/2026) : une description, pas un choix.
+    // L'ancienne lecture rendait 1 puis 2 : deux clics sur de mauvaises cibles.
+    expect(parseClosedListReply('The numbers range from 1 to 5, which are the buttons of an interactive website.', refs)).toBeNull();
+    expect(parseClosedListReply('The numbers range from 2 to 5 and are positioned in an ascending order.', refs)).toBeNull();
+    expect(parseClosedListReply('center=(288,161) so 4', refs)).toBeNull();
   });
 
   it('ignore le raisonnement d’un modèle « thinking »', () => {
