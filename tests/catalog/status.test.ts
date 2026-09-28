@@ -79,8 +79,15 @@ describe('catalog states and evidence', () => {
       expect(feature?.states.wired, definition.id).toBe('vrai');
       expect(feature?.states.deployed, definition.id).toBe('inconnu');
       if (feature?.states.testedInSituation !== 'vrai') {
-        expect(definition.verificationLimit, definition.id).toBeTruthy();
-        expect(feature?.reasons, definition.id).toContain(definition.verificationLimit);
+        // A merge can age a genuine execution trace without changing the inventory's
+        // editorial limit. Require a visible reason, never a fabricated current proof.
+        const staleProof = feature?.states.testedInSituation === 'inconnu'
+          && feature.latestEvidence !== null
+          && feature.reasons.includes('Preuve ancienne ou révision courante inconnue.');
+        expect(Boolean(definition.verificationLimit) || staleProof, definition.id).toBe(true);
+        if (definition.verificationLimit) {
+          expect(feature?.reasons, definition.id).toContain(definition.verificationLimit);
+        }
       }
     }
     const failedReplay = catalog.features.find((feature) => feature.id === 'cli-run');
