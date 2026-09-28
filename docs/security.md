@@ -209,15 +209,20 @@ when an endpoint is present. Changes may require a restart.
 
 ## Native Modules Installation (`--allow-scripts`)
 
-Some dependencies use native install scripts (`better-sqlite3`, `sharp`,
-`node-pty`, `tree-sitter*`, `onnxruntime-node`, `usearch`, etc.). npm 11 can
-warn that these scripts are not covered by `allowScripts`; that warning alone
-does not establish that the scripts were blocked. If an npm version requires
-explicit permission, review and name only the packages you need, for example:
+Code Buddy declares optional native add-ons such as `better-sqlite3`, `sharp`, `node-pty`, `tree-sitter*`, and `usearch`. The optional-dependency list also contains non-native packages, so its size is not a native-package count.
+
+In **npm 11**, unreviewed dependency install scripts produce a warning but still run by default. **npm 12** blocks them with a warning by default. If an optional native add-on needs an install script during a global installation, allow that package by name using `--allow-scripts=<packages>`:
 
 ```bash
+# Selectively allow the SQLite add-on during a global install
 npm install -g --allow-scripts=better-sqlite3 @phuetz/code-buddy@latest
 ```
+
+For a project-scoped install, use `allowScripts` in `package.json` or `.npmrc`;
+passing `--allow-scripts` on that command is an error. See npm's
+[version 11](https://docs.npmjs.com/cli/v11/commands/npm-install/#strict-allow-scripts)
+and [version 12](https://docs.npmjs.com/cli/v12/commands/npm-install/#strict-allow-scripts)
+install policies.
 
 If a source install fails while fetching `@vscode/ripgrep` from GitHub, see
 the [system-ripgrep workaround](install.md#ripgrep-download-blocked-during-npm-ci).
