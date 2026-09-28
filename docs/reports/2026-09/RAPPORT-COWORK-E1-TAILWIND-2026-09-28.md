@@ -3,7 +3,7 @@
 Mission du 28 septembre 2026. Branche `sol/cowork-e1-alias-tailwind-2026-09-28`.
 
 Rapport détaillé, inventaires JSON et seize captures Electron sous Xvfb :
-`/home/patrice/Videos/Partage/20260928-cowork-refonte/e1/sol/RAPPORT.md`.
+`Partage/20260928-cowork-refonte/e1/sol/RAPPORT.md` (passation hors dépôt public).
 
 Le script d'audit trouve 263 variantes couleur non générées avec la configuration
 initiale, puis zéro après alias et prise en charge des opacités. Les quatre fichiers
