@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -124,7 +124,7 @@ describe('runtime status', () => {
   });
 
   it.skipIf(process.platform === 'win32')('recognizes a checkout reached through a temporary-directory alias', () => {
-    const physicalRoot = fixture();
+    const physicalRoot = realpathSync(fixture());
     const aliasRoot = join(physicalRoot, 'path-alias');
     symlinkSync(physicalRoot, aliasRoot, 'dir');
     const revision = 'a'.repeat(40);
