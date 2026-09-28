@@ -317,7 +317,20 @@
     "recommendedForBeginners": "推荐新手使用",
     "startHere": "从这里开始",
     "general": "通用",
-    "generalDesc": "外观、语言等通用偏好"
+    "generalDesc": "外观、语言等通用偏好",
+    "tabGroup": {
+      "essentials": "基本",
+      "models": "模型与费用",
+      "tools": "工具与 MCP",
+      "extend": "技能与插件",
+      "automation": "自动化",
+      "security": "安全与工作区",
+      "ops": "服务器与诊断"
+    },
+    "tunnel": "网络 / 隧道",
+    "tunnelDesc": "通过 Ngrok 配置公共隧道访问",
+    "audio": "音频与语音合成",
+    "audioDesc": "配置本地语音、Piper TTS 模型和语速"
   },
   "general": {
     "appearance": "外观",
@@ -3276,5 +3289,241 @@
         "prerequisites": ""
       }
     }
+  },
+  "shell": {
+    "navLabel": "主导航",
+    "railKicker": "Cowork 工作区",
+    "navKicker": "导航",
+    "history": {
+      "label": "历史",
+      "title": "会话历史",
+      "help": "无需离开工作区，即可找到以前的会话、消息和证据。"
+    },
+    "theme": {
+      "button": "选择主题",
+      "buttonTitle": "选择应用主题",
+      "heading": "外观",
+      "light": "浅色",
+      "dark": "深色",
+      "system": "跟随系统"
+    },
+    "commandPalette": {
+      "label": "命令面板",
+      "title": "命令面板 (⌘K) — 快速访问任何功能"
+    },
+    "shortcuts": {
+      "label": "键盘快捷键",
+      "title": "键盘快捷键 (⌘/)"
+    },
+    "loading": "加载中…",
+    "rail": {
+      "chat": {
+        "label": "对话",
+        "help": "与 Code Buddy 对话、附加文件，并把请求变成行动。"
+      },
+      "plan": {
+        "label": "计划",
+        "help": "在让智能体执行之前，把任务拆成清晰的步骤。"
+      },
+      "activity": {
+        "label": "活动",
+        "help": "查看会话中产生的工具、文件、模型和决策。"
+      },
+      "workspace": {
+        "label": "文件",
+        "help": "浏览项目文件，打开智能体生成的成果。"
+      },
+      "studio": {
+        "label": "应用工作室",
+        "help": "以“生成、测试、改进”的循环构建应用。"
+      },
+      "creations": {
+        "label": "作品",
+        "help": "查找你的交付物：文档、表格、演示文稿和导出文件。"
+      },
+      "videostudio": {
+        "label": "视频工作室",
+        "help": "准备分镜、生成场景，并组装可验证的视频。"
+      },
+      "assistant": {
+        "label": "助手",
+        "help": "配置实时语音模式、Pocket TTS、音量和打断。"
+      },
+      "meeting": {
+        "label": "会议",
+        "help": "在征得同意后录制本地会议，支持可恢复的检查点和自动笔记。"
+      },
+      "library": {
+        "label": "媒体库",
+        "help": "浏览工作区媒体和可复用资源。"
+      },
+      "capabilities": {
+        "label": "能力",
+        "help": "启用智能体可用的技能、工具、MCP 服务器和提供商。"
+      },
+      "os": {
+        "label": "任务控制",
+        "help": "驱动 2.0 循环：宪章、多模型交流、影子孪生和证据。"
+      },
+      "labs": {
+        "label": "实验室",
+        "help": "探索实验性功能和新的编排模式。"
+      },
+      "advanced": {
+        "label": "高级",
+        "help": "访问专家设置、监督和高级集成。"
+      }
+    }
+  },
+  "homeView": {
+    "title": "你想做什么？",
+    "subtitle": "告诉 Code Buddy —— 它会在你的文件夹中编码、搜索和创作。",
+    "placeholder": "例如：修复登录错误，或创建一个仪表盘…",
+    "inputLabel": "你的请求",
+    "send": "发送",
+    "sending": "发送中…",
+    "keyHint": "Enter 发送 · Shift+Enter 换行",
+    "topicTravels": "你的主题会带到所选的工作室。",
+    "recentSessions": "最近的会话",
+    "untitled": "未命名",
+    "readyMissions": "现成任务",
+    "tiles": {
+      "app": "应用",
+      "deck": "演示",
+      "sheet": "表格",
+      "document": "文档",
+      "pod": "播客",
+      "image": "图像",
+      "video": "视频",
+      "drive": "云盘",
+      "search": "搜索"
+    },
+    "quick": {
+      "code": {
+        "label": "编码 / 修复",
+        "hint": "描述错误或功能"
+      },
+      "search": {
+        "label": "搜索",
+        "hint": "广泛研究 + 规划流程"
+      },
+      "document": {
+        "label": "创建文档",
+        "hint": "Excel、Word、PDF、图表"
+      }
+    }
+  },
+  "recipes": {
+    "items": {
+      "build-app": {
+        "title": "构建 Web 应用",
+        "description": "端到端地搭建、运行并在浏览器中测试一个小型 Web 应用。",
+        "prompt": "构建一个小型 Web 应用：<描述它应该做什么>。搭建项目，启动开发服务器，然后用浏览器验证页面能渲染、核心流程可用——有问题就修复，直到可用为止。"
+      },
+      "fix-bug": {
+        "title": "查找并修复错误",
+        "description": "定位根本原因，应用修复，并用测试验证。",
+        "prompt": "调查这个错误：<描述症状>。找到根本原因，提出最小且正确的修复并应用，再用一个修复前失败、修复后通过的测试来验证。"
+      },
+      "review-diff": {
+        "title": "审查我的更改",
+        "description": "审查当前的 git diff，找出错误和可清理之处。",
+        "prompt": "审查当前的 git diff，找出正确性错误以及可复用/可简化之处。按严重程度分组，并指出具体行号。"
+      },
+      "open-pr": {
+        "title": "创建拉取请求",
+        "description": "把当前更改整理成描述清晰的草稿 PR。",
+        "prompt": "把我当前的更改整理成拉取请求：写一个清晰的 Conventional Commits 标题，以及涵盖“做了什么/为什么/如何测试”的描述，然后以草稿形式创建。"
+      },
+      "deep-research": {
+        "title": "深度研究报告",
+        "description": "关于某个主题、带引用的多来源报告。",
+        "prompt": "对以下主题进行深度研究：<主题>。广泛检索多个来源，核实关键论断，并生成分节报告，正文中带 [n] 引用，并附参考文献列表。"
+      },
+      "sparkpage": {
+        "title": "动态研究页面",
+        "description": "把网络信息整合成可对话的分节页面。",
+        "prompt": "在网络上研究 <主题>，构建一个结构化页面——包含分节、对比表格和引用——保存为可继续追问的成果。"
+      }
+    }
+  },
+  "studio": {
+    "suggestions": {
+      "theme": "更换主题",
+      "darkMode": "添加深色模式",
+      "responsive": "适配不同屏幕"
+    },
+    "sendCancelledSecrets": "发送已取消：无法屏蔽项目密钥。",
+    "generationCancelledSecrets": "生成已取消：无法屏蔽项目密钥。",
+    "startFailed": "启动失败",
+    "tabs": {
+      "editor": "编辑器",
+      "preview": "预览",
+      "versions": "版本",
+      "secrets": "密钥"
+    },
+    "run": "运行",
+    "export": "导出",
+    "exportTitle": "将项目导出为 zip",
+    "site": "网站",
+    "siteBuilding": "构建中…",
+    "siteTitle": "构建网站并导出到文件夹（可直接静态托管）",
+    "siteUnavailable": "网站导出不可用。",
+    "siteExportedBuild": "已导出构建后的网站（{{files}} 个文件）：",
+    "siteExportedStatic": "已导出静态网站（{{files}} 个文件）：",
+    "deploy": "部署",
+    "deployTitle": "部署（Cloudflare Pages / Netlify 模拟）",
+    "github": "GitHub",
+    "githubPushing": "推送中…",
+    "githubTitle": "创建 GitHub 仓库并推送此项目",
+    "pushFailed": "推送失败",
+    "pushed": "已推送到 GitHub。",
+    "repoCreated": "仓库已创建。",
+    "finishManually": "请手动完成推送：",
+    "dismiss": "关闭",
+    "close": "关闭",
+    "noFile": "未选择文件。",
+    "bottomPanel": "底部面板",
+    "terminal": "终端",
+    "console": "控制台",
+    "consoleErrors": "错误",
+    "newApp": "新应用",
+    "newAppTitle": "开始一个新应用",
+    "filesPlaceholder": "生成过程中，应用的文件、代码和预览会显示在这里。",
+    "emptyTitle": "你想创建什么？",
+    "emptyHint": "在下方选择一种类型（预览将要创建的内容），或在上方描述你的应用——文件、代码和预览会显示在这里。"
+  },
+  "studioChat": {
+    "regionLabel": "应用工作室迭代对话",
+    "title": "迭代应用",
+    "hintBuild": "提出修改，然后查看预览。",
+    "hintDiscuss": "讨论模式：只做规划，不会修改任何文件。",
+    "modeGroup": "对话模式",
+    "modeBuild": "构建",
+    "modeDiscuss": "讨论",
+    "empty": "描述下一步迭代：要添加的样式、组件、数据或测试。",
+    "implementPlan": "实施此计划",
+    "userMessage": "用户消息",
+    "assistantMessage": "助手消息",
+    "iterating": "迭代中…",
+    "responseInProgress": "正在回复",
+    "suggestionsLabel": "迭代建议",
+    "attachmentsLabel": "下一次请求的附件",
+    "remove": "移除 {{label}}",
+    "composerLabel": "迭代消息",
+    "placeholder": "例如：让主按钮更醒目，并添加空状态",
+    "attachImageTitle": "附加设计稿或截图（也可拖放或粘贴图片）",
+    "image": "图片",
+    "contextTitle": "选择纳入或排除在上下文之外的文件",
+    "context": "上下文",
+    "tokensTitle": "此请求新增的输入令牌估算（不含历史）",
+    "tokensUnit": "个令牌",
+    "keyHint": "Enter 发送 · Shift+Enter 换行",
+    "stop": "停止",
+    "send": "发送"
+  },
+  "automations": {
+    "title": "自动化",
+    "hint": "管理提醒和可触发的感知规则"
   }
 }

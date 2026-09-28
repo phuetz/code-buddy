@@ -172,8 +172,10 @@ const VALID_TABS = new Set<TabId>([
   'general',
 ]);
 
-// Group the 28 settings tabs into ordered sections (mirroring Code Buddy's
+// Group the settings tabs into ordered sections (mirroring Code Buddy's
 // functional areas) so the sidebar reads as a structured list, not a flat dump.
+// `label` is the English default; the rendered title comes from
+// `settings.tabGroup.<id>` in the active locale.
 const SETTINGS_TAB_GROUPS: { id: string; label: string }[] = [
   { id: 'essentials', label: 'Essentials' },
   { id: 'models', label: 'Models & Cost' },
@@ -352,15 +354,15 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
     },
     {
       id: 'remote' as TabId,
-      label: t('settings.remote', '远程控制'),
+      label: t('settings.remote', 'Remote control'),
       icon: Wifi,
-      description: t('settings.remoteDesc', '通过飞书等平台远程使用'),
+      description: t('settings.remoteDesc', 'Use Code Buddy Studio from Feishu and other channels'),
     },
     {
       id: 'tunnel' as TabId,
-      label: 'Network / Tunnel',
+      label: t('settings.tunnel', 'Network / Tunnel'),
       icon: Globe,
-      description: 'Configure public tunnel access via Ngrok',
+      description: t('settings.tunnelDesc', 'Configure public tunnel access via Ngrok'),
     },
     {
       id: 'logs' as TabId,

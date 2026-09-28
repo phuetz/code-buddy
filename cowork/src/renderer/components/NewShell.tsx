@@ -18,6 +18,8 @@ import { PlanPanel } from './PlanPanel';
 import { FileActivityPanel } from './FileActivityPanel';
 import { HomeView } from './HomeView';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useAppStudio } from './studio/use-app-studio';
 import { useStudioRequestContext } from './studio/use-studio-request-context';
 import type { AttachedLogs } from './studio/request-context';
@@ -212,15 +214,26 @@ const RAIL: RailItem[] = [
   },
 ];
 
+// `labelKey` : libellé traduit (Clair / Sombre / Système) ; les autres thèmes
+// portent un nom propre, identique dans toutes les langues.
 const THEME_OPTIONS = [
-  { value: 'light', label: 'Clair', glyph: '☀️' },
-  { value: 'dark', label: 'Sombre', glyph: '🌙' },
-  { value: 'system', label: 'Système', glyph: '🖥️' },
+  { value: 'light', label: 'Light', labelKey: 'shell.theme.light', glyph: '☀️' },
+  { value: 'dark', label: 'Dark', labelKey: 'shell.theme.dark', glyph: '🌙' },
+  { value: 'system', label: 'System', labelKey: 'shell.theme.system', glyph: '🖥️' },
   { value: 'ember', label: 'Ember', glyph: '🔥' },
   { value: 'genspark', label: 'Genspark', glyph: '✨' },
   { value: 'codex', label: 'Codex', glyph: '◼️' },
   { value: 'anthropic', label: 'Anthropic', glyph: '🟠' },
 ] as const;
+
+/** Suggestions d'itération d'App Studio, dans la langue de l'interface. */
+export function studioSuggestions(t: TFunction): string[] {
+  return [
+    t('studio.suggestions.theme', 'Change the theme'),
+    t('studio.suggestions.darkMode', 'Add a dark mode'),
+    t('studio.suggestions.responsive', 'Make it responsive'),
+  ];
+}
 
 function themeGlyph(theme: string): string {
   return THEME_OPTIONS.find((option) => option.value === theme)?.glyph ?? '🎨';
@@ -233,6 +246,7 @@ function themeGlyph(theme: string): string {
  * calm empty state ("Décris une app pour commencer").
  */
 export function StudioView() {
+  const { t } = useTranslation();
   const apis = useMemo(() => createStudioApis(), []);
   const activeSessionId = useAppStore((st) => st.activeSessionId);
   const sessions = useAppStore((st) => st.sessions);
@@ -392,7 +406,7 @@ export function StudioView() {
         }
         const text = await redactForModel(sessionCwd, block.text);
         if (text === null) {
-          setSendNote('Envoi annulé : impossible de masquer les secrets du projet.');
+          setSendNote(t('studio.sendCancelledSecrets', 'Send cancelled: the project secrets could not be masked.'));
           return false;
         }
         safe.push({ type: 'text', text });
@@ -407,7 +421,7 @@ export function StudioView() {
       await continueSession(activeSessionId, only && only.type === 'text' ? only.text : safe);
       return true;
     },
-    [activeSessionId, continueSession, sessionCwd, takeVersion, redactForModel],
+    [activeSessionId, continueSession, sessionCwd, takeVersion, redactForModel, t],
   );
 
   // Pièces jointes de la prochaine demande : élément ciblé, journaux, image,
@@ -590,7 +604,7 @@ export function StudioView() {
     }
     const fixPrompt =
       health && !health.ok ? buildPreviewFixPrompt(health) : buildFixPrompt(result.error ?? '', terminalRef.current);
-    const summary = health && !health.ok ? health.summary : (result.error ?? 'échec du démarrage').slice(0, 120);
+    const summary = health && !health.ok ? health.summary : (result.error ?? t('studio.startFailed', 'startup failed')).slice(0, 120);
     if (!canRetry(st.attempts)) {
       // Budget spent — leave the error visible and hand back to the user.
       st.awaitingFix = false;
@@ -603,7 +617,7 @@ export function StudioView() {
     st.awaitingFix = true;
     setAutoFixAttempt(st.attempts);
     void sendTurn(fixPrompt, { mode: 'build', label: `Correction automatique ${st.attempts}` });
-  }, [activeSessionId, sessionCwd, ensurePreview, sendTurn]);
+  }, [activeSessionId, sessionCwd, ensurePreview, sendTurn, t]);
 
   // Falling edge of the agent turn = generation, a message, or a fix just finished.
   const refreshTreeForTurn = actions.refreshTree;
@@ -726,7 +740,7 @@ export function StudioView() {
       const prompt = redactRoot ? await redactForModel(redactRoot, rawPrompt) : rawPrompt;
       const title = redactRoot ? await redactForModel(redactRoot, rawTitle) : rawTitle;
       if (prompt === null || title === null) {
-        setSendNote('Génération annulée : impossible de masquer les secrets du projet.');
+        setSendNote(t('studio.generationCancelledSecrets', 'Generation cancelled: the project secrets could not be masked.'));
         return;
       }
       setSendNote(null);
@@ -749,7 +763,7 @@ export function StudioView() {
       );
       if (session?.id) setActiveSession(session.id);
     },
-    [startSession, setActiveSession, workingDir, takeVersion, redactForModel]
+    [startSession, setActiveSession, workingDir, takeVersion, redactForModel, t]
   );
 
   // "Vérifier" taps Code Buddy's web_test through the agent session (which owns
@@ -787,7 +801,7 @@ export function StudioView() {
         ...(st?.partialMessage ? { partial: st.partialMessage } : {}),
       }),
       busy,
-      suggestions: ['Change the theme', 'Add a dark mode', 'Make it responsive'],
+      suggestions: studioSuggestions(t),
       plan,
       changes,
       verifyReport,
@@ -835,6 +849,7 @@ export function StudioView() {
     compose,
     requestCtx,
     sendNote,
+    t,
   ]);
 
   return (
@@ -869,6 +884,7 @@ interface NewShellProps {
 }
 
 export function NewShell({ onboardingActive }: NewShellProps) {
+  const { t } = useTranslation();
   const primaryView = useAppStore((st) => st.primaryView);
   const setPrimaryView = useAppStore((st) => st.setPrimaryView);
   const setShowCommandPalette = useAppStore((st) => st.setShowCommandPalette);
@@ -916,31 +932,37 @@ export function NewShell({ onboardingActive }: NewShellProps) {
   return (
     <div className="h-full min-h-0 flex overflow-hidden bg-background" data-testid="new-shell">
       {/* Thin rail — one calm nav, not three. */}
-      <nav className="flex w-16 shrink-0 flex-col items-stretch border-r border-border py-2">
+      <nav
+        className="flex w-16 shrink-0 flex-col items-stretch border-r border-border py-2"
+        aria-label={t('shell.navLabel', 'Main navigation')}
+        data-testid="shell-rail"
+      >
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
           {RAIL.map((item) => {
             const active = primaryView === item.view;
+            const label = t(`shell.rail.${item.view}.label`, item.label);
             return (
               <GuidedTooltip
                 key={item.view}
-                title={item.label}
-                description={item.help}
-                kicker="Espace Cowork"
+                title={label}
+                description={t(`shell.rail.${item.view}.help`, item.help)}
+                kicker={t('shell.railKicker', 'Cowork workspace')}
                 side="right"
               >
                 <button
                   type="button"
                   aria-current={active ? 'page' : undefined}
                   onClick={() => setPrimaryView(item.view)}
-                  title={item.label}
+                  title={label}
+                  data-testid={`rail-${item.view}`}
                   className={`mx-1 flex flex-col items-center gap-0.5 rounded-md py-2 text-[10px] transition-colors ${
                     active
                       ? 'bg-accent text-foreground'
                       : 'text-muted-foreground hover:bg-accent/60'
                   }`}
                 >
-                  <span className="text-lg leading-none">{item.glyph}</span>
-                  <span>{item.label}</span>
+                  <span className="text-lg leading-none" aria-hidden="true">{item.glyph}</span>
+                  <span>{label}</span>
                 </button>
               </GuidedTooltip>
             );
@@ -950,20 +972,23 @@ export function NewShell({ onboardingActive }: NewShellProps) {
         {/* Footer: the discoverability net. ⌘K reaches every capability; "?" lists all shortcuts. */}
         <div className="shrink-0 border-t border-border/70 pt-1">
           <GuidedTooltip
-            title="History"
-            description="Find a previous session, its messages, and its proofs without leaving your workspace."
-            kicker="Navigation"
+            title={t('shell.history.label', 'History')}
+            description={t(
+              'shell.history.help',
+              'Find a previous session, its messages, and its proofs without leaving your workspace.'
+            )}
+            kicker={t('shell.navKicker', 'Navigation')}
             side="right"
           >
             <button
               type="button"
               onClick={() => useAppStore.getState().setShowConversationHistory(true)}
-              title="Conversation history"
+              title={t('shell.history.title', 'Conversation history')}
               className="mx-1 flex flex-col items-center gap-0.5 rounded-md py-1 text-[10px] text-muted-foreground transition-colors hover:bg-accent/60"
               data-testid="rail-history"
             >
-              <span className="text-base leading-none">🕘</span>
-              <span>History</span>
+              <span className="text-base leading-none" aria-hidden="true">🕘</span>
+              <span>{t('shell.history.label', 'History')}</span>
             </button>
           </GuidedTooltip>
           <div className="grid grid-cols-3 gap-0.5 px-1 pt-1">
@@ -971,8 +996,8 @@ export function NewShell({ onboardingActive }: NewShellProps) {
             <button
               type="button"
               onClick={() => setThemePickerOpen((open) => !open)}
-              title="Choisir le thème de l’application"
-              aria-label="Choisir le thème"
+              title={t('shell.theme.buttonTitle', 'Choose the app theme')}
+              aria-label={t('shell.theme.button', 'Choose the theme')}
               aria-haspopup="menu"
               aria-expanded={themePickerOpen}
               className="flex h-9 w-full items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60"
@@ -985,12 +1010,12 @@ export function NewShell({ onboardingActive }: NewShellProps) {
             {themePickerOpen && (
               <div
                 role="menu"
-                aria-label="Choisir le thème"
+                aria-label={t('shell.theme.button', 'Choose the theme')}
                 className="absolute bottom-0 left-full z-50 ml-2 w-52 overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-xl"
                 data-testid="theme-picker"
               >
                 <div className="px-2 pb-2 pt-1 text-xs font-semibold text-foreground">
-                  Apparence
+                  {t('shell.theme.heading', 'Appearance')}
                 </div>
                 <div className="grid grid-cols-2 gap-1">
                   {THEME_OPTIONS.map((option) => {
@@ -1013,7 +1038,7 @@ export function NewShell({ onboardingActive }: NewShellProps) {
                         data-testid={`theme-option-${option.value}`}
                       >
                         <span aria-hidden="true">{option.glyph}</span>
-                        <span>{option.label}</span>
+                        <span>{'labelKey' in option ? t(option.labelKey, option.label) : option.label}</span>
                       </button>
                     );
                   })}
@@ -1024,8 +1049,8 @@ export function NewShell({ onboardingActive }: NewShellProps) {
           <button
             type="button"
             onClick={() => setShowCommandPalette(true)}
-            title="Palette de commandes (⌘K) — atteindre n'importe quelle fonctionnalité"
-            aria-label="Palette de commandes"
+            title={t('shell.commandPalette.title', 'Command palette (⌘K) — reach any feature')}
+            aria-label={t('shell.commandPalette.label', 'Command palette')}
             className="flex h-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60"
           >
             <span className="text-xs leading-none font-mono" aria-hidden="true">
@@ -1035,8 +1060,8 @@ export function NewShell({ onboardingActive }: NewShellProps) {
           <button
             type="button"
             onClick={() => setShowShortcutsDialog(true)}
-            title="Raccourcis clavier (⌘/)"
-            aria-label="Raccourcis clavier"
+            title={t('shell.shortcuts.title', 'Keyboard shortcuts (⌘/)')}
+            aria-label={t('shell.shortcuts.label', 'Keyboard shortcuts')}
             className="flex h-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60"
           >
             <span className="text-base leading-none" aria-hidden="true">
@@ -1068,7 +1093,7 @@ export function NewShell({ onboardingActive }: NewShellProps) {
         <Suspense
           fallback={
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              Chargement…
+              {t('shell.loading', 'Loading…')}
             </div>
           }
         >

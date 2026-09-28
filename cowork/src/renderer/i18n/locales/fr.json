@@ -365,7 +365,20 @@
     "gUIAutomationScreenshot": "• Automatisation de l'interface utilisateur",
     "httpLocalhost3000": "http://localhost:3000",
     "leaveEmptyForLocalServer": "Laissez vide pour le serveur local",
-    "usesServerDefaultEGGemi": "Utilise le modèle par défaut du serveur"
+    "usesServerDefaultEGGemi": "Utilise le modèle par défaut du serveur",
+    "tabGroup": {
+      "essentials": "Essentiel",
+      "models": "Modèles et coût",
+      "tools": "Outils et MCP",
+      "extend": "Compétences et extensions",
+      "automation": "Automatisation",
+      "security": "Sécurité et espace de travail",
+      "ops": "Serveur et diagnostics"
+    },
+    "tunnel": "Réseau / tunnel",
+    "tunnelDesc": "Configurer un accès public par tunnel Ngrok",
+    "audio": "Audio et synthèse vocale",
+    "audioDesc": "Configurer la voix locale, les modèles Piper TTS et le débit de parole"
   },
   "general": {
     "appearance": "Apparence",
@@ -3467,5 +3480,241 @@
         "prerequisites": ""
       }
     }
+  },
+  "shell": {
+    "navLabel": "Navigation principale",
+    "railKicker": "Espace Cowork",
+    "navKicker": "Navigation",
+    "history": {
+      "label": "Historique",
+      "title": "Historique des conversations",
+      "help": "Retrouvez une session passée, ses messages et ses preuves sans quitter votre espace de travail."
+    },
+    "theme": {
+      "button": "Choisir le thème",
+      "buttonTitle": "Choisir le thème de l’application",
+      "heading": "Apparence",
+      "light": "Clair",
+      "dark": "Sombre",
+      "system": "Système"
+    },
+    "commandPalette": {
+      "label": "Palette de commandes",
+      "title": "Palette de commandes (⌘K) — atteindre n’importe quelle fonctionnalité"
+    },
+    "shortcuts": {
+      "label": "Raccourcis clavier",
+      "title": "Raccourcis clavier (⌘/)"
+    },
+    "loading": "Chargement…",
+    "rail": {
+      "chat": {
+        "label": "Discuter",
+        "help": "Discutez avec Code Buddy, joignez des fichiers et transformez une demande en action."
+      },
+      "plan": {
+        "label": "Plan",
+        "help": "Découpez une mission en étapes lisibles avant de laisser l’agent agir."
+      },
+      "activity": {
+        "label": "Activité",
+        "help": "Suivez les outils, fichiers, modèles et décisions produits pendant la session."
+      },
+      "workspace": {
+        "label": "Fichiers",
+        "help": "Parcourez les fichiers du projet et ouvrez les productions des agents."
+      },
+      "studio": {
+        "label": "App Studio",
+        "help": "Construisez une application en boucle : générer, tester, améliorer."
+      },
+      "creations": {
+        "label": "Créations",
+        "help": "Retrouvez vos livrables : documents, tableurs, présentations et exports."
+      },
+      "videostudio": {
+        "label": "Studio vidéo",
+        "help": "Préparez un scénarimage, générez les scènes et montez une vidéo vérifiable."
+      },
+      "assistant": {
+        "label": "Assistant",
+        "help": "Réglez le mode vocal en temps réel, Pocket TTS, le volume et les interruptions."
+      },
+      "meeting": {
+        "label": "Réunion",
+        "help": "Enregistrez une réunion locale avec consentement, points de reprise et notes automatiques."
+      },
+      "library": {
+        "label": "Médias",
+        "help": "Parcourez les médias de l’espace de travail et les ressources réutilisables."
+      },
+      "capabilities": {
+        "label": "Capacités",
+        "help": "Activez les compétences, outils, serveurs MCP et fournisseurs dont dispose l’agent."
+      },
+      "os": {
+        "label": "Pilotage",
+        "help": "Pilotez la boucle 2.0 : Constitution, échange multi-LLM, jumeau fantôme et preuves."
+      },
+      "labs": {
+        "label": "Labo",
+        "help": "Découvrez les fonctions expérimentales et les nouveaux modes d’orchestration."
+      },
+      "advanced": {
+        "label": "Avancé",
+        "help": "Accédez aux réglages experts, à la supervision et aux intégrations avancées."
+      }
+    }
+  },
+  "homeView": {
+    "title": "Que voulez-vous faire ?",
+    "subtitle": "Dites-le à Code Buddy : il code, cherche et crée dans votre dossier.",
+    "placeholder": "ex. corrige le bug de connexion, ou crée un tableau de bord…",
+    "inputLabel": "Votre demande",
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "keyHint": "Entrée pour envoyer · Maj+Entrée pour aller à la ligne",
+    "topicTravels": "Votre sujet suivra le studio que vous choisirez.",
+    "recentSessions": "Sessions récentes",
+    "untitled": "Sans titre",
+    "readyMissions": "Missions prêtes",
+    "tiles": {
+      "app": "App",
+      "deck": "Présentation",
+      "sheet": "Tableur",
+      "document": "Document",
+      "pod": "Podcast",
+      "image": "Image",
+      "video": "Vidéo",
+      "drive": "Drive",
+      "search": "Recherche"
+    },
+    "quick": {
+      "code": {
+        "label": "Coder / corriger",
+        "hint": "Décrivez le bug ou la fonctionnalité"
+      },
+      "search": {
+        "label": "Rechercher",
+        "hint": "Recherche large et plan de travail"
+      },
+      "document": {
+        "label": "Créer un document",
+        "hint": "Excel, Word, PDF, graphiques"
+      }
+    }
+  },
+  "recipes": {
+    "items": {
+      "build-app": {
+        "title": "Créer une application web",
+        "description": "Échafauder, lancer et tester dans le navigateur une petite application web, de bout en bout.",
+        "prompt": "Crée une petite application web : <décris ce qu’elle doit faire>. Échafaude-la, lance le serveur de développement, puis vérifie dans le navigateur que la page s’affiche et que le parcours principal fonctionne — corrige jusqu’à ce que ce soit le cas."
+      },
+      "fix-bug": {
+        "title": "Trouver et corriger un bug",
+        "description": "Trouver la cause, appliquer un correctif et le vérifier par un test.",
+        "prompt": "Enquête sur ce bug : <décris le symptôme>. Trouve la cause racine, propose le plus petit correctif juste, applique-le et vérifie-le avec un test qui échoue avant et passe après."
+      },
+      "review-diff": {
+        "title": "Relire mes changements",
+        "description": "Relire le diff git en cours pour y trouver bugs et simplifications.",
+        "prompt": "Relis le diff git en cours : bugs de justesse, réutilisations et simplifications possibles. Regroupe les constats par gravité et indique les lignes exactes."
+      },
+      "open-pr": {
+        "title": "Ouvrir une pull request",
+        "description": "Transformer les changements en cours en PR brouillon bien décrite.",
+        "prompt": "Transforme mes changements en cours en pull request : écris un titre clair au format Conventional Commits et une description (quoi, pourquoi, comment c’est testé), puis ouvre-la en brouillon."
+      },
+      "deep-research": {
+        "title": "Rapport de recherche approfondie",
+        "description": "Un rapport sourcé, à partir de plusieurs sources, sur un sujet.",
+        "prompt": "Mène une recherche approfondie sur : <sujet>. Explore plusieurs sources, vérifie les affirmations clés et produis un rapport en sections, avec des citations [n] dans le texte et une liste de références."
+      },
+      "sparkpage": {
+        "title": "Page de recherche vivante",
+        "description": "Synthétiser le web en une page à sections avec laquelle discuter.",
+        "prompt": "Recherche <sujet> sur le web et construis une page structurée — sections, tableaux comparatifs et citations — enregistrée comme artefact sur lequel je pourrai poser des questions."
+      }
+    }
+  },
+  "studio": {
+    "suggestions": {
+      "theme": "Changer le thème",
+      "darkMode": "Ajouter un mode sombre",
+      "responsive": "L’adapter aux petits écrans"
+    },
+    "sendCancelledSecrets": "Envoi annulé : impossible de masquer les secrets du projet.",
+    "generationCancelledSecrets": "Génération annulée : impossible de masquer les secrets du projet.",
+    "startFailed": "échec du démarrage",
+    "tabs": {
+      "editor": "Éditeur",
+      "preview": "Aperçu",
+      "versions": "Versions",
+      "secrets": "Secrets"
+    },
+    "run": "Lancer",
+    "export": "Exporter",
+    "exportTitle": "Exporter le projet en archive zip",
+    "site": "Site",
+    "siteBuilding": "Construction…",
+    "siteTitle": "Construire le site et l’exporter dans un dossier (prêt pour un hébergement statique)",
+    "siteUnavailable": "Export du site indisponible.",
+    "siteExportedBuild": "Site construit exporté ({{files}} fichiers) :",
+    "siteExportedStatic": "Site statique exporté ({{files}} fichiers) :",
+    "deploy": "Déployer",
+    "deployTitle": "Déployer (simulation Cloudflare Pages / Netlify)",
+    "github": "GitHub",
+    "githubPushing": "Envoi vers GitHub…",
+    "githubTitle": "Créer un dépôt GitHub et y envoyer ce projet",
+    "pushFailed": "Échec de l’envoi",
+    "pushed": "Envoyé sur GitHub.",
+    "repoCreated": "Dépôt créé.",
+    "finishManually": "Terminez l’envoi à la main :",
+    "dismiss": "Masquer",
+    "close": "Fermer",
+    "noFile": "Aucun fichier sélectionné.",
+    "bottomPanel": "Panneau du bas",
+    "terminal": "Terminal",
+    "console": "Console",
+    "consoleErrors": "erreurs",
+    "newApp": "Nouvelle app",
+    "newAppTitle": "Commencer une nouvelle application",
+    "filesPlaceholder": "Les fichiers, le code et l’aperçu de votre application apparaîtront ici pendant la génération.",
+    "emptyTitle": "Que voulez-vous créer ?",
+    "emptyHint": "Choisissez un type ci-dessous (aperçu de ce qui sera créé) ou décrivez votre application plus haut : les fichiers, le code et l’aperçu apparaîtront ici."
+  },
+  "studioChat": {
+    "regionLabel": "Discussion d’itération d’App Studio",
+    "title": "Faire évoluer l’application",
+    "hintBuild": "Demandez une modification, puis vérifiez l’aperçu.",
+    "hintDiscuss": "Mode discussion : on planifie, aucun fichier ne sera modifié.",
+    "modeGroup": "Mode du chat",
+    "modeBuild": "Construire",
+    "modeDiscuss": "Discuter",
+    "empty": "Décrivez la prochaine étape : style, composant, données ou tests à ajouter.",
+    "implementPlan": "Implémenter ce plan",
+    "userMessage": "Message de l’utilisateur",
+    "assistantMessage": "Message de l’assistant",
+    "iterating": "En cours…",
+    "responseInProgress": "Réponse en cours",
+    "suggestionsLabel": "Suggestions d’itération",
+    "attachmentsLabel": "Pièces jointes à la prochaine demande",
+    "remove": "Retirer {{label}}",
+    "composerLabel": "Message d’itération",
+    "placeholder": "ex. Rends le bouton principal plus visible et ajoute un état vide",
+    "attachImageTitle": "Joindre une maquette ou une capture (ou glisser-déposer / coller une image)",
+    "image": "Image",
+    "contextTitle": "Choisir les fichiers joints ou exclus du contexte",
+    "context": "Contexte",
+    "tokensTitle": "Estimation des jetons d’entrée ajoutés par cette demande (hors historique)",
+    "tokensUnit": "jetons",
+    "keyHint": "Entrée pour envoyer · Maj+Entrée pour aller à la ligne",
+    "stop": "Arrêter",
+    "send": "Envoyer"
+  },
+  "automations": {
+    "title": "Automatisations",
+    "hint": "Gérer les rappels et les règles sensorielles déclenchables"
   }
 }
