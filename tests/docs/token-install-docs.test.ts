@@ -31,10 +31,10 @@ describe('B-8 + B-3: Documentation of token minting, --allow-scripts, and option
     expect(content).toMatch(/JWT_SECRET/);
   });
 
-  it('docs/security.md documente --allow-scripts et les 18 paquets natifs optionnels', () => {
+  it('docs/security.md documente une autorisation ciblée des scripts natifs', () => {
     const content = readDoc('docs/security.md');
-    expect(content).toMatch(/--allow-scripts/);
-    expect(content).toMatch(/18\s+(?:optional\s+)?native/i);
+    expect(content).toMatch(/--allow-scripts=better-sqlite3/);
+    expect(content).toMatch(/warning alone\s+does not establish that the scripts were blocked/i);
   });
 
   it('docs/getting-started.md documente l ouverture PWA en une commande', () => {
