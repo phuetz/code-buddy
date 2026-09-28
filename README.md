@@ -51,10 +51,9 @@ Code Buddy combines a terminal coding agent with cloud, gateway and local model 
 query-selected tools, and the following interfaces. Optional services require their documented
 configuration; enabling a feature does not replace its permission checks.
 
-**New in 2.1:** explicit resource discovery and selection, RagChat search with page citations,
-MCP configuration import, a bounded A2A JSON-RPC bridge, and fixes for terminal sessions,
-configuration diagnostics and Cowork workflows. Read the [release notes](docs/RELEASE-NOTES-2.2.0.md)
-for setup and the limits of each integration.
+For changes planned for 2.3.0, see the [changelog](CHANGELOG.md). The
+[2.2.0 release notes](docs/RELEASE-NOTES-2.2.0.md) describe the last published
+version and its integration limits.
 
 - **A multi-AI fleet hub.** Peers running `buddy server` observe each other's events and call each
   other's models: one-shot `peer.chat`, multi-turn `peer.chat-session.*`, and `peer.tool.invoke`
@@ -261,7 +260,8 @@ to Apache 2.0 on 2030-08-31. Bundled Python skills stay MIT (see their `SKILL.md
 ## Documentation
 
 - **[Getting started](docs/getting-started.md)** — first run, headless mode, sessions.
-- **[Release notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)** — current changes and validation limits.
+- **[Changelog](CHANGELOG.md)** — 2.3.0 candidate and earlier changes.
+- **[Release notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)** — last published release and validation limits.
 - **[Release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md)** — previous release.
 - [Release notes 2.0.0](docs/RELEASE-NOTES-2.0.0.md) — previous major release.
 - [Install](docs/install.md) — published npm, Docker/VPS, the one-command installer.
