@@ -25,6 +25,7 @@ import {
 } from './execution-policy.js';
 import { confineSpawn } from '../../security/native-sandbox.js';
 import { refusedUnconfinedEscalationResult } from './unconfined-escalation.js';
+import { runProtectedWorkspaceCommand } from '../../security/git-secret-process-boundary.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
@@ -50,6 +51,11 @@ export async function* executeStreaming(
     return { success: false, error: 'Command aborted by user' };
   }
   const cwd = deps.getCurrentDirectory();
+  const protectedResult = runProtectedWorkspaceCommand(command, cwd);
+  if (protectedResult) {
+    if (protectedResult.success && protectedResult.output) yield protectedResult.output;
+    return protectedResult;
+  }
   // Validate against the directory where the command will actually run.
   const validation = validateCommand(command, undefined, cwd);
   if (!validation.valid) {

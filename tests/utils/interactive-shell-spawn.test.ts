@@ -7,6 +7,9 @@ import {
   type PTYShell,
 } from '../../src/tools/interactive-bash.js';
 import { getShellConfiguration } from '../../src/utils/shell-configuration.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 function createPtyHarness(): {
   module: PTYModule;
@@ -32,23 +35,28 @@ function createPtyHarness(): {
 }
 
 async function assertInteractiveSpawn(): Promise<void> {
-  const harness = createPtyHarness();
-  const tool = new InteractiveBashTool(harness.module);
-  const command = 'Write-Output "pty arguments"';
-  const execution = tool.executeInteractive(command, { cwd: process.cwd() });
+  const cwd = mkdtempSync(join(tmpdir(), 'codebuddy-interactive-public-'));
+  try {
+    const harness = createPtyHarness();
+    const tool = new InteractiveBashTool(harness.module);
+    const command = 'Write-Output "pty arguments"';
+    const execution = tool.executeInteractive(command, { cwd });
 
-  const shellConfiguration = getShellConfiguration();
-  const executable = shellConfiguration.shell === 'bash'
-    ? resolveBashExecutable()
-    : shellConfiguration.executable;
-  expect(harness.spawn).toHaveBeenCalledWith(
-    executable,
-    [...shellConfiguration.argsPrefix, command],
-    expect.objectContaining({ cwd: process.cwd() }),
-  );
+    const shellConfiguration = getShellConfiguration();
+    const executable = shellConfiguration.shell === 'bash'
+      ? resolveBashExecutable()
+      : shellConfiguration.executable;
+    expect(harness.spawn).toHaveBeenCalledWith(
+      executable,
+      [...shellConfiguration.argsPrefix, command],
+      expect.objectContaining({ cwd }),
+    );
 
-  harness.exit(0);
-  await execution;
+    harness.exit(0);
+    await execution;
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
 }
 
 describe('interactive shell dispatch', () => {

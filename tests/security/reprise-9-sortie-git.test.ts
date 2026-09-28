@@ -198,6 +198,7 @@ describe('seconde barrière sur la sortie shell', () => {
     const oid = gitIn(duplicateRepo, 'rev-parse', 'HEAD:a-public.txt').trim();
     expect(gitIn(duplicateRepo, 'rev-parse', 'HEAD~1:z-secret.env').trim()).toBe(oid);
     expect(validateCommand(`git cat-file -p ${oid}`, undefined, duplicateRepo).valid).toBe(false);
+    expect(redactTrackedGitOutput(current, duplicateRepo)).toBe('[REDACTED]');
   });
 
   it('refuse la plomberie après suppression du secret et l’admet dans un dépôt sans secret', () => {
@@ -332,12 +333,9 @@ describe('seconde barrière sur la sortie shell', () => {
     'env git archive HEAD', 'env git format-patch -1 --stdout',
     'env git whatchanged -p', 'env git diff-tree -p HEAD~1 HEAD',
     'env git stash show -p',
-  ])('masque les valeurs suivies, indépendamment du préfixe : %s', async (command) => {
-    // The CI Docker fallback uses node:22-slim, which has no Git. Run the
-    // actual host Git through BashTool's protected direct subprocess path.
+  ])('refuse le sous-processus direct malgré le préfixe : %s', async (command) => {
     const result = await new BashTool().shellFreeExec(['bash', '-c', command], 3_000, repo);
-    expect(result.success).toBe(true);
-    expect(JSON.stringify(result)).toContain('[REDACTED]');
+    expect(result.success).toBe(false);
     expect(JSON.stringify(result)).not.toContain(older);
     expect(JSON.stringify(result)).not.toContain(current);
     expect(JSON.stringify(result)).not.toContain(stashed);
@@ -356,13 +354,12 @@ describe('seconde barrière sur la sortie shell', () => {
     expect(JSON.stringify(result)).not.toContain(stashed);
   });
 
-  it.skipIf(!posixShell)('laisse passer une commande enveloppée et masque sa sortie', async () => {
+  it.skipIf(!posixShell)('refuse aussi une commande enveloppée dans le shell', async () => {
     const command = `env sh -c "printf ${current}"`;
     expect(validateCommand(command, undefined, repo).valid).toBe(true);
     const result = await new BashTool().execute(command, 3_000, repo);
-    expect(result.success).toBe(true);
-    expect(result.output).toContain('[REDACTED]');
-    expect(result.output).not.toContain(current);
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(current);
   });
 
   it.skipIf(!posixShell)('masque aussi les événements de sortie et le résultat final en flux', async () => {
@@ -374,23 +371,22 @@ describe('seconde barrière sur la sortie shell', () => {
       result = await stream.next();
     }
     const visible = JSON.stringify({ chunks, result: result.value });
-    expect(visible).toContain('[REDACTED]');
+    expect(result.value.success).toBe(false);
     expect(visible).not.toContain(current);
     expect(visible).not.toContain(older);
     expect(visible).not.toContain(stashed);
   });
 
-  it('conserve une sortie ordinaire et le mot clef sans sa valeur', async () => {
-    const result = await new BashTool().shellFreeExec(['git', 'show'], 3_000, repo);
-    expect(result.output).toContain('API_KEY=');
-    expect(result.output).toContain('diff --git a/.env b/.env');
+  it('conserve les métadonnées publiques via le parent sans rendre le secret', async () => {
+    const result = await new BashTool().execute('git status', 3_000, repo);
+    expect(result.success).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(current);
   });
 
   it('masque la valeur historique après suppression du fichier de travail', async () => {
     const result = await new BashTool().shellFreeExec(['git', 'show', 'HEAD~1'], 3_000, deletedRepo);
-    expect(result.success).toBe(true);
-    expect(result.output).toContain('[REDACTED]');
-    expect(result.output).not.toContain(older);
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(older);
   });
 
   it.skipIf(!posixShell)('l’enveloppe sh -c avec un chemin explicite ne rend pas la valeur', async () => {
@@ -398,20 +394,20 @@ describe('seconde barrière sur la sortie shell', () => {
     expect(JSON.stringify(result)).not.toContain(current);
   });
 
-  it('masque le blob lu par hash avec git cat-file sur toutes les plateformes', async () => {
+  it('refuse le blob lu par hash avec git cat-file sur toutes les plateformes', async () => {
     const oid = git('rev-parse', 'HEAD:.env').trim();
     const result = await new BashTool().shellFreeExec(['git', 'cat-file', '-p', oid], 3_000, repo);
-    expect(result.success).toBe(true);
-    expect(result.output).toBe('API_KEY=[REDACTED]');
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(current);
   });
 
-  it.skipIf(!posixShell)('refuse cat-file par le validateur et masque aussi le lancement direct', async () => {
+  it.skipIf(!posixShell)('refuse cat-file par le validateur et le lancement direct', async () => {
     const oid = git('rev-parse', 'HEAD:.env').trim();
     const command = `env git cat-file -p ${oid}`;
     expect(validateCommand(command, undefined, repo).valid).toBe(false);
     const result = await new BashTool().shellFreeExec(['bash', '-c', command], 3_000, repo);
-    expect(result.success).toBe(true);
-    expect(result.output).toBe('API_KEY=[REDACTED]');
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(current);
   });
 
   it('repère le dossier Git nommé dans la commande depuis un parent', () => {
@@ -419,12 +415,12 @@ describe('seconde barrière sur la sortie shell', () => {
       .toBe('[REDACTED]');
   });
 
-  it.skipIf(!posixShell)('masque un chemin de projet composé au moment de l’exécution', async () => {
+  it.skipIf(!posixShell)('refuse le chemin de projet composé au moment de l’exécution', async () => {
     const command = 'Z=; cat .en${Z}v';
     expect(validateCommand(command, undefined, repo).valid).toBe(true);
     const result = await new BashTool().shellFreeExec(['bash', '-c', command], 3_000, repo);
-    expect(result.success).toBe(true);
-    expect(result.output).toBe('API_KEY=[REDACTED]');
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(current);
   });
 
   it('préserve la sortie dans un dépôt Git neuf sans secret suivi', () => {
@@ -445,7 +441,7 @@ describe('seconde barrière sur la sortie shell', () => {
       chunks.push(step.value);
       step = await stream.next();
     }
-    expect(chunks.join('')).toContain('[REDACTED]');
+    expect(step.value.success).toBe(false);
     expect(chunks.join('')).not.toContain(current);
   });
 
@@ -465,9 +461,8 @@ describe('seconde barrière sur la sortie shell', () => {
 
   it.skipIf(!posixShell)('masque GIT_DIR même si le répertoire de lancement est hors du dépôt', async () => {
     const result = await new BashTool().shellFreeExec(['bash', '-c', 'env GIT_DIR=tracked/.git git show'], 3_000, qa.root);
-    expect(result.success).toBe(true);
-    expect(result.output).toContain('[REDACTED]');
-    expect(result.output).not.toContain(current);
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(current);
   });
 
   it.skipIf(!posixShell).each([
@@ -476,25 +471,22 @@ describe('seconde barrière sur la sortie shell', () => {
     'env GIT_DIR=tracked/.git GIT_WORK_TREE=tracked git show',
   ])('masque aussi un dépôt désigné depuis un répertoire parent : %s', async (command) => {
     const result = await new BashTool().shellFreeExec(['bash', '-c', command], 3_000, qa.root);
-    expect(result.success).toBe(true);
-    expect(result.output).toContain('[REDACTED]');
-    expect(result.output).not.toContain(current);
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(current);
   });
 
   it('masque aussi la sortie du chemin shellFreeExec', async () => {
     const result = await new BashTool().shellFreeExec(['git', 'show'], 3_000, repo);
-    expect(result.success).toBe(true);
-    expect(result.output).toContain('[REDACTED]');
-    expect(result.output).not.toContain(current);
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(current);
   });
 
   it('masque la sortie du ripgrep direct de BashTool', async () => {
     const bash = new BashTool();
     await bash.execute('cd ' + repo, 3_000, repo);
     const result = await bash.grep('FAKE-GIT', 'credentials.json');
-    expect(result.success).toBe(true);
-    expect(result.output).toContain('[REDACTED]');
-    expect(result.output).not.toContain(current);
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(current);
   });
 
   it('retient une sortie trop volumineuse', () => {

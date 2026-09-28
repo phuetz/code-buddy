@@ -51,6 +51,7 @@ import {
   redactTrackedGitResult,
   withheldTrackedGitOutput,
 } from '../../security/tracked-git-output-redactor.js';
+import { hasProtectedGitWorkspace, runProtectedWorkspaceCommand } from '../../security/git-secret-process-boundary.js';
 
 /**
  * Vrai seulement pour un `cd` SEUL, qui doit changer le répertoire de la session.
@@ -419,6 +420,13 @@ export class BashTool implements Disposable {
         };
       }
 
+      // The protected-workspace broker builds argv itself. Run it before the
+      // shell syntax validator, which deliberately rejects a diff touching a
+      // classified file even though the broker can omit that hunk safely.
+      const protectedResult = isBareChangeDirectory(command)
+        ? null : runProtectedWorkspaceCommand(command, effectiveCwd);
+      if (protectedResult) return protectedResult;
+
       // Validate command before any execution (legacy validation)
       const validation = this.validateCommand(command, effectiveCwd);
       if (!validation.valid) {
@@ -755,6 +763,9 @@ export class BashTool implements Disposable {
       return { success: false, error: 'shellFreeExec: argv must be non-empty' };
     }
     const workDir = cwd ?? this.currentDirectory;
+    if (hasProtectedGitWorkspace(workDir)) {
+      return { success: false, error: 'Command blocked: shellFreeExec cannot see a protected Git workspace' };
+    }
     const policyEnv = {
       ...getShellEnvPolicy().buildEnv(getFilteredEnv()),
       ...CONTROLLED_SUBPROCESS_ENV,
@@ -913,6 +924,9 @@ export class BashTool implements Disposable {
    * @returns Matching lines with file paths and line numbers, or error
    */
   async grep(pattern: string, files: string = '.'): Promise<ToolResult> {
+    if (hasProtectedGitWorkspace(this.currentDirectory)) {
+      return { success: false, error: 'Command blocked: external grep cannot see a protected Git workspace' };
+    }
     // Validate input with schema
     const validation = validateWithSchema(
       bashToolSchemas.grep,

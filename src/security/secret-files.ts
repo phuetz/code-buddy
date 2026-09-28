@@ -152,6 +152,11 @@ function canonicalize(p: string): string | null {
 function classify(absPath: string, roots: readonly string[]): string | null {
   const base = path.basename(absPath);
   if (absPath === '/etc/shadow' || absPath === '/etc/gshadow') return 'system password database';
+  // Git objects can carry the bytes of a classified file under opaque hash
+  // names. Guard the object store and its aliases through canonicalize() just
+  // like the working-tree credential path.
+  if (absPath.split(path.sep).some((component) => component.toLowerCase() === '.git'))
+    return 'private Git metadata and object store';
   if (isUniversalSecretBasename(base)) return `secret file name (${base})`;
   const home = homeDir();
   for (const rel of HOME_PRIVATE_ROOTS) {
@@ -228,6 +233,7 @@ export function checkSecretFileAccess(
   }
   const roots = getHomeCredentialRoots();
   const matched = verdict.matchedPath ?? '';
+  if (matched.split(path.sep).some((component) => component.toLowerCase() === '.git')) return verdict;
   const inCredentialRoot = roots.some((root) => isInside(matched, root));
   return inCredentialRoot ? verdict : { secret: false };
 }

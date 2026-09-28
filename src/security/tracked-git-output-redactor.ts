@@ -177,12 +177,16 @@ function historicalFingerprints(root: string): Fingerprints {
   const seen = new Set<string>();
   const home = path.resolve(os.homedir());
   const rootUnderHome = root === home || root.startsWith(home + path.sep);
-  const objects = git(root, ['rev-list', '--objects', '--all', '--reflog']);
-  for (const line of objects.toString('utf8').split('\n')) {
-    const space = line.indexOf(' ');
-    if (space < 0) continue;
-    const oid = line.slice(0, space);
-    const relative = line.slice(space + 1);
+  // rev-list --objects assigns one path to each OID. That path may be public
+  // even when the identical blob also belonged to a historical secret file.
+  const raw = git(root, [
+    'log', '--all', '--reflog', '--root', '-m', '--no-renames', '--raw', '--no-abbrev', '-z', '--format=',
+  ]).toString('utf8');
+  const changePattern = /:[0-7]{6} [0-7]{6} [0-9a-f]{40,64} ([0-9a-f]{40,64}) [A-Z][0-9]*\0([^\0]*)\0/g;
+  for (const match of raw.matchAll(changePattern)) {
+    const oid = match[1]!;
+    const relative = match[2]!;
+    if (/^0+$/.test(oid)) continue; // Deletion has no new blob.
     // Outside HOME, the central classifier only grants universal secret
     // basenames. Skip other historical objects without 95k filesystem probes.
     if (!rootUnderHome && !isUniversalSecretBasename(path.basename(relative))) continue;
@@ -190,6 +194,8 @@ function historicalFingerprints(root: string): Fingerprints {
     seen.add(oid);
     addGitBlob(index, root, oid);
   }
+  if (raw.replace(changePattern, '').replace(/[\0\r\n]/g, '') !== '')
+    throw new Error('Git history could not be inventoried');
   historyCache.set(root, { stamp, index: index.clone() });
   if (historyCache.size > 8) historyCache.delete(historyCache.keys().next().value!);
   return index;
@@ -246,6 +252,33 @@ function candidateDirectories(cwd: string, command: string, paths: string[] = []
     addCandidate(raw);
   }
   for (const candidate of paths) addCandidate(candidate);
+  // A parent worktree may contain a nested repository whose secret values are
+  // copied into an ordinary file in the parent. Inventory every reachable
+  // nested Git root, not only the repository selected by `git -C cwd`.
+  const pending = [...directories];
+  const visited = new Set<string>();
+  let traversed = 0;
+  while (pending.length > 0) {
+    const directory = pending.pop()!;
+    const real = fs.realpathSync(directory);
+    if (visited.has(real)) continue;
+    visited.add(real);
+    if (++traversed > 100_000) throw new Error('too many directories to inventory');
+    for (const entry of fs.readdirSync(real, { withFileTypes: true })) {
+      const child = path.join(real, entry.name);
+      if (entry.name === '.git') {
+        directories.add(real);
+        if (directories.size > 64) throw new Error('too many nested Git repositories to inventory');
+        continue;
+      }
+      if (entry.isDirectory()) pending.push(child);
+      else if (entry.isSymbolicLink()) {
+        try {
+          if (fs.statSync(child).isDirectory()) pending.push(child);
+        } catch { /* A broken link cannot contain tracked values. */ }
+      }
+    }
+  }
   return [...directories];
 }
 

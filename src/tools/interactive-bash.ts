@@ -6,6 +6,7 @@ import { ToolResult, getErrorMessage } from "../types/index.js";
 import { getFilteredEnv } from "./bash/command-validator.js";
 import { SAFE_ENV_VARS } from "./bash/security-patterns.js";
 import { getShellEnvPolicy } from "../security/shell-env-policy.js";
+import { runProtectedWorkspaceCommand } from "../security/git-secret-process-boundary.js";
 import {
   getShellConfiguration,
   type ShellConfiguration,
@@ -196,6 +197,11 @@ export class InteractiveBashTool extends EventEmitter {
     command: string,
     options: PTYOptions = {}
   ): Promise<{ sessionId: string; output: string }> {
+    const protectedResult = runProtectedWorkspaceCommand(command, options.cwd || process.cwd());
+    if (protectedResult) return {
+      sessionId: '',
+      output: protectedResult.success ? protectedResult.output ?? '' : `Error: ${protectedResult.error}`,
+    };
     // Validate command for dangerous patterns before execution
     const validationError = validateCommand(command);
     if (validationError) {

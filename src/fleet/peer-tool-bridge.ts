@@ -41,6 +41,7 @@ import { ConfirmationService } from '../utils/confirmation-service.js';
 import { auditLogger } from '../security/audit-logger.js';
 import { assertPeerToolInvokeAllowed } from './permissions.js';
 import { getGlobalEventBus } from '../events/event-bus.js';
+import { redactTrackedGitOutput } from '../security/tracked-git-output-redactor.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -488,14 +489,21 @@ async function runInvocation(
     if (!exec) {
       throw new Error(`UNKNOWN_PEER_TOOL: no executor registered for "${tool}"`);
     }
-    const { output, truncated } = await exec({
-      args: argsRaw,
-      emitChunk: stream ? ctx.emitChunk : undefined,
-    });
+    // Buffer before emitting: a secret may straddle two stream chunks. The
+    // peer executors intentionally bypass the local tool registry, so apply
+    // the same value boundary here using the entire exposed workspace.
+    const { output, truncated } = await exec({ args: argsRaw });
+    const root = getWorkspaceRoot();
+    if (!root) throw new Error('PEER_WORKSPACE_NOT_CONFIGURED');
+    const visible = redactTrackedGitOutput(output, root);
+    if (stream && visible) {
+      for (let offset = 0; offset < visible.length; offset += READ_STREAM_CHUNK)
+        ctx.emitChunk?.(visible.slice(offset, offset + READ_STREAM_CHUNK));
+    }
     logAudit({ ctx, tool, stream, ok: true, start });
     return {
       tool,
-      output: stripAnsi(output),
+      output: stripAnsi(visible),
       durationMs: Date.now() - start,
       truncated,
     };
