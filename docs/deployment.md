@@ -27,6 +27,10 @@ buddy server --port 3000 --no-auth             # ONLY behind a trusted network
 | `CODEBUDDY_TRUSTED_PROXIES` | unset | csv of reverse-proxy addresses/subnets (or `loopback`). Only then is `X-Forwarded-For` honoured for `req.ip` and the rate limit; unset ⇒ the socket address is used |
 | `--no-auth` | auth on | Disables JWT. Never expose a `--no-auth` server to an untrusted network — reserve it for loopback or a private overlay (Tailscale/WireGuard) |
 
+`buddy daemon start` launches its internal HTTP server without JWT on
+`127.0.0.1` only. Remote clients must use an authenticated `buddy server`
+with an explicit `--host` address.
+
 **Fleet convention:** the chat/API server runs on `3000` and a second
 instance acting as the fleet gateway runs on `3001`. They are separate
 processes of the same binary, not two listeners in one process.
