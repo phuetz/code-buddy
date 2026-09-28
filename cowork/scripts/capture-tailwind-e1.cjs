@@ -8,6 +8,8 @@ const WebSocket = require('ws');
 
 const outputDir = path.resolve(process.argv[2] || '.');
 const phase = process.argv[3] || 'capture';
+const themes = (process.argv[4] || 'light,dark').split(',');
+const views = (process.argv[5] || 'chat,studio,activity,advanced').split(',');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cowork-e1-'));
 fs.mkdirSync(outputDir, { recursive: true });
 const port = 19328;
@@ -74,8 +76,8 @@ async function main() {
     await sleep(500);
     await evaluate('window.useAppStore.getState().setNewShellEnabled(true)');
     await evaluate('localStorage.setItem("cowork.tourSeen", "1"); window.useAppStore.getState().setShowOnboardingTour(false)');
-    const views = ['chat', 'studio', 'activity', 'advanced'];
-    for (const theme of ['light', 'dark']) {
+    const probes = {};
+    for (const theme of themes) {
       await evaluate(`window.useAppStore.getState().updateSettings({theme:${JSON.stringify(theme)}})`);
       for (const view of views) {
         await evaluate(`window.useAppStore.getState().setPrimaryView(${JSON.stringify(view)})`);
@@ -83,8 +85,18 @@ async function main() {
         await sleep(700);
         const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
         fs.writeFileSync(path.join(outputDir, `${phase}-${view}-${theme}.png`), Buffer.from(screenshot.data, 'base64'));
+        if (view === 'chat') {
+          probes[theme] = await evaluate(`(() => {
+            const button = document.querySelector('.bg-accent.text-white');
+            if (!button) return { found: false };
+            const style = getComputedStyle(button);
+            return { found: true, color: style.color, background: style.backgroundColor,
+              theme: document.documentElement.className };
+          })()`);
+        }
       }
     }
+    fs.writeFileSync(path.join(outputDir, `${phase}-styles.json`), JSON.stringify(probes, null, 2));
   } finally {
     ws.close();
   }

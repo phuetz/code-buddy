@@ -114,8 +114,8 @@
     --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.4);
     --shadow-card: 0 4px 16px rgba(20, 10, 50, 0.5), 0 0 0 1px rgba(124, 92, 255, 0.12);
     --shadow-elevated: 0 20px 48px rgba(10, 5, 30, 0.6), 0 0 24px rgba(124, 92, 255, 0.2);
-    --color-accent: #7c5cff;
-    --color-accent-hover: #8f72ff;
+    --color-accent: #957aff;
+    --color-accent-hover: #a084ff;
     --color-on-accent: #0d0b1f;
     --color-accent-muted: rgba(124, 92, 255, 0.2);
     --color-text-primary: #ece9ff;
@@ -144,16 +144,16 @@
     --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.4);
     --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
     --shadow-elevated: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(16, 163, 127, 0.15);
-    --color-accent: #10a37f;
-    --color-accent-hover: #1fb894;
+    --color-accent: #1fb894;
+    --color-accent-hover: #31cba6;
     --color-on-accent: #0d1117;
     --color-accent-muted: rgba(16, 163, 127, 0.18);
     --color-text-primary: #e6edf3;
     --color-text-secondary: #9da7b3;
     --color-text-muted: #6e7681;
-    --color-success: #10a37f;
+    --color-success: #1fb894;
     --color-warning: #d29922;
-    --color-error: #f85149;
+    --color-error: #ff6359;
     --color-info: #86b3ff;
   }
 
@@ -181,9 +181,9 @@
     --color-text-primary: #2d2a26;
     --color-text-secondary: #6b6560;
     --color-text-muted: #9b938a;
-    --color-success: #10a37f;
-    --color-warning: #d97706;
-    --color-error: #ef4444;
+    --color-success: #17754a;
+    --color-warning: #8a5300;
+    --color-error: #b42318;
     --color-info: #1f5fd6;
   }
 
@@ -575,6 +575,15 @@
   .code-block code {
     background: transparent;
   }
+}
+
+/* Historical inline buttons pair an accent background with text-white. Match
+   their foreground to the active accent in every theme without rewriting the
+   components; the selector also covers the opaque hover and 90% variants. */
+:is(.bg-accent, .bg-accent-hover, .bg-primary, [class~="bg-accent/90"]).text-white,
+:is([class~="hover:bg-accent"], [class~="hover:bg-accent/90"],
+  [class~="hover:bg-accent-hover"], [class~="hover:bg-primary"]).text-white:hover {
+  color: var(--color-on-accent);
 }
 
 /* Respect reduced motion preferences */
