@@ -1,7 +1,7 @@
 # Code Buddy 2.3 — What landed, and what it does not do
 
 These release notes document the features and fixes integrated for the upcoming **2.3.0** release on top of published **2.2.0**.
-`package.json` remains untouched in this documentation cycle, and no package has been published.
+The repository is prepared with `package.json` at 2.3.0; publication remains pending.
 
 | Feature / Topic | Area | Documentation |
 |:----------------|:-----|:--------------|
@@ -13,7 +13,7 @@ These release notes document the features and fixes integrated for the upcoming 
 | Cowork folder instructions | Cowork UI & Context | [cowork.md](cowork.md#folder-instructions) |
 | Authored skills discovery | Self-improvement engine | [self-improvement-engine.md](self-improvement-engine.md#authored-skill-discovery) |
 | Kernel watcher limit resilience | Skills registry & inotify | [skills.md](skills.md#watcher-health) |
-| Sub-millisecond CLI startup | CLI boot | [performance.md](performance.md#startup-time) |
+| Thin CLI bootstrap | CLI boot | [getting-started.md](getting-started.md#installation) |
 
 ---
 
@@ -55,9 +55,8 @@ These release notes document the features and fixes integrated for the upcoming 
 - **What it does:** Prevents crashes when the kernel inotify watch table is exhausted (`ENOSPC` / `EMFILE` / `ENFILE`).
 - **Degraded mode:** Switches to synchronous on-demand file reading and periodically attempts to restore filesystem watches once quotas become available.
 
-### 9. Fast CLI startup (`cli-boot.js`)
-- **What it does:** Replaces the heavy monolithic process entry with a thin bootstrap loader (`dist/cli-boot.js`).
-- **Performance:** Bypasses Commander and large dependency trees for lightweight commands (`--version` down to ~25 ms, `--help` down to ~52 ms).
+### 9. Thin CLI bootstrap (`cli-boot.js`)
+- **What it does:** Routes lightweight commands through `dist/cli-boot.js`. Startup time depends on the machine and installation; no release-wide timing is claimed here.
 
 ---
 

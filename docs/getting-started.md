@@ -50,6 +50,10 @@ npm install -g @phuetz/code-buddy@latest
 npx @phuetz/code-buddy@latest
 ```
 
+If a source installation fails because `@vscode/ripgrep` receives HTTP 403
+from GitHub, see the [system-ripgrep workaround](install.md#ripgrep-download-blocked-during-npm-ci).
+Its `--ignore-scripts` option also skips native add-on installation.
+
 ## Interactive terminal
 
 The compact Ink interface shows the active provider/model, edit permissions and a multiline draft. It stays editable while the agent works: pressing Enter during a reply queues the next message; starting that queued turn preserves your newer draft.
@@ -73,7 +77,7 @@ run an offline AI demo.
 
 ```bash
 buddy login          # ChatGPT subscription, no API key (opens a browser)
-buddy try            # ← after login: a real coding demo (about a minute on a fast model).
+buddy try            # ← after login: a real coding demo; duration depends on the model.
                      #    Writes FizzBuzz + tests, runs them, and independently verifies them.
 
 buddy onboard        # Interactive guided setup. If a free provider is detected,
@@ -92,9 +96,8 @@ when the login attempt ends (after five minutes). `--no-browser` does not start
 the sign-in at all and exits with an explanation; there is no device-code mode
 for ChatGPT. Without a display, use a local model instead (`buddy onboard`).
 
-`buddy try` is a real coding demo, not a timer: there is no 60-second cutoff. On a
-fast ChatGPT or Qwen3 model it often finishes in about a minute; on a small or cold
-local model it can take several minutes. The model must be able to **call tools**
+`buddy try` is a real coding demo, not a timer: there is no fixed cutoff. A small
+or cold local model can take several minutes. The model must be able to **call tools**
 (edit files, run commands): use a `qwen3` tag such as `qwen3:8b`, `devstral`, or
 `qwen2.5-coder:14b` and above. `qwen2.5:7b`, `qwen2.5-coder:7b` and `llama3` 8B can
 chat, but Code Buddy treats them as chat-only, so `buddy try` cannot go green with them.
@@ -132,16 +135,16 @@ buddy
 buddy --yolo                       # full autonomy (see Special Modes)
 ```
 
-## The 8 commands that matter (everything else is optional)
+## Commands to start with (everything else is optional)
 
-`buddy --help` lists 60+ commands and the docs mention ~120 environment
-variables. **Ignore almost all of it to start.** These are the only ones a new
+`buddy --help` lists many commands and the configuration has many optional
+variables. **Ignore almost all of it to start.** These are the ones a new
 user needs; the rest (companion/voice, film, robot, fleet, self-improvement, …)
 are opt-in and stay out of your way until you go looking for them.
 
 | Command | What it does |
 | ---------------------- | ------------------------------------------------------------ |
-| `buddy try` | Proof the configured free provider works (real coding demo, about a minute on a fast model). |
+| `buddy try` | Proof the configured free provider works through a real coding demo. |
 | `buddy onboard` | Interactive setup; uses a detected free path or asks you to choose one. |
 | `buddy login` | Sign in with a ChatGPT subscription ($0, no API key). |
 | `buddy` | Start an interactive session. |
@@ -638,7 +641,9 @@ Confirm `.codebuddy/CODEBUDDY_MEMORY.md` exists in your project. If not, run `bu
 Auto-reconnect is opt-in (`autoReconnect: true` in the listener options). Without it, a single drop ends the session. With it, the listener uses exponential backoff. Check `/fleet status` for the current state. Persistent drops usually indicate a token scope issue or a network/firewall problem (Tailscale ACLs, port 3000 reachable?).
 
 ### Cannot find ripgrep / search is slow
-Install ripgrep (see Prerequisites). Without it, Code Buddy falls back to a slower Node-based search.
+Install ripgrep (see Prerequisites). Some searches have a slower fallback;
+commands that require `rg` report an error when neither a bundled nor a system
+binary is available.
 
 ### Stream errors mid-response (ECONNRESET, "socket hang up")
 Enable opt-in stream retry:
