@@ -574,7 +574,7 @@ If you don't want to set up multiple peers but want the team-lead pattern, use t
 ```
 > /swarm refactor the auth module to use JWT with PKCE
 ```
-This auto-enables `MultiAgentSystem`, decomposes the task, and submits specialized workers (orchestrator, coder, reviewer, tester) through bounded thread delegation. The scheduler defaults to one active worker; set `CODEBUDDY_SWARM_CONCURRENCY` explicitly when the provider can sustain more. Every worker stream is tagged `[swarm:<agent>:<kind>]`. Headless `buddy -p "/swarm …"` waits for the workflow report. In the TUI, track with `/swarm status`, stop with `/swarm stop`. Local Ollama works via `CODEBUDDY_PROVIDER=ollama` (no `GROK_API_KEY`).
+This auto-enables `MultiAgentSystem`, decomposes the task, and submits specialized workers (orchestrator, coder, reviewer, tester) through bounded thread delegation. The scheduler defaults to one active worker; set `CODEBUDDY_SWARM_CONCURRENCY` explicitly when the provider can sustain more. Every worker stream is tagged `[swarm:<agent>:<kind>]`. Headless `buddy -p "/swarm …"` waits for the workflow report. In the TUI, track with `/swarm status`, stop with `/swarm stop`. Local Ollama works via `CODEBUDDY_PROVIDER=ollama` without an API key.
 
 ### Parallel batch (`/batch`)
 
