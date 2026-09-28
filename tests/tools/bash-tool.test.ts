@@ -120,8 +120,13 @@ function createMockChildProcess(): ChildProcess & EventEmitter {
 describe('BashTool', () => {
   let bashTool: BashTool;
   let confirmationService: ConfirmationService;
+  const cleanCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-bash-tool-suite-'));
+  fs.writeFileSync(path.join(cleanCwd, 'notes.txt'), 'test public\n');
+  fs.writeFileSync(path.join(cleanCwd, 'sample.ts'), 'export const test = true;\n');
 
-  beforeEach(() => {
+  afterAll(() => fs.rmSync(cleanCwd, { recursive: true, force: true }));
+
+  beforeEach(async () => {
     delete process.env.CODEBUDDY_NATIVE_SANDBOX;
     // Reset confirmation service singleton
     (ConfirmationService as unknown as { instance: ConfirmationService | undefined }).instance = undefined;
@@ -133,6 +138,9 @@ describe('BashTool', () => {
     approveSandboxUnavailableEscalations(confirmationService);
 
     bashTool = new BashTool();
+    // The repository contains deliberate fake credentials under _qa. These
+    // tests exercise ordinary shell behavior in a credential-free directory.
+    expect((await bashTool.execute(`cd "${cleanCwd}"`)).success).toBe(true);
     jest.clearAllMocks();
   });
 
@@ -164,7 +172,7 @@ describe('BashTool', () => {
       const result = await bashTool.execute(pwdCommand);
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
-      expect(canonicalShellPath(result.output!)).toBe(canonical(process.cwd()));
+      expect(canonicalShellPath(result.output!)).toBe(canonical(cleanCwd));
     });
 
     it('streams in the cwd override too (the path Cowork actually uses)', async () => {
@@ -526,7 +534,7 @@ describe('BashTool', () => {
     });
 
     it('should start with current working directory', () => {
-      expect(bashTool.getCurrentDirectory()).toBe(process.cwd());
+      expect(bashTool.getCurrentDirectory()).toBe(fs.realpathSync(cleanCwd));
     });
 
     it('should change directory with cd command', async () => {

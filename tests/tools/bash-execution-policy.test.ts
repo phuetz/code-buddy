@@ -274,9 +274,20 @@ describe('Bash runtime execution policy', () => {
       const confirmationSpy = vi.spyOn(ConfirmationService.getInstance(), 'requestConfirmation');
 
       const tool = new BashTool();
-      const executeWithSpawnSpy = vi.spyOn(tool as any, 'executeWithSpawn');
-      const execResult = await tool.execute('git status');
-      tool.dispose();
+      const executeWithSpawnSpy = vi.spyOn(
+        tool as unknown as { executeWithSpawn: (...args: unknown[]) => unknown },
+        'executeWithSpawn',
+      );
+      const cleanCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-ssh-policy-'));
+      let execResult;
+      try {
+        // Test SSH transport failure without the repository's _qa secrets
+        // activating the separate protected-workspace process boundary.
+        execResult = await tool.execute('git status', 5000, cleanCwd);
+      } finally {
+        tool.dispose();
+        fs.rmSync(cleanCwd, { recursive: true, force: true });
+      }
 
       // Verify no local escalation was proposed
       expect(confirmationSpy).not.toHaveBeenCalled();

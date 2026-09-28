@@ -7,10 +7,15 @@
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { ToolResult } from '../types/index.js';
-import { checkSecretFileAccess, isSecretFileReadAllowedByOperator } from './secret-files.js';
+import {
+  checkSecretFileAccess, getHomeCredentialRoots, isSecretFileReadAllowedByOperator,
+  isUniversalSecretBasename,
+} from './secret-files.js';
 import { isPublicNpmrcContent, isPublicWorkspaceNpmrc } from './public-project-npmrc.js';
+import { isPublicDependencyConfig } from './public-dependency-config.js';
 import { redactTrackedGitOutput } from './tracked-git-output-redactor.js';
 
 const MAX_DIRECTORIES = 100_000;
@@ -80,8 +85,12 @@ function secretInRepo(root: string): boolean {
     const names = git(root, ['ls-files', '-z']) +
       git(root, ['log', '--all', '--reflog', '--name-only', '-z', '--format=']);
     const publicNpmrc = new Map<string, boolean>();
+    const canonicalRoot = fs.realpathSync(root);
+    const homeCredentialRepo = getHomeCredentialRoots().some((candidate) =>
+      inside(root, candidate) || inside(canonicalRoot, candidate));
     return names.split('\0').some((name) => {
-      if (!name || !checkSecretFileAccess(path.resolve(root, name), 'read').secret) return false;
+      if (!name || !homeCredentialRepo && !isUniversalSecretBasename(path.basename(name))) return false;
+      if (!checkSecretFileAccess(path.resolve(root, name), 'read').secret) return false;
       if (path.basename(name).toLowerCase() !== '.npmrc') return true;
       if (!publicNpmrc.has(name)) publicNpmrc.set(name, publicNpmrcInGit(root, name));
       return !publicNpmrc.get(name);
@@ -115,6 +124,11 @@ export function hasProtectedGitWorkspace(cwd: string): boolean {
   const root = gitRoot(resolved) ?? resolved;
   const pending = [root];
   const seen = new Set<string>();
+  const home = path.resolve(os.homedir());
+  const privateHomeDirectories = new Set(['.ssh', '.gnupg', '.aws', '.kube']);
+  const sensitiveRoots = [...getHomeCredentialRoots(), path.join(home, '.docker')];
+  try { sensitiveRoots.push(fs.realpathSync(path.join(home, '.docker'))); }
+  catch { /* An absent Docker profile needs no canonical form. */ }
   let count = 0;
   while (pending.length > 0) {
     const directory = pending.pop()!;
@@ -127,10 +141,18 @@ export function hasProtectedGitWorkspace(cwd: string): boolean {
     let entries: fs.Dirent[];
     try { entries = fs.readdirSync(real, { withFileTypes: true }); }
     catch { return protect(); }
+    const sensitiveDirectory = sensitiveRoots.some((candidate) => inside(real, candidate));
     if (entries.some((entry) => {
       if (entry.name === '.git') return false;
+      // Checking every ordinary dependency filename performs many filesystem
+      // probes inside checkSecretFileAccess. A normal file can only be secret
+      // through its basename unless it lives in a home credential root.
+      if (!sensitiveDirectory && !entry.isSymbolicLink() &&
+          !isUniversalSecretBasename(entry.name) &&
+          !(real === home && privateHomeDirectories.has(entry.name))) return false;
       const candidate = path.join(real, entry.name);
-      return checkSecretFileAccess(candidate, 'read').secret && !isPublicWorkspaceNpmrc(candidate);
+      return checkSecretFileAccess(candidate, 'read').secret &&
+        !isPublicWorkspaceNpmrc(candidate) && !isPublicDependencyConfig(candidate);
     })) return protect();
     if (entries.some((entry) => entry.name === '.git') && secretInRepo(real)) return protect();
     for (const entry of entries) {
