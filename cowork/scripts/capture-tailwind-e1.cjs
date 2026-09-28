@@ -90,8 +90,16 @@ async function main() {
             const button = document.querySelector('.bg-accent.text-white');
             if (!button) return { found: false };
             const style = getComputedStyle(button);
+            const disabled = button.cloneNode(true);
+            disabled.disabled = true;
+            disabled.classList.add('disabled:bg-surface-muted', 'disabled:text-text-muted');
+            document.body.appendChild(disabled);
+            const disabledStyle = getComputedStyle(disabled);
+            const disabledColor = disabledStyle.color;
+            const disabledBackground = disabledStyle.backgroundColor;
+            disabled.remove();
             return { found: true, color: style.color, background: style.backgroundColor,
-              theme: document.documentElement.className };
+              disabledColor, disabledBackground, theme: document.documentElement.className };
           })()`);
         }
       }

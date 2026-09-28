@@ -95,7 +95,8 @@ describe('Couleurs Tailwind Cowork', () => {
   );
 
   it('adapte le texte blanc historique sur les fonds accent sans changer les composants', () => {
-    expect(css).toContain('[class~="bg-accent/90"]).text-white');
+    expect(css).toContain('[class~="bg-accent/90"]).text-white:not(:disabled)');
+    expect(css).toContain('.text-white:hover:not(:disabled)');
     expect(css).toContain('color: var(--color-on-accent);');
   });
 });

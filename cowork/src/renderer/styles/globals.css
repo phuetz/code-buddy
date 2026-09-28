@@ -580,9 +580,9 @@
 /* Historical inline buttons pair an accent background with text-white. Match
    their foreground to the active accent in every theme without rewriting the
    components; the selector also covers the opaque hover and 90% variants. */
-:is(.bg-accent, .bg-accent-hover, .bg-primary, [class~="bg-accent/90"]).text-white,
+:is(.bg-accent, .bg-accent-hover, .bg-primary, [class~="bg-accent/90"]).text-white:not(:disabled),
 :is([class~="hover:bg-accent"], [class~="hover:bg-accent/90"],
-  [class~="hover:bg-accent-hover"], [class~="hover:bg-primary"]).text-white:hover {
+  [class~="hover:bg-accent-hover"], [class~="hover:bg-primary"]).text-white:hover:not(:disabled) {
   color: var(--color-on-accent);
 }
 
