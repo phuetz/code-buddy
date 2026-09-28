@@ -201,7 +201,7 @@ curl http://127.0.0.1:3000/v1/chat/completions \
 
 Code Buddy declares optional native add-ons such as `better-sqlite3`, `sharp`, `node-pty`, `tree-sitter*`, and `usearch`. The optional-dependency list also contains non-native packages, so its size is not a native-package count.
 
-In **npm 11**, unreviewed dependency install scripts produce a warning but still run by default. **npm 12** blocks them by default. If an optional native add-on needs an install script during a global installation, allow that package by name using `--allow-scripts=<packages>`:
+In **npm 11**, unreviewed dependency install scripts produce a warning but still run by default. **npm 12** blocks them with a warning by default. If an optional native add-on needs an install script during a global installation, allow that package by name using `--allow-scripts=<packages>`:
 
 ```bash
 # Selectively allow the SQLite add-on during a global install

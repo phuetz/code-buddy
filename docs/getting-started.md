@@ -42,7 +42,7 @@ npm install -g @phuetz/code-buddy@latest
 # optional dependencies. If one fails to compile, the matching feature falls back;
 # the CLI still starts.
 # npm 11 warns about unreviewed install scripts but still runs them by default.
-# npm 12 blocks unreviewed dependency install scripts by default. To enable a
+# npm 12 blocks unreviewed dependency install scripts with a warning by default. To enable a
 # native add-on you need, allow it by name during a global install:
 #   npm install -g --allow-scripts=better-sqlite3,sharp,node-pty @phuetz/code-buddy@latest
 

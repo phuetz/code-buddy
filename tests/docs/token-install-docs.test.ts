@@ -12,6 +12,7 @@ function readDoc(relPath: string): string {
 function expectAccurateInstallPolicy(content: string): void {
   expect(content).toMatch(/npm 11[\s\S]{0,160}warn[\s\S]{0,160}still runs?[\s\S]{0,30}by default/i);
   expect(content).toMatch(/npm 12[\s\S]{0,80}blocks?[\s\S]{0,80}by default/i);
+  expect(content).toMatch(/npm 12[\s\S]{0,80}with a warning by default/i);
   expect(content).toMatch(/--allow-scripts=better-sqlite3/);
   expect(content).not.toMatch(/npm\s*(?:>=|≥)\s*11[^\n]*blocked by default/i);
   expect(content).not.toMatch(/18\s+(?:optional\s+)?native\s+packages/i);
