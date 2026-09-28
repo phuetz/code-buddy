@@ -14,10 +14,12 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { hasProtectedGitWorkspace, runProtectedWorkspaceCommand } from '../../src/security/git-secret-process-boundary.js';
 import { checkSecretFileAccess } from '../../src/security/secret-files.js';
+import { isPublicWorkspaceNpmrc } from '../../src/security/public-project-npmrc.js';
 
 const publicRepo = path.join(qa.root, 'public');
 const oldSecretRepo = path.join(qa.root, 'old-secret');
 const indexSecretRepo = path.join(qa.root, 'index-secret');
+const commentSecretRepo = path.join(qa.root, 'comment-secret');
 const tracked = path.join(publicRepo, 'cowork', '.npmrc');
 const untracked = path.join(publicRepo, 'scratch', '.npmrc');
 const publicSettings = '# Cross-platform collaboration settings\nengine-strict=false\n' +
@@ -40,7 +42,7 @@ function commit(cwd: string, message: string): void {
 
 beforeAll(() => {
   fs.mkdirSync(path.join(qa.root, 'home'), { recursive: true });
-  for (const root of [publicRepo, oldSecretRepo, indexSecretRepo]) {
+  for (const root of [publicRepo, oldSecretRepo, indexSecretRepo, commentSecretRepo]) {
     fs.mkdirSync(root, { recursive: true });
     git(root, 'init', '-q');
   }
@@ -58,6 +60,8 @@ beforeAll(() => {
   fs.writeFileSync(staged, `//registry.npmjs.org/:_authToken=${fakeToken}\n`);
   git(indexSecretRepo, 'add', '.npmrc');
   fs.writeFileSync(staged, publicSettings);
+  fs.writeFileSync(path.join(commentSecretRepo, '.npmrc'),
+    'engine-strict=false\n# FAKE-CODE-15\n');
 });
 
 afterAll(() => {
@@ -69,6 +73,12 @@ afterAll(() => {
 });
 
 describe('B14 — .npmrc public et frontière des processus', () => {
+  it('reconnaît la configuration publique de cowork sans ouvrir ses lectures directes', () => {
+    const file = path.join(process.cwd(), 'cowork', '.npmrc');
+    expect(isPublicWorkspaceNpmrc(file)).toBe(true);
+    expect(checkSecretFileAccess(file, 'read').secret).toBe(true);
+  });
+
   it('laisse lancer un shell dans un dépôt avec .npmrc public suivi et non suivi', () => {
     expect(hasProtectedGitWorkspace(publicRepo)).toBe(false);
     expect(runProtectedWorkspaceCommand('echo public', publicRepo)).toBeNull();
@@ -92,6 +102,10 @@ describe('B14 — .npmrc public et frontière des processus', () => {
 
   it('protège un jeton dans l’index malgré un .npmrc courant public', () => {
     expect(hasProtectedGitWorkspace(indexSecretRepo)).toBe(true);
+  });
+
+  it('ne traite pas une valeur courte dans un commentaire comme un commentaire public', () => {
+    expect(hasProtectedGitWorkspace(commentSecretRepo)).toBe(true);
   });
 
 });

@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ToolResult } from '../types/index.js';
 import { checkSecretFileAccess, isSecretFileReadAllowedByOperator } from './secret-files.js';
-import { isPublicNpmrcContent, isPublicProjectNpmrc } from './public-project-npmrc.js';
+import { isPublicNpmrcContent, isPublicWorkspaceNpmrc } from './public-project-npmrc.js';
 import { redactTrackedGitOutput } from './tracked-git-output-redactor.js';
 
 const MAX_DIRECTORIES = 100_000;
@@ -51,12 +51,12 @@ function gitRoot(cwd: string): string | null {
 /** The working file, index and every reachable historical version must be public. */
 function publicNpmrcInGit(root: string, name: string): boolean {
   const file = path.resolve(root, name);
-  if (!isPublicProjectNpmrc(file)) return false;
+  if (!isPublicWorkspaceNpmrc(file)) return false;
   const inspectBlob = (oid: string): boolean => {
     if (!/^[0-9a-f]{40,64}$/.test(oid) || /^0+$/.test(oid)) return false;
     const size = Number(git(root, ['cat-file', '-s', oid]).trim());
     return Number.isSafeInteger(size) && size <= 16_384 &&
-      isPublicNpmrcContent(git(root, ['cat-file', 'blob', oid]));
+      isPublicNpmrcContent(git(root, ['cat-file', 'blob', oid]), true);
   };
   const index = git(root, ['ls-files', '--stage', '-z', '--', name]);
   for (const entry of index.split('\0').filter(Boolean)) {
@@ -130,7 +130,7 @@ export function hasProtectedGitWorkspace(cwd: string): boolean {
     if (entries.some((entry) => {
       if (entry.name === '.git') return false;
       const candidate = path.join(real, entry.name);
-      return checkSecretFileAccess(candidate, 'read').secret && !isPublicProjectNpmrc(candidate);
+      return checkSecretFileAccess(candidate, 'read').secret && !isPublicWorkspaceNpmrc(candidate);
     })) return protect();
     if (entries.some((entry) => entry.name === '.git') && secretInRepo(real)) return protect();
     for (const entry of entries) {
