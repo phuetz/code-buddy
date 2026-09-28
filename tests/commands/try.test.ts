@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ChatEntry } from '../../src/agent/types.js';
 import {
   NO_TRY_PROVIDER_MESSAGE,
   isChatOnlyModel,
   TRY_DEMO_PROMPT,
+  TRY_DEMO_RETRY_PROMPT,
   chooseOllamaModel,
   createTryCommand,
   resolveTryProvider,
@@ -28,8 +32,13 @@ describe('buddy try', () => {
     // files, so the tool-capable devstral wins even though the coder regex ranks first.
     expect(chooseOllamaModel(models)).toBe('devstral:latest');
     expect(chooseOllamaModel(models, 'qwen2.5-coder:7b')).toBe('qwen2.5-coder:7b');
-    expect(chooseOllamaModel(['llama3.2:latest', 'qwen2.5-coder:7b'])).toBe('qwen2.5-coder:7b');
+    expect(chooseOllamaModel(['qwen2.5:1.5b-instruct', 'qwen2.5-coder:7b'])).toBeNull();
     expect(chooseOllamaModel(['llama3.2:latest', 'qwen3:8b'])).toBe('qwen3:8b');
+    expect(chooseOllamaModel([
+      { name: 'qwen3:4b-instruct', capabilities: ['completion', 'tools'], parameterSize: 4 },
+      { name: 'qwen3:8b', capabilities: ['completion', 'tools'], parameterSize: 8 },
+      { name: 'qwen3.8:27b', capabilities: ['completion'], parameterSize: 27 },
+    ])).toBe('qwen3:8b');
     expect(chooseOllamaModel([])).toBeNull();
   });
 
@@ -41,6 +50,7 @@ describe('buddy try', () => {
         kind: 'ollama', label: 'Ollama', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', model: 'qwen2.5-coder:7b',
       } as TryProvider),
       createWorkspace: async () => '/tmp/code-buddy-try-test',
+      prepareWorkspace: async () => {},
       createAgent: async () => ({
         systemPromptReady: Promise.resolve(),
         processUserMessage: async () => [],
@@ -185,6 +195,7 @@ describe('buddy try', () => {
     const exitCode = await runTryDemo({
       resolveProvider: async () => chatGptProvider,
       createWorkspace: async () => '/tmp/code-buddy-try-test',
+      prepareWorkspace: async () => {},
       createAgent,
       verify,
       stdout: (message) => stdout.push(message),
@@ -192,11 +203,82 @@ describe('buddy try', () => {
 
     expect(exitCode).toBe(0);
     expect(createAgent).toHaveBeenCalledWith(chatGptProvider, '/tmp/code-buddy-try-test');
-    expect(processUserMessage).toHaveBeenCalledWith(TRY_DEMO_PROMPT, { surface: 'cli' });
+    expect(processUserMessage).toHaveBeenCalledWith(TRY_DEMO_PROMPT, { surface: 'try' });
     expect(verify).toHaveBeenCalledWith('/tmp/code-buddy-try-test');
     expect(stdout.join('\n')).toContain('Tools used: write_file');
     expect(stdout.join('\n')).toContain('✅ Demo succeeded');
     expect(dispose).toHaveBeenCalledWith({ skipSessionLearning: true });
+  });
+
+  it('retries one failed real test and accepts only the corrected implementation', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'code-buddy-try-unit-'));
+    const prompts: string[] = [];
+    const output: string[] = [];
+    try {
+      const code = await runTryDemo({
+        resolveProvider: async () => chatGptProvider,
+        createWorkspace: async () => workspace,
+        createAgent: async () => ({
+          processUserMessage: async (prompt) => {
+            prompts.push(prompt);
+            if (prompts.length === 2) {
+              await writeFile(join(workspace, 'fizzbuzz.js'),
+                "function fizzBuzz(n) { if (n % 15 === 0) return 'FizzBuzz'; if (n % 3 === 0) return 'Fizz'; if (n % 5 === 0) return 'Buzz'; return String(n); } module.exports = { fizzBuzz };\n");
+            }
+            return [{ type: 'assistant', content: 'The test passes.', timestamp: new Date() }];
+          },
+        }),
+        stdout: (line) => output.push(line),
+      });
+      expect(code).toBe(0);
+      expect(prompts).toEqual([TRY_DEMO_PROMPT, TRY_DEMO_RETRY_PROMPT]);
+      expect(output.join('\n')).toContain('One guided retry');
+      expect(output.join('\n')).toContain('✅ Demo succeeded');
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('does not accept a green visible test when unseen FizzBuzz cases are wrong', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'code-buddy-try-unit-'));
+    const prompts: string[] = [];
+    const output: string[] = [];
+    try {
+      const code = await runTryDemo({
+        resolveProvider: async () => chatGptProvider,
+        createWorkspace: async () => workspace,
+        createAgent: async () => ({
+          processUserMessage: async (prompt) => {
+            prompts.push(prompt);
+            await writeFile(join(workspace, 'fizzbuzz.js'),
+              "function fizzBuzz(n) { return ({ 1: '1', 3: 'Fizz', 5: 'Buzz', 15: 'FizzBuzz' })[n]; } module.exports = { fizzBuzz };\n");
+            return [{ type: 'assistant', content: 'The test passes.', timestamp: new Date() }];
+          },
+        }),
+        stdout: (line) => output.push(line),
+        stderr: (line) => output.push(line),
+      });
+      expect(code).toBe(1);
+      expect(prompts).toEqual([TRY_DEMO_PROMPT, TRY_DEMO_RETRY_PROMPT]);
+      expect(output.join('\n')).not.toContain('✅ Demo succeeded');
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('explains when only installed local models are too small for tools', async () => {
+    const reasons: string[] = [];
+    const provider = await resolveTryProvider({
+      env: { CODEBUDDY_PROVIDER: 'ollama' },
+      fetchImpl: vi.fn(async () => new Response(JSON.stringify({ models: [
+        { name: 'qwen2.5:1.5b-instruct', capabilities: ['completion', 'tools'] },
+        { name: 'moondream:latest', capabilities: ['completion', 'vision'] },
+      ] }), { status: 200 })),
+      onUnavailable: (reason) => reasons.push(reason),
+    });
+    expect(provider).toBeNull();
+    expect(reasons.join('\n')).toContain('qwen2.5:1.5b-instruct');
+    expect(reasons.join('\n')).toContain('ollama pull qwen3:8b');
   });
 
   it('fait taire la télémétrie pendant la démo, et restaure le niveau ensuite', async () => {
@@ -214,6 +296,7 @@ describe('buddy try', () => {
         verbose: false,
         resolveProvider: async () => chatGptProvider,
         createWorkspace: async () => '/tmp/code-buddy-try-test',
+        prepareWorkspace: async () => {},
         createAgent: async () => ({
           systemPromptReady: Promise.resolve(),
           processUserMessage: async () => {
@@ -275,6 +358,7 @@ describe('buddy try', () => {
       await runTryDemo({
         resolveProvider: async () => chatGptProvider,
         createWorkspace: async () => '/tmp/code-buddy-try-test',
+        prepareWorkspace: async () => {},
         createAgent: async () => ({
           systemPromptReady: Promise.resolve(),
           processUserMessage: async () => {
@@ -311,6 +395,7 @@ describe('buddy try', () => {
         verbose: true,
         resolveProvider: async () => chatGptProvider,
         createWorkspace: async () => '/tmp/code-buddy-try-test',
+        prepareWorkspace: async () => {},
         createAgent: async () => ({
           systemPromptReady: Promise.resolve(),
           processUserMessage: async () => {

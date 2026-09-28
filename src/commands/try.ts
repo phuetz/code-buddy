@@ -7,7 +7,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Command } from 'commander';
@@ -19,6 +19,7 @@ import { resolveProviderFromCatalog } from '../providers/provider-catalog.js';
 
 const OLLAMA_PROBE_TIMEOUT_MS = 2_000;
 const DEMO_MAX_TOOL_ROUNDS = 12;
+const DEMO_TEST_FILE = 'fizzbuzz.test.js';
 
 type EnvLike = Record<string, string | undefined>;
 
@@ -53,11 +54,13 @@ interface ResolveTryProviderOptions {
   baseUrlOverride?: string;
   /** Modèle imposé par l'utilisateur (`--model`). */
   modelOverride?: string;
+  onUnavailable?: (message: string) => void;
 }
 
 export interface RunTryDemoOptions extends ResolveTryProviderOptions {
   resolveProvider?: () => Promise<TryProvider | null>;
   createWorkspace?: () => Promise<string>;
+  prepareWorkspace?: (workspace: string) => Promise<void>;
   createAgent?: (provider: TryProvider, workspace: string) => Promise<TryDemoAgent>;
   verify?: (workspace: string) => Promise<TryVerification>;
   stdout?: (message: string) => void;
@@ -74,19 +77,32 @@ export interface TryCommandDependencies {
 }
 
 interface OllamaTagsResponse {
-  models?: Array<{ name?: unknown; model?: unknown }>;
+  models?: Array<{ name?: unknown; model?: unknown; capabilities?: unknown; details?: { parameter_size?: unknown } }>;
 }
 
-export const TRY_DEMO_PROMPT = `You are driving a short coding-agent demo in an empty temporary folder.
+interface OllamaModel {
+  name: string;
+  capabilities?: string[];
+  parameterSize?: number;
+}
 
-Exact goal:
-1. Create fizzbuzz.js in CommonJS. Export a function fizzBuzz(value) that returns the number as a string, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and "FizzBuzz" for multiples of 15.
-2. Create fizzbuzz.test.js using node:test and node:assert/strict. Test at least 1, 3, 5, and 15.
-3. Run exactly: node --test fizzbuzz.test.js
-4. If a test fails, fix the code and run it again.
-5. Finish with a very short summary naming the two files you created and the test result.
+export const TRY_DEMO_PROMPT = `Please implement the FizzBuzz function in this temporary folder. A test file named fizzbuzz.test.js is already provided.
 
-Write everything in English. Use the file and terminal tools with the configured permissions. Work only inside the temporary folder; no dependency installation is needed.`;
+Create fizzbuzz.js as CommonJS and export { fizzBuzz }. For a number, return "FizzBuzz" if it is divisible by 15, "Fizz" if divisible by 3, "Buzz" if divisible by 5, and otherwise its decimal string. Please run node --test fizzbuzz.test.js and briefly report the result.`;
+
+export const TRY_DEMO_RETRY_PROMPT = `The independent test is still failing. Please inspect fizzbuzz.js and fizzbuzz.test.js in this temporary folder, create or fix fizzbuzz.js, and run node --test fizzbuzz.test.js. The required export is { fizzBuzz }; return "FizzBuzz" for 15, "Fizz" for 3, "Buzz" for 5, and "1" for 1.`;
+
+const DEMO_TEST_SOURCE = `const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { fizzBuzz } = require('./fizzbuzz.js');
+
+test('FizzBuzz examples', () => {
+  assert.equal(fizzBuzz(1), '1');
+  assert.equal(fizzBuzz(3), 'Fizz');
+  assert.equal(fizzBuzz(5), 'Buzz');
+  assert.equal(fizzBuzz(15), 'FizzBuzz');
+});
+`;
 
 export const NO_TRY_PROVIDER_MESSAGE = [
   'No free provider is ready for the demo.',
@@ -99,31 +115,32 @@ export const NO_TRY_PROVIDER_MESSAGE = [
   '   ollama pull qwen3:8b',
   '   buddy try',
   '',
-  'The demo edits files, so the model must be able to call tools. qwen2.5 under 14B',
-  '(including qwen2.5-coder:7b) is chat-only in Code Buddy and cannot pass the demo.',
+  'The demo edits files, so the model must be able to call tools. Small qwen2.5',
+  'models (including 1.5B and 3B) are chat-only in Code Buddy.',
 ].join('\n');
 
 /** Pick a coding-oriented local model without assuming one exact Ollama tag. */
-export function chooseOllamaModel(models: readonly string[], requested?: string): string | null {
-  const usable = models.map((model) => model.trim()).filter(Boolean);
+export function chooseOllamaModel(models: readonly (string | OllamaModel)[], requested?: string): string | null {
+  const usable = models.map((model) => typeof model === 'string' ? { name: model.trim() } : model)
+    .filter((model) => Boolean(model.name));
   const requestedModel = requested?.trim();
   if (requestedModel) {
-    const exact = usable.find((model) => model.toLowerCase() === requestedModel.toLowerCase());
-    if (exact) return exact;
+    const exact = usable.find((model) => model.name.toLowerCase() === requestedModel.toLowerCase());
+    if (exact) return exact.name;
   }
 
-  // The demo edits files: a model that Code Buddy treats as chat-only
-  // (supportsToolCalls: false, e.g. qwen2.5-coder:7b) cannot pass it, so a
-  // tool-capable model is preferred whenever one is installed.
-  const toolCapable = usable.filter((model) => getModelToolConfig(model).supportsToolCalls !== false);
-  for (const pool of [toolCapable, usable]) {
-    for (const pattern of [/qwen.*coder/i, /devstral/i, /codestral/i, /coder/i, /code/i]) {
-      const match = pool.find((model) => pattern.test(model));
-      if (match) return match;
-    }
-    if (pool.length > 0) return pool[0] ?? null;
-  }
-  return null;
+  // Both the runtime and Code Buddy must offer structured calls. An unknown
+  // or chat-only model is never an automatic fallback for a file-editing demo.
+  const toolCapable = usable.filter((model) =>
+    model.capabilities?.includes('tools') !== false &&
+    getModelToolConfig(model.name).supportsToolCalls !== false);
+  toolCapable.sort((a, b) => {
+    const coding = (name: string) => /coder|devstral|codestral/i.test(name) ? 1 : 0;
+    const size = (model: OllamaModel) => model.parameterSize ??
+      Number.parseFloat(model.name.match(/:(\d+(?:\.\d+)?)b\b/i)?.[1] ?? '0');
+    return coding(b.name) - coding(a.name) || size(b) - size(a) || a.name.localeCompare(b.name);
+  });
+  return toolCapable[0]?.name ?? null;
 }
 
 /** True when Code Buddy treats this model as chat-only (no structured tool calls). */
@@ -138,16 +155,26 @@ function normalizeTryOllamaHost(rawHost?: string): string {
   return host;
 }
 
-function parseOllamaModels(value: unknown): string[] {
+function parseOllamaModels(value: unknown): OllamaModel[] {
   if (!value || typeof value !== 'object') return [];
   const models = (value as OllamaTagsResponse).models;
   if (!Array.isArray(models)) return [];
   return models
     .map((entry) => {
       const candidate = entry.name ?? entry.model;
-      return typeof candidate === 'string' ? candidate : null;
+      if (typeof candidate !== 'string') return null;
+      const rawSize = entry.details?.parameter_size;
+      return {
+        name: candidate,
+        ...(Array.isArray(entry.capabilities)
+          ? { capabilities: entry.capabilities.filter((item): item is string => typeof item === 'string') }
+          : {}),
+        ...(typeof rawSize === 'string' && Number.isFinite(Number.parseFloat(rawSize))
+          ? { parameterSize: Number.parseFloat(rawSize) }
+          : {}),
+      };
     })
-    .filter((model): model is string => Boolean(model));
+    .filter((model): model is OllamaModel => model !== null);
 }
 
 /** Demande à un endpoint OpenAI-compatible le premier modèle qu'il expose. */
@@ -222,9 +249,23 @@ export async function resolveTryProvider(
     if (!response.ok) return null;
     const models = parseOllamaModels(await response.json());
     const requestedModel = options.modelOverride?.trim();
+    const preferred = env.OLLAMA_MODEL && chooseOllamaModel(models, env.OLLAMA_MODEL);
+    const preferredMetadata = models.find((item) => item.name === preferred);
     const model = requestedModel
-      ? models.find((candidate) => candidate.toLowerCase() === requestedModel.toLowerCase()) ?? null
-      : chooseOllamaModel(models, env.OLLAMA_MODEL);
+      ? models.find((candidate) => candidate.name.toLowerCase() === requestedModel.toLowerCase())?.name ?? null
+      : preferredMetadata && preferredMetadata.capabilities?.includes('tools') !== false
+        && !isChatOnlyModel(preferredMetadata.name)
+        ? preferredMetadata.name
+        : chooseOllamaModel(models);
+    if (!model && models.length > 0) {
+      options.onUnavailable?.(
+        `Installed Ollama models cannot call the tools needed for this demo: ${models.map((item) => item.name).join(', ')}.\n` +
+        'Install a stronger tool-capable model with `ollama pull qwen3:8b`, then run `buddy try` again.',
+      );
+    }
+    if (!model && requestedModel) {
+      options.onUnavailable?.(`Model ${requestedModel} is not installed. Run \`ollama pull ${requestedModel}\` or omit --model.`);
+    }
     if (!model) return null;
     return {
       kind: 'ollama',
@@ -292,10 +333,10 @@ async function createDefaultAgent(
 }
 
 async function verifyDefaultDemo(workspace: string): Promise<TryVerification> {
-  return new Promise((resolve) => {
+  const test = await new Promise<TryVerification>((resolve) => {
     execFile(
       process.execPath,
-      ['--test', 'fizzbuzz.test.js'],
+      ['--test', DEMO_TEST_FILE],
       { cwd: workspace, timeout: 30_000, maxBuffer: 1024 * 1024 },
       (error, stdout, stderr) => {
         const output = `${stdout}${stderr}`.trim();
@@ -303,6 +344,24 @@ async function verifyDefaultDemo(workspace: string): Promise<TryVerification> {
       },
     );
   });
+  if (!test.success) return test;
+  // The visible test is a fixture. These extra cases independently check the
+  // implementation, so a green test or a model's claim alone is insufficient.
+  const holdout = await new Promise<TryVerification>((resolve) => {
+    const script = [
+      "const assert = require('node:assert/strict');",
+      "const { fizzBuzz } = require('./fizzbuzz.js');",
+      "for (const [input, expected] of [[2,'2'],[6,'Fizz'],[10,'Buzz'],[30,'FizzBuzz'],[37,'37']]) assert.equal(fizzBuzz(input), expected);",
+    ].join('\n');
+    execFile(process.execPath, ['-e', script],
+      { cwd: workspace, timeout: 30_000, maxBuffer: 1024 * 1024 },
+      (error, stdout, stderr) => resolve({ success: error === null, output: `${stdout}${stderr}`.trim() }));
+  });
+  return { success: holdout.success, output: [test.output, holdout.output].filter(Boolean).join('\n') };
+}
+
+async function prepareDefaultWorkspace(workspace: string): Promise<void> {
+  await writeFile(join(workspace, DEMO_TEST_FILE), DEMO_TEST_SOURCE, { flag: 'wx' });
 }
 
 function latestAssistantMessage(entries: readonly ChatEntry[]): string | null {
@@ -373,16 +432,21 @@ export async function runTryDemo(options: RunTryDemoOptions = {}): Promise<numbe
 async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   const write = options.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
   const writeError = options.stderr ?? ((message: string) => process.stderr.write(`${message}\n`));
-  const resolveProvider = options.resolveProvider ?? (() => resolveTryProvider(options));
+  let unavailableReason: string | undefined;
+  const resolveProvider = options.resolveProvider ?? (() => resolveTryProvider({
+    ...options,
+    onUnavailable: (reason) => { unavailableReason = reason; },
+  }));
   const provider = await resolveProvider();
   if (!provider) {
-    writeError(NO_TRY_PROVIDER_MESSAGE);
+    writeError(unavailableReason ?? NO_TRY_PROVIDER_MESSAGE);
     return 2;
   }
 
   const createWorkspace = options.createWorkspace
     ?? (() => mkdtemp(join(tmpdir(), 'code-buddy-try-')));
   const workspace = await createWorkspace();
+  const prepareWorkspace = options.prepareWorkspace ?? prepareDefaultWorkspace;
   const createAgent = options.createAgent ?? createDefaultAgent;
   const verify = options.verify ?? verifyDefaultDemo;
   const restoreEnv = [
@@ -394,19 +458,27 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   write('Code Buddy — coding-agent demo (about a minute on a fast model, longer on a small local one)');
   write(`[1/3] Provider: ${provider.label}`);
   write(`[2/3] Sandbox: ${workspace}`);
-  write('      The agent is creating FizzBuzz, writing its tests, and running them…');
+  write('      The agent is implementing FizzBuzz against a local test…');
 
   try {
+    await prepareWorkspace(workspace);
     agent = await createAgent(provider, workspace);
     await agent.systemPromptReady;
-    const entries = await agent.processUserMessage(TRY_DEMO_PROMPT, { surface: 'cli' });
-    const toolNames = invokedToolNames(entries);
+    const entries = await agent.processUserMessage(TRY_DEMO_PROMPT, { surface: 'try' });
+    let verification = await verify(workspace);
+    let allEntries = entries;
+    if (!verification.success) {
+      write('      The first attempt did not pass. One guided retry…');
+      const retryEntries = await agent.processUserMessage(TRY_DEMO_RETRY_PROMPT, { surface: 'try' });
+      allEntries = [...entries, ...retryEntries];
+      verification = await verify(workspace);
+    }
+    const toolNames = invokedToolNames(allEntries);
     if (toolNames.length > 0) write(`      Tools used: ${toolNames.join(', ')}`);
-    const assistantMessage = latestAssistantMessage(entries);
-    if (assistantMessage) write(`      Agent: ${assistantMessage}`);
+    const assistantMessage = latestAssistantMessage(allEntries);
+    if (assistantMessage && (verification.success || options.verbose)) write(`      Agent: ${assistantMessage}`);
 
     write('[3/3] Independent verification: node --test fizzbuzz.test.js');
-    const verification = await verify(workspace);
     if (!verification.success) {
       writeError('❌ The demo did not produce a green test. The sandbox is kept for inspection.');
       if (isChatOnlyModel(provider.model)) {
