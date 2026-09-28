@@ -76,6 +76,7 @@ export class TelegramChannel extends BaseChannel {
   private pollingTimeout: NodeJS.Timeout | null = null;
   private pollingWatchdog: NodeJS.Timeout | null = null;
   private activePollController: AbortController | null = null;
+  private activePollPromise: Promise<void> | null = null;
   private pollingGeneration = 0;
   private watchdogBaselineAt = 0;
   private lastUpdateId = 0;
@@ -326,6 +327,10 @@ export class TelegramChannel extends BaseChannel {
     this.consecutiveErrors = 0;
     this.activePollController?.abort(new Error('Telegram polling stopped'));
     this.activePollController = null;
+    if (this.activePollPromise) {
+      await this.activePollPromise.catch(() => {});
+      this.activePollPromise = null;
+    }
 
     // Clean up pro features
     if (this._pro) this._pro.destroy();
@@ -650,9 +655,13 @@ export class TelegramChannel extends BaseChannel {
   }
 
   private launchPoll(generation: number): void {
-    void this.poll(generation).catch((error) => {
+    this.activePollPromise = this.poll(generation).catch((error) => {
       if (!this.isCurrentPoll(generation)) return;
       this.handlePollingFailure(error, generation);
+    }).finally(() => {
+      if (this.isCurrentPoll(generation)) {
+        this.activePollPromise = null;
+      }
     });
   }
 
