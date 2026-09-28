@@ -28,7 +28,7 @@ beforeAll(() => {
     '#!/bin/sh\nif [ "$1" = "read" ]; then echo "secret-for:$2"; else exit 64; fi\n',
     { mode: 0o755 },
   );
-  process.env.PATH = `${binDir}:${originalPath}`;
+  process.env.PATH = [binDir, originalPath].filter(Boolean).join(path.delimiter);
 });
 
 afterAll(() => {
@@ -52,7 +52,8 @@ describe('built-in sources', () => {
   });
 });
 
-// The fake `op` binary is a POSIX shell script (shebang + chmod) — not runnable on Windows.
+// execFileSync('op') executes this extensionless POSIX shell fixture directly.
+// Native Windows execFile cannot execute a shell script, even when Bash is installed.
 const opSkipped = process.platform === 'win32';
 
 describe.skipIf(opSkipped)('1Password op:// notation', () => {
