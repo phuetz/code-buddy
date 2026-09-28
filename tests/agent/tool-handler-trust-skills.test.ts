@@ -17,12 +17,16 @@
 import fs from 'fs';
 import * as os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { removeTestDir } from '../helpers/tmp.js';
 
-const { isolatedHome } = vi.hoisted(() => ({
-  isolatedHome: `${process.cwd()}/.r32-tool-handler-home-${process.pid}`,
-}));
+const { isolatedHome } = await vi.hoisted(async () => {
+  const { mkdirSync, mkdtempSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const scratchRoot = join(process.cwd(), 'tmp');
+  mkdirSync(scratchRoot, { recursive: true });
+  return { isolatedHome: mkdtempSync(join(scratchRoot, 'r32-tool-handler-home-')) };
+});
 
 vi.mock('os', async (importOriginal) => {
   const actual = await importOriginal<typeof import('os')>();
@@ -54,31 +58,17 @@ function makeHandler(): ToolHandler {
 }
 
 const TRUST_ERROR = 'is not in a trusted directory';
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const originalCwd = process.cwd();
-let isolatedHomeIsInsideRepo = false;
 
 beforeAll(() => {
-  const relativeHome = path.relative(repoRoot, isolatedHome);
-  if (
-    relativeHome === '..' ||
-    relativeHome.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relativeHome)
-  ) {
-    throw new Error(`Refusing to create a test home outside the repository: ${isolatedHome}`);
-  }
-  isolatedHomeIsInsideRepo = true;
-
   // Keep the fake home outside the automatically trusted cwd while remaining
   // physically inside this repository.
-  process.chdir(path.join(repoRoot, 'tests'));
+  process.chdir(path.join(originalCwd, 'tests'));
 });
 
 afterAll(() => {
   process.chdir(originalCwd);
-  if (isolatedHomeIsInsideRepo) {
-    fs.rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 20 });
-  }
+  removeTestDir(isolatedHome);
 });
 
 describe('ToolHandler trust gate — read-only skills exception', () => {
@@ -100,7 +90,7 @@ describe('ToolHandler trust gate — read-only skills exception', () => {
     fs.mkdirSync(root, { recursive: true });
     createdRoot = root;
     fs.writeFileSync(skillFile, '# Trust test skill\n');
-    expect(skillFile.startsWith(`${repoRoot}${path.sep}`)).toBe(true);
+    expect(path.relative(originalCwd, skillFile).startsWith(`tmp${path.sep}`)).toBe(true);
   });
 
   afterEach(() => {
