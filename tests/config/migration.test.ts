@@ -115,6 +115,27 @@ describe('Settings Migration', () => {
   });
 
   describe('migrateSettings', () => {
+    it('treats the exact historical generated selection as unchosen without mutating it', () => {
+      const legacy: LegacyUserSettings = {
+        defaultModel: 'grok-code-fast-1',
+        models: [
+          'grok-code-fast-1', 'grok-4-latest', 'grok-3-latest',
+          'grok-3-fast', 'grok-3-mini-fast',
+        ],
+        baseURL: 'https://api.x.ai/v1',
+      };
+      const original = structuredClone(legacy);
+
+      expect(needsMigration(legacy)).toBe(false);
+      expect(detectProviderFromSettings(legacy)).toBe('custom');
+      const migrated = migrateSettings(legacy);
+      expect(migrated.defaultModel).toBeUndefined();
+      expect(migrated.models).toBeUndefined();
+      expect(migrated.connection?.activeProfileId).toBe('');
+      expect(migrated.connection?.profiles.some(profile => profile.id === 'grok')).toBe(false);
+      expect(legacy).toEqual(original);
+    });
+
     it('should migrate settings with custom config', () => {
       const legacy: LegacyUserSettings = {
         apiKey: 'my-custom-key',

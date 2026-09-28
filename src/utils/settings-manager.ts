@@ -29,6 +29,7 @@ import { shouldWriteProjectRuntimeFiles } from "./runtime-flags.js";
 import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 import { codeBuddyEnv } from '../config/legacy-env.js';
 import { detectProviderFromEnv } from './provider-detector.js';
+import { LEGACY_GENERATED_MODELS, withoutLegacyGeneratedSelection } from '../config/legacy-generated-settings.js';
 
 /**
  * User-level settings stored in ~/.codebuddy/user-settings.json
@@ -78,31 +79,9 @@ export interface ProjectSettings {
  */
 const DEFAULT_USER_SETTINGS: Partial<UserSettings> = {};
 
-const LEGACY_MODELS = [
-  'grok-code-fast-1', 'grok-4-latest', 'grok-3-latest',
-  'grok-3-fast', 'grok-3-mini-fast',
-];
-
-function withoutLegacyDefaults(settings: UserSettings): UserSettings {
-  if (settings.defaultModel !== LEGACY_MODELS[0] ||
-      !Array.isArray(settings.models) ||
-      settings.models.length !== LEGACY_MODELS.length ||
-      !settings.models.every((model, index) => model === LEGACY_MODELS[index])) {
-    return settings;
-  }
-  const { defaultModel: _defaultModel, models: _models, ...chosen } = settings;
-  // The historical scaffold also carried xAI's URL. It is not evidence of
-  // an explicit provider choice when no key, provider, model or profile exists.
-  if (chosen.baseURL === 'https://api.x.ai/v1' &&
-      !chosen.apiKey && !chosen.provider && !chosen.model && !chosen.connection) {
-    delete chosen.baseURL;
-  }
-  return chosen;
-}
-
 function withoutGeneratedProjectModel(settings: ProjectSettings): ProjectSettings {
   const keys = Object.keys(settings).sort();
-  if (settings.model === LEGACY_MODELS[0] &&
+  if (settings.model === LEGACY_GENERATED_MODELS[0] &&
       keys.join(',') === 'maxToolRounds,model,theme' &&
       (settings as Record<string, unknown>).maxToolRounds === 50 &&
       (settings as Record<string, unknown>).theme === 'default') {
@@ -219,7 +198,7 @@ export class SettingsManager {
       const result = validator.validate<ZodUserSettings>(rawSettings, 'user-settings.json');
 
       if (result.valid && result.data) {
-        return withoutLegacyDefaults({
+        return withoutLegacyGeneratedSelection({
           apiKey: result.data.apiKey,
           baseURL: result.data.baseURL,
           defaultModel: result.data.defaultModel,
@@ -236,7 +215,7 @@ export class SettingsManager {
 
       // Merge with defaults to ensure all required fields exist
       const merged = { ...DEFAULT_USER_SETTINGS, ...(rawSettings as object) };
-      return withoutLegacyDefaults(merged as UserSettings);
+      return withoutLegacyGeneratedSelection(merged as UserSettings);
     } catch (error) {
       logger.warn(
         "Failed to load user settings",

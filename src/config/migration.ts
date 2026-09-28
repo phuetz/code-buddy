@@ -1,5 +1,6 @@
 import { DEFAULT_BASE_URL } from '../utils/base-url.js';
 import { findRuntimeProvider } from '../providers/provider-catalog.js';
+import { withoutLegacyGeneratedSelection } from './legacy-generated-settings.js';
 /**
  * Settings Migration
  *
@@ -25,6 +26,7 @@ import {
  * Detect provider type from various hints
  */
 export function detectProviderFromSettings(settings: LegacyUserSettings): ProviderType {
+  settings = withoutLegacyGeneratedSelection(settings);
   // Check explicit provider
   if (settings.provider) {
     return settings.provider as ProviderType;
@@ -71,6 +73,7 @@ export function createProfileFromLegacy(
   settings: LegacyUserSettings,
   name: string = 'Migrated Configuration'
 ): ConnectionProfile {
+  settings = withoutLegacyGeneratedSelection(settings);
   const provider = detectProviderFromSettings(settings);
 
   return {
@@ -95,7 +98,7 @@ export function needsMigration(settings: unknown): boolean {
     return false;
   }
 
-  const s = settings as Record<string, unknown>;
+  const s = withoutLegacyGeneratedSelection(settings as LegacyUserSettings & Record<string, unknown>);
 
   // Already has connection config
   if (s.connection && typeof s.connection === 'object') {
@@ -110,6 +113,7 @@ export function needsMigration(settings: unknown): boolean {
  * Migrate legacy settings to modern format with connection profiles
  */
 export function migrateSettings(oldSettings: LegacyUserSettings): ModernUserSettings {
+  oldSettings = withoutLegacyGeneratedSelection(oldSettings);
   const profiles: ConnectionProfile[] = [];
   const addedIds = new Set<string>();
   let activeProfileId = '';
