@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "catalog-status",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-28T02:53:22.155Z",
+  "revision": "92f25d62bae3203c12d7c29d4ce8f0b02b295b6b",
+  "sourceDigest": "e398f21b73ff1367ceaef355c724779b936f60f35b019b2a4774860eaffc3c18",
+  "artifact": "docs/preuves/inventaire-catalog-status-2026-09-28.log",
+  "summary": "CLI compilée exécutée avec HOME isolé : JSON analysé, 91/91 entrées explicites codées et raccordées."
+}
