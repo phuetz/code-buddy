@@ -176,16 +176,6 @@ export interface ServerDetectionResult {
  */
 export const DEFAULT_PROFILES: ConnectionProfile[] = [
   {
-    id: 'grok',
-    name: 'Grok API (xAI)',
-    provider: 'grok',
-    baseURL: 'https://api.x.ai/v1',
-    model: 'grok-code-fast-1',
-    icon: '🤖',
-    description: 'xAI Grok API - production-ready AI inference',
-    enabled: true,
-  },
-  {
     id: 'lmstudio',
     name: 'LM Studio Local',
     provider: 'lmstudio',

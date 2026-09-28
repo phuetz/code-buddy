@@ -91,6 +91,12 @@ function withoutLegacyDefaults(settings: UserSettings): UserSettings {
     return settings;
   }
   const { defaultModel: _defaultModel, models: _models, ...chosen } = settings;
+  // The historical scaffold also carried xAI's URL. It is not evidence of
+  // an explicit provider choice when no key, provider, model or profile exists.
+  if (chosen.baseURL === 'https://api.x.ai/v1' &&
+      !chosen.apiKey && !chosen.provider && !chosen.model && !chosen.connection) {
+    delete chosen.baseURL;
+  }
   return chosen;
 }
 
@@ -106,7 +112,7 @@ function withoutGeneratedProjectModel(settings: ProjectSettings): ProjectSetting
   return settings;
 }
 
-const repairedEmptyUserSettings = new Set<string>();
+const warnedEmptyUserSettings = new Set<string>();
 
 /**
  * Default values for project settings
@@ -199,9 +205,9 @@ export class SettingsManager {
 
       const rawSettings = readJsonAtomicSync<unknown | null>(this.userSettingsPath, null, { mode: 0o600 });
       if (rawSettings === null) {
-        if (!repairedEmptyUserSettings.has(this.userSettingsPath)) {
-          repairedEmptyUserSettings.add(this.userSettingsPath);
-          logger.warn('user-settings.json was empty or unreadable; restored defaults once', {
+        if (!warnedEmptyUserSettings.has(this.userSettingsPath)) {
+          warnedEmptyUserSettings.add(this.userSettingsPath);
+          logger.warn('user-settings.json is empty or unreadable; using an unselected in-memory configuration', {
             path: this.userSettingsPath,
           });
         }
@@ -449,12 +455,7 @@ export class SettingsManager {
     // Older defaults can pin new workspaces to Grok unintentionally.
     if (fs.existsSync(this.projectSettingsPath)) {
       const projectModel = this.getProjectSetting("model");
-      if (projectModel) {
-        const userModel = this.getUserSetting("model");
-        if (projectModel !== LEGACY_MODELS[0] || !userModel) {
-          return projectModel;
-        }
-      }
+      if (projectModel) return projectModel;
     }
 
     const userModel = this.getUserSetting("model");
@@ -553,11 +554,10 @@ export class SettingsManager {
     if (!this.configResolver) {
       const settings = this.loadUserSettings();
 
-      // Check if migration is needed
+      // Migrate in memory for read-only callers; a read must never rewrite
+      // user-settings.json or silently select a profile.
       if (needsMigration(settings) && !settings.connection) {
-        logger.info("Migrating settings to new profile format...");
         const migrated = migrateSettings(settings);
-        this.saveUserSettings(migrated);
         this.configResolver = getConfigResolver();
         if (migrated.connection) {
           this.configResolver.fromConfig(migrated.connection);

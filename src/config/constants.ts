@@ -69,10 +69,10 @@ export const UI_CONFIG = {
 } as const;
 
 export const API_CONFIG = {
-  /** Default base URL for CodeBuddy API */
-  DEFAULT_BASE_URL: 'https://api.x.ai/v1',
-  /** Default model */
-  DEFAULT_MODEL: 'grok-3-fast',
+  /** Compatibility placeholder when no provider has been resolved. */
+  DEFAULT_BASE_URL: 'https://api.openai.com/v1',
+  /** Compatibility placeholder; the CLI resolves a provider before inference. */
+  DEFAULT_MODEL: 'gpt-4o',
   /** Request timeout (ms) */
   REQUEST_TIMEOUT: 60000, // 1 minute
   /** Maximum retries for failed requests */

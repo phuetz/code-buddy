@@ -1,5 +1,4 @@
 import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
-import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Automated Program Repair Engine
  *

@@ -634,7 +634,7 @@ denylist = ["rm -rf /", "sudo .*"]
     describe('API_CONFIG', () => {
       it('should have DEFAULT_BASE_URL defined', () => {
         expect(API_CONFIG.DEFAULT_BASE_URL).toBeDefined();
-        expect(API_CONFIG.DEFAULT_BASE_URL).toContain('x.ai');
+        expect(API_CONFIG.DEFAULT_BASE_URL).toBe('https://api.openai.com/v1');
       });
 
       it('should have DEFAULT_MODEL defined', () => {

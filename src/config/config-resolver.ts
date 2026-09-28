@@ -14,7 +14,7 @@ import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
 import { detectProviderFromEnv } from '../utils/provider-detector.js';
 import { codeBuddyEnv } from './legacy-env.js';
-import { FALLBACK_MODEL } from './model-defaults.js';
+import { FALLBACK_MODEL, MODEL_DEFAULTS } from './model-defaults.js';
 import { DEFAULT_BASE_URL } from '../utils/base-url.js';
 import {
   ConnectionConfig,
@@ -122,11 +122,12 @@ export class ConfigResolver extends EventEmitter {
    * Resolve from CLI arguments
    */
   private resolveFromCLI(cli: CLIOverrides): ResolvedConfig {
+    const provider = cli.provider || this.detectProvider(cli.baseURL) || 'openai';
     return {
       baseURL: cli.baseURL || codeBuddyEnv('BASE_URL') || DEFAULT_BASE_URL,
       apiKey: cli.apiKey || codeBuddyEnv('API_KEY') || '',
-      model: cli.model || codeBuddyEnv('MODEL') || FALLBACK_MODEL,
-      provider: cli.provider || this.detectProvider(cli.baseURL) || 'openai',
+      model: cli.model || codeBuddyEnv('MODEL') || this.defaultModelForProvider(provider),
+      provider,
       source: 'cli',
     };
   }
@@ -145,7 +146,7 @@ export class ConfigResolver extends EventEmitter {
     return {
       baseURL: cli?.baseURL || profile.baseURL,
       apiKey: cli?.apiKey || profile.apiKey || '',
-      model: cli?.model || profile.model || FALLBACK_MODEL,
+      model: cli?.model || profile.model || this.defaultModelForProvider(profile.provider),
       provider: cli?.provider || profile.provider,
       profileId: profile.id,
       profileName: profile.name,
@@ -185,6 +186,22 @@ export class ConfigResolver extends EventEmitter {
     if (provider === 'anthropic') return 'claude';
     if (provider === 'unknown') return 'openai';
     return provider as ProviderType;
+  }
+
+  private defaultModelForProvider(provider: ProviderType): string {
+    switch (provider) {
+      case 'grok':
+      case 'xai': return MODEL_DEFAULTS.xai;
+      case 'ollama': return MODEL_DEFAULTS.ollama;
+      case 'lmstudio': return MODEL_DEFAULTS.lmstudio;
+      case 'claude':
+      case 'anthropic': return MODEL_DEFAULTS.anthropic;
+      case 'gemini':
+      case 'google': return MODEL_DEFAULTS.google;
+      case 'mistral': return MODEL_DEFAULTS.mistral;
+      case 'deepseek': return MODEL_DEFAULTS.deepseek;
+      default: return FALLBACK_MODEL;
+    }
   }
 
   /**
@@ -361,9 +378,9 @@ export class ConfigResolver extends EventEmitter {
 
     this.profiles.delete(profileId);
 
-    // If we removed the active profile, switch to default
+    // Removing a selected profile leaves no implicit provider selection.
     if (this.activeProfileId === profileId) {
-      this.activeProfileId = 'grok';
+      this.activeProfileId = '';
     }
 
     this.emit('profile-removed', profileId);

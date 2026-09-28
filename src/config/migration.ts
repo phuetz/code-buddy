@@ -1,4 +1,5 @@
-import { codeBuddyEnv } from './legacy-env.js';
+import { DEFAULT_BASE_URL } from '../utils/base-url.js';
+import { findRuntimeProvider } from '../providers/provider-catalog.js';
 /**
  * Settings Migration
  *
@@ -40,8 +41,8 @@ export function detectProviderFromSettings(settings: LegacyUserSettings): Provid
   if (url.includes(':11434')) return 'ollama';
   if (url.includes('localhost') || url.includes('127.0.0.1')) return 'local';
 
-  // Default
-  return 'grok';
+  // No provider hint: keep the legacy OpenAI-compatible profile generic.
+  return 'custom';
 }
 
 /**
@@ -59,6 +60,10 @@ function generateProfileId(baseName: string, existingIds: Set<string>): string {
   return id;
 }
 
+function legacyBaseURL(settings: LegacyUserSettings, provider: ProviderType): string {
+  return settings.baseURL || findRuntimeProvider(provider)?.defaultBaseURL || DEFAULT_BASE_URL;
+}
+
 /**
  * Create a profile from legacy settings
  */
@@ -72,7 +77,7 @@ export function createProfileFromLegacy(
     id: 'migrated',
     name,
     provider,
-    baseURL: settings.baseURL || 'https://api.x.ai/v1',
+    baseURL: legacyBaseURL(settings, provider),
     apiKey: settings.apiKey,
     model: settings.model || settings.defaultModel,
     isDefault: true,
@@ -107,13 +112,10 @@ export function needsMigration(settings: unknown): boolean {
 export function migrateSettings(oldSettings: LegacyUserSettings): ModernUserSettings {
   const profiles: ConnectionProfile[] = [];
   const addedIds = new Set<string>();
-  let activeProfileId = 'grok'; // Default
+  let activeProfileId = '';
 
   // Check if there's meaningful custom configuration
-  const hasCustomConfig = !!(
-    (oldSettings.apiKey && oldSettings.apiKey !== codeBuddyEnv('API_KEY')) ||
-    (oldSettings.baseURL && !oldSettings.baseURL.includes('api.x.ai'))
-  );
+  const hasCustomConfig = !!(oldSettings.apiKey || oldSettings.baseURL || oldSettings.provider);
 
   if (hasCustomConfig) {
     // Create a profile from the old settings
@@ -125,7 +127,7 @@ export function migrateSettings(oldSettings: LegacyUserSettings): ModernUserSett
       id: profileId,
       name: `${provider.charAt(0).toUpperCase() + provider.slice(1)} (Migrated)`,
       provider,
-      baseURL: oldSettings.baseURL || 'https://api.x.ai/v1',
+      baseURL: legacyBaseURL(oldSettings, provider),
       apiKey: oldSettings.apiKey,
       model: oldSettings.model || oldSettings.defaultModel,
       isDefault: true,
@@ -209,18 +211,8 @@ export function validateConnectionConfig(config: ConnectionConfig): ConnectionCo
   // Ensure activeProfileId exists in profiles
   const profileIds = new Set(validated.profiles.map(p => p.id));
   if (!profileIds.has(validated.activeProfileId)) {
-    // Find a default profile or use 'grok'
-    const defaultProfile = validated.profiles.find(p => p.isDefault);
-    validated.activeProfileId = defaultProfile?.id || 'grok';
-
-    // Ensure grok exists
-    if (!profileIds.has('grok')) {
-      const grokProfile = DEFAULT_PROFILES.find(p => p.id === 'grok');
-      if (grokProfile) {
-        validated.profiles.push(grokProfile);
-        validated.activeProfileId = 'grok';
-      }
-    }
+    const defaultProfile = validated.profiles.find(p => p.isDefault && p.enabled !== false);
+    validated.activeProfileId = defaultProfile?.id || '';
   }
 
   // Ensure each profile has required fields
@@ -293,7 +285,7 @@ function detectProviderFromBaseURL(url: string): ProviderType {
   if (urlLower.includes(':11434')) return 'ollama';
   if (urlLower.includes('localhost') || urlLower.includes('127.0.0.1')) return 'local';
 
-  return 'grok';
+  return 'custom';
 }
 
 /**

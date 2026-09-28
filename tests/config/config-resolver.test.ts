@@ -231,7 +231,7 @@ describe('ConfigResolver', () => {
       const profiles = resolver.getProfiles();
 
       expect(profiles.length).toBeGreaterThan(0);
-      expect(profiles.some(p => p.id === 'grok')).toBe(true);
+      expect(profiles.some(p => p.id === 'grok')).toBe(false);
       expect(profiles.some(p => p.id === 'lmstudio')).toBe(true);
       expect(profiles.some(p => p.id === 'ollama')).toBe(true);
     });
@@ -283,12 +283,12 @@ describe('ConfigResolver', () => {
 
       expect(() => {
         resolver.addProfile({
-          id: 'grok', // Already exists
+          id: 'ollama', // Already exists
           name: 'Duplicate',
-          provider: 'grok',
-          baseURL: 'https://api.x.ai/v1',
+          provider: 'ollama',
+          baseURL: 'http://localhost:11434/v1',
         });
-      }).toThrow("Profile 'grok' already exists");
+      }).toThrow("Profile 'ollama' already exists");
     });
 
     it('should update existing profile', () => {
@@ -327,9 +327,9 @@ describe('ConfigResolver', () => {
     it('should not remove built-in profiles', () => {
       const resolver = new ConfigResolver();
 
-      const success = resolver.removeProfile('grok');
+      const success = resolver.removeProfile('ollama');
       expect(success).toBe(false);
-      expect(resolver.getProfile('grok')).toBeDefined();
+      expect(resolver.getProfile('ollama')).toBeDefined();
     });
 
     it('should filter enabled profiles', () => {
@@ -449,7 +449,8 @@ describe('ConfigResolver', () => {
       expect(resolver.getActiveProfileId()).toBe('imported');
       expect(resolver.getProfile('imported')).toBeDefined();
       // Should still have default profiles merged in
-      expect(resolver.getProfile('grok')).toBeDefined();
+      expect(resolver.getProfile('imported')?.provider).toBe('grok');
+      expect(resolver.getProfile('ollama')).toBeDefined();
     });
   });
 

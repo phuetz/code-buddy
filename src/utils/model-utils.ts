@@ -5,6 +5,8 @@
 import { SUPPORTED_MODELS } from '../config/constants.js';
 import { findModelToolConfig } from '../config/model-tools.js';
 import { ValidationError } from './errors.js';
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 
 export type ModelName = keyof typeof SUPPORTED_MODELS;
 export type ModelProvider = 'xai' | 'anthropic' | 'google' | 'openai' | 'lmstudio' | 'ollama' | 'bundled-gemma4' | 'unknown';
@@ -88,10 +90,10 @@ export function validateModel(model: string, strict: boolean = false): void {
 /**
  * Get the default model for a provider
  */
-export function getDefaultModel(provider: ModelProvider = 'xai'): string {
+export function getDefaultModel(provider: ModelProvider = 'unknown'): string {
   switch (provider) {
     case 'xai':
-      return 'grok-4-latest';
+      return getProviderDefaultModel('xai');
     case 'anthropic':
       return 'claude-opus-4-6';
     case 'openai':
@@ -99,11 +101,11 @@ export function getDefaultModel(provider: ModelProvider = 'xai'): string {
     case 'google':
       return 'gemini-2.5-pro';
     case 'lmstudio':
-      return 'local-model';
+      return getProviderDefaultModel('lmstudio');
     case 'ollama':
-      return 'llama3.2';
+      return getProviderDefaultModel('ollama');
     default:
-      return 'grok-4-latest';
+      return runtimeDefaultModel();
   }
 }
 
