@@ -127,7 +127,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `cli-groups` — Group chat security | Configurez les accès aux discussions de groupe. | **Testée localement** | [Trace réelle](preuves/p8-cli-groups.log); [Maillons vérifiés](preuves/verification-statique.md#cli-groups) |
 | `cli-policy` — Policy diagnostics | Inspectez et réparez les constats de politique par domaine. | **Testée localement** | [Trace réelle](preuves/p6-cli-policy.log); [Maillons vérifiés](preuves/verification-statique.md#cli-policy) |
 | `cli-secrets` — Encrypted secrets vault | Gérez les identifiants dans le coffre local chiffré. | **Testée localement** | [Trace réelle](preuves/p7-cli-secrets.log); [Maillons vérifiés](preuves/verification-statique.md#cli-secrets) |
-| `cli-approvals` — Action approvals | Examinez les approbations d’outils et d’actions en attente. | **Testée localement** | [Trace réelle](preuves/p8-cli-approvals.log); [Maillons vérifiés](preuves/verification-statique.md#cli-approvals) |
+| `cli-approvals` — Action approvals | Examinez les approbations d’outils et d’actions en attente. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-approvals) |
 | `security-sandbox` — Native shell sandbox | Confinez les commandes shell lorsque le bac à sable natif est activé. | **Testée localement** | [Trace réelle](preuves/p6-security-sandbox.log); [Maillons vérifiés](preuves/verification-statique.md#security-sandbox) |
 | `security-skill-firewall` — Skill firewall | Analysez les skills à la recherche de capacités risquées avant usage. | **Testée localement** | [Trace réelle](preuves/p5-security-skill-firewall-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#security-skill-firewall) |
 

@@ -127,7 +127,7 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 | `cli-groups` — Group chat security | Configure group chat access controls. | **Tested locally** | [Run trace](preuves/p8-cli-groups.log); [Wiring checks](preuves/verification-statique.md#cli-groups) |
 | `cli-policy` — Policy diagnostics | Inspect and repair policy findings by domain. | **Tested locally** | [Run trace](preuves/p6-cli-policy.log); [Wiring checks](preuves/verification-statique.md#cli-policy) |
 | `cli-secrets` — Encrypted secrets vault | Manage credentials in the local encrypted vault. | **Tested locally** | [Run trace](preuves/p7-cli-secrets.log); [Wiring checks](preuves/verification-statique.md#cli-secrets) |
-| `cli-approvals` — Action approvals | Review pending tool and action approvals. | **Tested locally** | [Run trace](preuves/p8-cli-approvals.log); [Wiring checks](preuves/verification-statique.md#cli-approvals) |
+| `cli-approvals` — Action approvals | Review pending tool and action approvals. | **Wired** | [Wiring checks](preuves/verification-statique.md#cli-approvals) |
 | `security-sandbox` — Native shell sandbox | Confine shell commands when native sandbox mode is enabled. | **Tested locally** | [Run trace](preuves/p6-security-sandbox.log); [Wiring checks](preuves/verification-statique.md#security-sandbox) |
 | `security-skill-firewall` — Skill firewall | Scan skills for risky capabilities before use. | **Tested locally** | [Run trace](preuves/p5-security-skill-firewall-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#security-skill-firewall) |
 

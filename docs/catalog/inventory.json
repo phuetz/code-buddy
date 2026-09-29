@@ -273,7 +273,7 @@
           }
         ]
       },
-      "verificationLimit": "The CLI supports AudioReader, Pocket and Voicebox; none was configured in the isolated HOME. The installed Piper binary is not a backend of this command, so no audio was synthesized.",
+      "verificationLimit": "No AudioReader, Pocket or Voicebox backend was started inside the isolated session; the command has no Piper backend despite Piper being installed, and host audio services were left untouched.",
       "discoveryKey": "cli:speak"
     },
     {
@@ -430,7 +430,7 @@
           }
         ]
       },
-      "verificationLimit": "The isolated HOME has zero hub-installed skills (8 bundled). No reachable shared skills registry was configured, so search and installation of a shared skill were not exercised.",
+      "verificationLimit": "An isolated hub search returned zero matches and list returned zero hub-installed skills (8 bundled); no shared skill was available to install or manage.",
       "discoveryKey": "cli:hub"
     },
     {
@@ -1177,7 +1177,7 @@
           }
         ]
       },
-      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "verificationLimit": "The production CLI has no request-creation path: ApprovalsStore.create is called only by an external harness, and a new CLI process lists no pending requests. No real tool approval was observed.",
       "discoveryKey": "cli:approvals"
     },
     {

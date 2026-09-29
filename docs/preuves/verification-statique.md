@@ -90,7 +90,7 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'speak'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerSpeakCommand(program)`.
 - Entrypoint check: `src/commands/cli/speak-command.ts` contains code fragment `registerSpeakCommand`.
-- Live limit: The CLI supports AudioReader, Pocket and Voicebox; none was configured in the isolated HOME. The installed Piper binary is not a backend of this command, so no audio was synthesized.
+- Live limit: No AudioReader, Pocket or Voicebox backend was started inside the isolated session; the command has no Piper backend despite Piper being installed, and host audio services were left untouched.
 
 ## cli-assistant
 
@@ -140,7 +140,7 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'hub'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerHubCommands(program)`.
 - Entrypoint check: `src/commands/cli/native-engine-commands.ts` contains code fragment `registerHubCommands`.
-- Live limit: The isolated HOME has zero hub-installed skills (8 bundled). No reachable shared skills registry was configured, so search and installation of a shared skill were not exercised.
+- Live limit: An isolated hub search returned zero matches and list returned zero hub-installed skills (8 bundled); no shared skill was available to install or manage.
 
 ## cli-curator
 
@@ -375,7 +375,7 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'approvals'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerApprovalsCommands(program)`.
 - Entrypoint check: `src/commands/cli/approvals-command.ts` contains code fragment `registerApprovalsCommands`.
-- Live trace: [p8-cli-approvals.log](p8-cli-approvals.log).
+- Live limit: The production CLI has no request-creation path: ApprovalsStore.create is called only by an external harness, and a new CLI process lists no pending requests. No real tool approval was observed.
 
 ## cli-insights
 
