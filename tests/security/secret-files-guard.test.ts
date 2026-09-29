@@ -73,6 +73,7 @@ beforeAll(() => {
   write(path.join(WORK, '.env.example'), 'API_KEY=\n');
   write(path.join(WORK, '.env'), `API_KEY=${FAKE_TOKEN}\n`);
   write(path.join(WORK, '.env.staging'), `API_KEY=${FAKE_TOKEN}\n`);
+  write(path.join(WORK, 'server.pem'), '-----BEGIN PRIVATE KEY-----\nFAKE-WORKSPACE-PEM\n');
   write(path.join(WORK, 'notes.md'), 'mention PUBLIC-SEARCH-MARKER dans un fichier ordinaire\n');
   if (process.platform !== 'win32') {
     fs.symlinkSync(TOKEN_FILE, path.join(WORK, 'innocent.txt'));
@@ -222,6 +223,15 @@ describe('search (ripgrep) sur un projet qui contient des secrets', () => {
     const result = await search.search('PUBLIC-SEARCH-MARKER', { searchType: 'text', includeHidden: true });
     expect(result.success).toBe(true);
     expect(result.output).toContain('notes.md');
+  });
+
+  it('ne recherche pas une clé PEM rangée dans le workspace', async () => {
+    const search = new SearchTool();
+    search.setCurrentDirectory(WORK);
+    const result = await search.search('PRIVATE KEY', { searchType: 'text', includeHidden: true });
+    expect(result.success).toBe(true);
+    expect(result.output).not.toContain('FAKE-WORKSPACE-PEM');
+    expect(result.output).not.toContain('server.pem');
   });
 
   it('retrouve .env.example sans exposer .env', async () => {

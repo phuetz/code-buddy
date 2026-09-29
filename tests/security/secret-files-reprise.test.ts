@@ -163,10 +163,10 @@ describe('classification et shell', () => {
     expect(findCredentialPathInCommand('ls ~/.codebuddy')).toBeNull();
   });
 
-  it('garde les modèles .env et les certificats publics PEM cherchables', () => {
+  it('garde les modèles .env cherchables et exclut tous les PEM de la recherche', () => {
     expect(classifySecretPath(path.join(work, '.env.example')).secret).toBe(false);
     expect(SECRET_SEARCH_EXCLUDE_GLOBS).not.toContain('!.env.*');
-    expect(SECRET_SEARCH_EXCLUDE_GLOBS).not.toContain('!*.pem');
+    expect(SECRET_SEARCH_EXCLUDE_GLOBS).toContain('!*.pem');
     expect(classifySecretPath(path.join(work, 'cert.pem')).secret).toBe(false);
     expect(classifySecretPath(path.join(cb, 'skill-signing', 'key.pem')).secret).toBe(true);
   });

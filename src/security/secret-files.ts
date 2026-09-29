@@ -271,6 +271,7 @@ export const SECRET_SEARCH_EXCLUDE_GLOBS: readonly string[] = [
   '!*.key',
   '!*.p12',
   '!*.pfx',
+  '!*.pem',
   '!devices.json',
   '!hosts.yml',
 ];
