@@ -137,9 +137,13 @@ export function getHomeCredentialRoots(): string[] {
   return Array.from(roots);
 }
 
+function comparablePath(value: string): string {
+  return process.platform === 'win32' || process.platform === 'darwin' ? value.toLowerCase() : value;
+}
+
 function isInside(candidate: string, root: string): boolean {
-  const a = process.platform === 'win32' || process.platform === 'darwin' ? candidate.toLowerCase() : candidate;
-  const b = process.platform === 'win32' || process.platform === 'darwin' ? root.toLowerCase() : root;
+  const a = comparablePath(candidate);
+  const b = comparablePath(root);
   return a === b || a.startsWith(b + path.sep);
 }
 
@@ -177,7 +181,7 @@ function classify(absPath: string, roots: readonly string[]): string | null {
     }
   }
   for (const rel of HOME_PRIVATE_FILES) {
-    if (absPath === path.join(home, rel)) return `private home file (${rel})`;
+    if (comparablePath(absPath) === comparablePath(path.join(home, rel))) return `private home file (${rel})`;
   }
   for (const root of roots) {
     if (isInside(absPath, root) && absPath !== root) {

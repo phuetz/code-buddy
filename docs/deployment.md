@@ -43,6 +43,16 @@ reverse proxy if external delivery is required. `buddy server --host` and
 `HOST` configure the HTTP/WebSocket API server, not this separate webhook
 listener.
 
+### WebChat channel
+
+`WebChatChannel` is a separate HTTP/WebSocket listener (port `3001` by
+default), independent of `buddy server`. It binds to `127.0.0.1` by default.
+Browser origins are limited to `localhost`, `127.0.0.1` and `[::1]` on its
+listening port; a remote `Host` or WebSocket `Origin` is refused. To expose it
+intentionally, configure its own `host` and `corsOrigins`, and set an
+`authToken`. `buddy server --host`, `HOST`, and `JWT_SECRET` do not configure
+this channel listener.
+
 ---
 
 ## Production checklist

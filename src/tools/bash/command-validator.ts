@@ -443,21 +443,71 @@ function directoryContainsSecret(directory: string): boolean {
   return false;
 }
 
-/** Expand one shell glob segment without executing the shell or opening files. */
+/** Bash expands comma braces before globbing, including nested braces. */
+function expandShellBraces(candidate: string): string[] | null {
+  let variants = [candidate];
+  while (true) {
+    const next: string[] = [];
+    let expanded = false;
+    for (const variant of variants) {
+      const match = /\{([^{}]*,[^{}]*)\}/.exec(variant);
+      if (!match) {
+        next.push(variant);
+        continue;
+      }
+      expanded = true;
+      for (const part of match[1]!.split(',')) {
+        next.push(variant.slice(0, match.index) + part + variant.slice(match.index + match[0].length));
+        if (next.length > 64) return null;
+      }
+    }
+    if (!expanded) return variants;
+    variants = next;
+  }
+}
+
+/** Expand static shell globs without executing the shell or opening file content. */
 function globContainsSecret(candidate: string): boolean {
-  const parent = path.dirname(candidate);
-  const pattern = path.basename(candidate);
-  if (/[*?[\]{}]/.test(parent) || (!/[*?]/.test(pattern) && !pattern.includes('['))) return false;
-  let names: string[];
-  try { names = fs.readdirSync(parent); } catch { return false; }
-  const escaped = pattern.replace(/[.+^${}()|\\]/g, '\\$&')
-    .replace(/\*/g, '.*').replace(/\?/g, '.');
-  let matcher: RegExp;
-  try { matcher = new RegExp(`^${escaped}$`); } catch { return false; }
-  return names.some((name) =>
-    (!name.startsWith('.') || pattern.startsWith('.')) &&
-    matcher.test(name) && checkSecretFileAccess(path.join(parent, name), 'read').secret,
-  );
+  if (!/[*?[\]{}]/.test(candidate)) return false;
+  const variants = expandShellBraces(candidate);
+  if (!variants) return true;
+  return variants.some((variant) => globVariantContainsSecret(variant));
+}
+
+function globVariantContainsSecret(candidate: string): boolean {
+  const root = path.parse(candidate).root;
+  let paths = [root];
+  for (const segment of candidate.slice(root.length).split(path.sep).filter(Boolean)) {
+    if (!/[*?[\]]/.test(segment)) {
+      paths = paths.map((parent) => path.join(parent, segment));
+      continue;
+    }
+    const escaped = segment.replace(/[.+^${}()|\\]/g, '\\$&')
+      .replace(/\[!([^\]]+)\]/g, '[^$1]')
+      .replace(/\*/g, '.*').replace(/\?/g, '.');
+    let matcher: RegExp;
+    try { matcher = new RegExp(`^${escaped}$`, process.platform === 'win32' || process.platform === 'darwin' ? 'i' : ''); }
+    catch { return false; } // An invalid character class is literal to the shell.
+    const next: string[] = [];
+    for (const parent of paths) {
+      let names: string[];
+      try { names = fs.readdirSync(parent); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ENOTDIR') continue;
+        return true;
+      }
+      for (const name of names) {
+        if ((process.platform === 'win32' || !name.startsWith('.') || segment.startsWith('.')) && matcher.test(name)) {
+          next.push(path.join(parent, name));
+          // An unbounded expansion is not safe to declare free of secrets.
+          if (next.length > 4096) return true;
+        }
+      }
+    }
+    paths = next;
+    if (paths.length === 0) return false;
+  }
+  return paths.some((file) => checkSecretFileAccess(file, 'read').secret);
 }
 
 interface GitInvocation {
@@ -996,7 +1046,8 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
       parseShellCommand(joined).commands.length === 1 &&
       isGitMetadataOnly(gitInvocations.commands[0]!)) return null;
   const roots = getHomeCredentialRoots();
-  const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
+  // Keep commas inside shell brace expansion, e.g. `{notes.txt,.env}`.
+  const tokens = expanded.split(/[\s`;|&<>()=]+/).filter(Boolean);
   const words = new Set(
     tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
   );
@@ -1085,9 +1136,12 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
       redirectionTargets.has(raw) ||
       (i === tokens.length - 1 && ['cp', 'mv', 'tee'].includes(firstWord ?? ''))
     );
+    // Any command can receive the paths produced by shell expansion. A glob
+    // that reaches a secret is unsafe even when the command is not on a list
+    // of known readers (sort, plugins and user binaries included).
+    if (globContainsSecret(normalized)) return raw;
     if (isWriteDestination && !checkSecretFileAccess(normalized, 'write').secret) continue;
     if (classifySecretPath(normalized).secret) return raw;
-    if (usesRecursiveReader && globContainsSecret(normalized)) return raw;
     let canonical = normalized;
     try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
     const underRoot = roots.find(

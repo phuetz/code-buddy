@@ -131,6 +131,17 @@ function createConfig(overrides: Partial<WebChatConfig> = {}): WebChatConfig {
   };
 }
 
+type WebChatInternals = {
+  config: WebChatConfig;
+  clients: Map<string, unknown>;
+  handleHttpRequest: (req: IncomingMessage, res: ServerResponse) => void;
+  allowedOrigins: () => string[];
+};
+
+function webChatInternals(channel: WebChatChannel): WebChatInternals {
+  return channel as unknown as WebChatInternals;
+}
+
 /**
  * Build a fake IncomingMessage (enough for handleHttpRequest)
  */
@@ -314,6 +325,50 @@ describe('WebChatChannel', () => {
   // =========================================================================
 
   describe('constructor', () => {
+    it('confine par défaut WebChat au loopback et ne publie pas CORS à toute origine', () => {
+      channel = new WebChatChannel(createConfig());
+      expect(webChatInternals(channel).config.host).toBe('127.0.0.1');
+      expect(webChatInternals(channel).config.corsOrigins).toBeUndefined();
+      const response = fakeRes();
+      webChatInternals(channel).handleHttpRequest(fakeReq('/api/health', 'GET', { origin: 'https://remote.example' }), response);
+      expect(response._headers['Access-Control-Allow-Origin']).toBeUndefined();
+    });
+
+    it('refuse un WebSocket venant d’une origine web distante avant toute inscription du client', async () => {
+      channel = new WebChatChannel(createConfig());
+      await channel.connect();
+      const socket = simulateConnection(channel, { origin: 'https://remote.example' });
+      expect(socket.close).toHaveBeenCalled();
+      expect(socket.send).not.toHaveBeenCalled();
+      expect(webChatInternals(channel).clients.size).toBe(0);
+    });
+
+    it('refuse un Host distant sur le service local, même sans en-tête Origin', async () => {
+      channel = new WebChatChannel(createConfig());
+      await channel.connect();
+      const response = fakeRes();
+      getHttpHandler()(fakeReq('/api/history', 'GET', { host: 'remote.example:3001' }), response);
+      expect(response._status).toBe(403);
+      const socket = simulateConnection(channel, { host: 'remote.example:3001' });
+      expect(socket.close).toHaveBeenCalled();
+      expect(webChatInternals(channel).clients.size).toBe(0);
+    });
+
+    it('garde WebChat utilisable depuis la page locale et permet une exposition explicitement configurée', async () => {
+      channel = new WebChatChannel(createConfig());
+      await channel.connect();
+      const local = simulateConnection(channel, { host: 'localhost:3001', origin: 'http://localhost:3001' });
+      expect(local.close).not.toHaveBeenCalled();
+      expect(local.send).toHaveBeenCalled();
+      await channel.disconnect();
+
+      channel = new WebChatChannel(createConfig({ host: '0.0.0.0', corsOrigins: ['https://chat.example'] }));
+      await channel.connect();
+      const remote = simulateConnection(channel, { host: 'chat.example:3001', origin: 'https://chat.example' });
+      expect(remote.close).not.toHaveBeenCalled();
+      expect(remote.send).toHaveBeenCalled();
+    });
+
     it('should create channel with type webchat', () => {
       channel = new WebChatChannel(createConfig());
       expect(channel.type).toBe('webchat');
@@ -324,14 +379,17 @@ describe('WebChatChannel', () => {
       expect((channel as any).config.port).toBe(3001);
     });
 
-    it('should apply default host 0.0.0.0', () => {
+    it('should apply default host 127.0.0.1', () => {
       channel = new WebChatChannel(createConfig());
-      expect((channel as any).config.host).toBe('0.0.0.0');
+      expect(webChatInternals(channel).config.host).toBe('127.0.0.1');
     });
 
-    it('should apply default corsOrigins ["*"]', () => {
+    it('should derive local browser origins unless corsOrigins is explicit', () => {
       channel = new WebChatChannel(createConfig());
-      expect((channel as any).config.corsOrigins).toEqual(['*']);
+      expect(webChatInternals(channel).config.corsOrigins).toBeUndefined();
+      expect(webChatInternals(channel).allowedOrigins()).toEqual([
+        'http://localhost:3001', 'http://127.0.0.1:3001', 'http://[::1]:3001',
+      ]);
     });
 
     it('should apply default title', () => {
@@ -1201,7 +1259,7 @@ describe('WebChatChannel', () => {
 
       const handler = getHttpHandler();
       const res = fakeRes();
-      handler(fakeReq('/api/health'), res);
+      handler(fakeReq('/api/health', 'GET', { origin: 'http://localhost:3001' }), res);
 
       expect(res.setHeader).toHaveBeenCalledWith(
         'Access-Control-Allow-Methods',
