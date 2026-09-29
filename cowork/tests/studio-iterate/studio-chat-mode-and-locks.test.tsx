@@ -34,7 +34,7 @@ describe('StudioChatPanel — mode discussion', () => {
     rerender(
       <StudioChatPanel messages={messages} mode="discuss" onModeChange={onModeChange} onImplementPlan={onImplementPlan} />,
     );
-    expect(screen.getByText(/aucun fichier ne sera modifié/)).toBeTruthy();
+    expect(screen.getByText(/no file will be changed/)).toBeTruthy();
     fireEvent.click(screen.getByTestId('studio-implement-plan'));
     expect(onImplementPlan).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByTestId('studio-mode-build'));
