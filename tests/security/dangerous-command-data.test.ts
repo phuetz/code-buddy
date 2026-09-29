@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { BASH_CONFIG } from '../../src/config/constants.js';
 import { AutoSandboxRouter } from '../../src/sandbox/auto-sandbox.js';
 import { containsDangerousCommand } from '../../src/security/bash-parser.js';
@@ -11,6 +12,16 @@ import { isDangerousCommand } from '../../src/security/dangerous-patterns.js';
 import { suggestAmendment } from '../../src/security/policy-amendments.js';
 import { SandboxManager } from '../../src/security/sandbox.js';
 import { SandboxedTerminal } from '../../src/security/sandboxed-terminal.js';
+
+const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
+
+function repositoryRelativePath(
+  root: string,
+  file: string,
+  platformPath: Pick<typeof path, 'relative' | 'sep'> = path,
+): string {
+  return platformPath.relative(root, file).split(platformPath.sep).join('/');
+}
 
 // Golden inventories from all name lists before consolidation: pattern registry,
 // BASH_CONFIG, policy amendments, and the Bash parser's local list.
@@ -107,28 +118,41 @@ describe('shared dangerous command data', () => {
     expect(BASH_CONFIG.DANGEROUS_COMMANDS).toContain('rm');
   });
 
+  it('normalizes simulated Windows paths to repository relative POSIX paths', () => {
+    const root = 'C:\\work\\code-buddy';
+    const dataFile = path.win32.join(root, 'src', 'security', 'dangerous-command-data.ts');
+    const configFile = path.win32.join(root, 'src', 'config', 'constants.ts');
+
+    expect(configFile.endsWith('src/config/constants.ts')).toBe(false);
+    expect(repositoryRelativePath(root, dataFile, path.win32)).toBe('src/security/dangerous-command-data.ts');
+    expect(repositoryRelativePath(root, configFile, path.win32)).toBe('src/config/constants.ts');
+  });
+
   it('rejects a second local DANGEROUS_COMMANDS declaration anywhere in src', () => {
     function sourceFiles(directory: string): string[] {
       return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
-        const file = join(directory, entry.name);
+        const file = path.join(directory, entry.name);
         if (entry.isDirectory()) return sourceFiles(file);
         return entry.isFile() && /\.[cm]?[jt]sx?$/.test(entry.name) ? [file] : [];
       });
     }
-    const files = sourceFiles(join(process.cwd(), 'src'));
+    const files = sourceFiles(path.join(repositoryRoot, 'src'));
+    const dataFile = repositoryRelativePath(repositoryRoot, path.join(repositoryRoot, 'src/security/dangerous-command-data.ts'));
+    const configFile = repositoryRelativePath(repositoryRoot, path.join(repositoryRoot, 'src/config/constants.ts'));
     const declarations: string[] = [];
     const localLiterals: string[] = [];
     for (const file of files) {
+      const relativeFile = repositoryRelativePath(repositoryRoot, file);
       const source = readFileSync(file, 'utf8');
-      if (/\b(?:const|let|var)\s+DANGEROUS_COMMANDS\b/.test(source)) declarations.push(file);
-      if (file.endsWith('src/config/constants.ts')) {
+      if (/\b(?:const|let|var)\s+DANGEROUS_COMMANDS\b/.test(source)) declarations.push(relativeFile);
+      if (relativeFile === configFile) {
         expect(source).toMatch(/\bDANGEROUS_COMMANDS\s*:\s*\[\s*\.\.\.DANGEROUS_COMMANDS\s*\]/);
         expect(source.match(/\bDANGEROUS_COMMANDS\s*:/g)).toHaveLength(1);
       } else if (/\bDANGEROUS_COMMANDS\s*:\s*(?:\[|new\s+Set\s*\()/.test(source)) {
-        localLiterals.push(file);
+        localLiterals.push(relativeFile);
       }
     }
-    expect(declarations).toEqual([join(process.cwd(), 'src/security/dangerous-command-data.ts')]);
+    expect(declarations).toEqual([dataFile]);
     expect(localLiterals).toEqual([]);
   });
 });
