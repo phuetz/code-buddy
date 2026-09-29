@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { execFile } from 'node:child_process';
-import { chmod, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { execFile, spawnSync } from 'node:child_process';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
+const hasFfmpeg = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0;
+const pythonBin = ['python3', 'python'].find((bin) => spawnSync(bin, ['--version'], { stdio: 'ignore' }).status === 0);
+const skipReason = !hasFfmpeg ? 'ffmpeg unavailable' : !pythonBin ? 'Python unavailable' : undefined;
 
 describe('understandVideo process lifecycle', () => {
-  it('returns after local STT and leaves no live child process or pipe', async () => {
+  it.skipIf(Boolean(skipReason))(`returns after local STT and leaves no live child process or pipe${skipReason ? ` (skipped: ${skipReason})` : ''}`, async () => {
     const dir = await mkdtemp(join(tmpdir(), 'video-lifecycle-'));
     const video = join(dir, 'sample.mp4');
-    const worker = join(dir, 'local-stt');
     const home = join(dir, 'home');
     await mkdir(home);
     try {
@@ -21,23 +23,14 @@ describe('understandVideo process lifecycle', () => {
         '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=16000:duration=20',
         '-c:v', 'mpeg4', '-c:a', 'aac', '-shortest', video,
       ], { timeout: 5_000 });
-      // Local protocol-compatible STT keeps stdin open, just like faster-whisper.
-      // The test needs no model download and exposes a leaked persistent worker.
-      await writeFile(worker, `#!/usr/bin/env node
-process.stdout.write(JSON.stringify({ ready: true }) + '\\n');
-let buffer = '';
-process.stdin.on('data', (part) => {
-  buffer += part;
-  let end;
-  while ((end = buffer.indexOf('\\n')) >= 0) {
-    const line = buffer.slice(0, end);
-    buffer = buffer.slice(end + 1);
-    const request = JSON.parse(line);
-    process.stdout.write(JSON.stringify({ id: request.id, text: '' }) + '\\n');
-  }
-});
+      // Use the real persistent Python worker protocol without downloading a model.
+      await writeFile(join(dir, 'faster_whisper.py'), `class WhisperModel:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def transcribe(self, wav, **kwargs):
+        return [], None
 `, 'utf8');
-      await chmod(worker, 0o755);
 
       const script = `
         import { understandVideo } from './src/tools/video/video-understanding.ts';
@@ -55,9 +48,11 @@ process.stdin.on('data', (part) => {
         env: {
           ...process.env,
           HOME: home,
+          USERPROFILE: home,
+          PYTHONPATH: dir,
           CODEBUDDY_SPEECH_ENGINE: 'faster-whisper',
           CODEBUDDY_SPEECH_WORKER: 'true',
-          CODEBUDDY_SPEECH_PYTHON: worker,
+          CODEBUDDY_SPEECH_PYTHON: pythonBin ?? 'python3',
           CODEBUDDY_COLLECTIVE_MEMORY: 'false',
         },
         timeout: 8_000,
