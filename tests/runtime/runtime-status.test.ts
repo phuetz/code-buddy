@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -121,5 +121,45 @@ describe('runtime status', () => {
     expect(status.execution.revision).toBe('a'.repeat(40));
     expect(status.execution.verified).toBe(false);
     expect(status.alerts).toContain('repository-dirty');
+  });
+
+  it.skipIf(process.platform === 'win32')('recognizes a checkout reached through a temporary-directory alias', () => {
+    const physicalRoot = realpathSync(fixture());
+    const aliasRoot = join(physicalRoot, 'path-alias');
+    symlinkSync(physicalRoot, aliasRoot, 'dir');
+    const revision = 'a'.repeat(40);
+    const runGit = (_cwd: string, args: string[]) => {
+      if (args.join(' ') === 'rev-parse --show-toplevel') return aliasRoot;
+      if (args.join(' ') === 'rev-parse HEAD') return 'b'.repeat(40);
+      if (args[0] === 'status') return ' M src/runtime/runtime-status.ts';
+      if (args[0] === 'show-ref') return '';
+      if (args[0] === 'rev-list') return '1';
+      if (args[0] === 'merge-base') return '';
+      return null;
+    };
+    const compiled = collectRuntimeStatus({
+      root: aliasRoot, codePath: join(aliasRoot, 'dist', 'runtime', 'runtime-status.js'),
+      repositoryRoot: aliasRoot, env: {}, runGit,
+      observeServices: () => ({ servicesObservation: 'systemd-user', services: [
+        { name: 'codebuddy.service', state: 'active', version: '8.0.0', revision: 'c'.repeat(40) },
+      ] }),
+    });
+    expect(compiled.repository.path).toBe(physicalRoot);
+    expect(compiled.repository.mainAheadBy).toBe(1);
+    expect(compiled.alerts).toContain('execution-behind-main');
+    expect(compiled.alerts).toContain('repository-dirty');
+    expect(compiled.alerts).toContain('service-revision-mismatch:codebuddy.service');
+
+    mkdirSync(join(physicalRoot, 'src', 'runtime'), { recursive: true });
+    const sourcePath = join(aliasRoot, 'src', 'runtime', 'runtime-status.ts');
+    writeFileSync(sourcePath, 'export const marker = 1;\n');
+    const source = collectRuntimeStatus({
+      root: aliasRoot, codePath: sourcePath, repositoryRoot: aliasRoot, env: {},
+      includeServices: false,
+      runGit: (cwd, args) => args.join(' ') === 'rev-parse HEAD' ? revision : runGit(cwd, args),
+    });
+    expect(source.execution.revision).toBe(revision);
+    expect(source.execution.verified).toBe(false);
+    expect(source.alerts).toContain('repository-dirty');
   });
 });
