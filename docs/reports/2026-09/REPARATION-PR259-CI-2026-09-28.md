@@ -1,6 +1,6 @@
 # Reprise CI de la PR #259
 
-Branche `fix/securite-2-3-0`, départ `8501e2265`, correctif de tests `8d75726af`. La relecture indépendante n°10 a été lue en entier ; elle jugeait la PR prête, mais les quatre jobs de tests du [run GitHub 36403881266](https://github.com/phuetz/code-buddy/actions/runs/36403881266) ont échoué. Les annotations publiques des quatre jobs ont été vérifiées. HOME, USERPROFILE et jetons des essais sont fictifs. Aucun identifiant de Patrice n'a été lu. Le tableau de coordination n'a pas été modifié et aucun push n'a été effectué.
+Branche `fix/securite-2-3-0`, départ `8501e2265`, correctif de tests `8d75726af`. La relecture indépendante n°10 a été lue en entier ; elle jugeait la PR prête, mais les quatre jobs de tests du [run GitHub 36403881266](https://github.com/phuetz/code-buddy/actions/runs/36403881266) ont échoué. Les annotations publiques des quatre jobs ont été vérifiées. HOME, USERPROFILE et jetons des essais sont fictifs. Aucun identifiant du propriétaire n'a été lu. Le tableau de coordination n'a pas été modifié et aucun push n'a été effectué.
 
 ## Bloquant → traitement → preuve
 

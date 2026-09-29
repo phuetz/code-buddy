@@ -1,6 +1,6 @@
 # Reprise de la relecture n°9 de la PR #259
 
-Branche `fix/securite-2-3-0`, départ `339a67968`, correctif `2e4567256`. La relecture indépendante n°9 a été lue en entier. Tous les essais ont utilisé `_qa/securite-reprise-9` et `_qa/securite-reprise/runner-home`, avec des jetons fictifs. Aucun identifiant personnel ni fichier `.env` de Patrice n'a été ouvert.
+Branche `fix/securite-2-3-0`, départ `339a67968`, correctif `2e4567256`. La relecture indépendante n°9 a été lue en entier. Tous les essais ont utilisé `_qa/securite-reprise-9` et `_qa/securite-reprise/runner-home`, avec des jetons fictifs. Aucun identifiant personnel ni fichier `.env` du propriétaire n'a été ouvert.
 
 ## Bloquants, traitement et preuve
 

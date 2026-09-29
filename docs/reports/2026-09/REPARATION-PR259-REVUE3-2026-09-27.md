@@ -30,4 +30,4 @@ Les journaux cités ci-dessous se trouvent dans `revue-259/reprise-sol/reprise-1
 
 - Windows et macOS natifs, Electron/Cowork, la suite complète d'environ 27 000 tests et un vrai cycle d'agent avec fournisseur externe.
 - Le confinement natif `CODEBUDDY_NATIVE_SANDBOX` et les chemins Bash dont tous les caractères sont calculés à l'exécution ; cette limite du filtre textuel reste ouverte.
-- Un audit exhaustif de tous les lecteurs de fichiers du dépôt, les services réseau distants et les déploiements existants du daemon. Aucun vrai identifiant de Patrice ni fichier `.env` personnel n'a été ouvert ; aucun push, fusion ou déploiement n'a été fait.
+- Un audit exhaustif de tous les lecteurs de fichiers du dépôt, les services réseau distants et les déploiements existants du daemon. Aucun vrai identifiant du propriétaire ni fichier `.env` personnel n'a été ouvert ; aucun push, fusion ou déploiement n'a été fait.

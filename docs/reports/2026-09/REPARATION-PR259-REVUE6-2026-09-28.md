@@ -1,6 +1,6 @@
 # Reprise de la sixième relecture de sécurité PR #259
 
-Branche `fix/securite-2-3-0`, correctif `f17c1b4ee`. Aucun push ni fusion. Tous les essais utilisent le HOME fictif `_qa/securite-reprise-6/home` et des valeurs `FAKE-*`. Aucun identifiant réel ou fichier `.env` de Patrice n'a été ouvert.
+Branche `fix/securite-2-3-0`, correctif `f17c1b4ee`. Aucun push ni fusion. Tous les essais utilisent le HOME fictif `_qa/securite-reprise-6/home` et des valeurs `FAKE-*`. Aucun identifiant réel ou fichier `.env` du propriétaire n'a été ouvert.
 
 | Bloquant ou réserve | Traitement | Preuve |
 | --- | --- | --- |
