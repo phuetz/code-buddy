@@ -29,8 +29,7 @@
 
 import * as fs from 'fs';
 import * as os from 'os';
-import * as path from 'path';
-import { isPathInside, isSamePath } from './path-comparison.js';
+import { isPathInside, isSamePath, pathForPlatform } from './path-comparison.js';
 
 export type SecretFileAccess = 'read' | 'write';
 
@@ -114,17 +113,14 @@ export interface SecretPathContext {
   platform?: NodeJS.Platform;
 }
 
-function pathFor(platform: NodeJS.Platform) {
-  return platform === 'win32' ? path.win32 : path;
-}
+type PathOps = ReturnType<typeof pathForPlatform>;
 
-type PathOps = ReturnType<typeof pathFor>;
-
-function homeDirs(platform: NodeJS.Platform): string[] {
-  const paths = pathFor(platform);
+export function getHomeDirectories(platform: NodeJS.Platform = process.platform): string[] {
+  const paths = pathForPlatform(platform);
   // Windows shells may use HOME while Node uses USERPROFILE. Both locations can
-  // hold credentials, so every reader must protect both through this policy.
-  const candidates = [os.homedir(), ...(platform === 'win32' ? [process.env.HOME, process.env.USERPROFILE] : [])];
+  // hold credentials. HOME also supplies a POSIX home when simulating darwin
+  // or linux on Windows, where os.homedir() is a Windows path.
+  const candidates = [os.homedir(), process.env.HOME, ...(platform === 'win32' ? [process.env.USERPROFILE] : [])];
   return Array.from(new Set(candidates
     .filter((candidate): candidate is string => !!candidate && paths.isAbsolute(candidate))
     .map((candidate) => paths.resolve(candidate))));
@@ -133,9 +129,9 @@ function homeDirs(platform: NodeJS.Platform): string[] {
 /** Lexical + canonical forms of the credential roots. */
 export function getHomeCredentialRoots(context: SecretPathContext = {}): string[] {
   const platform = context.platform ?? process.platform;
-  const paths = pathFor(platform);
+  const paths = pathForPlatform(platform);
   const roots = new Set<string>();
-  for (const home of homeDirs(platform)) {
+  for (const home of getHomeDirectories(platform)) {
     for (const rel of [...HOME_CREDENTIAL_ROOTS, ...HOME_PRIVATE_ROOTS]) {
       const lexical = paths.join(home, rel);
       roots.add(lexical);
@@ -166,14 +162,14 @@ function canonicalize(p: string, paths: PathOps, platform: NodeJS.Platform): str
 }
 
 function classify(absPath: string, roots: readonly string[], platform: NodeJS.Platform): string | null {
-  const paths = pathFor(platform);
+  const paths = pathForPlatform(platform);
   const base = paths.basename(absPath);
   if (platform !== 'win32' &&
     (isSamePath(absPath, '/etc/shadow', platform) || isSamePath(absPath, '/etc/gshadow', platform))) {
     return 'system password database';
   }
   if (isUniversalSecretBasename(base)) return `secret file name (${base})`;
-  for (const home of homeDirs(platform)) {
+  for (const home of getHomeDirectories(platform)) {
     for (const rel of HOME_PRIVATE_ROOTS) {
       const root = paths.join(home, rel);
       if (isPathInside(absPath, root, platform) ||
@@ -187,7 +183,7 @@ function classify(absPath: string, roots: readonly string[], platform: NodeJS.Pl
   }
   for (const root of roots) {
     if (isPathInside(absPath, root, platform) && !isSamePath(absPath, root, platform)) {
-      // path.relative is case-sensitive even when simulating darwin on Linux.
+      // path.relative is case-sensitive even on case-insensitive macOS volumes.
       const relative = paths.normalize(absPath).slice(paths.normalize(root).length + 1);
       if (paths.basename(root).toLowerCase() === '.codebuddy' &&
         /^(sessions|peer-sessions)[\\/]/i.test(relative)) {
@@ -218,7 +214,7 @@ export function classifySecretPath(filePath: string, baseDir?: string, context: 
     return { secret: false };
   }
   const platform = context.platform ?? process.platform;
-  const paths = pathFor(platform);
+  const paths = pathForPlatform(platform);
   const lexical = baseDir ? paths.resolve(baseDir, filePath) : paths.resolve(filePath);
   const roots = getHomeCredentialRoots(context);
   const lexicalReason = classify(lexical, roots, platform);
