@@ -391,7 +391,7 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   ];
   let agent: TryDemoAgent | undefined;
 
-  write('Code Buddy — coding-agent demo (about a minute on a fast model, longer on a small local one)');
+  write('Code Buddy — coding-agent demo (duration depends on the model and hardware)');
   write(`[1/3] Provider: ${provider.label}`);
   write(`[2/3] Sandbox: ${workspace}`);
   write('      The agent is creating FizzBuzz, writing its tests, and running them…');

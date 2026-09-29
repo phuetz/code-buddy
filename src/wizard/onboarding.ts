@@ -639,7 +639,7 @@ export async function offerOnboardingDemo(rl: readline.Interface, result: Onboar
     console.log('  Verify this provider with the first-chat command below.');
     return;
   }
-  const answer = (await ask(rl, 'Run the coding demo now (about a minute on a fast model) to confirm it works? (Y/n)', 'y')).toLowerCase();
+  const answer = (await ask(rl, 'Run the coding demo now to confirm it works? Duration depends on the model and hardware. (Y/n)', 'y')).toLowerCase();
   if (answer === 'y' || answer === 'yes' || answer === '') {
     try {
       const { runTryDemo } = await import('../commands/try.js');
