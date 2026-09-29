@@ -165,6 +165,17 @@ export function registerLspCommands(program: Command): void {
       }
 
       // 4. Run the existing client.
+      // A PATH entry may be a broken shim (for example rustup without the
+      // rust-analyzer component). Distinguish startup failure from a clean file.
+      if (!(await client.ensureServerForFile(file))) {
+        if (emitJson) {
+          console.log(JSON.stringify({ error: 'server_start_failed', file, language, command: config.command }));
+        } else {
+          console.error(`LSP server for ${language} failed to start: '${config.command}'.`);
+        }
+        process.exit(1);
+        return;
+      }
       logger.debug('Running LSP diagnostics', { file, language, command: config.command });
       const diagnostics = await client.getDiagnostics(file);
 

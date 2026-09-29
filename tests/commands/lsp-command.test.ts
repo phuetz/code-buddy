@@ -26,9 +26,11 @@ jest.mock('../../src/utils/command-exists.js', () => ({
 }));
 
 const mockGetDiagnostics = jest.fn();
+const mockEnsureServerForFile = jest.fn();
 const mockDetectLanguage = jest.fn();
 const mockClient = {
   getDiagnostics: mockGetDiagnostics,
+  ensureServerForFile: mockEnsureServerForFile,
   detectLanguage: mockDetectLanguage,
 };
 
@@ -91,6 +93,7 @@ describe('buddy lsp CLI', () => {
     // Default: file exists, language detected as typescript.
     mockExistsSync.mockReturnValue(true);
     mockDetectLanguage.mockReturnValue('typescript');
+    mockEnsureServerForFile.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -187,6 +190,18 @@ describe('buddy lsp CLI', () => {
 
       expect(getLogOutput()).toContain('No diagnostics');
       expect(processExitSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not report a clean file when an installed server fails to start', async () => {
+      mockCommandExists.mockResolvedValue(true);
+      mockEnsureServerForFile.mockResolvedValue(false);
+      mockGetDiagnostics.mockResolvedValue([]);
+
+      await createProgram().parseAsync(['node', 'test', 'lsp', 'diagnostics', 'foo.ts', '--json']);
+
+      expect(JSON.parse(getLogOutput())).toMatchObject({ error: 'server_start_failed' });
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(mockGetDiagnostics).not.toHaveBeenCalled();
     });
 
     it('fails cleanly when the file does not exist', async () => {
