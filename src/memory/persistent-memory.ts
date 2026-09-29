@@ -16,6 +16,7 @@ import {
 } from "./memory-forgetting.js";
 import { withSessionLock } from "../persistence/session-lock.js";
 import { readTextAtomic, writeFileAtomic } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import {
   formatProvenance, memoryPromptScanText, normalizeProvenance, provenanceEnabled,
   unsafeMemoryPromptText,
@@ -93,7 +94,7 @@ export interface MemoryConfig {
 
 const DEFAULT_CONFIG: MemoryConfig = {
   projectMemoryPath: ".codebuddy/CODEBUDDY_MEMORY.md",
-  get userMemoryPath() { return path.join(os.homedir(), ".codebuddy", "memory.md"); },
+  get userMemoryPath() { return getCodeBuddyPath("memory.md"); },
   autoCapture: true,
   maxMemories: 100,
   relevanceThreshold: 0.5,
@@ -1984,7 +1985,7 @@ export function getMemoryManager(
   const key = botId ? `bot:${botId}` : `project:${root}`;
   let manager = memoryManagers.get(key);
   if (!manager) {
-    const botDir = botId ? path.join(os.homedir(), '.codebuddy', 'bots', botId) : undefined;
+    const botDir = botId ? getCodeBuddyPath('bots', botId) : undefined;
     manager = new PersistentMemoryManager({
       projectMemoryPath: path.join(root, '.codebuddy', 'CODEBUDDY_MEMORY.md'),
       ...config,

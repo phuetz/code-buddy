@@ -23,6 +23,7 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 export interface EventFollowUp {
   id: string;
@@ -72,7 +73,7 @@ export function hasFutureCue(text: string): boolean {
 function defaultStatePath(): string {
   return (
     process.env.CODEBUDDY_EVENT_FOLLOWUPS_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'event-followups.json')
+    getCodeBuddyPath('companion', 'event-followups.json')
   );
 }
 

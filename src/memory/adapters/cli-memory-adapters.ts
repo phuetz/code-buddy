@@ -6,6 +6,7 @@ import type { MemoryProvider, MemoryRememberOptions } from '../memory-provider.j
 import { LocalMemoryProvider } from '../local-memory-provider.js';
 import type { Memory } from '../persistent-memory.js';
 import { logger } from '../../utils/logger.js';
+import { getCodeBuddyPath } from '../../utils/codebuddy-home.js';
 
 /**
  * CLI-backed memory providers (Hermes parity).
@@ -117,7 +118,7 @@ export class ByteRoverMemoryProvider implements MemoryProvider {
 
   constructor(options: { brvPath?: string; cwd?: string } = {}) {
     this.brvPath = options.brvPath ?? resolveBrvPath();
-    this.cwd = options.cwd ?? path.join(os.homedir(), '.codebuddy', 'byterover');
+    this.cwd = options.cwd ?? getCodeBuddyPath('byterover');
     this.fallback = new LocalMemoryProvider();
   }
 

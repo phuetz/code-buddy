@@ -12,6 +12,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 
 /** Curated, clean, audibly-working French jokes (no spelling-only puns). */
 export const CURATED_JOKES: string[] = [
@@ -92,7 +93,7 @@ export function pickJoke(
 
 function storePath(name: string, env: NodeJS.ProcessEnv = process.env): string {
   const override = env[`CODEBUDDY_JOKES_${name.toUpperCase().replace(/-/g, '_')}_FILE`];
-  return override?.trim() || join(homedir(), '.codebuddy', 'companion', `jokes-${name}.json`);
+  return override?.trim() || getCodeBuddyPathForEnv(env, 'companion', `jokes-${name}.json`);
 }
 
 function loadList(path: string): string[] {

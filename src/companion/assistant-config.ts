@@ -18,6 +18,7 @@ import { synthesizePocketWav } from '../voice/local-tts.js';
 import { resolveSensoryResponsePolicy } from '../sensory/respond-decider.js';
 import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
 import { DEFAULT_MARKET_SYMBOLS, DEFAULT_NEWS_QUERY } from './prefetch-config.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import {
   readVoiceRuntimeSnapshot,
   type VoiceTurnRuntimeSnapshot,
@@ -905,7 +906,7 @@ function validUpdateEntries(updates: Record<string, string>): Array<[AssistantSe
 }
 
 export function envFilePath(which: AssistantEnvFileName): string {
-  return join(homedir(), '.codebuddy', `${which}.env`);
+  return getCodeBuddyPath(`${which}.env`);
 }
 
 export function parseEnv(content: string): Record<string, string> {
@@ -1080,10 +1081,7 @@ export function voicePreviewCachePath(
 ): string {
   const safeName = name.trim().replace(/[^a-z0-9._-]/gi, '-') || 'voice';
   const effective = text.trim() || DEFAULT_VOICE_PREVIEW_TEXT;
-  return join(
-    homedir(),
-    '.codebuddy',
-    'companion',
+  return getCodeBuddyPath('companion',
     'voice-previews',
     `${safeName}-${hashText(effective)}.wav`
   );

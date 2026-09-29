@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
+import { getCodeBuddyPath } from '../../src/utils/codebuddy-home.js';
 import {
   ASSISTANT_SETTINGS,
   mergeEnv,
@@ -197,8 +198,8 @@ describe('assistant privileged runtime env', () => {
 describe('voicePreviewCachePath', () => {
   it('builds a sanitized path under ~/.codebuddy/companion/voice-previews, keyed on voice+text', () => {
     const p = voicePreviewCachePath('estelle');
-    // Compare the POSIX spelling: the cache path uses native separators.
-    expect(p.split(sep).join('/')).toMatch(/\.codebuddy\/companion\/voice-previews\/estelle-[a-z0-9]+\.wav$/);
+    expect(p.startsWith(getCodeBuddyPath('companion', 'voice-previews') + sep)).toBe(true);
+    expect(p.split(sep).join('/')).toMatch(/\/estelle-[a-z0-9]+\.wav$/);
     // default text → stable path (prewarm-friendly), unsafe chars sanitized
     expect(voicePreviewCachePath('estelle')).toBe(p);
     expect(voicePreviewCachePath('a b/../c')).toMatch(/a-b-\.\.-c-[a-z0-9]+\.wav$/);

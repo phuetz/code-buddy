@@ -23,6 +23,7 @@ import { shouldAllowVisionImageEndpoint } from '../sensory/vision-reaction.js';
 import { redactVisionDescriptionForEgress } from '../sensory/vision-description-safety.js';
 import { safeCameraKeyframePath } from '../sensory/camera-keyframe-policy.js';
 import { isLisaSelfieRequest } from './lisa-selfie.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 import type {
   CameraSnapshotOptions,
   CameraSnapshotResult,
@@ -207,7 +208,7 @@ async function defaultAnalyze(imagePath: string, env: NodeJS.ProcessEnv): Promis
 
 function eyeKeyframeRoot(env: NodeJS.ProcessEnv): string {
   const configured = env.BUDDY_SENSE_FRAME_DIR?.trim();
-  if (!configured) return path.join(homedir(), '.codebuddy', 'companion');
+  if (!configured) return getCodeBuddyPathForEnv(env, 'companion');
   if (configured.startsWith('~/')) return path.join(homedir(), configured.slice(2));
   return path.resolve(configured);
 }
