@@ -1,0 +1,144 @@
+Fonctionnalité : fleet-cli
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : buddy fleet status --server-url http://127.0.0.1:18761 --token <jetable> --json ; buddy fleet policy safe read_file write_file --json
+Attendu : Statut du serveur local et décisions de politique de flotte.
+Observé : status=ok ; read_file=allow, write_file=deny ; serveur arrêté.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- fleet.out ---
+{
+  "fleetStatus": {
+    "status": "ok",
+    "connections": {
+      "total": 0,
+      "authenticated": 0,
+      "streaming": 0,
+      "totalBroadcastsDropped": 0
+    }
+  },
+  "toolRead": {
+    "tool": "view_file",
+    "output": "FLEET_MARKER_731\n",
+    "durationMs": 2,
+    "truncated": false
+  },
+  "toolDenied": {
+    "error": "peer.invoke METHOD_ERROR: PATH_OUTSIDE_PEER_WORKSPACE: ../outside.txt resolves to <WORKTREE>/_qa/preuves-p6/outside.txt, outside <WORKTREE>/_qa/preuves-p6/work"
+  },
+  "chat": {
+    "text": "FLEET_OK",
+    "modelRequested": "qwen3:4b-instruct",
+    "providerResolved": "ollama",
+    "finishReason": "stop",
+    "usage": {
+      "prompt_tokens": 32,
+      "completion_tokens": 5,
+      "total_tokens": 37
+    },
+    "traceId": "trace-mumn6ypt-6nijac"
+  },
+  "sessionStart": {
+    "sessionId": "sess_mumn6yzg_ay9xlm",
+    "expiresAt": 1790686092507,
+    "traceId": "trace-mumn6yzf-3wmaez"
+  },
+  "sessionContinue": {
+    "text": "OK",
+    "finishReason": "stop",
+    "usage": {
+      "prompt_tokens": 51,
+      "completion_tokens": 2,
+      "total_tokens": 53
+    },
+    "traceId": "trace-mumn6yzl-b07e2v",
+    "providerResolved": "ollama"
+  },
+  "sessionRecall": {
+    "text": "731",
+    "finishReason": "stop",
+    "usage": {
+      "prompt_tokens": 68,
+      "completion_tokens": 4,
+      "total_tokens": 72
+    },
+    "traceId": "trace-mumn6z8m-aeag1j",
+    "providerResolved": "ollama"
+  },
+  "sessionList": {
+    "count": 1,
+    "sessions": [
+      {
+        "sessionId": "sess_mumn6yzg_ay9xlm",
+        "turnCount": 2,
+        "model": "qwen3:4b-instruct",
+        "ageMs": 721,
+        "idleMs": 6,
+        "expiresInMs": 1799994
+      }
+    ],
+    "traceId": "trace-mumn6zjg-686tym"
+  },
+  "sessionEnd": {
+    "closed": true,
+    "traceId": "trace-mumn6zjh-ezskx8"
+  },
+  "serverStopped": true
+}
+
+--- fleet-policy ---
+$ buddy fleet policy safe read_file write_file --json
+Code de sortie : 0
+{
+  "requestedProfile": "safe",
+  "profile": "safe",
+  "policyProfile": "minimal",
+  "defaultAction": "deny",
+  "summary": "Safe posture: read-only by default, deny mutation and execution unless explicitly widened.",
+  "allowGroups": [
+    "group:fs:read",
+    "group:web:search",
+    "group:git:read",
+    "group:system:info"
+  ],
+  "confirmGroups": [
+    "group:web:fetch",
+    "group:mcp",
+    "group:plugin"
+  ],
+  "denyGroups": [
+    "group:fs:write",
+    "group:fs:delete",
+    "group:runtime",
+    "group:git:write",
+    "group:system:modify",
+    "group:docker",
+    "group:kubernetes",
+    "group:dangerous"
+  ],
+  "decisions": [
+    {
+      "tool": "read_file",
+      "groups": [
+        "group:fs",
+        "group:fs:read"
+      ],
+      "action": "allow",
+      "source": "global",
+      "reason": "Fleet dispatch profile \"safe\" allows group:fs:read",
+      "matchedGroup": "group:fs:read"
+    },
+    {
+      "tool": "write_file",
+      "groups": [
+        "group:fs",
+        "group:fs:write"
+      ],
+      "action": "deny",
+      "source": "global",
+      "reason": "Fleet dispatch profile \"safe\" denies group:fs:write",
+      "matchedGroup": "group:fs:write"
+    }
+  ]
+}

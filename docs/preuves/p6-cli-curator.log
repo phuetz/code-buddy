@@ -1,0 +1,54 @@
+Fonctionnalité : cli-curator
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : buddy curator scan ; buddy curator latest
+Attendu : Rapport écrit puis relu depuis le projet jetable.
+Observé : Codes 0 ; fichier latest.md écrit puis contenu relu, zéro proposition.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- cli-curator ---
+$ buddy curator scan
+Code de sortie : 0
+<!-- AUTO-GÉNÉRÉ par `buddy curator scan` — NE PAS ÉDITER (régénéré à chaque scan) -->
+# Rapport Curator — 2026-09-29T12:11:33.912Z
+
+Projet : `<WORKTREE>/_qa/preuves-p6/work`
+
+## État
+
+- ✅ **Mémoire persistante** — 0 souvenirs vivants, 0 candidat(s) à l'oubli (rétention < 0.05)
+- ✅ **Skills authored** — aucun répertoire de skills (rien à curer)
+- ✅ **CKG (mémoire collective)** — 0 entités, 0 relations, 0 supersédées (0%)
+- ✅ **Leçons** — 0 candidate(s) pending, 0 qui stagnent ≥ 7j
+- ✅ **Modèles (council)** — pas de ledger de performance (rien à agréger)
+
+## Propositions (0) — validation humaine requise
+
+Rien à proposer : la couche apprenante est saine.
+
+> Le Curator PROPOSE et n'applique rien : chaque patch pointe vers la commande humaine existante.
+
+Rapport écrit : <WORKTREE>/_qa/preuves-p6/work/.codebuddy/curator/latest.md (+ report-2026-09-29T12-11-33-912Z.json)
+
+--- cli-curator-latest ---
+$ buddy curator latest
+Code de sortie : 0
+<!-- AUTO-GÉNÉRÉ par `buddy curator scan` — NE PAS ÉDITER (régénéré à chaque scan) -->
+# Rapport Curator — 2026-09-29T12:11:33.912Z
+
+Projet : `<WORKTREE>/_qa/preuves-p6/work`
+
+## État
+
+- ✅ **Mémoire persistante** — 0 souvenirs vivants, 0 candidat(s) à l'oubli (rétention < 0.05)
+- ✅ **Skills authored** — aucun répertoire de skills (rien à curer)
+- ✅ **CKG (mémoire collective)** — 0 entités, 0 relations, 0 supersédées (0%)
+- ✅ **Leçons** — 0 candidate(s) pending, 0 qui stagnent ≥ 7j
+- ✅ **Modèles (council)** — pas de ledger de performance (rien à agréger)
+
+## Propositions (0) — validation humaine requise
+
+Rien à proposer : la couche apprenante est saine.
+
+> Le Curator PROPOSE et n'applique rien : chaque patch pointe vers la commande humaine existante.

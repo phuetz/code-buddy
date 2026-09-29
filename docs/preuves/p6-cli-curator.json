@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-curator",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.995657+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "5d7d0ab8ab32f0412ce34773fa019a92205094ad330ab895ede0df33d274c4de",
+  "artifact": "docs/preuves/p6-cli-curator.log",
+  "summary": "Codes 0 ; fichier latest.md écrit puis contenu relu, zéro proposition."
+}

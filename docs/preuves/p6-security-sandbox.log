@@ -1,0 +1,29 @@
+Fonctionnalité : security-sandbox
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : node _qa/preuves-p6/sandbox.mjs (confineSpawn + sous-processus réels)
+Attendu : Commande autorisée dans le bac ; écriture hors projet refusée.
+Observé : Code 0 ; bubblewrap actif ; sandbox-ok ; écriture hors projet refusée : Read-only file system.
+Verdict : prouvée en situation
+
+Chemin de la cible externe neutralisé dans cette trace.
+
+Sortie capturée :
+--- security-sandbox.out ---
+{
+  "recommended": "bwrap",
+  "reason": "bubblewrap bubblewrap 0.9.0 usable",
+  "wrapped": {
+    "ok": true,
+    "backend": "bwrap"
+  },
+  "child": {
+    "status": 0,
+    "stdout": "sandbox-ok",
+    "stderr": ""
+  },
+  "deniedOutside": {
+    "status": 1,
+    "stderr": "touch: cannot touch '<OUTSIDE_PROBE>': Read-only file system"
+  }
+}

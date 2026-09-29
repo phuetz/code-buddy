@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "context-compaction",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:07.002667+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "78ddef249420fa1310500f5994a9defef6ea6038e067403d8b8609825ccf6619",
+  "artifact": "docs/preuves/p6-context-compaction.log",
+  "summary": "Code 0 ; 14→4 messages, 1096→129 tokens, requête préservée."
+}

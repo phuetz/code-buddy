@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-improve",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.991413+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "46b2c2d15ff884e88b4650f2eeb990c0ec73b3d485cb48bacd4458b88e54de6e",
+  "artifact": "docs/preuves/p6-cli-improve.log",
+  "summary": "Code 0 ; archive count=0 et couverture détaillée du banc."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "dgm-learning-cycle",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.997694+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "3bf97080bc02c83100847f44c850b68cc452b43338ddf84cb5a14f78d0c6296e",
+  "artifact": "docs/preuves/p6-dgm-learning-cycle.log",
+  "summary": "Code 0 ; candidat évalué, applied=false, accepted but reverted (propose-only)."
+}
