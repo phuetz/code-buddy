@@ -23,8 +23,13 @@ buddy server --port 3000 --no-auth             # ONLY behind a trusted network
 | Flag | Default | Notes |
 |:-----|:--------|:------|
 | `--port <port>` | `3000` | Also settable via `PORT` |
-| `--host <host>` | `0.0.0.0` | Bind to `127.0.0.1` when fronted by a local reverse proxy |
+| `--host <host>` | `HOST`, else `127.0.0.1` | **Loopback by default since 2.3.0.** Exposing the server on the network is explicit: `--host 0.0.0.0` (or `HOST=0.0.0.0`), and then set `JWT_SECRET`. A fleet peer, the mobile PWA over Tailscale or a Docker container needs this flag |
+| `CODEBUDDY_TRUSTED_PROXIES` | unset | csv of reverse-proxy addresses/subnets (or `loopback`). Only then is `X-Forwarded-For` honoured for `req.ip` and the rate limit; unset ⇒ the socket address is used |
 | `--no-auth` | auth on | Disables JWT. Never expose a `--no-auth` server to an untrusted network — reserve it for loopback or a private overlay (Tailscale/WireGuard) |
+
+`buddy daemon start` launches its internal HTTP server without JWT on
+`127.0.0.1` only. Remote clients must use an authenticated `buddy server`
+with an explicit `--host` address.
 
 **Fleet convention:** the chat/API server runs on `3000` and a second
 instance acting as the fleet gateway runs on `3001`. They are separate

@@ -136,7 +136,9 @@ export function registerDaemonCommands(program: Command): void {
         const { startServer } = await import("../../server/index.js");
         await startServer({
           port: parseInt(options.port),
-          host: '0.0.0.0',
+          // This daemon has no HTTP authentication. Keep it on the local host;
+          // remote clients must use `buddy server` with authentication.
+          host: '127.0.0.1',
           authEnabled: false,
         });
       } catch (error) {

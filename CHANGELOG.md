@@ -9,6 +9,7 @@
 
 ### Sécurité
 
+- **security:** Les lecteurs directs intégrés refusent les fichiers d’identifiants classés, y compris les lecteurs documentaires et multimédias ; les archives sont contrôlées avant lecture et extraction. `buddy server` et le serveur sans JWT de `buddy daemon` écoutent `127.0.0.1` par défaut. Le serveur limite le débit sans faire confiance aux en-têtes de proxy non configurés et refuse les JWT mal formés ; l’environnement Bash transmis aux commandes retire `*_PAT`, `*_HEADERS` et les proxys avec mot de passe. **Limite connue : le filtre statique du shell ne couvre pas toutes les lectures récursives ni les chemins construits à l’exécution. Un secret suivi par Git peut encore être extrait par une commande shell qui lit les objets Git. La garantie « secret suivi par Git illisible » est reportée en 2.3.1.**
 - `buddy security audit` vérifie les réglages de sécurité du profil, des skills et de MCP ; son option `--fix` resserre les permissions des fichiers après sauvegarde des modes. Les audits incomplets ou portant sur des fichiers spéciaux échouent explicitement (`36fac9ed1`, `16aa191df`, `aed8b35c9`).
 - Un serveur MCP ne peut plus lancer librement un shell ni écrire hors des emplacements autorisés ; ses outils d'écriture doivent être explicitement listés (`0d9c5b2c9`, `48adb3f31`, `1d713a409`, `c7e4066ca`).
 - L'App Studio limite l'environnement transmis aux commandes et masque les clés dans la console, le chat et l'historique des versions (`a508f43d4`, `ec47c2103`, `5390cb1d2`).

@@ -1750,8 +1750,8 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'HOST',
     type: 'string',
-    default: '0.0.0.0',
-    description: 'HTTP server listen address',
+    default: '127.0.0.1',
+    description: 'HTTP server listen address (loopback by default; 0.0.0.0 exposes the server and requires JWT_SECRET)',
     category: 'server',
   },
   {
