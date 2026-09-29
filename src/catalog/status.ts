@@ -4,6 +4,7 @@ import path from 'node:path';
 
 export type CatalogState = 'vrai' | 'faux' | 'inconnu';
 export type EntryKind = 'cli' | 'tool' | 'route' | 'channel';
+export const STALE_PROOF_REASON = 'Preuve ancienne ou révision courante inconnue.';
 
 export interface CatalogProof {
   date: string;
@@ -194,20 +195,36 @@ function isProof(root: string, value: unknown): value is CatalogProof {
     && typeof proof.summary === 'string' && proof.summary.length > 0;
 }
 
-function sourceDigest(root: string, feature: FeatureDefinition): string | null {
+function sourceDigest(root: string, feature: FeatureDefinition, legacy = false): string | null {
   const paths = [...new Set([
-    'docs/catalog/inventory.json',
+    ...(legacy ? ['docs/catalog/inventory.json'] : []),
     ...(feature.codePaths ?? []),
     ...(feature.entrypoint?.checks.map((check) => check.file) ?? []),
   ])].sort();
   if (!feature.codePaths?.length || !feature.entrypoint?.checks.length) return null;
   const digest = createHash('sha256');
+  if (!legacy) {
+    // Bind the proof to this feature's structural declaration, not every
+    // editorial entry in the inventory. The marker separates it from v1.
+    digest.update('catalog-feature-v2\0').update(JSON.stringify({
+      codePaths: feature.codePaths,
+      entrypoint: feature.entrypoint,
+    })).update('\0');
+  }
   for (const relative of paths) {
     const file = locatedFile(root, relative);
     if (!file) return null;
     digest.update(relative).update('\0').update(readFileSync(file)).update('\0');
   }
   return digest.digest('hex');
+}
+
+/** Digest to record after a real execution of one curated feature. */
+export function currentCatalogSourceDigest(root: string, featureId: string): string | null {
+  const absoluteRoot = path.resolve(root);
+  const inventory = JSON.parse(readFileSync(path.join(absoluteRoot, 'docs/catalog/inventory.json'), 'utf8')) as Inventory;
+  const feature = inventory.features.find((item) => item.id === featureId);
+  return feature ? sourceDigest(absoluteRoot, feature) : null;
 }
 
 function proofsByFeature(root: string, inventory: Inventory, warnings: string[]): Map<string, CatalogProof[]> {
@@ -270,10 +287,11 @@ export function buildCatalog(options: CatalogOptions): CatalogStatus {
     let testedInSituation: CatalogState = 'inconnu';
     const matchesSource = latestEvidence?.sourceDigest
       ? latestEvidence.sourceDigest === sourceDigest(root, feature)
+        || latestEvidence.sourceDigest === sourceDigest(root, feature, true)
       : !!(latestEvidence && revision && latestEvidence.revision === revision);
     if (latestEvidence && matchesSource) {
       testedInSituation = latestEvidence.result === 'passed' ? 'vrai' : 'faux';
-    } else if (latestEvidence) reasons.push('Preuve ancienne ou révision courante inconnue.');
+    } else if (latestEvidence) reasons.push(STALE_PROOF_REASON);
     let deployed: CatalogState = installed ? coded : 'inconnu';
     if (installed && feature.introducedIn) {
       const order = versionOrder(installed, feature.introducedIn);

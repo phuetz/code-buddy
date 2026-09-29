@@ -1,15 +1,15 @@
-# Code Buddy 2.1 — mémoire, apprentissage et coopération
+# Code Buddy 2 — mémoire, apprentissage et coopération
 
 Code Buddy peut conserver des informations utiles, proposer des leçons, réutiliser des skills et évaluer des variantes de code. Ces mécanismes agissent sur le contexte et les artefacts du système ; ils ne réentraînent pas les poids du modèle.
 
 Pour l’installation et les autres usages, consulter le [README principal](README.md). Cette présentation thématique en français, qui n’est pas une traduction intégrale du README principal, accompagne le [guide technique et ses preuves de source](docs/learning-mechanisms.md).
 
-## Nouveautés 2.1
+## Versions récentes
 
-La version 2.2 ajoute la connexion OAuth à ElevenLabs hébergé via MCP, fiabilise les commandes en script (interruption headless en code 130, `mcp add-json --yes`) et affiche le thème effectif dans `/status` ([notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)). La version 2.1 ajoutait un catalogue explicite de ressources, la recherche RagChat avec citations de pages, l’import de configurations MCP et un pont A2A JSON-RPC limité aux échanges texte documentés. Elle corrige aussi des problèmes de sessions terminal, de mémoire par fournisseur, de diagnostic de configuration et d’interface Cowork. Les [notes de version](docs/RELEASE-NOTES-2.1.0.md) détaillent les limites : pas de reprise automatique des tâches après panne, pas de compatibilité universelle ni de garantie de qualité OCR.
+La version 2.3.0 est en préparation : ses changements intégrés et leurs limites figurent dans le [changelog](CHANGELOG.md). La version 2.2 ajoute la connexion OAuth à ElevenLabs hébergé via MCP, fiabilise les commandes en script (interruption headless en code 130, `mcp add-json --yes`) et affiche le thème effectif dans `/status` ([notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)). La version 2.1 ajoutait un catalogue explicite de ressources, la recherche RagChat avec citations de pages, l’import de configurations MCP et un pont A2A JSON-RPC limité aux échanges texte documentés. Elle corrige aussi des problèmes de sessions terminal, de mémoire par fournisseur, de diagnostic de configuration et d’interface Cowork. Les [notes de version](docs/RELEASE-NOTES-2.1.0.md) détaillent les limites : pas de reprise automatique des tâches après panne, pas de compatibilité universelle ni de garantie de qualité OCR.
 
 ```sh
-npm install -g @phuetz/code-buddy@2.2.0
+npm install -g @phuetz/code-buddy@latest
 buddy --version
 buddy doctor --offline
 ```

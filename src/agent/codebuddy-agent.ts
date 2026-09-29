@@ -805,7 +805,9 @@ Look at the screenshot and find the element matching the user's intent. Output o
       if (!hasInitialOverride) {
         try {
           const profiler = getRepoProfiler();
-          const profile = await profiler.getProfile();
+          // The prompt only needs the repository summary. Starting the semantic
+          // index here loads optional native modules before the first prompt.
+          const profile = await profiler.getProfile({ backgroundIndexing: false });
           if (profile.contextPack) {
             systemPrompt = `${systemPrompt}\n\n[Repo] ${profile.contextPack}`;
             logger.debug('RepoProfiler: injected contextPack into system prompt');

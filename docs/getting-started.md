@@ -41,14 +41,24 @@ npm install -g @phuetz/code-buddy@latest
 # Native add-ons (better-sqlite3, sharp, node-pty, tree-sitter, usearch, …) are
 # optional dependencies. If one fails to compile, the matching feature falls back;
 # the CLI still starts.
-# npm 11 lists packages whose install scripts were not reviewed; per the npm 11
-# docs those scripts still run by default. If a future npm blocks them, allow the
-# ones you need by name (a bare `--allow-scripts` is not the documented form):
+# npm 11 warns about unreviewed install scripts but still runs them by default.
+# npm 12 blocks unreviewed dependency install scripts with a warning by default. To enable a
+# native add-on you need, allow it by name during a global install:
 #   npm install -g --allow-scripts=better-sqlite3,sharp,node-pty @phuetz/code-buddy@latest
 
 # Or try without installing (also subject to the lag note above)
 npx @phuetz/code-buddy@latest
 ```
+
+If a source installation fails because `@vscode/ripgrep` receives HTTP 403
+from GitHub, see the [system-ripgrep workaround](install.md#ripgrep-download-blocked-during-npm-ci).
+Its `--ignore-scripts` option also skips native add-on installation. Follow the
+full workaround, including `npm link` (or run `node dist/index.js` directly).
+
+For an install from source, configure npm's `allowScripts` policy in the project's
+`package.json` or `.npmrc`; the command-line `--allow-scripts` option is for
+global installs and one-off execution. See the [npm 11 install policy](https://docs.npmjs.com/cli/v11/commands/npm-install/#strict-allow-scripts)
+and [npm 12 install policy](https://docs.npmjs.com/cli/v12/commands/npm-install/#strict-allow-scripts).
 
 ## Interactive terminal
 
@@ -73,7 +83,7 @@ run an offline AI demo.
 
 ```bash
 buddy login          # ChatGPT subscription, no API key (opens a browser)
-buddy try            # ← after login: a real coding demo (about a minute on a fast model).
+buddy try            # ← after login: a real coding demo; duration depends on the model.
                      #    Writes FizzBuzz + tests, runs them, and independently verifies them.
 
 buddy onboard        # Interactive guided setup. If a free provider is detected,
@@ -92,16 +102,16 @@ when the login attempt ends (after five minutes). `--no-browser` does not start
 the sign-in at all and exits with an explanation; there is no device-code mode
 for ChatGPT. Without a display, use a local model instead (`buddy onboard`).
 
-`buddy try` is a real coding demo, not a timer: there is no 60-second cutoff. On a
-fast ChatGPT or Qwen3 model it often finishes in about a minute; on a small or cold
-local model it can take several minutes. The model must be able to **call tools**
+`buddy try` is a real coding demo, not a timer: there is no fixed cutoff. A small
+or cold local model can take several minutes. The model must be able to **call tools**
 (edit files, run commands): use a `qwen3` tag such as `qwen3:8b`, `devstral`, or
 `qwen2.5-coder:14b` and above. `qwen2.5:7b`, `qwen2.5-coder:7b` and `llama3` 8B can
 chat, but Code Buddy treats them as chat-only, so `buddy try` cannot go green with them.
 
 `buddy onboard` also needs a terminal because it asks questions. In a pipe or CI
 job, configure provider environment variables and use `buddy doctor` for a
-non-interactive check.
+non-interactive check. Without a configured provider, `buddy doctor` can report
+zero errors but still exit with status 1 because chatting is not ready.
 
 ### The two $0 paths in detail
 
@@ -132,16 +142,16 @@ buddy
 buddy --yolo                       # full autonomy (see Special Modes)
 ```
 
-## The 8 commands that matter (everything else is optional)
+## Commands to start with (everything else is optional)
 
-`buddy --help` lists 60+ commands and the docs mention ~120 environment
-variables. **Ignore almost all of it to start.** These are the only ones a new
+`buddy --help` lists many commands and the configuration has many optional
+variables. **Ignore almost all of it to start.** These are the ones a new
 user needs; the rest (companion/voice, film, robot, fleet, self-improvement, …)
 are opt-in and stay out of your way until you go looking for them.
 
 | Command | What it does |
 | ---------------------- | ------------------------------------------------------------ |
-| `buddy try` | Proof the configured free provider works (real coding demo, about a minute on a fast model). |
+| `buddy try` | Proof the configured free provider works through a real coding demo. |
 | `buddy onboard` | Interactive setup; uses a detected free path or asks you to choose one. |
 | `buddy login` | Sign in with a ChatGPT subscription ($0, no API key). |
 | `buddy` | Start an interactive session. |
@@ -441,11 +451,11 @@ export JWT_SECRET="$(openssl rand -hex 32)"
 buddy server --port 3000 --host 127.0.0.1   # REST + the fleet WebSocket on /ws (use your LAN/VPN address for another machine)
 ```
 
-Mint a token with the **same** `JWT_SECRET` and the fleet scopes (the default
-`user` role only carries `chat`, `chat:stream`, `sessions` and `tools`):
+Mint a token with the **same** `JWT_SECRET`. `buddy fleet token` adds
+`fleet:listen` and `peer:invoke` to the default `user` scopes; `buddy token`
+keeps the four basic scopes. Use `--scopes` only when you need a custom set:
 ```bash
-JWT_SECRET="<the same secret>" buddy fleet token --user demo --ttl 24h \
-  --scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke
+JWT_SECRET="<the same secret>" buddy fleet token --user demo --ttl 24h
 ```
 
 On the instance that connects:
@@ -495,7 +505,8 @@ buddy fleet policy review bash
 route. In production it requires a `JWT_SECRET` and a signed bearer token
 (see [Security](security.md)).
 
-You can mint a signed bearer token with `buddy token` (or its fleet alias `buddy fleet token`):
+You can mint a signed bearer token with `buddy token`, or use `buddy fleet token`
+when the default token also needs `fleet:listen` and `peer:invoke`:
 
 ```bash
 # Mint a token for local or peer use (prints JWT, expiry, PWA open URL)
@@ -605,7 +616,7 @@ Run `buddy doctor` to verify which keys are detected. Check the active provider 
 Code Buddy is ESM-only. From source, ensure Node.js ≥ 20.0.0 and that you ran `npm install && npm run build` in the project root. Imports of `.ts` files need a `.js` extension at the import site (the build handles this for you).
 
 ### Slow startup (> 5s) or noticeable cold-start cost
-Set `PERF_TIMING=true` to see which lazy-loaded modules dominate startup. Most heavy features (voice, browser automation, desktop) are loaded on-demand only when first invoked, so a vanilla `buddy` should warm up in 1-2 seconds.
+Set `PERF_TIMING=true` to see which lazy-loaded modules dominate startup. Most heavy features (voice, browser automation, desktop) are loaded on demand when first invoked; startup time varies by machine and installation.
 
 ### "Lock file exists" / stale session
 ```bash
@@ -638,7 +649,9 @@ Confirm `.codebuddy/CODEBUDDY_MEMORY.md` exists in your project. If not, run `bu
 Auto-reconnect is opt-in (`autoReconnect: true` in the listener options). Without it, a single drop ends the session. With it, the listener uses exponential backoff. Check `/fleet status` for the current state. Persistent drops usually indicate a token scope issue or a network/firewall problem (Tailscale ACLs, port 3000 reachable?).
 
 ### Cannot find ripgrep / search is slow
-Install ripgrep (see Prerequisites). Without it, Code Buddy falls back to a slower Node-based search.
+Install ripgrep (see Prerequisites). Some searches have a slower fallback;
+commands that require `rg` report an error when neither a bundled nor a system
+binary is available.
 
 ### Stream errors mid-response (ECONNRESET, "socket hang up")
 Enable opt-in stream retry:

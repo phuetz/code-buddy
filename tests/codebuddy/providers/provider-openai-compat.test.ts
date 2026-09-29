@@ -138,7 +138,7 @@ describe('OpenAICompatProvider request payloads', () => {
     providerMocks.create.mockResolvedValueOnce({ choices: [] });
 
     await expect(createProvider().chat([{ role: 'user', content: 'hello' }], []))
-      .rejects.toThrow('réponse vide du fournisseur');
+      .rejects.toThrow('Empty provider response');
   });
 
   it('rejects an empty stream when its non-streaming fallback is also empty', async () => {
@@ -155,7 +155,7 @@ describe('OpenAICompatProvider request payloads', () => {
       }
     };
 
-    await expect(drain()).rejects.toThrow('réponse vide du fournisseur');
+    await expect(drain()).rejects.toThrow('Empty provider response');
   });
 
   it('warns and marks an xAI response when requested search is not honored', async () => {

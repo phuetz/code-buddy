@@ -4,6 +4,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { SettingsSchema } from '../../src/utils/config-validation/schema.js';
 import {
   initCodeBuddyProject,
   formatInitResult,
@@ -499,12 +500,13 @@ describe('initCodeBuddyProject', () => {
     expect(fs.readFileSync(agentsPath, 'utf-8')).toContain('— Agent Guide');
   });
 
-  it('settings.json uses grok-code-fast-1 as default model', async () => {
+  it('settings.json is accepted by the runtime schema and leaves model detection open', async () => {
     await initCodeBuddyProject(tmpDir);
     const settings = JSON.parse(
       fs.readFileSync(path.join(tmpDir, '.codebuddy', 'settings.json'), 'utf-8')
     );
-    expect(settings.model).toBe('grok-code-fast-1');
+    expect(settings).toEqual({});
+    expect(SettingsSchema.safeParse(settings).success).toBe(true);
   });
 
   it('.gitignore includes runs/, tool-results/, cache/ entries', async () => {
