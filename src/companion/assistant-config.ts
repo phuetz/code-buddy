@@ -7,6 +7,7 @@
  *
  * @module companion/assistant-config
  */
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -314,7 +315,7 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     label: 'Speech model endpoint',
     group: 'speech',
     type: 'text',
-    default: 'http://127.0.0.1:11434/v1',
+    default: getOllamaV1BaseUrl(),
     envFile: 'vision',
     help: 'OpenAI-compatible endpoint used by the low-latency speech model.',
   },

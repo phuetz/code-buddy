@@ -333,7 +333,7 @@ describe('browser-use-runner', () => {
         local: true,
         pythonPath: '/tmp/bu-venv/bin/python',
         model: 'qwen2.5:7b-instruct',
-        ollamaHost: 'http://localhost:11434',
+        ollamaHost: 'http://127.0.0.1:11434',
       });
 
       // browser-use is noisy; the result is a sentinel-wrapped JSON line.
@@ -361,7 +361,7 @@ describe('browser-use-runner', () => {
       expect(opts.env.CB_BU_TASK).toBe('Get the page title');
       expect(opts.env.CB_BU_URL).toBe('https://example.com');
       expect(opts.env.CB_BU_MODEL).toBe('qwen2.5:7b-instruct');
-      expect(opts.env.CB_BU_OLLAMA_HOST).toBe('http://localhost:11434');
+      expect(opts.env.CB_BU_OLLAMA_HOST).toBe('http://127.0.0.1:11434');
     });
 
     it('auto-detects local when browser_use is importable and nothing else is configured', async () => {

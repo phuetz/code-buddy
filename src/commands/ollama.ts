@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 
 export interface OllamaStatus {
   baseUrl: string;
@@ -22,7 +23,7 @@ export interface OllamaUpdatePlan {
 }
 
 export function normalizeOllamaBaseUrl(rawUrl?: string): string {
-  const value = (rawUrl || 'http://localhost:11434').trim();
+  const value = (rawUrl || getOllamaBaseUrl()).trim();
   const withoutV1 = value.replace(/\/v1\/?$/, '');
   return withoutV1.replace(/\/+$/, '');
 }

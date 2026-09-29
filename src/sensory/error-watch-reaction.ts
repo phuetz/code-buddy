@@ -18,6 +18,7 @@ import type { BaseEvent } from '../events/types.js';
 import { logger } from '../utils/logger.js';
 import { perceptionOf } from './reactions.js';
 import { getSensoryMemory } from './sensory-memory.js';
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 
 const ERROR_INDICATOR = /Traceback|Error:|Exception|FAILED|npm ERR!|panic:|segfault|Uncaught/i;
 const ERROR_DETAIL = /(?:\w*Error|\w*Exception|FAILED|npm ERR!|panic:|segfault|Uncaught)\b:?/i;
@@ -228,7 +229,7 @@ async function defaultVisionAnalyze(
 ): Promise<ErrorWatchVisionAnalysis> {
   if (!imagePath) return { success: false };
   try {
-    const baseURL = process.env.CODEBUDDY_VISION_BASE_URL || 'http://127.0.0.1:11434/v1';
+    const baseURL = process.env.CODEBUDDY_VISION_BASE_URL || getOllamaV1BaseUrl();
     if (!isLoopbackVisionEndpoint(baseURL)) {
       logger.warn('[error-watch] refusing screen keyframe egress to a non-loopback VLM endpoint');
       return { success: false };

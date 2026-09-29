@@ -9,7 +9,7 @@ export const NO_PROVIDER_GUIDANCE = [
   '      buddy login',
   '   2. Local & free — start Ollama and pull a model that can call tools:',
   '      ollama pull qwen3:8b',
-  '      export OLLAMA_HOST=http://localhost:11434',
+  '      export OLLAMA_HOST=http://127.0.0.1:11434',
   '      export CODEBUDDY_PROVIDER=ollama',
   '      (qwen2.5 under 14B, including qwen2.5-coder:7b, is chat-only: it cannot edit files.)',
   '   3. More providers — run the full wizard or configure an API key:',

@@ -5,6 +5,7 @@
  * and auth-profile subcommands on the given program.
  */
 
+import { getOllamaV1BaseUrl } from '../../utils/ollama-url.js';
 import type { Command } from 'commander';
 import type { ChannelType, ContentType } from '../../channels/core.js';
 import { buildHeartbeatStatusReport } from '../../daemon/status-reports.js';
@@ -1240,7 +1241,7 @@ export function registerFleetAutonomyCommands(program: Command): void {
     .option('--dir <path>', 'colab queue dir (default ~/.codebuddy/fleet)')
     .option('--output-dir <path>', 'artifact dir (default <dir>/out)')
     .option('--model <model>', 'local model', 'qwen2.5:7b-instruct')
-    .option('--ollama-url <url>', 'Ollama OpenAI-compatible base URL', 'http://localhost:11434/v1')
+    .option('--ollama-url <url>', 'Ollama OpenAI-compatible base URL', getOllamaV1BaseUrl())
     .option('--interval <ms>', 'fallback heartbeat interval (events drive the rest)', '60000')
     .option('--executor <mode>', 'executor: "artifact" (v0, no repo edits) or "agent" (real edits; needs --workspace)', 'artifact')
     .option('--workspace <dir>', 'bounded dir the agent edits (REQUIRED for --executor agent)')

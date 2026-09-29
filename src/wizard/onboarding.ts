@@ -1,3 +1,4 @@
+import { getOllamaBaseUrl, getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import * as readline from 'readline';
 import { spawn } from 'child_process';
 import { existsSync, readFileSync, mkdirSync } from 'fs';
@@ -114,9 +115,9 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     authMode: 'local',
     envVar: '',
     defaultModel: 'qwen3:8b',
-    baseURL: 'http://localhost:11434/v1',
+    baseURL: getOllamaV1BaseUrl(),
     setupCommand: 'ollama serve',
-    verifyCommand: 'curl http://localhost:11434/api/tags',
+    verifyCommand: `curl ${getOllamaBaseUrl()}/api/tags`,
     help: 'Run Ollama locally and pull a model that can call tools, for example: ollama pull qwen3:8b',
   },
   {
@@ -307,7 +308,7 @@ export async function persistProviderSelection(
   }
 
   if (guide.id === 'ollama' && !process.env.OLLAMA_HOST) {
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = getOllamaBaseUrl();
   }
 }
 

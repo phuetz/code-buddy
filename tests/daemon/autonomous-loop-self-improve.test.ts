@@ -8,7 +8,7 @@ import type { ModelTierConfig } from '../../src/agent/model-tier';
 
 const TIER: ModelTierConfig = {
   localModel: 'qwen2.5:7b-instruct',
-  localBaseUrl: 'http://localhost:11434/v1',
+  localBaseUrl: 'http://127.0.0.1:11434/v1',
   escalationModel: 'claude-opus-4-8',
 };
 

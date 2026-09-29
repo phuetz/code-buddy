@@ -31,6 +31,7 @@ import { getModelScoreboard, type ModelScoreboard } from './model-scoreboard.js'
 import { inferStrengths, inferTaskType } from './model-capability-heuristics.js';
 import { logger } from '../utils/logger.js';
 import { getModelPricing } from '../config/model-pricing.js';
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 
 /** One LLM the selector can choose, normalised across cloud + local sources. */
 export interface LlmCandidate {
@@ -88,7 +89,7 @@ function msg(e: unknown): string {
 }
 
 function ollamaBaseURL(env: NodeJS.ProcessEnv): string {
-  return `${env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434'}/v1`;
+  return getOllamaV1BaseUrl(env);
 }
 
 /**

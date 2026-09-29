@@ -247,7 +247,7 @@ describe('voice loop — adaptive latency buffers', () => {
   it('recognizes remote routes without treating loopback or invalid URLs as cloud', () => {
     expect(isRemoteVoiceRoute('https://chatgpt.com/backend-api/codex')).toBe(true);
     expect(isRemoteVoiceRoute('http://127.0.0.1:11434/v1')).toBe(false);
-    expect(isRemoteVoiceRoute('http://localhost:11434/v1')).toBe(false);
+    expect(isRemoteVoiceRoute('http://127.0.0.1:11434/v1')).toBe(false);
     expect(isRemoteVoiceRoute('http://[::1]:11434/v1')).toBe(false);
     expect(isRemoteVoiceRoute('not a URL')).toBe(false);
   });
@@ -423,7 +423,7 @@ describe('voice loop — model resolution (env authoritative)', () => {
     const r = await resolveVoiceModel('Bonjour', {
       env: {
         CODEBUDDY_SENSORY_SPEAK_MODEL: 'gpt-5.6-luna',
-        CODEBUDDY_SENSORY_SPEAK_BASE_URL: 'http://localhost:11434/v1',
+        CODEBUDDY_SENSORY_SPEAK_BASE_URL: 'http://127.0.0.1:11434/v1',
       } as NodeJS.ProcessEnv,
       hasCodexOAuth: () => false,
     });

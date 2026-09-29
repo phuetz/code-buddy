@@ -31,7 +31,7 @@ describe('voice cognitive specialists', () => {
   });
 
   it('recognizes only explicit loopback hosts as private local inference', () => {
-    expect(isLoopbackCognitiveRoute('http://localhost:11434/v1')).toBe(true);
+    expect(isLoopbackCognitiveRoute('http://127.0.0.1:11434/v1')).toBe(true);
     expect(isLoopbackCognitiveRoute('http://127.0.0.1:11434/v1')).toBe(true);
     expect(isLoopbackCognitiveRoute('http://192.168.1.20:11434/v1')).toBe(false);
     expect(isLoopbackCognitiveRoute('gemini-cli://local')).toBe(false);

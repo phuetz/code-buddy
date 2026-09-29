@@ -67,7 +67,7 @@ describe('createColabGoalJudge judge client routing', () => {
     const result = { ok: true, summary: 'done', output: 'evidence' } as TaskExecutionResult;
     const model = {
       model: 'qwen3.5-ctx32k',
-      baseUrl: 'http://localhost:11434/v1',
+      baseUrl: 'http://127.0.0.1:11434/v1',
       tier: 'local',
       paid: false,
       reason: 'test',
@@ -80,7 +80,7 @@ describe('createColabGoalJudge judge client routing', () => {
       {
         apiKey: 'local',
         model: 'qwen3.5-ctx32k',
-        baseURL: 'http://localhost:11434/v1',
+        baseURL: 'http://127.0.0.1:11434/v1',
       },
       {
         apiKey: 'oauth-chatgpt',

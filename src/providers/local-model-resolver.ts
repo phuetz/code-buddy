@@ -1,3 +1,4 @@
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 /**
  * Local-model resolution for Ollama.
  *
@@ -51,7 +52,7 @@ export function chooseInstalledOllamaModel(
 
 /** Turn an Ollama base URL (with or without a trailing `/v1`) into its `/api/tags` endpoint. */
 export function ollamaTagsUrl(baseURL: string): string {
-  let host = (baseURL || 'http://localhost:11434').trim();
+  let host = (baseURL || getOllamaBaseUrl()).trim();
   if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
   host = host.replace(/\/+$/, '').replace(/\/v1$/i, '');
   return `${host}/api/tags`;

@@ -70,9 +70,9 @@ describe('chooseInstalledOllamaModel', () => {
 
 describe('ollamaTagsUrl', () => {
   it('strips a trailing /v1 and points at /api/tags', () => {
-    expect(ollamaTagsUrl('http://localhost:11434/v1')).toBe('http://localhost:11434/api/tags');
-    expect(ollamaTagsUrl('http://localhost:11434')).toBe('http://localhost:11434/api/tags');
-    expect(ollamaTagsUrl('localhost:11434/v1/')).toBe('http://localhost:11434/api/tags');
+    expect(ollamaTagsUrl('http://127.0.0.1:11434/v1')).toBe('http://127.0.0.1:11434/api/tags');
+    expect(ollamaTagsUrl('http://127.0.0.1:11434')).toBe('http://127.0.0.1:11434/api/tags');
+    expect(ollamaTagsUrl('127.0.0.1:11434/v1/')).toBe('http://127.0.0.1:11434/api/tags');
   });
 });
 
@@ -81,7 +81,7 @@ describe('fetchOllamaTags', () => {
     const fetchImpl = fakeFetch({
       models: [{ name: 'llama3:latest' }, { model: 'devstral-small-2:24b' }],
     });
-    expect(await fetchOllamaTags('http://localhost:11434/v1', { fetchImpl })).toEqual([
+    expect(await fetchOllamaTags('http://127.0.0.1:11434/v1', { fetchImpl })).toEqual([
       'llama3:latest',
       'devstral-small-2:24b',
     ]);
@@ -89,12 +89,12 @@ describe('fetchOllamaTags', () => {
 
   it('returns null (unreachable) when the fetch throws', async () => {
     const fetchImpl = fakeFetch(null, { throws: true });
-    expect(await fetchOllamaTags('http://localhost:11434/v1', { fetchImpl })).toBeNull();
+    expect(await fetchOllamaTags('http://127.0.0.1:11434/v1', { fetchImpl })).toBeNull();
   });
 
   it('returns null on a non-ok response', async () => {
     const fetchImpl = fakeFetch({}, { ok: false });
-    expect(await fetchOllamaTags('http://localhost:11434/v1', { fetchImpl })).toBeNull();
+    expect(await fetchOllamaTags('http://127.0.0.1:11434/v1', { fetchImpl })).toBeNull();
   });
 });
 
@@ -102,7 +102,7 @@ describe('resolveInstalledOllamaModel', () => {
   it('resolves a real installed model instead of the requested cloud slug', async () => {
     const fetchImpl = fakeFetch({ models: INSTALLED.map((name) => ({ name })) });
     const res = await resolveInstalledOllamaModel({
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       requested: 'grok-code-fast-1',
       fetchImpl,
     });
@@ -114,7 +114,7 @@ describe('resolveInstalledOllamaModel', () => {
   it('reports reachable-but-empty (no models installed)', async () => {
     const fetchImpl = fakeFetch({ models: [] });
     const res = await resolveInstalledOllamaModel({
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       requested: 'qwen2.5-coder:7b',
       fetchImpl,
     });
@@ -137,7 +137,7 @@ describe('resolveInstalledOllamaModel', () => {
   it('reports unreachable when the server is down', async () => {
     const fetchImpl = fakeFetch(null, { throws: true });
     const res = await resolveInstalledOllamaModel({
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       fetchImpl,
     });
     expect(res).toEqual({ model: null, reachable: false, installedCount: 0 });
@@ -147,7 +147,7 @@ describe('resolveInstalledOllamaModel', () => {
 describe('buildOllamaPullHint', () => {
   it('tells the user to pull a model when the server is reachable but empty', () => {
     const hint = buildOllamaPullHint({
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       reachable: true,
       requested: 'qwen2.5-coder:7b',
     });
@@ -157,7 +157,7 @@ describe('buildOllamaPullHint', () => {
   });
 
   it('tells the user to start Ollama when unreachable', () => {
-    const hint = buildOllamaPullHint({ baseURL: 'http://localhost:11434/v1', reachable: false });
+    const hint = buildOllamaPullHint({ baseURL: 'http://127.0.0.1:11434/v1', reachable: false });
     expect(hint).toContain('not reachable');
     expect(hint).toContain('ollama serve');
     expect(hint).toContain(`ollama pull ${DEFAULT_OLLAMA_MODEL}`);

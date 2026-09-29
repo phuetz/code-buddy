@@ -16,6 +16,7 @@
  */
 
 import { logger } from '../../utils/logger.js';
+import { getOllamaV1BaseUrl } from '../../utils/ollama-url.js';
 
 export interface DescribeFrameDeps {
   /** Injectable VLM describer (default: local Ollama vision model). */
@@ -48,7 +49,7 @@ async function defaultAnalyze(
     const img = await loadImageFromFile(imagePath);
     const content = buildMultimodalContent(prompt, [img]);
     const model = visionModel || process.env.CODEBUDDY_VISION_MODEL || 'moondream';
-    const baseURL = visionBaseURL || process.env.CODEBUDDY_VISION_BASE_URL || 'http://127.0.0.1:11434/v1';
+    const baseURL = visionBaseURL || process.env.CODEBUDDY_VISION_BASE_URL || getOllamaV1BaseUrl();
     const client = new CodeBuddyClient(process.env.OLLAMA_API_KEY || 'ollama', model, baseURL);
     const resp = await client.chat([{ role: 'user', content } as never], []);
     return (resp?.choices?.[0]?.message?.content ?? '').trim();

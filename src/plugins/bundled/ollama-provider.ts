@@ -2,7 +2,7 @@
  * Ollama Provider Plugin (Bundled)
  *
  * Wraps a local Ollama instance as a plugin-based LLM provider.
- * Gated by OLLAMA_HOST environment variable (defaults to http://localhost:11434).
+ * Gated by OLLAMA_HOST environment variable (defaults to http://127.0.0.1:11434).
  * Includes onboarding hooks for auth, discovery, and model picking.
  *
  * Native Engine v2026.3.19 — Provider Plugin Onboarding Architecture.
@@ -10,11 +10,12 @@
 
 import { logger } from '../../utils/logger.js';
 import type { PluginProvider, DiscoveredModel, ProviderOnboardingHooks } from '../types.js';
+import { getOllamaBaseUrl } from '../../utils/ollama-url.js';
 
 export const OLLAMA_PROVIDER_ID = 'bundled-ollama';
 
 /** Default Ollama API endpoint */
-const DEFAULT_OLLAMA_HOST = 'http://localhost:11434';
+const DEFAULT_OLLAMA_HOST = getOllamaBaseUrl();
 
 /**
  * Resolve the Ollama base URL from environment or default.

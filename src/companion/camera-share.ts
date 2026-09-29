@@ -13,6 +13,7 @@
  * @module companion/camera-share
  */
 
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import { readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -165,7 +166,7 @@ function isConfiguredAlertChat(inboundChatId: string | undefined, env: NodeJS.Pr
 
 function visionEndpointAllowed(env: NodeJS.ProcessEnv): boolean {
   if (!env.CODEBUDDY_VISION_MODEL?.trim()) return false;
-  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || 'http://127.0.0.1:11434/v1';
+  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || getOllamaV1BaseUrl();
   return shouldAllowVisionImageEndpoint(baseURL, env.CODEBUDDY_VISION_REMOTE_IMAGE === 'true');
 }
 
@@ -198,7 +199,7 @@ async function defaultAnalyze(imagePath: string, env: NodeJS.ProcessEnv): Promis
     [img],
   );
   const model = env.CODEBUDDY_VISION_MODEL?.trim() || 'moondream';
-  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || 'http://127.0.0.1:11434/v1';
+  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || getOllamaV1BaseUrl();
   const client = new CodeBuddyClient(env.OLLAMA_API_KEY || 'ollama', model, baseURL);
   const resp = await client.chat([{ role: 'user', content } as never], []);
   return String(resp?.choices?.[0]?.message?.content ?? '').trim();

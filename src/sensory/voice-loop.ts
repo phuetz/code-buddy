@@ -17,6 +17,7 @@
  * @module sensory/voice-loop
  */
 
+import { getOllamaBaseUrl, getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { existsSync } from 'fs';
@@ -1251,7 +1252,7 @@ export async function resolveVoiceModel(
   const baseURL =
     env.CODEBUDDY_SENSORY_SPEAK_BASE_URL ||
     env.CODEBUDDY_VISION_BASE_URL ||
-    'http://127.0.0.1:11434/v1';
+    getOllamaV1BaseUrl(env);
   const fastOverride = env.CODEBUDDY_SENSORY_SPEAK_MODEL;
   const factOverride = env.CODEBUDDY_SENSORY_SPEAK_FACT_MODEL?.trim();
   const useFactLane =
@@ -1375,7 +1376,7 @@ function ollamaGenerateUrl(baseURL: string, env: NodeJS.ProcessEnv): string | nu
   const route = normalizedHttpUrl(baseURL);
   if (!route) return null;
   const configured = normalizedHttpUrl(
-    env.OLLAMA_BASE_URL || env.OLLAMA_HOST || 'http://127.0.0.1:11434'
+    getOllamaBaseUrl(env)
   );
   const knownOllamaOrigin = configured?.origin === route.origin;
   if (!knownOllamaOrigin && route.port !== '11434') return null;

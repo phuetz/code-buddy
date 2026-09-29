@@ -28,7 +28,7 @@ describe('goal judge client routing', () => {
     expect(
       isChatGptProvider({
         apiKey: 'ollama',
-        baseURL: 'http://localhost:11434/v1',
+        baseURL: 'http://127.0.0.1:11434/v1',
         providerLabel: 'ollama',
       })
     ).toBe(false);
@@ -38,7 +38,7 @@ describe('goal judge client routing', () => {
     expect(
       shouldUseStandaloneChatGptJudge('gpt-5.5', {
         apiKey: 'ollama',
-        baseURL: 'http://localhost:11434/v1',
+        baseURL: 'http://127.0.0.1:11434/v1',
         providerLabel: 'ollama',
       })
     ).toBe(true);
@@ -54,7 +54,7 @@ describe('goal judge client routing', () => {
     expect(
       shouldUseStandaloneChatGptJudge('qwen3:8b', {
         apiKey: 'ollama',
-        baseURL: 'http://localhost:11434/v1',
+        baseURL: 'http://127.0.0.1:11434/v1',
         providerLabel: 'ollama',
       })
     ).toBe(false);
@@ -76,7 +76,7 @@ describe('goal judge client routing', () => {
 
     const resolved = await resolveGoalJudgeClient(currentClient, 'gpt-5.5', {
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       providerLabel: 'ollama',
     });
 
@@ -92,7 +92,7 @@ describe('goal judge client routing', () => {
 
     const resolved = await resolveGoalJudgeClientFailOpen(currentClient, 'gpt-5.5', {
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       providerLabel: 'ollama',
     });
 
