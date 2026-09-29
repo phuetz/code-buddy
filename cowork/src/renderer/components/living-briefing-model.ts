@@ -3,6 +3,8 @@ import type { ActivityEntry } from './activity-feed-helpers';
 import type { AutonomySnapshot } from './os-panels/autonomy-queue-model.js';
 import type { OsAutonomyBriefingPayload } from '../../shared/autonomy-briefing-ipc.js';
 import type { MaisonSnapshotPayload } from '../../shared/maison-ipc.js';
+import type { TFunction } from 'i18next';
+import { frenchT } from '../i18n/translator.js';
 
 const FALLBACK_WINDOW_MS = 18 * 60 * 60 * 1000;
 const ACTIVE_PRESENCE_MS = 15 * 60 * 1000;
@@ -49,6 +51,7 @@ export interface MaisonBriefingCue {
 }
 
 export interface LivingBriefingInput {
+  t?: TFunction;
   now: number;
   activities: ActivityEntry[];
   sessions: Session[];
@@ -58,16 +61,17 @@ export interface LivingBriefingInput {
   maison?: MaisonSnapshotPayload | null;
 }
 
-function dayLabel(payload: MaisonSnapshotPayload): string {
+function dayLabel(payload: MaisonSnapshotPayload, t: TFunction): string {
   const day = payload.snapshot.day;
-  if (day?.kind === 'holiday') return day.holidayName ? `Jour férié : ${day.holidayName}` : 'Jour férié';
-  if (day?.kind === 'weekend') return 'Week-end';
-  if (day?.kind === 'workday') return 'Journée de travail';
-  return 'Journée à confirmer';
+  if (day?.kind === 'holiday') return day.holidayName ? t('livingBriefing.holidayWithName', { name: day.holidayName }) : t('livingBriefing.holiday');
+  if (day?.kind === 'weekend') return t('livingBriefing.weekend');
+  if (day?.kind === 'workday') return t('livingBriefing.workday');
+  return t('livingBriefing.dayToConfirm');
 }
 
 /** Assemble factual household context without calling a model or inferring availability. */
 export function buildMaisonBriefingCue(
+  t: TFunction,
   payload: MaisonSnapshotPayload | null | undefined,
 ): MaisonBriefingCue | null {
   if (!payload || payload.status !== 'ready') return null;
@@ -77,27 +81,23 @@ export function buildMaisonBriefingCue(
   // Treat the renderer payload as untrusted defense-in-depth: an older main
   // process must not make private food-profile metadata visible in guest mode.
   const unknownFoodRules = mode === 'guests' ? 0 : payload.foodProfile.unknownCount;
-  const foodNote = unknownFoodRules > 0
-    ? ` ${unknownFoodRules} contrainte${unknownFoodRules > 1 ? 's' : ''} alimentaire${unknownFoodRules > 1 ? 's' : ''} ${unknownFoodRules > 1 ? 'restent' : 'reste'} à confirmer.`
-    : '';
+  const foodNote = unknownFoodRules > 0 ? t('livingBriefing.foodNote', { count: unknownFoodRules }) : '';
 
   if (dueCount > 0) {
     return {
-      label: dueCount === 1 ? 'Un minuteur est terminé' : `${dueCount} minuteurs sont terminés`,
-      detail: `Une confirmation explicite arrêtera la répétition.${foodNote}`,
+      label: t('livingBriefing.timerDueLabel', { count: dueCount }),
+      detail: `${t('livingBriefing.timerDueDetail')}${foodNote}`,
       tone: 'warning',
-      spokenText: dueCount === 1
-        ? 'Un minuteur de cuisine est terminé et attend ta confirmation.'
-        : `${dueCount} minuteurs de cuisine sont terminés et attendent ta confirmation.`,
+      spokenText: t('livingBriefing.timerDueSpoken', { count: dueCount }),
     };
   }
 
   if (mode === 'silent' || mode === 'rest' || mode === 'focus') {
     const presentation = mode === 'silent'
-      ? ['Maison silencieuse', 'Aucune initiative sonore tant que tu ne réactives pas la voix.']
+      ? [t('livingBriefing.modeSilentLabel'), t('livingBriefing.modeSilentDetail')]
       : mode === 'rest'
-        ? ['Repos protégé', 'Les suggestions spontanées restent en attente.']
-        : ['Concentration protégée', 'Seules les demandes directes passent au premier plan.'];
+        ? [t('livingBriefing.modeRestLabel'), t('livingBriefing.modeRestDetail')]
+        : [t('livingBriefing.modeFocusLabel'), t('livingBriefing.modeFocusDetail')];
     return {
       label: presentation[0]!,
       detail: `${presentation[1]}${foodNote}`,
@@ -107,60 +107,56 @@ export function buildMaisonBriefingCue(
   }
 
   if (mode === 'guests') {
-    const timerNote = runningCount > 0
-      ? ` ${runningCount} minuteur${runningCount > 1 ? 's' : ''} ${runningCount > 1 ? 'restent' : 'reste'} actif${runningCount > 1 ? 's' : ''}.`
-      : '';
+    const timerNote = runningCount > 0 ? ' ' + t('livingBriefing.timerActiveNote', { count: runningCount }) : '';
     return {
-      label: 'Mode invités actif',
-      detail: `Les détails personnels restent masqués.${timerNote}`,
+      label: t('livingBriefing.modeGuestsLabel'),
+      detail: `${t('livingBriefing.modeGuestsDetail')}${timerNote}`,
       tone: 'calm',
-      spokenText: 'Le mode invités est actif et les détails personnels restent masqués.',
+      spokenText: t('livingBriefing.modeGuestsSpoken'),
     };
   }
 
   if (mode === 'away') {
     return {
-      label: 'Maison en veille discrète',
-      detail: `La présence locale n’est pas supposée.${foodNote}`,
+      label: t('livingBriefing.modeAwayLabel'),
+      detail: `${t('livingBriefing.modeAwayDetail')}${foodNote}`,
       tone: 'calm',
-      spokenText: 'La maison reste en veille discrète sans supposer ta présence.',
+      spokenText: t('livingBriefing.modeAwaySpoken'),
     };
   }
 
   const meal = payload.snapshot.nextMeal;
   const schedule = meal
     ? `${meal.title}${meal.whenLabel ? ` · ${meal.whenLabel}` : ''}`
-    : 'Aucun repas n’est encore planifié.';
+    : t('livingBriefing.noMealPlanned');
   const lightDay = mode === 'free-day'
     || payload.snapshot.day?.kind === 'weekend'
     || payload.snapshot.day?.kind === 'holiday';
-  const label = lightDay ? 'Journée légère' : 'Maison au rythme normal';
-  const timerNote = runningCount > 0
-    ? ` ${runningCount} minuteur${runningCount > 1 ? 's' : ''} de cuisine actif${runningCount > 1 ? 's' : ''}.`
-    : '';
+  const label = lightDay ? t('livingBriefing.lightDay') : t('livingBriefing.normalDay');
+  const timerNote = runningCount > 0 ? ' ' + t('livingBriefing.kitchenTimerActiveNote', { count: runningCount }) : '';
   return {
     label,
-    detail: `${dayLabel(payload)} · ${schedule}${timerNote}${foodNote}`,
+    detail: `${dayLabel(payload, t)} · ${schedule}${timerNote}${foodNote}`,
     tone: runningCount > 0 ? 'active' : 'calm',
     spokenText: meal
-      ? `${label}. Le prochain repas prévu est ${meal.title}.`
-      : `${label}. Rien d’urgent n’est prévu côté maison.`,
+      ? `${label}. ${t('livingBriefing.nextMealPlanned', { mealTitle: meal.title })}`
+      : `${label}. ${t('livingBriefing.nothingUrgentPlanned')}`,
   };
 }
 
-function greetingFor(now: number): string {
+function greetingFor(now: number, t: TFunction): string {
   const hour = new Date(now).getHours();
-  if (hour < 5) return 'Bonsoir';
-  if (hour < 12) return 'Bonjour';
-  if (hour < 18) return 'Bon après-midi';
-  return 'Bonsoir';
+  if (hour < 5) return t('livingBriefing.goodEvening');
+  if (hour < 12) return t('livingBriefing.goodMorning');
+  if (hour < 18) return t('livingBriefing.goodAfternoon');
+  return t('livingBriefing.goodEvening');
 }
 
-function fallbackSourceLabel(now: number): string {
+function fallbackSourceLabel(now: number, t: TFunction): string {
   const hour = new Date(now).getHours();
-  if (hour >= 5 && hour < 12) return 'Depuis hier soir';
-  if (hour >= 12 && hour < 18) return 'Depuis ce matin';
-  return 'Ces 18 dernières heures';
+  if (hour >= 5 && hour < 12) return t('livingBriefing.sinceLastNight');
+  if (hour >= 12 && hour < 18) return t('livingBriefing.sinceThisMorning');
+  return t('livingBriefing.last18Hours');
 }
 
 function isFiniteTimestamp(value: string | number | undefined): value is string | number {
@@ -203,18 +199,18 @@ function outcomeTone(outcome: string): BriefingMomentTone {
   return 'neutral';
 }
 
-function outcomeLabel(outcome: string): string {
+function outcomeLabel(outcome: string, t: TFunction): string {
   const labels: Record<string, string> = {
-    blocked: 'Point laissé en revue',
-    completed: 'Mission terminée',
-    error: 'Passage interrompu',
-    failed: 'Passage à vérifier',
-    goal_complete: 'Objectif atteint',
-    goal_continued: 'Objectif poursuivi',
-    idle: 'Veille active',
-    self_improved: 'Amélioration retenue',
+    blocked: t('livingBriefing.outcomeBlocked'),
+    completed: t('livingBriefing.outcomeCompleted'),
+    error: t('livingBriefing.outcomeError'),
+    failed: t('livingBriefing.outcomeFailed'),
+    goal_complete: t('livingBriefing.outcomeGoalComplete'),
+    goal_continued: t('livingBriefing.outcomeGoalContinued'),
+    idle: t('livingBriefing.outcomeIdle'),
+    self_improved: t('livingBriefing.outcomeSelfImproved'),
   };
-  return labels[outcome] ?? 'Passage autonome';
+  return labels[outcome] ?? t('livingBriefing.outcomeDefault');
 }
 
 function dedupeMoments(moments: BriefingMoment[]): BriefingMoment[] {
@@ -238,7 +234,7 @@ function activePresenceCount(snapshot: AutonomySnapshot | null, now: number): nu
   }).length;
 }
 
-function nextQueueFocus(snapshot: AutonomySnapshot | null): { title: string; reason: string } | null {
+function nextQueueFocus(snapshot: AutonomySnapshot | null, t: TFunction): { title: string; reason: string } | null {
   if (!snapshot) return null;
   const statusRank = (status: string) => {
     if (['in_progress', 'claimed', 'running'].includes(status)) return 0;
@@ -256,11 +252,11 @@ function nextQueueFocus(snapshot: AutonomySnapshot | null): { title: string; rea
   const active = statusRank(task.status) === 0;
   return {
     title: clean(task.title) ?? task.id,
-    reason: active ? 'Déjà en cours dans la boucle autonome.' : `Prochaine mission ${task.priority || 'planifiée'}.`,
+    reason: active ? t('livingBriefing.taskAlreadyRunning') : t('livingBriefing.taskNextMission', { priority: task.priority || t('livingBriefing.taskPriorityPlanned') }),
   };
 }
 
-function fallbackModel(input: LivingBriefingInput): LivingBriefingModel {
+function fallbackModel(input: LivingBriefingInput, t: TFunction): LivingBriefingModel {
   const cutoff = input.now - FALLBACK_WINDOW_MS;
   const activities = input.activities.filter(
     (entry) => entry.timestamp >= cutoff && entry.timestamp <= input.now && activityIsRelevant(entry),
@@ -279,15 +275,15 @@ function fallbackModel(input: LivingBriefingInput): LivingBriefingModel {
   const moments = dedupeMoments([
     ...recentWorklog.map((entry, index): BriefingMoment => ({
       id: `worklog:${entry.id ?? index}`,
-      title: clean(entry.summary) ?? 'Passage autonome documenté',
-      ...(entry.agent ? { detail: `Par ${entry.agent}` } : {}),
+      title: clean(entry.summary) ?? t('livingBriefing.autonomousPassDocumented'),
+      ...(entry.agent ? { detail: t('livingBriefing.byAgent', { agent: entry.agent }) } : {}),
       at: isFiniteTimestamp(entry.date) ? timestamp(entry.date) : input.now,
       source: 'daemon',
       tone: 'success',
     })),
     ...activities.map((entry): BriefingMoment => ({
       id: `activity:${entry.id}`,
-      title: clean(entry.title) ?? 'Activité Cowork',
+      title: clean(entry.title) ?? t('livingBriefing.activityCowork'),
       ...(clean(entry.description) ? { detail: clean(entry.description) } : {}),
       at: entry.timestamp,
       source: 'activité',
@@ -295,8 +291,8 @@ function fallbackModel(input: LivingBriefingInput): LivingBriefingModel {
     })),
     ...recentSessions.map((session): BriefingMoment => ({
       id: `session:${session.id}`,
-      title: clean(session.title) ?? 'Session mise à jour',
-      detail: session.status === 'error' ? 'Session à reprendre' : 'Session Cowork mise à jour',
+      title: clean(session.title) ?? t('livingBriefing.sessionUpdated'),
+      detail: session.status === 'error' ? t('livingBriefing.sessionToResume') : t('livingBriefing.sessionUpdatedLong'),
       at: session.updatedAt,
       source: 'session',
       tone: session.status === 'error' ? 'warning' : 'neutral',
@@ -305,34 +301,38 @@ function fallbackModel(input: LivingBriefingInput): LivingBriefingModel {
 
   const hasNewWork = progressCount + recentSessions.length + warningCount > 0;
   const headline = warningCount > 0
-    ? 'J’ai avancé, avec un point à regarder'
+    ? t('livingBriefing.headlineAdvancedWithPoint')
     : hasNewWork
-      ? 'J’ai avancé pendant ton absence'
+      ? t('livingBriefing.headlineAdvanced')
       : input.daemonRunning
-        ? 'Tout est calme, je veille'
+        ? t('livingBriefing.headlineCalm')
         : input.daemonRunning === false
-          ? 'Je suis prêt à reprendre avec toi'
-          : 'Je rassemble le fil de notre travail';
+          ? t('livingBriefing.headlineReady')
+          : t('livingBriefing.headlineGathering');
   const summary = hasNewWork
-    ? `${progressCount} avancée${progressCount === 1 ? '' : 's'} concrète${progressCount === 1 ? '' : 's'}, ${recentSessions.length} session${recentSessions.length === 1 ? '' : 's'} mise${recentSessions.length === 1 ? '' : 's'} à jour et ${agents} agent${agents === 1 ? '' : 's'} en veille.`
+    ? t('livingBriefing.fallbackSummaryWork', {
+      advances: t('livingBriefing.advanceCount', { count: progressCount }),
+      sessions: t('livingBriefing.sessionCount', { count: recentSessions.length }),
+      agents: t('livingBriefing.agentStandbyCount', { count: agents }),
+    })
     : input.daemonRunning
-      ? `La boucle autonome est active avec ${agents} agent${agents === 1 ? '' : 's'} présent${agents === 1 ? '' : 's'}. Aucun événement récent n’exige ton attention.`
-      : 'Aucun événement récent n’exige ton attention. Le contexte reste prêt pour la prochaine mission.';
-  const nextFocus = nextQueueFocus(input.snapshot);
-  const spokenText = `${greetingFor(input.now)}. ${headline}. ${summary}${nextFocus ? ` Prochaine intention : ${nextFocus.title}.` : ''}`;
+      ? t('livingBriefing.fallbackSummaryActive', { count: agents })
+      : t('livingBriefing.eventSummaryNoNewWork');
+  const nextFocus = nextQueueFocus(input.snapshot, t);
+  const spokenText = `${greetingFor(input.now, t)}. ${headline}. ${summary}${nextFocus ? t('livingBriefing.nextIntention', { title: nextFocus.title }) : ''}`;
 
   return {
-    greeting: greetingFor(input.now),
+    greeting: greetingFor(input.now, t),
     headline,
     summary,
-    sourceLabel: fallbackSourceLabel(input.now),
-    daemonLabel: input.daemonRunning === null ? 'État en cours' : input.daemonRunning ? 'Boucle active' : 'Boucle en pause',
+    sourceLabel: fallbackSourceLabel(input.now, t),
+    daemonLabel: input.daemonRunning === null ? t('livingBriefing.stateInProgress') : input.daemonRunning ? t('livingBriefing.daemonActive') : t('livingBriefing.daemonPaused'),
     daemonTone: input.daemonRunning === null ? 'unknown' : input.daemonRunning ? 'live' : 'paused',
     stats: [
-      { label: 'Avancées', value: progressCount, tone: progressCount > 0 ? 'success' : 'default' },
-      { label: 'Sessions', value: recentSessions.length, tone: 'default' },
-      { label: 'Agents', value: agents, tone: agents > 0 ? 'success' : 'default' },
-      { label: 'À voir', value: warningCount, tone: warningCount > 0 ? 'warning' : 'default' },
+      { label: t('livingBriefing.statAdvanced'), value: progressCount, tone: progressCount > 0 ? 'success' : 'default' },
+      { label: t('livingBriefing.statSessions'), value: recentSessions.length, tone: 'default' },
+      { label: t('livingBriefing.statAgents'), value: agents, tone: agents > 0 ? 'success' : 'default' },
+      { label: t('livingBriefing.statToReview'), value: warningCount, tone: warningCount > 0 ? 'warning' : 'default' },
     ],
     moments,
     nextFocus,
@@ -343,7 +343,7 @@ function fallbackModel(input: LivingBriefingInput): LivingBriefingModel {
   };
 }
 
-function artifactModel(input: LivingBriefingInput, artifact: OsAutonomyBriefingPayload): LivingBriefingModel {
+function artifactModel(input: LivingBriefingInput, artifact: OsAutonomyBriefingPayload, t: TFunction): LivingBriefingModel {
   const { brief } = artifact;
   const results = brief.summary.completed + brief.summary.selfImproved;
   const attention = brief.summary.failed + brief.queue.criticalAwaitingOperator;
@@ -351,7 +351,7 @@ function artifactModel(input: LivingBriefingInput, artifact: OsAutonomyBriefingP
   const moments = dedupeMoments([
     ...brief.notableEvents.map((event, index): BriefingMoment => ({
       id: `brief-event:${event.tickNumber}:${index}`,
-      title: clean(event.taskTitle) ?? outcomeLabel(event.outcome),
+      title: clean(event.taskTitle) ?? outcomeLabel(event.outcome, t),
       ...(clean(event.detail) ? { detail: clean(event.detail) } : {}),
       at: isFiniteTimestamp(event.at) ? timestamp(event.at) : input.now,
       source: 'daemon',
@@ -359,8 +359,8 @@ function artifactModel(input: LivingBriefingInput, artifact: OsAutonomyBriefingP
     })),
     ...brief.worklog.map((entry): BriefingMoment => ({
       id: `brief-worklog:${entry.id}`,
-      title: clean(entry.summary) ?? 'Résultat consigné dans le worklog',
-      ...(entry.agent ? { detail: `Par ${entry.agent}` } : {}),
+      title: clean(entry.summary) ?? t('livingBriefing.worklogResult'),
+      ...(entry.agent ? { detail: t('livingBriefing.byAgent', { agent: entry.agent }) } : {}),
       at: isFiniteTimestamp(entry.date) ? timestamp(entry.date) : input.now,
       source: 'daemon',
       tone: entry.issues.length > 0 ? 'warning' : 'success',
@@ -368,31 +368,35 @@ function artifactModel(input: LivingBriefingInput, artifact: OsAutonomyBriefingP
   ]);
   const next = brief.opportunities[0];
   const nextFocus = next
-    ? { title: clean(next.title) ?? 'Opportunité à examiner', reason: clean(next.safeNextStep) ?? next.reason }
-    : nextQueueFocus(input.snapshot);
+    ? { title: clean(next.title) ?? t('livingBriefing.opportunityToReview'), reason: clean(next.safeNextStep) ?? next.reason }
+    : nextQueueFocus(input.snapshot, t);
   const hasNewWork = results + brief.summary.goalContinuations + attention > 0;
   const headline = attention > 0
-    ? 'La relève est prête, avec un point à regarder'
+    ? t('livingBriefing.relayReadyWithPoint')
     : results > 0
-      ? 'J’ai avancé pendant ton absence'
+      ? t('livingBriefing.headlineAdvanced')
       : brief.summary.observedTicks > 0
-        ? 'J’ai veillé, tout est resté calme'
-        : 'La relève est prête';
-  const summary = `${brief.summary.observedTicks} passage${brief.summary.observedTicks === 1 ? '' : 's'} de la boucle, ${brief.summary.completed} tâche${brief.summary.completed === 1 ? '' : 's'} terminée${brief.summary.completed === 1 ? '' : 's'} et ${brief.summary.selfImproved} amélioration${brief.summary.selfImproved === 1 ? '' : 's'} retenue${brief.summary.selfImproved === 1 ? '' : 's'}.`;
-  const spokenText = `${greetingFor(input.now)}. ${headline}. ${summary}${nextFocus ? ` Prochaine intention sûre : ${nextFocus.title}.` : ''}`;
+        ? t('livingBriefing.headlineWatchedAndCalm')
+        : t('livingBriefing.relayReady');
+  const summary = t('livingBriefing.artifactSummary', {
+    passages: t('livingBriefing.passagesCount', { count: brief.summary.observedTicks }),
+    tasks: t('livingBriefing.completedCount', { count: brief.summary.completed }),
+    improvements: t('livingBriefing.improvementsCount', { count: brief.summary.selfImproved }),
+  });
+  const spokenText = `${greetingFor(input.now, t)}. ${headline}. ${summary}${nextFocus ? t('livingBriefing.nextSafeIntention', { title: nextFocus.title }) : ''}`;
 
   return {
-    greeting: greetingFor(input.now),
+    greeting: greetingFor(input.now, t),
     headline,
     summary,
-    sourceLabel: `Relève probante · ${brief.briefingDate}`,
-    daemonLabel: input.daemonRunning === null ? 'Relève chargée' : input.daemonRunning ? `Boucle active · ${agents} agent${agents === 1 ? '' : 's'}` : 'Boucle en pause',
+    sourceLabel: t('livingBriefing.relayProbativeDate', { date: brief.briefingDate }),
+    daemonLabel: input.daemonRunning === null ? t('livingBriefing.relayLoaded') : input.daemonRunning ? t('livingBriefing.daemonActiveWithCount', { count: agents }) : t('livingBriefing.daemonPaused'),
     daemonTone: input.daemonRunning === false ? 'paused' : input.daemonRunning ? 'live' : 'unknown',
     stats: [
-      { label: 'Terminées', value: brief.summary.completed, tone: brief.summary.completed > 0 ? 'success' : 'default' },
-      { label: 'Évolutions', value: brief.summary.selfImproved, tone: brief.summary.selfImproved > 0 ? 'success' : 'default' },
-      { label: 'En cours', value: brief.queue.inProgress, tone: 'default' },
-      { label: 'Payant', value: brief.summary.paidModelRuns, tone: brief.summary.paidModelRuns > 0 ? 'warning' : 'default' },
+      { label: t('livingBriefing.statCompleted'), value: brief.summary.completed, tone: brief.summary.completed > 0 ? 'success' : 'default' },
+      { label: t('livingBriefing.statEvolutions'), value: brief.summary.selfImproved, tone: brief.summary.selfImproved > 0 ? 'success' : 'default' },
+      { label: t('livingBriefing.statInProgress'), value: brief.queue.inProgress, tone: 'default' },
+      { label: t('livingBriefing.statPaid'), value: brief.summary.paidModelRuns, tone: brief.summary.paidModelRuns > 0 ? 'warning' : 'default' },
     ],
     moments,
     nextFocus,
@@ -405,8 +409,9 @@ function artifactModel(input: LivingBriefingInput, artifact: OsAutonomyBriefingP
 
 /** Build the visible briefing without inventing data. The daemon artifact wins when available. */
 export function buildLivingBriefing(input: LivingBriefingInput): LivingBriefingModel {
-  const base = input.artifact ? artifactModel(input, input.artifact) : fallbackModel(input);
-  const maisonCue = buildMaisonBriefingCue(input.maison);
+  const t = input.t ?? frenchT;
+  const base = input.artifact ? artifactModel(input, input.artifact, t) : fallbackModel(input, t);
+  const maisonCue = buildMaisonBriefingCue(t, input.maison);
   return maisonCue
     ? { ...base, maisonCue, spokenText: `${base.spokenText} ${maisonCue.spokenText}` }
     : base;

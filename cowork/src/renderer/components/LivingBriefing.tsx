@@ -18,6 +18,7 @@ import {
 import type { Session } from '../types';
 import type { ActivityEntry } from './activity-feed-helpers';
 import { GuidedTooltip } from './Tooltip';
+import { useCoworkTranslation } from '../i18n/translator.js';
 import { speakText } from './VoiceOutputToggle';
 import {
   buildLivingBriefing,
@@ -80,6 +81,7 @@ function BriefingOrb({ hour }: { hour: number }) {
 }
 
 export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefingProps) {
+  const t = useCoworkTranslation();
   const [signals, setSignals] = useState<BriefingSignals>(EMPTY_SIGNALS);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -146,8 +148,9 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
     snapshot: signals.snapshot,
     daemonRunning: signals.daemonRunning,
     artifact: signals.artifact,
+    t,
     maison: signals.maison,
-  }), [now, sessions, signals]);
+  }), [now, sessions, signals, t]);
   const briefing = useMemo(() => buildLivingBriefing(input), [input]);
 
   const speak = async () => {
@@ -162,7 +165,7 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
   return (
     <section
       className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-border bg-surface shadow-soft"
-      aria-label="Réveil vivant de Code Buddy"
+      aria-label={t('livingBriefing.ui.aria')}
       data-testid="living-briefing"
     >
       <div className="pointer-events-none absolute -right-20 -top-24 h-52 w-52 rounded-full bg-accent/10 blur-3xl" aria-hidden="true" />
@@ -179,13 +182,13 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
               {briefing.headline}
             </h2>
             <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-text-secondary sm:text-sm">
-              {loading ? 'Je rassemble les preuves de la relève…' : briefing.summary}
+              {loading ? t('livingBriefing.ui.loading') : briefing.summary}
             </p>
           </div>
           <GuidedTooltip
-            title="Actualiser la relève"
-            description="Relit le rapport autonome, les sessions et le journal d’activité sans lancer de nouvelle mission."
-            kicker="Réveil vivant"
+            title={t('livingBriefing.ui.refreshTitle')}
+            description={t('livingBriefing.ui.refreshDescription')}
+            kicker={t('livingBriefing.ui.liveBriefing')}
             side="left"
           >
             <button
@@ -193,7 +196,7 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
               onClick={() => void load(false)}
               disabled={loading}
               className="rounded-lg p-2 text-text-muted transition-colors hover:bg-accent/10 hover:text-text-primary disabled:opacity-50"
-              aria-label="Actualiser le briefing"
+              aria-label={t('livingBriefing.ui.refreshAria')}
               data-testid="living-briefing-refresh"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
@@ -212,7 +215,7 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
               <House className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">Maison aujourd’hui</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">{t('livingBriefing.ui.homeToday')}</div>
               <div className="mt-0.5 text-xs font-semibold text-text-primary">{briefing.maisonCue.label}</div>
               <div className="mt-0.5 text-[10px] leading-relaxed text-text-secondary">{briefing.maisonCue.detail}</div>
             </div>
@@ -245,9 +248,9 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
           <div className="flex flex-wrap items-center gap-1.5">
             {briefing.artifactPath ? (
               <GuidedTooltip
-                title="Ouvrir la relève probante"
-                description="Affiche le rapport Markdown produit par le daemon à partir de son ledger et de son worklog local."
-                kicker="Preuves"
+                title={t('livingBriefing.ui.openArtifact')}
+                description={t('livingBriefing.ui.artifactDescription')}
+                kicker={t('livingBriefing.ui.evidence')}
                 side="top"
               >
                 <button
@@ -257,14 +260,14 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
                   data-testid="living-briefing-open-artifact"
                 >
                   <FileText className="h-3.5 w-3.5" aria-hidden="true" />
-                  Rapport
+                  {t('livingBriefing.ui.report')}
                 </button>
               </GuidedTooltip>
             ) : null}
             <GuidedTooltip
-              title="Écouter la relève"
-              description="Pocket TTS lit une synthèse courte ; le texte complet et les preuves restent visibles ici."
-              kicker="Voix locale"
+              title={t('livingBriefing.ui.listenTitle')}
+              description={t('livingBriefing.ui.listenDescription')}
+              kicker={t('livingBriefing.ui.localVoice')}
               side="top"
             >
               <button
@@ -275,13 +278,13 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
                 data-testid="living-briefing-speak"
               >
                 <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
-                {speaking ? 'Lecture…' : 'Écouter'}
+                {speaking ? t('livingBriefing.ui.reading') : t('livingBriefing.ui.listen')}
               </button>
             </GuidedTooltip>
             <GuidedTooltip
-              title="Entrer dans Mission Control"
-              description="Ouvre le cockpit complet : intention, preuves, flotte, conseil de modèles et file autonome."
-              kicker="Piloter"
+              title={t('livingBriefing.ui.missionTitle')}
+              description={t('livingBriefing.ui.missionDescription')}
+              kicker={t('livingBriefing.ui.pilot')}
               side="top"
             >
               <button
@@ -291,7 +294,7 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
                 data-testid="living-briefing-mission-control"
               >
                 <Radio className="h-3.5 w-3.5" aria-hidden="true" />
-                Mission Control
+                {t('livingBriefing.ui.missionControl')}
               </button>
             </GuidedTooltip>
             <button
@@ -302,7 +305,7 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
               aria-controls="living-briefing-details"
               data-testid="living-briefing-toggle"
             >
-              Détails
+              {t('livingBriefing.ui.details')}
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
           </div>
@@ -313,7 +316,7 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
             <div>
               <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
                 <Sparkles className="h-3 w-3" aria-hidden="true" />
-                Ce qui a bougé
+                {t('livingBriefing.ui.changes')}
               </div>
               {briefing.moments.length > 0 ? (
                 <ol className="space-y-2">
@@ -325,7 +328,7 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
                       <div className="min-w-0">
                         <div className="line-clamp-1 font-medium text-text-primary">{moment.title}</div>
                         <div className="line-clamp-1 text-[10px] text-text-muted">
-                          {moment.source}{moment.detail ? ` · ${moment.detail}` : ''}
+                          {t(`livingBriefing.source.${moment.source}`)}{moment.detail ? ` · ${moment.detail}` : ''}
                         </div>
                       </div>
                     </li>
@@ -333,14 +336,14 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
                 </ol>
               ) : (
                 <p className="text-xs leading-relaxed text-text-muted">
-                  Aucun événement notable : la boucle est disponible sans inventer de travail.
+                  {t('livingBriefing.ui.noEvents')}
                 </p>
               )}
             </div>
             <div className="rounded-xl border border-border/80 bg-background/65 p-3">
               <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">
                 <BrainCircuit className="h-3 w-3" aria-hidden="true" />
-                Prochaine intention sûre
+                {t('livingBriefing.ui.nextSafe')}
               </div>
               {briefing.nextFocus ? (
                 <>
@@ -349,7 +352,7 @@ export function LivingBriefing({ sessions, onOpenMissionControl }: LivingBriefin
                 </>
               ) : (
                 <p className="mt-2 text-xs leading-relaxed text-text-muted">
-                  Rien d’urgent. Tu peux choisir librement la prochaine mission.
+                  {t('livingBriefing.ui.nothingUrgent')}
                 </p>
               )}
             </div>

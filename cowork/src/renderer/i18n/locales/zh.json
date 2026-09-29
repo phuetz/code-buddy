@@ -3276,5 +3276,470 @@
         "prerequisites": ""
       }
     }
+  },
+  "livingBriefing": {
+    "goodMorning": "早上好",
+    "goodAfternoon": "下午好",
+    "goodEvening": "晚上好",
+    "sinceLastNight": "从昨晚开始",
+    "sinceThisMorning": "从今早开始",
+    "last18Hours": "过去18小时",
+    "outcomeBlocked": "留待审查的项目",
+    "outcomeCompleted": "任务完成",
+    "outcomeError": "运行中断",
+    "outcomeFailed": "运行待检查",
+    "outcomeGoalComplete": "目标达成",
+    "outcomeGoalContinued": "目标继续",
+    "outcomeIdle": "主动待机",
+    "outcomeSelfImproved": "改进已保留",
+    "outcomeDefault": "自主运行",
+    "daemonActive": "循环激活",
+    "daemonPaused": "循环暂停",
+    "statSessions": "会话",
+    "statAgents": "代理",
+    "statToReview": "待审查",
+    "statCompleted": "已完成",
+    "statEvolutions": "演进",
+    "statInProgress": "进行中",
+    "statPaid": "付费",
+    "statAdvanced": "进展",
+    "activityCowork": "Cowork 活动",
+    "sessionUpdated": "会话已更新",
+    "sessionToResume": "待恢复会话",
+    "sessionUpdatedLong": "Cowork 会话已更新",
+    "headlineAdvancedWithPoint": "我取得了进展，但有一点需要审查",
+    "headlineAdvanced": "你不在的时候我取得了进展",
+    "headlineCalm": "一切平静，我正在看着",
+    "headlineReady": "我准备好和你一起恢复了",
+    "headlineGathering": "我正在整理我们工作的思路",
+    "autonomousPassDocumented": "自主运行已记录",
+    "relayLoaded": "继电器已加载",
+    "relayProbative": "验证继电器",
+    "relayReadyWithPoint": "继电器已准备好，有一点需要审查",
+    "headlineWatchedAndCalm": "我看着，一切保持平静",
+    "stateInProgress": "进行中的状态",
+    "agentWord": "{{count}} 个代理在线",
+    "daemonConnectionUnknown": "后台驻留程序连接未知。",
+    "daemonSuspended": "循环已挂起。",
+    "daemonActiveWithAgents": "自主循环处于活动状态，有 {{count}} 个{{agentWord}}。",
+    "eventSummaryNewWork": "我注意到 {{progressCount}} 个具体进展，{{recentSessionsCount}} 个会话已更新，以及 {{agents}} 个循环代理，完成了 {{completed}} 个任务，并保留了 {{selfImproved}} 项改进",
+    "eventSummaryNoNewWork": "最近没有需要你注意的事件。上下文已为下一个任务准备就绪。",
+    "fallbackEventSummaryNewWork": "我注意到 {{progressCount}} 个具体进展，{{recentSessionsCount}} 个会话已更新，以及 {{agents}} 个活跃代理。",
+    "fallbackEventSummaryNoNewWork": "最近没有需要你注意的事件。",
+    "baseSummaryCompletedTasks": "自主循环已完成 {{count}} 个任务。",
+    "attentionRequired": "我发现了一点需要你注意的地方，然后再继续。",
+    "nextReady": "其余的已准备就绪。",
+    "taskPriorityHigh": "下一个继电器的高优先级。",
+    "taskReadyForLoop": "为自主循环准备就绪。",
+    "taskNextMission": "下一个任务 {{priority}}",
+    "taskPriorityPlanned": "计划中",
+    "byAgent": "由 {{agent}} 执行",
+    "holidayWithName": "假期：{{name}}",
+    "holiday": "假期",
+    "weekend": "周末",
+    "workday": "工作日",
+    "dayToConfirm": "待确认的一天",
+    "foodNote": " 还有 {{count}} 个饮食限制待确认。",
+    "timerDueLabel": "计时器已到期",
+    "timerDueDetail": "明确的确认将停止重复。",
+    "timerDueSpoken": "厨房计时器已到期，等待你的确认。",
+    "modeSilentLabel": "静音模式",
+    "modeSilentDetail": "在您重新激活语音之前没有声音主动性。",
+    "modeRestLabel": "受保护的休息",
+    "modeRestDetail": "自发的建议保持搁置状态。",
+    "modeFocusLabel": "受保护的专注",
+    "modeFocusDetail": "只有直接请求才会出现在前台。",
+    "timerActiveNote": " {{count}} 个计时器保持活动状态。",
+    "modeGuestsLabel": "访客模式激活",
+    "modeGuestsDetail": "个人详细信息保持隐藏。",
+    "modeGuestsSpoken": "访客模式处于活动状态，个人详细信息保持隐藏。",
+    "modeAwayLabel": "离家模式（谨慎待机）",
+    "modeAwayDetail": "不假设本地存在。",
+    "modeAwaySpoken": "家处于谨慎的待机状态，不假设你的存在。",
+    "noMealPlanned": "暂无膳食计划。",
+    "lightDay": "轻松的一天",
+    "normalDay": "正常节奏的家",
+    "kitchenTimerActiveNote": " {{count}} 个活动厨房计时器。",
+    "nextMealPlanned": "下一个计划的膳食是 {{mealTitle}}。",
+    "nothingUrgentPlanned": "家里没有什么紧急计划。",
+    "agentWord_one": "{{count}} 个代理在线",
+    "agentWord_other": "{{count}} 个代理在线",
+    "eventSummaryNewWork_one": "我注意到 {{progressCount}} 个具体进展，{{recentSessionsCount}} 个会话已更新，以及 {{agents}} 个循环代理，完成了 {{completed}} 个任务，并保留了 {{selfImproved}} 项改进",
+    "eventSummaryNewWork_other": "我注意到 {{progressCount}} 个具体进展，{{recentSessionsCount}} 个会话已更新，以及 {{agents}} 个循环代理，完成了 {{completed}} 个任务，并保留了 {{selfImproved}} 项改进",
+    "fallbackEventSummaryNewWork_one": "我注意到 {{progressCount}} 个具体进展，{{recentSessionsCount}} 个会话已更新，以及 {{agents}} 个活跃代理。",
+    "fallbackEventSummaryNewWork_other": "我注意到 {{progressCount}} 个具体进展，{{recentSessionsCount}} 个会话已更新，以及 {{agents}} 个活跃代理。",
+    "baseSummaryCompletedTasks_one": "自主循环已完成 {{count}} 个任务。",
+    "baseSummaryCompletedTasks_other": "自主循环已完成 {{count}} 个任务。",
+    "foodNote_one": " 还有 {{count}} 个饮食限制待确认。",
+    "foodNote_other": " 还有 {{count}} 个饮食限制待确认。",
+    "timerDueLabel_one": "计时器已到期",
+    "timerDueLabel_other": "计时器已到期",
+    "timerDueSpoken_one": "厨房计时器已到期，等待你的确认。",
+    "timerDueSpoken_other": "厨房计时器已到期，等待你的确认。",
+    "timerActiveNote_one": " {{count}} 个计时器保持活动状态。",
+    "timerActiveNote_other": " {{count}} 个计时器保持活动状态。",
+    "kitchenTimerActiveNote_one": " {{count}} 个活动厨房计时器。",
+    "kitchenTimerActiveNote_other": " {{count}} 个活动厨房计时器。",
+    "taskAlreadyRunning": "已在自主循环中执行。",
+    "fallbackSummaryWork": "{{advances}}、{{sessions}}，以及{{agents}}。",
+    "fallbackSummaryActive": "自主循环正在运行，有 {{count}} 位智能体在线。最近没有需要你处理的事件。",
+    "fallbackSummaryActive_other": "自主循环正在运行，有 {{count}} 位智能体在线。最近没有需要你处理的事件。",
+    "advanceCount_one": "{{count}} 项具体进展",
+    "advanceCount_other": "{{count}} 项具体进展",
+    "sessionCount_one": "{{count}} 个会话已更新",
+    "sessionCount_other": "{{count}} 个会话已更新",
+    "agentStandbyCount_one": "{{count}} 位智能体待命",
+    "agentStandbyCount_other": "{{count}} 位智能体待命",
+    "nextIntention": " 下一步计划：{{title}}。",
+    "worklogResult": "结果已记入工作日志",
+    "opportunityToReview": "待审查的机会",
+    "relayReady": "交接已准备就绪",
+    "artifactSummary": "自主循环{{passages}}，{{tasks}}，{{improvements}}。",
+    "passagesCount_one": "运行 {{count}} 次",
+    "passagesCount_other": "运行 {{count}} 次",
+    "completedCount_one": "完成 {{count}} 项任务",
+    "completedCount_other": "完成 {{count}} 项任务",
+    "improvementsCount_one": "保留 {{count}} 项改进",
+    "improvementsCount_other": "保留 {{count}} 项改进",
+    "nextSafeIntention": " 下一步安全计划：{{title}}。",
+    "relayProbativeDate": "有据可查的交接 · {{date}}",
+    "daemonActiveWithCount": "循环运行中 · {{count}} 位智能体",
+    "daemonActiveWithCount_other": "循环运行中 · {{count}} 位智能体",
+    "ui": {
+      "aria": "Code Buddy 实时简报",
+      "loading": "正在收集交接证据…",
+      "refreshTitle": "更新简报",
+      "refreshDescription": "重新读取自主报告、会话和活动日志，不会启动新任务。",
+      "liveBriefing": "实时简报",
+      "refreshAria": "更新简报",
+      "homeToday": "今日家庭",
+      "openArtifact": "打开证据报告",
+      "artifactDescription": "显示守护进程根据本地账本和工作日志生成的 Markdown 报告。",
+      "evidence": "证据",
+      "report": "报告",
+      "listenTitle": "收听简报",
+      "listenDescription": "Pocket TTS 朗读简短摘要；全文和证据仍在此处显示。",
+      "localVoice": "本地语音",
+      "reading": "播放中…",
+      "listen": "收听",
+      "missionTitle": "打开任务控制台",
+      "missionDescription": "打开完整控制台：意图、证据、智能体网络、模型委员会和自主队列。",
+      "pilot": "控制",
+      "missionControl": "任务控制台",
+      "details": "详情",
+      "changes": "最新变化",
+      "noEvents": "没有显著事件：循环保持可用，不会虚构工作。",
+      "nextSafe": "下一步安全计划",
+      "nothingUrgent": "没有紧急事项。你可以自由选择下一个任务。"
+    },
+    "source": {
+      "daemon": "守护进程",
+      "activité": "活动",
+      "session": "会话"
+    }
+  },
+  "maisonCard": {
+    "connectionStatusTitle": "连接状态",
+    "connectionStatusDescription": "卡片实时更新。如果失去连接，操作将暂时不可用。",
+    "systemKicker": "系统",
+    "statusOffline": "离线",
+    "statusUnknown": "未知",
+    "statusReady": "就绪",
+    "dayTypeLabel": "日期类型",
+    "presenceLabel": "在场",
+    "modeLabel": "家庭模式",
+    "noMealPlanned": "未计划餐饮",
+    "mealDetailDefault": "一个实用的建议，在烹饪时确认。",
+    "noMealToPrepare": "目前无需准备任何东西。",
+    "mealStatePlanned": "已计划",
+    "mealStateCooked": "已烹饪",
+    "mealOriginLeftovers": "使用剩菜",
+    "mealOriginPantry": "使用食品储藏",
+    "mealOriginDelivery": "点外卖",
+    "mealOriginUnknown": "来源待确认",
+    "refreshTitle": "刷新数据",
+    "syncKicker": "同步",
+    "stopCookingTitle": "停止烹饪",
+    "startCookingTitle": "宣布烹饪",
+    "cookingDescription": "通知家庭调整音乐、计时器行为并暂停外部建议。",
+    "contextKicker": "上下文",
+    "change": "更改",
+    "cook": "烹饪",
+    "disableGuestsTitle": "禁用访客模式",
+    "enableGuestsTitle": "启用访客模式",
+    "guestsDescription": "此模式隐藏个人事件（日历、约会）并阻止与家庭资料链接的语音公告。",
+    "privacyKicker": "隐私",
+    "guestsActive": "访客已启用",
+    "guests": "访客",
+    "unmuteTitle": "取消静音语音建议",
+    "muteTitle": "请求静音",
+    "muteDescription": "静音会暂停所有语音功能。信息可以保持可见，而不会打断家庭。",
+    "quietModeKicker": "静音模式",
+    "unmute": "取消静音",
+    "silence": "静音",
+    "persistentTimers": "持久计时器",
+    "timerDue": "已完成",
+    "timerRemaining": "{{minutes}} 分钟",
+    "ackTimerTitle": "确认此计时器",
+    "ackTimerDescription": "确认您已看到或听到警报。计时器将不再重复。",
+    "kitchenKicker": "厨房",
+    "ackTimerAria": "确认计时器 {{label}}",
+    "cancelTimerAria": "取消计时器 {{label}}",
+    "privateMealProfileTitle": "私人膳食资料",
+    "privateMealProfileDescription": "此处仅显示摘要。详细的限制条件在本地保持加密，并且永远不会添加到常规资料中。",
+    "encryptedMealProfile": "加密膳食资料",
+    "explicitConstraints": "{{count}} 个明确限制",
+    "toConfirm": "{{count}} 个待确认",
+    "allConfirmed": "全部确认",
+    "dayLabel": {
+      "holiday": "假期",
+      "weekend": "周末",
+      "workday": "工作日",
+      "unknown": "未知类型",
+      "free-day": "自由日"
+    },
+    "dayDetail": {
+      "holiday": "时间可以保持真正的自由",
+      "weekend": "节奏更轻松，没有额外的紧迫感。",
+      "workday": "更有条理和准时的建议。",
+      "unknown": "一天的节奏尚不清楚。",
+      "free-day": "提供温和的帮助，而不会将这一天变成任务清单。"
+    },
+    "presence": {
+      "present": "{{name}} 在这里",
+      "away": "无人",
+      "unknown": "不确定是否在场"
+    },
+    "presenceDetail": {
+      "present": "在场",
+      "away": "今天未检测到有人在场。",
+      "unknown": "房子在等待生命的迹象。"
+    },
+    "mode": {
+      "normal": {
+        "label": "正常节奏",
+        "detail": "房子顺其自然。"
+      },
+      "free-day": {
+        "label": "自由日",
+        "detail": "温和的想法，而不把这一天变成任务。"
+      },
+      "focus": {
+        "label": "专注",
+        "detail": "只有重要的事情才能通过。"
+      },
+      "rest": {
+        "label": "受保护的休息",
+        "detail": "建议暂停。"
+      },
+      "silent": {
+        "label": "静音",
+        "detail": "不会采取任何语音主动。"
+      },
+      "guests": {
+        "label": "访客",
+        "detail": "个人元素保持隐藏。"
+      },
+      "cooking": {
+        "label": "烹饪中",
+        "detail": "音乐和建议适应这顿饭。"
+      },
+      "away": {
+        "label": "待机",
+        "detail": "房子安静地休息。"
+      }
+    },
+    "model": {
+      "holidayWithName": "节假日 · {{name}}",
+      "personPresent": "{{name}} 在家",
+      "ageUnknown": "时间未知",
+      "ageNow": "刚刚",
+      "ageMinutes": "{{count}} 分钟前",
+      "ageHours": "{{count}} 小时前",
+      "ageDays": "{{count}} 天前",
+      "nextMeal": "下一餐",
+      "mealDetail": "实用建议，请在烹饪时确认。",
+      "source": {
+        "manual": "手动设置",
+        "calendar": "本地日历",
+        "presence": "本地在场信号",
+        "companion": "本地伙伴",
+        "sensor": "本地传感器",
+        "derived": "推断的情境",
+        "unknown": "来源未知"
+      },
+      "origin": {
+        "manual": "你选择的",
+        "leftovers": "利用剩余食材",
+        "recipe": "食谱建议",
+        "calendar": "日历计划",
+        "unknown": "来源待确认"
+      },
+      "state": {
+        "loading": {
+          "known": "正在更新家庭情境…",
+          "empty": "正在准备家庭情境…"
+        },
+        "offline": {
+          "known": "家庭服务离线：仍显示上次状态，但无法操作。",
+          "empty": "家庭服务离线，尚无本地状态。"
+        },
+        "unknown": {
+          "known": "部分信号仍需确认，才能主动响应。",
+          "empty": "尚无家庭情境。Code Buddy 默认保持安静。"
+        }
+      },
+      "narrative": {
+        "silent": {
+          "headline": "家中保持安静",
+          "summary": "不会主动发声。有用的信息会在这里等候，不打扰你。"
+        },
+        "cooking": {
+          "headline": "厨房已准备好协助你",
+          "summary": "简短步骤、具名计时器和免提回答会优先显示。"
+        },
+        "guests": {
+          "headline": "接待客人时保护隐私",
+          "summary": "访客模式下，回忆、消息和个人项目保持隐藏。"
+        },
+        "rest": {
+          "headline": "安静、不受打扰的时刻",
+          "summary": "需要时仍可呼叫 Code Buddy，自发建议会暂停。"
+        },
+        "focus": {
+          "headline": "家中守护你的专注",
+          "summary": "只有直接请求和真正重要的事件会优先显示。"
+        },
+        "away": {
+          "headline": "家中安静守候",
+          "summary": "在确认你在场之前，不会播报个人内容。"
+        },
+        "free-day": {
+          "headline": "今天可以真正放松",
+          "summary": "可以获得温和帮助，而不把今天变成任务清单。"
+        },
+        "unknown": {
+          "headline": "家中情境正在确认",
+          "summary": "信号确认之前，Code Buddy 不会推测你的节奏或在场情况。"
+        },
+        "normal": {
+          "headline": "家中一切平静",
+          "summary": "Code Buddy 保持适度主动，所有操作都需要明确发起。"
+        }
+      },
+      "day": {
+        "workday": {
+          "label": "工作日",
+          "detail": "日常节奏仍然可用。"
+        },
+        "weekend": {
+          "label": "周末",
+          "detail": "节奏更轻松，不增加紧迫感。"
+        },
+        "holiday": {
+          "label": "节假日",
+          "detail": "家中优先保持宁静和空闲时间。"
+        },
+        "unknown": {
+          "label": "待确认日期",
+          "detail": "没有可靠来源时，不预设生活节奏。"
+        }
+      },
+      "presence": {
+        "present": {
+          "label": "已确认在场",
+          "detail": "可以建议本地交互。"
+        },
+        "away": {
+          "label": "家中无人",
+          "detail": "不会播报个人内容。"
+        },
+        "unknown": {
+          "label": "在场情况未知",
+          "detail": "Code Buddy 默认保持低调。"
+        }
+      },
+      "mode": {
+        "normal": {
+          "label": "正常节奏",
+          "detail": "房子顺其自然。"
+        },
+        "free-day": {
+          "label": "自由日",
+          "detail": "温和的想法，而不把这一天变成任务。"
+        },
+        "focus": {
+          "label": "专注",
+          "detail": "只有重要的事情才能通过。"
+        },
+        "rest": {
+          "label": "受保护的休息",
+          "detail": "建议暂停。"
+        },
+        "silent": {
+          "label": "静音",
+          "detail": "不会采取任何语音主动。"
+        },
+        "guests": {
+          "label": "访客",
+          "detail": "个人元素保持隐藏。"
+        },
+        "cooking": {
+          "label": "烹饪中",
+          "detail": "音乐和建议适应这顿饭。"
+        },
+        "away": {
+          "label": "待机",
+          "detail": "房子安静地休息。"
+        },
+        "unknown": {
+          "label": "模式未知",
+          "detail": "情境尚未确认。"
+        }
+      }
+    },
+    "ui": {
+      "change": "更改",
+      "statusReady": "就绪",
+      "statusLoading": "更新中",
+      "statusOffline": "离线",
+      "statusUnknown": "待确认",
+      "homeContext": "家庭情境",
+      "changeRhythmTitle": "更改家庭节奏",
+      "changeRhythmDescription": "请选择明确的情境。这张卡片不会推断或暗中启用模式。",
+      "control": "控制",
+      "chooseMode": "选择家庭模式",
+      "homeRhythm": "家庭节奏",
+      "changeLocal": "更改仅在本地生效，且可立即撤销。",
+      "home": "家庭",
+      "provenanceTitle": "这个情境从何而来？",
+      "provenanceDescription": "此信息区分手动设置、日历或本地信号，并显示观察时间。",
+      "transparency": "透明度",
+      "refreshHome": "更新家庭状态",
+      "refreshDescription": "重新读取已授权的信号，不会更改模式或启动例程。",
+      "dayType": "日期类型",
+      "dayTooltip": "日历和节假日仅提示可能的节奏，不能单独证明你有空。",
+      "presence": "在场",
+      "presenceTooltip": "在场状态与模式分开显示。不确定时，Code Buddy 保持安静且不透露个人信息。",
+      "homeMode": "家庭模式",
+      "modeTooltip": "模式控制主动性和隐私，可随时更改并立即撤销。",
+      "nextMeal": "下一餐",
+      "noMeal": "尚无计划",
+      "mealPrompt": "可根据现有食材寻求建议，不涉及医疗目标或评判。",
+      "planned": "已计划",
+      "suggestion": "建议",
+      "toChoose": "待选择",
+      "homeActions": "家庭操作",
+      "handsFreeTitle": "进入免提烹饪",
+      "handsFreeDescription": "打开简短步骤、明确替换和具名计时器。不会自动开始烹饪。",
+      "kitchen": "厨房",
+      "cookingActive": "烹饪中",
+      "cook": "烹饪",
+      "leaveGuests": "退出访客模式",
+      "protectGuests": "保护访客隐私",
+      "guestsDescription": "访客模式隐藏回忆、消息和个人项目。未经同意不会记住任何人。"
+    },
+    "explicitConstraints_one": "{{count}} 个明确限制",
+    "explicitConstraints_other": "{{count}} 个明确限制"
   }
 }
