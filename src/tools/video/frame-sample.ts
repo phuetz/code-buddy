@@ -49,6 +49,8 @@ export interface FrameSampleDeps {
   durationSec?: number;
   /** Injectable duration probe (default: ffprobe). */
   probeDuration?: (path: string) => Promise<number | null>;
+  /** Per-process wall-clock limit for ffmpeg/ffprobe. */
+  timeoutMs?: number;
   /** Injectable directory read (default: fs `readdir`). */
   readdir?: (dir: string) => Promise<string[]>;
   /** Below this many scene frames, fall back to interval sampling (default 3). */
@@ -152,10 +154,11 @@ function runFfmpeg(
   return new Promise((resolve) => {
     let stderr = '';
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const finish = (r: ProcResult): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       resolve(r);
     };
     let child: ReturnType<typeof realSpawn>;
@@ -165,13 +168,13 @@ function runFfmpeg(
       finish({ code: null, stderr: err instanceof Error ? err.message : String(err) });
       return;
     }
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       try {
         child.kill('SIGKILL');
       } catch {
         /* gone */
       }
-      finish({ code: null, stderr: `${stderr}\n[timeout ${timeoutMs}ms]` });
+      stderr = `${stderr}\n[timeout ${timeoutMs}ms]`;
     }, timeoutMs);
     child.stderr?.on('data', (d) => {
       stderr = `${stderr}${String(d)}`.slice(-200_000);
@@ -185,12 +188,15 @@ async function defaultProbeDuration(
   spawn: typeof realSpawn,
   ffprobeBin: string,
   file: string,
+  timeoutMs = 30_000,
 ): Promise<number | null> {
   const { code, stderr } = await new Promise<{ code: number | null; stdout: string; stderr: string }>(
     (resolve) => {
       let stdout = '';
       let err = '';
       let child: ReturnType<typeof realSpawn>;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let timedOut = false;
       try {
         child = spawn(
           ffprobeBin,
@@ -203,8 +209,12 @@ async function defaultProbeDuration(
       }
       child.stdout?.on('data', (d) => (stdout += String(d)));
       child.stderr?.on('data', (d) => (err += String(d)));
-      child.on('error', () => resolve({ code: null, stdout, stderr: err }));
-      child.on('close', (c) => resolve({ code: c, stdout, stderr: err }));
+      timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
+      child.on('error', () => { if (timer) clearTimeout(timer); resolve({ code: null, stdout, stderr: err }); });
+      child.on('close', (c) => {
+        if (timer) clearTimeout(timer);
+        resolve({ code: timedOut ? null : c, stdout, stderr: err });
+      });
     },
   ).then((r) => ({ code: r.code, stderr: r.stdout }));
   if (code !== 0) return null;
@@ -218,8 +228,9 @@ async function extractWithArgs(
   args: string[],
   dir: string,
   readdirFn: (dir: string) => Promise<string[]>,
+  timeoutMs?: number,
 ): Promise<SampledFrame[]> {
-  const { code, stderr } = await runFfmpeg(spawn, ffmpegBin, args);
+  const { code, stderr } = await runFfmpeg(spawn, ffmpegBin, args, timeoutMs);
   if (code !== 0) {
     logger.warn(`[video] ffmpeg frame extraction failed (code=${code}): ${stderr.trim().slice(-300)}`);
     return [];
@@ -262,7 +273,7 @@ export async function sampleFrames(
   try {
     const duration =
       deps.durationSec ??
-      (await (deps.probeDuration ?? ((p: string) => defaultProbeDuration(spawn, ffprobeBin, p)))(videoPath)) ??
+      (await (deps.probeDuration ?? ((p: string) => defaultProbeDuration(spawn, ffprobeBin, p, deps.timeoutMs)))(videoPath)) ??
       0;
     const budget = deps.budget ?? frameBudgetForDuration(duration);
 
@@ -277,6 +288,7 @@ export async function sampleFrames(
       buildSceneDetectArgs(videoPath, sceneTemplate, sceneThreshold),
       sceneDir,
       readdirFn,
+      deps.timeoutMs,
     );
 
     // 2) Fallback: low-motion screencast → too few scene cuts → even interval pass, into a
@@ -293,6 +305,7 @@ export async function sampleFrames(
         buildIntervalArgs(videoPath, intervalTemplate, rate),
         intervalDir,
         readdirFn,
+        deps.timeoutMs,
       );
       if (intervalFrames.length > frames.length) frames = intervalFrames;
     }

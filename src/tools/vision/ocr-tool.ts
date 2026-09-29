@@ -7,7 +7,6 @@
 import { createWorker } from 'tesseract.js';
 import { logger } from '../../utils/logger.js';
 import * as fs from 'fs';
-import * as path from 'path';
 
 export class OcrTool {
   private static instance: OcrTool | null = null;
@@ -27,15 +26,35 @@ export class OcrTool {
       throw new Error(`Image file not found: ${imagePath}`);
     }
 
+    let worker: Awaited<ReturnType<typeof createWorker>> | undefined;
+    const timeoutMs = 30_000;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       this.isInitializing = true;
       logger.debug(`Initializing OCR worker for language: ${language}`);
-      const worker = await createWorker(language);
+      const creating = createWorker(language);
+      let creationTimedOut = false;
+      void creating.then(async (created) => {
+        if (creationTimedOut) await created.terminate();
+      }).catch(() => {});
+      worker = await Promise.race([
+        creating,
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => {
+            creationTimedOut = true;
+            reject(new Error(`OCR timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
+      if (timeout) clearTimeout(timeout);
       
       logger.debug(`Starting OCR on image: ${imagePath}`);
-      const { data: { text } } = await worker.recognize(imagePath);
-      
-      await worker.terminate();
+      const { data: { text } } = await Promise.race([
+        worker.recognize(imagePath),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error(`OCR timed out after ${timeoutMs}ms`)), timeoutMs);
+        }),
+      ]);
       logger.debug(`OCR completed on image: ${imagePath}`);
       
       return text.trim();
@@ -43,6 +62,8 @@ export class OcrTool {
        logger.error('OCR extraction failed', { error, imagePath });
        throw new Error(`Failed to extract text from image: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
+       if (timeout) clearTimeout(timeout);
+       if (worker) await worker.terminate().catch(() => {});
        this.isInitializing = false;
     }
   }
