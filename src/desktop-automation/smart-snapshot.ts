@@ -21,6 +21,14 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
 import { Point, Rect } from './types.js';
+import {
+  parseVisualRegions,
+  regionSignature,
+  type IconBox,
+  type RawImage,
+  type VisualRegion,
+} from './visual-regions.js';
+import { isVisualRegionsEnabled } from './grounding-prompts.js';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -260,6 +268,20 @@ export class SmartSnapshotManager extends EventEmitter {
   private nextRef: number = 1;
   /** Cached python interpreter that has the Atspi GI binding (`''` = none found, `null` = not yet probed). */
   private atspiPython: string | null = null;
+  /**
+   * Dernières régions visuelles numérotées et la capture qui les a produites.
+   * Elles survivent au TTL du snapshot (5 s, plus court qu'un appel au modèle)
+   * pendant `VISUAL_REGION_TTL_MS` : c'est le garde de signature, au moment du
+   * clic, qui vérifie que l'écran n'a pas changé à cet endroit.
+   */
+  private visualRegionCache: {
+    captureId: string;
+    expiresAt: number;
+    width: number;
+    height: number;
+    elements: Map<number, UIElement>;
+  } | null = null;
+  static readonly VISUAL_REGION_TTL_MS = 60_000;
 
   constructor(config: Partial<SmartSnapshotConfig> = {}) {
     super();
@@ -305,6 +327,17 @@ export class SmartSnapshotManager extends EventEmitter {
           elements.push(...await this.detectAccessibilityElements(options));
           elements.push(...await this.detectOCRElements(options));
           break;
+      }
+
+      // Arbre d'accessibilité vide (Avalonia 11, Canvas, Skia…) : découper la
+      // capture en régions numérotées plutôt que de laisser le modèle deviner des
+      // pixels. Inactif sans drapeau (voir isVisualRegionsEnabled).
+      if (
+        this.config.method !== 'ocr' &&
+        isVisualRegionsEnabled() &&
+        !elements.some((e) => e.interactive && e.visible && e.bounds.width > 0 && e.bounds.height > 0)
+      ) {
+        elements.push(...await this.detectVisualRegionElements());
       }
 
       // Filter elements
@@ -399,11 +432,149 @@ export class SmartSnapshotManager extends EventEmitter {
    * Get element by reference number
    */
   getElement(ref: number): UIElement | undefined {
+    const region = this.getVisualRegionElement(ref);
     if (!this.currentSnapshot?.valid) {
+      if (region) return region;
       logger.warn('Snapshot expired or not available');
       return undefined;
     }
-    return this.currentSnapshot.elementMap.get(ref);
+    return this.currentSnapshot.elementMap.get(ref) ?? region;
+  }
+
+  // ============================================================================
+  // Régions visuelles numérotées (arbre d'accessibilité vide)
+  // ============================================================================
+
+  /** Région visuelle encore valide pour ce numéro, sinon undefined. */
+  getVisualRegionElement(ref: number): UIElement | undefined {
+    const cache = this.visualRegionCache;
+    if (!cache || Date.now() > cache.expiresAt) return undefined;
+    return cache.elements.get(ref);
+  }
+
+  /** Taille de la capture qui a produit les régions en cours. */
+  getVisualRegionCapture(): { captureId: string; width: number; height: number } | null {
+    const cache = this.visualRegionCache;
+    if (!cache || Date.now() > cache.expiresAt) return null;
+    return { captureId: cache.captureId, width: cache.width, height: cache.height };
+  }
+
+  /**
+   * Ajoute les régions visuelles au snapshot courant (ou en crée un) quand elles
+   * n'y sont pas déjà. Rend les éléments ajoutés.
+   */
+  async addVisualRegionsToSnapshot(): Promise<UIElement[]> {
+    const current = this.currentSnapshot?.valid ? this.currentSnapshot : null;
+    if (current?.elements.some((e) => e.attributes?.source === 'visual-region')) return [];
+    const added = await this.detectVisualRegionElements();
+    if (added.length === 0) return [];
+    if (current) {
+      for (const e of added) {
+        current.elements.push(e);
+        current.elementMap.set(e.ref, e);
+      }
+      return added;
+    }
+    const screenSize = await this.getScreenSize();
+    const snapshot: Snapshot = {
+      id: `snap-${Date.now()}`,
+      timestamp: new Date(),
+      source: 'visual-regions',
+      elements: added,
+      elementMap: new Map(added.map((e) => [e.ref, e])),
+      screenSize,
+      valid: true,
+      ttl: this.config.defaultTtl,
+    };
+    setTimeout(() => {
+      snapshot.valid = false;
+    }, snapshot.ttl);
+    this.currentSnapshot = snapshot;
+    return added;
+  }
+
+  /**
+   * Capture l'écran et le découpe en régions numérotées (OCR ×3 + contours, et
+   * OmniParser seulement si `OMNIPARSER_API_URL` est configuré — client HTTP
+   * d'un serveur séparé, jamais embarqué : licence AGPL-3.0).
+   */
+  async detectVisualRegionElements(): Promise<UIElement[]> {
+    try {
+      const { ScreenshotTool } = await import('../tools/screenshot-tool.js');
+      const screenshotTool = new ScreenshotTool();
+      const capture = await screenshotTool.capture({ fullscreen: true, format: 'png' });
+      const capturePath = (capture.data as { path?: string } | undefined)?.path;
+      if (!capture.success || !capturePath) {
+        logger.debug('Visual regions skipped: screenshot capture failed');
+        return [];
+      }
+
+      let omniParserElements: IconBox[] | undefined;
+      if (process.env.OMNIPARSER_API_URL) {
+        try {
+          const sharp = (await import('sharp')).default;
+          const meta = await sharp(capturePath).metadata();
+          const { OmniParserRunner } = await import('./omniparser-runner.js');
+          const b64 = fs.readFileSync(capturePath).toString('base64');
+          const parsed = await new OmniParserRunner().parseScreen(b64, { width: meta.width, height: meta.height });
+          omniParserElements = parsed.elements
+            .filter((e) => !e.normalized && e.interactable)
+            .map((e) => ({
+              x: e.bbox[0],
+              y: e.bbox[1],
+              width: Math.max(1, e.bbox[2] - e.bbox[0]),
+              height: Math.max(1, e.bbox[3] - e.bbox[1]),
+              label: e.content,
+              source: 'omniparser' as const,
+            }));
+        } catch (err) {
+          logger.debug('Visual regions: OmniParser unavailable', { error: String(err) });
+        }
+      }
+
+      const parsed = await parseVisualRegions(capturePath, { omniParserElements });
+      const captureId = `capture-${Date.now()}`;
+      const elements = parsed.regions.map((r) => this.visualRegionToElement(r, parsed.raw, captureId, parsed.detectors));
+      this.visualRegionCache = {
+        captureId,
+        expiresAt: Date.now() + SmartSnapshotManager.VISUAL_REGION_TTL_MS,
+        width: parsed.width,
+        height: parsed.height,
+        elements: new Map(elements.map((e) => [e.ref, e])),
+      };
+      logger.info('Visual regions detected', { count: elements.length, detectors: parsed.detectors });
+      return elements;
+    } catch (err) {
+      logger.debug('Visual regions detection failed', { error: String(err) });
+      return [];
+    }
+  }
+
+  private visualRegionToElement(r: VisualRegion, raw: RawImage, captureId: string, detectors: string[]): UIElement {
+    const role: ElementRole = r.kind === 'text' ? 'text' : 'button';
+    return {
+      ref: this.nextRef++,
+      role,
+      name: r.label,
+      bounds: { ...r.bounds },
+      center: { ...r.center },
+      interactive: true,
+      focused: false,
+      enabled: true,
+      visible: true,
+      attributes: {
+        source: 'visual-region',
+        regionId: r.id,
+        regionKind: r.kind,
+        detector: r.source,
+        detectors,
+        captureId,
+        captureWidth: raw.width,
+        captureHeight: raw.height,
+        signature: regionSignature(raw, r.bounds),
+        ...(r.confidence !== undefined ? { confidence: r.confidence } : {}),
+      },
+    };
   }
 
   /**
@@ -492,9 +663,20 @@ export class SmartSnapshotManager extends EventEmitter {
         const valueStr = elem.value ? ` = "${elem.value}"` : '';
         const focusStr = elem.focused ? ' (focused)' : '';
         const disabledStr = !elem.enabled ? ' (disabled)' : '';
-        lines.push(`  [${elem.ref}] ${elem.name}${valueStr}${focusStr}${disabledStr}`);
+        const regionStr = elem.attributes?.source === 'visual-region'
+          ? `${elem.name ? '' : '(no text)'} center=(${elem.center.x},${elem.center.y})`
+          : '';
+        lines.push(`  [${elem.ref}] ${elem.name}${regionStr}${valueStr}${focusStr}${disabledStr}`);
       }
       lines.push('');
+    }
+
+    if (snap.elements.some((e) => e.attributes?.source === 'visual-region')) {
+      lines.push(
+        'Note: the accessibility tree is empty, so these are numbered regions cut from a screenshot ' +
+          '(OCR text boxes + detected controls). Pick a number and use click with that ref: it targets ' +
+          'the region center, only if the screen has not changed there since the capture.',
+      );
     }
 
     return lines.join('\n');

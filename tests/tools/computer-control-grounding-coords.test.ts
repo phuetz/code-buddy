@@ -17,6 +17,7 @@ const { mockSnapshotManager } = vi.hoisted(() => {
     toTextRepresentation: vi.fn(),
     findElements: vi.fn(),
     toAnnotatedScreenshot: vi.fn(),
+    addVisualRegionsToSnapshot: vi.fn().mockResolvedValue([]),
   };
   return { mockSnapshotManager };
 });
@@ -79,6 +80,8 @@ describe("ancrage visuel en coordonnées et assertions d'existence", () => {
     setVisionGroundingProvider(async () => ({ x: 172, y: 145 }));
     const previous = process.env.CODEBUDDY_VISION_GROUNDING;
     process.env.CODEBUDDY_VISION_GROUNDING = '1';
+    // Ces cas portent sur le repli en coordonnées, désormais sous drapeau.
+    process.env.CODEBUDDY_VISION_GROUNDING_COORDS = '1';
     try {
       const tool = new ComputerControlTool() as unknown as {
         resolveElementForIntent(i: Record<string, unknown>, o: Record<string, unknown>): Promise<{ element?: { ref: number }; error?: string }>;
@@ -89,6 +92,7 @@ describe("ancrage visuel en coordonnées et assertions d'existence", () => {
       );
     } finally {
       setVisionGroundingProvider(null);
+      delete process.env.CODEBUDDY_VISION_GROUNDING_COORDS;
       if (previous === undefined) delete process.env.CODEBUDDY_VISION_GROUNDING;
       else process.env.CODEBUDDY_VISION_GROUNDING = previous;
     }
