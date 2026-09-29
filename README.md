@@ -2,6 +2,15 @@
 
 # Code Buddy 2
 
+<!-- proven-features:start -->
+## Ce qui est prouvé
+
+[`PROUVÉES 71/91 | ÉCHECS 2 | NON PROUVABLES ICI 18`](docs/FONCTIONNALITES-PROUVEES.md)
+**71/91 fonctionnalités prouvées en situation** ; 2 échecs affichés et 18 non prouvables ici, avec raison.
+Chaque état « prouvée » renvoie à une exécution réelle : commande, date, résultat observé et limite du scénario.
+[Consulter les preuves par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: proven features](docs/PROVEN-FEATURES.md)
+<!-- proven-features:end -->
+
 **A local-first AI coding agent that can also run as a fleet, a desktop app, and a companion.**
 It reads your repository, writes code, runs commands, and you can watch it work — on your machine,
 at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
