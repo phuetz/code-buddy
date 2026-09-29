@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "fleet-peer-chat",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:07.003583+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "ee4e10f14c2ba736000a484723ee709b51a0b9a1e28e19585357f165ebd9717b",
+  "artifact": "docs/preuves/p6-fleet-peer-chat.log",
+  "summary": "text=FLEET_OK ; providerResolved=ollama ; serveur arrêté."
+}

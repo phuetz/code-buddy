@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "fleet-peer-sessions",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:07.003753+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "52f8e96781bead935447ca0f4b4f15cc2f482e8613e4ba387283f2bc48da1c12",
+  "artifact": "docs/preuves/p6-fleet-peer-sessions.log",
+  "summary": "Premier tour OK ; second tour 731 ; list turnCount=2 ; end closed=true ; serveur arrêté."
+}

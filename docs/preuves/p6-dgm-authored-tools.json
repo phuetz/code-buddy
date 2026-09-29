@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "dgm-authored-tools",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.998763+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "b118406705de9087a782c045c281b45d04caccecc60d3befb891a6272a952ce6",
+  "artifact": "docs/preuves/p6-dgm-authored-tools.log",
+  "summary": "Code 0 ; propositions générées ; portes rejettent les candidats en échec, aucun outil appliqué."
+}

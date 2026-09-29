@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "media-video-stitch",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:07.000066+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "b9f18a949064f22f60725a1492d6f4a3a4789d13ec011b619c9e2999f8fe39e7",
+  "artifact": "docs/preuves/p6-media-video-stitch.log",
+  "summary": "Code 0 ; success=true, clipCount=2, probedDuration=4, hasAudio=true."
+}

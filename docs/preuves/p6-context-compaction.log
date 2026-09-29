@@ -1,0 +1,18 @@
+Fonctionnalité : context-compaction
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : node _qa/preuves-p6/context.mjs (ContextManagerV2 réel)
+Attendu : Compaction réduit le contexte et garde la requête courante.
+Observé : Code 0 ; 14→4 messages, 1096→129 tokens, requête préservée.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- context-compaction.out ---
+[2026-09-29T12:16:02.892Z]  INFO  Auto-compact: Reduced 967 tokens (1,096 -> 129)
+{
+  "beforeMessages": 14,
+  "afterMessages": 4,
+  "currentRequestPreserved": true,
+  "beforeTokens": 1096,
+  "afterTokens": 129
+}
