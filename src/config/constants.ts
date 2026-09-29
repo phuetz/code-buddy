@@ -1,3 +1,5 @@
+import { DANGEROUS_COMMANDS } from '../security/dangerous-command-data.js';
+
 /**
  * Centralized configuration constants for Code Buddy
  */
@@ -39,19 +41,7 @@ export const BASH_CONFIG = {
   /** Maximum output size to capture (bytes) */
   MAX_OUTPUT_SIZE: 1024 * 1024, // 1MB
   /** Dangerous commands that require confirmation */
-  DANGEROUS_COMMANDS: [
-    'rm',
-    'rmdir',
-    'del',
-    'format',
-    'mkfs',
-    'dd',
-    'shutdown',
-    'reboot',
-    'halt',
-    'poweroff',
-    'init',
-  ],
+  DANGEROUS_COMMANDS: [...DANGEROUS_COMMANDS],
   /** Blocked commands that are never allowed */
   BLOCKED_COMMANDS: [
     'fork',
