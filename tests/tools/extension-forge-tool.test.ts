@@ -98,7 +98,7 @@ describe('extension_forge', () => {
     expect(FormalToolRegistry.getInstance().has('authored__uppercase')).toBe(true);
     const executed = await FormalToolRegistry.getInstance().execute('authored__uppercase', {
       text: 'same turn',
-    });
+    }, { cwd });
     expect(executed.output).toContain('SAME TURN');
 
     const store = JSON.parse(fs.readFileSync(

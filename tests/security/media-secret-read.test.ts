@@ -1,15 +1,20 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-const qa = vi.hoisted(() => {
+const qa = await vi.hoisted(async () => {
+  const path = await import('node:path');
   // A sibling of the earlier reprise fixture: both suites can run in separate forks.
-  const root = `${process.cwd()}/_qa/securite-reprise-media-readers`;
+  const root = path.join(process.cwd(), '_qa', 'securite-reprise-media-readers');
   const oldHome = process.env.HOME;
-  process.env.HOME = `${root}/home`;
+  const oldProfile = process.env.USERPROFILE;
+  const home = path.join(root, 'home');
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
   delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
-  return { root, home: `${root}/home`, oldHome };
+  return { root, home, oldHome, oldProfile };
 });
 
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { understandVideoCloud } from '../../src/tools/video/cloud-understand.js';
 import { analyzeVideoWithModel } from '../../src/tools/video-analysis-tool.js';
@@ -23,6 +28,7 @@ const imageCredential = path.join(qa.home, '.codebuddy', 'credentials.png');
 const fake = 'FAKE-MEDIA-SECRET-REPRISE';
 
 beforeAll(async () => {
+  expect(path.normalize(os.homedir())).toBe(path.normalize(qa.home));
   await fs.rm(qa.root, { recursive: true, force: true });
   await fs.mkdir(path.dirname(credential), { recursive: true });
   await fs.mkdir(work, { recursive: true });
@@ -37,6 +43,8 @@ afterAll(async () => {
   await fs.rm(qa.root, { recursive: true, force: true });
   if (qa.oldHome === undefined) delete process.env.HOME;
   else process.env.HOME = qa.oldHome;
+  if (qa.oldProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = qa.oldProfile;
 });
 
 describe('les lecteurs multimédia gardent les chemins locaux avant transmission', () => {

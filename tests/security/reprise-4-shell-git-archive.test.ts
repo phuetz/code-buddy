@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-const qa = vi.hoisted(() => {
+const qa = await vi.hoisted(async () => {
+  const path = await import('node:path');
   const previousHome = process.env.HOME;
-  const home = `${process.cwd()}/_qa/securite-reprise-4-git/home`;
+  const previousProfile = process.env.USERPROFILE;
+  const home = path.join(process.cwd(), '_qa', 'securite-reprise-4-git', 'home');
   process.env.HOME = home;
+  process.env.USERPROFILE = home;
   delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
-  return { home, previousHome };
+  return { home, previousHome, previousProfile };
 });
 
 import fs from 'node:fs';
@@ -21,6 +24,7 @@ let repo: string;
 let archiveWork: string;
 
 beforeAll(() => {
+  expect(path.normalize(os.homedir())).toBe(path.normalize(qa.home));
   fs.mkdirSync(path.join(qa.home, '.codebuddy', 'skill-signing'), { recursive: true });
   fs.writeFileSync(path.join(qa.home, '.codebuddy', 'skill-signing', 'key.pem'), fakeToken);
   fs.mkdirSync(path.join(qa.home, '.codebuddy', 'skills'), { recursive: true });
@@ -42,6 +46,8 @@ afterAll(() => {
   fs.rmSync(path.dirname(qa.home), { recursive: true, force: true });
   if (qa.previousHome === undefined) delete process.env.HOME;
   else process.env.HOME = qa.previousHome;
+  if (qa.previousProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = qa.previousProfile;
 });
 
 describe('shell, Git et archives sur secrets fictifs', () => {

@@ -1,9 +1,12 @@
 /**
  * GK21 — a web_test that cannot capture a screenshot must not announce PASSED.
  */
+import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -24,20 +27,18 @@ async function freePort(): Promise<number> {
   });
 }
 
-function appCommand(port: number): string {
-  const js = [
-    'const http=require("http");',
-    'http.createServer((q,s)=>{',
-    's.setHeader("Content-Type","text/html");',
-    's.end("<!doctype html><title>Shot app</title><h1>Welcome</h1>");',
-    `}).listen(${port},"127.0.0.1");`,
-  ].join('');
-  return `node -e '${js}'`;
-}
-
 describe.skipIf(!chromiumExecutableExists())('GK21 web_test refuses PASSED without a screenshot', () => {
   const webTest = new WebTestTool();
   const browser = new BrowserExecuteTool();
+  let appCwd: string;
+
+  beforeAll(() => {
+    appCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-gk21-shot-'));
+  });
+
+  afterAll(() => {
+    if (appCwd) fs.rmSync(appCwd, { recursive: true, force: true });
+  });
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -62,9 +63,17 @@ describe.skipIf(!chromiumExecutableExists())('GK21 web_test refuses PASSED witho
 
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
+    fs.writeFileSync(path.join(appCwd, 'server.mjs'), [
+      'import http from "node:http";',
+      'http.createServer((_q, s) => {',
+      '  s.setHeader("Content-Type", "text/html");',
+      '  s.end("<!doctype html><title>Shot app</title><h1>Welcome</h1>");',
+      `}).listen(${port}, "127.0.0.1");`,
+    ].join('\n'));
     const started = await getAppServerTool().start({
-      command: appCommand(port),
+      command: 'node server.mjs',
       url: `${base}/`,
+      cwd: appCwd,
       timeoutMs: 15_000,
     });
     expect(started.success, started.error).toBe(true);
