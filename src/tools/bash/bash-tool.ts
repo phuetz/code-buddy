@@ -46,6 +46,12 @@ import {
 } from './execution-policy.js';
 import { confineSpawn } from '../../security/native-sandbox.js';
 import { refusedUnconfinedEscalationResult } from './unconfined-escalation.js';
+import {
+  redactTrackedGitOutput,
+  redactTrackedGitResult,
+  withheldTrackedGitOutput,
+} from '../../security/tracked-git-output-redactor.js';
+import { hasProtectedGitWorkspace, runProtectedWorkspaceCommand } from '../../security/git-secret-process-boundary.js';
 
 /**
  * Vrai seulement pour un `cd` SEUL, qui doit changer le répertoire de la session.
@@ -120,9 +126,9 @@ export class BashTool implements Disposable {
    * 6. Protected paths - blocks access to sensitive directories
    * 7. Sandbox manager validation - additional runtime checks
    */
-  private validateCommand(command: string): { valid: boolean; reason?: string } {
+  private validateCommand(command: string, cwd: string): { valid: boolean; reason?: string } {
     // Run static validation checks
-    const staticValidation = validateCommand(command);
+    const staticValidation = validateCommand(command, undefined, cwd);
     if (!staticValidation.valid) {
       return staticValidation;
     }
@@ -153,12 +159,31 @@ export class BashTool implements Disposable {
     signal?: AbortSignal,
     options?: { refuseUnconfinedEscalation?: boolean },
   ): AsyncGenerator<string, ToolResult, undefined> {
-    return yield* executeStreamingImpl(command, timeout, {
+    const effectiveCwd = cwd ?? this.currentDirectory;
+    const stream = executeStreamingImpl(command, timeout, {
       getCurrentDirectory: () => cwd ?? this.currentDirectory,
       getSandboxManager: () => this.sandboxManager,
       getRunningProcesses: () => this.runningProcesses,
       refuseUnconfinedEscalation: options?.refuseUnconfinedEscalation === true,
     }, signal);
+    const chunks: string[] = [];
+    let bytes = 0;
+    let overflow = false;
+    let step = await stream.next();
+    while (!step.done) {
+      bytes += Buffer.byteLength(step.value, 'utf8');
+      if (bytes <= 2 * 1024 * 1024) chunks.push(step.value);
+      else overflow = true;
+      step = await stream.next();
+    }
+    // A secret can straddle child-process chunks or be added by the command
+    // itself. Release no progress chunk until the final inventory is ready.
+    const visible = overflow
+      ? withheldTrackedGitOutput()
+      : redactTrackedGitOutput(chunks.join(''), effectiveCwd, command);
+    if (visible) yield visible;
+    const result = redactTrackedGitResult(step.value, effectiveCwd, command);
+    return overflow ? { ...result, output: withheldTrackedGitOutput() } : result;
   }
 
   /**
@@ -354,7 +379,9 @@ export class BashTool implements Disposable {
     signal?: AbortSignal,
     options?: { refuseUnconfinedEscalation?: boolean },
   ): Promise<ToolResult> {
-    return this.executeInternal(command, timeout, cwd, true, signal, options);
+    const effectiveCwd = cwd ?? this.currentDirectory;
+    const result = await this.executeInternal(command, timeout, cwd, true, signal, options);
+    return redactTrackedGitResult(result, effectiveCwd, command);
   }
 
   private async executeInternal(
@@ -393,8 +420,15 @@ export class BashTool implements Disposable {
         };
       }
 
+      // The protected-workspace broker builds argv itself. Run it before the
+      // shell syntax validator, which deliberately rejects a diff touching a
+      // classified file even though the broker can omit that hunk safely.
+      const protectedResult = isBareChangeDirectory(command)
+        ? null : runProtectedWorkspaceCommand(command, effectiveCwd);
+      if (protectedResult) return protectedResult;
+
       // Validate command before any execution (legacy validation)
-      const validation = this.validateCommand(command);
+      const validation = this.validateCommand(command, effectiveCwd);
       if (!validation.valid) {
         return {
           success: false,
@@ -433,7 +467,7 @@ export class BashTool implements Disposable {
       // RTK is a command transformer. Freeze its output before policy,
       // approval and sandboxing so the command the user sees is exactly the
       // command that will execute.
-      const executionCommand = await this.resolveRtkCommand(command);
+      const executionCommand = await this.resolveRtkCommand(command, effectiveCwd);
       if (signal?.aborted) {
         return { success: false, error: 'Command aborted by user' };
       }
@@ -472,6 +506,7 @@ export class BashTool implements Disposable {
               sandboxed.result.stderr,
               sandboxed.result.exitCode,
               `sandbox:${sandboxed.result.backend}`,
+              effectiveCwd,
             );
           }
           if (!isSandboxBoundaryFailure(sandboxed.result)) {
@@ -480,10 +515,11 @@ export class BashTool implements Disposable {
               sandboxed.result.stderr,
               sandboxed.result.exitCode,
               `sandbox:${sandboxed.result.backend}`,
+              effectiveCwd,
             );
           }
           requiresDirectApproval = true;
-          escalationReason = `Sandbox boundary denied the command: ${sandboxed.result.stderr || sandboxed.result.stdout}`;
+          escalationReason = `Sandbox boundary denied the command: ${redactTrackedGitOutput(sandboxed.result.stderr || sandboxed.result.stdout, effectiveCwd, executionCommand)}`;
         } else {
           requiresDirectApproval = true;
           escalationReason = sandboxed.reason || 'Workspace sandbox unavailable';
@@ -543,7 +579,7 @@ export class BashTool implements Disposable {
       });
 
       if (result.exitCode !== 0) {
-        const errorMessage = result.stderr || `Command exited with code ${result.exitCode}`;
+        const errorMessage = redactTrackedGitOutput(result.stderr || `Command exited with code ${result.exitCode}`, effectiveCwd, executionCommand);
 
         if (signal?.aborted || result.exitCode === 130) {
           return { success: false, error: 'Command aborted by user', output: result.stdout };
@@ -559,7 +595,8 @@ export class BashTool implements Disposable {
               // of the approved one. Route it through validation, RTK freeze,
               // policy, sandbox and exact approval again; only disable nested
               // healing to keep the retry budget bounded.
-              return this.executeInternal(fixCmd, timeout * 2, effectiveCwd, false, signal, options);
+              const repaired = await this.executeInternal(fixCmd, timeout * 2, effectiveCwd, false, signal, options);
+              return redactTrackedGitResult(repaired, effectiveCwd, fixCmd);
             }
           );
 
@@ -616,14 +653,14 @@ export class BashTool implements Disposable {
     }
   }
 
-  private async resolveRtkCommand(command: string): Promise<string> {
+  private async resolveRtkCommand(command: string, cwd: string): Promise<string> {
     const rewrite = await rewriteCommandWithRtk(command);
     if (!rewrite.rewritten) return command;
 
     const safetyValidation = validateCommandSafety(rewrite.command);
     if (!safetyValidation.valid) return command;
 
-    const validation = this.validateCommand(rewrite.command);
+    const validation = this.validateCommand(rewrite.command, cwd);
     if (!validation.valid) return command;
 
     return rewrite.command;
@@ -635,12 +672,13 @@ export class BashTool implements Disposable {
     stderr: string,
     exitCode: number,
     source: string,
+    cwd: string,
   ): ToolResult {
     if (exitCode !== 0) {
       const diagnostic = stderr.trim() || stdout.trim() || `Command exited with code ${exitCode}`;
       return {
         success: false,
-        error: `${diagnostic}\n[${source}; exit code ${exitCode}]`,
+        error: `${redactTrackedGitOutput(diagnostic, cwd)}\n[${source}; exit code ${exitCode}]`,
       };
     }
 
@@ -725,12 +763,15 @@ export class BashTool implements Disposable {
       return { success: false, error: 'shellFreeExec: argv must be non-empty' };
     }
     const workDir = cwd ?? this.currentDirectory;
+    if (hasProtectedGitWorkspace(workDir)) {
+      return { success: false, error: 'Command blocked: shellFreeExec cannot see a protected Git workspace' };
+    }
     const policyEnv = {
       ...getShellEnvPolicy().buildEnv(getFilteredEnv()),
       ...CONTROLLED_SUBPROCESS_ENV,
     };
 
-    return new Promise((resolve) => {
+    const result = await new Promise<ToolResult>((resolve) => {
       let stdout = '';
       let stderr = '';
       let timedOut = false;
@@ -782,6 +823,7 @@ export class BashTool implements Disposable {
         resolve({ success: false, error: err.message });
       });
     });
+    return redactTrackedGitResult(result, workDir, argv.join(' '));
   }
 
   /**
@@ -882,6 +924,9 @@ export class BashTool implements Disposable {
    * @returns Matching lines with file paths and line numbers, or error
    */
   async grep(pattern: string, files: string = '.'): Promise<ToolResult> {
+    if (hasProtectedGitWorkspace(this.currentDirectory)) {
+      return { success: false, error: 'Command blocked: external grep cannot see a protected Git workspace' };
+    }
     // Validate input with schema
     const validation = validateWithSchema(
       bashToolSchemas.grep,
@@ -897,7 +942,7 @@ export class BashTool implements Disposable {
     }
 
     // Use ripgrep for ultra-fast searching
-    return new Promise((resolve) => {
+    const result = await new Promise<ToolResult>((resolve) => {
       const args = [
         '--no-heading',
         '--line-number',
@@ -946,5 +991,6 @@ export class BashTool implements Disposable {
         });
       });
     });
+    return redactTrackedGitResult(result, this.currentDirectory, `rg ${pattern} ${files}`);
   }
 }

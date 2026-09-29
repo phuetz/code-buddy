@@ -208,6 +208,19 @@ function wantsStatusReport(query: Record<string, unknown>): boolean {
 }
 
 /**
+ * Express `trust proxy` value from `CODEBUDDY_TRUSTED_PROXIES` (csv of
+ * addresses/subnets, or Express keywords such as `loopback`). Unset or empty
+ * ⇒ `false`: `req.ip` is the socket address and `X-Forwarded-For` is ignored.
+ */
+export function resolveTrustProxySetting(raw: string | undefined): false | string[] {
+  const entries = (raw ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return entries.length > 0 ? entries : false;
+}
+
+/**
  * Create and configure the Express application
  */
 function createApp(
@@ -217,8 +230,10 @@ function createApp(
 ): Application {
   const app = express();
 
-  // Trust proxy (for rate limiting behind reverse proxy)
-  app.set('trust proxy', 1);
+  // Trust proxy ONLY when the operator lists the proxies. Trusting one hop
+  // unconditionally let any direct client pick its own `X-Forwarded-For`, and
+  // thus a fresh rate-limit bucket per request (req.ip is the rate-limit key).
+  app.set('trust proxy', resolveTrustProxySetting(process.env.CODEBUDDY_TRUSTED_PROXIES));
   app.set('authEnabled', config.authEnabled);
 
   // Request ID middleware
@@ -280,12 +295,6 @@ function createApp(
   // Kubernetes-standard health aliases (no auth required)
   app.use(createK8sHealthAliases());
 
-  // Metrics routes (no auth required for monitoring)
-  app.use('/api/metrics', metricsRoutes);
-
-  // Also expose at /metrics for Prometheus compatibility
-  app.use('/metrics', metricsRoutes);
-
   // Mobile remote-supervision routes (custom pairing-token auth)
   app.use('/api/mobile', mobileRoutes);
 
@@ -302,7 +311,7 @@ function createApp(
   // Android pairs with a local code and proves key possession before JWT auth.
   app.use('/api/auth/device', createDeviceAuthRoutes(config.jwtSecret));
 
-  // Authentication (applied after public health/metrics/mobile endpoints)
+  // Authentication (applied after public health and mobile endpoints)
   app.use(createAuthMiddleware(config));
 
   // A2A routes (auth-based, exempt from CSRF) — must be mounted BEFORE CSRF middleware
@@ -312,6 +321,11 @@ function createApp(
   // network-reachable. All general agent/session/tool/workflow routes below are
   // direct-loopback only; otherwise remote chat could invoke tools indirectly.
   app.use(requireLocalAnonymousAccess);
+
+  // Detailed metrics and reset follow the same JWT and local-anonymous rules
+  // as the other API routes. `/api/health/metrics` remains a public basic probe.
+  app.use('/api/metrics', metricsRoutes);
+  app.use('/metrics', metricsRoutes);
 
   // Read-only Fleet diagnostics for the CLI. These HTTP wrappers expose the
   // same server state and peer description as the Gateway WebSocket methods.

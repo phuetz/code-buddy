@@ -3,7 +3,8 @@
  */
 
 import { EventEmitter } from 'events';
-import type { IncomingMessage, ServerResponse } from 'http';
+import type { IncomingMessage, Server, ServerResponse } from 'http';
+import type { AddressInfo } from 'net';
 import { WebhookServer } from '../../src/channels/webhook-server.js';
 import { resetChannelLaneQueue } from '../../src/channels/index.js';
 import { logger } from '../../src/utils/logger.js';
@@ -61,5 +62,33 @@ describe('WebhookServer handleRequest', () => {
     expect(JSON.stringify(errorSpy.mock.calls)).toContain(payload.traceId);
 
     errorSpy.mockRestore();
+  });
+});
+
+describe('WebhookServer network bind', () => {
+  it('uses loopback by default even when HOST configures buddy server', async () => {
+    const previousHost = process.env.HOST;
+    process.env.HOST = '0.0.0.0';
+    const server = new WebhookServer({ port: 0 });
+    try {
+      await server.start();
+      const listener = (server as unknown as { server: Server }).server;
+      expect((listener.address() as AddressInfo).address).toBe('127.0.0.1');
+    } finally {
+      await server.stop();
+      if (previousHost === undefined) delete process.env.HOST;
+      else process.env.HOST = previousHost;
+    }
+  });
+
+  it('binds to the requested interface when its own host is explicit', async () => {
+    const server = new WebhookServer({ port: 0, host: '0.0.0.0' });
+    try {
+      await server.start();
+      const listener = (server as unknown as { server: Server }).server;
+      expect((listener.address() as AddressInfo).address).toBe('0.0.0.0');
+    } finally {
+      await server.stop();
+    }
   });
 });

@@ -97,7 +97,7 @@ export const TEXT_TO_SPEECH_TOOL: CodeBuddyTool = {
         },
         output_path: {
           type: "string",
-          description: "Optional absolute or workspace-relative output path. Defaults to .codebuddy/tts/tts-<id>.<format>"
+          description: "Optional new audio filename or path inside workspace .codebuddy/tts. Existing files are never replaced. Defaults to .codebuddy/tts/tts-<id>.<format>"
         },
         provider: {
           type: "string",

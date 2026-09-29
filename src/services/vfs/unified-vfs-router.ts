@@ -2,6 +2,11 @@ import fs from "fs-extra";
 import * as path from "path";
 import { measureLatency } from "../../optimization/latency-optimizer.js";
 import { getWorkspaceIsolation, type PathValidationResult } from "../../workspace/workspace-isolation.js";
+import {
+  checkSecretFileAccess,
+  formatSecretRefusal,
+  type SecretFileAccess,
+} from "../../security/secret-files.js";
 
 export interface IFileStat {
   isDirectory(): boolean;
@@ -28,7 +33,12 @@ export interface IVfsProvider {
   ensureDir(path: string): Promise<void>;
   remove(path: string): Promise<void>;
   rename(oldPath: string, newPath: string): Promise<void>;
-  resolvePath(filePath: string, baseDir: string): { valid: boolean; resolved: string; error?: string };
+  /** `access` defaults to 'read'; writers pass 'write' (read-only whitelist, credential stores). */
+  resolvePath(
+    filePath: string,
+    baseDir: string,
+    access?: SecretFileAccess
+  ): { valid: boolean; resolved: string; error?: string };
 }
 
 /**
@@ -54,12 +64,16 @@ export class UnifiedVfsRouter implements IVfsProvider {
    * File operations are wrapped with latency measurement for performance tracking.
    */
   async readFile(filePath: string, encoding: string = "utf-8"): Promise<string> {
+    const verdict = checkSecretFileAccess(filePath, 'read');
+    if (verdict.secret) throw new Error(formatSecretRefusal(filePath, verdict));
     return measureLatency('file_read', () =>
       fs.readFile(filePath, encoding as BufferEncoding)
     );
   }
 
   async readFileBuffer(filePath: string): Promise<Buffer> {
+    const verdict = checkSecretFileAccess(filePath, 'read');
+    if (verdict.secret) throw new Error(formatSecretRefusal(filePath, verdict));
     return measureLatency('file_read_buffer', () =>
       fs.readFile(filePath)
     );
@@ -119,17 +133,21 @@ export class UnifiedVfsRouter implements IVfsProvider {
    * - Blocked path enforcement
    * - System whitelist support
    */
-  resolvePath(filePath: string, baseDir: string): { valid: boolean; resolved: string; error?: string } {
+  resolvePath(
+    filePath: string,
+    baseDir: string,
+    access: SecretFileAccess = 'read'
+  ): { valid: boolean; resolved: string; error?: string } {
     const isolation = getWorkspaceIsolation();
 
-    // If isolation is disabled or baseDir differs from workspace root,
-    // fall back to basic path validation
+    // If isolation is disabled, fall back to basic path validation (which
+    // still refuses credential files).
     if (!isolation.getConfig().enabled) {
-      return this.basicResolvePath(filePath, baseDir);
+      return this.basicResolvePath(filePath, baseDir, access);
     }
 
     // Use workspace isolation for comprehensive validation
-    const result = isolation.validatePath(filePath, 'vfs_resolve');
+    const result = isolation.validatePath(filePath, 'vfs_resolve', access);
 
     return {
       valid: result.valid,
@@ -142,8 +160,17 @@ export class UnifiedVfsRouter implements IVfsProvider {
    * Basic path resolution without workspace isolation.
    * Used as fallback when isolation is disabled.
    */
-  private basicResolvePath(filePath: string, baseDir: string): { valid: boolean; resolved: string; error?: string } {
+  private basicResolvePath(
+    filePath: string,
+    baseDir: string,
+    access: SecretFileAccess = 'read'
+  ): { valid: boolean; resolved: string; error?: string } {
     const resolved = path.resolve(filePath);
+
+    const secret = checkSecretFileAccess(resolved, access);
+    if (secret.secret) {
+      return { valid: false, resolved, error: formatSecretRefusal(filePath, secret) };
+    }
     const normalizedBase = path.normalize(baseDir);
     const normalizedResolved = path.normalize(resolved);
 
@@ -157,22 +184,46 @@ export class UnifiedVfsRouter implements IVfsProvider {
       };
     }
 
-    // Second check: if file exists, resolve symlinks and verify real path
+    // Second check: resolve symlinks through the nearest EXISTING ancestor, so
+    // `link/new-file` (where `link` points outside) is caught before a create,
+    // not only when the final file already exists.
     // Note: We use fs directly here because realpath is a physical FS concept
+    let realBase: string;
     try {
-      if (fs.existsSync(resolved)) {
-        const realPath = fs.realpathSync(resolved);
-        const realBase = fs.realpathSync(baseDir);
-        if (!realPath.startsWith(realBase + path.sep) && realPath !== realBase) {
-          return {
-            valid: false,
-            resolved,
-            error: `Symlink traversal not allowed: ${filePath} points outside project directory`
-          };
-        }
-      }
+      realBase = fs.realpathSync(baseDir);
     } catch (_err) {
-      // If realpath fails, allow the operation (file may not exist yet)
+      return {
+        valid: false,
+        resolved,
+        error: `Project directory cannot be resolved: ${baseDir}`
+      };
+    }
+    let ancestor = resolved;
+    while (!fs.existsSync(ancestor)) {
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) break;
+      ancestor = parent;
+    }
+    let realPath: string;
+    try {
+      const realAncestor = fs.realpathSync(ancestor);
+      const suffix = path.relative(ancestor, resolved);
+      realPath = suffix ? path.resolve(realAncestor, suffix) : realAncestor;
+    } catch (_err) {
+      // Fail closed: an ancestor exists but cannot be resolved (permissions,
+      // symlink loop) — we cannot prove where the path lands.
+      return {
+        valid: false,
+        resolved,
+        error: `Path cannot be resolved safely: ${filePath}`
+      };
+    }
+    if (!realPath.startsWith(realBase + path.sep) && realPath !== realBase) {
+      return {
+        valid: false,
+        resolved,
+        error: `Symlink traversal not allowed: ${filePath} points outside project directory`
+      };
     }
 
     return { valid: true, resolved };
@@ -182,7 +233,11 @@ export class UnifiedVfsRouter implements IVfsProvider {
    * Validate a path using workspace isolation
    * Returns the full PathValidationResult for detailed error handling
    */
-  validateWithIsolation(filePath: string, operation?: string): PathValidationResult {
-    return getWorkspaceIsolation().validatePath(filePath, operation);
+  validateWithIsolation(
+    filePath: string,
+    operation?: string,
+    access: SecretFileAccess = 'read'
+  ): PathValidationResult {
+    return getWorkspaceIsolation().validatePath(filePath, operation, access);
   }
 }

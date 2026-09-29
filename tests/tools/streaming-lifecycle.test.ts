@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { executeStreaming } from '../../src/tools/bash/streaming-executor.js';
 import * as shell from '../../src/utils/shell-configuration.js';
 
@@ -12,7 +15,10 @@ vi.mock('../../src/security/shell-env-policy.js', () => ({ getShellEnvPolicy: ()
 vi.mock('../../src/utils/confirmation-service.js', () => ({ ConfirmationService: { getInstance: () => ({}) } }));
 vi.mock('../../src/utils/shell-configuration.js', () => ({ getShellConfiguration: () => ({ shell: 'bash', executable: '/bin/bash', argsPrefix: ['-c'] }), shellWorkingDirectoryCommand: (command: string) => command }));
 
-const deps = () => ({ getCurrentDirectory: () => process.cwd(), getSandboxManager: () => ({ validateCommand: () => ({ valid: true }) }), getRunningProcesses: () => new Set(), maxOutputBytes: 1024 });
+let shellWorkspace: string;
+beforeAll(() => { shellWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-streaming-')); });
+afterAll(() => { fs.rmSync(shellWorkspace, { recursive: true, force: true }); });
+const deps = () => ({ getCurrentDirectory: () => shellWorkspace, getSandboxManager: () => ({ validateCommand: () => ({ valid: true }) }), getRunningProcesses: () => new Set(), maxOutputBytes: 1024 });
 async function collect(command: string, timeout = 3000) {
   const gen = executeStreaming(command, timeout, deps());
   let next = await gen.next();

@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
 import { resolveNpmLaunch } from './local-binary-launch.js';
+import { protectedWorkspaceProcessRefusal } from '../security/git-secret-process-boundary.js';
 
 export interface TestRunnerData {
   root: string;
@@ -76,6 +77,8 @@ export class TestRunnerTool {
       if (!isRecord(input)) return { success: false, error: 'Input must be an object' };
       if (typeof input.root !== 'string' || input.root.trim() === '') return { success: false, error: 'root must be a non-empty absolute path' };
       const root = await safeRoot(input.root);
+      const processRefusal = protectedWorkspaceProcessRefusal(root);
+      if (processRefusal) return processRefusal;
       const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8')) as unknown;
       if (!isRecord(pkg) || !isRecord(pkg.scripts) || typeof pkg.scripts.test !== 'string') return { success: false, error: 'package.json must declare scripts.test' };
       const timeoutMs = Math.min(Math.max(Number(input.timeoutMs) || DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS);

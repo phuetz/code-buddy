@@ -25,6 +25,20 @@ import { validateWithSchema, validateCommand as validateCommandSafety, sanitizeF
 import { isLikelyTestOutput, parseTestOutput } from '../../src/utils/test-output-parser';
 import { registerDisposable } from '../../src/utils/disposable';
 
+// These execution tests mock spawn, but the process boundary still inspects
+// the real working directory. Keep them in an empty workspace: this source
+// repository contains a historical credential in its Git objects.
+const sourceDirectory = process.cwd();
+let executionWorkspace: string;
+beforeAll(() => {
+  executionWorkspace = mkdtempSync(path.join(os.tmpdir(), 'codebuddy-bash-unit-'));
+  process.chdir(executionWorkspace);
+});
+afterAll(() => {
+  process.chdir(sourceDirectory);
+  rmSync(executionWorkspace, { recursive: true, force: true });
+});
+
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
   SpawnOptions: {},

@@ -35,9 +35,9 @@ export interface WebChatConfig extends ChannelConfig {
   type: 'webchat';
   /** HTTP port to listen on (default: 3001) */
   port?: number;
-  /** Host to bind to (default: '0.0.0.0') */
+  /** Host to bind to (default: '127.0.0.1') */
   host?: string;
-  /** Allowed CORS origins (default: ['*']) */
+  /** Allowed browser origins (default: local origins on the listening port) */
   corsOrigins?: string[];
   /** Title displayed in the chat UI */
   title?: string;
@@ -98,8 +98,7 @@ export class WebChatChannel extends BaseChannel {
     // Apply defaults
     const cfg = this.config as WebChatConfig;
     if (cfg.port === undefined) cfg.port = 3001;
-    if (!cfg.host) cfg.host = '0.0.0.0';
-    if (!cfg.corsOrigins) cfg.corsOrigins = ['*'];
+    if (!cfg.host) cfg.host = '127.0.0.1';
     if (!cfg.title) cfg.title = 'Code Buddy WebChat';
     if (cfg.maxMessageLength === undefined) cfg.maxMessageLength = 4096;
   }
@@ -132,7 +131,7 @@ export class WebChatChannel extends BaseChannel {
     }
 
     const port = this.webChatConfig.port ?? 3001;
-    const host = this.webChatConfig.host ?? '0.0.0.0';
+    const host = this.webChatConfig.host ?? '127.0.0.1';
 
     return new Promise<void>((resolve, reject) => {
       try {
@@ -332,16 +331,45 @@ export class WebChatChannel extends BaseChannel {
   // HTTP Handler
   // ==========================================================================
 
+  private allowedOrigins(): string[] {
+    if (this.webChatConfig.corsOrigins !== undefined) return this.webChatConfig.corsOrigins;
+    const boundPort = this.status.info?.port;
+    const port = typeof boundPort === 'number' ? boundPort : (this.webChatConfig.port ?? 3001);
+    return [`http://localhost:${port}`, `http://127.0.0.1:${port}`, `http://[::1]:${port}`];
+  }
+
+  private isAllowedOrigin(origin: string): boolean {
+    const allowed = this.allowedOrigins();
+    return allowed.includes('*') || allowed.includes(origin);
+  }
+
+  private isAllowedHost(req: http.IncomingMessage): boolean {
+    const boundHost = this.webChatConfig.host;
+    if (!['127.0.0.1', 'localhost', '::1'].includes(boundHost ?? '')) return true;
+    const host = req.headers.host;
+    if (!host || Array.isArray(host)) return !host;
+    try {
+      const hostname = new URL(`http://${host}`).hostname.toLowerCase();
+      return ['127.0.0.1', 'localhost', '[::1]'].includes(hostname);
+    } catch { return false; }
+  }
+
   /**
    * Handle incoming HTTP requests
    */
   private handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
     const url = req.url ?? '/';
-    const corsOrigins = this.webChatConfig.corsOrigins ?? ['*'];
-    const origin = req.headers.origin ?? '*';
+    if (!this.isAllowedHost(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden host' }));
+      return;
+    }
+    const origin = req.headers.origin;
 
     // CORS headers
-    const allowedOrigin = corsOrigins.includes('*') ? '*' : (corsOrigins.includes(origin) ? origin : '');
+    const allowedOrigin = origin && !Array.isArray(origin) && this.isAllowedOrigin(origin)
+      ? (this.allowedOrigins().includes('*') ? '*' : origin)
+      : '';
     if (allowedOrigin) {
       res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -413,6 +441,11 @@ export class WebChatChannel extends BaseChannel {
    * Handle a new WebSocket connection
    */
   private handleWsConnection(ws: import('ws').WebSocket, req: http.IncomingMessage): void {
+    const origin = req.headers.origin;
+    if (!this.isAllowedHost(req) || (origin && (Array.isArray(origin) || !this.isAllowedOrigin(origin)))) {
+      ws.close(1008, 'Forbidden origin');
+      return;
+    }
     const clientId = randomUUID();
     const ip = req.headers['x-forwarded-for'] as string ?? req.socket.remoteAddress ?? 'unknown';
 

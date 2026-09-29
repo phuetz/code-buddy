@@ -22,7 +22,13 @@ export function restoreSessionHistory(entries: ChatEntry[]): CodeBuddyMessage[] 
     } else if (entry.type === 'tool_result') {
       const call = calls[0];
       const result = entry.toolResult;
-      const content = result ? JSON.stringify({ ...result, ...(result.output === undefined && entry.content ? { output: entry.content } : {}) }) : entry.content;
+      // Structured data is retained locally for the UI, but may contain file
+      // contents that were never part of the provider-visible tool response.
+      const content = result ? JSON.stringify({
+        success: result.success,
+        ...(result.output !== undefined ? { output: result.output } : entry.content ? { output: entry.content } : {}),
+        ...(result.error !== undefined ? { error: result.error } : {}),
+      }) : entry.content;
       if (call && knownCalls.has(call.id)) {
         messages.push({ role: 'tool', tool_call_id: call.id, content });
       } else {

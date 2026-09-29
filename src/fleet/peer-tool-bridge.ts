@@ -25,6 +25,7 @@
 
 import { spawn } from 'child_process';
 import { getRipgrepPath } from '../utils/ripgrep-path.js';
+import { classifySecretPath, SECRET_SEARCH_EXCLUDE_GLOBS } from '../security/secret-files.js';
 import * as fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import * as path from 'path';
@@ -40,6 +41,7 @@ import { ConfirmationService } from '../utils/confirmation-service.js';
 import { auditLogger } from '../security/audit-logger.js';
 import { assertPeerToolInvokeAllowed } from './permissions.js';
 import { getGlobalEventBus } from '../events/event-bus.js';
+import { redactTrackedGitOutput } from '../security/tracked-git-output-redactor.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -211,12 +213,25 @@ async function readFilePrefix(filePath: string, limit: number): Promise<string> 
   }
 }
 
+/**
+ * A remote peer never reads a credential file, even inside the exposed root
+ * (a root set to $HOME would otherwise serve ~/.codebuddy/codex-auth.json).
+ * No operator opt-in here: the reader is another machine.
+ */
+function assertNotSecretFile(requested: string, resolved: string): void {
+  const verdict = classifySecretPath(resolved);
+  if (verdict.secret) {
+    throw new Error(`SECRET_FILE_REFUSED: ${requested} is a credential file (${verdict.reason ?? 'secret'})`);
+  }
+}
+
 async function execViewFile({ args, emitChunk }: ExecArgs): Promise<{ output: string; truncated: boolean }> {
   const filePath = args.file_path ?? args.path;
   if (typeof filePath !== 'string' || filePath.length === 0) {
     throw new Error('view_file: missing string file_path');
   }
   const resolved = await assertPathInsideWorkspace(filePath);
+  assertNotSecretFile(filePath, resolved);
   const stat = await fs.stat(resolved);
   if (!stat.isFile()) {
     throw new Error(`view_file: ${filePath} is not a regular file`);
@@ -255,6 +270,7 @@ async function execListDirectory({ args }: ExecArgs): Promise<{ output: string; 
   const resolved = await assertPathInsideWorkspace(dirPath);
   const entries = await fs.readdir(resolved, { withFileTypes: true });
   const lines = entries
+    .filter((entry) => !classifySecretPath(path.join(resolved, entry.name)).secret)
     .map((e) => {
       const tag = e.isDirectory() ? 'DIR ' : e.isSymbolicLink() ? 'LINK' : 'FILE';
       return `${tag}  ${e.name}`;
@@ -278,6 +294,13 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
     throw new Error('search: path must be a string');
   }
   const resolved = await assertPathInsideWorkspace(dirPath);
+  // An explicit file path bypasses ripgrep's globs: check it directly.
+  assertNotSecretFile(dirPath, resolved);
+
+  const safeLine = (line: string): boolean => {
+    const match = line.match(/^(.+):(\d+):/);
+    return !!match && !classifySecretPath(match[1] ?? '').secret;
+  };
 
   return await new Promise<{ output: string; truncated: boolean }>((resolve, reject) => {
     const rgArgs = [
@@ -285,6 +308,7 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
       '--line-number',
       '--color', 'never',
       '--max-count', '50',
+      ...SECRET_SEARCH_EXCLUDE_GLOBS.flatMap((glob) => ['--glob', glob]),
       '--', query, resolved,
     ];
     const proc = spawn(getRipgrepPath(), rgArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -308,6 +332,7 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
       stdoutBuffer = stdoutBuffer.slice(lastNl + 1);
       const lines = ready.split('\n').filter(Boolean);
       for (const line of lines) {
+        if (!safeLine(line)) continue;
         if (lineCount >= SEARCH_MAX_RESULTS) {
           truncated = true;
           continue;
@@ -329,9 +354,11 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
     proc.on('close', (code) => {
       clearTimeout(timer);
       if (stdoutBuffer.length > 0 && lineCount < SEARCH_MAX_RESULTS) {
-        const cleanBuf = stripAnsi(stdoutBuffer);
-        stdout += cleanBuf;
-        emitChunk?.(cleanBuf);
+        if (safeLine(stdoutBuffer)) {
+          const cleanBuf = stripAnsi(stdoutBuffer);
+          stdout += cleanBuf;
+          emitChunk?.(cleanBuf);
+        }
       }
       // ripgrep exit codes: 0 = matches found, 1 = no matches (still ok),
       // 2 = error. SIGTERM after truncation produces null code on some
@@ -462,14 +489,21 @@ async function runInvocation(
     if (!exec) {
       throw new Error(`UNKNOWN_PEER_TOOL: no executor registered for "${tool}"`);
     }
-    const { output, truncated } = await exec({
-      args: argsRaw,
-      emitChunk: stream ? ctx.emitChunk : undefined,
-    });
+    // Buffer before emitting: a secret may straddle two stream chunks. The
+    // peer executors intentionally bypass the local tool registry, so apply
+    // the same value boundary here using the entire exposed workspace.
+    const { output, truncated } = await exec({ args: argsRaw });
+    const root = getWorkspaceRoot();
+    if (!root) throw new Error('PEER_WORKSPACE_NOT_CONFIGURED');
+    const visible = redactTrackedGitOutput(output, root);
+    if (stream && visible) {
+      for (let offset = 0; offset < visible.length; offset += READ_STREAM_CHUNK)
+        ctx.emitChunk?.(visible.slice(offset, offset + READ_STREAM_CHUNK));
+    }
     logAudit({ ctx, tool, stream, ok: true, start });
     return {
       tool,
-      output: stripAnsi(output),
+      output: stripAnsi(visible),
       durationMs: Date.now() - start,
       truncated,
     };

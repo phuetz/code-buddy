@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const configDir = path.dirname(fileURLToPath(import.meta.url));
 
 function resolveTestSourceSpecifier(importerId: string, specifier: string): string | null {
   if (!specifier.startsWith('.') || !specifier.includes('/src/')) {
@@ -166,8 +169,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@jest/globals': path.resolve(__dirname, './tests/support/jest-globals.ts'),
+      '@': path.resolve(configDir, './src'),
+      '@jest/globals': path.resolve(configDir, './tests/support/jest-globals.ts'),
     },
   },
 });

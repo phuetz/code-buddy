@@ -62,6 +62,12 @@ describe('execute_code real subprocess integration', () => {
       ].join('\n'),
     });
 
+    if (process.platform !== 'linux') {
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Compute confinement requires Linux');
+      return;
+    }
+
     expect(result.success, result.error).toBe(true);
     const payload = parseToolOutput(result);
     expect(payload).toMatchObject({
@@ -110,6 +116,12 @@ describe('execute_code real subprocess integration', () => {
       timeout_ms: 1000,
       code: 'setInterval(() => {}, 1000);',
     });
+
+    if (process.platform !== 'linux') {
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Compute confinement requires Linux');
+      return;
+    }
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('timed out');

@@ -3006,7 +3006,7 @@ program
   .command("server")
   .description("Start the Code Buddy HTTP/WebSocket API server")
   .option("--port <port>", "server port", "3000")
-  .option("--host <host>", "server host", "0.0.0.0")
+  .option("--host <host>", "server host (default: HOST, else 127.0.0.1 — pass 0.0.0.0 to expose on the network)")
   .option("--no-auth", "disable JWT authentication (loopback development only)")
   .action(async (options) => {
     let port: number;
@@ -3021,7 +3021,8 @@ program
     try {
       await startServer({
         port,
-        host: options.host,
+        // Loopback unless the operator asks otherwise (flag, then HOST).
+        ...(options.host ? { host: String(options.host) } : {}),
         authEnabled: options.auth !== false,
       });
     } catch (error) {

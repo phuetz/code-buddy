@@ -79,6 +79,7 @@ describe('catalog states and evidence', () => {
       expect(feature?.states.wired, definition.id).toBe('vrai');
       expect(feature?.states.deployed, definition.id).toBe('inconnu');
       if (feature?.states.testedInSituation !== 'vrai') {
+        expect(feature?.reasons.length, definition.id).toBeGreaterThan(0);
         // A merge can age a genuine execution trace without changing the inventory's
         // editorial limit. Require a visible reason, never a fabricated current proof.
         const staleProof = feature?.states.testedInSituation === 'inconnu'

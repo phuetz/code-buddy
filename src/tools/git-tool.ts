@@ -1,9 +1,11 @@
 import { spawn } from "child_process";
+import * as fs from "node:fs";
 import * as path from "path";
 import { ToolResult, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { AttributionManager } from "../ui/cli-enhancements.js";
 import { getIdentityManager } from "../identity/identity-manager.js";
+import { checkSecretFileAccess, formatSecretRefusal } from "../security/secret-files.js";
 
 /**
  * Execute a command safely using spawn with array arguments
@@ -223,7 +225,20 @@ export class GitTool {
 
   async getDiff(staged: boolean = false): Promise<string> {
     const args = staged ? ['diff', '--cached'] : ['diff'];
-    const { stdout } = await this.execGit(args);
+    const { stdout: nameStatus } = await this.execGit([...args, '--name-status', '-z']);
+    const fields = nameStatus.split('\0').filter(Boolean);
+    const safePaths: string[] = [];
+    for (let index = 0; index < fields.length;) {
+      const status = fields[index++] ?? '';
+      const first = fields[index++] ?? '';
+      const second = /^[RC]/.test(status) ? fields[index++] : undefined;
+      const paths = second === undefined ? [first] : [first, second];
+      if (paths.every(file => file && !checkSecretFileAccess(path.resolve(this.cwd, file), 'read').secret)) {
+        safePaths.push(second ?? first);
+      }
+    }
+    if (safePaths.length === 0) return '';
+    const { stdout } = await this.execGit([...args, '--', ...safePaths]);
     return stdout;
   }
 
@@ -237,14 +252,30 @@ export class GitTool {
   }
 
   async add(files: string[] | "all"): Promise<ToolResult> {
-    // Use array args to prevent command injection
-    const args = files === "all" ? ['add', '.'] : ['add', ...files];
-
     try {
+      let selected: string[];
+      if (files === 'all') {
+        const { stdout } = await this.execGit(['ls-files', '--cached', '--others', '--exclude-standard', '-z']);
+        selected = stdout.split('\0').filter(Boolean).filter(file =>
+          !checkSecretFileAccess(path.resolve(this.cwd, file), 'read').secret,
+        );
+      } else {
+        selected = files;
+        for (const file of selected) {
+          const resolved = path.resolve(this.cwd, file);
+          const verdict = checkSecretFileAccess(resolved, 'read');
+          if (verdict.secret) return { success: false, error: formatSecretRefusal(resolved, verdict) };
+          if (file === '.' || file === '..' || fs.statSync(resolved, { throwIfNoEntry: false })?.isDirectory()) {
+            return { success: false, error: `Git add requires explicit file paths: ${file}` };
+          }
+        }
+      }
+      if (selected.length === 0) return { success: true, output: 'Staged: no non-secret changes' };
+      const args = ['add', '--', ...selected];
       await this.execGit(args);
       return {
         success: true,
-        output: `Staged: ${files === "all" ? "all changes" : files.join(", ")}`,
+        output: `Staged: ${files === "all" ? "all non-secret changes" : files.join(", ")}`,
       };
     } catch (error: unknown) {
       return {
@@ -524,6 +555,9 @@ export class GitTool {
    */
   async blame(filePath: string, options?: BlameOptions): Promise<ToolResult> {
     try {
+      const resolved = path.resolve(this.cwd, filePath);
+      const verdict = checkSecretFileAccess(resolved, 'read');
+      if (verdict.secret) return { success: false, error: formatSecretRefusal(resolved, verdict) };
       const args = ['blame', '--porcelain'];
 
       // Add line range if specified

@@ -15,6 +15,7 @@
 import { BashTool } from '../../src/tools/bash';
 import path from 'path';
 import os from 'os';
+import fs from 'node:fs';
 
 jest.mock('../../src/utils/confirmation-service', () => ({
   ConfirmationService: {
@@ -38,16 +39,23 @@ jest.mock('../../src/utils/self-healing', () => ({
 }));
 
 const isWindows = process.platform === 'win32';
-const itUnix = isWindows ? it.skip : it;
 // BashTool runs its commands through PowerShell on Windows (getShellConfiguration),
 // where `ls -la` binds `-la` to no Get-ChildItem parameter and fails.
 const listDirectoryCommand = isWindows ? 'Get-ChildItem -Force' : 'ls -la';
 
 describe('BashTool', () => {
   let bashTool: BashTool;
+  const cleanCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-bash-suite-'));
+  fs.mkdirSync(path.join(cleanCwd, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(cleanCwd, 'src', 'sample.ts'), 'export const test = true;\n');
+  fs.writeFileSync(path.join(cleanCwd, 'notes.txt'), 'test public\n');
 
-  beforeEach(() => {
+  afterAll(() => fs.rmSync(cleanCwd, { recursive: true, force: true }));
+
+  beforeEach(async () => {
     bashTool = new BashTool();
+    // The repository may contain fake secrets in _qa or dependency fixtures.
+    expect((await bashTool.execute(`cd "${cleanCwd}"`)).success).toBe(true);
     jest.clearAllMocks();
   });
 

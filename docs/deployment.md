@@ -23,12 +23,35 @@ buddy server --port 3000 --no-auth             # ONLY behind a trusted network
 | Flag | Default | Notes |
 |:-----|:--------|:------|
 | `--port <port>` | `3000` | Also settable via `PORT` |
-| `--host <host>` | `0.0.0.0` | Bind to `127.0.0.1` when fronted by a local reverse proxy |
+| `--host <host>` | `HOST`, else `127.0.0.1` | **Loopback by default since 2.3.0.** Exposing the server on the network is explicit: `--host 0.0.0.0` (or `HOST=0.0.0.0`), and then set `JWT_SECRET`. A fleet peer, the mobile PWA over Tailscale or a Docker container needs this flag |
+| `CODEBUDDY_TRUSTED_PROXIES` | unset | csv of reverse-proxy addresses/subnets (or `loopback`). Only then is `X-Forwarded-For` honoured for `req.ip` and the rate limit; unset ⇒ the socket address is used |
 | `--no-auth` | auth on | Disables JWT. Never expose a `--no-auth` server to an untrusted network — reserve it for loopback or a private overlay (Tailscale/WireGuard) |
 
 **Fleet convention:** the chat/API server runs on `3000` and a second
 instance acting as the fleet gateway runs on `3001`. They are separate
 processes of the same binary, not two listeners in one process.
+
+### Channel webhooks
+
+The separate `WebhookServer` used for incoming channel webhooks also takes
+`SERVER_CONFIG.DEFAULT_HOST`, so it binds to `127.0.0.1` by default. An
+upgrade from a version that listened on all interfaces can therefore stop
+remote Telegram, Slack, or other webhook senders from reaching it. Configure
+its own `host` explicitly when constructing it (or on the **first**
+`getWebhookServer({ host: '0.0.0.0' })` call), and expose it through a trusted
+reverse proxy if external delivery is required. `buddy server --host` and
+`HOST` configure the HTTP/WebSocket API server, not this separate webhook
+listener.
+
+### WebChat channel
+
+`WebChatChannel` is a separate HTTP/WebSocket listener (port `3001` by
+default), independent of `buddy server`. It binds to `127.0.0.1` by default.
+Browser origins are limited to `localhost`, `127.0.0.1` and `[::1]` on its
+listening port; a remote `Host` or WebSocket `Origin` is refused. To expose it
+intentionally, configure its own `host` and `corsOrigins`, and set an
+`authToken`. `buddy server --host`, `HOST`, and `JWT_SECRET` do not configure
+this channel listener.
 
 ---
 
@@ -264,13 +287,19 @@ IPs and origins are evaluated correctly.
 | Endpoint | Purpose |
 |:---------|:--------|
 | `GET /api/health` | Liveness + `apiHeartbeat` (30 s provider probe loop) |
-| `GET /api/metrics` | Prometheus metrics |
+| `GET /api/metrics` and `GET /metrics` | Detailed Prometheus metrics; authenticated API token required |
+| `POST /api/metrics/reset` | Reset detailed metrics; authenticated `admin` scope required |
+| `GET /api/health/metrics` | Basic public metrics probe |
 | `GET /api/heartbeat/status` | Heartbeat detail (`?format=report` for Cowork-ready JSON) |
 | `GET /api/daemon/status` | Autonomy daemon status (`?format=report`) |
 
 Observability backends: set `SENTRY_DSN` (errors) and/or
 `OTEL_EXPORTER_OTLP_ENDPOINT` (traces). `buddy doctor` diagnoses a
 misbehaving install (`--fix` applies auto-migrations).
+
+`buddy daemon start` runs its HTTP server without authentication on
+`127.0.0.1` only. For remote access, start `buddy server --host <address>`
+with authentication enabled and provide a token to the metrics scraper.
 
 ---
 

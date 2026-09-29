@@ -11,6 +11,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as os from 'os';
+import * as path from 'path';
+import { pathToFileURL } from 'url';
 
 // Mock the LSP client before importing the tool
 const mockPrepareRename = vi.fn();
@@ -58,6 +61,10 @@ import {
   uriToPath,
 } from '../../src/tools/lsp-rename-tool.js';
 import type { LSPWorkspaceEdit, LSPTextEdit } from '../../src/lsp/lsp-client.js';
+
+function fixtureUri(...segments: string[]): string {
+  return pathToFileURL(path.resolve(...segments)).href;
+}
 
 describe('LSP Rename Tool', () => {
   beforeEach(() => {
@@ -133,10 +140,10 @@ describe('LSP Rename Tool', () => {
     it('should extract from changes format', () => {
       const workspaceEdit: LSPWorkspaceEdit = {
         changes: {
-          'file:///src/main.ts': [
+          [fixtureUri('src', 'main.ts')]: [
             { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } }, newText: 'bar' },
           ],
-          'file:///src/utils.ts': [
+          [fixtureUri('src', 'utils.ts')]: [
             { range: { start: { line: 5, character: 10 }, end: { line: 5, character: 13 } }, newText: 'bar' },
           ],
         },
@@ -150,7 +157,7 @@ describe('LSP Rename Tool', () => {
       const workspaceEdit: LSPWorkspaceEdit = {
         documentChanges: [
           {
-            textDocument: { uri: 'file:///src/main.ts', version: 1 },
+            textDocument: { uri: fixtureUri('src', 'main.ts'), version: 1 },
             edits: [
               { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } }, newText: 'bar' },
             ],
@@ -165,13 +172,13 @@ describe('LSP Rename Tool', () => {
     it('should merge both formats', () => {
       const workspaceEdit: LSPWorkspaceEdit = {
         changes: {
-          'file:///src/a.ts': [
+          [fixtureUri('src', 'a.ts')]: [
             { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } }, newText: 'x' },
           ],
         },
         documentChanges: [
           {
-            textDocument: { uri: 'file:///src/a.ts', version: 1 },
+            textDocument: { uri: fixtureUri('src', 'a.ts'), version: 1 },
             edits: [
               { range: { start: { line: 5, character: 0 }, end: { line: 5, character: 3 } }, newText: 'y' },
             ],
@@ -182,7 +189,7 @@ describe('LSP Rename Tool', () => {
       const result = extractEdits(workspaceEdit);
       expect(result.size).toBe(1);
       // Both edits should be merged for the same file
-      const edits = result.get(uriToPath('file:///src/a.ts'));
+      const edits = result.get(uriToPath(fixtureUri('src', 'a.ts')));
       expect(edits).toBeDefined();
       expect(edits!.length).toBe(2);
     });
@@ -193,16 +200,16 @@ describe('LSP Rename Tool', () => {
   // ==========================================================================
 
   describe('uriToPath', () => {
-    it('should strip file:/// prefix', () => {
-      const result = uriToPath('file:///src/main.ts');
-      expect(result).toContain('src');
-      expect(result).toContain('main.ts');
-      expect(result).not.toContain('file:');
+    it('should convert an absolute local file URI', () => {
+      const uri = fixtureUri('src', 'main.ts');
+      if (process.platform === 'win32') expect(uri).toMatch(/^file:\/\/\/[A-Za-z]:\//);
+      const result = uriToPath(uri);
+      expect(result).toBe(path.resolve('src', 'main.ts'));
     });
 
     it('should decode URI-encoded characters', () => {
-      const result = uriToPath('file:///path%20with%20spaces/file.ts');
-      expect(result).toContain('path with spaces');
+      const result = uriToPath(fixtureUri('path with spaces', 'file.ts'));
+      expect(result).toBe(path.resolve('path with spaces', 'file.ts'));
     });
   });
 
@@ -211,6 +218,37 @@ describe('LSP Rename Tool', () => {
   // ==========================================================================
 
   describe('executeLspRename', () => {
+    it('refuse un fichier d’identifiants avant tout appel au serveur LSP', async () => {
+      const secret = path.join(os.homedir(), '.codebuddy', 'auth.ts');
+      const result = await executeLspRename({ filePath: secret, line: 1, character: 1, newName: 'newName' });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/credential\/secret/i);
+      expect(mockPrepareRename).not.toHaveBeenCalled();
+      expect(mockReadFileSync).not.toHaveBeenCalled();
+    });
+
+    it('refuse un lot de renommage si une édition cible un secret', async () => {
+      const secret = path.join(os.homedir(), '.codebuddy', 'auth.ts');
+      mockPrepareRename.mockResolvedValue({
+        range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } },
+        placeholder: 'foo',
+      });
+      mockRename.mockResolvedValue({
+        changes: {
+          [pathToFileURL(secret).href]: [{
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } },
+            newText: 'bar',
+          }],
+        },
+      });
+      mockReadFileSync.mockReturnValue('foo');
+      const result = await executeLspRename({ filePath: 'ordinary.ts', line: 1, character: 1, newName: 'bar' });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/credential\/secret/i);
+      expect(mockReadFileSync).not.toHaveBeenCalled();
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
+    });
+
     it('should return error for missing filePath', async () => {
       const result = await executeLspRename({
         filePath: '',
@@ -307,7 +345,7 @@ describe('LSP Rename Tool', () => {
 
       mockRename.mockResolvedValue({
         changes: {
-          ['file:///' + process.cwd().replace(/\\/g, '/') + '/test.ts']: [
+          [fixtureUri('test.ts')]: [
             {
               range: { start: { line: 0, character: 6 }, end: { line: 0, character: 9 } },
               newText: 'newFoo',
@@ -339,17 +377,15 @@ describe('LSP Rename Tool', () => {
         placeholder: 'foo',
       });
 
-      const cwd = process.cwd().replace(/\\/g, '/');
-
       mockRename.mockResolvedValue({
         changes: {
-          [`file:///${cwd}/src/main.ts`]: [
+          [fixtureUri('src', 'main.ts')]: [
             {
               range: { start: { line: 0, character: 6 }, end: { line: 0, character: 9 } },
               newText: 'bar',
             },
           ],
-          [`file:///${cwd}/src/utils.ts`]: [
+          [fixtureUri('src', 'utils.ts')]: [
             {
               range: { start: { line: 2, character: 10 }, end: { line: 2, character: 13 } },
               newText: 'bar',
@@ -385,11 +421,9 @@ describe('LSP Rename Tool', () => {
         placeholder: 'foo',
       });
 
-      const cwd = process.cwd().replace(/\\/g, '/');
-
       mockRename.mockResolvedValue({
         changes: {
-          [`file:///${cwd}/test.ts`]: [
+          [fixtureUri('test.ts')]: [
             {
               range: { start: { line: 0, character: 6 }, end: { line: 0, character: 9 } },
               newText: 'bar',

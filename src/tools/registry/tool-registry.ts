@@ -11,6 +11,7 @@
 import { EventEmitter } from 'events';
 import type { ToolResult } from '../../types/index.js';
 import { logger } from '../../utils/logger.js';
+import { redactTrackedGitToolResult } from '../../security/tracked-git-output-redactor.js';
 import type {
   ITool,
   IToolRegistry,
@@ -322,6 +323,10 @@ export class FormalToolRegistry extends EventEmitter implements IToolRegistry {
 
     try {
       toolResult = await entry.tool.execute(input, context);
+      toolResult = redactTrackedGitToolResult(
+        toolResult, context?.cwd ?? process.cwd(),
+        Object.values(input).filter((value): value is string => typeof value === 'string'),
+      );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       const result: IToolExecutionResult = {

@@ -99,12 +99,15 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = {
   port: SERVER_CONFIG.DEFAULT_PORT,
   host: SERVER_CONFIG.DEFAULT_HOST,
   cors: true,
-  corsOrigins: '*',
+  // Same secure defaults as the real server (src/server/index.ts): localhost
+  // origins only, no built-in secret. A known fallback secret here would let
+  // anyone mint tokens for a server built from this object.
+  corsOrigins: ['http://localhost:*', 'http://127.0.0.1:*'],
   rateLimit: true,
   rateLimitWindow: TIMEOUT_CONFIG.DEFAULT_RATE_LIMIT_WINDOW,
   rateLimitMax: 60, // 60 requests per minute
   authEnabled: true,
-  jwtSecret: process.env.JWT_SECRET || 'change-me-in-production',
+  jwtSecret: process.env.JWT_SECRET || '',
   jwtExpiration: SERVER_CONFIG.DEFAULT_JWT_EXPIRATION,
   websocketEnabled: true,
   maxConnections: SERVER_CONFIG.DEFAULT_MAX_CONNECTIONS,

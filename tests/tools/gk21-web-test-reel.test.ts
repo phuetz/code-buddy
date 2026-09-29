@@ -22,7 +22,7 @@ import { resetProcessTool } from '../../src/tools/process-tool.js';
 import { chromiumExecutableExists } from '../helpers/cifix2-dependencies.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const appCwd = path.join(repoRoot, '_qa/gk21-app');
+const sourceAppCwd = path.join(repoRoot, '_qa/gk21-app');
 const gk21Home = path.join(repoRoot, '_qa/gk21/home');
 
 async function freePort(): Promise<number> {
@@ -41,30 +41,42 @@ describe.skipIf(!chromiumExecutableExists())('GK21 real mini-app (app_server + w
   let savedDisplay: string | undefined;
   let savedWayland: string | undefined;
   let savedHome: string | undefined;
+  let savedProfile: string | undefined;
   let savedPlaywrightBrowsers: string | undefined;
+  let appCwd: string;
 
   beforeAll(() => {
+    const browserCacheHome = os.homedir();
     savedDisplay = process.env.DISPLAY;
     savedWayland = process.env.WAYLAND_DISPLAY;
     savedHome = process.env.HOME;
+    savedProfile = process.env.USERPROFILE;
     savedPlaywrightBrowsers = process.env.PLAYWRIGHT_BROWSERS_PATH;
     delete process.env.DISPLAY;
     delete process.env.WAYLAND_DISPLAY;
+    // The app server must start in a clean workspace: this repository may
+    // contain tracked secret fixtures and correctly refuses arbitrary shells.
+    appCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-gk21-app-'));
+    fs.cpSync(sourceAppCwd, appCwd, { recursive: true });
     fs.mkdirSync(gk21Home, { recursive: true });
     process.env.HOME = gk21Home;
+    process.env.USERPROFILE = gk21Home;
     // Reuse the already-installed Playwright cache; do not download, never Brave.
     if (!savedPlaywrightBrowsers) {
-      process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(savedHome || os.homedir(), '.cache/ms-playwright');
+      process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(browserCacheHome, '.cache/ms-playwright');
     }
   });
 
   afterAll(() => {
+    if (appCwd) fs.rmSync(appCwd, { recursive: true, force: true });
     if (savedDisplay === undefined) delete process.env.DISPLAY;
     else process.env.DISPLAY = savedDisplay;
     if (savedWayland === undefined) delete process.env.WAYLAND_DISPLAY;
     else process.env.WAYLAND_DISPLAY = savedWayland;
     if (savedHome === undefined) delete process.env.HOME;
     else process.env.HOME = savedHome;
+    if (savedProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = savedProfile;
     if (savedPlaywrightBrowsers === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH;
     else process.env.PLAYWRIGHT_BROWSERS_PATH = savedPlaywrightBrowsers;
   });

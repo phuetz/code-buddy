@@ -1,5 +1,9 @@
 import { vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import * as executionPolicy from '../../src/tools/bash/execution-policy.js';
+import { executeStreaming as executeStreamingImpl } from '../../src/tools/bash/streaming-executor.js';
 import { BashTool } from '../../src/tools/bash';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import {
@@ -9,6 +13,11 @@ import {
 
 describe('BashTool - Streaming Execution', () => {
   let bash: BashTool;
+  // This suite exercises streaming, not the credential-workspace boundary.
+  // The repository's _qa tree intentionally contains fake tracked secrets.
+  const cleanCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-bash-streaming-'));
+
+  afterAll(() => fs.rmSync(cleanCwd, { recursive: true, force: true }));
 
   beforeEach(() => {
     delete process.env.CODEBUDDY_NATIVE_SANDBOX;
@@ -32,7 +41,7 @@ describe('BashTool - Streaming Execution', () => {
 
   it('should stream output line by line', async () => {
     const chunks: string[] = [];
-    const gen = bash.executeStreaming('echo "line1"; echo "line2"; echo "line3"', 10000);
+    const gen = bash.executeStreaming('echo "line1"; echo "line2"; echo "line3"', 10000, cleanCwd);
 
     let result = await gen.next();
     while (!result.done) {
@@ -48,7 +57,7 @@ describe('BashTool - Streaming Execution', () => {
   });
 
   it('should return error result for blocked commands', async () => {
-    const gen = bash.executeStreaming('rm -rf /', 10000);
+    const gen = bash.executeStreaming('rm -rf /', 10000, cleanCwd);
     const result = await gen.next();
     // Should immediately return done with error
     expect(result.done).toBe(true);
@@ -57,7 +66,7 @@ describe('BashTool - Streaming Execution', () => {
 
   it('should return error for failed commands', async () => {
     const chunks: string[] = [];
-    const gen = bash.executeStreaming('ls /nonexistent-dir-12345', 10000);
+    const gen = bash.executeStreaming('ls /nonexistent-dir-12345', 10000, cleanCwd);
 
     let result = await gen.next();
     while (!result.done) {
@@ -70,7 +79,7 @@ describe('BashTool - Streaming Execution', () => {
 
   // sleep is not available on Windows
   (process.platform === 'win32' ? it.skip : it)('should handle timeout', async () => {
-    const gen = bash.executeStreaming('sleep 60', 500);
+    const gen = bash.executeStreaming('sleep 60', 500, cleanCwd);
     const chunks: string[] = [];
 
     let result = await gen.next();
@@ -90,12 +99,12 @@ describe('BashTool - Streaming Execution', () => {
       available: false, reason: 'Workspace sandbox unavailable (direct streaming test)',
     });
     const controller = new AbortController();
-    const gen = bash.executeStreaming(
-      'sleep 60 & echo ABORT_READY; wait',
-      30000,
-      undefined,
-      controller.signal,
-    );
+    const runningProcesses = new Set<import('node:child_process').ChildProcess>();
+    const gen = executeStreamingImpl('sleep 60 & echo ABORT_READY; wait', 30000, {
+      getCurrentDirectory: () => cleanCwd,
+      getSandboxManager: () => ({ validateCommand: () => ({ valid: true }) }),
+      getRunningProcesses: () => runningProcesses,
+    }, controller.signal);
     // Wait for the child to start, then consume until the executor's close
     // event completes the generator. No scheduler-dependent 50 ms race.
     let result = await gen.next();
@@ -110,5 +119,6 @@ describe('BashTool - Streaming Execution', () => {
 
     expect(result.value.success).toBe(false);
     expect(result.value.error).toContain('aborted by user');
+    expect(runningProcesses.size).toBe(0);
   }, 15000);
 });

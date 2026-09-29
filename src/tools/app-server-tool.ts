@@ -23,6 +23,7 @@ import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { getProcessTool } from './process-tool.js';
 import { isLoopbackHost, registerDevOrigin, unregisterDevOrigin } from '../security/dev-origins.js';
+import { protectedWorkspaceProcessRefusal } from '../security/git-secret-process-boundary.js';
 
 export interface AppServerStartInput {
   /** Shell command that starts the server, e.g. "npm run dev". */
@@ -142,6 +143,8 @@ export class AppServerTool {
     }
 
     const cwd = input.cwd ?? process.cwd();
+    const processRefusal = protectedWorkspaceProcessRefusal(cwd);
+    if (processRefusal) return processRefusal;
     const timeoutMs = Math.max(1_000, input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
     const childEnv: NodeJS.ProcessEnv = { ...process.env, ...input.env };

@@ -39,8 +39,9 @@ export interface ExecuteCodeRunnerOptions {
   rpcCallTimeoutMs?: number;
   /**
    * Environment exposure to the child process.
-   *  - `'inherit'` (default): the child sees the full `process.env` — for the
-   *    user-facing execute_code tool, which may legitimately need credentials.
+   *  - `'inherit'` (default for trusted internal callers only): the child sees
+   *    the full `process.env`. The model-facing execute_code tool overrides
+   *    this with isolation and mandatory compute confinement.
    *  - `'isolate'`: the child sees ONLY a minimal allowlist (PATH, locale, a
    *    throwaway HOME pointing at the run dir) plus the runner's own
    *    CODEBUDDY_EXECUTE_CODE_* keys and the caller-supplied `env`. Every
@@ -122,8 +123,19 @@ export async function executeCode(
   input: ExecuteCodeInput,
   options: ExecuteCodeRunnerOptions = {},
 ): Promise<ExecuteCodeResult> {
-  const code = parseCode(input.code);
+  let code = parseCode(input.code);
   const language = input.language ?? 'javascript';
+  // A confined child cannot launch npx/tsx. Transpile TypeScript in the
+  // trusted parent, then run the resulting JavaScript in the same restricted
+  // view. The public result still reports the requested language.
+  let executionLanguage = language;
+  if (language === 'typescript' && options.confinement === 'compute') {
+    const ts = await import('typescript');
+    code = ts.transpileModule(code, {
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    executionLanguage = 'javascript';
+  }
   const timeoutMs = clampTimeout(input.timeoutMs);
   const startedAtDate = (options.now ?? (() => new Date()))();
   const startedAt = startedAtDate.toISOString();
@@ -134,7 +146,7 @@ export async function executeCode(
   const stdoutPath = path.join(runDir, 'stdout.log');
   const stderrPath = path.join(runDir, 'stderr.log');
   const resultPath = path.join(runDir, 'result.json');
-  const invocation = buildInvocation(language);
+  const invocation = buildInvocation(executionLanguage);
   const scriptPath = path.join(runDir, `script${invocation.extension}`);
   const scriptArgs = parseArgs(input.args);
   const env = parseEnv(input.env);

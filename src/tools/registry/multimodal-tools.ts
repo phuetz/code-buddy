@@ -11,6 +11,7 @@
 import type { ToolResult } from '../../types/index.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { checkSecretFileAccess, formatSecretRefusal } from '../../security/secret-files.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
 import {
   synthesizeTextToSpeech,
@@ -269,7 +270,7 @@ export class TextToSpeechTool implements ITool {
           },
           output_path: {
             type: 'string',
-            description: 'Optional absolute or workspace-relative output path. Defaults to .codebuddy/tts/tts-<id>.<format>.',
+            description: 'Optional new audio filename or path inside workspace .codebuddy/tts. Existing files are never replaced. Defaults to .codebuddy/tts/tts-<id>.<format>.',
           },
           provider: {
             type: 'string',
@@ -494,6 +495,8 @@ export class ImageEditTool implements ITool {
 
 async function loadBoundedWorkspaceImage(value: string, workspace: string, requirePng: boolean): Promise<string> {
   const resolved = path.resolve(workspace, value);
+  const verdict = checkSecretFileAccess(resolved, 'read');
+  if (verdict.secret) throw new Error(formatSecretRefusal(resolved, verdict));
   const [root, realPath] = await Promise.all([fs.realpath(workspace), fs.realpath(resolved)]);
   if (realPath !== root && !realPath.startsWith(`${root}${path.sep}`)) {
     throw new Error('image path escapes the current workspace');

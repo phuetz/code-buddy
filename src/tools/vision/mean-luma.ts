@@ -8,6 +8,7 @@
  */
 import { inflateSync } from 'node:zlib';
 import fs from 'fs/promises';
+import { checkSecretFileAccess } from '../../security/secret-files.js';
 
 import { loadSharp } from './load-sharp.js';
 
@@ -17,6 +18,7 @@ export const DARK_SCENE_LUMA_THRESHOLD = 12;
 const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 export async function meanLumaOfImage(imagePath: string): Promise<number | undefined> {
+  if (checkSecretFileAccess(imagePath, 'read').secret) return undefined;
   let bytes: Buffer;
   try {
     bytes = await fs.readFile(imagePath);

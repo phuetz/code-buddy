@@ -26,6 +26,7 @@ import { readFile as realReadFile } from 'fs/promises';
 import { existsSync as realExistsSync } from 'fs';
 import { isAbsolute, resolve as resolvePath, extname } from 'path';
 import { logger } from '../../utils/logger.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../../security/secret-files.js';
 import { isYoutubeUrl } from './youtube-captions.js';
 
 /** Explicit privacy warning attached to every cloud result — the video went to Google. */
@@ -171,6 +172,8 @@ async function buildMediaPart(
   const localPath = isAbsolute(source) ? source : resolvePath(deps.cwd ?? process.cwd(), source);
   if (existsSync(source) || existsSync(localPath)) {
     const filePath = existsSync(source) ? source : localPath;
+    const secret = checkSecretFileAccess(filePath, 'read');
+    if (secret.secret) return { reason: formatSecretRefusal(filePath, secret) };
     const readFile = deps.readFile ?? realReadFile;
     const maxBytes = deps.maxInlineBytes ?? DEFAULT_MAX_INLINE_BYTES;
     let bytes: Buffer;
