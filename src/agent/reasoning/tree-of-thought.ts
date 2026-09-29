@@ -1,3 +1,4 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
 /**
  * Tree-of-Thought Reasoner
  *
@@ -99,7 +100,7 @@ export class TreeOfThoughtReasoner extends EventEmitter {
     };
     this.client = new CodeBuddyClient(
       apiKey,
-      config.model || process.env.GROK_MODEL || "grok-3-latest",
+      config.model || runtimeDefaultModel(),
       baseURL
     );
     this.executeCommand = executeCommand;

@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { CodeBuddyClient } from "../../codebuddy/client.js";
 import { AITestRunner, createAITestRunner } from "../../testing/ai-integration-tests.js";
@@ -73,7 +74,7 @@ export async function handleAITest(
   const option = args[0]?.toLowerCase();
 
   // Check for API key
-  const apiKey = process.env.GROK_API_KEY;
+  const apiKey = codeBuddyEnv('API_KEY');
   if (!codebuddyClient && !apiKey) {
     return {
       handled: true,
@@ -96,8 +97,8 @@ Set your API key to run integration tests.`,
   let client = codebuddyClient;
   if (!client) {
     // Fallback: create client from environment variables
-    const model = process.env.GROK_MODEL || process.env.OPENAI_MODEL;
-    const baseURL = process.env.GROK_BASE_URL || process.env.OPENAI_BASE_URL;
+    const model = codeBuddyEnv('MODEL') || process.env.OPENAI_MODEL;
+    const baseURL = codeBuddyEnv('BASE_URL') || process.env.OPENAI_BASE_URL;
     client = new CodeBuddyClient(apiKey ?? '', model, baseURL);
   }
 

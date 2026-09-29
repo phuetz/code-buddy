@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Enterprise-grade Smart Context Compaction System
  *
@@ -722,7 +723,7 @@ export class SmartCompactionEngine extends EventEmitter {
 let compactionEngineInstance: SmartCompactionEngine | null = null;
 
 function resolveDefaultCompactionMaxTokens(): number {
-  const model = process.env.GROK_MODEL?.trim() || process.env.CODEBUDDY_MODEL?.trim();
+  const model = codeBuddyEnv('MODEL')?.trim() || process.env.CODEBUDDY_MODEL?.trim();
   if (model) {
     const window = getModelToolConfig(model).contextWindow;
     if (window && window > 0) return window;

@@ -27,6 +27,9 @@ import {
 } from "../config/index.js";
 import { shouldWriteProjectRuntimeFiles } from "./runtime-flags.js";
 import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
+import { detectProviderFromEnv } from './provider-detector.js';
+import { LEGACY_GENERATED_MODELS, withoutLegacyGeneratedSelection } from '../config/legacy-generated-settings.js';
 
 /**
  * User-level settings stored in ~/.codebuddy/user-settings.json
@@ -74,26 +77,26 @@ export interface ProjectSettings {
 /**
  * Default values for user settings
  */
-const DEFAULT_USER_SETTINGS: Partial<UserSettings> = {
-  baseURL: DEFAULT_BASE_URL,
-  defaultModel: "grok-code-fast-1",
-  models: [
-    "grok-code-fast-1",
-    "grok-4-latest",
-    "grok-3-latest",
-    "grok-3-fast",
-    "grok-3-mini-fast",
-  ],
-};
+const DEFAULT_USER_SETTINGS: Partial<UserSettings> = {};
 
-const repairedEmptyUserSettings = new Set<string>();
+function withoutGeneratedProjectModel(settings: ProjectSettings): ProjectSettings {
+  const keys = Object.keys(settings).sort();
+  if (settings.model === LEGACY_GENERATED_MODELS[0] &&
+      keys.join(',') === 'maxToolRounds,model,theme' &&
+      (settings as Record<string, unknown>).maxToolRounds === 50 &&
+      (settings as Record<string, unknown>).theme === 'default') {
+    const { model: _model, ...rest } = settings;
+    return rest;
+  }
+  return settings;
+}
+
+const warnedEmptyUserSettings = new Set<string>();
 
 /**
  * Default values for project settings
  */
-const DEFAULT_PROJECT_SETTINGS: Partial<ProjectSettings> = {
-  model: "grok-code-fast-1",
-};
+const DEFAULT_PROJECT_SETTINGS: Partial<ProjectSettings> = {};
 
 /**
  * Test-only path overrides (TESTWRITE1, 2026-09-04). Never used in production —
@@ -176,20 +179,17 @@ export class SettingsManager {
   public loadUserSettings(): UserSettings {
     try {
       if (!fs.existsSync(this.userSettingsPath)) {
-        // Create default user settings if file doesn't exist
-        this.saveUserSettings(DEFAULT_USER_SETTINGS);
         return { ...DEFAULT_USER_SETTINGS };
       }
 
       const rawSettings = readJsonAtomicSync<unknown | null>(this.userSettingsPath, null, { mode: 0o600 });
       if (rawSettings === null) {
-        if (!repairedEmptyUserSettings.has(this.userSettingsPath)) {
-          repairedEmptyUserSettings.add(this.userSettingsPath);
-          logger.warn('user-settings.json was empty or unreadable; restored defaults once', {
+        if (!warnedEmptyUserSettings.has(this.userSettingsPath)) {
+          warnedEmptyUserSettings.add(this.userSettingsPath);
+          logger.warn('user-settings.json is empty or unreadable; using an unselected in-memory configuration', {
             path: this.userSettingsPath,
           });
         }
-        this.saveUserSettings(DEFAULT_USER_SETTINGS);
         return { ...DEFAULT_USER_SETTINGS };
       }
 
@@ -198,15 +198,14 @@ export class SettingsManager {
       const result = validator.validate<ZodUserSettings>(rawSettings, 'user-settings.json');
 
       if (result.valid && result.data) {
-        // Ensure legacy defaults remain populated (baseURL isn't defaulted in schema).
-        return {
+        return withoutLegacyGeneratedSelection({
           apiKey: result.data.apiKey,
-          baseURL: result.data.baseURL ?? DEFAULT_USER_SETTINGS.baseURL,
-          defaultModel: result.data.defaultModel ?? DEFAULT_USER_SETTINGS.defaultModel,
-          models: result.data.models ?? DEFAULT_USER_SETTINGS.models,
+          baseURL: result.data.baseURL,
+          defaultModel: result.data.defaultModel,
+          models: result.data.models,
           provider: result.data.provider,
           model: result.data.model,
-        };
+        });
       }
 
       // Log validation errors but still use the file with defaults
@@ -216,7 +215,7 @@ export class SettingsManager {
 
       // Merge with defaults to ensure all required fields exist
       const merged = { ...DEFAULT_USER_SETTINGS, ...(rawSettings as object) };
-      return merged as UserSettings;
+      return withoutLegacyGeneratedSelection(merged as UserSettings);
     } catch (error) {
       logger.warn(
         "Failed to load user settings",
@@ -343,11 +342,7 @@ export class SettingsManager {
 
       if (result.valid && result.data) {
         // Zod applies defaults
-        return {
-          model: result.data.model,
-          // Include any additional fields from raw settings not in Zod schema
-          ...(rawSettings as object),
-        };
+        return withoutGeneratedProjectModel({ ...(rawSettings as object) });
       }
 
       // Log validation errors but still use the file with defaults
@@ -356,7 +351,7 @@ export class SettingsManager {
       }
 
       // Merge with defaults
-      return { ...DEFAULT_PROJECT_SETTINGS, ...(rawSettings as object) };
+      return withoutGeneratedProjectModel({ ...DEFAULT_PROJECT_SETTINGS, ...(rawSettings as object) });
     } catch (error) {
       logger.warn(
         "Failed to load project settings",
@@ -439,13 +434,7 @@ export class SettingsManager {
     // Older defaults can pin new workspaces to Grok unintentionally.
     if (fs.existsSync(this.projectSettingsPath)) {
       const projectModel = this.getProjectSetting("model");
-      if (projectModel) {
-        const userModel = this.getUserSetting("model");
-        const isDefaultProjectModel = projectModel === DEFAULT_PROJECT_SETTINGS.model;
-        if (!isDefaultProjectModel || !userModel) {
-          return projectModel;
-        }
-      }
+      if (projectModel) return projectModel;
     }
 
     const userModel = this.getUserSetting("model");
@@ -458,7 +447,7 @@ export class SettingsManager {
       return userDefaultModel;
     }
 
-    return DEFAULT_PROJECT_SETTINGS.model || "grok-code-fast-1";
+    return codeBuddyEnv('MODEL') || detectProviderFromEnv()?.defaultModel || '';
   }
 
   /**
@@ -483,7 +472,7 @@ export class SettingsManager {
    */
   public getAvailableModels(): string[] {
     const models = this.getUserSetting("models");
-    return models || DEFAULT_USER_SETTINGS.models || [];
+    return models || [];
   }
 
   /**
@@ -492,7 +481,7 @@ export class SettingsManager {
    */
   public getApiKey(): string | undefined {
     // First check environment variable
-    const envApiKey = process.env.GROK_API_KEY;
+    const envApiKey = codeBuddyEnv('API_KEY');
     if (envApiKey) {
       return envApiKey;
     }
@@ -507,12 +496,12 @@ export class SettingsManager {
    */
   public getBaseURL(): string {
     // First check environment variable
-    const envBaseURL = process.env.GROK_BASE_URL;
+    const envBaseURL = codeBuddyEnv('BASE_URL');
     if (envBaseURL) {
       try {
         return normalizeBaseURL(envBaseURL);
       } catch (error) {
-        logger.warn('Ignoring invalid GROK_BASE_URL, falling back to settings/default', {
+        logger.warn('Ignoring invalid CODEBUDDY_BASE_URL, falling back to settings/default', {
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -544,11 +533,10 @@ export class SettingsManager {
     if (!this.configResolver) {
       const settings = this.loadUserSettings();
 
-      // Check if migration is needed
+      // Migrate in memory for read-only callers; a read must never rewrite
+      // user-settings.json or silently select a profile.
       if (needsMigration(settings) && !settings.connection) {
-        logger.info("Migrating settings to new profile format...");
         const migrated = migrateSettings(settings);
-        this.saveUserSettings(migrated);
         this.configResolver = getConfigResolver();
         if (migrated.connection) {
           this.configResolver.fromConfig(migrated.connection);

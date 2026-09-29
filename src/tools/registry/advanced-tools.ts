@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Advanced Tool Adapters
  *
@@ -507,12 +508,12 @@ export class SpawnSubagentExecuteTool implements ITool {
     // Parallel execution: run multiple subagents concurrently
     if (parallel && tasks && tasks.length > 0) {
       try {
-        const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+        const apiKey = codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY || '';
         if (!apiKey) {
           return { success: false, error: 'No API key available for parallel subagents (GROK_API_KEY or XAI_API_KEY)' };
         }
         const { getParallelSubagentRunner } = await import('../../agent/subagents.js');
-        const runner = getParallelSubagentRunner(apiKey, process.env.GROK_BASE_URL);
+        const runner = getParallelSubagentRunner(apiKey, codeBuddyEnv('BASE_URL'));
 
         const parallelTasks = tasks.map((t: { type: string; task: string; context?: string }, i: number) => ({
           id: `parallel-${i}`,
@@ -543,7 +544,7 @@ export class SpawnSubagentExecuteTool implements ITool {
       return { success: false, error: `Unknown subagent type: ${type}. Available: ${Object.keys(PREDEFINED_SUBAGENTS).join(', ')}` };
     }
 
-    const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+    const apiKey = codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY || '';
     if (!apiKey) {
       return { success: false, error: 'No API key available for subagent (GROK_API_KEY or XAI_API_KEY)' };
     }
@@ -552,7 +553,7 @@ export class SpawnSubagentExecuteTool implements ITool {
     const finalTask = (task === 'process' || !task) ? (input._input as string || task) : task;
     const finalContext = context || (input._context as string) || (input._input as string);
 
-    const subagent = new Subagent(apiKey, config, process.env.GROK_BASE_URL);
+    const subagent = new Subagent(apiKey, config, codeBuddyEnv('BASE_URL'));
     const result = await subagent.run(finalTask, finalContext);
 
     return {

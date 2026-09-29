@@ -6,9 +6,9 @@
 # Chaque table n'est ouverte qu'une fois. Une clé qui est déjà une table n'est pas aussi une valeur.
 
 # cle: active_model
-# défaut : grok-code-fast
-# Modèle actif. La valeur du fichier généré ne masque pas le fournisseur détecté
-active_model = "grok-code-fast"
+# défaut : auto
+# Modèle actif. auto utilise le fournisseur détecté
+active_model = "auto"
 
 # cle: advisor
 # défaut : absent

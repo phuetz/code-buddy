@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
+
 /**
  * JSON-RPC Server for code-buddy
  *
@@ -288,7 +290,7 @@ export class JsonRpcServer {
 
     return {
       text: content,
-      model: params.options?.model || 'grok-2',
+      model: params.options?.model || runtimeDefaultModel(),
       usage: response.usage ? {
         promptTokens: response.usage.prompt_tokens,
         completionTokens: response.usage.completion_tokens,
@@ -346,7 +348,7 @@ export class JsonRpcServer {
     return {
       response: content,
       conversationId,
-      model: 'grok-2',
+      model: runtimeDefaultModel(),
     };
   }
 

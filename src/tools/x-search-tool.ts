@@ -1,3 +1,4 @@
+import { xaiApiKey, xaiBaseURL } from '../config/legacy-env.js';
 import type { ToolResult } from '../types/index.js';
 
 export interface XSearchOptions {
@@ -230,8 +231,7 @@ function buildXSearchToolDef(options: {
 
 function resolveXaiCredential(options: XSearchOptions): { apiKey: string; baseUrl: string; source: string } {
   const apiKey = options.apiKey
-    ?? process.env.XAI_API_KEY
-    ?? process.env.GROK_API_KEY
+    ?? xaiApiKey()
     ?? '';
   const source = options.apiKey
     ? 'option'
@@ -243,7 +243,7 @@ function resolveXaiCredential(options: XSearchOptions): { apiKey: string; baseUr
   const baseUrl = (options.baseUrl
     ?? process.env.XAI_BASE_URL
     ?? process.env.HERMES_XAI_BASE_URL
-    ?? process.env.GROK_BASE_URL
+    ?? xaiBaseURL()
     ?? DEFAULT_XAI_BASE_URL).trim().replace(/\/+$/, '');
   return { apiKey: apiKey.trim(), baseUrl, source };
 }

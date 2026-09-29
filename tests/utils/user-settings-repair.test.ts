@@ -8,7 +8,7 @@ function resetSettingsManager(): void {
   (SettingsManager as unknown as { instance: SettingsManager | undefined }).instance = undefined;
 }
 
-describe('user-settings.json empty-file repair', () => {
+describe('user-settings.json empty-file handling', () => {
   let tmpDir: string;
   let userSettingsPath: string;
   let projectSettingsPath: string;
@@ -29,24 +29,23 @@ describe('user-settings.json empty-file repair', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('rewrites an empty user-settings.json with defaults, once, and logs it', () => {
+  it('keeps an empty file untouched, returns no model, and warns once', () => {
     fs.writeFileSync(userSettingsPath, '');
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const manager = getSettingsManager({ userSettingsPath, projectSettingsPath });
     const loaded = manager.loadUserSettings();
-    expect(loaded.defaultModel).toBeTruthy();
-    const rewritten = fs.readFileSync(userSettingsPath, 'utf8');
-    expect(rewritten.trim().length).toBeGreaterThan(2);
-    expect(JSON.parse(rewritten)).toMatchObject({ defaultModel: loaded.defaultModel });
-    const repairLogs = warn.mock.calls.filter((call) =>
-      String(call[0]).includes('restored defaults once'),
+    expect(loaded.defaultModel).toBeUndefined();
+    expect(fs.readFileSync(userSettingsPath, 'utf8')).toBe('');
+    const noticeLogs = warn.mock.calls.filter((call) =>
+      String(call[0]).includes('unselected in-memory configuration'),
     );
-    expect(repairLogs).toHaveLength(1);
+    expect(noticeLogs).toHaveLength(1);
     manager.loadUserSettings();
-    const repairLogsAfter = warn.mock.calls.filter((call) =>
-      String(call[0]).includes('restored defaults once'),
+    const noticeLogsAfter = warn.mock.calls.filter((call) =>
+      String(call[0]).includes('unselected in-memory configuration'),
     );
-    expect(repairLogsAfter).toHaveLength(1);
+    expect(noticeLogsAfter).toHaveLength(1);
+    expect(fs.readFileSync(userSettingsPath, 'utf8')).toBe('');
     warn.mockRestore();
   });
 });

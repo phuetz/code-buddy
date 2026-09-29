@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Application Factory
  *
@@ -48,7 +49,7 @@ export function loadApiKey(): string | undefined {
  * Load base URL from settings or environment
  */
 export function loadBaseURL(): string {
-  const envURL = process.env.GROK_BASE_URL;
+  const envURL = codeBuddyEnv('BASE_URL');
   if (envURL) return envURL;
 
   const manager = getSettingsManager();
@@ -59,7 +60,7 @@ export function loadBaseURL(): string {
  * Load model from settings or environment
  */
 export function loadModel(): string | undefined {
-  const envModel = process.env.CODEBUDDY_MODEL || process.env.GROK_MODEL;
+  const envModel = process.env.CODEBUDDY_MODEL || codeBuddyEnv('MODEL');
   if (envModel) return envModel;
 
   try {

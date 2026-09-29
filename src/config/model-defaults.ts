@@ -5,9 +5,9 @@
  * the resolution helpers that replace 124+ hardcoded model-name strings
  * scattered across the codebase.
  *
- * IMPORTANT: This file must have ZERO imports from the rest of the project
- * to prevent circular dependency chains.
+ * Only the environment alias helper is imported so legacy names warn once.
  */
+import { codeBuddyEnv } from './legacy-env.js';
 
 // ============================================================================
 // Provider Keys
@@ -40,17 +40,19 @@ export const MODEL_DEFAULTS: Record<ProviderKey, string> = {
   openai: 'gpt-4o',
   anthropic: 'claude-sonnet-4-20250514',
   google: 'gemini-2.5-flash',
-  ollama: 'llama3.2',
+  ollama: 'qwen3:8b',
   lmstudio: 'local-model',
   deepseek: 'deepseek-chat',
   mistral: 'devstral-latest',
 };
 
 /** The ultimate fallback when no provider can be determined. */
-export const FALLBACK_MODEL: string = MODEL_DEFAULTS.xai;
+/** Compatibility placeholder for callers that construct a client without a provider.
+ * The CLI rejects an unconfigured provider before any request is sent. */
+export const FALLBACK_MODEL = 'gpt-4o';
 
 /** The provider used when nothing else is configured. */
-export const FALLBACK_PROVIDER: ProviderKey = 'xai';
+export const FALLBACK_PROVIDER: ProviderKey = 'openai';
 
 // ============================================================================
 // Environment Variable Resolution
@@ -60,10 +62,14 @@ export const FALLBACK_PROVIDER: ProviderKey = 'xai';
  * Maps each provider to the env var that can override its default model.
  */
 const ENV_VAR_MAP: Partial<Record<ProviderKey, string>> = {
-  xai: 'GROK_MODEL',
+  xai: 'XAI_MODEL',
   openai: 'OPENAI_MODEL',
   anthropic: 'ANTHROPIC_MODEL',
   google: 'GEMINI_MODEL',
+  ollama: 'OLLAMA_MODEL',
+  lmstudio: 'LMSTUDIO_MODEL',
+  deepseek: 'DEEPSEEK_MODEL',
+  mistral: 'MISTRAL_MODEL',
 };
 
 /**
@@ -72,10 +78,14 @@ const ENV_VAR_MAP: Partial<Record<ProviderKey, string>> = {
  * Resolution: env var > MODEL_DEFAULTS[provider] > FALLBACK_MODEL
  */
 export function getProviderDefaultModel(provider: ProviderKey): string {
+  const neutralModel = process.env.CODEBUDDY_MODEL?.trim();
+  const legacyModel = codeBuddyEnv('MODEL');
+  if (neutralModel) return neutralModel;
   const envVar = ENV_VAR_MAP[provider];
   if (envVar && process.env[envVar]) {
     return process.env[envVar]!;
   }
+  if (legacyModel) return legacyModel;
   return MODEL_DEFAULTS[provider] ?? FALLBACK_MODEL;
 }
 

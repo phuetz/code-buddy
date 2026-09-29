@@ -1,3 +1,4 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
 /**
  * Automated Program Repair Engine
  *
@@ -106,7 +107,7 @@ export class RepairEngine extends EventEmitter {
     this.config = { ...DEFAULT_REPAIR_CONFIG, ...config };
 
     if (apiKey) {
-      this.client = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || "grok-3-latest", baseURL);
+      this.client = new CodeBuddyClient(apiKey, runtimeDefaultModel(), baseURL);
     }
 
     this.faultLocalizer = createFaultLocalizer(

@@ -1,3 +1,4 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
 /**
  * Extended Thinking Engine
  *
@@ -123,7 +124,7 @@ export class ExtendedThinkingEngine extends EventEmitter {
     this.config = { ...DEFAULT_THINKING_CONFIG, ...config };
     this.client = new CodeBuddyClient(
       apiKey,
-      config.model || process.env.GROK_MODEL || "grok-3-latest",
+      config.model || runtimeDefaultModel(),
       baseURL
     );
   }

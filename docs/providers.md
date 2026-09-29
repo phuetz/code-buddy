@@ -5,6 +5,11 @@ Code Buddy resolves providers through a shared runtime catalog in
 runtime split: provider id, API mode, base URL, credential source, and default
 model are resolved before the agent loop builds a client.
 
+No Grok model is selected by default. A connected ChatGPT session wins, then a
+configured provider, then a local Ollama with a tool-capable model. The old
+`GROK_API_KEY`, `GROK_BASE_URL`, and `GROK_MODEL` names remain deprecated aliases
+for compatibility. CLI `-k` and `-u` are session-only unless `--save` is given.
+
 The main `CodeBuddyClient` path directly supports ChatGPT OAuth,
 OpenAI-compatible endpoints, and Gemini native. Azure OpenAI, AWS Bedrock, and
 GitHub Copilot remain plugin-native providers because they need non-standard
@@ -15,9 +20,10 @@ auth headers or request transports.
 | Provider | Runtime path | Env / credential | Models (examples) |
 |:---------|:-------------|:-----------------|:------------------|
 | **ChatGPT OAuth** | direct Responses Lite | `buddy login chatgpt` | gpt-5.6-sol (default), gpt-5.6-terra, gpt-5.6-luna |
+| **Custom OpenAI-compatible** | direct | `CODEBUDDY_API_KEY` + `CODEBUDDY_BASE_URL`, optional `CODEBUDDY_MODEL` | Model served by the endpoint |
 | **Ollama** | direct OpenAI-compatible | `OLLAMA_HOST` | qwen2.5-coder, llama3, devstral |
 | **LM Studio** | direct OpenAI-compatible | `LMSTUDIO_HOST` / `LM_STUDIO_HOST` | Any local served model |
-| **Grok** (xAI) | direct OpenAI-compatible | `GROK_API_KEY` / `XAI_API_KEY` | grok-4, grok-code-fast-1 |
+| **Grok** (xAI) | direct OpenAI-compatible | `XAI_API_KEY` | grok-4, grok-code-fast-1 |
 | **Gemini** (Google) | direct Gemini native | `GOOGLE_API_KEY` / `GEMINI_API_KEY` | gemini-2.5-flash, gemini-2.5-pro |
 | **OpenAI** | direct OpenAI-compatible | `OPENAI_API_KEY` | gpt-4o, o-series |
 | **Claude** (Anthropic) | direct OpenAI-compatible | `ANTHROPIC_API_KEY` | claude-sonnet-4, opus |
@@ -139,7 +145,7 @@ validated end-to-end in the [1.0.0 QA campaign](qa/v1.0.0-validation.md):
 
    ```bash
    CODEBUDDY_PROVIDER=ollama OLLAMA_HOST=http://localhost:11434 \
-     GROK_MODEL=qwen3.5:35b buddy -p "..." --output-format json
+     CODEBUDDY_MODEL=qwen3.5:35b buddy -p "..." --output-format json
    ```
 
 2. **Pick a tool-capable family.** `src/config/model-tools.ts`
@@ -158,7 +164,7 @@ validated end-to-end in the [1.0.0 QA campaign](qa/v1.0.0-validation.md):
    ```bash
    printf 'FROM qwen3.5:35b\nPARAMETER num_ctx 32768\n' > Modelfile
    ollama create qwen3.5-ctx32k -f Modelfile
-   GROK_MODEL=qwen3.5-ctx32k ...
+   CODEBUDDY_MODEL=qwen3.5-ctx32k ...
    ```
 
 ## Connection Profiles

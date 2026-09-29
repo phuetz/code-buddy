@@ -9,6 +9,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
 
 type SuggestionMessage = {
   role: 'system' | 'user';
@@ -166,7 +167,7 @@ export class PromptSuggestionEngine {
     }
 
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
-    this.client = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || 'grok-code-fast-1') as SuggestionClient;
+    this.client = new CodeBuddyClient(apiKey, runtimeDefaultModel()) as SuggestionClient;
     return this.client;
   }
 

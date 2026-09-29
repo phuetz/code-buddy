@@ -18,7 +18,7 @@ const VALUE_HINTS: Record<string, string> = {
   '--profile': 'Values: core, all, or a name from [profiles.<name>] in the config',
   '--security-mode': 'Values: suggest, auto-edit, full-auto',
   '--output-format': 'Values: json, stream-json, text, markdown',
-  '--model': 'Example: grok-code-fast-1, or a local Ollama tag',
+  '--model': 'Example: gpt-4o, or a local Ollama tag',
 };
 
 const BOOLEAN_FLAGS = new Set([

@@ -1,3 +1,4 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
 /**
  * Web Control UI Dashboard
  *
@@ -117,7 +118,7 @@ export class Dashboard {
 
   getMetrics(): DashboardMetrics {
     return {
-      agent: { status: 'idle', model: 'grok-3', mode: 'code' },
+      agent: { status: 'idle', model: runtimeDefaultModel(), mode: 'code' },
       sessions: 0,
       channels: ['telegram', 'discord', 'slack'],
       tools: 25,

@@ -138,7 +138,7 @@ describe('ConfigResolver', () => {
     });
 
     it('should use defaults when nothing else available', () => {
-      process.env.CODEBUDDY_PROVIDER = 'grok';
+      delete process.env.CODEBUDDY_PROVIDER;
       const config: ConnectionConfig = {
         profiles: [],
         activeProfileId: 'nonexistent',
@@ -148,8 +148,8 @@ describe('ConfigResolver', () => {
       const resolver = new ConfigResolver(config);
       const result = resolver.resolve();
 
-      expect(result.baseURL).toBe('https://api.x.ai/v1');
-      expect(result.model).toBe('grok-code-fast-1');
+      expect(result.baseURL).toBe('https://api.openai.com/v1');
+      expect(result.model).toBe('gpt-4o');
       expect(result.source).toBe('default');
     });
 
@@ -231,7 +231,7 @@ describe('ConfigResolver', () => {
       const profiles = resolver.getProfiles();
 
       expect(profiles.length).toBeGreaterThan(0);
-      expect(profiles.some(p => p.id === 'grok')).toBe(true);
+      expect(profiles.some(p => p.id === 'grok')).toBe(false);
       expect(profiles.some(p => p.id === 'lmstudio')).toBe(true);
       expect(profiles.some(p => p.id === 'ollama')).toBe(true);
     });
@@ -239,7 +239,7 @@ describe('ConfigResolver', () => {
     it('should switch active profile', () => {
       const resolver = new ConfigResolver();
 
-      expect(resolver.getActiveProfileId()).toBe('grok');
+      expect(resolver.getActiveProfileId()).toBe('');
 
       const success = resolver.setActiveProfile('lmstudio');
       expect(success).toBe(true);
@@ -255,7 +255,7 @@ describe('ConfigResolver', () => {
 
       const success = resolver.setActiveProfile('nonexistent');
       expect(success).toBe(false);
-      expect(resolver.getActiveProfileId()).toBe('grok'); // Unchanged
+      expect(resolver.getActiveProfileId()).toBe(''); // Unchanged
     });
 
     it('should add new profile', () => {
@@ -283,12 +283,12 @@ describe('ConfigResolver', () => {
 
       expect(() => {
         resolver.addProfile({
-          id: 'grok', // Already exists
+          id: 'ollama', // Already exists
           name: 'Duplicate',
-          provider: 'grok',
-          baseURL: 'https://api.x.ai/v1',
+          provider: 'ollama',
+          baseURL: 'http://localhost:11434/v1',
         });
-      }).toThrow("Profile 'grok' already exists");
+      }).toThrow("Profile 'ollama' already exists");
     });
 
     it('should update existing profile', () => {
@@ -327,9 +327,9 @@ describe('ConfigResolver', () => {
     it('should not remove built-in profiles', () => {
       const resolver = new ConfigResolver();
 
-      const success = resolver.removeProfile('grok');
+      const success = resolver.removeProfile('ollama');
       expect(success).toBe(false);
-      expect(resolver.getProfile('grok')).toBeDefined();
+      expect(resolver.getProfile('ollama')).toBeDefined();
     });
 
     it('should filter enabled profiles', () => {
@@ -414,11 +414,10 @@ describe('ConfigResolver', () => {
       }
     });
 
-    it('should default to grok for unknown URLs', () => {
+    it('should not infer xAI for unknown URLs', () => {
       const resolver = new ConfigResolver();
       const result = resolver.resolve({ baseURL: 'http://192.168.1.1:8080/v1', apiKey: 'test' });
-      // Unknown URLs default to grok
-      expect(result.provider).toBe('grok');
+      expect(result.provider).toBe('openai');
     });
   });
 
@@ -450,7 +449,8 @@ describe('ConfigResolver', () => {
       expect(resolver.getActiveProfileId()).toBe('imported');
       expect(resolver.getProfile('imported')).toBeDefined();
       // Should still have default profiles merged in
-      expect(resolver.getProfile('grok')).toBeDefined();
+      expect(resolver.getProfile('imported')?.provider).toBe('grok');
+      expect(resolver.getProfile('ollama')).toBeDefined();
     });
   });
 

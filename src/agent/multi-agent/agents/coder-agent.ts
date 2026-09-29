@@ -11,6 +11,7 @@
  */
 
 import { BaseAgent, createId } from "../base-agent.js";
+import { runtimeDefaultModel } from '../../../config/runtime-default-model.js';
 import {
   AgentConfig,
   AgentTask,
@@ -82,7 +83,7 @@ For modifications, use the str_replace_editor tool directly.`,
     "bash",
     "multi_edit",
   ],
-  model: "grok-3-latest",
+  model: runtimeDefaultModel(),
   maxRounds: 40,
   temperature: 0.3, // Lower temperature for more consistent code
 };

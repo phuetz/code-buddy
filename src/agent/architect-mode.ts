@@ -3,6 +3,7 @@ import { EventEmitter } from "events";
 import { getErrorMessage } from "../types/index.js";
 import { auditLogger } from "../security/audit-logger.js";
 import { logger } from '../utils/logger.js';
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
 
 export interface StepResult {
   step: ArchitectStep;
@@ -87,8 +88,8 @@ export class ArchitectMode extends EventEmitter {
   ) {
     super();
     this.config = {
-      architectModel: config.architectModel || process.env.GROK_MODEL || "grok-3-latest",
-      editorModel: config.editorModel || "grok-code-fast-1",
+      architectModel: config.architectModel || runtimeDefaultModel(),
+      editorModel: config.editorModel || runtimeDefaultModel(),
       autoApprove: config.autoApprove || false,
       maxSteps: config.maxSteps || 20,
       ...config,

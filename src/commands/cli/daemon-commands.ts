@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Daemon and Trigger CLI commands
  *
@@ -145,7 +147,7 @@ export function registerDaemonCommands(program: Command): void {
 
       // Wire CronAgentBridge so cron jobs execute through the AI agent
       try {
-        const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+        const apiKey = codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY || '';
         if (apiKey) {
           const { getCronAgentBridge } = await import('../../daemon/cron-agent-bridge.js');
           const { getCronScheduler } = await import('../../scheduler/cron-scheduler.js');
@@ -153,8 +155,8 @@ export function registerDaemonCommands(program: Command): void {
           const scheduler = getCronScheduler();
           const bridge = getCronAgentBridge({
             apiKey,
-            baseURL: process.env.GROK_BASE_URL,
-            model: process.env.GROK_MODEL || 'grok-3-latest',
+            baseURL: codeBuddyEnv('BASE_URL'),
+            model: runtimeDefaultModel(),
             maxToolRounds: 20,
             jobTimeoutMs: 300000,
             notepadDir: scheduler.notepadDir,
@@ -179,9 +181,9 @@ export function registerDaemonCommands(program: Command): void {
             const { getCronAgentBridge } = await import('../../daemon/cron-agent-bridge.js');
             const { RunStore } = await import('../../observability/run-store.js');
             const bridge = getCronAgentBridge({
-              apiKey: process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
-              baseURL: process.env.GROK_BASE_URL,
-              model: process.env.GROK_MODEL || 'grok-3-latest',
+              apiKey: codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY || '',
+              baseURL: codeBuddyEnv('BASE_URL'),
+              model: runtimeDefaultModel(),
               maxToolRounds: 20,
               jobTimeoutMs: 600000,
               notepadDir: scheduler.notepadDir,

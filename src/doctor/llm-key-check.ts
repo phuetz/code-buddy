@@ -1,3 +1,4 @@
+import { xaiApiKey, xaiBaseURL } from '../config/legacy-env.js';
 /**
  * Live LLM key validation for `buddy doctor` — ZERO tokens consumed.
  *
@@ -34,10 +35,10 @@ const PROVIDER_CHECKS: ProviderKeyCheck[] = [
     }),
   },
   {
-    envVars: ['GROK_API_KEY'],
+    envVars: ['XAI_API_KEY', 'GROK_API_KEY'],
     label: 'xAI (Grok)',
     request: (key) => ({
-      url: `${(process.env.GROK_BASE_URL ?? 'https://api.x.ai/v1').replace(/\/$/, '')}/models`,
+      url: `${(xaiBaseURL() ?? 'https://api.x.ai/v1').replace(/\/$/, '')}/models`,
       headers: { Authorization: `Bearer ${key}` },
     }),
   },
@@ -113,7 +114,7 @@ export async function checkLlmKeysLive(
 ): Promise<DoctorCheck[]> {
   const configured = PROVIDER_CHECKS.map((p) => ({
     p,
-    key: p.envVars.map((v) => process.env[v]).find(Boolean),
+    key: p.label === 'xAI (Grok)' ? xaiApiKey() : p.envVars.map((v) => process.env[v]).find(Boolean),
   })).filter((x): x is { p: ProviderKeyCheck; key: string } => !!x.key);
   if (configured.length === 0) return [];
   return Promise.all(configured.map(({ p, key }) => checkOneKey(p, key, fetchImpl)));

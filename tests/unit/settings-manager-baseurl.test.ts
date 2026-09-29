@@ -60,6 +60,6 @@ describe('SettingsManager baseURL hardening', () => {
     process.env.GROK_BASE_URL = 'not-a-url';
     const manager = getSettingsManager();
 
-    expect(manager.getBaseURL()).toBe('https://api.x.ai/v1');
+    expect(manager.getBaseURL()).toBe('https://api.openai.com/v1');
   });
 });

@@ -1,3 +1,4 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
 /**
  * Model Tier Routing
  *
@@ -267,7 +268,7 @@ export function selectModel(
   // Verify model is available
   if (!availableModels.includes(recommendedModel)) {
     // Fall back to first available model
-    recommendedModel = availableModels[0] || "grok-3";
+    recommendedModel = availableModels[0] || runtimeDefaultModel();
     reason = "Fallback - preferred model not available";
   }
 
@@ -352,7 +353,7 @@ export interface RoutingConfig {
  */
 export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   enabled: true,
-  defaultModel: "grok-3",
+  defaultModel: runtimeDefaultModel(),
   minConfidence: 0.7,
   costSensitivity: "medium",
   allowFallback: true,

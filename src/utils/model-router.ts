@@ -1,6 +1,7 @@
 import * as path from "path";
 import { EventEmitter } from "events";
 import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
 
 export type TaskType =
   | "search"      // Fast searches
@@ -82,21 +83,21 @@ const GROK_MODELS: Record<string, ModelConfig> = {
 };
 
 const DEFAULT_ROUTER_CONFIG: ModelRouterConfig = {
-  defaultModel: "grok-code-fast-1",
+  defaultModel: runtimeDefaultModel(),
   taskModels: {
-    search: "grok-code-fast-1",
-    planning: "grok-3-latest",
-    coding: "grok-code-fast-1",
-    review: "grok-3-latest",
-    debug: "grok-code-fast-1",
-    docs: "grok-3-latest",
-    chat: "grok-3-fast",
-    complex: "grok-3-latest",
+    search: runtimeDefaultModel(),
+    planning: runtimeDefaultModel(),
+    coding: runtimeDefaultModel(),
+    review: runtimeDefaultModel(),
+    debug: runtimeDefaultModel(),
+    docs: runtimeDefaultModel(),
+    chat: runtimeDefaultModel(),
+    complex: runtimeDefaultModel(),
   },
   autoSwitch: true,
   preferSpeed: false,
-  fallbackChain: ["grok-3-fast", "grok-2-latest", "grok-code-fast-1"],
-  enableFallback: true,
+  fallbackChain: [],
+  enableFallback: false,
 };
 
 /** Cooldown period after consecutive failures (in ms) */

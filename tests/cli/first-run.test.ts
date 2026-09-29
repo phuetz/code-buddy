@@ -10,11 +10,11 @@ describe('first-run provider recovery', () => {
   it('puts buddy login first, Ollama second, and API keys last', () => {
     const login = NO_PROVIDER_GUIDANCE.indexOf('buddy login');
     const ollama = NO_PROVIDER_GUIDANCE.indexOf('Ollama');
-    const grokKey = NO_PROVIDER_GUIDANCE.indexOf('GROK_API_KEY');
+    const apiKey = NO_PROVIDER_GUIDANCE.indexOf('CODEBUDDY_API_KEY');
 
     expect(login).toBeGreaterThanOrEqual(0);
     expect(login).toBeLessThan(ollama);
-    expect(ollama).toBeLessThan(grokKey);
+    expect(ollama).toBeLessThan(apiKey);
     expect(NO_PROVIDER_GUIDANCE).toContain('buddy try');
     expect(NO_PROVIDER_GUIDANCE).toContain('$0 marginal cost');
     expect(NO_PROVIDER_GUIDANCE).toContain('ollama pull qwen3:8b');

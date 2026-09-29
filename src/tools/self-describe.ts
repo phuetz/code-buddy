@@ -20,6 +20,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { xaiApiKey } from '../config/legacy-env.js';
 import { fileURLToPath } from 'url';
 import {
   resolveCodeBuddyCoreRoot,
@@ -227,7 +228,8 @@ function unavailableBricks(): BrickInfo[] {
 /** Provider configurations detectable from the environment (best-effort, no network). */
 function detectConfiguredProviders(env: Record<string, string | undefined>): string[] {
   const providers: string[] = [];
-  if (env.GROK_API_KEY || env.XAI_API_KEY) providers.push('Grok/xAI');
+  if (xaiApiKey(env)) providers.push('Grok/xAI');
+  if (env.CODEBUDDY_API_KEY && !['xai', 'grok'].includes(env.CODEBUDDY_PROVIDER || '')) providers.push('Custom API');
   if (env.OPENAI_API_KEY) providers.push('OpenAI/ChatGPT');
   if (env.ANTHROPIC_API_KEY) providers.push('Claude');
   if (env.GEMINI_API_KEY || env.GOOGLE_API_KEY) providers.push('Gemini');

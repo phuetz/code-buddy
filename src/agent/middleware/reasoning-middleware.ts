@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Reasoning Middleware
  *
@@ -327,10 +328,10 @@ export class ReasoningMiddleware implements ConversationMiddleware {
 
           // Auto-enable extended thinking for complex queries
           try {
-            const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
+            const apiKey = codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY;
             if (apiKey) {
               const { getExtendedThinkingEngine } = await import('../thinking/extended-thinking.js');
-              const et = getExtendedThinkingEngine(apiKey, process.env.GROK_BASE_URL);
+              const et = getExtendedThinkingEngine(apiKey, codeBuddyEnv('BASE_URL'));
               et.setDepth(complexity.level === 'mcts' ? 'deep' : 'extended');
             }
           } catch { /* extended thinking module optional */ }

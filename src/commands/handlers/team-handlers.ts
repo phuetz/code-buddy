@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Team Command Handlers
  *
@@ -154,7 +155,7 @@ async function* streamWithTeamPermissionMode(
 async function createTeamRuntime(options: TeamHandlerOptions): Promise<TeamRuntime | string> {
   const credentials = _resolveAgentsCredentials();
   if ('error' in credentials && !options.agentFactory) return credentials.error;
-  const model = options.model ?? process.env.GROK_MODEL?.trim();
+  const model = options.model ?? codeBuddyEnv('MODEL')?.trim();
   const configuredRounds = Math.floor(
     positiveNumber(process.env.CODEBUDDY_TEAM_MAX_ROUNDS, 6),
   );

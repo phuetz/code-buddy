@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Tool Handler Module
  *
@@ -1815,8 +1816,8 @@ export class ToolHandler {
         );
         if (authorizationError) return authorizationError;
         const { getTreeOfThoughtReasoner } = await import('./reasoning/index.js');
-        const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
-        const baseURL = process.env.GROK_BASE_URL;
+        const apiKey = codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY || '';
+        const baseURL = codeBuddyEnv('BASE_URL');
         const mode = (args.mode as string) || 'medium';
 
         type ThinkingMode = import('./reasoning/types.js').ThinkingMode;

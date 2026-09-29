@@ -262,15 +262,14 @@ describe('InterpreterService LLM Integration', () => {
 
       const result = await service.chat('expensive query');
 
-      // Default profile uses grok-3-mini: input=$0.30/1M, output=$0.50/1M
-      // Cost = (1M / 1M) * 0.30 + (1M / 1M) * 0.50 = 0.80
-      const expectedCost = service.calculateCost('grok-3-mini', {
+      // The default profile uses the active model; the generic fallback is gpt-4o.
+      const expectedCost = service.calculateCost('gpt-4o', {
         input: 1_000_000,
         output: 1_000_000,
         total: 2_000_000,
       });
       expect(result.cost).toBeCloseTo(expectedCost, 6);
-      expect(result.cost).toBeCloseTo(0.80, 6);
+      expect(result.cost).toBeCloseTo(12.50, 6);
     });
   });
 
@@ -324,15 +323,15 @@ describe('InterpreterService LLM Integration', () => {
       expect(cost).toBeCloseTo(3.0, 6);
     });
 
-    it('should fall back to grok-3-mini pricing for unknown models', () => {
+    it('should use active-model pricing for unknown models', () => {
       const cost = service.calculateCost('unknown-model-xyz', {
         input: 1_000_000,
         output: 1_000_000,
         total: 2_000_000,
       });
 
-      // Fallback: grok-3-mini: input=$0.30/1M, output=$0.50/1M
-      expect(cost).toBeCloseTo(0.80, 6);
+      // Generic compatibility model gpt-4o: $2.50/1M input, $10/1M output.
+      expect(cost).toBeCloseTo(12.50, 6);
     });
 
     it('should return 0 for local models', () => {

@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * Parallel Agent Tool
  * 
@@ -27,12 +28,12 @@ export class ParallelAgentTool implements ITool {
       return { success: false, error: 'No tasks provided for parallel execution.' };
     }
 
-    const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+    const apiKey = codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY || '';
     if (!apiKey) {
       return { success: false, error: 'No API key available for sub-agents.' };
     }
 
-    const runner = getParallelSubagentRunner(apiKey, process.env.GROK_BASE_URL);
+    const runner = getParallelSubagentRunner(apiKey, codeBuddyEnv('BASE_URL'));
     
     // Pipeline integration: if no tasks but has _input, treat _input as a list of tasks or a single task
     let finalTasks = tasks;

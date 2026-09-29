@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Security Audit Tool
  *
@@ -760,7 +761,7 @@ export class SecurityAuditor {
     } catch { /* skip */ }
 
     // 5. Model quality — warn for models known to be poorly instruction-tuned
-    const modelEnv = process.env.GROK_MODEL || process.env.OPENAI_MODEL || '';
+    const modelEnv = codeBuddyEnv('MODEL') || process.env.OPENAI_MODEL || '';
     const legacyPatterns = ['gpt-3.5', 'davinci', 'curie', 'babbage', 'ada'];
     if (legacyPatterns.some(p => modelEnv.includes(p))) {
       this.addFinding({

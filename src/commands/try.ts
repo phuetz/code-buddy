@@ -16,6 +16,7 @@ import { normalizeOllamaBaseUrl } from './ollama.js';
 import { getModelToolConfig } from '../config/model-tools.js';
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import { resolveProviderFromCatalog } from '../providers/provider-catalog.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 
 const OLLAMA_PROBE_TIMEOUT_MS = 2_000;
 const DEMO_MAX_TOOL_ROUNDS = 12;
@@ -187,7 +188,7 @@ export async function resolveTryProvider(
     return {
       kind: 'ollama',
       label: `endpoint imposé (${baseURL} · ${model})`,
-      apiKey: env.OPENAI_API_KEY ?? env.GROK_API_KEY ?? 'local',
+      apiKey: codeBuddyEnv('API_KEY', env) ?? env.OPENAI_API_KEY ?? 'local',
       baseURL,
       model,
     };

@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Code Buddy Language Server Protocol (LSP) Server
  *
@@ -63,7 +65,7 @@ interface CodeBuddyLSPSettings {
 
 const defaultSettings: CodeBuddyLSPSettings = {
   apiKey: '',
-  model: process.env.GROK_MODEL?.trim() || 'grok-3-latest',
+  model: runtimeDefaultModel(),
   enableDiagnostics: true,
   enableCompletions: true,
   maxTokens: 2048,
@@ -120,7 +122,7 @@ connection.onInitialized(() => {
   logger.info('Code Buddy LSP server initialized');
 
   // Initialize Code Buddy client with API key
-  const apiKey = process.env.GROK_API_KEY || globalSettings.apiKey;
+  const apiKey = codeBuddyEnv('API_KEY') || globalSettings.apiKey;
   if (apiKey) {
     codebuddyClient = new CodeBuddyClient(apiKey, globalSettings.model);
     aiCompletionProvider.setClient(codebuddyClient);
@@ -146,7 +148,7 @@ connection.onDidChangeConfiguration((change) => {
   };
 
   // Reinitialize client
-  const apiKey = process.env.GROK_API_KEY || globalSettings.apiKey;
+  const apiKey = codeBuddyEnv('API_KEY') || globalSettings.apiKey;
   if (apiKey) {
     codebuddyClient = new CodeBuddyClient(apiKey, globalSettings.model);
     aiCompletionProvider.setClient(codebuddyClient);

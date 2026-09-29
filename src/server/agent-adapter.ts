@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 import type { ChatEntry, StreamingChunk } from '../agent/types.js';
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
 import type { ContextManagerConversationState } from '../context/context-manager-v2.js';
@@ -94,16 +96,16 @@ export function resolveServerAgentConfig(): ServerAgentConfig {
   const detected = detectProviderFromEnv();
 
   return {
-    apiKey: detected?.apiKey || process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
-    baseURL: detected?.baseURL || process.env.GROK_BASE_URL,
-    model: process.env.GROK_MODEL || detected?.defaultModel || 'grok-3-latest',
+    apiKey: detected?.apiKey || codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY || '',
+    baseURL: detected?.baseURL || codeBuddyEnv('BASE_URL'),
+    model: codeBuddyEnv('MODEL') || detected?.defaultModel || runtimeDefaultModel(),
   };
 }
 
 export function listServerModels(): ServerModelInfo[] {
   const detected = detectProviderFromEnv();
   const created = Math.floor(Date.now() / 1000);
-  const configuredModel = process.env.GROK_MODEL || detected?.defaultModel;
+  const configuredModel = codeBuddyEnv('MODEL') || detected?.defaultModel;
 
   if (detected?.provider === 'chatgpt') {
     return [
@@ -162,7 +164,7 @@ export function listServerModels(): ServerModelInfo[] {
 
   return [
     {
-      id: process.env.GROK_MODEL || 'grok-3-latest',
+      id: runtimeDefaultModel(),
       object: 'model',
       created,
       owned_by: 'xai',

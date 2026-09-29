@@ -1,3 +1,5 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
 export interface FailoverEntry {
   provider: string;
   model: string;
@@ -101,12 +103,20 @@ export class ModelFailoverChain {
   static fromEnvironment(): ModelFailoverChain {
     const chain = new ModelFailoverChain();
 
-    if (process.env.GROK_API_KEY) {
+    if (process.env.CODEBUDDY_API_KEY) {
+      chain.addProvider({
+        provider: 'custom',
+        model: codeBuddyEnv('MODEL') || runtimeDefaultModel(),
+        apiKey: 'CODEBUDDY_API_KEY',
+        baseURL: codeBuddyEnv('BASE_URL'),
+      });
+    } else if (process.env.XAI_API_KEY || process.env.GROK_API_KEY) {
+      codeBuddyEnv('API_KEY'); // Log the deprecated alias once when present.
       chain.addProvider({
         provider: 'grok',
-        model: 'grok-3',
-        apiKey: 'GROK_API_KEY',
-        baseURL: process.env.GROK_BASE_URL,
+        model: process.env.XAI_MODEL || codeBuddyEnv('MODEL') || 'grok-3',
+        apiKey: process.env.XAI_API_KEY ? 'XAI_API_KEY' : 'GROK_API_KEY',
+        baseURL: codeBuddyEnv('BASE_URL'),
       });
     }
 

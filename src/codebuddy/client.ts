@@ -6,6 +6,8 @@ import type {
 } from "openai/resources/chat";
 import { validateModel, getModelInfo } from "../utils/model-utils.js";
 import { getModelToolConfig } from "../config/model-tools.js";
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { codeBuddyEnv, xaiApiKey, xaiBaseURL } from '../config/legacy-env.js';
 import { logger } from "../utils/logger.js";
 import { recordEffectiveCall } from '../runtime/runtime-status.js';
 import { normalizeBaseURL, DEFAULT_BASE_URL } from "../utils/base-url.js";
@@ -266,7 +268,7 @@ export interface CodeBuddyResponse {
 }
 
 export class CodeBuddyClient {
-  private currentModel: string = "grok-code-fast-1";
+  private currentModel: string = runtimeDefaultModel();
   /** Track the last model that was explicitly requested by the user */
   private lastRequestedModel: string | undefined;
   /** Track the last effective model that actually responded */
@@ -358,7 +360,8 @@ export class CodeBuddyClient {
       throw new Error('API key cannot be empty or whitespace only');
     }
 
-    const selectedBaseURL = baseURL ?? process.env.GROK_BASE_URL ?? DEFAULT_BASE_URL;
+    const selectedBaseURL = baseURL ?? codeBuddyEnv('BASE_URL') ??
+      (apiKey === xaiApiKey() ? xaiBaseURL() || 'https://api.x.ai/v1' : DEFAULT_BASE_URL);
     // Subprocess providers use synthetic baseURL strings that
     // don't pass URL validation. Skip normalization in that case — the
     // baseURL is informational only, the actual transport is the local

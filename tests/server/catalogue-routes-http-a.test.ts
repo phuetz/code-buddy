@@ -129,7 +129,7 @@ describe('catalogue HTTP partie A', () => {
     const body = asObject(parseJson(created.text, 'création'), 'création');
     expect(typeof body.id).toBe('string');
     expect(body.name).toBe('Catalogue HTTP');
-    expect(body.model).toBe('grok-3-latest');
+    expect(body.model).toBe('gpt-4o');
     const id = String(body.id);
 
     const listed = await httpCall(ctx.baseUrl, ctx.token, 'GET', '/api/sessions');
@@ -145,7 +145,7 @@ describe('catalogue HTTP partie A', () => {
     const detail = asObject(parseJson(fetched.text, 'détail'), 'détail');
     expect(detail.id).toBe(id);
     expect(detail.name).toBe('Catalogue HTTP');
-    expect(detail.model).toBe('grok-3-latest');
+    expect(detail.model).toBe('gpt-4o');
     expect(detail.messageCount).toBe(0);
     expect(detail.messages).toEqual([]);
   });

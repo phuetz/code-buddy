@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../../config/legacy-env.js';
 /**
  * A2A inbound TaskExecutor — Code Buddy implementation
  *
@@ -54,7 +56,7 @@ export function resolveA2AProviderCredentials():
   | { ok: true; apiKey: string; baseURL?: string; model: string }
   | { ok: false; error: string } {
   const detected = detectProviderFromEnv();
-  const apiKey = process.env.GROK_API_KEY || detected?.apiKey || '';
+  const apiKey = codeBuddyEnv('API_KEY') || detected?.apiKey || '';
   if (!apiKey) {
     if (!detected) {
       return { ok: false, error: 'No LLM provider configured' };
@@ -64,10 +66,10 @@ export function resolveA2AProviderCredentials():
   return {
     ok: true,
     apiKey,
-    ...(process.env.GROK_BASE_URL || detected?.baseURL
-      ? { baseURL: process.env.GROK_BASE_URL || detected?.baseURL }
+    ...(codeBuddyEnv('BASE_URL') || detected?.baseURL
+      ? { baseURL: codeBuddyEnv('BASE_URL') || detected?.baseURL }
       : {}),
-    model: process.env.GROK_MODEL || detected?.defaultModel || 'grok-3-latest',
+    model: codeBuddyEnv('MODEL') || detected?.defaultModel || runtimeDefaultModel(),
   };
 }
 

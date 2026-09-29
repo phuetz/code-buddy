@@ -13,6 +13,7 @@ import { SandboxManager, getSandboxManager } from "../security/sandbox.js";
 import { ContextManagerV2, createContextManager } from "../context/context-manager-v2.js";
 import { SessionStore, getSessionStore } from "../persistence/session-store.js";
 import type { ChatEntry } from "./types.js";
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
 
 /**
  * Agent configuration options
@@ -93,7 +94,7 @@ export class AgentState extends EventEmitter {
     this.costTracker = getCostTracker();
     this.modeManager = getAgentModeManager();
     this.sandboxManager = getSandboxManager();
-    this.contextManager = createContextManager("grok-3-latest");
+    this.contextManager = createContextManager(runtimeDefaultModel());
     this.sessionStore = getSessionStore();
   }
 

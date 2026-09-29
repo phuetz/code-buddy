@@ -417,9 +417,9 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
         // User settings
         const userSettings = settingsManager.loadUserSettings();
         lines.push('--- User Settings (~/.codebuddy/user-settings.json) ---');
-        lines.push(`  provider: ${userSettings.provider || 'grok'}`);
-        lines.push(`  defaultModel: ${userSettings.defaultModel || 'grok-code-fast-1'}`);
-        lines.push(`  baseURL: ${userSettings.baseURL || 'https://api.x.ai/v1'}`);
+        lines.push(`  provider: ${userSettings.provider || 'auto'}`);
+        lines.push(`  defaultModel: ${userSettings.defaultModel || 'auto'}`);
+        lines.push(`  baseURL: ${userSettings.baseURL || 'auto'}`);
         lines.push(`  apiKey: ${userSettings.apiKey ? '[SET]' : '[NOT SET]'}`);
         lines.push(`  models: ${userSettings.models?.length || 0} configured`);
         lines.push('');

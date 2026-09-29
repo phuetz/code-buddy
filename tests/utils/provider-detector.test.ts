@@ -93,11 +93,11 @@ describe('detectProviderFromEnv — priority chain', () => {
     expect(detected?.provider).toBe('ollama');
   });
 
-  it('falls back to ollama when no chatgpt OAuth + OLLAMA_HOST set', async () => {
+  it('uses a configured xAI key before an ambient Ollama endpoint', async () => {
     process.env.OLLAMA_HOST = 'http://localhost:11434';
     process.env.GROK_API_KEY = 'should-not-be-used';
     const { detectProviderFromEnv } = await import('../../src/utils/provider-detector.js');
-    expect(detectProviderFromEnv()?.provider).toBe('ollama');
+    expect(detectProviderFromEnv()?.provider).toBe('grok');
   });
 
   it('ollama auto-prepends http:// and appends /v1 to OLLAMA_HOST', async () => {

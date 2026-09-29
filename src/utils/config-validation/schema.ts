@@ -342,15 +342,15 @@ export const UserSettingsSchema = z.object({
   defaultModel: z.string()
     .min(1)
     .max(100)
-    .default('grok-code-fast-1')
+    .optional()
     .describe('Default model for all sessions'),
 
   models: z.array(z.string().min(1))
-    .default(['grok-code-fast-1', 'grok-4-latest', 'grok-3-latest', 'grok-3-fast', 'grok-3-mini-fast'])
+    .optional()
     .describe('List of available models'),
 
   provider: z.enum(AI_PROVIDERS)
-    .default('grok')
+    .optional()
     .describe('Active AI provider'),
 
   model: z.string()
@@ -617,7 +617,6 @@ export const SCHEMAS: Record<string, JSONSchema> = {
       model: {
         type: 'string',
         description: 'Default AI model to use',
-        default: 'grok-3-latest',
       },
       maxRounds: {
         type: 'number',

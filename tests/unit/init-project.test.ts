@@ -499,12 +499,12 @@ describe('initCodeBuddyProject', () => {
     expect(fs.readFileSync(agentsPath, 'utf-8')).toContain('— Agent Guide');
   });
 
-  it('settings.json uses grok-code-fast-1 as default model', async () => {
+  it('settings.json leaves the model to provider resolution', async () => {
     await initCodeBuddyProject(tmpDir);
     const settings = JSON.parse(
       fs.readFileSync(path.join(tmpDir, '.codebuddy', 'settings.json'), 'utf-8')
     );
-    expect(settings.model).toBe('grok-code-fast-1');
+    expect(settings.model).toBeUndefined();
   });
 
   it('.gitignore includes runs/, tool-results/, cache/ entries', async () => {

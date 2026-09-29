@@ -4,7 +4,6 @@ const STARTUP_TIME = Date.now();
 
 import { Option, program } from "commander";
 import { readFileSync } from "fs";
-import * as nodeFs from "fs";
 import * as nodeOs from "os";
 import * as nodePath from "path";
 import { join, dirname } from "path";
@@ -313,7 +312,7 @@ async function ensureUserSettingsDirectory(): Promise<void> {
   try {
     const getSettingsManager = await lazyImport.settingsManager();
     const manager = getSettingsManager();
-    // This will create default settings if they don't exist
+    // Read existing settings without creating a default profile.
     manager.loadUserSettings();
   } catch (_err) {
     logger.debug('Failed to initialize user settings directory', { error: _err });
@@ -335,109 +334,7 @@ async function ensureUserSettingsDirectory(): Promise<void> {
 // (Phase d.25) so it can be unit-tested in isolation. Re-exported here
 // for the rest of this file's call sites.
 import type { DetectedProvider } from './utils/provider-detector.js';
-
-// Legacy inline implementation kept commented for git-archaeology only.
-function _detectProviderFromEnvLegacy(): DetectedProvider | null {
-  // Priority order (mirror of src/fleet/peer-chat-client-factory.ts —
-  // explicit user intent first, then local, then cloud env keys):
-  //   0. CODEBUDDY_PROVIDER override (always wins when set + valid)
-  //   1. ChatGPT OAuth credentials present (~/.codebuddy/codex-auth.json) —
-  //      explicit "I logged in" act, beats ambient OLLAMA_HOST
-  //   2. OLLAMA_HOST    → ollama (local, free, unlimited)
-  //   3. GROK_API_KEY   → grok / OpenAI-compat
-  //   4. GEMINI/GOOGLE  → gemini
-  //   5. OPENAI         → openai
-  //   6. ANTHROPIC      → anthropic
-
-  const override = process.env.CODEBUDDY_PROVIDER?.toLowerCase();
-
-  // ChatGPT subscription auth — explicit login wins over ambient
-  // env-detected providers. User who ran `buddy login chatgpt` recently
-  // expects subsequent calls to route through their ChatGPT plan, not
-  // get hijacked by an OLLAMA_HOST set in their shell rc weeks ago.
-  // Inline the file-existence check rather than importing codex-oauth
-  // (this function is sync; the module is async-safe).
-  if (override === 'chatgpt' || !override) {
-    try {
-      const fs = nodeFs;
-      const path = nodePath;
-      const os = nodeOs;
-      const authPath = path.join(os.homedir(), '.codebuddy', 'codex-auth.json');
-      if (fs.existsSync(authPath)) {
-        const raw = fs.readFileSync(authPath, 'utf-8').trim();
-        const parsed = raw ? JSON.parse(raw) : null;
-        if (parsed?.tokens?.access_token) {
-          return {
-            provider: 'chatgpt',
-            apiKey: 'oauth-chatgpt', // sentinel consumed by CodeBuddyClient
-            baseURL: 'https://chatgpt.com/backend-api/codex',
-            defaultModel: process.env.CHATGPT_MODEL || 'gpt-6-sol',
-          };
-        }
-      }
-    } catch (err) {
-      logger.debug('Ignoring unreadable ChatGPT OAuth credentials during provider detection', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  if ((override === 'ollama' || (!override && process.env.OLLAMA_HOST))) {
-    let host = process.env.OLLAMA_HOST || 'http://localhost:11434';
-    if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
-    if (!host.endsWith('/v1')) host = host.replace(/\/+$/, '') + '/v1';
-    return {
-      provider: 'ollama',
-      apiKey: 'ollama', // placeholder — Ollama OpenAI-compat ignores it
-      baseURL: host,
-      defaultModel: process.env.GROK_MODEL || process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b',
-    };
-  }
-
-  if (
-    (override === 'grok' || override === 'xai') ||
-    (!override && (process.env.GROK_API_KEY || process.env.XAI_API_KEY))
-  ) {
-    return {
-      provider: 'grok',
-      apiKey: process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
-      baseURL: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
-      defaultModel: process.env.GROK_MODEL || 'grok-3-fast',
-    };
-  }
-
-  if (
-    (override === 'gemini' || override === 'google') ||
-    (!override && (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY))
-  ) {
-    return {
-      provider: 'gemini',
-      apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '',
-      baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-      defaultModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-    };
-  }
-
-  if (process.env.OPENAI_API_KEY) {
-    return {
-      provider: 'openai',
-      apiKey: process.env.OPENAI_API_KEY,
-      baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-      defaultModel: process.env.OPENAI_MODEL || 'gpt-4o',
-    };
-  }
-
-  if (process.env.ANTHROPIC_API_KEY) {
-    return {
-      provider: 'anthropic',
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      baseURL: 'https://api.anthropic.com/v1',
-      defaultModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-    };
-  }
-
-  return null;
-}
+import { codeBuddyEnv } from './config/legacy-env.js';
 
 // Cache detected provider
 let cachedProvider: DetectedProvider | null | undefined = undefined;
@@ -461,7 +358,7 @@ async function getDetectedProvider(): Promise<DetectedProvider | null> {
       xaiOverride === 'xai' ||
       (!xaiOverride &&
         cachedProvider?.provider !== 'chatgpt' &&
-        !process.env.GROK_API_KEY &&
+        !codeBuddyEnv('API_KEY') &&
         !process.env.XAI_API_KEY);
     if (xaiWanted) {
       try {
@@ -477,7 +374,7 @@ async function getDetectedProvider(): Promise<DetectedProvider | null> {
               baseURL: 'https://api.x.ai/v1',
               // grok-4-latest is an alias of the current flagship grok-4.3
               // (verified accessible on the SuperGrok plan; Hermes defaults here too).
-              defaultModel: process.env.GROK_MODEL || 'grok-4-latest',
+              defaultModel: process.env.XAI_MODEL || codeBuddyEnv('MODEL') || 'grok-4-latest',
             };
           } else {
             logger.warn('xAI login found but no valid access token — run `buddy login xai` again.');
@@ -633,6 +530,7 @@ async function tryZeroConfigProvider(options: { baseUrl?: string; model?: string
   if (!process.env.OLLAMA_HOST) {
     process.env.OLLAMA_HOST = decision.baseURL.replace(/\/v1\/?$/, '');
   }
+  if (!process.env.CODEBUDDY_MODEL) process.env.CODEBUDDY_MODEL = model;
   cli.info(zeroConfig.formatZeroConfigChoice(decision, options.model));
   return { launched: { apiKey: 'ollama', baseURL: decision.baseURL, model }, decision };
 }
@@ -672,6 +570,7 @@ async function applyPreferredLocalProvider(options: {
   if (!process.env.OLLAMA_HOST) {
     process.env.OLLAMA_HOST = decision.baseURL.replace(/\/v1\/?$/, '');
   }
+  if (!process.env.CODEBUDDY_MODEL) process.env.CODEBUDDY_MODEL = model;
   cli.info(
     zeroConfig
       .formatZeroConfigChoice(decision, options.model)
@@ -692,7 +591,7 @@ async function loadBaseURL(): Promise<string> {
   if (detected) return detected.baseURL;
 
   // Check explicit environment override
-  const envBaseURL = process.env.GROK_BASE_URL;
+  const envBaseURL = codeBuddyEnv('BASE_URL');
   if (envBaseURL) return envBaseURL;
 
   const getSettingsManager = await lazyImport.settingsManager();
@@ -1397,7 +1296,7 @@ async function processPromptHeadless(
         if (format === 'text' || format === 'markdown') {
           cli.stdout(resultText);
         } else {
-          const slashEffectiveModel = modelToUse || process.env.GROK_MODEL || 'unknown';
+          const slashEffectiveModel = modelToUse || codeBuddyEnv('MODEL') || 'unknown';
           const slashCostExtended = agent.getSessionCostExtended?.() ?? { total: agent.getSessionCost(), estimated: true, pricing: 'unknown' as const, billing: 'pay-per-use' as const, inputTokens: 0, outputTokens: 0 };
           const slashOutputData: Record<string, unknown> = {
             result: resultText,
@@ -1507,7 +1406,7 @@ async function processPromptHeadless(
     const resultText = lastAssistantEntry?.content ?? '';
 
     const client = agent.getClient();
-    const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
+    const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? codeBuddyEnv('MODEL') ?? 'unknown';
     if (isHeadlessFinalResponseEmpty(resultText)) {
       const { detectProviderFromEnv } = await import('./utils/provider-detector.js');
       const providerLabel = process.env.CODEBUDDY_PROVIDER?.trim()
@@ -1652,7 +1551,7 @@ async function processPromptHeadless(
           error: errorMessage,
           result: null,
           cost: { total: 0 },
-          model: model || process.env.GROK_MODEL || 'unknown',
+          model: model || codeBuddyEnv('MODEL') || 'unknown',
         })
       );
     }
@@ -1711,14 +1610,15 @@ program
   .version(packageJson.version)
   .argument("[message...]", "Initial message to send to Code Buddy")
   .option("-d, --directory <dir>", "set working directory", process.cwd())
-  .option("-k, --api-key <key>", "API key for a metered provider (optional; or set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)")
+  .option("-k, --api-key <key>", "API key for this run (or set CODEBUDDY_API_KEY / provider key)")
+  .option("--save", "save -k/--api-key and -u/--base-url for future sessions")
   .option(
     "-u, --base-url <url>",
-    "OpenAI-compatible base URL (optional; or set GROK_BASE_URL)"
+    "OpenAI-compatible base URL for this run (or set CODEBUDDY_BASE_URL)"
   )
   .option(
     "-m, --model <model>",
-    "model id (optional; defaults to the configured provider's model, or set GROK_MODEL)"
+    "model id (optional; defaults to the configured provider's model, or set CODEBUDDY_MODEL)"
   )
   .option(
     "-p, --prompt <prompt>",
@@ -2217,6 +2117,7 @@ program
         ...(options.apiKey ? { apiKey: options.apiKey } : {}),
         ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
       }));
+      if (options.model && model) process.env.CODEBUDDY_MODEL = model;
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2304,8 +2205,10 @@ program
       }
 
       // Save API key and base URL to user settings if provided via command line
-      if (options.apiKey || options.baseUrl) {
+      if (options.save && (options.apiKey || options.baseUrl)) {
         await saveCommandLineSettings(options.apiKey, options.baseUrl);
+      } else if ((options.apiKey || options.baseUrl) && !options.prompt && !options.print) {
+        cli.info('API key and base URL apply to this session only. Use --save to keep them.');
       }
 
       // Enable force-tools mode for local models
@@ -2869,14 +2772,15 @@ gitCommand
   .command("commit-and-push")
   .description("Generate AI commit message and push to remote")
   .option("-d, --directory <dir>", "set working directory", process.cwd())
-  .option("-k, --api-key <key>", "API key for a metered provider (optional; or set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)")
+  .option("-k, --api-key <key>", "API key for this run (or set CODEBUDDY_API_KEY / provider key)")
+  .option("--save", "save -k/--api-key and -u/--base-url for future sessions")
   .option(
     "-u, --base-url <url>",
-    "OpenAI-compatible base URL (optional; or set GROK_BASE_URL)"
+    "OpenAI-compatible base URL for this run (or set CODEBUDDY_BASE_URL)"
   )
   .option(
     "-m, --model <model>",
-    "model id (optional; defaults to the configured provider's model, or set GROK_MODEL)"
+    "model id (optional; defaults to the configured provider's model, or set CODEBUDDY_MODEL)"
   )
   .option(
     "--max-tool-rounds <rounds>",
@@ -2909,6 +2813,7 @@ gitCommand
       let apiKey = launched.apiKey;
       let baseURL = launched.baseURL;
       let model = launched.model;
+      if (options.model && model) process.env.CODEBUDDY_MODEL = model;
       const maxToolRounds = options.maxToolRounds
         ? parseInt(options.maxToolRounds, 10) || undefined
         : undefined;
@@ -2925,7 +2830,7 @@ gitCommand
       }
 
       // Save API key and base URL to user settings if provided via command line
-      if (options.apiKey || options.baseUrl) {
+      if (options.save && (options.apiKey || options.baseUrl)) {
         await saveCommandLineSettings(options.apiKey, options.baseUrl);
       }
 
@@ -3476,7 +3381,8 @@ async function probeXaiInference(): Promise<void> {
     cli.error("❌ Could not load a valid token after login.");
     return;
   }
-  const probeModel = process.env.GROK_MODEL || "grok-3";
+  const { xaiProbeModel } = await import('./config/legacy-env.js');
+  const probeModel = xaiProbeModel();
   try {
     const res = await fetch(`${XAI_OAUTH_BASE_URL}/chat/completions`, {
       method: "POST",

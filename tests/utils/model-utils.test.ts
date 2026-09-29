@@ -109,12 +109,13 @@ describe('Model Utilities', () => {
 
   describe('getDefaultModel', () => {
     it('should return correct default for each provider', () => {
-      expect(getDefaultModel('xai')).toBe('grok-4-latest');
+      expect(getDefaultModel('xai')).toBe('grok-code-fast-1');
       expect(getDefaultModel('anthropic')).toBe('claude-opus-4-6');
       expect(getDefaultModel('openai')).toBe('gpt-4o');
       expect(getDefaultModel('google')).toBe('gemini-2.5-pro');
       expect(getDefaultModel('lmstudio')).toBe('local-model');
-      expect(getDefaultModel('unknown')).toBe('grok-4-latest');
+      expect(getDefaultModel('unknown')).toBe('gpt-4o');
+      expect(getDefaultModel()).toBe('gpt-4o');
     });
   });
 

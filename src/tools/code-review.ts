@@ -1,3 +1,5 @@
+import { runtimeDefaultModel } from '../config/runtime-default-model.js';
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * AI Code Review Tool
  *
@@ -90,7 +92,7 @@ const DEFAULT_CONFIG: ReviewConfig = {
   maxFunctionLength: 50,
   excludePatterns: ['node_modules', 'dist', 'build', '.git', '*.min.js'],
   includeOnlyPatterns: [],
-  model: 'grok-3-latest',
+  model: runtimeDefaultModel(),
   contextLines: 5,
 };
 
@@ -136,7 +138,7 @@ export class CodeReviewTool extends EventEmitter {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
     if (config.model === undefined) {
-      const envModel = process.env.GROK_MODEL?.trim();
+      const envModel = codeBuddyEnv('MODEL')?.trim();
       if (envModel) this.config.model = envModel;
     }
     this.bash = new BashTool();
@@ -147,7 +149,7 @@ export class CodeReviewTool extends EventEmitter {
    */
   private ensureClient(): CodeBuddyClient {
     if (!this.client) {
-      const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+      const apiKey = codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY || '';
       this.client = new CodeBuddyClient(apiKey, this.config.model);
     }
     return this.client;

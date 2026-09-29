@@ -1,3 +1,5 @@
+import { codeBuddyEnv } from '../../config/legacy-env.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { getAutonomyManager, SAFE_MODE_PATHS, type AutonomyLevel } from "../../utils/autonomy-manager.js";
 import { getSlashCommandManager } from "../slash-commands.js";
@@ -456,7 +458,7 @@ Use the spawn_parallel_agents tool to launch them concurrently.`,
     
     // Lazy-load wide research
     const { runWideResearch } = await import('../../agent/wide-research.js');
-    const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
+    const apiKey = codeBuddyEnv('API_KEY') || process.env.XAI_API_KEY || '';
     
     if (!apiKey) {
       return {
@@ -524,6 +526,7 @@ Consider splitting into parallel operations for:
  */
 export function handleModelRouter(args: string[]): CommandHandlerResult {
   const action = args[0]?.toLowerCase();
+  const currentModel = codeBuddyEnv('MODEL') || detectProviderFromEnv()?.defaultModel || 'No provider configured';
 
   let content: string;
 
@@ -555,14 +558,17 @@ Use /model to change models manually.`;
 
 Mode: Manual (use /model-router auto to enable)
 
+Default model: ${currentModel}
 Task-to-Model Mapping:
-  • search   → grok-code-fast-1
-  • planning → grok-4-latest
-  • coding   → grok-4-latest
-  • review   → grok-4-latest
-  • debug    → grok-4-latest
-  • docs     → grok-code-fast-1
-  • chat     → grok-code-fast-1
+  • search   → ${currentModel}
+  • planning → ${currentModel}
+  • coding   → ${currentModel}
+  • review   → ${currentModel}
+  • debug    → ${currentModel}
+  • docs     → ${currentModel}
+  • chat     → ${currentModel}
+
+Task mappings can be configured in .codebuddy/model-router.json.
 
 Commands:
   /model-router auto    - Enable auto selection

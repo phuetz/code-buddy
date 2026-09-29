@@ -18,7 +18,6 @@ import {
   LegacyUserSettings,
   ConnectionConfig,
   ConnectionProfile,
-  DEFAULT_PROFILES,
 } from '../../src/config/types.js';
 
 describe('Settings Migration', () => {
@@ -78,8 +77,8 @@ describe('Settings Migration', () => {
       expect(detectProviderFromSettings({ baseURL: 'http://localhost:8080/v1' })).toBe('local');
     });
 
-    it('should default to grok', () => {
-      expect(detectProviderFromSettings({})).toBe('grok');
+    it('should keep an unknown provider generic', () => {
+      expect(detectProviderFromSettings({})).toBe('custom');
     });
   });
 
@@ -102,13 +101,41 @@ describe('Settings Migration', () => {
       expect(profile.enabled).toBe(true);
     });
 
-    it('should use default URL if not provided', () => {
+    it('should use a neutral URL if no provider was selected', () => {
       const profile = createProfileFromLegacy({});
+      expect(profile.baseURL).toBe('https://api.openai.com/v1');
+      expect(profile.provider).toBe('custom');
+    });
+
+    it('keeps the xAI endpoint when xAI was explicitly selected', () => {
+      const profile = createProfileFromLegacy({ provider: 'xai', apiKey: 'xai-key' });
       expect(profile.baseURL).toBe('https://api.x.ai/v1');
+      expect(profile.provider).toBe('xai');
     });
   });
 
   describe('migrateSettings', () => {
+    it('treats the exact historical generated selection as unchosen without mutating it', () => {
+      const legacy: LegacyUserSettings = {
+        defaultModel: 'grok-code-fast-1',
+        models: [
+          'grok-code-fast-1', 'grok-4-latest', 'grok-3-latest',
+          'grok-3-fast', 'grok-3-mini-fast',
+        ],
+        baseURL: 'https://api.x.ai/v1',
+      };
+      const original = structuredClone(legacy);
+
+      expect(needsMigration(legacy)).toBe(false);
+      expect(detectProviderFromSettings(legacy)).toBe('custom');
+      const migrated = migrateSettings(legacy);
+      expect(migrated.defaultModel).toBeUndefined();
+      expect(migrated.models).toBeUndefined();
+      expect(migrated.connection?.activeProfileId).toBe('');
+      expect(migrated.connection?.profiles.some(profile => profile.id === 'grok')).toBe(false);
+      expect(legacy).toEqual(original);
+    });
+
     it('should migrate settings with custom config', () => {
       const legacy: LegacyUserSettings = {
         apiKey: 'my-custom-key',
@@ -136,19 +163,21 @@ describe('Settings Migration', () => {
     it('should add default profiles', () => {
       const migrated = migrateSettings({});
 
-      expect(migrated.connection?.profiles.some(p => p.id === 'grok')).toBe(true);
+      expect(migrated.connection?.profiles.some(p => p.id === 'grok')).toBe(false);
       expect(migrated.connection?.profiles.some(p => p.id === 'lmstudio')).toBe(true);
       expect(migrated.connection?.profiles.some(p => p.id === 'ollama')).toBe(true);
+      expect(migrated.connection?.activeProfileId).toBe('');
     });
 
-    it('should not create migrated profile if using same API key as env', () => {
+    it('preserves a legacy key even when it matches an environment alias', () => {
       const originalEnv = process.env.GROK_API_KEY;
       process.env.GROK_API_KEY = 'env-key';
 
       try {
         const migrated = migrateSettings({ apiKey: 'env-key' });
-        // Should use default grok profile
-        expect(migrated.connection?.activeProfileId).toBe('grok');
+        expect(migrated.connection?.activeProfileId).toBe('custom');
+        expect(migrated.connection?.profiles.find(p => p.id === 'custom')?.apiKey).toBe('env-key');
+        expect(migrated.connection?.profiles.some(p => p.id === 'grok')).toBe(false);
       } finally {
         if (originalEnv) {
           process.env.GROK_API_KEY = originalEnv;
@@ -172,7 +201,7 @@ describe('Settings Migration', () => {
       const merged = mergeWithDefaults(config);
 
       expect(merged.profiles.some(p => p.id === 'custom')).toBe(true);
-      expect(merged.profiles.some(p => p.id === 'grok')).toBe(true);
+      expect(merged.profiles.some(p => p.id === 'grok')).toBe(false);
       expect(merged.profiles.some(p => p.id === 'lmstudio')).toBe(true);
     });
 

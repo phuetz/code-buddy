@@ -98,11 +98,12 @@ describe('SettingsManager', () => {
   });
 
   describe('User Settings', () => {
-    it('should load user settings with defaults', () => {
+    it('should not invent provider or model settings for a new user', () => {
       const settings = manager.loadUserSettings();
       expect(settings).toBeDefined();
-      expect(settings.baseURL).toBeDefined();
-      expect(settings.defaultModel).toBeDefined();
+      expect(settings.baseURL).toBeUndefined();
+      expect(settings.defaultModel).toBeUndefined();
+      expect(settings.models).toBeUndefined();
     });
 
     it('should save user settings', () => {
@@ -200,7 +201,7 @@ describe('SettingsManager', () => {
     it('should get available models', () => {
       const models = manager.getAvailableModels();
       expect(Array.isArray(models)).toBe(true);
-      expect(models.length).toBeGreaterThan(0);
+      expect(models).toEqual([]);
     });
   });
 
@@ -238,8 +239,8 @@ describe('SettingsManager', () => {
       const newManager = getSettingsManager(settingsManagerOverrides());
       const settings = newManager.loadUserSettings();
 
-      // Should still have default values
-      expect(settings.baseURL).toBeDefined();
+      expect(settings.baseURL).toBeUndefined();
+      expect(settings.defaultModel).toBeUndefined();
     });
 
     it('should handle null values in settings', () => {

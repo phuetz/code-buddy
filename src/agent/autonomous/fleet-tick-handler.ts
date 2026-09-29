@@ -41,6 +41,7 @@ import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../../utils/logger.js';
+import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import { readJsonAtomic, writeJsonAtomic } from '../../utils/atomic-write.js';
 import {
   resolveProviderFromEnv,
@@ -99,7 +100,7 @@ export interface FleetTickOptions {
   priorityThreshold?: FleetTaskPriority;
   /**
    * Phase (d).20 — LLM provider selection for the autonomous agent.
-   * `'cloud'` (default V0.1) → GROK env. `'auto'` → factory auto-detect.
+   * `'cloud'` → configured cloud provider. `'auto'` (default) → provider detection.
    * Explicit provider id → force that provider. Per-task `preferLocal`
    * overrides this for that task only (when Ollama is configured).
    */
@@ -120,16 +121,27 @@ export interface FleetTickOptions {
   gitRun?: (args: string[], cwd: string) => Promise<{ stdout: string; stderr: string; code: number }>;
 }
 
-/** GROK fallback used by the V0.1 'cloud' default and the safety-net fallback. */
-function buildGrokEnvProvider(reason: ResolvedTickProvider['reason']): ResolvedTickProvider {
-  return {
-    provider: 'grok',
-    model: process.env.GROK_MODEL || 'grok-3',
-    isLocal: false,
-    apiKey: process.env.GROK_API_KEY || '',
-    baseUrl: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
-    reason,
-  };
+const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio', 'vllm', 'lemonade']);
+
+function configuredProvider(reason: ResolvedTickProvider['reason'], cloudOnly: boolean): ResolvedTickProvider | null {
+  const detected = detectProviderFromEnv();
+  if (detected && !(cloudOnly && LOCAL_PROVIDERS.has(detected.provider))) {
+    return {
+      provider: detected.provider,
+      model: detected.defaultModel,
+      isLocal: LOCAL_PROVIDERS.has(detected.provider),
+      apiKey: detected.apiKey,
+      baseUrl: detected.baseURL,
+      reason,
+    };
+  }
+  if (cloudOnly) {
+    for (const id of ['chatgpt-oauth', 'agy-cli', 'gemini-cli', 'openrouter', 'grok', 'mistral', 'anthropic', 'gemini', 'openai'] as const) {
+      const peer = resolveProviderFromEnv(id);
+      if (peer) return { ...peer, reason };
+    }
+  }
+  return null;
 }
 
 /**
@@ -137,13 +149,12 @@ function buildGrokEnvProvider(reason: ResolvedTickProvider['reason']): ResolvedT
  *
  * Priority cascade:
  *   1. `task.preferLocal=true` AND `OLLAMA_HOST` set → ollama
- *   2. `llm_provider='cloud'` (default V0.1) → GROK env
- *   3. `llm_provider='auto'` → factory auto-detect (Ollama → grok → ...)
+ *   2. `llm_provider='cloud'` → configured cloud provider
+ *   3. `llm_provider='auto'` (default) → normal provider detection
  *   4. `llm_provider='<id>'` → force that provider via factory
- *   5. Fallback (factory failed): GROK env (V0.1 behavior)
+ *   5. Fallback (explicit provider unavailable): normal provider detection
  *
- * Pure function. Logs at warn level when fallthrough happens so users
- * can spot misconfigs without losing the task to a hard error.
+ * Logs at warn level when an explicit provider is unavailable.
  */
 export function resolveTickProvider(
   task: Pick<FleetTask, 'preferLocal'>,
@@ -164,21 +175,30 @@ export function resolveTickProvider(
       '[fleet-tick] task.preferLocal=true but OLLAMA_HOST is not set — falling through to host config',
     );
   }
-  // 2. cloud (default)
-  const cfg = configProvider ?? 'cloud';
+  // 2. configured cloud or automatic provider
+  const cfg = configProvider ?? 'auto';
   if (cfg === 'cloud') {
-    return buildGrokEnvProvider('config:cloud');
+    const cloud = configuredProvider('config:cloud', true);
+    if (cloud) return cloud;
+    throw new Error('No cloud provider configured. Run buddy login or configure CODEBUDDY_API_KEY and CODEBUDDY_BASE_URL.');
   }
-  // 3. auto or explicit
+  if (cfg === 'auto') {
+    const automatic = configuredProvider('config:auto', false) ?? resolveProviderFromEnv('auto');
+    if (automatic) return { ...automatic, reason: 'config:auto' };
+    throw new Error('No LLM provider available. Run buddy login or start a tool-capable Ollama model.');
+  }
+  // 3. explicit provider
   const r = cfg === 'ollama' && !process.env.OLLAMA_HOST?.trim()
     ? null
     : resolveProviderFromEnv(cfg);
   if (r) {
-    return { ...r, reason: cfg === 'auto' ? 'config:auto' : 'config:explicit' };
+    return { ...r, reason: 'config:explicit' };
   }
   // 4. fallback
-  logger.warn(`[fleet-tick] llm_provider="${cfg}" could not resolve — falling back to GROK env`);
-  return buildGrokEnvProvider('fallback');
+  logger.warn(`[fleet-tick] llm_provider="${cfg}" could not resolve — using the configured provider`);
+  const fallback = configuredProvider('fallback', false) ?? resolveProviderFromEnv('auto');
+  if (fallback) return { ...fallback, reason: 'fallback' };
+  throw new Error('No LLM provider available. Run buddy login or start a tool-capable Ollama model.');
 }
 
 /** Internal: ISO-8601 UTC timestamp, second precision (mirrors python `now_iso`). */
@@ -465,10 +485,8 @@ async function defaultAgentRun(
 ): Promise<{ stdout: string; timedOut: boolean }> {
   // Lazy-import to avoid pulling the agent module at fleet-tick load time.
   const { CodeBuddyAgent } = await import('../codebuddy-agent.js');
-  // V0.1 fallback: when no provider was resolved (test path, or someone
-  // calling defaultAgentRun directly without going through runFleetTick),
-  // use the GROK env that V0.1 used.
-  const p = provider ?? buildGrokEnvProvider('config:cloud');
+  // Direct callers still resolve the same active provider as a normal tick.
+  const p = provider ?? resolveTickProvider({ preferLocal: false }, 'auto');
   const agent = new CodeBuddyAgent(p.apiKey, p.baseUrl, p.model, 50, false);
 
   let timedOut = false;

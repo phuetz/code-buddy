@@ -112,11 +112,9 @@ describe("Per-agent provider override (Fleet P1)", () => {
     expect(constructorCalls[0].model).toBe("claude-haiku-4");
   });
 
-  it("ORCHESTRATOR_CONFIG default model wins when both override.model and overrides.model absent", () => {
+  it('uses the active provider model when no agent override is configured', () => {
     new OrchestratorAgent("k");
-    // ORCHESTRATOR_CONFIG.model is unset → BaseAgent falls back to
-    // 'grok-3-latest' (the legacy default).
-    expect(constructorCalls[0].model).toBe("grok-3-latest");
+    expect(constructorCalls[0].model).toBe('gpt-4o');
   });
 
   it(

@@ -1,3 +1,5 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
+
 /**
  * Runtime provider catalog.
  *
@@ -196,7 +198,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     priority: 20,
     apiKeyEnvKeys: [],
     baseUrlEnvKeys: ['OLLAMA_HOST'],
-    modelEnvKeys: ['GROK_MODEL', 'OLLAMA_MODEL'],
+    modelEnvKeys: ['OLLAMA_MODEL'],
     defaultBaseURL: 'http://localhost:11434/v1',
     defaultModel: 'qwen2.5-coder:7b',
     apiKeyPlaceholder: 'ollama',
@@ -245,9 +247,9 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
     priority: 30,
-    apiKeyEnvKeys: ['GROK_API_KEY', 'XAI_API_KEY'],
-    baseUrlEnvKeys: ['GROK_BASE_URL', 'XAI_BASE_URL'],
-    modelEnvKeys: ['GROK_MODEL', 'XAI_MODEL'],
+    apiKeyEnvKeys: ['XAI_API_KEY', 'GROK_API_KEY'],
+    baseUrlEnvKeys: ['XAI_BASE_URL', 'GROK_BASE_URL'],
+    modelEnvKeys: ['XAI_MODEL', 'GROK_MODEL'],
     defaultBaseURL: 'https://api.x.ai/v1',
     defaultModel: 'grok-3-fast',
     models: ['grok-4-1-fast', 'grok-code-fast-1', 'grok-3-fast', 'grok-3-mini'],
@@ -1126,8 +1128,8 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     apiKeyEnvKeys: ['CODEBUDDY_API_KEY', 'CUSTOM_PROVIDER_API_KEY'],
     baseUrlEnvKeys: ['CODEBUDDY_BASE_URL', 'CUSTOM_PROVIDER_BASE_URL'],
     modelEnvKeys: ['CODEBUDDY_MODEL', 'CUSTOM_PROVIDER_MODEL'],
-    defaultBaseURL: 'http://localhost:8000/v1',
-    defaultModel: 'model',
+    defaultBaseURL: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o',
     models: ['model'],
   },
   {
@@ -1211,7 +1213,21 @@ export function findRuntimeProvider(idOrAlias: string | undefined | null): Runti
 export function resolveProviderFromCatalog(
   options: ProviderCatalogResolveOptions = {},
 ): ResolvedRuntimeProvider | null {
-  const env = options.env ?? process.env;
+  const sourceEnv = options.env ?? process.env;
+  const resolvedApiKey = codeBuddyEnv('API_KEY', sourceEnv);
+  const resolvedBaseURL = codeBuddyEnv('BASE_URL', sourceEnv);
+  const resolvedModel = codeBuddyEnv('MODEL', sourceEnv);
+  const env = { ...sourceEnv };
+  // A neutral custom endpoint takes priority over old xAI aliases. Do not
+  // mutate process.env: this resolver is also used by diagnostics and tests.
+  if (sourceEnv.CODEBUDDY_API_KEY || sourceEnv.CODEBUDDY_BASE_URL) {
+    env.CODEBUDDY_API_KEY = resolvedApiKey;
+    env.CODEBUDDY_BASE_URL = resolvedBaseURL;
+    env.CODEBUDDY_MODEL = sourceEnv.CODEBUDDY_MODEL || resolvedModel;
+    delete env.GROK_API_KEY;
+    delete env.GROK_BASE_URL;
+    delete env.GROK_MODEL;
+  }
   const override = normalizeProviderId(options.providerOverride ?? env.CODEBUDDY_PROVIDER);
 
   if (override) {
@@ -1229,18 +1245,22 @@ export function resolveProviderFromCatalog(
   // _API_KEY exported for another tool must not hijack detection away from a configured custom endpoint
   // or a historical provider. They stay fully usable when chosen explicitly (CODEBUDDY_PROVIDER, --profile,
   // `buddy provider use <id>`).
+  const custom = findRuntimeProvider('custom');
+  if (custom && isEntryConfigured(custom, env)) {
+    return resolveEntry(custom, env, 'environment', options);
+  }
+
   const ordered = getDirectRuntimeProviderCatalog()
     .filter((entry) => entry.id !== 'chatgpt' && entry.id !== 'custom' && entry.priority < AUTO_DETECT_PRIORITY_CEILING)
-    .sort((a, b) => a.priority - b.priority);
+    .sort((a, b) => {
+      const aLocal = a.authMode === 'local' ? 1 : 0;
+      const bLocal = b.authMode === 'local' ? 1 : 0;
+      return aLocal - bLocal || a.priority - b.priority;
+    });
 
   for (const entry of ordered) {
     if (!isEntryConfigured(entry, env)) continue;
     return resolveEntry(entry, env, 'environment', options);
-  }
-
-  const custom = findRuntimeProvider('custom');
-  if (custom && isEntryConfigured(custom, env)) {
-    return resolveEntry(custom, env, 'environment', options);
   }
 
   return null;
@@ -1304,12 +1324,15 @@ function resolveEntry(
     return null;
   }
 
-  const apiKey = firstEnvValue(env, entry.apiKeyEnvKeys) || entry.apiKeyPlaceholder || '';
+  const neutral = entry.id === 'chatgpt' ? undefined : env.CODEBUDDY_API_KEY?.trim();
+  const apiKey = neutral || firstEnvValue(env, entry.apiKeyEnvKeys) || entry.apiKeyPlaceholder || '';
   const baseURL = normalizeProviderBaseURL(
-    firstEnvValue(env, entry.baseUrlEnvKeys) || entry.defaultBaseURL,
+    (entry.id === 'chatgpt' ? undefined : env.CODEBUDDY_BASE_URL?.trim()) ||
+      firstEnvValue(env, entry.baseUrlEnvKeys) || entry.defaultBaseURL,
     entry,
   );
-  const defaultModel = firstEnvValue(env, entry.modelEnvKeys) || entry.defaultModel;
+  const defaultModel = (entry.id === 'chatgpt' ? undefined : env.CODEBUDDY_MODEL?.trim()) ||
+    firstEnvValue(env, entry.modelEnvKeys) || codeBuddyEnv('MODEL', env) || entry.defaultModel;
 
   if (options.requireConfigured && !apiKey && entry.authMode === 'api-key') {
     return null;

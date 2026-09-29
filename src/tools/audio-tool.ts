@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { Readable } from 'stream';
@@ -202,7 +203,7 @@ export class AudioTool {
       }
 
       // Check for CodeBuddy API (if it supports transcription)
-      const codebuddyKey = process.env.GROK_API_KEY;
+      const codebuddyKey = codeBuddyEnv('API_KEY');
       if (codebuddyKey) {
         // Grok doesn't natively support audio transcription yet
         // Return instruction for user

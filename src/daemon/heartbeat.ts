@@ -1,3 +1,4 @@
+import { codeBuddyEnv } from '../config/legacy-env.js';
 /**
  * Heartbeat Engine
  *
@@ -291,9 +292,9 @@ export class HeartbeatEngine extends EventEmitter {
       return this.config.agentReviewFn(checklistContent);
     }
 
-    const apiKey = process.env.GROK_API_KEY || '';
-    const baseURL = process.env.GROK_BASE_URL;
-    const model = process.env.GROK_MODEL;
+    const apiKey = codeBuddyEnv('API_KEY') || '';
+    const baseURL = codeBuddyEnv('BASE_URL');
+    const model = codeBuddyEnv('MODEL');
     const forceReview =
       this.consecutiveSuppressions >= this.config.maxConsecutiveSuppressions - 1;
     const suppressionContext = forceReview

@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function resolveTestSourceSpecifier(importerId: string, specifier: string): string | null {
   if (!specifier.startsWith('.') || !specifier.includes('/src/')) {

@@ -11,6 +11,7 @@
  */
 
 import { BaseAgent, createId } from "../base-agent.js";
+import { runtimeDefaultModel } from '../../../config/runtime-default-model.js';
 import {
   AgentConfig,
   AgentTask,
@@ -98,7 +99,7 @@ Always be constructive and respectful. Explain WHY something is an issue, not ju
     "search",
     "bash", // For running linters
   ],
-  model: "grok-3-latest",
+  model: runtimeDefaultModel(),
   maxRounds: 25,
   temperature: 0.5,
 };

@@ -53,7 +53,7 @@ describe('model-defaults', () => {
       expect(MODEL_DEFAULTS.openai).toBe('gpt-4o');
       expect(MODEL_DEFAULTS.anthropic).toBe('claude-sonnet-4-20250514');
       expect(MODEL_DEFAULTS.google).toBe('gemini-2.5-flash');
-      expect(MODEL_DEFAULTS.ollama).toBe('llama3.2');
+      expect(MODEL_DEFAULTS.ollama).toBe('qwen3:8b');
       expect(MODEL_DEFAULTS.lmstudio).toBe('local-model');
       expect(MODEL_DEFAULTS.deepseek).toBe('deepseek-chat');
       expect(MODEL_DEFAULTS.mistral).toBe('devstral-latest');
@@ -61,18 +61,18 @@ describe('model-defaults', () => {
   });
 
   describe('FALLBACK_MODEL', () => {
-    it('should equal the xai default', () => {
-      expect(FALLBACK_MODEL).toBe(MODEL_DEFAULTS.xai);
+    it('should be separate from the xai provider default', () => {
+      expect(FALLBACK_MODEL).not.toBe(MODEL_DEFAULTS.xai);
     });
 
-    it('should be grok-code-fast-1', () => {
-      expect(FALLBACK_MODEL).toBe('grok-code-fast-1');
+    it('should use the documented generic compatibility model', () => {
+      expect(FALLBACK_MODEL).toBe('gpt-4o');
     });
   });
 
   describe('FALLBACK_PROVIDER', () => {
-    it('should be xai', () => {
-      expect(FALLBACK_PROVIDER).toBe('xai');
+    it('should not select xai without configuration', () => {
+      expect(FALLBACK_PROVIDER).toBe('openai');
     });
   });
 
@@ -105,7 +105,7 @@ describe('model-defaults', () => {
     });
 
     it('should return static default for providers without env var mapping', () => {
-      expect(getProviderDefaultModel('ollama')).toBe('llama3.2');
+      expect(getProviderDefaultModel('ollama')).toBe('qwen3:8b');
       expect(getProviderDefaultModel('lmstudio')).toBe('local-model');
       expect(getProviderDefaultModel('deepseek')).toBe('deepseek-chat');
       expect(getProviderDefaultModel('mistral')).toBe('devstral-latest');

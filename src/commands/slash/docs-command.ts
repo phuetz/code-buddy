@@ -1,3 +1,6 @@
+import { runtimeDefaultModel } from '../../config/runtime-default-model.js';
+import { codeBuddyEnv, xaiApiKey } from '../../config/legacy-env.js';
+import { DEFAULT_BASE_URL } from '../../utils/base-url.js';
 /**
  * /docs slash command — Generate DeepWiki-style documentation
  *
@@ -122,19 +125,19 @@ async function handleGenerateWithLLM(thinkingLevelOverride?: 'minimal' | 'low' |
     if (!rawResult.success) return rawResult;
 
     // Step 2: Set up LLM client for enrichment (use OpenAI SDK directly for reliability)
-    const apiKey = process.env.GROK_API_KEY || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY || '';
+    const apiKey = codeBuddyEnv('API_KEY') || xaiApiKey() || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY || '';
     if (!apiKey) {
       return {
-        output: rawResult.output + '\n\n(LLM enrichment skipped — no API key. Set GROK_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY.)',
+        output: rawResult.output + '\n\n(LLM enrichment skipped — no API key. Set CODEBUDDY_API_KEY, XAI_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY.)',
         success: true,
       };
     }
 
     // Determine model and provider
-    const isGemini = !!(process.env.GOOGLE_API_KEY && !process.env.GROK_API_KEY);
-    const isOpenAI = !!(process.env.OPENAI_API_KEY && !process.env.GROK_API_KEY && !process.env.GOOGLE_API_KEY);
+    const isGemini = !!(process.env.GOOGLE_API_KEY && !codeBuddyEnv('API_KEY') && !xaiApiKey());
+    const isOpenAI = !!(process.env.OPENAI_API_KEY && !codeBuddyEnv('API_KEY') && !xaiApiKey() && !process.env.GOOGLE_API_KEY);
 
-    let model = process.env.GROK_MODEL || 'grok-3-latest';
+    let model = runtimeDefaultModel();
     if (isGemini) model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
     if (isOpenAI) model = 'gpt-4o-mini';
 
@@ -176,7 +179,7 @@ async function handleGenerateWithLLM(thinkingLevelOverride?: 'minimal' | 'low' |
       };
     } else {
       // OpenAI-compatible (Grok, OpenAI, LM Studio)
-      let baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
+      let baseURL = codeBuddyEnv('BASE_URL') || (xaiApiKey() ? 'https://api.x.ai/v1' : DEFAULT_BASE_URL);
       if (isOpenAI) baseURL = 'https://api.openai.com/v1';
       const OpenAI = (await import('openai')).default;
       const openaiClient = new OpenAI({ apiKey, baseURL });
@@ -266,11 +269,11 @@ async function handleGenerateV2(withLLM: boolean, thinkingLevel?: 'minimal' | 'l
     // Set up LLM if requested
     let llmCall: ((sys: string, user: string, thinking?: string) => Promise<string>) | undefined;
     if (withLLM) {
-      const apiKey = process.env.GROK_API_KEY || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY || '';
+      const apiKey = codeBuddyEnv('API_KEY') || xaiApiKey() || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY || '';
       if (apiKey) {
-        const isGemini = !!(process.env.GOOGLE_API_KEY && !process.env.GROK_API_KEY);
-        const isOpenAI = !!(process.env.OPENAI_API_KEY && !process.env.GROK_API_KEY && !process.env.GOOGLE_API_KEY);
-        let model = process.env.GROK_MODEL || 'grok-3-latest';
+        const isGemini = !!(process.env.GOOGLE_API_KEY && !codeBuddyEnv('API_KEY') && !xaiApiKey());
+        const isOpenAI = !!(process.env.OPENAI_API_KEY && !codeBuddyEnv('API_KEY') && !xaiApiKey() && !process.env.GOOGLE_API_KEY);
+        let model = runtimeDefaultModel();
         if (isGemini) model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
         if (isOpenAI) model = 'gpt-4o-mini';
 
@@ -291,7 +294,7 @@ async function handleGenerateV2(withLLM: boolean, thinkingLevel?: 'minimal' | 'l
             return data.candidates?.[0]?.content?.parts?.filter((p: { text?: string }) => p.text).map((p: { text?: string }) => p.text).join('') ?? '';
           };
         } else {
-          let baseURL = process.env.GROK_BASE_URL || 'https://api.x.ai/v1';
+          let baseURL = codeBuddyEnv('BASE_URL') || (xaiApiKey() ? 'https://api.x.ai/v1' : DEFAULT_BASE_URL);
           if (isOpenAI) baseURL = 'https://api.openai.com/v1';
           const OpenAI = (await import('openai')).default;
           const client = new OpenAI({ apiKey, baseURL });

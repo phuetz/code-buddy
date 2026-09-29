@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { findRuntimeProvider } from '../providers/provider-catalog.js';
+import { codeBuddyEnv } from './legacy-env.js';
 import { installCataloguePriceOverlays, type ModelPricing } from './model-pricing.js';
 import { findModelToolConfig, installModelCatalogueOverlays } from './model-tools.js';
 import { ownValue } from './own-lookup.js';
@@ -413,7 +414,7 @@ export function resolveStartupModel(request: StartupModelRequest = {}): StartupM
   const profile = lookupProfile(document, profileName);
   const aliases = document ? aliasMap(document) : aliasMap(emptyDocument());
   const cli = firstText(request.cli) ?? modelFromArgv(request.argv ?? []);
-  const envModel = firstText(env.CODEBUDDY_MODEL) ?? firstText(env.GROK_MODEL);
+  const envModel = firstText(codeBuddyEnv('MODEL', env));
   const profileModel = profileName ? profile.activeModel : null;
   const userModel = document ? explicitUserModel(document) : null;
   if (cli || envModel || profileModel || userModel) {
@@ -885,7 +886,7 @@ function explicitUserModel(document: CatalogueDocument): string | null {
   const primary = document.roles.primary?.trim();
   if (primary) return primary;
   const active = document.activeModel?.trim();
-  if (!active || active === GENERATED_ACTIVE_MODEL) return null;
+  if (!active || active === GENERATED_ACTIVE_MODEL || active === 'grok-code-fast') return null;
   return active;
 }
 
