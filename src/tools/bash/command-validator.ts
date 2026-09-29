@@ -1046,6 +1046,10 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
       parseShellCommand(joined).commands.length === 1 &&
       isGitMetadataOnly(gitInvocations.commands[0]!)) return null;
   const roots = getHomeCredentialRoots();
+  const credentialRootNames = new Set([
+    ...roots.map((root) => path.basename(root).toLowerCase()),
+    '.docker',
+  ]);
   // Keep commas inside shell brace expansion, e.g. `{notes.txt,.env}`.
   const tokens = expanded.split(/[\s`;|&<>()=]+/).filter(Boolean);
   const words = new Set(
@@ -1120,6 +1124,14 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     const token = usesSearchReader && /^-f[^-]/.test(raw)
       ? raw.slice(2) // grep/rg `-fFILE` reads FILE as a pattern file.
       : raw.replace(/^--?[A-Za-z0-9-]+=/, '');
+    // A shell variable can move a known credential root to an arbitrary
+    // location after static validation (`$PWD/.codebuddy/*`,
+    // `/home/$USER/.docker/*`). Do not guess its runtime value: only a
+    // literal, fully resolved path can be checked against the file guard.
+    if (/\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)/.test(token) &&
+        token.split(/[\\/]/).some((segment) => credentialRootNames.has(segment.toLowerCase()))) {
+      return raw;
+    }
     const base = path.basename(token).toLowerCase();
     if (BASH_CREDENTIAL_BASENAMES.has(base)) return raw;
     if (i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd')) {
