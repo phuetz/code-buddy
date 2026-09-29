@@ -19,6 +19,7 @@ const SHIPPED_SKILLS = [
   'file-edit',
   'git-commit',
   'pubcommander-control',
+  'ragchat',
   'typescript-expert',
   'weather',
   'web-app-testing',
