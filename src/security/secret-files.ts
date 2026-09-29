@@ -221,6 +221,16 @@ export function classifySecretPath(filePath: string, baseDir?: string): SecretFi
       return { secret: true, matchedPath: canonical, reason: `${canonicalReason} (via symlink)` };
     }
   }
+  // A hard link has no canonical "target": every name resolves to itself.
+  // Without an inode inventory of the entire disk, a public-looking alias
+  // cannot be proven independent of a credential path. Refuse the alias
+  // instead of allowing the same bytes under a second name.
+  try {
+    const stat = fs.statSync(lexical);
+    if (stat.isFile() && stat.nlink > 1) {
+      return { secret: true, matchedPath: lexical, reason: 'file has multiple hard links' };
+    }
+  } catch { /* nonexistent path: keep lexical classification */ }
   return { secret: false };
 }
 
@@ -244,6 +254,7 @@ export function checkSecretFileAccess(
   }
   const roots = getHomeCredentialRoots();
   const matched = verdict.matchedPath ?? '';
+  if (verdict.reason === 'file has multiple hard links') return verdict;
   if (matched.split(path.sep).some((component) => component.toLowerCase() === '.git')) return verdict;
   const inCredentialRoot = roots.some((root) => isInside(matched, root));
   return inCredentialRoot ? verdict : { secret: false };

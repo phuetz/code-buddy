@@ -813,6 +813,19 @@ function trackedSecretForGitDiff(invocation: GitInvocation): string | null {
   if (invocation.unsafeConfiguration) return 'Git diff configuration could not be checked';
   const args = invocation.args;
   const unsupported = 'Git diff could not be checked';
+  // The preflight must observe the same file selection as the command sent
+  // to Git. Unknown options (including --output) can change that selection
+  // or write a result to a file that another tool reads in a later turn.
+  const safeOptions = new Set([
+    '-p', '--patch', '--binary', '--raw', '--stat', '--numstat',
+    '--name-only', '--name-status', '--check', '--quiet',
+    '--cached', '--staged', '--no-ext-diff', '--no-textconv',
+    '--no-color', '--no-renames', '--exit-code',
+  ]);
+  const pathspecAt = args.indexOf('--');
+  const beforePathspec = pathspecAt < 0 ? args : args.slice(0, pathspecAt);
+  if (beforePathspec.some((arg) => arg.startsWith('-') &&
+    !safeOptions.has(arg) && !/^--unified=\d+$/.test(arg) && !/^-U\d+$/.test(arg))) return unsupported;
   const metadataOnly = args.some((arg) =>
     ['--name-only', '--name-status', '--stat', '--numstat', '--check', '--quiet'].includes(arg));
   if (metadataOnly && !args.some((arg) => ['-p', '--patch', '--binary'].includes(arg))) return null;
