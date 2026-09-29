@@ -1,32 +1,23 @@
 ---
 name: ragchat
-description: Interroger un serveur RagChat (RAG documentaire à droits cloisonnés) via ses outils MCP ou sa CLI `ragchat` — retrouver la documentation et le code d'un projet indexé, avec citations vérifiables (fichier, page, lignes). À utiliser quand la réponse se trouve dans un corpus RagChat plutôt que dans les fichiers ouverts.
+description: Interroger explicitement un serveur RagChat via ses outils MCP `mcp__ragchat__*` ou sa CLI `ragchat`.
 version: 1.0.0
 author: Code Buddy
 tier: bundled
 tags:
   - ragchat
-  - rag
-  - documentation
-  - knowledge-base
-  - citations
-  - mcp
-  - corpus
-  - recherche-documentaire
+requires:
+  env:
+    - RAGCHAT_URL
+    - RAGCHAT_TOKEN
 nativeEngine:
   category: research
   priority: 70
   triggers:
     - ragchat
-    - corpus indexé
-    - indexed documentation
-    - cherche dans la doc
-    - search the docs
-    - base documentaire
-    - avec citations
-  examples:
-    - "Que dit la documentation indexée dans RagChat sur la rotation des certificats ?"
-    - "Retrouve dans RagChat où est décrite l'API d'import, avec le fichier et les lignes"
+    - mcp__ragchat__
+    - RAGCHAT_URL
+    - serveur RagChat
 ---
 
 # RagChat — interroger un corpus documentaire avec citations
@@ -100,8 +91,7 @@ références `${…}` sont résolues à la connexion et un manque échoue fermé
         "url": "${RAGCHAT_URL}/mcp",
         "headers": { "Authorization": "Bearer ${RAGCHAT_TOKEN}" }
       },
-      "enabled": true,
-      "description": "RagChat — recherche documentaire citée, lecture seule"
+      "enabled": true
     }
   }
 }
