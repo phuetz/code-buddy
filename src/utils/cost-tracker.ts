@@ -3,6 +3,8 @@ import * as os from "os";
 import { EventEmitter } from "events";
 import { getAnalyticsRepository, AnalyticsRepository } from '../database/repositories/analytics-repository.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
+import { MODEL_PRICE_DATA, SUBSCRIPTION_MODEL_IDS, LOCAL_NO_COST_MODEL_IDS } from '../config/model-price-data.js';
+import { getPricingPer1k } from '../config/model-pricing.js';
 
 /**
  * Detect models served EXCLUSIVELY via the ChatGPT subscription auth
@@ -16,45 +18,19 @@ import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
  * doesn't return token usage in the SSE stream.
  */
 function isChatGptSubscriptionModel(model: string): boolean {
-  if (!model) return false;
-  const m = model.toLowerCase();
-  return (
-    // Models served EXCLUSIVELY via ChatGPT OAuth/backend (not billable via API key)
-    m === 'gpt-5.2' ||
-    m === 'gpt-5.5' ||
-    m.startsWith('gpt-5.5-') ||
-    m.includes('-codex') ||
-    m === 'codex-1' ||
-    m.startsWith('codex-mini') ||
-    // gpt-5.6 variants served via ChatGPT Responses backend
-    m === 'gpt-5.6-sol' ||
-    m === 'gpt-5.6' ||
-    m.startsWith('gpt-5.6-') ||
-    // Codex models
-    m === 'codex' ||
-    m.startsWith('codex-')
+  const id = model.toLowerCase();
+  return Boolean(id) && (
+    SUBSCRIPTION_MODEL_IDS.exact.includes(id) ||
+    SUBSCRIPTION_MODEL_IDS.prefixes.some(prefix => id.startsWith(prefix)) ||
+    SUBSCRIPTION_MODEL_IDS.contains.some(part => id.includes(part))
   );
 }
 
 function isLocalNoCostModel(model: string): boolean {
-  if (!model) return false;
-  const m = model.toLowerCase();
-  return (
-    m === 'ollama' ||
-    m.startsWith('ollama/') ||
-    m === 'lmstudio' ||
-    m === 'local-model' ||
-    m.startsWith('llama') ||
-    m.startsWith('qwen') ||
-    m.startsWith('gemma') ||
-    m.startsWith('phi') ||
-    m.startsWith('codellama') ||
-    m.startsWith('deepseek') ||
-    m.startsWith('command-r') ||
-    m === 'mistral' ||
-    m.startsWith('mistral:') ||
-    m === 'mixtral' ||
-    m.startsWith('mixtral:')
+  const id = model.toLowerCase();
+  return Boolean(id) && (
+    LOCAL_NO_COST_MODEL_IDS.exact.includes(id) ||
+    LOCAL_NO_COST_MODEL_IDS.prefixes.some(prefix => id.startsWith(prefix))
   );
 }
 
@@ -117,33 +93,13 @@ export interface ModelPricing {
   outputPer1k: number;
 }
 
-// Model pricing (approximate, update as needed)
-// Pricing is per 1K tokens (inputPer1k, outputPer1k)
-const MODEL_PRICING: Record<string, ModelPricing> = {
-  // Grok models
-  "grok-4-latest": { inputPer1k: 0.003, outputPer1k: 0.015 },
-  "grok-4-fast": { inputPer1k: 0.003, outputPer1k: 0.015 },
-  "grok-4-1-fast": { inputPer1k: 0.003, outputPer1k: 0.015 },
-  "grok-3-latest": { inputPer1k: 0.003, outputPer1k: 0.015 },
-  "grok-3-fast": { inputPer1k: 0.0006, outputPer1k: 0.004 },
-  "grok-3-mini": { inputPer1k: 0.0003, outputPer1k: 0.0005 },
-  "grok-code-fast-1": { inputPer1k: 0.00015, outputPer1k: 0.0006 },
-  "grok-2-latest": { inputPer1k: 0.002, outputPer1k: 0.010 },
-
-  // Mistral models - public pricing (as of 2026-09)
-  // mistral-medium-latest: 1.5 $/M input, 7.5 $/M output = 0.0015 $/K input, 0.0075 $/K output
-  "mistral-medium-latest": { inputPer1k: 0.0015, outputPer1k: 0.0075 },
-  "mistral-medium": { inputPer1k: 0.0015, outputPer1k: 0.0075 },
-  "mistral-large-latest": { inputPer1k: 0.003, outputPer1k: 0.015 },
-  "mistral-large": { inputPer1k: 0.003, outputPer1k: 0.015 },
-  "mistral-small-latest": { inputPer1k: 0.00025, outputPer1k: 0.001 },
-  "mistral-small": { inputPer1k: 0.00025, outputPer1k: 0.001 },
-  "mixtral-8x7b-latest": { inputPer1k: 0.0005, outputPer1k: 0.002 },
-  "mixtral-8x7b": { inputPer1k: 0.0005, outputPer1k: 0.002 },
-
-  // Fallback for unknown models
-  "default": { inputPer1k: 0.003, outputPer1k: 0.015 },
-};
+/** Compatibility view; built from the sole price table. */
+const MODEL_PRICING: Record<string, ModelPricing> = Object.fromEntries(
+  Object.keys(MODEL_PRICE_DATA).map(model => [model, {
+    get inputPer1k() { return getPricingPer1k(model).inputPer1k; },
+    get outputPer1k() { return getPricingPer1k(model).outputPer1k; },
+  }]),
+);
 
 const DEFAULT_CONFIG: CostConfig = {
   trackHistory: true,
@@ -258,7 +214,7 @@ export class CostTracker extends EventEmitter {
     if (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
       return 'subscription';
     }
-    return MODEL_PRICING[model] ? 'known' : 'unknown';
+    return Object.hasOwn(MODEL_PRICE_DATA, model) ? 'known' : 'unknown';
   }
 
   /**
@@ -288,7 +244,7 @@ export class CostTracker extends EventEmitter {
     if (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
       return 0;
     }
-    const pricing = MODEL_PRICING[model] ?? MODEL_PRICING["default"] ?? { inputPer1k: 0.003, outputPer1k: 0.015 };
+    const pricing = getPricingPer1k(model);
     return (effectiveInput / 1000) * pricing.inputPer1k +
            (effectiveOutput / 1000) * pricing.outputPer1k;
   }
@@ -317,7 +273,7 @@ export class CostTracker extends EventEmitter {
     if (billing === 'subscription') {
       total = 0;
     } else {
-      const pricing = MODEL_PRICING[model] ?? MODEL_PRICING["default"] ?? { inputPer1k: 0.003, outputPer1k: 0.015 };
+      const pricing = getPricingPer1k(model);
       total = (effectiveInput / 1000) * pricing.inputPer1k +
               (effectiveOutput / 1000) * pricing.outputPer1k;
     }

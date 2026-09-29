@@ -1,3 +1,5 @@
+import { UNKNOWN_MODEL_PRICE } from '../config/model-price-data.js';
+
 /**
  * LLM Response Cache
  *
@@ -87,7 +89,7 @@ const DEFAULT_CONFIG: LLMCacheConfig = {
   maxEntries: 500,
   similarityThreshold: 0.92,
   minTokensToCache: 100,
-  costPerMillion: 3.0,
+  costPerMillion: UNKNOWN_MODEL_PRICE.inputPerMillion,
   persistToDisk: true,
   cachePath: '.codebuddy/cache/llm-response-cache.json',
   prefixLength: 200,

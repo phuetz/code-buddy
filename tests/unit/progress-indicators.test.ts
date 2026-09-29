@@ -239,7 +239,7 @@ describe('CostTracker', () => {
     it('should return default pricing for unknown model', () => {
       const pricing = tracker.getPricing('completely-unknown-model');
 
-      expect(pricing.inputPer1M).toBe(5.0);
+      expect(pricing.inputPer1M).toBe(3.0);
       expect(pricing.outputPer1M).toBe(15.0);
     });
   });

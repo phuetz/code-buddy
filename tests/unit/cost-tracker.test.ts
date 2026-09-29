@@ -203,8 +203,8 @@ describe('CostTracker', () => {
 
     it('should calculate cost for grok-code-fast-1 model', () => {
       const cost = tracker.calculateCost(1000, 1000, 'grok-code-fast-1');
-      // inputPer1k: 0.00015, outputPer1k: 0.0006
-      expect(cost).toBeCloseTo(0.00075, 6);
+      // xAI published $0.20 input and $1.50 output per million tokens.
+      expect(cost).toBeCloseTo(0.0017, 6);
     });
 
     it('should calculate cost for grok-2-latest model', () => {

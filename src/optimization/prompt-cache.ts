@@ -1,3 +1,5 @@
+import { UNKNOWN_MODEL_PRICE } from '../config/model-price-data.js';
+
 /**
  * Prompt Caching Module
  *
@@ -62,7 +64,7 @@ export const DEFAULT_CACHE_CONFIG: CacheConfig = {
   maxEntries: 1000,
   ttlMs: 5 * 60 * 1000, // 5 minutes (matches OpenAI auto-cache TTL)
   minTokensToCache: 1024,
-  costPerMillion: 3.0, // Default for grok models
+  costPerMillion: UNKNOWN_MODEL_PRICE.inputPerMillion, // Default for grok models
 };
 
 /**

@@ -6,14 +6,15 @@
  * Provides:
  *   - `ModelRegistry` class with pricing, aliases, and model listing
  *   - `getModelRegistry()` singleton accessor
- *   - Alias resolution (e.g., 'sonnet' → 'claude-sonnet-4-20250514')
- *   - Pricing from models-snapshot.json with prefix-match fallback
+ *   - Alias resolution from the model data table
+ *   - Pricing only from model-price-data.ts; snapshot cost fields are ignored
  */
 
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { inferProvider } from './resolve-model.js';
+import { MODEL_PRICE_DATA, MODEL_ALIASES, UNKNOWN_MODEL_PRICE } from './model-price-data.js';
 
 // ============================================================================
 // Types
@@ -24,12 +25,28 @@ export interface ModelPricing {
   outputPerMillion: number;
 }
 
+const cataloguePrices = new Map<string, ModelPricing>();
+
+/** Explicit prices from the active user/project catalogue. */
+export function installRegistryPriceOverlays(entries: Record<string, ModelPricing> | null): void {
+  cataloguePrices.clear();
+  if (!entries) return;
+  for (const [name, price] of Object.entries(entries)) {
+    const key = name.trim().toLowerCase();
+    if (key && Number.isFinite(price.inputPerMillion) && Number.isFinite(price.outputPerMillion)
+      && price.inputPerMillion >= 0 && price.outputPerMillion >= 0) {
+      cataloguePrices.set(key, { ...price });
+    }
+  }
+}
+
 interface SnapshotEntry {
   maxTokens?: number;
   maxInputTokens?: number;
   maxOutputTokens?: number;
   supportsVision?: boolean;
   supportsFunctionCalling?: boolean;
+  /** Present in external snapshots for compatibility; never used as a price source. */
   inputCostPerToken?: number;
   outputCostPerToken?: number;
   input_cost_per_token?: number;
@@ -39,59 +56,6 @@ interface SnapshotEntry {
 // ============================================================================
 // Default pricing fallback
 // ============================================================================
-
-const DEFAULT_PRICING: ModelPricing = {
-  inputPerMillion: 3.0,
-  outputPerMillion: 15.0,
-};
-
-/**
- * Built-in pricing for known model families (per 1M tokens).
- * Used when the snapshot doesn't contain pricing data.
- */
-const BUILTIN_PRICING: Record<string, ModelPricing> = {
-  // xAI Grok
-  'grok-4': { inputPerMillion: 3.0, outputPerMillion: 15.0 },
-  'grok-3': { inputPerMillion: 3.0, outputPerMillion: 15.0 },
-  'grok-3-fast': { inputPerMillion: 0.60, outputPerMillion: 4.0 },
-  'grok-3-mini': { inputPerMillion: 0.30, outputPerMillion: 0.50 },
-  'grok-code-fast': { inputPerMillion: 0.15, outputPerMillion: 0.60 },
-  'grok-2': { inputPerMillion: 2.0, outputPerMillion: 10.0 },
-  'grok-2-mini': { inputPerMillion: 0.20, outputPerMillion: 1.0 },
-
-  // OpenAI
-  'gpt-5.6-sol': { inputPerMillion: 5.0, outputPerMillion: 30.0 },
-  'gpt-5.6-luna': { inputPerMillion: 1.0, outputPerMillion: 6.0 },
-  'gpt-5.6': { inputPerMillion: 5.0, outputPerMillion: 30.0 },
-  'gpt-5': { inputPerMillion: 5.0, outputPerMillion: 15.0 },
-  'gpt-4.1': { inputPerMillion: 2.0, outputPerMillion: 8.0 },
-  'gpt-4o': { inputPerMillion: 2.50, outputPerMillion: 10.0 },
-  'gpt-4o-mini': { inputPerMillion: 0.15, outputPerMillion: 0.60 },
-  'gpt-4-turbo': { inputPerMillion: 10.0, outputPerMillion: 30.0 },
-  'gpt-4': { inputPerMillion: 30.0, outputPerMillion: 60.0 },
-  'gpt-3.5-turbo': { inputPerMillion: 0.50, outputPerMillion: 1.50 },
-
-  // Anthropic
-  'claude-opus-4': { inputPerMillion: 15.0, outputPerMillion: 75.0 },
-  'claude-sonnet-4': { inputPerMillion: 3.0, outputPerMillion: 15.0 },
-  'claude-haiku-4': { inputPerMillion: 0.80, outputPerMillion: 4.0 },
-  'claude-3-opus': { inputPerMillion: 15.0, outputPerMillion: 75.0 },
-  'claude-3-sonnet': { inputPerMillion: 3.0, outputPerMillion: 15.0 },
-  'claude-3-haiku': { inputPerMillion: 0.25, outputPerMillion: 1.25 },
-  'claude-3.5-sonnet': { inputPerMillion: 3.0, outputPerMillion: 15.0 },
-
-  // Google Gemini
-  'gemini-2.5-pro': { inputPerMillion: 1.25, outputPerMillion: 10.0 },
-  'gemini-2.5-flash': { inputPerMillion: 0.15, outputPerMillion: 0.60 },
-  'gemini-2.0-flash': { inputPerMillion: 0.10, outputPerMillion: 0.40 },
-  'gemini-1.5-pro': { inputPerMillion: 1.25, outputPerMillion: 5.0 },
-  'gemini-1.5-flash': { inputPerMillion: 0.075, outputPerMillion: 0.30 },
-
-  // Local (free)
-  'local': { inputPerMillion: 0, outputPerMillion: 0 },
-  'ollama': { inputPerMillion: 0, outputPerMillion: 0 },
-  'lmstudio': { inputPerMillion: 0, outputPerMillion: 0 },
-};
 
 // ============================================================================
 // ModelRegistry
@@ -114,48 +78,36 @@ export class ModelRegistry {
    * Get pricing for a model.
    *
    * Resolution order:
-   *   1. Snapshot per-token cost fields (converted to per-1M)
-   *   2. Built-in pricing (exact match)
-   *   3. Built-in pricing (prefix match)
-   *   4. Default fallback
+   *   1. Versioned price data (exact match)
+   *   2. Versioned price data (longest prefix)
+   *   3. Unknown-model estimate
    */
   getPricing(model: string): ModelPricing {
-    // 1. Check snapshot cost fields
-    const entry = Object.hasOwn(this.snapshot, model) ? this.snapshot[model] : undefined;
-    if (entry) {
-      const inputCost = entry.input_cost_per_token ?? entry.inputCostPerToken;
-      const outputCost = entry.output_cost_per_token ?? entry.outputCostPerToken;
-      if (typeof inputCost === 'number' && typeof outputCost === 'number') {
-        return {
-          inputPerMillion: inputCost * 1_000_000,
-          outputPerMillion: outputCost * 1_000_000,
-        };
-      }
-    }
-
-    // 2. Exact match in built-in pricing
-    const builtin = Object.hasOwn(BUILTIN_PRICING, model) ? BUILTIN_PRICING[model] : undefined;
+    const overlay = cataloguePrices.get(model.trim().toLowerCase());
+    if (overlay) return { ...overlay };
+    // 1. Exact match in versioned price data
+    const builtin = Object.hasOwn(MODEL_PRICE_DATA, model) ? MODEL_PRICE_DATA[model] : undefined;
     if (builtin) {
-      return { ...builtin };
+      return { inputPerMillion: builtin.inputPerMillion, outputPerMillion: builtin.outputPerMillion };
     }
 
-    // 3. Prefix match in built-in pricing (longest prefix wins)
+    // 2. Longest prefix in versioned price data (longest prefix wins)
     const lower = model.toLowerCase();
     let bestMatch = '';
-    for (const key of Object.keys(BUILTIN_PRICING)) {
+    for (const key of Object.keys(MODEL_PRICE_DATA)) {
       if (lower.startsWith(key.toLowerCase()) && key.length > bestMatch.length) {
         bestMatch = key;
       }
     }
     if (bestMatch) {
-      const matched = BUILTIN_PRICING[bestMatch];
+      const matched = MODEL_PRICE_DATA[bestMatch];
       if (matched) {
-        return { ...matched };
+        return { inputPerMillion: matched.inputPerMillion, outputPerMillion: matched.outputPerMillion };
       }
     }
 
-    // 4. Default
-    return { ...DEFAULT_PRICING };
+    // 3. Unknown model estimate
+    return { ...UNKNOWN_MODEL_PRICE };
   }
 
   // --------------------------------------------------------------------------
@@ -210,16 +162,7 @@ export class ModelRegistry {
   // --------------------------------------------------------------------------
 
   private loadAliases(): void {
-    // Built-in aliases
-    this.aliases.set('sonnet', 'claude-sonnet-4-20250514');
-    this.aliases.set('opus', 'claude-opus-4-6');
-    this.aliases.set('haiku', 'claude-haiku-4-5-20251001');
-    this.aliases.set('gpt4', 'gpt-4o');
-    this.aliases.set('gpt-5.6', 'gpt-5.6-sol');
-    this.aliases.set('gemini', 'gemini-2.5-flash');
-    this.aliases.set('grok', 'grok-code-fast-1');
-    this.aliases.set('flash', 'gemini-2.5-flash');
-    this.aliases.set('mini', 'gpt-4o-mini');
+    for (const [alias, model] of Object.entries(MODEL_ALIASES)) this.aliases.set(alias, model);
 
     // Env var overrides: CODEBUDDY_ALIAS_SONNET etc.
     for (const [alias] of this.aliases) {

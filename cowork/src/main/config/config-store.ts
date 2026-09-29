@@ -1,3 +1,4 @@
+import { DEFAULT_YOLO_SESSION_COST_USD, YOLO_SESSION_COST_HARD_CAP_USD } from '../../../../src/config/session-cost-defaults.js';
 /**
  * @module main/config/config-store
  *
@@ -115,6 +116,9 @@ export interface ApiConfigSet {
 }
 
 export interface AppConfig {
+  yoloMode?: boolean;
+  yoloMaxCostUsd?: number;
+  yoloMaxRounds?: number;
   // API Provider
   provider: ProviderType;
 
@@ -394,6 +398,9 @@ const defaultConfigSet: ApiConfigSet = {
 };
 
 const defaultConfig: AppConfig = {
+  yoloMode: false,
+  yoloMaxCostUsd: DEFAULT_YOLO_SESSION_COST_USD,
+  yoloMaxRounds: 400,
   provider: defaultConfigSet.provider,
   apiKey: defaultProfiles.openrouter.apiKey,
   baseUrl: defaultProfiles.openrouter.baseUrl,
@@ -1118,6 +1125,12 @@ export class ConfigStore {
     const projected = this.projectFromConfigSet(activeConfigSet);
 
     const result: AppConfig = {
+      yoloMode: raw.yoloMode === true,
+      yoloMaxCostUsd: typeof raw.yoloMaxCostUsd === 'number' && Number.isFinite(raw.yoloMaxCostUsd) && raw.yoloMaxCostUsd >= 0
+        ? Math.min(raw.yoloMaxCostUsd, YOLO_SESSION_COST_HARD_CAP_USD)
+        : DEFAULT_YOLO_SESSION_COST_USD,
+      yoloMaxRounds: typeof raw.yoloMaxRounds === 'number' && Number.isInteger(raw.yoloMaxRounds) && raw.yoloMaxRounds > 0 && raw.yoloMaxRounds <= 400
+        ? raw.yoloMaxRounds : 400,
       provider: projected.provider,
       customProtocol: projected.customProtocol,
       apiKey: projected.apiKey,
@@ -1619,6 +1632,9 @@ export class ConfigStore {
     const projectedConfig = this.composeProjectedConfig(current, nextConfigSets, activeConfigSetId);
     this.saveConfig({
       ...projectedConfig,
+      yoloMode: updates.yoloMode ?? current.yoloMode,
+      yoloMaxCostUsd: updates.yoloMaxCostUsd ?? current.yoloMaxCostUsd,
+      yoloMaxRounds: updates.yoloMaxRounds ?? current.yoloMaxRounds,
       claudeCodePath:
         updates.claudeCodePath !== undefined ? updates.claudeCodePath : current.claudeCodePath,
       defaultWorkdir:

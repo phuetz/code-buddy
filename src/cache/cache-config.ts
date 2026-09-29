@@ -1,3 +1,5 @@
+import { UNKNOWN_MODEL_PRICE } from '../config/model-price-data.js';
+
 /**
  * Cache Configuration
  *
@@ -66,7 +68,7 @@ export const DEFAULT_CACHE_CONFIG: UnifiedCacheConfig = {
     compressionEnabled: true,
     similarityThreshold: 0.92, // High threshold for semantic matching
     minTokensToCache: 100,
-    costPerMillion: 3.0,
+    costPerMillion: UNKNOWN_MODEL_PRICE.inputPerMillion,
   },
 
   fileContent: {

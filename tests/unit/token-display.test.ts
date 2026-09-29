@@ -53,6 +53,10 @@ describe('estimateCost', () => {
     expect(cost).toBe(0);
   });
 
+  it('uses the shared model price when a model is supplied', () => {
+    expect(estimateCost(1_000_000, 1_000_000, undefined, undefined, 'grok-code-fast-1')).toBeCloseTo(1.7);
+  });
+
   it('accepts custom pricing', () => {
     const cost = estimateCost(1000, 1000, 0.001, 0.002);
     // 1 * 0.001 + 1 * 0.002 = 0.003

@@ -36,10 +36,11 @@ describe('ModelRegistry', () => {
       expect(pricing.outputPerMillion).toBe(15.0);
     });
 
-    it('should return snapshot pricing when cost fields are present', () => {
+    it('ignores snapshot pricing so the versioned table remains authoritative', () => {
       const pricing = registry.getPricing('test-model-with-cost');
-      expect(pricing.inputPerMillion).toBe(3.0);
-      expect(pricing.outputPerMillion).toBe(15.0);
+      expect(pricing).toEqual({ inputPerMillion: 3, outputPerMillion: 15 });
+      const conflicting = new ModelRegistry({ 'gpt-4o': { input_cost_per_token: 99, output_cost_per_token: 99 } });
+      expect(conflicting.getPricing('gpt-4o')).toEqual({ inputPerMillion: 2.5, outputPerMillion: 10 });
     });
 
     it('should do prefix matching for models with suffixes', () => {

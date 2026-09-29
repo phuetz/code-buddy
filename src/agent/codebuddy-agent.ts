@@ -2138,7 +2138,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
    *
    * YOLO mode enables full autonomy with:
    * - 400 max tool rounds (vs 50 in normal mode)
-   * - No session cost limit
+   * - $100 default session cost limit, configurable up to $1,000
    * - Aggressive system prompt for autonomous operation
    *
    * @param enabled - Whether to enable YOLO mode
@@ -2147,6 +2147,15 @@ Look at the screenshot and find the element matching the user's intent. Output o
    * Applique [middleware] sans prendre les défauts du schéma pour des choix.
    * L'argument du constructeur et --max-price passent avant le fichier.
    */
+  /** Desktop override. Validated with the same hard cap as CLI limits. */
+  private sessionCostOverrideUsd?: number;
+
+  setSessionCostOverride(maxCostUsd?: number): void {
+    this.sessionCostOverrideUsd = maxCostUsd !== undefined && Number.isFinite(maxCostUsd) && maxCostUsd >= 0
+      ? maxCostUsd : undefined;
+    this.applySessionLimits(this.yoloMode);
+  }
+
   private applySessionLimits(yolo: boolean): void {
     const cliPrice = readCliFlagValue(process.argv, '--max-price');
     const cliMaxCost = cliPrice === undefined ? undefined : Number(cliPrice);
@@ -2154,7 +2163,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     const envMaxCost = envText === undefined || envText.trim() === '' ? undefined : Number(envText);
     const resolved = resolveSessionLimits({
       cliMaxToolRounds: this.callerMaxToolRounds,
-      cliMaxCost: cliMaxCost !== undefined && Number.isFinite(cliMaxCost) ? cliMaxCost : undefined,
+      cliMaxCost: this.sessionCostOverrideUsd ?? (cliMaxCost !== undefined && Number.isFinite(cliMaxCost) ? cliMaxCost : undefined),
       envMaxCost: envMaxCost !== undefined && Number.isFinite(envMaxCost) ? envMaxCost : undefined,
       toml: this.fileMiddlewareLimits,
       yolo,

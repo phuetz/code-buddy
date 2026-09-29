@@ -206,7 +206,7 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
       const promptAppendHash = config.systemPromptAppend
         ? createHash('sha256').update(config.systemPromptAppend).digest('hex').slice(0, 12)
         : '';
-      const desiredIdentity = `${config.apiKey || ''}:${config.baseURL || ''}:${config.model || ''}:${config.workingDirectory || ''}:${config.thinkingLevel || ''}:${promptAppendHash}`;
+      const desiredIdentity = `${config.apiKey || ''}:${config.baseURL || ''}:${config.model || ''}:${config.workingDirectory || ''}:${config.thinkingLevel || ''}:${config.yoloMode ?? false}:${config.maxCostUsd ?? ''}:${config.maxToolRounds ?? ''}:${promptAppendHash}`;
       const cachedIdentity = this.agentIdentities.get(sessionId);
       let agent = this.agents.get(sessionId) as InstanceType<typeof CodeBuddyAgent> | undefined;
       if (agent && cachedIdentity !== desiredIdentity) {
@@ -240,6 +240,11 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
           config.workingDirectory,
           config.systemPromptAppend,
         );
+
+        if (config.yoloMode) {
+          agent.setSessionCostOverride(config.maxCostUsd);
+          agent.setYoloMode(true);
+        }
 
         if (typeof (agent as any).setVisionGroundingModel === 'function') {
           (agent as any).setVisionGroundingModel(this.config.visionGroundingModel);

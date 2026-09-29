@@ -1,3 +1,5 @@
+import { getPricingPer1M } from '../config/model-pricing.js';
+
 /**
  * Persistent Analytics
  *
@@ -66,19 +68,6 @@ const DEFAULT_BUDGET: CostBudget = {
   weekly: 50,
   monthly: 150,
   session: 5,
-};
-
-// Model costs per 1M tokens (input/output)
-const MODEL_COSTS: Record<string, { input: number; output: number }> = {
-  'grok': { input: 5, output: 15 },
-  'grok-2': { input: 10, output: 30 },
-  'grok-2-mini': { input: 2, output: 6 },
-  'gpt-4-turbo': { input: 10, output: 30 },
-  'gpt-4o': { input: 5, output: 15 },
-  'gpt-4o-mini': { input: 0.15, output: 0.6 },
-  'claude-3-opus': { input: 15, output: 75 },
-  'claude-3-sonnet': { input: 3, output: 15 },
-  'claude-3-haiku': { input: 0.25, output: 1.25 },
 };
 
 // ============================================================================
@@ -160,7 +149,7 @@ export class PersistentAnalytics extends EventEmitter {
    * Calculate cost for tokens
    */
   calculateCost(model: string, tokensIn: number, tokensOut: number): number {
-    const costs = MODEL_COSTS[model] ?? MODEL_COSTS['grok'] ?? { input: 5, output: 15 };
+    const costs = getPricingPer1M(model);
     return (tokensIn * costs.input + tokensOut * costs.output) / 1_000_000;
   }
 

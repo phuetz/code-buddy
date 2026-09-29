@@ -5,6 +5,9 @@
  * after each LLM response in the agent loop.
  */
 
+import { LOCAL_NO_COST_MODEL_IDS, SUBSCRIPTION_MODEL_IDS, UNKNOWN_MODEL_PRICE } from '../config/model-price-data.js';
+import { getPricingPer1k } from '../config/model-pricing.js';
+
 export interface TokenUsageInfo {
   inputTokens: number;
   outputTokens: number;
@@ -47,53 +50,35 @@ function formatCost(cost: number): string {
 
 /**
  * Estimate cost from token counts using approximate model pricing.
- * Uses a simple heuristic; for accurate cost tracking use CostTracker.
+ * Uses the shared model price; for accurate cost tracking use CostTracker.
  *
- * Special-case: returns 0 when `model` indicates a ChatGPT subscription
- * call (`gpt-5.2`, `gpt-5.5*`, `*-codex*`, `codex-1`) or a local Ollama /
- * LM Studio model. Those are not billed per token through Code Buddy, so
- * reporting USD spend would be misleading.
+ * Subscription and local models report zero USD spend.
  */
 export function estimateCost(
   inputTokens: number,
   outputTokens: number,
-  inputPricePer1k: number = 0.003,
-  outputPricePer1k: number = 0.015,
+  inputPricePer1k?: number,
+  outputPricePer1k?: number,
   model?: string,
 ): number {
   if (model && (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model))) return 0;
-  return (inputTokens / 1000) * inputPricePer1k + (outputTokens / 1000) * outputPricePer1k;
+  const price = model ? getPricingPer1k(model) : {
+    inputPer1k: UNKNOWN_MODEL_PRICE.inputPerMillion / 1000,
+    outputPer1k: UNKNOWN_MODEL_PRICE.outputPerMillion / 1000,
+  };
+  return (inputTokens / 1000) * (inputPricePer1k ?? price.inputPer1k)
+    + (outputTokens / 1000) * (outputPricePer1k ?? price.outputPer1k);
 }
 
 function isChatGptSubscriptionModel(model: string): boolean {
   const m = model.toLowerCase();
-  return (
-    m === 'gpt-5.2' ||
-    m === 'gpt-5.5' ||
-    m.startsWith('gpt-5.5-') ||
-    m.includes('-codex') ||
-    m === 'codex-1' ||
-    m.startsWith('codex-mini')
-  );
+  return SUBSCRIPTION_MODEL_IDS.exact.includes(m)
+    || SUBSCRIPTION_MODEL_IDS.prefixes.some(prefix => m.startsWith(prefix))
+    || SUBSCRIPTION_MODEL_IDS.contains.some(part => m.includes(part));
 }
 
 function isLocalNoCostModel(model: string): boolean {
   const m = model.toLowerCase();
-  return (
-    m === 'ollama' ||
-    m.startsWith('ollama/') ||
-    m === 'lmstudio' ||
-    m === 'local-model' ||
-    m.startsWith('llama') ||
-    m.startsWith('qwen') ||
-    m.startsWith('gemma') ||
-    m.startsWith('phi') ||
-    m.startsWith('codellama') ||
-    m.startsWith('deepseek') ||
-    m.startsWith('command-r') ||
-    m === 'mistral' ||
-    m.startsWith('mistral:') ||
-    m === 'mixtral' ||
-    m.startsWith('mixtral:')
-  );
+  return LOCAL_NO_COST_MODEL_IDS.exact.includes(m)
+    || LOCAL_NO_COST_MODEL_IDS.prefixes.some(prefix => m.startsWith(prefix));
 }
