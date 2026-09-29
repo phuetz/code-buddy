@@ -27,6 +27,7 @@ import {
   clearSandboxEscalationBridge,
 } from '../helpers/sandbox-escalation-bridge.js';
 import { canonical, canonicalShellPath } from '../helpers/shell-path.js';
+import { removeTestDirAsync } from '../helpers/tmp.js';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'child_process';
 import path from 'path';
@@ -124,7 +125,7 @@ describe('BashTool', () => {
   fs.writeFileSync(path.join(cleanCwd, 'notes.txt'), 'test public\n');
   fs.writeFileSync(path.join(cleanCwd, 'sample.ts'), 'export const test = true;\n');
 
-  afterAll(() => fs.rmSync(cleanCwd, { recursive: true, force: true }));
+  afterAll(() => removeTestDirAsync(cleanCwd));
 
   beforeEach(async () => {
     delete process.env.CODEBUDDY_NATIVE_SANDBOX;
@@ -527,7 +528,9 @@ describe('BashTool', () => {
 
   describe('Working Directory Management', () => {
     const originalDir = process.cwd();
-    const tmpDir = os.tmpdir();
+    // The system temp root contains fixtures from unrelated tests. A shell
+    // must not start there when one of those fixtures is classified secret.
+    const tmpDir = fs.mkdtempSync(path.join(cleanCwd, 'working-'));
 
     afterEach(() => {
       process.chdir(originalDir);
@@ -568,6 +571,24 @@ describe('BashTool', () => {
       if (!result.success) console.error('[macos-diag] pwd after cd', tmpDir, '->', bashTool.getCurrentDirectory(), ':', result.error);
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
+    });
+
+    it('refuse la racine temporaire avec un secret, mais autorise un sous-dossier public', async () => {
+      const root = fs.mkdtempSync(path.join(cleanCwd, 'mixed-'));
+      const publicDir = path.join(root, 'public');
+      fs.mkdirSync(publicDir);
+      fs.writeFileSync(path.join(root, '.env'), 'API_KEY=FAKE-PRIVATE-CI-TEST\n');
+      try {
+        const denied = await bashTool.execute('echo public', 30000, root);
+        expect(denied.success).toBe(false);
+        expect(denied.error).toMatch(/credential\/secret workspace/);
+
+        const allowed = await bashTool.execute('echo public', 30000, publicDir);
+        expect(allowed.success).toBe(true);
+        expect(allowed.output).toContain('public');
+      } finally {
+        await removeTestDirAsync(root);
+      }
     });
   });
 
