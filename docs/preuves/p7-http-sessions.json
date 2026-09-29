@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-sessions",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "9972b3791b62e47f2d4f9b0debef3e724425fe487316a3c9928293d36e111dc1",
+  "artifact": "docs/preuves/p7-http-sessions.log",
+  "summary": "POST 201 ; GET 200 ; « P7 fixture session » retrouvée ; serveur arrêté code 0."
+}

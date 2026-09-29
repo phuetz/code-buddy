@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: context-tool-selection
+Commande: getRelevantTools("Read package.json and search for the version string", maxTools=12)
+Attendu: Sélection réelle depuis le registre complet.
+Observé: Code 0 ; catégories file_search, file_read, git ; 12 outils retenus dont view_file/search ; 55603 jetons initiaux, 2590 évités.
+Verdict: prouvée
+Limite: Qualité de sélection mesurée sur une seule requête, sans tour LLM.

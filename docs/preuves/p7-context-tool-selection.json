@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "context-tool-selection",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "6544e4cd350f583e6d5d54652620d29722b99d4b4b59537fec2ac6673c1753c4",
+  "artifact": "docs/preuves/p7-context-tool-selection.log",
+  "summary": "Code 0 ; catégories file_search, file_read, git ; 12 outils retenus dont view_file/search ; 55603 jetons initiaux, 2590 évités."
+}

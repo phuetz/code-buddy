@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-devices",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "c4ed0c0edb92ea3517ceff6deb114fde9d74f75fc00ec9f6da50b34b9521ea7b",
+  "artifact": "docs/preuves/p7-cli-devices.log",
+  "summary": "Code 0 ; appareil présent ; nom final « P7 renamed authenticator » ; Device revoked ; revokedAt présent."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-dev",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "db66ff7fbff92a5b65cdabb3da6fbffdda828b221a2661a1b9a4c17a0b45be9f",
+  "artifact": "docs/preuves/p7-cli-dev.log",
+  "summary": "Code 0 ; plan numéroté à 2 étapes ; « Wrote plan: <QA_PROJECT>/PLAN.md » ; fichier non vide."
+}
