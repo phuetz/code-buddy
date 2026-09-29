@@ -21,6 +21,20 @@ afterEach(() => {
 });
 
 describe('removeTestDir', () => {
+  it('retries a Windows EBUSY by walking the whole tree again', async () => {
+    const dir = scratch();
+    const child = path.join(dir, 'tracked');
+    fs.mkdirSync(child);
+    const visited: string[] = [];
+    await removeTestDirAsync(dir, async (target, options) => {
+      visited.push(target);
+      if (visited.length === 1) throw codeError('EBUSY');
+      await fs.promises.rm(target, options);
+    });
+    expect(visited).toEqual([dir, dir]);
+    expect(fs.existsSync(dir)).toBe(false);
+  });
+
   it('repeats the whole removal when a pass meets ENOTEMPTY', () => {
     const dir = scratch();
     const calls: string[] = [];

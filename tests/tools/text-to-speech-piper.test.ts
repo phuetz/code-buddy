@@ -74,14 +74,19 @@ describe('text_to_speech — piper provider (deterministic, injected spawn)', ()
       { rootDir: workspace, runtime: { spawn: fakePiperSpawn(captured) as never } },
     );
 
-    expect(result).toMatchObject({ kind: 'text_to_speech_result', ok: true, provider: 'piper', format: 'wav', outputPath });
+    expect(result).toMatchObject({ kind: 'text_to_speech_result', ok: true, provider: 'piper', format: 'wav' });
+    // Windows may expand the runner's 8.3 temp-directory alias during the
+    // security guard's realpath resolution. Both spellings must name the
+    // exact output file requested by the caller.
+    expect(await fs.realpath(result.outputPath)).toBe(await fs.realpath(outputPath));
     expect(captured.command).toBe('piper');
     expect(captured.args).toEqual([
       '--model', '/voices/fr_FR-siwis-medium.onnx', '--output_file',
       expect.stringMatching(/\.tts-[0-9a-f-]+\.wav$/),
     ]);
-    expect(path.dirname(captured.args![3]!)).toBe(path.dirname(outputPath));
-    expect(captured.args![3]).not.toBe(outputPath);
+    expect(await fs.realpath(path.dirname(captured.args![3]!)))
+      .toBe(await fs.realpath(path.dirname(outputPath)));
+    expect(path.basename(captured.args![3]!)).not.toBe(path.basename(outputPath));
     expect(captured.stdin).toBe('Bonjour Patrice on progresse vers le robot');
     // stdin must be piped (not 'ignore') so Piper can read the utterance.
     expect(Array.isArray(captured.stdio) ? (captured.stdio as unknown[])[0] : undefined).toBe('pipe');

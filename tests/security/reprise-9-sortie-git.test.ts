@@ -20,6 +20,7 @@ import { redactTrackedGitOutput, redactTrackedGitResult, redactTrackedGitToolRes
 import { ViewFileTool } from '../../src/tools/registry/text-editor-tools.js';
 import { createTestToolRegistry } from '../../src/tools/registry/tool-registry.js';
 import { registerBuiltinTools } from '../../src/tools/registry/index.js';
+import { removeTestDirAsync } from '../helpers/tmp.js';
 
 function findGitExecutable(): string {
   const names = process.platform === 'win32' ? ['git.exe'] : ['git'];
@@ -109,14 +110,20 @@ beforeAll(() => {
   ConfirmationService.getInstance().setSessionFlag('bashCommands', true);
 });
 
-afterAll(() => {
-  fs.rmSync(qa.root, { recursive: true, force: true });
-  if (qa.oldHome === undefined) delete process.env.HOME;
-  else process.env.HOME = qa.oldHome;
-  if (qa.oldUserProfile === undefined) delete process.env.USERPROFILE;
-  else process.env.USERPROFILE = qa.oldUserProfile;
-  if (previousPath === undefined) delete process.env.PATH;
-  else process.env.PATH = previousPath;
+afterAll(async () => {
+  try {
+    // Git has exited, but Windows may keep a directory handle briefly after
+    // its last child process closes. Retry the complete tree walk after an
+    // asynchronous wait, and still fail if a handle never becomes available.
+    await removeTestDirAsync(qa.root);
+  } finally {
+    if (qa.oldHome === undefined) delete process.env.HOME;
+    else process.env.HOME = qa.oldHome;
+    if (qa.oldUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = qa.oldUserProfile;
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+  }
 });
 
 describe('seconde barrière sur la sortie shell', () => {
