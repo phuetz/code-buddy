@@ -37,6 +37,8 @@ export interface TimedSegment {
 }
 
 export interface LongTranscribeOptions {
+  /** Surface STT failures to callers that must distinguish them from silence. */
+  failOnTranscriptionError?: boolean;
   /** Injectable STT (default: `transcribeWav` from speech-reaction, lazy-loaded). */
   transcriber?: Transcriber;
   /**
@@ -215,6 +217,7 @@ export async function transcribeLong(
     ]);
     if (seg.code !== 0) {
       logger.warn(`[video] ffmpeg segmentation failed (code=${seg.code}): ${seg.stderr.trim().slice(-300)}`);
+      if (options.failOnTranscriptionError) throw new Error(`ffmpeg segmentation failed: ${seg.stderr.trim().slice(-300)}`);
       return [];
     }
 
@@ -223,6 +226,7 @@ export async function transcribeLong(
       .sort();
     if (chunks.length === 0) {
       logger.warn('[video] ffmpeg produced no chunks');
+      if (options.failOnTranscriptionError) throw new Error('ffmpeg produced no audio chunks');
       return [];
     }
 
@@ -235,6 +239,7 @@ export async function transcribeLong(
         said = (await transcriber(chunkPath))?.trim() ?? '';
       } catch (err) {
         logger.warn(`[video] transcription failed for ${chunk}: ${err instanceof Error ? err.message : String(err)}`);
+        if (options.failOnTranscriptionError) throw err;
       }
       const dur = (await probeDuration(spawn, ffprobeBin, chunkPath)) ?? chunkSec;
       if (said) {

@@ -271,7 +271,10 @@ async function resolveSegments(
   const runTranscribe = deps.transcribeLong
     ?? ((audioPath: string, opts?: LongTranscribeOptions) => transcribeLong(audioPath, opts));
   const existsSync = deps.existsSync ?? realExistsSync;
-  const transcribeOpts: LongTranscribeOptions = deps.transcriber ? { transcriber: deps.transcriber } : {};
+  const transcribeOpts: LongTranscribeOptions = {
+    ...(deps.transcriber ? { transcriber: deps.transcriber } : {}),
+    failOnTranscriptionError: true,
+  };
 
   const langs = [input.language, 'en', 'fr'].filter((l): l is string => !!l && l.trim().length > 0);
   const uniqueLangs = [...new Set(langs)];
@@ -575,7 +578,12 @@ export async function understandVideo(
     return { error: `could not create output dir ${outDir}: ${err instanceof Error ? err.message : String(err)}` };
   }
 
-  const resolved = await resolveSegments({ ...input, source }, deps, outDir);
+  let resolved: ResolvedSegments | UnderstandVideoFailure;
+  try {
+    resolved = await resolveSegments({ ...input, source }, deps, outDir);
+  } catch (err) {
+    return { error: `transcription failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
   if ('error' in resolved) return resolved;
 
   const { segments, method } = resolved;
