@@ -20,6 +20,7 @@ import * as os from 'node:os';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { classifySecretPath, getHomeCredentialRoots } from '../../security/secret-files.js';
+import { foldPathCase, isPathInside } from '../../security/path-comparison.js';
 import { parseShellCommand } from '../../security/bash-parser.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
@@ -414,7 +415,7 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     variants.unshift(expandHomeReferences(unquoted));
     variants.push(expandHomeReferences(unquoted.replace(/\\([^\n])/g, '/$1')));
   }
-  const roots = getHomeCredentialRoots();
+  const roots = getHomeCredentialRoots({ platform });
   for (const expanded of new Set(variants)) {
     const found = findCredentialPathInExpandedCommand(expanded, platform, roots);
     if (found) return found;
@@ -427,7 +428,7 @@ function findCredentialPathInExpandedCommand(
   platform: NodeJS.Platform,
   roots: readonly string[],
 ): string | null {
-  const fold = (value: string): string => platform === 'win32' ? value.toLowerCase() : value;
+  const fold = (value: string): string => foldPathCase(value, platform);
   const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
   const words = new Set(
     tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
@@ -468,19 +469,20 @@ function findCredentialPathInExpandedCommand(
     // A simple copy of a public template to a new .env is a supported
     // scaffolding operation. The source remains subject to the read guard.
     if (tokens[0] === 'cp' && i === tokens.length - 1 &&
-      tokens.length === 3 && !classifySecretPath(tokens[1] ?? '').secret) continue;
-    if (classifySecretPath(normalized).secret) return raw;
+      tokens.length === 3 && !classifySecretPath(tokens[1] ?? '', undefined, { platform }).secret) continue;
+    if (classifySecretPath(normalized, undefined, { platform }).secret) return raw;
     let canonical = normalized;
     try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
-    const underRoot = roots.find(
-      (root) => fold(canonical) === fold(root) || fold(canonical).startsWith(fold(root + path.sep)),
-    );
+    const underRoot = roots.find((root) => isPathInside(canonical, root, platform));
     if (!underRoot) continue;
     if (/[*?[\]{}]/.test(normalized)) return raw;
     const isCdTarget = i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd');
     let isDirectory = false;
     try { isDirectory = fs.statSync(normalized).isDirectory(); } catch { /* missing path */ }
-    if (usesRecursiveReader && isDirectory && !isCdTarget) return raw;
+    // A simulated platform may not have the directory on this host. A
+    // directory-shaped operand under a credential root is still unsafe.
+    if (usesRecursiveReader && !isCdTarget &&
+      (isDirectory || (/[\\/]/.test(token) && !path.extname(normalized)))) return raw;
   }
   return null;
 }

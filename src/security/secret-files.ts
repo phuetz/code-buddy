@@ -30,6 +30,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { isPathInside, isSamePath } from './path-comparison.js';
 
 export type SecretFileAccess = 'read' | 'write';
 
@@ -109,7 +110,7 @@ function isCredentialRootSecretBasename(base: string): boolean {
 }
 
 export interface SecretPathContext {
-  /** Allows the Windows path rules to be tested on another host. */
+  /** Allows platform path rules to be tested on another host. */
   platform?: NodeJS.Platform;
 }
 
@@ -145,20 +146,6 @@ export function getHomeCredentialRoots(context: SecretPathContext = {}): string[
   return Array.from(roots);
 }
 
-function samePath(candidate: string, root: string, paths: PathOps, platform: NodeJS.Platform): boolean {
-  const a = paths.normalize(candidate);
-  const b = paths.normalize(root);
-  return platform === 'win32' || platform === 'darwin' ? a.toLowerCase() === b.toLowerCase() : a === b;
-}
-
-function isInside(candidate: string, root: string, paths: PathOps, platform: NodeJS.Platform): boolean {
-  const a = paths.normalize(candidate);
-  const b = paths.normalize(root);
-  const foldedA = platform === 'win32' || platform === 'darwin' ? a.toLowerCase() : a;
-  const foldedB = platform === 'win32' || platform === 'darwin' ? b.toLowerCase() : b;
-  return foldedA === foldedB || foldedA.startsWith(foldedB + paths.sep);
-}
-
 /** realpath through the nearest existing ancestor (null when nothing resolves). */
 function canonicalize(p: string, paths: PathOps, platform: NodeJS.Platform): string | null {
   // A simulated platform has no matching filesystem; lexical checks still run.
@@ -181,25 +168,29 @@ function canonicalize(p: string, paths: PathOps, platform: NodeJS.Platform): str
 function classify(absPath: string, roots: readonly string[], platform: NodeJS.Platform): string | null {
   const paths = pathFor(platform);
   const base = paths.basename(absPath);
-  if (platform !== 'win32' && (absPath === '/etc/shadow' || absPath === '/etc/gshadow')) return 'system password database';
+  if (platform !== 'win32' &&
+    (isSamePath(absPath, '/etc/shadow', platform) || isSamePath(absPath, '/etc/gshadow', platform))) {
+    return 'system password database';
+  }
   if (isUniversalSecretBasename(base)) return `secret file name (${base})`;
   for (const home of homeDirs(platform)) {
     for (const rel of HOME_PRIVATE_ROOTS) {
       const root = paths.join(home, rel);
-      if (isInside(absPath, root, paths, platform) ||
-        isInside(absPath, canonicalize(root, paths, platform) ?? root, paths, platform)) {
+      if (isPathInside(absPath, root, platform) ||
+        isPathInside(absPath, canonicalize(root, paths, platform) ?? root, platform)) {
         return `private home directory (${rel})`;
       }
     }
     for (const rel of HOME_PRIVATE_FILES) {
-      if (samePath(absPath, paths.join(home, rel), paths, platform)) return `private home file (${rel})`;
+      if (isSamePath(absPath, paths.join(home, rel), platform)) return `private home file (${rel})`;
     }
   }
   for (const root of roots) {
-    if (isInside(absPath, root, paths, platform) && !samePath(absPath, root, paths, platform)) {
-      const relative = paths.relative(root, absPath);
+    if (isPathInside(absPath, root, platform) && !isSamePath(absPath, root, platform)) {
+      // path.relative is case-sensitive even when simulating darwin on Linux.
+      const relative = paths.normalize(absPath).slice(paths.normalize(root).length + 1);
       if (paths.basename(root).toLowerCase() === '.codebuddy' &&
-        /^(sessions|peer-sessions)[\\/]/.test(relative)) {
+        /^(sessions|peer-sessions)[\\/]/i.test(relative)) {
         return `private Code Buddy session under ${root}`;
       }
       // Any path component below the root may name a secret store
@@ -261,10 +252,9 @@ export function checkSecretFileAccess(
     return isSecretFileReadAllowedByOperator(options.env) ? { secret: false } : verdict;
   }
   const platform = options.platform ?? process.platform;
-  const paths = pathFor(platform);
   const roots = getHomeCredentialRoots(options);
   const matched = verdict.matchedPath ?? '';
-  const inCredentialRoot = roots.some((root) => isInside(matched, root, paths, platform));
+  const inCredentialRoot = roots.some((root) => isPathInside(matched, root, platform));
   return inCredentialRoot ? verdict : { secret: false };
 }
 
