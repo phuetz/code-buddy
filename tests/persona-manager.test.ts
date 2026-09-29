@@ -4,6 +4,16 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { afterAll, vi } from 'vitest';
+const originalUserName = vi.hoisted(() => {
+  const original = process.env.CODEBUDDY_USER_NAME;
+  process.env.CODEBUDDY_USER_NAME = 'Alex';
+  return original;
+});
+afterAll(() => {
+  if (originalUserName === undefined) delete process.env.CODEBUDDY_USER_NAME;
+  else process.env.CODEBUDDY_USER_NAME = originalUserName;
+});
 import { makeTmpDir, removeTmpDir } from './helpers/tmp.js';
 import {
   PersonaManager,
@@ -124,7 +134,7 @@ describe('PersonaManager', () => {
       expect(lisa?.spokenPrompt).toContain('petite amie numérique');
       expect(lisa?.spokenPrompt).toContain('petite copine vocale');
       expect(lisa?.spokenPrompt).toMatch(/xAI|Ani|sans tabous|Code Buddy/i);
-      expect(lisa?.greeting).toContain('Te revoilà Patrice');
+      expect(lisa?.greeting).toContain('Te revoilà Alex');
     });
   });
 

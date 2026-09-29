@@ -212,7 +212,7 @@
   "enrollment": {
     "title": "Enregistrer un visage",
     "nameLabel": "Nom",
-    "namePlaceholder": "Patrice",
+    "namePlaceholder": "Nom de la personne",
     "aliasesLabel": "Alias (séparés par des virgules)",
     "aliasesPlaceholder": "mon chéri, patron",
     "aliasesHelp": "Les alias sont des noms facultatifs que l'IA peut utiliser pour vous saluer selon le contexte.",

@@ -287,7 +287,7 @@ export function renderAutonomyMorningBrief(brief: AutonomyMorningBrief): string 
     '',
     `- ${brief.summary.observedTicks} tick(s) observé(s), ${brief.summary.completed} tâche(s) terminée(s), ${brief.summary.selfImproved} amélioration(s) conservée(s).`,
     `- ${brief.summary.maintenanceChecks} cycle(s) d’entretien sans changement : une absence de nouveauté reste une preuve, pas un succès inventé.`,
-    `- ${brief.summary.failed} échec(s), ${brief.queue.blocked} tâche(s) en revue, ${brief.queue.criticalAwaitingOperator} décision(s) critique(s) laissée(s) à Patrice.`,
+    `- ${brief.summary.failed} échec(s), ${brief.queue.blocked} tâche(s) en revue, ${brief.queue.criticalAwaitingOperator} décision(s) critique(s) laissée(s) à l’opérateur.`,
     `- ${brief.summary.paidModelRuns} exécution(s) sur un modèle payant ; ${brief.summary.worklogEntries} preuve(s) dans le worklog sur cette fenêtre.`,
     '',
     '## Résultats vérifiables',

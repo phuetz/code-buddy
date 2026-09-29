@@ -1,6 +1,6 @@
 /**
- * Relationship state — the companion's sense of shared history with Patrice: when it first met
- * him, when it last saw him, and which "we've been together N days" milestones it already marked.
+ * Relationship state — the companion's sense of shared history with the user: when it first met
+ * the user, when it last saw the user, and which "we've been together N days" milestones it already marked.
  *
  * This is the substrate for two warm, non-gamified presence moments (see `presence-loop.ts`):
  *   - a **tenure** milestone ("ça fait 30 jours qu'on se côtoie") — MySoulmate's MILESTONE_DAYS
@@ -30,7 +30,7 @@ export interface RelationshipTraits {
 }
 
 export interface RelationshipState {
-  /** Epoch ms the companion first saw Patrice (set once). */
+  /** Epoch ms the companion first saw the user (set once). */
   firstSeenAt?: number;
   /** Epoch ms of the last confirmed sighting (updated every present tick). */
   lastPresentAt?: number;
@@ -168,7 +168,7 @@ const TRAIT_LABELS_FR: Record<keyof RelationshipTraits, string> = {
 };
 
 /**
- * What just happened between Lisa and Patrice — the drift signal. Kept as a small closed union so
+ * What just happened between Lisa and the user — the drift signal. Kept as a small closed union so
  * callers can't invent arbitrary deltas; the per-signal nudges live in `SIGNAL_DELTAS`.
  */
 export type RelationalSignal =

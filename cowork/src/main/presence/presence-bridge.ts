@@ -122,8 +122,8 @@ export interface EncodePayload {
 /**
  * Throttle period between two `presence:detected` events for the *same*
  * person. Without this the bus would fire ~fps Hz forever — the agent loop
- * doesn't need that, just needs to know "Patrice is here" once per session
- * (and again when he comes back).
+ * doesn't need that, just needs to know "the user is here" once per session
+ * (and again when the user comes back).
  */
 const PRESENCE_DEDUP_WINDOW_MS = 30_000;
 

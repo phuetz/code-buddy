@@ -1,7 +1,7 @@
 /**
  * Autonomous research ingestion — the daemon, when idle, studies a database of scientific
  * publications on its own and feeds the Collective Knowledge Graph. Combined with the
- * self-improvement bridge (the lesson drafter recalls the CKG), this closes Patrice's loop:
+ * self-improvement bridge (the lesson drafter recalls the CKG), this closes the intended loop:
  * "avec une base de connaissances sur l'IA, Code Buddy s'auto-améliore plus facilement".
  *
  * Opt-in via `CODEBUDDY_RESEARCH_TOPICS` (csv). One topic per idle cycle (round-robin),

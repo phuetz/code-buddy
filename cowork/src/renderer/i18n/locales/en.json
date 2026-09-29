@@ -212,7 +212,7 @@
   "enrollment": {
     "title": "Register a face",
     "nameLabel": "Name",
-    "namePlaceholder": "Patrice",
+    "namePlaceholder": "Person name",
     "aliasesLabel": "Aliases (comma-separated)",
     "aliasesPlaceholder": "boss, teammate",
     "aliasesHelp": "Aliases are optional names the AI can use to greet you depending on context.",

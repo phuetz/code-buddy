@@ -2,7 +2,7 @@
  * Scientific publication sources for `buddy research ingest` — open, $0, no API key.
  *
  * Feeds the Collective Knowledge Graph (CKG) with real research so discoveries self-organise
- * into a queryable graph (Patrice's vision: "lui faire étudier une base de publications
+ * into a queryable graph (the owner's requirement: "lui faire étudier une base de publications
  * scientifiques"). Domain-agnostic: arXiv covers CS/AI/physics/math/bio, Europe PMC covers
  * life sciences/medicine.
  *

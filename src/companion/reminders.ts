@@ -1,5 +1,5 @@
 /**
- * Reminders — the robot reminds Patrice to do things (meds…) and he flags them done.
+ * Reminders — the robot reminds the user to do things (meds…), and the user flags them done.
  *
  * Persisted as JSON (companion-subsystem style, like sensory-rules.json) so it's portable and
  * hand-editable: `~/.codebuddy/reminders.json` (definitions) + `~/.codebuddy/companion/
@@ -604,7 +604,7 @@ export function parseVoiceReminder(text: string, now: Date = new Date()): AddRem
 }
 
 // ── voice MANAGEMENT of reminders (list / remove / disable) ────────────
-// So Patrice can say "supprime le rappel du train" instead of needing the CLI. The parse + fuzzy
+// So the user can say "supprime le rappel du train" instead of needing the CLI. The parse + fuzzy
 // match + spoken-summary logic is pure/testable; `handleReminderVoiceCommand` wires it to the store.
 
 /** Lowercase, strip diacritics + punctuation → clean word sequence (STT-friendly). */

@@ -59,12 +59,12 @@ export interface FaceSample {
 /**
  * Persistent identity record — what we know about one human. The store
  * holds many of these. Aliases let the LLM pick the right register
- * ("Patrice" vs "mon chéri") based on context.
+ * (a name vs "mon chéri") based on context.
  */
 export interface PersonIdentity {
   /** Stable id (uuid). */
   id: string;
-  /** Canonical display name ("Patrice"). */
+  /** Canonical display name (configured name). */
   name: string;
   /**
    * Affectionate / contextual aliases the LLM can use as alternative

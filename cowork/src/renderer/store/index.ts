@@ -462,7 +462,7 @@ export interface AppState {
   // Live presence — pushed by PresenceService whenever the main-process
   // bridge fires an event. Volatile (no localStorage) — it's the present.
   // `currentPresence` carries the matched person while the camera sees
-  // them; `lastPresenceEventType` lets the indicator distinguish "Patrice
+  // them; `lastPresenceEventType` lets the indicator distinguish "l'utilisateur
   // est là" from "un visage inconnu" from "personne".
   currentPresence: {
     personId: string;

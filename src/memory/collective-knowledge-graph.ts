@@ -427,7 +427,7 @@ export class CollectiveKnowledgeGraph {
   }
 
   /**
-   * Ingest a DISCOVERY and auto-link it to its nearest existing discoveries — Patrice's
+   * Ingest a DISCOVERY and auto-link it to its nearest existing discoveries — the owner's
    * vision: "à chaque découverte, l'enregistrer et relier les découvertes aux plus proches"
    * (Zettelkasten / A-MEM). Uses the multilingual embeddings to find semantic neighbours and
    * adds `related_to` edges. Async (embeds); best-effort linking (a failure still stores the

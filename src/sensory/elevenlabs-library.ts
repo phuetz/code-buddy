@@ -3,7 +3,7 @@
  * and PAID FOR in Lisa's real voice.
  *
  * Why this exists: `~/.codebuddy/tts-elevenlabs-permanent/` holds 6 400+ short
- * conversational replies ("Coucou Patrice. Je suis là.", "Je t'entends, on peut
+ * conversational replies ("Coucou. Je suis là.", "Je t'entends, on peut
  * ralentir.") in the ElevenLabs voice, each paid once and reusable for free.
  * MySoulmate and the phone assistant already consume it through symlinks — the
  * robot, which speaks every day, did not. This module closes that gap.
@@ -280,7 +280,7 @@ function withIndexLock(lockPath: string, fn: () => void): boolean {
  * Publish a freshly PAID rendition into the shared library, so the other products
  * get it for free.
  *
- * Doctrine (Patrice, 2026-08-16): a phrase in Lisa's ElevenLabs voice is a
+ * Decision of 2026-08-16: a phrase in Lisa's ElevenLabs voice is a
  * cross-product asset, paid once and reused everywhere. Until now Code Buddy only
  * READ this library: everything the robot paid for landed in its private TTS cache
  * — which also evicts — and MySoulmate and the phone assistant never saw it.
