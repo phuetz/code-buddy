@@ -126,6 +126,7 @@ interface ProfileCooldownState {
  * Persisted state shape
  */
 interface PersistedState {
+  profiles?: AuthProfile[];
   cooldowns: Record<string, {
     cooldownUntil: number;
     failureCount: number;
@@ -199,6 +200,7 @@ export class AuthProfileManager extends EventEmitter {
         lastFailureWasBilling: false,
       });
     }
+    this.saveState();
   }
 
   /**
@@ -219,7 +221,9 @@ export class AuthProfileManager extends EventEmitter {
       }
     }
 
-    return this.profiles.delete(profileId);
+    const removed = this.profiles.delete(profileId);
+    if (removed) this.saveState();
+    return removed;
   }
 
   /**
@@ -542,6 +546,7 @@ export class AuthProfileManager extends EventEmitter {
       }
 
       const state: PersistedState = {
+        profiles: [...this.profiles.values()],
         cooldowns: {},
         savedAt: Date.now(),
       };
@@ -584,6 +589,20 @@ export class AuthProfileManager extends EventEmitter {
       }
 
       const now = Date.now();
+
+      for (const profile of state.profiles ?? []) {
+        if (!profile || typeof profile.id !== 'string' || typeof profile.provider !== 'string'
+          || (profile.type !== 'api-key' && profile.type !== 'oauth')
+          || !profile.credentials || typeof profile.credentials !== 'object'
+          || !Number.isFinite(profile.priority) || !profile.metadata || typeof profile.metadata !== 'object') continue;
+        if (!this.profiles.has(profile.id)) {
+          this.profiles.set(profile.id, profile);
+          this.cooldownStates.set(profile.id, {
+            profileId: profile.id, inCooldown: false, cooldownUntil: 0,
+            failureCount: 0, lastFailureWasBilling: false,
+          });
+        }
+      }
 
       for (const [id, saved] of Object.entries(state.cooldowns)) {
         const existing = this.cooldownStates.get(id);
