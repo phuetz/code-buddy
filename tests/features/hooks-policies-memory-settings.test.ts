@@ -509,7 +509,8 @@ describe('AutoMemoryManager', () => {
     it('should return correct user memory path', () => {
       const manager = new AutoMemoryManager(tempDir);
       const userPath = manager.getMemoryPath('user');
-      expect(userPath).toBe(path.join(os.homedir(), '.codebuddy', 'memory', 'MEMORY.md'));
+      const profileRoot = process.env.CODEBUDDY_HOME || path.join(os.homedir(), '.codebuddy');
+      expect(userPath).toBe(path.join(profileRoot, 'memory', 'MEMORY.md'));
     });
 
     it('should return correct project memory path', () => {
