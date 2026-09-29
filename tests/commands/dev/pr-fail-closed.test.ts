@@ -8,7 +8,7 @@ const repoRoot = process.cwd();
 const tsxCli = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 const roots: string[] = [];
 
-function runDev(args: string[], cwd: string, home: string, extraPath?: string): Promise<{
+function runDev(args: string[], cwd: string, home: string): Promise<{
   exitCode: number | null;
   stdout: string;
   stderr: string;
@@ -18,10 +18,15 @@ function runDev(args: string[], cwd: string, home: string, extraPath?: string): 
       cwd,
       env: {
         ...process.env,
-        PATH: extraPath ? `${extraPath}:${process.env.PATH ?? ''}` : process.env.PATH,
         CODEBUDDY_DISABLE_MCP: 'true',
         HOME: home,
         USERPROFILE: home,
+        GH_CONFIG_DIR: path.join(home, 'gh'),
+        GH_TOKEN: '',
+        GITHUB_TOKEN: '',
+        GH_ENTERPRISE_TOKEN: '',
+        GITHUB_ENTERPRISE_TOKEN: '',
+        GH_PROMPT_DISABLED: '1',
         LOG_LEVEL: 'error',
         NO_COLOR: '1',
         CODEBUDDY_PROVIDER: 'grok',
@@ -56,6 +61,7 @@ afterEach(() => {
 function initRepo(work: string, origin: string): void {
   fs.mkdirSync(work, { recursive: true });
   execFileSync('git', ['init', '-b', 'main'], { cwd: work, stdio: 'pipe' });
+  execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: work, stdio: 'pipe' });
   execFileSync('git', ['config', 'user.email', 'gk18@test'], { cwd: work, stdio: 'pipe' });
   execFileSync('git', ['config', 'user.name', 'GK18'], { cwd: work, stdio: 'pipe' });
   fs.writeFileSync(path.join(work, 'a.txt'), 'a\n');
@@ -70,12 +76,9 @@ describe('buddy dev pr fail-closed', () => {
     roots.push(root);
     const work = path.join(root, 'work');
     const home = path.join(root, 'home');
-    const bin = path.join(root, 'bin');
-    fs.mkdirSync(bin);
-    fs.writeFileSync(path.join(bin, 'gh'), '#!/bin/sh\necho "gh: not authenticated" >&2\nexit 1\n', { mode: 0o755 });
     initRepo(work, 'https://github.com/example/toy.git');
 
-    const result = await runDev(['dev', 'pr'], work, home, bin);
+    const result = await runDev(['dev', 'pr'], work, home);
     const text = `${result.stdout}\n${result.stderr}`;
     expect(result.exitCode, text).toBe(1);
     expect(text).toMatch(/Title:/);
@@ -89,14 +92,11 @@ describe('buddy dev pr fail-closed', () => {
     roots.push(root);
     const work = path.join(root, 'work');
     const home = path.join(root, 'home');
-    const bin = path.join(root, 'bin');
     const remote = path.join(root, 'remote.git');
-    fs.mkdirSync(bin);
-    fs.writeFileSync(path.join(bin, 'gh'), '#!/bin/sh\necho "gh: not authenticated" >&2\nexit 1\n', { mode: 0o755 });
     execFileSync('git', ['init', '--bare', remote], { stdio: 'pipe' });
     initRepo(work, remote);
 
-    const result = await runDev(['dev', 'pr'], work, home, bin);
+    const result = await runDev(['dev', 'pr'], work, home);
     const text = `${result.stdout}\n${result.stderr}`;
     expect(result.exitCode, text).toBe(0);
     expect(text).toMatch(/Title:/);

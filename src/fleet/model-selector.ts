@@ -30,6 +30,7 @@ import type { ModelStrength } from './types.js';
 import { getModelScoreboard, type ModelScoreboard } from './model-scoreboard.js';
 import { inferStrengths, inferTaskType } from './model-capability-heuristics.js';
 import { logger } from '../utils/logger.js';
+import { getModelPricing } from '../config/model-pricing.js';
 
 /** One LLM the selector can choose, normalised across cloud + local sources. */
 export interface LlmCandidate {
@@ -140,7 +141,7 @@ async function listCandidates(env: NodeJS.ProcessEnv): Promise<LlmCandidate[]> {
           ? `${env.LM_STUDIO_BASE_URL || 'http://127.0.0.1:1234'}/v1`
           : ollamaBaseURL(env),
         isLocal: true,
-        costInputUsdPerMtok: 0,
+        costInputUsdPerMtok: getModelPricing(isLmStudio ? 'lmstudio' : 'ollama').inputPerMillion,
         strengths: m.strengths,
       });
     }

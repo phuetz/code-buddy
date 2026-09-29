@@ -20,6 +20,11 @@
 - **security:** The unauthenticated daemon HTTP server now binds `127.0.0.1` only. Detailed `/api/metrics` and `/metrics` routes require API authentication; `POST /api/metrics/reset` requires the `admin` scope. The basic `/api/health/metrics` probe remains public.
 - **research:** `buddy research ingest --source blogs` lit des flux RSS/Atom configurés en JSON, filtre les billets par mots du thème et utilise leur URL canonique pour la déduplication CKG. `--feeds-file` sélectionne la liste ; les erreurs de flux échouent ouvertement.
 - **research:** `buddy research ingest --source github|models|all` ajoute les dépôts GitHub populaires et les modèles de génération Hugging Face au CKG, avec filtres, tri, identifiants stables et ingestion idempotente. `both` conserve arXiv et Europe PMC.
+### Corrigé
+
+- Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.
+- Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré.
+
 ## [2.3.0] (2026-10-01)
 
 ### Sécurité

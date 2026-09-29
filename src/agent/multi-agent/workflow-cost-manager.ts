@@ -1,3 +1,5 @@
+import { getPricingPer1k } from '../../config/model-pricing.js';
+
 /**
  * WorkflowCostManager — Phase L (V0.4 multi-agent).
  *
@@ -92,18 +94,8 @@ export class WorkflowCostManager {
    *  Used when the CostTracker async load isn't ready yet. The exact
    *  pricing matches CostTracker's default fallback rate. */
   private calculateCostSync(inputTokens: number, outputTokens: number, model: string): number {
-    // Pricing kept in sync with src/utils/cost-tracker.ts MODEL_PRICING fallback.
-    // V0.5 = single source of truth via CostTracker.calculateCost().
-    const defaultRate = { input: 0.003, output: 0.015 };
-    const ratesByModel: Record<string, { input: number; output: number }> = {
-      'grok-4-latest': { input: 0.003, output: 0.015 },
-      'grok-3-fast': { input: 0.0006, output: 0.004 },
-      'grok-3-mini': { input: 0.0003, output: 0.0005 },
-      'grok-code-fast-1': { input: 0.00015, output: 0.0006 },
-      default: defaultRate,
-    };
-    const rate = ratesByModel[model] ?? defaultRate;
-    return (inputTokens / 1000) * rate.input + (outputTokens / 1000) * rate.output;
+    const rate = getPricingPer1k(model);
+    return (inputTokens / 1000) * rate.inputPer1k + (outputTokens / 1000) * rate.outputPer1k;
   }
 
   /** Async accurate cost via CostTracker. Falls back to sync calc on failure. */

@@ -5,6 +5,7 @@ import { promisify } from 'util';
 import { Command } from 'commander';
 import {
   createGpuMediaWorkerServer,
+  resolveGpuMediaWorkerId,
   type GpuMediaRunnerConfig,
   type GpuMediaWorkerServerConfig,
 } from '../gpu-worker/gpu-media-worker-server.js';
@@ -18,7 +19,7 @@ interface GpuWorkerCommandOptions {
   port: string;
   stateDir: string;
   root?: string[];
-  workerId: string;
+  workerId?: string;
   maxConcurrency: string;
 }
 
@@ -105,7 +106,7 @@ export function buildGpuWorkerConfig(
       ...(panoworld ? { panoworld_reconstruct: panoworld } : {}),
       ...(longcat ? { avatar_video_render: longcat } : {}),
     },
-    workerId: options.workerId,
+    ...(options.workerId ? { workerId: options.workerId } : {}),
     maxConcurrency: integer(options.maxConcurrency, '--max-concurrency', 1, 2),
     ...(retentionDays ? {
       terminalJobRetentionMs: integer(retentionDays, 'CODEBUDDY_GPU_WORKER_RETENTION_DAYS', 1, 3650) * 24 * 60 * 60 * 1000,
@@ -152,14 +153,14 @@ export function createGpuWorkerCommand(): Command {
       join(homedir(), '.codebuddy', 'gpu-worker')
     )
     .option('--root <path...>', 'Allowed input/output roots')
-    .option('--worker-id <id>', 'Worker identifier', 'gpuNode')
+    .option('--worker-id <id>', 'Worker identifier (optional)')
     .option('--max-concurrency <count>', 'Concurrent jobs (1–2)', '1')
     .action(async (options: GpuWorkerCommandOptions) => {
       const config = buildGpuWorkerConfig(options);
       const worker = createGpuMediaWorkerServer(config, { capabilities: detectNvidiaGpus });
       const address = await worker.listen();
       logger.info(
-        `GPU media worker ${config.workerId} listening on ${address.host}:${address.port}`
+        `GPU media worker ${resolveGpuMediaWorkerId(config.workerId)} listening on ${address.host}:${address.port}`
       );
       logger.info(`Enabled jobs: ${Object.keys(config.runners).join(', ')}`);
 

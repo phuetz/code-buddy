@@ -1,4 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
+const originalUserName = vi.hoisted(() => {
+  const original = process.env.CODEBUDDY_USER_NAME;
+  process.env.CODEBUDDY_USER_NAME = 'Alex';
+  return original;
+});
+afterAll(() => {
+  if (originalUserName === undefined) delete process.env.CODEBUDDY_USER_NAME;
+  else process.env.CODEBUDDY_USER_NAME = originalUserName;
+});
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -669,8 +678,8 @@ describe('voice loop — fast companion replies', () => {
     expect(fastCompanionReply('Bonjour !')).toBe("Bonjour ! Je t'écoute.");
     expect(fastCompanionReply('merci beaucoup')).toBe('Avec plaisir.');
     expect(fastCompanionReply('tu es là ?')).toBe('Oui, je suis là.');
-    expect(fastCompanionReply('Lisa ?')).toBe('Coucou Patrice. Je suis là.');
-    expect(fastCompanionReply('Lisa comment ça va ?')).toBe('Oui Patrice. Je suis contente de t’entendre.');
+    expect(fastCompanionReply('Lisa ?')).toBe('Coucou Alex. Je suis là.');
+    expect(fastCompanionReply('Lisa comment ça va ?')).toBe('Oui Alex. Je suis contente de t’entendre.');
     expect(fastCompanionReply('Lisa je pars chez des amis')).toBe(
       'Amuse-toi bien chez tes amis. Je reste là, tu me raconteras.',
     );
@@ -678,7 +687,7 @@ describe('voice loop — fast companion replies', () => {
       'Amuse-toi bien chez tes amis. Je reste là, tu me raconteras.',
     );
     expect(fastCompanionReply('Bonne nuit Lisa')).toBe(
-      'Bonne nuit Patrice. Repose-toi bien, je veille tranquillement.',
+      'Bonne nuit Alex. Repose-toi bien, je veille tranquillement.',
     );
     expect(fastCompanionReply('Lisa je suis fatigué')).toBe(
       'Je suis là avec toi. On peut ralentir et faire les choses doucement.',
@@ -949,10 +958,10 @@ describe('voice loop — TTS prewarm corpus', () => {
     expect(getDefaultVoicePrewarmPhrases(16)).toContain(
       'On va faire simple. Respire un peu, puis dis-moi ce dont tu as besoin.'
     );
-    expect(DEFAULT_TTS_PREWARM_PHRASES).toContain('Coucou Patrice. Je suis là.');
+    expect(DEFAULT_TTS_PREWARM_PHRASES).toContain('Coucou Alex. Je suis là.');
     expect(DEFAULT_TTS_PREWARM_PHRASES).toContain('Amuse-toi bien chez tes amis.');
     expect(DEFAULT_TTS_PREWARM_PHRASES).toContain("Je n'ai pas réussi.");
-    expect(DEFAULT_TTS_PREWARM_PHRASES).toContain('Bonne nuit Patrice. Repose-toi bien, je veille tranquillement.');
+    expect(DEFAULT_TTS_PREWARM_PHRASES).toContain('Bonne nuit Alex. Repose-toi bien, je veille tranquillement.');
     expect(getDefaultVoicePrewarmPhrases(2)).toHaveLength(2);
   });
 });
@@ -1114,7 +1123,7 @@ describe('voice loop — heard → think → speak', () => {
     const onHeard = makeVoiceReply({
       replyFn: async (heard) => {
         calls.push(`reply:${heard}`);
-        return 'Salut Patrice, on progresse.';
+        return 'Salut Alex, on progresse.';
       },
       synth: async (text) => {
         calls.push(`synth:${text}`);
@@ -1132,10 +1141,10 @@ describe('voice loop — heard → think → speak', () => {
 
     expect(calls).toEqual([
       'reply:Bonjour, où en est le robot ?',
-      'synth:Salut Patrice, on progresse.',
+      'synth:Salut Alex, on progresse.',
       'play:/tmp/reply.wav',
     ]);
-    expect(spoke).toBe('Salut Patrice, on progresse.');
+    expect(spoke).toBe('Salut Alex, on progresse.');
   });
 
   it('propagates one acoustic delivery profile through cognition, TTS, playback and timing', async () => {

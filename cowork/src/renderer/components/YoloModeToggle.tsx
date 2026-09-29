@@ -13,12 +13,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Zap, ShieldAlert, X } from 'lucide-react';
 import { useAppStore } from '../store';
+import { DEFAULT_YOLO_SESSION_COST_USD, YOLO_SESSION_COST_HARD_CAP_USD } from '../../../../src/config/session-cost-defaults.js';
 
 export function YoloModeToggle() {
   const { t } = useTranslation();
   const [yoloOn, setYoloOn] = useState(false);
-  const [maxCost, setMaxCost] = useState(10);
-  const [maxRounds, setMaxRounds] = useState(50);
+  const [maxCost, setMaxCost] = useState(DEFAULT_YOLO_SESSION_COST_USD);
+  const [maxRounds, setMaxRounds] = useState(400);
   const [showConfig, setShowConfig] = useState(false);
   const setPermissionMode = useAppStore((s) => s.setPermissionMode);
   const permissionMode = useAppStore((s) => s.permissionMode);
@@ -32,7 +33,7 @@ export function YoloModeToggle() {
       if (cancelled) return;
       const c = cfg as { yoloMode?: boolean; yoloMaxCostUsd?: number; yoloMaxRounds?: number };
       if (c.yoloMode) setYoloOn(true);
-      if (typeof c.yoloMaxCostUsd === 'number') setMaxCost(c.yoloMaxCostUsd);
+      if (typeof c.yoloMaxCostUsd === 'number' && Number.isFinite(c.yoloMaxCostUsd) && c.yoloMaxCostUsd >= 0) setMaxCost(Math.min(c.yoloMaxCostUsd, YOLO_SESSION_COST_HARD_CAP_USD));
       if (typeof c.yoloMaxRounds === 'number') setMaxRounds(c.yoloMaxRounds);
     });
     return () => {
@@ -60,16 +61,24 @@ export function YoloModeToggle() {
       await persist({ yoloMode: false });
     } else {
       // turning ON — capture current mode, switch to bypassPermissions
+      const budget = Number.isFinite(maxCost)
+        ? Math.min(Math.max(0, maxCost), YOLO_SESSION_COST_HARD_CAP_USD)
+        : DEFAULT_YOLO_SESSION_COST_USD;
+      setMaxCost(budget);
       previousMode.current = permissionMode;
       setYoloOn(true);
       setPermissionMode('bypassPermissions');
       window.electronAPI?.permission?.setMode('bypassPermissions');
-      await persist({ yoloMode: true, yoloMaxCostUsd: maxCost, yoloMaxRounds: maxRounds });
+      await persist({ yoloMode: true, yoloMaxCostUsd: budget, yoloMaxRounds: maxRounds });
     }
   };
 
   const handleSaveBudget = async () => {
-    await persist({ yoloMaxCostUsd: maxCost, yoloMaxRounds: maxRounds });
+    const budget = Number.isFinite(maxCost)
+      ? Math.min(Math.max(0, maxCost), YOLO_SESSION_COST_HARD_CAP_USD)
+      : DEFAULT_YOLO_SESSION_COST_USD;
+    setMaxCost(budget);
+    await persist({ yoloMaxCostUsd: budget, yoloMaxRounds: maxRounds });
     setShowConfig(false);
   };
 
@@ -120,7 +129,7 @@ export function YoloModeToggle() {
                 value={maxCost}
                 onChange={(e) => setMaxCost(Number(e.target.value))}
                 min={1}
-                max={100}
+                max={YOLO_SESSION_COST_HARD_CAP_USD}
                 step={1}
                 className="mt-0.5 w-full px-2 py-1 text-xs rounded-md bg-surface border border-border-subtle focus:outline-none focus:border-accent"
                 data-testid="yolo-max-cost"

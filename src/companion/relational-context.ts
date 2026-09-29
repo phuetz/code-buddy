@@ -4,7 +4,7 @@
  *
  * This is the "wire, don't rewrite" seam of the interactions refonte: two rich engines were already
  * built but DISCONNECTED from the voice path —
- *   - `user-model.ts` — a privacy-screened, review-gated model of Patrice's working preferences
+ *   - `user-model.ts` — a privacy-screened, review-gated model of the user's working preferences
  *     (accepted observations only; sensitive content is refused at WRITE time, never a dossier);
  *   - `relationship-state.ts` — Lisa's own evolving mood/traits/rapport (Phase 1);
  * plus the live camera `presence` block. None were read by any `sensory`/`companion` surface. This

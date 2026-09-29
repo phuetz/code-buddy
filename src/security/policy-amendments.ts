@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'node:crypto';
 import { logger } from '../utils/logger.js';
+import { DANGEROUS_COMMANDS } from './dangerous-command-data.js';
 
 // ============================================================================
 // Types
@@ -51,12 +52,6 @@ const BANNED_COMMAND_PREFIXES = [
   'curl', 'wget',                                 // network (too broad)
 ];
 
-const DANGEROUS_COMMANDS = new Set([
-  'rm', 'rmdir', 'del', 'format', 'mkfs',
-  'dd', 'fdisk', 'parted',
-  'kill', 'killall', 'pkill',
-  'shutdown', 'reboot', 'halt',
-]);
 
 // ============================================================================
 // Rules Store

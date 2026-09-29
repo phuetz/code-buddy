@@ -324,15 +324,15 @@ describe('InterpreterService LLM Integration', () => {
       expect(cost).toBeCloseTo(3.0, 6);
     });
 
-    it('should fall back to grok-3-mini pricing for unknown models', () => {
+    it('should use the shared unknown-model estimate', () => {
       const cost = service.calculateCost('unknown-model-xyz', {
         input: 1_000_000,
         output: 1_000_000,
         total: 2_000_000,
       });
 
-      // Fallback: grok-3-mini: input=$0.30/1M, output=$0.50/1M
-      expect(cost).toBeCloseTo(0.80, 6);
+      // Shared unknown-model estimate: $3/M input and $15/M output.
+      expect(cost).toBeCloseTo(18, 6);
     });
 
     it('should return 0 for local models', () => {

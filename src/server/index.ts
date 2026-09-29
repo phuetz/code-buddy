@@ -1773,7 +1773,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 };
               }
 
-              // Event follow-ups (opt-in): when Patrice mentions a dated future event IN a real
+              // Event follow-ups (opt-in): when the user mentions a dated future event IN a real
               // conversation with Lisa, capture it and confirm aloud so a mis-hear is corrected on
               // the spot; the presence loop later asks how it went. Capture runs AFTER the reply and
               // fire-and-forget so it never adds reply latency, and is skipped for reminder commands

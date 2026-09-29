@@ -6,7 +6,7 @@ import { synthesizePocketWav } from './local-tts.js';
 import { synthesizeVoiceboxWav } from './voicebox-tts.js';
 
 export const DEFAULT_TTS_BENCHMARK_TEXT =
-  'Bonjour Patrice. Je peux être à la fois douce, naturelle et précise dans mes explications.';
+  'Bonjour. Je peux être à la fois douce, naturelle et précise dans mes explications.';
 
 export interface TtsLatencyAttempt {
   run: number;

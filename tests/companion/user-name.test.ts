@@ -9,6 +9,7 @@ describe('resolveUserName', () => {
   });
 
   it('falls back to the default when unset or empty', () => {
+    expect(DEFAULT_USER_NAME).toBe('l’utilisateur');
     expect(resolveUserName({} as NodeJS.ProcessEnv)).toBe(DEFAULT_USER_NAME);
     expect(resolveUserName({ CODEBUDDY_USER_NAME: '   ' } as NodeJS.ProcessEnv)).toBe(
       DEFAULT_USER_NAME

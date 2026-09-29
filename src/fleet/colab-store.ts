@@ -23,7 +23,7 @@
  *    human `version`/`comment` fields.
  *
  * Safety: {@link FleetColabStore.isAutoClaimable} is the load-bearing guardrail
- * — `critical`-priority tasks are never auto-claimed (they need Patrice).
+ * — `critical`-priority tasks are never auto-claimed (they need the operator).
  */
 
 import * as os from 'os';
@@ -289,7 +289,7 @@ export class FleetColabStore {
 
   /**
    * The load-bearing safety predicate: a task is auto-claimable only when it is
-   * open, unclaimed, and NOT `critical` (critical work needs Patrice's eyes).
+   * open, unclaimed, and NOT `critical` (critical work needs the operator's review).
    */
   isAutoClaimable(task: Pick<ColabTask, 'status' | 'priority' | 'claimedBy'>): boolean {
     return task.status === 'open' && !task.claimedBy && task.priority !== 'critical';

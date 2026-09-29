@@ -36,10 +36,11 @@ describe('ModelRegistry', () => {
       expect(pricing.outputPerMillion).toBe(15.0);
     });
 
-    it('should return snapshot pricing when cost fields are present', () => {
+    it('ignores snapshot pricing so the versioned table remains authoritative', () => {
       const pricing = registry.getPricing('test-model-with-cost');
-      expect(pricing.inputPerMillion).toBe(3.0);
-      expect(pricing.outputPerMillion).toBe(15.0);
+      expect(pricing).toEqual({ inputPerMillion: 3, outputPerMillion: 15 });
+      const conflicting = new ModelRegistry({ 'gpt-4o': { input_cost_per_token: 99, output_cost_per_token: 99 } });
+      expect(conflicting.getPricing('gpt-4o')).toEqual({ inputPerMillion: 2.5, outputPerMillion: 10 });
     });
 
     it('should do prefix matching for models with suffixes', () => {
@@ -81,6 +82,19 @@ describe('ModelRegistry', () => {
       const pricing = registry.getPricing('unknown-model-xyz');
       expect(pricing.inputPerMillion).toBe(3.0);
       expect(pricing.outputPerMillion).toBe(15.0);
+    });
+
+    it('resolves aliases before looking up prices', () => {
+      expect(registry.getPricing('grok')).toEqual({ inputPerMillion: 0.2, outputPerMillion: 1.5 });
+      expect(registry.getPricing('SONNET')).toEqual({ inputPerMillion: 3, outputPerMillion: 15 });
+      registry.setAlias('custom', 'grok-code-fast-1');
+      expect(registry.getPricing('custom')).toEqual({ inputPerMillion: 0.2, outputPerMillion: 1.5 });
+    });
+
+    it('uses the documented Opus 4.5 rate without borrowing Opus 4 pricing', () => {
+      expect(registry.getPricing('claude-opus-4-5')).toEqual({ inputPerMillion: 5, outputPerMillion: 25 });
+      expect(registry.getPricing('claude-opus-4-5-20251101')).toEqual({ inputPerMillion: 5, outputPerMillion: 25 });
+      expect(registry.getPricing('claude-opus-4-9')).toEqual({ inputPerMillion: 3, outputPerMillion: 15 });
     });
   });
 

@@ -212,7 +212,7 @@ interface ServerStatusShape {
 /**
  * Clipboard summariser button (Lisa-derived). Click opens the
  * ClipboardSummaryPanel overlay. Shows a small indicator dot when
- * auto-monitoring is on so Patrice knows the watcher is running.
+ * auto-monitoring is on so the user knows the watcher is running.
  */
 function ClipboardButton() {
   const { t } = useTranslation();

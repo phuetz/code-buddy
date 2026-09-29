@@ -6,7 +6,7 @@
  * was built but never SPOKEN. This loop fires it (and a small library of "moments") on a slow tick
  * — turning a silent engine into felt company.
  *
- * Patrice chose a WARM/present companion, so the cadence is generous — but the rails that prevent
+ * The owner chose a WARM/present companion, so the cadence is generous — but the rails that prevent
  * "companion" from curdling into "annoying" are non-negotiable and all tunable:
  *   - opt-in (`CODEBUDDY_COMPANION_PRESENCE=true`, default OFF)
  *   - quiet/sleep hours (never speak while you sleep)
@@ -52,13 +52,13 @@ export interface PresenceCtx {
   drowsy: boolean;
   /** A thread from memory worth following up (e.g. a project). */
   projectThread: string | null;
-  /** Whole days since the companion first saw Patrice (shared-history tenure). */
+  /** Whole days since the companion first saw the user (shared-history tenure). */
   daysTogether: number;
   /** Whole days since the last confirmed sighting (0 on a continuous presence). */
   daysSinceLastSeen: number;
   /** Tenure milestones already celebrated — so a milestone moment fires exactly once. */
   celebratedMilestones: number[];
-  /** An event Patrice mentioned that is now due for a "how did it go?" follow-up, or null. */
+  /** An event the user mentioned that is now due for a "how did it go?" follow-up, or null. */
   dueEventFollowUp?: { id: string; followUp: string } | null;
 }
 
@@ -144,7 +144,7 @@ export const RELATIONSHIP_MOMENTS: Moment[] = [
         : null,
   },
   {
-    // "How did that go?" — an event Patrice mentioned earlier that has now passed. Placed high (a
+    // "How did that go?" — an event the user mentioned earlier that has now passed. Placed high (a
     // timely, personal follow-up), engages so he can answer back. Short cooldown so a due one
     // surfaces on the next presence rather than waiting hours.
     id: 'followup',

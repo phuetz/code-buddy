@@ -102,7 +102,7 @@ Buffalo_S is the small variant of InsightFace's ArcFace family. ~13 MB,
 
 Open the EnrollmentDialog (mounted by the renderer once `App.tsx`
 wiring is done), enter your name + optional aliases (e.g.
-`Patrice` + `mon chéri, patron`), face the camera, click **Capturer**
+a configured name + `mon chéri, patron`), face the camera, click **Capturer**
 five times. The store ends up with one identity averaged from the
 5 samples.
 
@@ -112,7 +112,7 @@ The LLM gets a `<presence>` block in its system prompt:
 
 ```xml
 <presence>
-  Patrice est devant la caméra (confidence 91%).
+  L’utilisateur est devant la caméra (confidence 91%).
   alias possibles: mon chéri, patron
   vu il y a 12s.
   Tu peux personnaliser ton ton et ton greeting en conséquence — choisis
@@ -122,7 +122,7 @@ The LLM gets a `<presence>` block in its system prompt:
 
 We *don't* tell the LLM "say 'bonjour mon chéri'". We give it the menu
 (name + alias list) and trust the model to pick the register from the
-conversation history (formal session → "Bonjour Patrice", late-night
+conversation history (formal session → "Bonjour", late-night
 philosophical chat → "bonjour mon chéri"). This is the only place where
 trusting the LLM beats hardcoding.
 

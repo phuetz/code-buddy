@@ -6,6 +6,7 @@
  */
 
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
+import { UNKNOWN_MODEL_PRICE } from '../config/model-price-data.js';
 
 // ============================================================================
 // Middleware Actions
@@ -266,7 +267,7 @@ export function defaultModelInfo(): ModelInfo {
   return {
     name: 'unknown',
     maxContextTokens: 128000,
-    inputPricePerMillion: 0.15,
-    outputPricePerMillion: 0.60,
+    inputPricePerMillion: UNKNOWN_MODEL_PRICE.inputPerMillion,
+    outputPricePerMillion: UNKNOWN_MODEL_PRICE.outputPerMillion,
   };
 }

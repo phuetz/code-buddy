@@ -1,3 +1,6 @@
+import { OPTIMIZATION_MODEL_DATA } from '../config/model-price-data.js';
+import { getModelPricing } from '../config/model-pricing.js';
+
 /**
  * Model Tier Routing
  *
@@ -39,51 +42,11 @@ export interface ModelConfig {
 /**
  * Available Grok models with their configurations
  */
-export const GROK_MODELS: Record<string, ModelConfig> = {
-  // Mini tier - fast and cheap
-  "grok-3-mini": {
-    id: "grok-3-mini",
-    tier: "mini",
-    costPerMillionTokens: 0.3,
-    maxTokens: 8192,
-    supportsVision: false,
-    supportsToolUse: true,
-    reasoning: "basic",
-  },
-
-  // Standard tier - balanced
-  "grok-3": {
-    id: "grok-3",
-    tier: "standard",
-    costPerMillionTokens: 3.0,
-    maxTokens: 32768,
-    supportsVision: false,
-    supportsToolUse: true,
-    reasoning: "standard",
-  },
-
-  // Reasoning tier - for complex tasks
-  "grok-3-reasoning": {
-    id: "grok-3-reasoning",
-    tier: "reasoning",
-    costPerMillionTokens: 5.0,
-    maxTokens: 65536,
-    supportsVision: false,
-    supportsToolUse: true,
-    reasoning: "extended",
-  },
-
-  // Vision tier - for image understanding
-  "grok-2-vision": {
-    id: "grok-2-vision",
-    tier: "vision",
-    costPerMillionTokens: 2.0,
-    maxTokens: 8192,
-    supportsVision: true,
-    supportsToolUse: true,
-    reasoning: "standard",
-  },
-};
+export const GROK_MODELS: Record<string, ModelConfig> = Object.fromEntries(
+  Object.entries(OPTIMIZATION_MODEL_DATA).map(([id, data]) => [id, {
+    ...data, id, get costPerMillionTokens() { return getModelPricing(id).inputPerMillion; },
+  }]),
+);
 
 /**
  * Task classification for routing

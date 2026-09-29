@@ -38,7 +38,7 @@ export type EntityType =
   // Collective Knowledge Graph (CKG) vocabulary — the agent collective's shared memory.
   | 'agent' | 'task' | 'lesson' | 'decision' | 'fact'
   // Scientific-discovery memory: a finding ingested from a publication, auto-linked to its
-  // nearest neighbours (Patrice's vision — "relier les découvertes aux plus proches").
+  // nearest neighbours (the intended behavior — "relier les découvertes aux plus proches").
   | 'discovery';
 
 export type RelationType =

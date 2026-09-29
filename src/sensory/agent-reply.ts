@@ -136,7 +136,7 @@ const SUMMARY_MAX_TOKENS = 512;
  * should talk, so an explicit value is honoured as the ceiling. It used to be
  * merely a lower input to `Math.max(96, …, conversationTokenBudget(…))`, which
  * meant a deliberate 48 became at least 96 and, on a long exchange, up to 512.
- * Measured on Patrice's robot on 2026-09-02: he had set 48 and heard a 656-character
+ * Measured on the owner's robot on 2026-09-02: he had set 48 and heard a 656-character
  * answer delivered as fourteen separate phrases.
  *
  * Unset, the automatic budget keeps its previous behaviour exactly.

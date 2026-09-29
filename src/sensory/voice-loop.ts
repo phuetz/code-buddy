@@ -756,7 +756,7 @@ export function isFactualVoiceQuestion(heard: string): boolean {
  * outside the 'concise' style: `Math.max(64, min(512, max(base, planned)))` turned
  * a deliberate 48 into at least 64 and, on any real exchange, into the 512 cap.
  *
- * Measured on Patrice's robot, 2026-09-02: he had set 48 and heard replies with a
+ * Measured on the owner's robot, 2026-09-02: he had set 48 and heard replies with a
  * 479-character median, delivered as a dozen phrases with a silence between each
  * — the gaps are what a listener calls choppy. Every one of those turns took the
  * chitchat route, so this function, not the agent summary, is the one he hears.

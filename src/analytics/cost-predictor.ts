@@ -10,6 +10,7 @@
  */
 
 import type { CostTracker, ModelPricing } from '../utils/cost-tracker.js';
+import { getPricingPer1k } from '../config/model-pricing.js';
 
 export interface CostPrediction {
   /** Estimated number of input tokens */
@@ -23,19 +24,6 @@ export interface CostPrediction {
   /** Confidence level of the prediction */
   confidence: 'low' | 'medium' | 'high';
 }
-
-// Model pricing lookup (mirrors cost-tracker.ts)
-const MODEL_PRICING: Record<string, ModelPricing> = {
-  'grok-4-latest': { inputPer1k: 0.003, outputPer1k: 0.015 },
-  'grok-4-fast': { inputPer1k: 0.003, outputPer1k: 0.015 },
-  'grok-4-1-fast': { inputPer1k: 0.003, outputPer1k: 0.015 },
-  'grok-3-latest': { inputPer1k: 0.003, outputPer1k: 0.015 },
-  'grok-3-fast': { inputPer1k: 0.0006, outputPer1k: 0.004 },
-  'grok-3-mini': { inputPer1k: 0.0003, outputPer1k: 0.0005 },
-  'grok-code-fast-1': { inputPer1k: 0.00015, outputPer1k: 0.0006 },
-  'grok-2-latest': { inputPer1k: 0.002, outputPer1k: 0.010 },
-  'default': { inputPer1k: 0.003, outputPer1k: 0.015 },
-};
 
 /** Average characters per token (rough heuristic) */
 const CHARS_PER_TOKEN = 4;
@@ -66,9 +54,7 @@ export class CostPredictor {
   ): CostPrediction {
     const estimatedInputTokens = this.estimateInputTokens(messages);
     const estimatedOutputTokens = this.estimateOutputTokens();
-    const pricing: ModelPricing =
-      MODEL_PRICING[model] ??
-      MODEL_PRICING['default'] ?? { inputPer1k: 0.003, outputPer1k: 0.015 };
+    const pricing: ModelPricing = getPricingPer1k(model);
 
     const estimatedCost =
       (estimatedInputTokens / 1000) * pricing.inputPer1k +

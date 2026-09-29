@@ -83,6 +83,9 @@ jobs:
       # Node version and the entire database test suite (~200 tests) is skipped.
       run: npm rebuild better-sqlite3
 
+    - name: Configure public-source name guard
+      run: node scripts/ci/prepare-personal-name-guard.mjs
+
     - name: Run type check
       run: npm run typecheck
 

@@ -283,7 +283,7 @@ export class CodeBuddyClient {
   private geminiProvider: GeminiNativeProvider | null = null;
   /** Strategy for OpenAI-compat backends — non-null only when NOT isGeminiProvider. */
   private openaiCompatProvider: OpenAICompatProvider | null = null;
-  /** Strategy for ChatGPT Codex Responses backend (OAuth, Patrice's plan). */
+  /** Strategy for ChatGPT Codex Responses backend (OAuth, configured account). */
   private chatgptProvider: ChatGptResponsesProvider | null = null;
   /** True when routed through ChatGPT Responses (apiKey sentinel or matching baseURL). */
   private isChatGptProvider: boolean = false;

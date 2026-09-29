@@ -132,7 +132,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   'gemini-cli': {
     id: 'gemini-cli',
     // Pinned to 3.1 explicitly so a fleet behavior shift only happens
-    // when Patrice updates this default (vs. the `gemini-3-pro-preview`
+    // when the owner updates this default (vs. the `gemini-3-pro-preview`
     // alias, which Google can auto-route to 3.2/3.3 etc.). Override
     // via CODEBUDDY_PEER_MODEL — works for both the alias and any
     // dotted version the binary accepts.
@@ -256,7 +256,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
 
 /** Detection priority: local/subscription first to spare cloud quotas.
  *
- * `chatgpt-oauth` sits above paid API keys so Patrice's ChatGPT plan is
+ * `chatgpt-oauth` sits above paid API keys so the configured ChatGPT plan is
  * used before metered providers.
  *
  * `gemini-cli` sits above `gemini` (API key) so a user with both will

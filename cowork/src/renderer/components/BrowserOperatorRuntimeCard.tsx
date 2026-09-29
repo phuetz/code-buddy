@@ -42,7 +42,7 @@ export const BrowserOperatorRuntimeCard: React.FC<BrowserOperatorRuntimeCardProp
   runtime,
   draft,
   events = [],
-  defaultApprover = 'Patrice',
+  defaultApprover = 'Utilisateur',
   onApprove,
   onStop,
   onRuntimeChange,

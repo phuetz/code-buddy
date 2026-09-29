@@ -1,3 +1,6 @@
+import { MODEL_PRICE_DATA } from '../config/model-price-data.js';
+import { getModelPricing } from '../config/model-pricing.js';
+
 /**
  * Interpreter Types
  *
@@ -267,29 +270,12 @@ export interface ModelPricing {
   };
 }
 
-export const DEFAULT_MODEL_PRICING: ModelPricing = {
-  // Grok
-  'grok-3': { input: 3.00, output: 15.00 },
-  'grok-3-mini': { input: 0.30, output: 0.50 },
-  'grok-3-fast': { input: 5.00, output: 15.00 },
-  'grok-2': { input: 2.00, output: 10.00 },
-  'grok-beta': { input: 5.00, output: 15.00 },
-  // Gemini
-  'gemini-2.0-flash': { input: 0.10, output: 0.40 },
-  'gemini-1.5-pro': { input: 1.25, output: 5.00 },
-  'gemini-1.5-flash': { input: 0.075, output: 0.30 },
-  // OpenAI
-  'gpt-4o': { input: 2.50, output: 10.00 },
-  'gpt-4o-mini': { input: 0.15, output: 0.60 },
-  'gpt-4-turbo': { input: 10.00, output: 30.00 },
-  // Anthropic
-  'claude-3-5-sonnet': { input: 3.00, output: 15.00 },
-  'claude-3-opus': { input: 15.00, output: 75.00 },
-  'claude-3-haiku': { input: 0.25, output: 1.25 },
-  // Local (free)
-  'lmstudio': { input: 0, output: 0 },
-  'ollama': { input: 0, output: 0 },
-};
+export const DEFAULT_MODEL_PRICING: ModelPricing = Object.fromEntries(
+  Object.keys(MODEL_PRICE_DATA).map(model => [model, {
+    get input() { return getModelPricing(model).inputPerMillion; },
+    get output() { return getModelPricing(model).outputPerMillion; },
+  }]),
+);
 
 export const DEFAULT_INTERPRETER_CONFIG: InterpreterConfig = {
   profilesDir: '~/.codebuddy/profiles',

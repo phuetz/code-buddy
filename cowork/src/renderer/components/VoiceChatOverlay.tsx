@@ -463,7 +463,7 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
     void speakText(
       t(
         'voiceOverlay.sample',
-        'Bonjour Patrice. Voici un échantillon de la voix sélectionnée.',
+        'Bonjour. Voici un échantillon de la voix sélectionnée.',
       ),
     );
   };
