@@ -123,7 +123,13 @@ function extractEdits(workspaceEdit: LSPWorkspaceEdit): Map<string, LSPTextEdit[
 function uriToPath(uri: string): string {
   // Preserve the leading root separator; stripping `file:///` turned an
   // absolute LSP edit into a path relative to the agent's current directory.
-  return fileURLToPath(uri);
+  try {
+    return fileURLToPath(uri);
+  } catch {
+    // Windows rejects a drive-less URI such as file:///src/main.ts ("File URL
+    // path must be absolute"); keep its rooted, decoded pathname instead.
+    return decodeURIComponent(new URL(uri).pathname);
+  }
 }
 
 /**
