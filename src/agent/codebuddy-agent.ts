@@ -19,7 +19,8 @@ import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastruc
 import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
 import type { Session, SessionStore } from "../persistence/session-store.js";
 import type { CostTracker, ExtendedCostInfo } from "../utils/cost-tracker.js";
-import { MODEL_PRICING, isChatGptSubscriptionModel, isLocalNoCostModel } from "../utils/cost-tracker.js";
+import { isChatGptSubscriptionModel, isLocalNoCostModel } from "../utils/cost-tracker.js";
+import { hasModelPricing } from "../config/model-pricing.js";
 import { getLaneQueue } from "../concurrency/lane-queue.js";
 import type { RouteAgentConfig } from "../channels/peer-routing.js";
 import { findSkill, findStarterPack, resetSkillRegistry } from "../skills/index.js";
@@ -1817,7 +1818,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     const pricing: 'known' | 'unknown' | 'subscription' =
       billing === 'subscription'
         ? 'subscription'
-        : MODEL_PRICING[model] ? 'known' : 'unknown';
+        : hasModelPricing(model) ? 'known' : 'unknown';
 
     return {
       total: this.sessionCost,

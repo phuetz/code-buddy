@@ -921,6 +921,12 @@ describe('CostTracker', () => {
         expect(result.estimated).toBe(true); // pas d'usage provider
       });
 
+      it('recognizes the shared price behind a model alias', () => {
+        const result = tracker.calculateCostExtended(1_000_000, 1_000_000, 'grok');
+        expect(result.total).toBeCloseTo(1.7);
+        expect(result.pricing).toBe('known');
+      });
+
       it('COST1-VERT-7: ChatGPT subscription models have correct metadata', () => {
         const result = tracker.calculateCostExtended(100, 50, 'gpt-5.6-sol');
 

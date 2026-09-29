@@ -21,6 +21,10 @@ export function getModelPricing(model: string): ModelPricing {
   return getModelRegistry().getPricing(model);
 }
 
+export function hasModelPricing(model: string): boolean {
+  return getModelRegistry().hasPricing(model);
+}
+
 // ============================================================================
 // Adapters for different unit formats used across the codebase
 // ============================================================================

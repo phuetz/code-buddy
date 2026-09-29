@@ -78,36 +78,43 @@ export class ModelRegistry {
    * Get pricing for a model.
    *
    * Resolution order:
-   *   1. Versioned price data (exact match)
-   *   2. Versioned price data (longest prefix)
-   *   3. Unknown-model estimate
+   *   1. Explicit catalogue price for the requested name or its alias target
+   *   2. Versioned price data for the resolved model (exact match)
+   *   3. Versioned price data for a dated snapshot or latest suffix
+   *   4. Unknown-model estimate
    */
   getPricing(model: string): ModelPricing {
-    const overlay = cataloguePrices.get(model.trim().toLowerCase());
+    const requested = model.trim().toLowerCase();
+    const resolved = this.resolveAlias(requested).trim().toLowerCase();
+    const overlay = cataloguePrices.get(requested) ?? cataloguePrices.get(resolved);
     if (overlay) return { ...overlay };
-    // 1. Exact match in versioned price data
-    const builtin = Object.hasOwn(MODEL_PRICE_DATA, model) ? MODEL_PRICE_DATA[model] : undefined;
-    if (builtin) {
-      return { inputPerMillion: builtin.inputPerMillion, outputPerMillion: builtin.outputPerMillion };
-    }
+    const key = this.findPriceKey(resolved);
+    const price = key ? MODEL_PRICE_DATA[key] : undefined;
+    return price
+      ? { inputPerMillion: price.inputPerMillion, outputPerMillion: price.outputPerMillion }
+      : { ...UNKNOWN_MODEL_PRICE };
+  }
 
-    // 2. Longest prefix in versioned price data (longest prefix wins)
-    const lower = model.toLowerCase();
+  /** True when a model or its alias has a table or explicit catalogue rate. */
+  hasPricing(model: string): boolean {
+    const requested = model.trim().toLowerCase();
+    const resolved = this.resolveAlias(requested).trim().toLowerCase();
+    return cataloguePrices.has(requested) || cataloguePrices.has(resolved)
+      || this.findPriceKey(resolved) !== undefined;
+  }
+
+  private findPriceKey(resolved: string): string | undefined {
+    if (Object.hasOwn(MODEL_PRICE_DATA, resolved)) return resolved;
+    // Only known snapshot/alias suffixes may inherit a base rate. A different
+    // model generation must not inherit the old generation's price.
     let bestMatch = '';
     for (const key of Object.keys(MODEL_PRICE_DATA)) {
-      if (lower.startsWith(key.toLowerCase()) && key.length > bestMatch.length) {
+      const suffix = resolved.startsWith(key) ? resolved.slice(key.length) : '';
+      if (/^-(?:latest|\d{8}|\d{4}-\d{2}-\d{2})(?:$|[-:])/.test(suffix) && key.length > bestMatch.length) {
         bestMatch = key;
       }
     }
-    if (bestMatch) {
-      const matched = MODEL_PRICE_DATA[bestMatch];
-      if (matched) {
-        return { inputPerMillion: matched.inputPerMillion, outputPerMillion: matched.outputPerMillion };
-      }
-    }
-
-    // 3. Unknown model estimate
-    return { ...UNKNOWN_MODEL_PRICE };
+    return bestMatch || undefined;
   }
 
   // --------------------------------------------------------------------------

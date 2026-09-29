@@ -50,6 +50,15 @@ describe('shared model prices', () => {
     expect(MODEL_PRICE_DATA['grok-code-fast-1']).toMatchObject({
       verified: true, checkedAt: '2026-09-29', source: 'https://x.ai/news/grok-code-fast-1',
     });
+    expect(MODEL_PRICE_DATA['gpt-4o']).toMatchObject({
+      verified: true, source: 'https://developers.openai.com/api/docs/models/gpt-4o',
+    });
+    expect(MODEL_PRICE_DATA['mistral-small-latest']).toMatchObject({
+      inputPerMillion: 0.15, outputPerMillion: 0.6, verified: true,
+    });
+    expect(MODEL_PRICE_DATA['mistral-large-latest']).toMatchObject({
+      inputPerMillion: 0.5, outputPerMillion: 1.5, verified: true,
+    });
   });
 
   it('uses documented CLI limits for Cowork and clamps explicit YOLO budgets', () => {
@@ -67,6 +76,7 @@ describe('shared model prices', () => {
     try {
       const router = new ModelRouter('/tmp/model-price-overlay');
       expect(getModelRegistry().getPricing(model)).toEqual({ inputPerMillion: 7, outputPerMillion: 8 });
+      expect(getModelRegistry().getPricing('grok')).toEqual({ inputPerMillion: 7, outputPerMillion: 8 });
       expect(TRACKER_PRICING[model]!.inputPer1k).toBe(0.007);
       expect(INDICATOR_PRICING.find(entry => entry.model === model)?.outputPer1M).toBe(8);
       expect(router.getModelInfo(model)?.costPer1kInput).toBe(0.007);

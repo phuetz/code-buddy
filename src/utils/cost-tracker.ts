@@ -4,7 +4,7 @@ import { EventEmitter } from "events";
 import { getAnalyticsRepository, AnalyticsRepository } from '../database/repositories/analytics-repository.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
 import { MODEL_PRICE_DATA, SUBSCRIPTION_MODEL_IDS, LOCAL_NO_COST_MODEL_IDS } from '../config/model-price-data.js';
-import { getPricingPer1k } from '../config/model-pricing.js';
+import { getPricingPer1k, hasModelPricing } from '../config/model-pricing.js';
 
 /**
  * Detect models served EXCLUSIVELY via the ChatGPT subscription auth
@@ -214,7 +214,7 @@ export class CostTracker extends EventEmitter {
     if (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
       return 'subscription';
     }
-    return Object.hasOwn(MODEL_PRICE_DATA, model) ? 'known' : 'unknown';
+    return hasModelPricing(model) ? 'known' : 'unknown';
   }
 
   /**

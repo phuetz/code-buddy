@@ -83,6 +83,19 @@ describe('ModelRegistry', () => {
       expect(pricing.inputPerMillion).toBe(3.0);
       expect(pricing.outputPerMillion).toBe(15.0);
     });
+
+    it('resolves aliases before looking up prices', () => {
+      expect(registry.getPricing('grok')).toEqual({ inputPerMillion: 0.2, outputPerMillion: 1.5 });
+      expect(registry.getPricing('SONNET')).toEqual({ inputPerMillion: 3, outputPerMillion: 15 });
+      registry.setAlias('custom', 'grok-code-fast-1');
+      expect(registry.getPricing('custom')).toEqual({ inputPerMillion: 0.2, outputPerMillion: 1.5 });
+    });
+
+    it('uses the documented Opus 4.5 rate without borrowing Opus 4 pricing', () => {
+      expect(registry.getPricing('claude-opus-4-5')).toEqual({ inputPerMillion: 5, outputPerMillion: 25 });
+      expect(registry.getPricing('claude-opus-4-5-20251101')).toEqual({ inputPerMillion: 5, outputPerMillion: 25 });
+      expect(registry.getPricing('claude-opus-4-9')).toEqual({ inputPerMillion: 3, outputPerMillion: 15 });
+    });
   });
 
   describe('resolveAlias', () => {
