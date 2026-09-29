@@ -1375,10 +1375,8 @@ function normalizedHttpUrl(raw: string): URL | null {
 function ollamaGenerateUrl(baseURL: string, env: NodeJS.ProcessEnv): string | null {
   const route = normalizedHttpUrl(baseURL);
   if (!route) return null;
-  const configured = normalizedHttpUrl(
-    getOllamaBaseUrl(env)
-  );
-  const knownOllamaOrigin = configured?.origin === route.origin;
+  const knownOllamaOrigin = [env.OLLAMA_BASE_URL, env.OLLAMA_HOST, getOllamaBaseUrl(env)]
+    .some((candidate) => normalizedHttpUrl(candidate ?? '')?.origin === route.origin);
   if (!knownOllamaOrigin && route.port !== '11434') return null;
   return new URL('/api/generate', route.origin).toString();
 }

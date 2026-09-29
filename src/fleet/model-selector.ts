@@ -89,7 +89,9 @@ function msg(e: unknown): string {
 }
 
 function ollamaBaseURL(env: NodeJS.ProcessEnv): string {
-  return getOllamaV1BaseUrl(env);
+  // The selector historically treats an explicit client base URL as authoritative.
+  const explicitBase = env.OLLAMA_BASE_URL?.trim();
+  return getOllamaV1BaseUrl(explicitBase ? { OLLAMA_BASE_URL: explicitBase } : env);
 }
 
 /**

@@ -167,7 +167,7 @@ function isConfiguredAlertChat(inboundChatId: string | undefined, env: NodeJS.Pr
 
 function visionEndpointAllowed(env: NodeJS.ProcessEnv): boolean {
   if (!env.CODEBUDDY_VISION_MODEL?.trim()) return false;
-  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || getOllamaV1BaseUrl();
+  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || getOllamaV1BaseUrl(env);
   return shouldAllowVisionImageEndpoint(baseURL, env.CODEBUDDY_VISION_REMOTE_IMAGE === 'true');
 }
 
@@ -200,7 +200,7 @@ async function defaultAnalyze(imagePath: string, env: NodeJS.ProcessEnv): Promis
     [img],
   );
   const model = env.CODEBUDDY_VISION_MODEL?.trim() || 'moondream';
-  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || getOllamaV1BaseUrl();
+  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || getOllamaV1BaseUrl(env);
   const client = new CodeBuddyClient(env.OLLAMA_API_KEY || 'ollama', model, baseURL);
   const resp = await client.chat([{ role: 'user', content } as never], []);
   return String(resp?.choices?.[0]?.message?.content ?? '').trim();

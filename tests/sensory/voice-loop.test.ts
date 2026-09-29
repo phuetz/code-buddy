@@ -620,6 +620,29 @@ describe('voice loop — runtime prewarming', () => {
     });
   });
 
+  it('keeps the configured BASE_URL route warm when HOST is also present', async () => {
+    let requestedUrl = '';
+    const result = await prewarmVoiceModel({
+      route: {
+        model: 'qwen2.5:7b-instruct',
+        apiKey: 'ollama',
+        baseURL: 'http://127.0.0.1:11500/v1',
+        reason: 'test',
+      },
+      env: {
+        OLLAMA_BASE_URL: 'http://127.0.0.1:11500',
+        OLLAMA_HOST: 'http://127.0.0.1:11434',
+      },
+      fetchFn: async (input) => {
+        requestedUrl = String(input);
+        return new Response('{}', { status: 200 });
+      },
+    });
+
+    expect(result).toMatchObject({ attempted: true, warmed: true });
+    expect(requestedUrl).toBe('http://127.0.0.1:11500/api/generate');
+  });
+
   it('never sends a warmup generation to a non-Ollama route', async () => {
     let fetched = false;
     const result = await prewarmVoiceModel({
