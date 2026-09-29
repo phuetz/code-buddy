@@ -108,65 +108,97 @@ function isCredentialRootSecretBasename(base: string): boolean {
   return false;
 }
 
-function homeDir(): string {
-  // os.homedir() honours $HOME on POSIX — tests run under an isolated HOME.
-  return path.resolve(os.homedir());
+export interface SecretPathContext {
+  /** Allows the Windows path rules to be tested on another host. */
+  platform?: NodeJS.Platform;
+}
+
+function pathFor(platform: NodeJS.Platform) {
+  return platform === 'win32' ? path.win32 : path;
+}
+
+type PathOps = ReturnType<typeof pathFor>;
+
+function homeDirs(platform: NodeJS.Platform): string[] {
+  const paths = pathFor(platform);
+  // Windows shells may use HOME while Node uses USERPROFILE. Both locations can
+  // hold credentials, so every reader must protect both through this policy.
+  const candidates = [os.homedir(), ...(platform === 'win32' ? [process.env.HOME, process.env.USERPROFILE] : [])];
+  return Array.from(new Set(candidates
+    .filter((candidate): candidate is string => !!candidate && paths.isAbsolute(candidate))
+    .map((candidate) => paths.resolve(candidate))));
 }
 
 /** Lexical + canonical forms of the credential roots. */
-export function getHomeCredentialRoots(): string[] {
-  const home = homeDir();
+export function getHomeCredentialRoots(context: SecretPathContext = {}): string[] {
+  const platform = context.platform ?? process.platform;
+  const paths = pathFor(platform);
   const roots = new Set<string>();
-  for (const rel of [...HOME_CREDENTIAL_ROOTS, ...HOME_PRIVATE_ROOTS]) {
-    const lexical = path.join(home, rel);
-    roots.add(lexical);
-    const canonical = canonicalize(lexical);
-    if (canonical) roots.add(canonical);
+  for (const home of homeDirs(platform)) {
+    for (const rel of [...HOME_CREDENTIAL_ROOTS, ...HOME_PRIVATE_ROOTS]) {
+      const lexical = paths.join(home, rel);
+      roots.add(lexical);
+      const canonical = canonicalize(lexical, paths, platform);
+      if (canonical) roots.add(canonical);
+    }
   }
   return Array.from(roots);
 }
 
-function isInside(candidate: string, root: string): boolean {
-  const a = process.platform === 'win32' || process.platform === 'darwin' ? candidate.toLowerCase() : candidate;
-  const b = process.platform === 'win32' || process.platform === 'darwin' ? root.toLowerCase() : root;
-  return a === b || a.startsWith(b + path.sep);
+function samePath(candidate: string, root: string, paths: PathOps, platform: NodeJS.Platform): boolean {
+  const a = paths.normalize(candidate);
+  const b = paths.normalize(root);
+  return platform === 'win32' || platform === 'darwin' ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+function isInside(candidate: string, root: string, paths: PathOps, platform: NodeJS.Platform): boolean {
+  const a = paths.normalize(candidate);
+  const b = paths.normalize(root);
+  const foldedA = platform === 'win32' || platform === 'darwin' ? a.toLowerCase() : a;
+  const foldedB = platform === 'win32' || platform === 'darwin' ? b.toLowerCase() : b;
+  return foldedA === foldedB || foldedA.startsWith(foldedB + paths.sep);
 }
 
 /** realpath through the nearest existing ancestor (null when nothing resolves). */
-function canonicalize(p: string): string | null {
+function canonicalize(p: string, paths: PathOps, platform: NodeJS.Platform): string | null {
+  // A simulated platform has no matching filesystem; lexical checks still run.
+  if (platform !== process.platform) return null;
   let ancestor = p;
   while (!fs.existsSync(ancestor)) {
-    const parent = path.dirname(ancestor);
+    const parent = paths.dirname(ancestor);
     if (parent === ancestor) return null;
     ancestor = parent;
   }
   try {
     const real = fs.realpathSync(ancestor);
-    const suffix = path.relative(ancestor, p);
-    return suffix ? path.resolve(real, suffix) : real;
+    const suffix = paths.relative(ancestor, p);
+    return suffix ? paths.resolve(real, suffix) : real;
   } catch {
     return null;
   }
 }
 
-function classify(absPath: string, roots: readonly string[]): string | null {
-  const base = path.basename(absPath);
-  if (absPath === '/etc/shadow' || absPath === '/etc/gshadow') return 'system password database';
+function classify(absPath: string, roots: readonly string[], platform: NodeJS.Platform): string | null {
+  const paths = pathFor(platform);
+  const base = paths.basename(absPath);
+  if (platform !== 'win32' && (absPath === '/etc/shadow' || absPath === '/etc/gshadow')) return 'system password database';
   if (isUniversalSecretBasename(base)) return `secret file name (${base})`;
-  const home = homeDir();
-  for (const rel of HOME_PRIVATE_ROOTS) {
-    const root = path.join(home, rel);
-    if (isInside(absPath, root) || isInside(absPath, canonicalize(root) ?? root)) {
-      return `private home directory (${rel})`;
+  for (const home of homeDirs(platform)) {
+    for (const rel of HOME_PRIVATE_ROOTS) {
+      const root = paths.join(home, rel);
+      if (isInside(absPath, root, paths, platform) ||
+        isInside(absPath, canonicalize(root, paths, platform) ?? root, paths, platform)) {
+        return `private home directory (${rel})`;
+      }
+    }
+    for (const rel of HOME_PRIVATE_FILES) {
+      if (samePath(absPath, paths.join(home, rel), paths, platform)) return `private home file (${rel})`;
     }
   }
-  for (const rel of HOME_PRIVATE_FILES) {
-    if (absPath === path.join(home, rel)) return `private home file (${rel})`;
-  }
   for (const root of roots) {
-    if (isInside(absPath, root) && absPath !== root) {
-      const relative = path.relative(root, absPath);
-      if (path.basename(root) === '.codebuddy' &&
+    if (isInside(absPath, root, paths, platform) && !samePath(absPath, root, paths, platform)) {
+      const relative = paths.relative(root, absPath);
+      if (paths.basename(root).toLowerCase() === '.codebuddy' &&
         /^(sessions|peer-sessions)[\\/]/.test(relative)) {
         return `private Code Buddy session under ${root}`;
       }
@@ -190,17 +222,19 @@ export function isSecretFileReadAllowedByOperator(env: NodeJS.ProcessEnv = proce
  * Classify a path. Checks the lexical path AND its symlink-resolved form, so a
  * workspace symlink `notes.txt -> ~/.codebuddy/codex-auth.json` is caught.
  */
-export function classifySecretPath(filePath: string, baseDir?: string): SecretFileVerdict {
+export function classifySecretPath(filePath: string, baseDir?: string, context: SecretPathContext = {}): SecretFileVerdict {
   if (typeof filePath !== 'string' || filePath.length === 0 || filePath.includes('\0')) {
     return { secret: false };
   }
-  const lexical = baseDir ? path.resolve(baseDir, filePath) : path.resolve(filePath);
-  const roots = getHomeCredentialRoots();
-  const lexicalReason = classify(lexical, roots);
+  const platform = context.platform ?? process.platform;
+  const paths = pathFor(platform);
+  const lexical = baseDir ? paths.resolve(baseDir, filePath) : paths.resolve(filePath);
+  const roots = getHomeCredentialRoots(context);
+  const lexicalReason = classify(lexical, roots, platform);
   if (lexicalReason) return { secret: true, matchedPath: lexical, reason: lexicalReason };
-  const canonical = canonicalize(lexical);
+  const canonical = canonicalize(lexical, paths, platform);
   if (canonical && canonical !== lexical) {
-    const canonicalReason = classify(canonical, roots);
+    const canonicalReason = classify(canonical, roots, platform);
     if (canonicalReason) {
       return { secret: true, matchedPath: canonical, reason: `${canonicalReason} (via symlink)` };
     }
@@ -219,16 +253,18 @@ export function classifySecretPath(filePath: string, baseDir?: string): SecretFi
 export function checkSecretFileAccess(
   filePath: string,
   access: SecretFileAccess,
-  options: { baseDir?: string; env?: NodeJS.ProcessEnv } = {},
+  options: { baseDir?: string; env?: NodeJS.ProcessEnv } & SecretPathContext = {},
 ): SecretFileVerdict {
-  const verdict = classifySecretPath(filePath, options.baseDir);
+  const verdict = classifySecretPath(filePath, options.baseDir, options);
   if (!verdict.secret) return verdict;
   if (access === 'read') {
     return isSecretFileReadAllowedByOperator(options.env) ? { secret: false } : verdict;
   }
-  const roots = getHomeCredentialRoots();
+  const platform = options.platform ?? process.platform;
+  const paths = pathFor(platform);
+  const roots = getHomeCredentialRoots(options);
   const matched = verdict.matchedPath ?? '';
-  const inCredentialRoot = roots.some((root) => isInside(matched, root));
+  const inCredentialRoot = roots.some((root) => isInside(matched, root, paths, platform));
   return inCredentialRoot ? verdict : { secret: false };
 }
 
