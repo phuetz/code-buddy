@@ -51,7 +51,8 @@ Code Buddy combines a terminal coding agent with cloud, gateway and local model 
 query-selected tools, and the following interfaces. Optional services require their documented
 configuration; enabling a feature does not replace its permission checks.
 
-For changes planned for 2.3.0, see the [changelog](CHANGELOG.md). The
+For changes planned for 2.3.0, see the [release notes](docs/RELEASE-NOTES-2.3.0.md)
+and [changelog](CHANGELOG.md). The
 [2.2.0 release notes](docs/RELEASE-NOTES-2.2.0.md) describe the last published
 version and its integration limits.
 
@@ -271,6 +272,7 @@ to Apache 2.0 on 2030-08-31. Bundled Python skills stay MIT (see their `SKILL.md
 
 - **[Getting started](docs/getting-started.md)** — first run, headless mode, sessions.
 - **[Changelog](CHANGELOG.md)** — 2.3.0 candidate and earlier changes.
+- **[Release notes 2.3.0](docs/RELEASE-NOTES-2.3.0.md)** — candidate changes, setup and limits in French and English.
 - **[2.3.0 preview and limits](docs/whats-new-2.3.md)** — behavior and boundaries of the candidate.
 - **[Release notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)** — last published release and validation limits.
 - **[Release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md)** — previous release.
