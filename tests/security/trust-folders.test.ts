@@ -1,12 +1,15 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, vi } from 'vitest';
+import { afterAll, vi } from 'vitest';
+import { removeTestDir } from '../helpers/tmp.js';
 
-const { isolatedHome } = vi.hoisted(() => ({
-  isolatedHome: `${process.cwd()}/.r32-trust-folders-home-${process.pid}`,
-}));
+const { isolatedHome } = await vi.hoisted(async () => {
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  return { isolatedHome: mkdtempSync(join(tmpdir(), 'r32-trust-folders-home-')) };
+});
 
 vi.mock('os', async (importOriginal) => {
   const actual = await importOriginal<typeof import('os')>();
@@ -15,25 +18,8 @@ vi.mock('os', async (importOriginal) => {
 
 import { TrustFolderManager } from '../../src/security/trust-folders.js';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-let isolatedHomeIsInsideRepo = false;
-
-beforeAll(() => {
-  const relativeHome = path.relative(repoRoot, isolatedHome);
-  if (
-    relativeHome === '..' ||
-    relativeHome.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relativeHome)
-  ) {
-    throw new Error(`Refusing to create a test home outside the repository: ${isolatedHome}`);
-  }
-  isolatedHomeIsInsideRepo = true;
-});
-
 afterAll(() => {
-  if (isolatedHomeIsInsideRepo) {
-    fs.rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 20 });
-  }
+  removeTestDir(isolatedHome);
 });
 
 describe('TrustFolderManager', () => {
