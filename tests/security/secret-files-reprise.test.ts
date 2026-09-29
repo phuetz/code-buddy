@@ -1,13 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-const qa = vi.hoisted(() => {
-  const root = `${process.cwd()}/_qa/securite-reprise`;
+const qa = await vi.hoisted(async () => {
+  const { join, normalize } = await import('node:path');
+  const root = normalize(join(process.cwd(), '_qa', 'securite-reprise'));
+  const home = join(root, 'home');
   const previousHome = process.env.HOME;
   const previousUserProfile = process.env.USERPROFILE;
-  process.env.HOME = `${root}/home`;
-  process.env.USERPROFILE = `${root}/home`;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
   delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
-  return { root, home: `${root}/home`, previousHome, previousUserProfile };
+  return { root, home, previousHome, previousUserProfile };
 });
 
 import * as fs from 'node:fs';
@@ -154,6 +156,11 @@ describe('classification et shell', () => {
     'grep -r FAKE ~/.CodeBuddy/skill-signing',
   ])('refuse le chemin statique %s', (command) => {
     expect(findCredentialPathInCommand(command)).not.toBeNull();
+  });
+
+  it('refuse aussi sous Windows les échappements POSIX et les variantes de casse', () => {
+    expect(findCredentialPathInCommand('cat ~/.codebuddy/codex-auth\\.json', 'win32')).not.toBeNull();
+    expect(findCredentialPathInCommand('grep -r FAKE ~/.CodeBuddy/skill-signing', 'win32')).not.toBeNull();
   });
 
   it('conserve les lectures de configuration publique et la copie de modèle', () => {

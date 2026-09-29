@@ -401,13 +401,30 @@ const RECURSIVE_READERS = new Set([
  */
 export function findCredentialPathInCommand(command: string, platform: NodeJS.Platform = process.platform): string | null {
   if (typeof command !== 'string' || !command) return null;
-  // Shell joins adjacent quoted fragments and removes escaping before opening
-  // paths. On Windows backslashes are path separators, not POSIX escapes.
-  const expanded = expandHomeReferences(command)
+  // Both POSIX-style escapes (`codex-auth\.json`) and Windows separators
+  // (`C:\Users\...`) can occur on Windows. Check both interpretations before
+  // allowing the command; expanding HOME afterwards preserves its separators.
+  const unquoted = command
     .replace(/\$(?:""|'')/g, '')
-    .replace(/\\([^\n])/g, platform === 'win32' ? '/$1' : '$1')
     .replace(/["']/g, '');
+  const variants = [expandHomeReferences(unquoted.replace(/\\([^\n])/g, '$1'))];
+  if (platform === 'win32') {
+    variants.push(expandHomeReferences(unquoted.replace(/\\([^\n])/g, '/$1')));
+  }
   const roots = getHomeCredentialRoots();
+  for (const expanded of new Set(variants)) {
+    const found = findCredentialPathInExpandedCommand(expanded, platform, roots);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findCredentialPathInExpandedCommand(
+  expanded: string,
+  platform: NodeJS.Platform,
+  roots: readonly string[],
+): string | null {
+  const fold = (value: string): string => platform === 'win32' ? value.toLowerCase() : value;
   const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
   const words = new Set(
     tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
@@ -420,8 +437,9 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     const dynamicPath = expanded.split(/[\s;|&<>]+/).find((token) =>
       roots.some((root) => {
         const normalizedRoot = platform === 'win32' ? root.replace(/\\/g, '/') : root;
+        const normalizedToken = platform === 'win32' ? token.replace(/\\/g, '/') : token;
         const separator = platform === 'win32' ? '/' : path.sep;
-        return token.includes(`${normalizedRoot}${separator}`) && /\$|`/.test(token);
+        return fold(normalizedToken).includes(fold(`${normalizedRoot}${separator}`)) && /\$|`/.test(token);
       }),
     );
     if (dynamicPath) return dynamicPath;
@@ -452,7 +470,7 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     let canonical = normalized;
     try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
     const underRoot = roots.find(
-      (root) => canonical === root || canonical.startsWith(root + path.sep),
+      (root) => fold(canonical) === fold(root) || fold(canonical).startsWith(fold(root + path.sep)),
     );
     if (!underRoot) continue;
     if (/[*?[\]{}]/.test(normalized)) return raw;
