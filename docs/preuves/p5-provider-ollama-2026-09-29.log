@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: CODEBUDDY_PROVIDER=ollama OLLAMA_HOST=http://127.0.0.1:11434 GROK_MODEL=qwen3:4b-instruct buddy --prompt <lecture package.json>
+Attendu: Le fournisseur local renvoie un résultat réel.
+Observé: Auto-detected provider: ollama (model: qwen3:4b-instruct); appel read_file réussi; réponse finale 7.3.1; coût $0.0000; code 0.
+Verdict: prouvée

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-user-model",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "3c8e77ce7784a3aba7e185bdcd84ad1a421f5162e311d8d9df2a4dba7dd0a364",
+  "artifact": "docs/preuves/p5-cli-user-model-2026-09-29.log",
+  "summary": "Préférence locale proposée, acceptée et relue."
+}

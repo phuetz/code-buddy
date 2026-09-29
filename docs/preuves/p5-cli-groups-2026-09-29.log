@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy groups block qa-fixture-user; buddy groups status; buddy groups unblock qa-fixture-user
+Attendu: La liste de blocage persiste entre deux invocations CLI.
+Observé: block: "Blocked user: qa-fixture-user" (code 0); status: "Blocklist: 0 users" (code 0); unblock: "User not in blocklist: qa-fixture-user" (code 0).
+Verdict: échec

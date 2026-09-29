@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy skills import --dir <QA_SKILLS> --apply --json; buddy skills list
+Attendu: Un skill local est importé et listé.
+Observé: imported=[imported-qa-proof], verdict=allow; list: Available local skills (9), imported-qa-proof (hub), Installed skills (1 usable / 1 enabled / 1 total). Codes 0.
+Verdict: prouvée

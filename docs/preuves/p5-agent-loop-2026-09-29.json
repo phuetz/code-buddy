@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "agent-loop",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "3fa0f62e569e2fec3d7b43e81db39b9e8c187bba7d8679e6aae6694d871a28f0",
+  "artifact": "docs/preuves/p5-agent-loop-2026-09-29.log",
+  "summary": "Boucle agent réelle exécutée avec appel d’outil et réponse Ollama."
+}

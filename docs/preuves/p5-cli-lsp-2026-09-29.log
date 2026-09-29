@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy lsp diagnostics <QA_PROJECT>/bad.rs --json; rust-analyzer --version
+Attendu: Le serveur LSP démarre et signale l’erreur de type du vrai fichier Rust.
+Observé: Avant correctif: "Failed to start LSP server: Error: LSP server exited with code 1", diagnostics=[], code 0. rust-analyzer --version: "error: Unknown binary 'rust-analyzer' in official toolchain 'stable-x86_64-unknown-linux-gnu'." Après correctif: {"error":"server_start_failed","language":"rust","command":"rust-analyzer"}, code 1.
+Verdict: échec

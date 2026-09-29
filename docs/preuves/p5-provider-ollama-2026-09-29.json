@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "provider-ollama",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "e8f34373a255bdc33e8e6f7c0a02cd532baa34ad54a4d4556d4053f2c8329150",
+  "artifact": "docs/preuves/p5-provider-ollama-2026-09-29.log",
+  "summary": "Fournisseur Ollama local réellement utilisé pour un tour agent."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-token",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "e4b221ffe83d7fadf216686ad0de0ae31be09b0a0d5fb59c7ee7a2b0bba77b9e",
+  "artifact": "docs/preuves/p5-cli-token-2026-09-29.log",
+  "summary": "Jeton temporaire signé et signature contrôlée avec une clé jetable."
+}

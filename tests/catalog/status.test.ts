@@ -90,10 +90,15 @@ describe('catalog states and evidence', () => {
         }
       }
     }
-    const failedReplay = catalog.features.find((feature) => feature.id === 'cli-run');
-    expect(failedReplay?.states.testedInSituation).toBe('inconnu');
-    expect(failedReplay?.reasons).toContain(STALE_PROOF_REASON);
-    expect(failedReplay?.latestEvidence?.artifact).toBe('docs/preuves/inventaire-cli-run-echec.log');
+    const replay = catalog.features.find((feature) => feature.id === 'cli-run');
+    expect(replay?.latestEvidence?.artifact).toBe('docs/preuves/p5-cli-run-2026-09-29.log');
+    expect(replay?.latestEvidence?.result).toBe('passed');
+    if (replay?.latestEvidence?.sourceDigest === currentCatalogSourceDigest(root, 'cli-run')) {
+      expect(replay?.states.testedInSituation).toBe('vrai');
+    } else {
+      expect(replay?.states.testedInSituation).toBe('inconnu');
+      expect(replay?.reasons).toContain(STALE_PROOF_REASON);
+    }
   });
 
   it('finds each declared entrypoint in the real source inventory', () => {

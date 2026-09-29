@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy skills import --dir <QA_SKILLS> --apply; buddy bundles create qa-bundle imported-qa-proof --json; buddy bundles show qa-bundle --json; buddy bundles remove qa-bundle --json
+Attendu: Le bundle d’un skill installé est créé, relu et supprimé.
+Observé: Skill importé sous imported-qa-proof; created=true, skills=[imported-qa-proof]; show renvoie la même liste; removed=true. Codes 0.
+Verdict: prouvée

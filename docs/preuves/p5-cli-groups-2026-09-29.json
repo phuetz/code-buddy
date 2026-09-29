@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-groups",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "47bf908160bcc14cbc2e33bac7e7866c320237d18e26e48116468f81eb79dcc8",
+  "artifact": "docs/preuves/p5-cli-groups-2026-09-29.log",
+  "summary": "Le blocage annoncé disparaît à la commande suivante ; gestion CLI non persistante."
+}

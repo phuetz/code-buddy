@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy trigger add "file_change:*.txt notify:cli"; buddy trigger list; buddy trigger remove <id>; buddy trigger list
+Attendu: La déclaration persiste entre invocations puis disparaît.
+Observé: Trigger created: 47686c76 (file_change: *.txt); list le retrouve; Trigger removed: 47686c76; No triggers configured. Codes 0. Aucun événement déclenché.
+Verdict: prouvée

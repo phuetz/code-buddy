@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-health",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "86b0a9da7ed1abf4e769f682a6d5d503db092aeee5da0342803672c9918f0159",
+  "artifact": "docs/preuves/p5-http-health-2026-09-29.log",
+  "summary": "Route /api/health interrogée sur le serveur réel local."
+}

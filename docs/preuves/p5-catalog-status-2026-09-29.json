@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "catalog-status",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "cbd767f8edab2e02f2988f27ea68bdc3a6cebe159863506f2c8d586919559fbd",
+  "artifact": "docs/preuves/p5-catalog-status-2026-09-29.log",
+  "summary": "Commande catalogue exécutée et JSON analysé."
+}

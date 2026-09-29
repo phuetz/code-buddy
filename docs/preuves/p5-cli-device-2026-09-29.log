@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy device pair --transport local --id qa-local --name qa-local; buddy device list; buddy device run qa-local printf QA_DEVICE_OK; buddy device remove qa-local
+Attendu: Le nœud local exécute la commande et est retiré.
+Observé: Device paired: qa-local; list le retrouve; run rend QA_DEVICE_OK; Device qa-local removed. Codes 0.
+Verdict: prouvée

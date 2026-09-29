@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-lsp",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "7710349157529365fac7ad2b59edfa2a990eadfa0c37f565efbe3a4af2ef3762",
+  "artifact": "docs/preuves/p5-cli-lsp-2026-09-29.log",
+  "summary": "Diagnostics Rust non prouvables ici : composant rust-analyzer absent ; l’échec est désormais explicite."
+}
