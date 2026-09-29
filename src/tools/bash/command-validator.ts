@@ -397,6 +397,84 @@ const RECURSIVE_READERS = new Set([
   'awk', 'sed', 'diff', 'cmp', 'tee', 'openssl',
 ]);
 
+/** Commands whose ordinary operands can name files read by the process. */
+const FILE_OPERAND_READERS = new Set([
+  'cat', 'sort', 'head', 'tail', 'less', 'more', 'base64', 'xxd', 'od',
+  'strings', 'cp', 'diff', 'cmp', 'tar', 'zip', '7z', 'tee',
+]);
+
+/** Resolve only scalar assignments whose expansion cannot add shell words. */
+function resolveScalarShellValue(value: string, variables: Map<string, string>): string | null {
+  let unknown = false;
+  const expanded = value.replace(
+    /\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g,
+    (_match, braced: string | undefined, plain: string | undefined) => {
+      const known = variables.get(braced ?? plain ?? '');
+      if (known === undefined) { unknown = true; return ''; }
+      return known;
+    },
+  );
+  if (unknown || /\$\(|`|[\s;&|<>]/.test(expanded)) return null;
+  return expanded.replace(/^~(?=\/|$)/, variables.get('HOME') ?? os.homedir());
+}
+
+/**
+ * A runtime-computed shell variable is not a path the file guard can classify.
+ * Prove simple assignments in command order; refuse unresolved file operands.
+ * A directory change invalidates PWD. Arbitrary shell computations continue
+ * to require the runtime sandbox and cannot be trusted by this static check.
+ */
+function unverifiedFileOperand(command: string, cwd: string): string | null {
+  const parsed = parseShellCommand(command);
+  const variables = new Map<string, string>([
+    ['PWD', cwd],
+    ['HOME', os.homedir()],
+  ]);
+  for (const segment of parsed.commands) {
+    const assignment = segment.args.length === 0 &&
+      /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(segment.command);
+    if (assignment) {
+      const resolved = resolveScalarShellValue(assignment[2] ?? '', variables);
+      if (resolved === null) variables.delete(assignment[1]!);
+      else variables.set(assignment[1]!, resolved);
+      continue;
+    }
+    if (['cd', 'pushd', 'popd'].includes(segment.command)) variables.delete('PWD');
+    const executable = path.basename(segment.command).toLowerCase();
+    if (!FILE_OPERAND_READERS.has(executable)) continue;
+    const cpTargetOption = executable === 'cp'
+      ? segment.args.findIndex((arg) => arg === '-t' || arg === '--target-directory') : -1;
+    const cpInlineTarget = executable === 'cp' && segment.args.some((arg) =>
+      arg.startsWith('--target-directory=') || /^-t[^-]/.test(arg));
+    for (let index = 0; index < segment.args.length; index += 1) {
+      const arg = segment.args[index]!;
+      if (!/\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)/.test(arg)) continue;
+      const resolved = resolveScalarShellValue(arg, variables);
+      if (resolved === null) return arg;
+      const previous = segment.args[index - 1];
+      const writesFile = executable === 'tee' ||
+        (executable === 'cp' && (cpTargetOption >= 0
+          ? index === cpTargetOption + 1
+          : cpInlineTarget
+            ? arg.startsWith('--target-directory=') || /^-t[^-]/.test(arg)
+            : index === segment.args.length - 1)) ||
+        (executable === 'sort' && (previous === '-o' || previous === '--output' ||
+          arg.startsWith('--output=')));
+      const operand = executable === 'sort' && arg.startsWith('--output=')
+        ? resolved.slice('--output='.length)
+        : executable === 'cp' && arg.startsWith('--target-directory=')
+          ? resolved.slice('--target-directory='.length)
+          : executable === 'cp' && /^-t[^-]/.test(arg)
+            ? resolved.slice(2)
+            : resolved;
+      const candidate = path.resolve(cwd, operand);
+      if (checkSecretFileAccess(candidate, writesFile ? 'write' : 'read').secret ||
+          globContainsSecret(candidate)) return arg;
+    }
+  }
+  return null;
+}
+
 /** Only explicit public placeholders may be traversed in classified env files. */
 function isPublicProjectEnvPlaceholder(file: string): boolean {
   const base = path.basename(file).toLowerCase();
@@ -1045,13 +1123,22 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
   if (gitInvocations.commands.length === 1 &&
       parseShellCommand(joined).commands.length === 1 &&
       isGitMetadataOnly(gitInvocations.commands[0]!)) return null;
+  const unresolvedFile = unverifiedFileOperand(command.replace(/\\\r?\n/g, ''), cwd);
+  if (unresolvedFile) return unresolvedFile;
   const roots = getHomeCredentialRoots();
   const credentialRootNames = new Set([
     ...roots.map((root) => path.basename(root).toLowerCase()),
     '.docker',
   ]);
   // Keep commas inside shell brace expansion, e.g. `{notes.txt,.env}`.
-  const tokens = expanded.split(/[\s`;|&<>()=]+/).filter(Boolean);
+  // A standalone scalar assignment sets data for a later command; its value
+  // is not itself a file operand. The ordered variable check above validates
+  // any later reader that consumes it.
+  const pathOperands = expanded.replace(
+    /(^|[;|&]\s*)[A-Za-z_][A-Za-z0-9_]*=[^\s;|&]+/g,
+    '$1',
+  );
+  const tokens = pathOperands.split(/[\s`;|&<>()=]+/).filter(Boolean);
   const words = new Set(
     tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
   );
