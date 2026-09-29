@@ -1,3 +1,6 @@
+import { MODEL_PRICE_DATA } from '../config/model-price-data.js';
+import { getModelPricing } from '../config/model-pricing.js';
+
 /**
  * Real-Time Cost Indicator
  *
@@ -47,22 +50,14 @@ export interface CostBudget {
 /**
  * Default pricing for common models ($ per 1M tokens)
  */
-export const MODEL_PRICING: TokenPricing[] = [
-  { model: 'grok-4-latest', inputPer1M: 3.00, outputPer1M: 15.00 },
-  { model: 'grok-4-fast', inputPer1M: 3.00, outputPer1M: 15.00 },
-  { model: 'grok-4-1-fast', inputPer1M: 3.00, outputPer1M: 15.00 },
-  { model: 'grok-3', inputPer1M: 3.00, outputPer1M: 15.00 },
-  { model: 'grok-3-latest', inputPer1M: 3.00, outputPer1M: 15.00 },
-  { model: 'grok-3-fast', inputPer1M: 0.60, outputPer1M: 4.00 },
-  { model: 'grok-3-mini', inputPer1M: 0.30, outputPer1M: 0.50 },
-  { model: 'grok-code-fast-1', inputPer1M: 0.15, outputPer1M: 0.60 },
-  { model: 'grok-2', inputPer1M: 2.00, outputPer1M: 10.00 },
-  { model: 'gpt-4o', inputPer1M: 2.50, outputPer1M: 10.00, cachedInputPer1M: 1.25 },
-  { model: 'gpt-4o-mini', inputPer1M: 0.15, outputPer1M: 0.60, cachedInputPer1M: 0.075 },
-  { model: 'claude-3-opus', inputPer1M: 15.00, outputPer1M: 75.00 },
-  { model: 'claude-3-sonnet', inputPer1M: 3.00, outputPer1M: 15.00 },
-  { model: 'claude-3-haiku', inputPer1M: 0.25, outputPer1M: 1.25 },
-];
+export const MODEL_PRICING: TokenPricing[] = Object.keys(MODEL_PRICE_DATA)
+  .filter(model => (MODEL_PRICE_DATA[model]?.inputPerMillion ?? 0) > 0)
+  .map(model => ({
+    model,
+    get inputPer1M() { return getModelPricing(model).inputPerMillion; },
+    get outputPer1M() { return getModelPricing(model).outputPerMillion; },
+    get cachedInputPer1M() { return MODEL_PRICE_DATA[model]?.cachedInputPerMillion; },
+  }));
 
 /**
  * Cost Tracker
@@ -74,12 +69,7 @@ export class CostTracker {
   private sessionStart: Date = new Date();
 
   constructor(customPricing?: TokenPricing[]) {
-    // Load default pricing
-    for (const p of MODEL_PRICING) {
-      this.pricing.set(p.model, p);
-    }
-
-    // Add custom pricing
+    // Only caller overrides are stored here; built-in prices stay live.
     if (customPricing) {
       for (const p of customPricing) {
         this.pricing.set(p.model, p);
@@ -195,8 +185,13 @@ export class CostTracker {
       }
     }
 
-    // Default fallback
-    return { model, inputPer1M: 5.00, outputPer1M: 15.00 };
+    const shared = getModelPricing(model);
+    const cached = Object.entries(MODEL_PRICE_DATA)
+      .filter(([key]) => model.toLowerCase().startsWith(key.toLowerCase()))
+      .sort(([a], [b]) => b.length - a.length)[0]?.[1].cachedInputPerMillion;
+    return { model, inputPer1M: shared.inputPerMillion, outputPer1M: shared.outputPerMillion,
+      ...(cached !== undefined ? { cachedInputPer1M: cached } : {}),
+    };
   }
 
   /**

@@ -1,3 +1,5 @@
+import { TOML_MODEL_DATA, TOML_DEFAULT_ACTIVE_MODEL } from './model-price-data.js';
+import { getModelPricing } from './model-pricing.js';
 /**
  * TOML Configuration System
  *
@@ -709,7 +711,7 @@ export interface CodeBuddyConfig {
 // ============================================================================
 
 export const DEFAULT_CONFIG: CodeBuddyConfig = {
-  active_model: 'grok-code-fast',
+  active_model: TOML_DEFAULT_ACTIVE_MODEL,
 
   providers: {
     xai: {
@@ -738,104 +740,14 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
     },
   },
 
-  models: {
-    'grok-4-fast': {
-      provider: 'xai',
-      model_id: 'grok-4-1-fast',
-      price_per_m_input: 2.0,
-      price_per_m_output: 10.0,
-      max_context_tokens: 2000000,
-      description: 'Grok 4.1 Fast (2M context)',
-    },
-    'grok-4': {
-      provider: 'xai',
-      model_id: 'grok-4-latest',
-      price_per_m_input: 6.0,
-      price_per_m_output: 18.0,
-      max_context_tokens: 256000,
-      description: 'Grok 4 (256K context)',
-    },
-    'grok-code-fast': {
-      provider: 'xai',
-      model_id: 'grok-code-fast-1',
-      price_per_m_input: 0.15,
-      price_per_m_output: 0.60,
-      max_context_tokens: 256000,
-      description: 'Fast Grok model optimized for code',
-    },
-    'grok-3': {
-      provider: 'xai',
-      model_id: 'grok-3-latest',
-      price_per_m_input: 3.0,
-      price_per_m_output: 15.0,
-      max_context_tokens: 131072,
-      description: 'Full Grok 3 model',
-    },
-    'claude-opus': {
-      provider: 'anthropic',
-      model_id: 'claude-opus-4-6',
-      price_per_m_input: 5.0,
-      price_per_m_output: 25.0,
-      max_context_tokens: 200000,
-      description: 'Claude Opus 4.6 (128K output)',
-    },
-    'claude-sonnet': {
-      provider: 'anthropic',
-      model_id: 'claude-sonnet-4-5-20250929',
-      price_per_m_input: 3.0,
-      price_per_m_output: 15.0,
-      max_context_tokens: 200000,
-      description: 'Claude Sonnet 4.5 (64K output)',
-    },
-    'claude-haiku': {
-      provider: 'anthropic',
-      model_id: 'claude-haiku-4-5-20251001',
-      price_per_m_input: 1.0,
-      price_per_m_output: 5.0,
-      max_context_tokens: 200000,
-      description: 'Claude Haiku 4.5 (64K output, fastest)',
-    },
-    'gpt-5.6-sol': {
-      provider: 'openai',
-      model_id: 'gpt-5.6-sol',
-      price_per_m_input: 5.0,
-      price_per_m_output: 30.0,
-      max_context_tokens: 1050000,
-      description: 'GPT-5.6 Sol (1.05M context, 128K output, vision, max reasoning)',
-    },
-    'gpt-5': {
-      provider: 'openai',
-      model_id: 'gpt-5',
-      price_per_m_input: 10.0,
-      price_per_m_output: 30.0,
-      max_context_tokens: 400000,
-      description: 'GPT-5 (400K context, 128K output)',
-    },
-    'gpt-4o': {
-      provider: 'openai',
-      model_id: 'gpt-4o',
-      price_per_m_input: 2.5,
-      price_per_m_output: 10.0,
-      max_context_tokens: 128000,
-      description: 'GPT-4o',
-    },
-    'gemini-2.5': {
-      provider: 'google',
-      model_id: 'gemini-2.5-flash',
-      price_per_m_input: 0.15,
-      price_per_m_output: 0.60,
-      max_context_tokens: 1000000,
-      description: 'Gemini 2.5 Flash (1M context, 65K output)',
-    },
-    'gemini-2': {
-      provider: 'google',
-      model_id: 'gemini-2.0-flash',
-      price_per_m_input: 0.10,
-      price_per_m_output: 0.40,
-      max_context_tokens: 1000000,
-      description: 'Gemini 2.0 Flash (1M context)',
-    },
-  },
+  models: Object.fromEntries(
+    Object.entries(TOML_MODEL_DATA).map(([alias, data]) => {
+      return [alias, { ...data,
+        get price_per_m_input() { return getModelPricing(data.model_id).inputPerMillion; },
+        get price_per_m_output() { return getModelPricing(data.model_id).outputPerMillion; },
+      }];
+    }),
+  ),
 
   tool_config: {
     bash: {

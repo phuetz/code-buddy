@@ -31,6 +31,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { getModelPricing } from '../config/model-pricing.js';
 import {
   ProviderFallbackChain,
   getFallbackChain,
@@ -569,19 +570,8 @@ export class SmartModelRouter extends EventEmitter {
       return undefined;
     }
 
-    // Rough cost estimates per 1M tokens (combined input/output)
-    const costMap: Record<string, number> = {
-      'grok-3-mini': 0.3,
-      'grok-3': 3.0,
-      'grok-3-reasoning': 5.0,
-      'gpt-4o-mini': 0.15,
-      'gpt-4o': 5.0,
-      'claude-3-haiku': 0.25,
-      'claude-3-sonnet': 3.0,
-      'claude-3-opus': 15.0,
-    };
-
-    const costPerMillion = costMap[model] ?? 1.0;
+    // EstimatedTokens has no input/output split; keep the input-rate estimate.
+    const costPerMillion = getModelPricing(model).inputPerMillion;
     return (estimatedTokens / 1_000_000) * costPerMillion;
   }
 

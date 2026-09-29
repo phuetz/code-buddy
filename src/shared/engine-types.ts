@@ -125,6 +125,8 @@ export interface EngineSessionConfig {
   /** Approval posture scoped to this engine session/turn. */
   permissionMode?: 'default' | 'plan' | 'acceptEdits' | 'dontAsk' | 'bypassPermissions';
   maxToolRounds?: number;
+  yoloMode?: boolean;
+  maxCostUsd?: number;
   workingDirectory?: string;
   /** Runtime system prompt addition supplied by the host (for active Cowork personas). */
   systemPromptAppend?: string;

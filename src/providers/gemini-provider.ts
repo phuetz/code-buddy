@@ -1,3 +1,5 @@
+import { getPricingPer1M } from '../config/model-pricing.js';
+
 /**
  * Gemini Provider (Google)
  *
@@ -381,8 +383,7 @@ export class GeminiProvider extends BaseProvider {
    * Pricing is per 1M tokens.
    */
   getPricing(): { input: number; output: number } {
-    // Gemini 2.0 Flash pricing per 1M tokens
-    return { input: 0.075, output: 0.30 };
+    return getPricingPer1M(this.config?.model ?? this.defaultModel);
   }
 
   /**

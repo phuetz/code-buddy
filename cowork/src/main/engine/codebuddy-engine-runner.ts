@@ -614,6 +614,7 @@ export class CodeBuddyEngineRunner {
       }
     };
     try {
+      const yoloConfig = configStore.getAll();
       await this.adapter.runSession(
         session.id,
         engineMessages,
@@ -898,6 +899,9 @@ export class CodeBuddyEngineRunner {
           model: effectiveModel,
           thinkingLevel: session.intelligence?.thinkingLevel,
           permissionMode: session.permissionModeOverride ?? session.permissionMode ?? 'default',
+          yoloMode: yoloConfig.yoloMode === true,
+          maxCostUsd: yoloConfig.yoloMaxCostUsd,
+          maxToolRounds: yoloConfig.yoloMode ? yoloConfig.yoloMaxRounds : undefined,
           systemPromptAppend,
           ...(turnContext ? { currentTurnContext: turnContext } : {}),
           ...(relationshipSafety ? { relationshipSafety: true } : {}),

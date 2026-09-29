@@ -242,6 +242,7 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 ## Config Files
 
 - `src/config/model-tools.ts` — **start here for model-specific behavior**. Per-model caps with glob matching.
+- `src/config/model-price-data.ts` — sole versioned price table (USD per million uncached text tokens), with source, verification date and scope per row; unverified legacy estimates are marked. Explicit catalogue prices can override it for a configured model.
 - `src/config/constants.ts` — `SUPPORTED_MODELS`, `TOKEN_LIMITS`
 - `src/config/toml-config.ts` — config profiles (`[profiles.<name>]` deep-merged; `buddy --profile <name>`). Also `[model_pairs]` for architect/editor split.
 - `src/config/advanced-config.ts` — effort levels (low/medium/high) → temperature + token params
@@ -268,7 +269,7 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `CODEBUDDY_AUTOCOMPACT_PCT` | Auto-compact threshold as % of context window |
 | `CODEBUDDY_MCP_INIT_TIMEOUT_MS` | Per-server MCP handshake timeout (default `15000`). A slow server is skipped so the others still load; the handshake continues in the background and tools appear when it responds. Invalid/non-positive values fall back to 15s. |
 | `MORPH_API_KEY` | Enables fast file editing |
-| `YOLO_MODE` / `MAX_COST` | Cost controls ($10 default, $100 in YOLO). Arm YOLO explicitly with `buddy --yolo` or `/yolo on`; setting `YOLO_MODE=true` alone only emits a warning and does not enable autonomy |
+| `YOLO_MODE` / `MAX_COST` | Cost controls ($10 default, $100 in YOLO; configurable, YOLO hard cap $1,000). CLI and Cowork defaults come from `src/config/session-cost-defaults.ts`. Arm YOLO explicitly with `buddy --yolo` or `/yolo on`; setting `YOLO_MODE=true` alone only emits a warning and does not enable autonomy |
 | `CODEBUDDY_NATIVE_SANDBOX` | Opt-in kernel confinement for `bash` (Bubblewrap, else Landlock, else macOS `sandbox-exec`). Unset = host spawn unchanged. Set = wrap after confirmation, **fail-closed** if confinement cannot be applied (never runs unsandboxed under a sandbox label). `bwrap` / `landlock` / `seatbelt` force one backend. |
 | `CODEBUDDY_BATCH_CONCURRENCY` | Maximum concurrent `/batch` delegate threads (default `1`) |
 | `CODEBUDDY_MOBILE_HISTORY` / `_DIR` | **Opt-out (default ON)**: the mobile PWA companion conversation (`assistant:'companion'` over `/ws`) is kept per connection (≤ 20 turns, text only, a `kind:'selfie'` marker instead of image bytes) and persisted per identity so a reconnection resumes the conversation. `=false` keeps the in-memory history and writes nothing. The file name is a sha256 of the JWT user id — no identity in clear, and a traversal-shaped id cannot escape `_DIR` (default `~/.codebuddy/companion/mobile-history/`). `src/companion/mobile-history.ts` |
