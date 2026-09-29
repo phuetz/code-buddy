@@ -409,6 +409,9 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
     .replace(/["']/g, '');
   const variants = [expandHomeReferences(unquoted.replace(/\\([^\n])/g, '$1'))];
   if (platform === 'win32') {
+    // Preserve literal Windows separators too: replacing every backslash can
+    // turn a doubled separator into an invalid mixed separator sequence.
+    variants.unshift(expandHomeReferences(unquoted));
     variants.push(expandHomeReferences(unquoted.replace(/\\([^\n])/g, '/$1')));
   }
   const roots = getHomeCredentialRoots();
@@ -451,7 +454,7 @@ function findCredentialPathInExpandedCommand(
   for (let i = 0; i < tokens.length; i += 1) {
     const raw = tokens[i] ?? '';
     const token = raw.replace(/^--?[A-Za-z0-9-]+=/, '');
-    const base = path.basename(token).toLowerCase();
+    const base = (platform === 'win32' ? path.win32 : path).basename(token).toLowerCase();
     if (BASH_CREDENTIAL_BASENAMES.has(base)) return raw;
     if (i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd')) {
       cdTarget = path.isAbsolute(token) ? path.normalize(token) : path.resolve(cdTarget, token);

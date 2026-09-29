@@ -498,6 +498,9 @@ async function loadBoundedWorkspaceImage(value: string, workspace: string, requi
   const verdict = checkSecretFileAccess(resolved, 'read');
   if (verdict.secret) throw new Error(formatSecretRefusal(resolved, verdict));
   const [root, realPath] = await Promise.all([fs.realpath(workspace), fs.realpath(resolved)]);
+  // The canonical path is the one read below; check it as well as the lexical path.
+  const realVerdict = checkSecretFileAccess(realPath, 'read');
+  if (realVerdict.secret) throw new Error(formatSecretRefusal(realPath, realVerdict));
   if (realPath !== root && !realPath.startsWith(`${root}${path.sep}`)) {
     throw new Error('image path escapes the current workspace');
   }

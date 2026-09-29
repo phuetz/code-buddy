@@ -1,15 +1,20 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-const qa = vi.hoisted(() => {
+const qa = await vi.hoisted(async () => {
+  const { join, normalize } = await import('node:path');
   // A sibling of the earlier reprise fixture: both suites can run in separate forks.
-  const root = `${process.cwd()}/_qa/securite-reprise-media-readers`;
+  const root = normalize(join(process.cwd(), '_qa', 'securite-reprise-media-readers'));
+  const home = join(root, 'home');
   const oldHome = process.env.HOME;
-  process.env.HOME = `${root}/home`;
+  const oldUserProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
   delete process.env.CODEBUDDY_ALLOW_SECRET_FILE_READ;
-  return { root, home: `${root}/home`, oldHome };
+  return { root, home, oldHome, oldUserProfile };
 });
 
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { understandVideoCloud } from '../../src/tools/video/cloud-understand.js';
 import { analyzeVideoWithModel } from '../../src/tools/video-analysis-tool.js';
@@ -37,9 +42,16 @@ afterAll(async () => {
   await fs.rm(qa.root, { recursive: true, force: true });
   if (qa.oldHome === undefined) delete process.env.HOME;
   else process.env.HOME = qa.oldHome;
+  if (qa.oldUserProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = qa.oldUserProfile;
 });
 
 describe('les lecteurs multimédia gardent les chemins locaux avant transmission', () => {
+  it('isole le répertoire personnel sur chaque plateforme', () => {
+    expect(path.normalize(os.homedir())).toBe(qa.home);
+    expect(process.env.USERPROFILE).toBe(qa.home);
+  });
+
   it('understand_video refuse le jeton direct et accepte une vidéo ordinaire', async () => {
     const callGemini = vi.fn(async () => 'ok');
     const deps = { env: { GEMINI_API_KEY: 'fake-api-key' }, callGemini };
@@ -127,6 +139,8 @@ describe('réserves du validateur shell', () => {
     const command = `cat ${qa.home}\\.codebuddy\\codex-auth.json`;
     expect(findCredentialPathInCommand(command, 'win32')).not.toBeNull();
     expect(findCredentialPathInCommand(`cat ${qa.home}\\.codebuddy\\codex-$F.json`, 'win32')).not.toBeNull();
+    const doubledSeparators = path.win32.join('C:\\Users', 'agent', '.codebuddy', 'codex-auth.json').replaceAll('\\', '\\\\');
+    expect(findCredentialPathInCommand(`cat ${doubledSeparators}`, 'win32')).not.toBeNull();
     expect(findCredentialPathInCommand('cat ~/.codebuddy/settings.json', 'win32')).toBeNull();
   });
 });
