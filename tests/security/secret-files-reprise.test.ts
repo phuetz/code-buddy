@@ -25,6 +25,7 @@ import { findCredentialPathInCommand } from '../../src/tools/bash/command-valida
 import { applyPatchOps, parsePatch } from '../../src/tools/apply-patch.js';
 import { WorkspaceReadTool } from '../../src/tools/workspace-tools.js';
 import { SQLTool } from '../../src/tools/sql-tool.js';
+import { SearchTool } from '../../src/tools/search.js';
 
 const work = path.join(qa.root, 'work');
 const cb = path.join(qa.home, '.codebuddy');
@@ -44,6 +45,7 @@ beforeAll(() => {
   write(path.join(work, '.env'), `KEY=${fake}\n`);
   write(path.join(work, '.env.example'), 'KEY=example\n');
   write(path.join(work, 'notes.txt'), 'ordinary searchable text\n');
+  write(path.join(work, 'cert.pem'), 'PUBLIC-CERTIFICATE-259\n');
   write(path.join(cb, 'skill-signing', 'key.pem'), `PRIVATE ${fake}\n`);
   if (process.platform !== 'win32') fs.symlinkSync(cb, path.join(qa.home, '.CodeBuddy'), 'dir');
 });
@@ -173,5 +175,19 @@ describe('classification et shell', () => {
     expect(SECRET_SEARCH_EXCLUDE_GLOBS).not.toContain('!*.pem');
     expect(classifySecretPath(path.join(work, 'cert.pem')).secret).toBe(false);
     expect(classifySecretPath(path.join(cb, 'skill-signing', 'key.pem')).secret).toBe(true);
+  });
+
+  it('recherche un certificat PEM public mais filtre le PEM privé', async () => {
+    const search = new SearchTool();
+    search.setCurrentDirectory(work);
+    const publicResult = await search.search('PUBLIC-CERTIFICATE-259', { searchType: 'text' });
+    expect(publicResult.success).toBe(true);
+    expect(publicResult.output).toContain('cert.pem');
+
+    search.setCurrentDirectory(cb);
+    const privateResult = await search.search(fake, { searchType: 'text', includeHidden: true });
+    expect(privateResult.success).toBe(true);
+    expect(privateResult.output).not.toContain('key.pem');
+    expect(privateResult.output).not.toContain('PRIVATE');
   });
 });

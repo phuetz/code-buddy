@@ -31,6 +31,18 @@ buddy server --port 3000 --no-auth             # ONLY behind a trusted network
 instance acting as the fleet gateway runs on `3001`. They are separate
 processes of the same binary, not two listeners in one process.
 
+### Channel webhooks
+
+The separate `WebhookServer` used for incoming channel webhooks also takes
+`SERVER_CONFIG.DEFAULT_HOST`, so it binds to `127.0.0.1` by default. An
+upgrade from a version that listened on all interfaces can therefore stop
+remote Telegram, Slack, or other webhook senders from reaching it. Configure
+its own `host` explicitly when constructing it (or on the **first**
+`getWebhookServer({ host: '0.0.0.0' })` call), and expose it through a trusted
+reverse proxy if external delivery is required. `buddy server --host` and
+`HOST` configure the HTTP/WebSocket API server, not this separate webhook
+listener.
+
 ---
 
 ## Production checklist
