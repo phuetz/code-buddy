@@ -18,6 +18,7 @@
 import { EventEmitter } from "events";
 import { logger } from "../../utils/logger.js";
 import type { CodeChunk } from "./types.js";
+import { getOllamaBaseUrl } from '../../utils/ollama-url.js';
 
 /**
  * Ollama embedding configuration
@@ -43,7 +44,7 @@ export interface OllamaEmbeddingConfig {
  * Default configuration
  */
 export const DEFAULT_OLLAMA_EMBEDDING_CONFIG: OllamaEmbeddingConfig = {
-  baseUrl: "http://localhost:11434",
+  baseUrl: getOllamaBaseUrl(),
   model: "nomic-embed-text",
   timeout: 30000,
   batchSize: 32,

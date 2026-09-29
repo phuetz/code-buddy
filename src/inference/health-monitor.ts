@@ -8,6 +8,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 
 // ============================================================================
 // Types
@@ -266,7 +267,7 @@ async function checkCloudProvider(
 // Aggregate Health
 // ============================================================================
 
-const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
+const DEFAULT_OLLAMA_ENDPOINT = getOllamaBaseUrl();
 const DEFAULT_VLLM_ENDPOINT = 'http://localhost:8000';
 
 /**

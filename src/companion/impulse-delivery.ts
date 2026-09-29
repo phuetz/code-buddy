@@ -23,6 +23,7 @@ import {
 } from './channel-history.js';
 import { buildCompanionImpulseBrief, type CompanionImpulse } from './impulses.js';
 import { resolveHouseholdClock } from './household-time.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 
 export const IMPULSE_DELIVER_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
@@ -41,7 +42,7 @@ export function isImpulseDeliveryEnabled(env: NodeJS.ProcessEnv = process.env): 
 function statePath(env: NodeJS.ProcessEnv): string {
   return (
     env.CODEBUDDY_COMPANION_IMPULSE_DELIVER_STATE?.trim() ||
-    join(homedir(), '.codebuddy', 'companion', 'impulse-delivery.json')
+    getCodeBuddyPathForEnv(env, 'companion', 'impulse-delivery.json')
   );
 }
 

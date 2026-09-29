@@ -10,6 +10,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
 import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 // ============================================================================
 // Types
@@ -59,7 +60,7 @@ export class SubagentMemory {
 
     switch (scope) {
       case 'user':
-        return path.join(os.homedir(), '.codebuddy', 'agents', safeName, 'memory');
+        return getCodeBuddyPath('agents', safeName, 'memory');
       case 'project':
         return path.join(process.cwd(), '.codebuddy', 'agents', safeName, 'memory');
       case 'local':

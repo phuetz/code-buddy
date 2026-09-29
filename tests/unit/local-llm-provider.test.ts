@@ -1942,7 +1942,7 @@ describe('Type Safety', () => {
       const config: LocalProviderConfig = {
         model: 'test-model',
         modelPath: '/path/to/model.gguf',
-        endpoint: 'http://localhost:11434',
+        endpoint: 'http://127.0.0.1:11434',
         maxTokens: 2048,
         temperature: 0.7,
         gpuLayers: 32,

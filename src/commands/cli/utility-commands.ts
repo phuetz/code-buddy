@@ -7,6 +7,7 @@
 import type { Command } from 'commander';
 import { resolve } from 'path';
 import { buildOllamaUpdatePlan, fetchOllamaStatus, runOllamaUpdatePlan } from '../ollama.js';
+import { getOllamaBaseUrl } from '../../utils/ollama-url.js';
 
 function resolveCommandDirectory(program: Command): string {
   const directory = (program.opts() as { directory?: string }).directory;
@@ -164,7 +165,7 @@ export function registerUtilityCommands(program: Command): void {
   ollamaCommand
     .command('status')
     .description('Show local Ollama version and models')
-    .option('--url <url>', 'Ollama base URL', process.env.OLLAMA_HOST ?? 'http://localhost:11434')
+    .option('--url <url>', 'Ollama base URL', getOllamaBaseUrl())
     .option('--json', 'Output JSON')
     .action(async (options: { url: string; json?: boolean }) => {
       const status = await fetchOllamaStatus(options.url);

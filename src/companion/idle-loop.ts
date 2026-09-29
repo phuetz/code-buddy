@@ -29,6 +29,7 @@ import { spawn } from 'node:child_process';
 import { logger } from '../utils/logger.js';
 import { isCanonicalDialogueHearingPercept } from './dialogue-percepts.js';
 import type { CompanionPercept } from './percepts.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 /** The closed allowlist of operations the idle loop may perform WITHOUT review (printable). */
 export const IDLE_ACT_ALLOWLIST = [
@@ -84,7 +85,7 @@ export interface IdleDeps {
 // ── delivery: the "while you were away" log ───────────────────────────
 
 function idleLogFile(): string {
-  return process.env.CODEBUDDY_IDLE_LOG_FILE || join(homedir(), '.codebuddy', 'companion', 'idle-log.jsonl');
+  return process.env.CODEBUDDY_IDLE_LOG_FILE || getCodeBuddyPath('companion', 'idle-log.jsonl');
 }
 
 async function defaultRecord(item: IdleArtifact, now: Date): Promise<void> {

@@ -18,6 +18,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 
 export interface VoiceGuidanceItem {
   /** The one-line guidance, imperative and short. */
@@ -32,7 +33,7 @@ export const MAX_VOICE_GUIDANCE = 5;
 export function defaultVoiceGuidancePath(env: NodeJS.ProcessEnv = process.env): string {
   return (
     env.CODEBUDDY_VOICE_GUIDANCE_FILE?.trim() ||
-    join(homedir(), '.codebuddy', 'companion', 'voice-guidance.json')
+    getCodeBuddyPathForEnv(env, 'companion', 'voice-guidance.json')
   );
 }
 

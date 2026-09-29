@@ -74,7 +74,7 @@ describe('detectProviderFromEnv — priority chain', () => {
 
   it('chatgpt OAuth credentials beat ambient OLLAMA_HOST', async () => {
     writeAuth();
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     process.env.GROK_API_KEY = 'should-not-be-used';
     const { detectProviderFromEnv } = await import('../../src/utils/provider-detector.js');
     const detected = detectProviderFromEnv();
@@ -87,14 +87,14 @@ describe('detectProviderFromEnv — priority chain', () => {
   it('CODEBUDDY_PROVIDER override always wins (forces ollama even if chatgpt OAuth file exists)', async () => {
     writeAuth();
     process.env.CODEBUDDY_PROVIDER = 'ollama';
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     const { detectProviderFromEnv } = await import('../../src/utils/provider-detector.js');
     const detected = detectProviderFromEnv();
     expect(detected?.provider).toBe('ollama');
   });
 
   it('falls back to ollama when no chatgpt OAuth + OLLAMA_HOST set', async () => {
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     process.env.GROK_API_KEY = 'should-not-be-used';
     const { detectProviderFromEnv } = await import('../../src/utils/provider-detector.js');
     expect(detectProviderFromEnv()?.provider).toBe('ollama');
@@ -138,14 +138,14 @@ describe('detectProviderFromEnv — priority chain', () => {
 
   it('skips chatgpt path when codex-auth.json exists but has no access_token', async () => {
     writeAuth({ tokens: {} });
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     const { detectProviderFromEnv } = await import('../../src/utils/provider-detector.js');
     expect(detectProviderFromEnv()?.provider).toBe('ollama');
   });
 
   it('skips chatgpt path when codex-auth.json is malformed JSON', async () => {
     writeAuth('not-json{{{');
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     const { detectProviderFromEnv } = await import('../../src/utils/provider-detector.js');
     expect(detectProviderFromEnv()?.provider).toBe('ollama');
   });

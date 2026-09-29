@@ -12,6 +12,7 @@ import type { MessageAttachment } from '../channels/core.js';
 import { CodeBuddyClient } from '../codebuddy/client.js';
 import type { ImageInput } from '../tools/image-input.js';
 import { sanitizeModelOutput, stripInvisibleChars } from '../utils/output-sanitizer.js';
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 
 const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -248,7 +249,7 @@ export async function groundAttachedImages(
   if (imageAttachments.length === 0) return { status: 'unavailable', imageCount: 0, reason: 'no_images' };
   const env = options.env ?? process.env;
   const model = env.CODEBUDDY_ATTACHED_VISION_MODEL?.trim() || env.CODEBUDDY_VISION_MODEL?.trim();
-  const defaultBase = env.OLLAMA_HOST ? `${env.OLLAMA_HOST.replace(/\/+$/, '')}/v1` : 'http://127.0.0.1:11434/v1';
+  const defaultBase = getOllamaV1BaseUrl(env);
   const baseURL = (env.CODEBUDDY_VISION_BASE_URL?.trim() || defaultBase).replace(/\/+$/, '');
   if (!model) return { status: 'unavailable', imageCount: imageAttachments.length, reason: 'no_model' };
   if (!isAllowedEndpoint(baseURL, env)) {

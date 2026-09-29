@@ -4,6 +4,7 @@
  * ITool-compliant adapters for OCR and Image Processing operations.
  */
 
+import { getOllamaV1BaseUrl } from '../../utils/ollama-url.js';
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
 import fs from 'fs/promises';
@@ -1050,11 +1051,7 @@ export function createVisionTools(options: VisionAnalysisOptions = {}): ITool[] 
  * OLLAMA_HOST is typically `host:port` with no scheme and no /v1 path.
  */
 export function resolveOllamaChatEndpoint(env: NodeJS.ProcessEnv): string {
-  const raw = (env.OLLAMA_HOST ?? '').trim();
-  if (!raw) return 'http://localhost:11434/v1/chat/completions';
-  const withScheme = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
-  const base = withScheme.replace(/\/+$/, '').replace(/\/v1$/i, '');
-  return `${base}/v1/chat/completions`;
+  return `${getOllamaV1BaseUrl(env)}/chat/completions`;
 }
 
 /**

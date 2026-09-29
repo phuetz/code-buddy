@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { getOllamaBaseUrl, getOllamaV1BaseUrl } from './utils/ollama-url.js';
 // Record startup time as early as possible
 const STARTUP_TIME = Date.now();
 
@@ -370,7 +371,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
   }
 
   if ((override === 'ollama' || (!override && process.env.OLLAMA_HOST))) {
-    let host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+    let host = getOllamaBaseUrl();
     if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
     if (!host.endsWith('/v1')) host = host.replace(/\/+$/, '') + '/v1';
     return {
@@ -509,7 +510,7 @@ async function detectOnboardedLocalProvider(): Promise<DetectedProvider | null> 
     const provider = (settings.provider || '').toLowerCase();
     if (provider !== 'ollama' && provider !== 'lmstudio') return null;
     const fallbackBase = provider === 'ollama'
-      ? 'http://localhost:11434/v1'
+      ? getOllamaV1BaseUrl()
       : 'http://localhost:1234/v1';
     const baseURL = settings.baseURL || fallbackBase;
     // Mirror the env path so anything else reading OLLAMA_HOST stays consistent.

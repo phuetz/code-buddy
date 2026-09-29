@@ -21,6 +21,7 @@ import { mkdir, appendFile, stat, rename } from 'node:fs/promises';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { resolveUserName } from './user-name.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 /** A reminder definition (shape mirrors prospective-memory's Reminder; stored as JSON). */
 export interface Reminder {
@@ -51,7 +52,7 @@ export interface Reminder {
 export type ReminderLogEvent = 'fired' | 'done' | 'missed' | 'renag';
 
 function remindersFile(): string {
-  return process.env.CODEBUDDY_REMINDERS_FILE || join(homedir(), '.codebuddy', 'reminders.json');
+  return process.env.CODEBUDDY_REMINDERS_FILE || getCodeBuddyPath('reminders.json');
 }
 
 /**

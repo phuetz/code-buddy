@@ -6,6 +6,7 @@
  */
 
 import { AIProvider } from '../utils/config-validator.js';
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 
 // ============================================================================
 // Provider Types
@@ -205,7 +206,7 @@ export const DEFAULT_PROFILES: ConnectionProfile[] = [
     id: 'ollama',
     name: 'Ollama Local',
     provider: 'ollama',
-    baseURL: 'http://localhost:11434/v1',
+    baseURL: getOllamaV1BaseUrl(),
     apiKey: 'ollama',
     icon: '🦙',
     description: 'Ollama local inference server',

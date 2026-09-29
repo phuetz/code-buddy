@@ -1,5 +1,5 @@
 import { DANGEROUS_COMMANDS } from '../security/dangerous-command-data.js';
-
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 /**
  * Centralized configuration constants for Code Buddy
  */
@@ -72,7 +72,7 @@ export const API_CONFIG = {
   /** LM Studio default base URL */
   LMSTUDIO_BASE_URL: 'http://localhost:1234/v1',
   /** Ollama default base URL */
-  OLLAMA_BASE_URL: 'http://localhost:11434/v1',
+  OLLAMA_BASE_URL: getOllamaV1BaseUrl(),
 } as const;
 
 export const PATHS = {

@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { logger } from '../utils/logger.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 
 export const CONVERSATION_LOG_MAX_BYTES = 5 * 1024 * 1024;
 export const CONVERSATION_LOG_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
@@ -22,7 +23,7 @@ export interface ConversationLogEntry {
 export function resolveConversationLogDir(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.CODEBUDDY_MOBILE_CONVERSATIONS_DIR?.trim();
   if (configured) return configured;
-  return path.join(os.homedir(), '.codebuddy', 'companion', 'mobile-conversations');
+  return getCodeBuddyPathForEnv(env, 'companion', 'mobile-conversations');
 }
 
 export function resolveConversationLogFile(

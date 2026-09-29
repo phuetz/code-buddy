@@ -89,13 +89,13 @@ describe('buddy try', () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      'http://localhost:11434/api/tags',
+      'http://127.0.0.1:11434/api/tags',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(provider).toMatchObject({
       kind: 'ollama',
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       model: 'qwen3-coder:30b',
     });
   });
