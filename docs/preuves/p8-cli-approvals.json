@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-approvals",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "866ae6bb7afd2002e6bf9cd9bda9aa01a5476637edbd71242d0ed248624ab64f",
+  "artifact": "docs/preuves/p8-cli-approvals.log",
+  "summary": "pending puis approved pour la même demande jetable."
+}

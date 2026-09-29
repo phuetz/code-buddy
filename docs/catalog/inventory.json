@@ -273,7 +273,7 @@
           }
         ]
       },
-      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "verificationLimit": "The CLI supports AudioReader, Pocket and Voicebox; none was configured in the isolated HOME. The installed Piper binary is not a backend of this command, so no audio was synthesized.",
       "discoveryKey": "cli:speak"
     },
     {
@@ -285,7 +285,8 @@
         "fr": "Configurez l’assistante vocale Lisa."
       },
       "codePaths": [
-        "src/commands/assistant.ts"
+        "src/commands/assistant.ts",
+        "src/companion/assistant-config.ts"
       ],
       "entrypoint": {
         "kind": "cli",
@@ -378,7 +379,8 @@
         "fr": "Inspectez et configurez les réveils périodiques de l’agent."
       },
       "codePaths": [
-        "src/commands/cli/native-engine-commands.ts"
+        "src/commands/cli/native-engine-commands.ts",
+        "src/daemon/heartbeat.ts"
       ],
       "entrypoint": {
         "kind": "cli",
@@ -428,7 +430,7 @@
           }
         ]
       },
-      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "verificationLimit": "The isolated HOME has zero hub-installed skills (8 bundled). No reachable shared skills registry was configured, so search and installation of a shared skill were not exercised.",
       "discoveryKey": "cli:hub"
     },
     {
@@ -657,7 +659,8 @@
         "fr": "Configurez les accès aux discussions de groupe."
       },
       "codePaths": [
-        "src/commands/cli/native-engine-commands.ts"
+        "src/commands/cli/native-engine-commands.ts",
+        "src/channels/group-security.ts"
       ],
       "entrypoint": {
         "kind": "cli",
@@ -688,7 +691,8 @@
         "fr": "Gérez les profils d’authentification des fournisseurs."
       },
       "codePaths": [
-        "src/commands/cli/native-engine-commands.ts"
+        "src/commands/cli/native-engine-commands.ts",
+        "src/auth/profile-manager.ts"
       ],
       "entrypoint": {
         "kind": "cli",
@@ -738,7 +742,7 @@
           }
         ]
       },
-      "verificationLimit": "Functional execution needs its dependencies and a separate live run.",
+      "verificationLimit": "CODE_EXPLORER_ENDPOINT is unset in the isolated HOME; the CLI reports that CodeExplorer is not configured, so no graph query was completed.",
       "discoveryKey": "cli:code-explorer"
     },
     {
@@ -1091,7 +1095,8 @@
         "fr": "Gérez les nœuds de l’application compagnon sur ordinateur et mobile."
       },
       "codePaths": [
-        "src/commands/cli/node-commands.ts"
+        "src/commands/cli/node-commands.ts",
+        "src/nodes/index.ts"
       ],
       "entrypoint": {
         "kind": "cli",
@@ -1370,7 +1375,8 @@
         "fr": "Préparez un déploiement web par un parcours CLI."
       },
       "codePaths": [
-        "src/commands/cli/deploy-command.ts"
+        "src/commands/cli/deploy-command.ts",
+        "src/deploy/cloud-configs.ts"
       ],
       "entrypoint": {
         "kind": "cli",
@@ -1619,7 +1625,8 @@
       },
       "codePaths": [
         "src/codebuddy/tool-definitions/web-tools.ts",
-        "src/tools/registry/web-tools.ts"
+        "src/tools/registry/web-tools.ts",
+        "src/tools/web-search.ts"
       ],
       "entrypoint": {
         "kind": "tool",
@@ -1683,7 +1690,8 @@
       },
       "codePaths": [
         "src/codebuddy/tool-definitions/research-tools.ts",
-        "src/tools/registry/research-tools.ts"
+        "src/tools/registry/research-tools.ts",
+        "src/tools/deep-research-tool.ts"
       ],
       "entrypoint": {
         "kind": "tool",
@@ -1734,7 +1742,7 @@
           }
         ]
       },
-      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "verificationLimit": "The independent verifier requires a live LLM/tool bridge and an executed oracle. No complete verifier delegation was observed in this campaign.",
       "discoveryKey": "tool:verify"
     },
     {
@@ -1766,7 +1774,7 @@
           }
         ]
       },
-      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "verificationLimit": "No isolated ComfyUI endpoint or image-provider credential was configured; no bitmap generation completed.",
       "discoveryKey": "tool:image_generate"
     },
     {
@@ -1798,7 +1806,7 @@
           }
         ]
       },
-      "verificationLimit": "Requires a configured runtime or external service and a real agent turn.",
+      "verificationLimit": "No isolated ComfyUI video endpoint or xAI/Fal credential was configured; no video generation completed.",
       "discoveryKey": "tool:video_generate"
     },
     {
@@ -1811,7 +1819,9 @@
       },
       "codePaths": [
         "src/codebuddy/tool-definitions/multimodal-tools.ts",
-        "src/tools/registry/multimodal-tools.ts"
+        "src/tools/registry/multimodal-tools.ts",
+        "src/tools/video/video-understanding.ts",
+        "src/tools/video/long-transcribe.ts"
       ],
       "entrypoint": {
         "kind": "tool",
@@ -1961,7 +1971,7 @@
           }
         ]
       },
-      "verificationLimit": "Electron UI and its external services were not run."
+      "verificationLimit": "The Cowork Electron dependencies and executable were absent from this checkout; App Studio was not launched in a real window."
     },
     {
       "id": "cowork-video-studio",
@@ -1987,7 +1997,7 @@
           }
         ]
       },
-      "verificationLimit": "Electron UI and its external services were not run."
+      "verificationLimit": "The Cowork Electron dependencies and executable were absent from this checkout; Video Studio was not launched in a real window."
     },
     {
       "id": "agent-loop",
@@ -2065,7 +2075,7 @@
           }
         ]
       },
-      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+      "verificationLimit": "Only one local Ollama endpoint was authorized in the isolated HOME; no independent fallback provider was configured for a real failure handoff."
     },
     {
       "id": "provider-chatgpt-oauth",
@@ -2091,7 +2101,7 @@
           }
         ]
       },
-      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+      "verificationLimit": "The isolated HOME has no ChatGPT OAuth login, and real credentials were not copied; no subscription request was made."
     },
     {
       "id": "provider-gemini-cli",
@@ -2117,7 +2127,7 @@
           }
         ]
       },
-      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+      "verificationLimit": "The isolated HOME has no authenticated Gemini CLI session; the campaign used Ollama only."
     },
     {
       "id": "provider-agy-cli",
@@ -2143,7 +2153,7 @@
           }
         ]
       },
-      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+      "verificationLimit": "The isolated HOME has no authenticated AGY CLI session; the campaign used Ollama only."
     },
     {
       "id": "context-compaction",
@@ -2321,7 +2331,7 @@
           }
         ]
       },
-      "verificationLimit": "Needs a separate live scenario with its actual prerequisites."
+      "verificationLimit": "No microphone capture was performed and the local faster_whisper STT module is absent; an audio-to-reply loop cannot be observed here."
     },
     {
       "id": "media-film-assemble",
@@ -2517,7 +2527,7 @@
           }
         ]
       },
-      "verificationLimit": "No proposal was generated or executed."
+      "verificationLimit": "The isolated HOME has no vetted experiment fiche or matching scholarly discovery record; no proposal archive was generated."
     },
     {
       "id": "cowork-desktop-chat",
@@ -2544,7 +2554,7 @@
           }
         ]
       },
-      "verificationLimit": "Electron was not launched on this host."
+      "verificationLimit": "The Cowork Electron dependencies and executable were absent from this checkout; no desktop chat window was exercised."
     },
     {
       "id": "cowork-desktop-assistant",
@@ -2570,7 +2580,7 @@
           }
         ]
       },
-      "verificationLimit": "Electron and companion hardware were not launched."
+      "verificationLimit": "The Cowork Electron dependencies and executable were absent, and no microphone or camera session was opened."
     },
     {
       "id": "cowork-desktop-settings",
@@ -2596,7 +2606,7 @@
           }
         ]
       },
-      "verificationLimit": "Electron was not launched on this host."
+      "verificationLimit": "The Cowork Electron dependencies and executable were absent from this checkout; no settings window was exercised."
     },
     {
       "id": "fleet-peer-sessions",
