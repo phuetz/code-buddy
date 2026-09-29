@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-provision",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "e85fa454619b5d4c756ce815fb3df0ad986626394c32aa7dc904a77c30eb5e5d",
+  "artifact": "docs/preuves/p5-cli-provision-2026-09-29.log",
+  "summary": "Superposition locale DB/auth réellement écrite dans le projet jetable."
+}

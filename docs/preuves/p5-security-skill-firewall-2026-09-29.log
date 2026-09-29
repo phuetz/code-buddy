@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy skills import --dir <QA_MALICIOUS_SKILLS> --apply --json
+Attendu: Le skill contenant une injection est refusé.
+Observé: imported=[]; quarantined=[qa-malicious]; verdict=quarantine; reason="Skill Firewall quarantine: score 54/100; 1 critical; capabilities: prompt-injection, secrets." Code 0 (rapport de quarantaine).
+Verdict: prouvée

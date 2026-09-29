@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-film",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.999558+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "58963126119d1d42e4a01e2f5271957770ade1f1472bf60055d9efb03a92ab5d",
+  "artifact": "docs/preuves/p6-cli-film.log",
+  "summary": "Codes 0 ; 2/2 scènes ready, quality PASS, 4 secondes ; MP4 90285 octets, ffprobe 4.000000 s."
+}

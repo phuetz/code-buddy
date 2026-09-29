@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "fleet-peer-tools",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:07.003396+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "b7f163b546be73b83454cb35c4e775feaf1adfacf1dcb6cec251f70c11ea2df7",
+  "artifact": "docs/preuves/p6-fleet-peer-tools.log",
+  "summary": "FLEET_MARKER_731 lu ; PATH_OUTSIDE_PEER_WORKSPACE renvoyé ; serveur arrêté."
+}

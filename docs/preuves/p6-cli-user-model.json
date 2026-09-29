@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-user-model",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.996394+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "3c8e77ce7784a3aba7e185bdcd84ad1a421f5162e311d8d9df2a4dba7dd0a364",
+  "artifact": "docs/preuves/p6-cli-user-model.log",
+  "summary": "Codes 0 ; observation pending puis accepted, reviewedBy=QA."
+}

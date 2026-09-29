@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "memory-ckg",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.996735+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "250a557e1a258b608276d7cfa3d420855d29868fbb07cbc6b2e65f28cfd69576",
+  "artifact": "docs/preuves/p6-memory-ckg.log",
+  "summary": "Codes 0 ; résultat [0.82] ollamalocal ; stats=1 découverte, 0 lien."
+}

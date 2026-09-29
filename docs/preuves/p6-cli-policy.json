@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-policy",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.992041+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "756baecb11fa45b6b46db42b72ff2abc20d2b2c68b4d05237b0da29171a9ce9c",
+  "artifact": "docs/preuves/p6-cli-policy.log",
+  "summary": "Code 0 ; ok=true, application=DIAGNOSTIC NON APPLIQUÉ, cinq domaines."
+}

@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy user-model observe <préférence>; buddy user-model accept <id> --by qa-reviewer; buddy user-model show --json
+Attendu: La préférence proposée devient active après revue.
+Observé: Observation pending créée puis Accepted observation; show: status=accepted, reviewedBy=qa-reviewer, contenu de fixture retrouvé. Codes 0.
+Verdict: prouvée

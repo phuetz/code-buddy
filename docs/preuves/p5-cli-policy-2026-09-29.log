@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy policy check --json; buddy policy repair --json; buddy policy check --json (politique et config jetables)
+Attendu: Une violation est détectée puis supprimée par restriction.
+Observé: Avant: ok=false, finding sandbox.mode, config=off, policy=all, code 1. repair: config sandbox.mode=all, code 0. Après: ok=true, findings=[], code 0.
+Verdict: prouvée

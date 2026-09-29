@@ -1,0 +1,159 @@
+Fonctionnalité : dgm-authored-tools
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : buddy improve tools --json
+Attendu : Outils candidats exécutés contre scénarios visibles et cachés.
+Observé : Code 0 ; propositions générées ; portes rejettent les candidats en échec, aucun outil appliqué.
+Verdict : prouvée en situation
+
+Chemins temporaires et système neutralisés dans cette trace.
+
+Sortie capturée :
+--- dgm-authored-tools ---
+$ buddy improve tools --json
+Code de sortie : 0
+{
+  "kind": "self_improvement_tools",
+  "cycles": [
+    {
+      "kind": "tool_improvement_cycle",
+      "startedAt": "2026-09-29T12:12:12.516Z",
+      "autonomy": "propose-only",
+      "selectedScenarioId": "slugify",
+      "proposalId": "llm-tool:slugify",
+      "gate": {
+        "proposalId": "llm-tool:slugify",
+        "scenarioId": "slugify",
+        "visiblePassed": 0,
+        "visibleTotal": 2,
+        "heldOutPassed": 0,
+        "heldOutTotal": 3,
+        "accepted": false,
+        "rejectionReason": "visible-fail",
+        "reasons": [
+          "case 0: tool errored (authored tool \"authored__slugify\" failed (exit 1): <PYTHON_MODULE>:37: Warning: W:Unable )",
+          "case 1: tool errored (authored tool \"authored__slugify\" failed (exit 1): <PYTHON_MODULE>:37: Warning: W:Unable )"
+        ]
+      },
+      "applied": false,
+      "notes": [
+        "case 0: tool errored (authored tool \"authored__slugify\" failed (exit 1): <PYTHON_MODULE>:37: Warning: W:Unable )",
+        "case 1: tool errored (authored tool \"authored__slugify\" failed (exit 1): <PYTHON_MODULE>:37: Warning: W:Unable )"
+      ]
+    },
+    {
+      "kind": "tool_improvement_cycle",
+      "startedAt": "2026-09-29T12:12:20.691Z",
+      "autonomy": "propose-only",
+      "selectedScenarioId": "word-count",
+      "proposalId": "llm-tool:word-count",
+      "gate": {
+        "proposalId": "llm-tool:word-count",
+        "scenarioId": "word-count",
+        "visiblePassed": 0,
+        "visibleTotal": 2,
+        "heldOutPassed": 0,
+        "heldOutTotal": 2,
+        "accepted": false,
+        "rejectionReason": "visible-fail",
+        "reasons": [
+          "case 0: tool errored (authored tool \"authored__word_count_tool\" failed (exit 1): file://<TEMP_MODULE>/)",
+          "case 1: tool errored (authored tool \"authored__word_count_tool\" failed (exit 1): file://<TEMP_MODULE>/)"
+        ]
+      },
+      "applied": false,
+      "notes": [
+        "case 0: tool errored (authored tool \"authored__word_count_tool\" failed (exit 1): file://<TEMP_MODULE>/)",
+        "case 1: tool errored (authored tool \"authored__word_count_tool\" failed (exit 1): file://<TEMP_MODULE>/)"
+      ]
+    },
+    {
+      "kind": "tool_improvement_cycle",
+      "startedAt": "2026-09-29T12:12:26.847Z",
+      "autonomy": "propose-only",
+      "selectedScenarioId": "sitemap-check",
+      "proposalId": "llm-tool:sitemap-check",
+      "gate": {
+        "proposalId": "llm-tool:sitemap-check",
+        "scenarioId": "sitemap-check",
+        "visiblePassed": 0,
+        "visibleTotal": 2,
+        "heldOutPassed": 0,
+        "heldOutTotal": 3,
+        "accepted": false,
+        "rejectionReason": "static-scan",
+        "reasons": [
+          "matched 2 dangerous pattern(s): Command execution; Template literal with interpolation (potential injection)"
+        ]
+      },
+      "applied": false,
+      "notes": [
+        "matched 2 dangerous pattern(s): Command execution; Template literal with interpolation (potential injection)"
+      ]
+    },
+    {
+      "kind": "tool_improvement_cycle",
+      "startedAt": "2026-09-29T12:12:53.618Z",
+      "autonomy": "propose-only",
+      "selectedScenarioId": "ffmpeg-argv-audit",
+      "proposalId": "llm-tool:ffmpeg-argv-audit",
+      "gate": {
+        "proposalId": "llm-tool:ffmpeg-argv-audit",
+        "scenarioId": "ffmpeg-argv-audit",
+        "visiblePassed": 0,
+        "visibleTotal": 3,
+        "heldOutPassed": 0,
+        "heldOutTotal": 3,
+        "accepted": false,
+        "rejectionReason": "visible-fail",
+        "reasons": [
+          "case 0: tool errored (authored tool \"authored__ffmpeg_defect_auditor\" failed (exit 1): <PYTHON_MODULE>:37: Warn)",
+          "case 1: tool errored (authored tool \"authored__ffmpeg_defect_auditor\" failed (exit 1): <PYTHON_MODULE>:37: Warn)",
+          "case 2: tool errored (authored tool \"authored__ffmpeg_defect_auditor\" failed (exit 1): <PYTHON_MODULE>:37: Warn)"
+        ]
+      },
+      "applied": false,
+      "notes": [
+        "case 0: tool errored (authored tool \"authored__ffmpeg_defect_auditor\" failed (exit 1): <PYTHON_MODULE>:37: Warn)",
+        "case 1: tool errored (authored tool \"authored__ffmpeg_defect_auditor\" failed (exit 1): <PYTHON_MODULE>:37: Warn)",
+        "case 2: tool errored (authored tool \"authored__ffmpeg_defect_auditor\" failed (exit 1): <PYTHON_MODULE>:37: Warn)"
+      ]
+    },
+    {
+      "kind": "tool_improvement_cycle",
+      "startedAt": "2026-09-29T12:13:17.153Z",
+      "autonomy": "propose-only",
+      "selectedScenarioId": "orphan-temporaries",
+      "proposalId": "llm-tool:orphan-temporaries",
+      "gate": {
+        "proposalId": "llm-tool:orphan-temporaries",
+        "scenarioId": "orphan-temporaries",
+        "visiblePassed": 1,
+        "visibleTotal": 2,
+        "heldOutPassed": 0,
+        "heldOutTotal": 3,
+        "accepted": false,
+        "rejectionReason": "visible-fail",
+        "reasons": [
+          "case 0: output mismatch (expected \"report.pdf.tmp.1023\", got \"none\")"
+        ]
+      },
+      "applied": false,
+      "notes": [
+        "case 0: output mismatch (expected \"report.pdf.tmp.1023\", got \"none\")"
+      ]
+    },
+    {
+      "kind": "tool_improvement_cycle",
+      "startedAt": "2026-09-29T12:13:36.088Z",
+      "autonomy": "propose-only",
+      "selectedScenarioId": null,
+      "proposalId": null,
+      "gate": null,
+      "applied": false,
+      "notes": [
+        "no uncovered tool scenario with an available proposal"
+      ]
+    }
+  ]
+}

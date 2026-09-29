@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "security-skill-firewall",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "c02ff85a95c7bd71ff447a010f09211cf0f792a9f145f1fb66e169121c0b5cdc",
+  "artifact": "docs/preuves/p5-security-skill-firewall-2026-09-29.log",
+  "summary": "Skill malveillant de fixture mis en quarantaine par le pare-feu réel."
+}

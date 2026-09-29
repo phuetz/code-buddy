@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy identity set SOUL <texte> ; buddy identity get SOUL (cwd=<QA_PROJECT>)
+Attendu: Le fichier de projet est écrit puis relu.
+Observé: Updated SOUL.md; get rend « Je suis une identité de preuve locale. » ; fichier <QA_PROJECT>/.codebuddy/SOUL.md, 39 octets. Codes 0.
+Verdict: prouvée

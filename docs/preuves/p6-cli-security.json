@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-security",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.995057+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "b0a0a3d876d9f525578df48dfb328f29f28d37d35af798b8b0eeea3f60103113",
+  "artifact": "docs/preuves/p6-cli-security.log",
+  "summary": "Code 0 ; passed=true, status=passed, findings=[] et limites explicites."
+}

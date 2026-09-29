@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-widgets",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "18758795a1791c80609982af347c9078220e551b296b94466585ad5d59a34c19",
+  "artifact": "docs/preuves/p5-cli-widgets-2026-09-29.log",
+  "summary": "Widget météo intégré rendu en vrai fichier HTML."
+}

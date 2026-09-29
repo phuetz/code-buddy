@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-device",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "9764643a57ae829da3cf10f3b3f28959a8b76e634f04aa0b91af53675dc7e30e",
+  "artifact": "docs/preuves/p5-cli-device-2026-09-29.log",
+  "summary": "Nœud local jumelé, commande réellement exécutée, puis retiré."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-run",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "6c48c9e24b1c43c2754317072c715abd1e0a10fe489928f14c391f6ca81a3837",
+  "artifact": "docs/preuves/p5-cli-run-2026-09-29.log",
+  "summary": "Rejeu réel de read_file réparé et confirmé sur le même run Ollama."
+}

@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: JWT_SECRET=<clé de test> buddy token --user qa-user --ttl 15m --json; vérification HMAC SHA-256 locale
+Attendu: Le jeton est signé et porte les droits attendus.
+Observé: token retourné; signatureValid=true; sub=qa-user; exp>iat; scopes=chat,chat:stream,sessions,tools. Code 0. Aucun jeton ni secret conservé dans cette preuve.
+Verdict: prouvée
