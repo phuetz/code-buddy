@@ -1,7 +1,10 @@
-Date: 2026-09-29T12:06:27.530Z
-Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
-Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
-Commande: buddy server --port 18729 --host 127.0.0.1 --no-auth; GET http://127.0.0.1:18729/api/health
-Attendu: La route de santé répond depuis un vrai serveur isolé.
-Observé: HTTP 200; status=ok; version=2.3.0; checks.database=ok, checks.api=ok, checks.memory=ok. Serveur arrêté, port libéré.
-Verdict: prouvée
+Date: 2026-09-29T12:25:02.439Z
+Révision testée: 281daf9a6c28606b1259713fcf623ed868cb4a1b
+Exécution: CLI compilée du checkout (node dist/index.js), projet=<QA_PROJECT>, HOME=<QA_HOME>.
+Commande serveur: HOME=<QA_HOME> CODEBUDDY_PROVIDER=ollama OLLAMA_HOST=http://127.0.0.1:11434 GROK_MODEL=qwen3:4b-instruct node dist/index.js server --port 18731 --host 127.0.0.1 --no-auth
+Commande client: GET http://127.0.0.1:18731/api/health (urllib.request.urlopen, sans mock).
+Attendu: La route de santé répond depuis un vrai serveur isolé et le moniteur atteint Ollama local.
+Observé: HTTP 200; status=ok; version=2.3.0; checks.database=ok, checks.api=ok, checks.memory=ok; apiHeartbeat.status=ok, latencyMs=53; serveur arrêté avec code 0, port 18731 fermé.
+Extrait JSON de la réponse brute: {"status":"ok","version":"2.3.0","checks":{"database":"ok","api":"ok","memory":"ok"},"apiHeartbeat":{"status":"ok","latencyMs":53}}
+Capture brute locale (gitignorée): _qa/preuves-p5/http-health-reprise.raw.json ; journal serveur: _qa/preuves-p5/http-health-reprise-server.raw.log.
+Verdict: prouvée pour cette configuration locale. Sans OLLAMA_HOST, le moniteur ne dispose pas de cible et l'état observé par la revue est degraded/api=unknown.

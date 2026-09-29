@@ -3,9 +3,9 @@
   "featureId": "http-health",
   "kind": "integration",
   "result": "passed",
-  "date": "2026-09-29T12:06:27.530Z",
-  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "date": "2026-09-29T12:25:02.439Z",
+  "revision": "281daf9a6c28606b1259713fcf623ed868cb4a1b",
   "sourceDigest": "86b0a9da7ed1abf4e769f682a6d5d503db092aeee5da0342803672c9918f0159",
   "artifact": "docs/preuves/p5-http-health-2026-09-29.log",
-  "summary": "Route /api/health interrogée sur le serveur réel local."
+  "summary": "Route /api/health rejouée sur un serveur local avec OLLAMA_HOST explicite : HTTP 200, status=ok, api=ok ; serveur arrêté."
 }
