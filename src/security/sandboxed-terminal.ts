@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as os from 'os';
 import fs from 'fs-extra';
+import { DANGEROUS_COMMAND_BLOCK_PATTERNS } from './dangerous-command-data.js';
 
 export interface SandboxTerminalConfig {
   // Isolation settings
@@ -97,17 +98,6 @@ const DEFAULT_CONFIG: SandboxTerminalConfig = {
   method: 'namespace',
 };
 
-const DANGEROUS_COMMANDS = [
-  /rm\s+(-rf?|--recursive)\s+[/~]/i,
-  /dd\s+.*of=\/dev/i,
-  /mkfs/i,
-  /:\(\)\s*\{\s*:\|:&\s*\};:/,  // Fork bomb - escape parens and braces
-  /chmod\s+-R\s+777\s+\//i,
-  />\s*\/dev\/sd[a-z]/i,
-  /wget.*\|\s*(ba)?sh/i,
-  /curl.*\|\s*(ba)?sh/i,
-  /eval\s+\$\(/i,
-];
 
 /**
  * Sandboxed Terminal Manager
@@ -186,7 +176,7 @@ export class SandboxedTerminal extends EventEmitter {
    */
   validateCommand(command: string): { valid: boolean; reason?: string } {
     // Check for dangerous patterns
-    for (const pattern of DANGEROUS_COMMANDS) {
+    for (const pattern of DANGEROUS_COMMAND_BLOCK_PATTERNS) {
       if (pattern.test(command)) {
         return {
           valid: false,

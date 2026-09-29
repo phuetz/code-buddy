@@ -48,45 +48,11 @@ export interface DangerousPattern {
 // ============================================================================
 
 /**
- * Commands that are always dangerous regardless of arguments.
- * Used by bash-parser's containsDangerousCommand() and bash tool's BLOCKED_COMMANDS.
+ * Commands classified as dangerous regardless of arguments.
+ * Used by the Bash parser, auto-sandbox routing and other safety consumers.
  */
-export const DANGEROUS_COMMANDS: ReadonlySet<string> = new Set([
-  // Destructive file operations
-  'rm', 'shred', 'wipefs', 'rmdir',
-  // Disk operations
-  'mkfs', 'fdisk', 'parted', 'dd',
-  // Permission changes
-  'chmod', 'chown', 'chgrp',
-  // Privilege escalation
-  'sudo', 'su', 'doas',
-  // Network tools (dangerous modes)
-  'nc', 'netcat', 'ncat', 'socat',
-  // Insecure protocols
-  'telnet', 'ftp',
-  // Port scanning / packet capture
-  'nmap', 'masscan', 'tcpdump', 'wireshark', 'tshark',
-  // Process tracing / debugging
-  'strace', 'ltrace', 'ptrace', 'gdb', 'lldb',
-  // System control
-  'reboot', 'shutdown', 'poweroff', 'halt',
-  'init', 'systemctl', 'service',
-  // Firewall
-  'iptables', 'ip6tables', 'nft', 'firewall-cmd',
-  // Mount operations
-  'mount', 'umount',
-  // Kernel modules
-  'insmod', 'rmmod', 'modprobe', 'sysctl',
-  // Scheduled tasks
-  'crontab', 'at',
-  // User management
-  'useradd', 'userdel', 'usermod', 'groupadd',
-  'passwd', 'chpasswd', 'visudo',
-  // SSH / GPG / certs
-  'ssh-keygen', 'ssh-add', 'gpg', 'openssl',
-  // Kill (process control)
-  'kill', 'killall', 'pkill',
-]);
+export { DANGEROUS_COMMANDS } from './dangerous-command-data.js';
+import { DANGEROUS_COMMANDS } from './dangerous-command-data.js';
 
 // ============================================================================
 // Dangerous Bash Patterns (regex-based, for full command strings)
