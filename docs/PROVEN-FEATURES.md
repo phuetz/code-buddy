@@ -9,7 +9,7 @@ Every feature marked “proven” links to a real execution and its observed res
 
 This page covers the capabilities explicitly tracked in the [catalogue](catalog/README.md), rather than every detected command or tool metadata entry. “Proven” applies to the stated scenario; it does not certify every use, platform or installed package.
 
-Commands are recorded from the traces, including direct component calls. Angle-bracket parameters and `_qa/` scripts refer to temporary fixtures; these lines are not all standalone recipes. Observations, limits and reasons retain the language of the catalogue or trace.
+Commands are recorded from the traces, including direct component calls. Angle-bracket parameters and `_qa/` scripts refer to temporary fixtures; these lines are not all standalone recipes. Observations and reasons, along with recorded limits, retain the language of the catalogue or trace.
 
 Recorded execution dates (UTC): 2026-09-29 → 2026-09-29.
 

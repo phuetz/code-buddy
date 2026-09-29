@@ -91,8 +91,8 @@ function renderPage(rows: Row[], digest: string, language: Language): string {
       : 'Every feature marked “proven” links to a real execution and its observed result. Failures remain visible.', '',
     fr ? 'Cette page couvre les capacités explicitement suivies dans le [catalogue](catalog/README.md), pas toutes les commandes et métadonnées détectées. « Prouvée » vaut pour le scénario décrit ; cela ne certifie ni tous les usages, ni toutes les plateformes, ni le paquet installé.'
       : 'This page covers the capabilities explicitly tracked in the [catalogue](catalog/README.md), rather than every detected command or tool metadata entry. “Proven” applies to the stated scenario; it does not certify every use, platform or installed package.', '',
-    fr ? 'Les commandes sont celles enregistrées dans les traces, y compris les appels directs de composants. Les paramètres entre chevrons et les scripts `_qa/` désignent des fixtures temporaires ; ces lignes ne sont pas toutes des recettes autonomes. Les observations, limites et raisons conservent la langue du catalogue ou de la trace.'
-      : 'Commands are recorded from the traces, including direct component calls. Angle-bracket parameters and `_qa/` scripts refer to temporary fixtures; these lines are not all standalone recipes. Observations, limits and reasons retain the language of the catalogue or trace.', '',
+    fr ? 'Les commandes sont celles enregistrées dans les traces, y compris les appels directs de composants. Les paramètres entre chevrons et les scripts `_qa/` désignent des fixtures temporaires ; ces lignes ne sont pas toutes des recettes autonomes. Les observations et raisons, ainsi que les limites consignées, conservent la langue du catalogue ou de la trace.'
+      : 'Commands are recorded from the traces, including direct component calls. Angle-bracket parameters and `_qa/` scripts refer to temporary fixtures; these lines are not all standalone recipes. Observations and reasons, along with recorded limits, retain the language of the catalogue or trace.', '',
     fr ? `Dates des exécutions enregistrées (UTC) : ${dates[0]?.slice(0, 10) ?? '—'} → ${dates.at(-1)?.slice(0, 10) ?? '—'}.`
       : `Recorded execution dates (UTC): ${dates[0]?.slice(0, 10) ?? '—'} → ${dates.at(-1)?.slice(0, 10) ?? '—'}.`, '',
     `## ${fr ? 'Échecs observés' : 'Observed failures'}`, '',
@@ -188,7 +188,7 @@ export function generateProvenFeatures(root: string, revision?: string | null): 
   const block = [START, '## Ce qui est prouvé', '',
     `[\`PROUVÉES ${c.passed}/${c.total} | ÉCHECS ${c.failed} | NON PROUVABLES ICI ${c.unavailable}\`](docs/FONCTIONNALITES-PROUVEES.md)`,
     `**${c.passed}/${c.total} fonctionnalités prouvées en situation** ; ${c.failed} échecs affichés et ${c.unavailable} non prouvables ici, avec raison.`,
-    'Chaque état « prouvée » renvoie à une exécution réelle : commande, date, résultat observé et limite du scénario.',
+    'Chaque état « prouvée » renvoie à une exécution réelle : commande, date, résultat observé et limite du scénario lorsqu’elle est consignée.',
     '[Consulter les preuves par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: proven features](docs/PROVEN-FEATURES.md)',
     END].join('\n');
   const files = {

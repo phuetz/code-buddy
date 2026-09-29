@@ -7,7 +7,7 @@
 
 [`PROUVÉES 71/91 | ÉCHECS 2 | NON PROUVABLES ICI 18`](docs/FONCTIONNALITES-PROUVEES.md)
 **71/91 fonctionnalités prouvées en situation** ; 2 échecs affichés et 18 non prouvables ici, avec raison.
-Chaque état « prouvée » renvoie à une exécution réelle : commande, date, résultat observé et limite du scénario.
+Chaque état « prouvée » renvoie à une exécution réelle : commande, date, résultat observé et limite du scénario lorsqu’elle est consignée.
 [Consulter les preuves par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: proven features](docs/PROVEN-FEATURES.md)
 <!-- proven-features:end -->
 

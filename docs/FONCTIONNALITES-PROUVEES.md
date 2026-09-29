@@ -9,7 +9,7 @@ Chaque fonctionnalité marquée « prouvée » est reliée à une exécution ré
 
 Cette page couvre les capacités explicitement suivies dans le [catalogue](catalog/README.md), pas toutes les commandes et métadonnées détectées. « Prouvée » vaut pour le scénario décrit ; cela ne certifie ni tous les usages, ni toutes les plateformes, ni le paquet installé.
 
-Les commandes sont celles enregistrées dans les traces, y compris les appels directs de composants. Les paramètres entre chevrons et les scripts `_qa/` désignent des fixtures temporaires ; ces lignes ne sont pas toutes des recettes autonomes. Les observations, limites et raisons conservent la langue du catalogue ou de la trace.
+Les commandes sont celles enregistrées dans les traces, y compris les appels directs de composants. Les paramètres entre chevrons et les scripts `_qa/` désignent des fixtures temporaires ; ces lignes ne sont pas toutes des recettes autonomes. Les observations et raisons, ainsi que les limites consignées, conservent la langue du catalogue ou de la trace.
 
 Dates des exécutions enregistrées (UTC) : 2026-09-29 → 2026-09-29.
 

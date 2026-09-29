@@ -148,4 +148,17 @@ describe('generated proven features showcase', () => {
     expect(() => updateReadme('# No markers', 'block')).toThrow('marker pair');
     expect(() => updateReadme('<!-- proven-features:start --><!-- proven-features:start --><!-- proven-features:end -->', 'block')).toThrow('marker pair');
   });
+
+  it('qualifies the scenario limit promise when a proven trace records no scope', () => {
+    const directory = fixture();
+    proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUCCESS');
+    put(directory, 'docs/preuves/passed.log', 'Commande : buddy fixture --json\n');
+    const files = generateProvenFeatures(directory, revision);
+    expect(files['README.md']).toContain('limite du scénario lorsqu’elle est consignée');
+    expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('Les observations et raisons, ainsi que les limites consignées,');
+    expect(files['docs/PROVEN-FEATURES.md']).toContain('Observations and reasons, along with recorded limits,');
+    expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('**Prouvée**');
+    expect(files['docs/FONCTIONNALITES-PROUVEES.md']).not.toContain('Portée de l’essai :');
+    expect(files['docs/PROVEN-FEATURES.md']).not.toContain('Run scope :');
+  });
 });
