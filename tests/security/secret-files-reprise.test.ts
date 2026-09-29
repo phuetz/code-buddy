@@ -45,7 +45,9 @@ beforeAll(() => {
   write(path.join(work, '.env.example'), 'KEY=example\n');
   write(path.join(work, 'notes.txt'), 'ordinary searchable text\n');
   write(path.join(cb, 'skill-signing', 'key.pem'), `PRIVATE ${fake}\n`);
-  if (process.platform !== 'win32') fs.symlinkSync(cb, path.join(qa.home, '.CodeBuddy'), 'dir');
+  // macOS (APFS) and Windows are case-insensitive: ~/.CodeBuddy already resolves to ~/.codebuddy there.
+  const upperCaseHome = path.join(qa.home, '.CodeBuddy');
+  if (process.platform !== 'win32' && !fs.existsSync(upperCaseHome)) fs.symlinkSync(cb, upperCaseHome, 'dir');
 });
 
 afterAll(() => {
