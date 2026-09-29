@@ -1497,7 +1497,7 @@ describe('AgentExecutor', () => {
 
       const joined = entries.map((entry) => entry.content).join('\n');
       expect(entries.length).toBeGreaterThanOrEqual(1);
-      expect(joined).toMatch(/réponse vide du fournisseur/i);
+      expect(joined).toMatch(/Empty provider response/i);
       expect(joined).not.toContain('Using tools to help you');
     });
 
@@ -3039,7 +3039,7 @@ describe('AgentExecutor', () => {
       const entries = await executor.processUserMessage('Hello', history, messages);
 
       expect(entries.length).toBe(1);
-      expect(entries[0].content).toMatch(/réponse vide du fournisseur/i);
+      expect(entries[0].content).toMatch(/Empty provider response/i);
     });
 
     it('should handle tool returning no output', async () => {

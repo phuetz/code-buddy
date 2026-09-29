@@ -1,6 +1,6 @@
 <div align="center">
 
-# Code Buddy 2.1
+# Code Buddy 2
 
 **A local-first AI coding agent that can also run as a fleet, a desktop app, and a companion.**
 It reads your repository, writes code, runs commands, and you can watch it work — on your machine,
@@ -28,7 +28,7 @@ at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
 </p>
 
 <p>
-  <a href="docs/assets/infographic-code-buddy-2.webp"><img src="docs/assets/infographic-code-buddy-2.webp" width="900" alt="Code Buddy 2 architecture: you, multi-channel interfaces (terminal, Cowork, PWA, chat, voice, App Studio), the agentic runtime (council, fleet, memory, shadow workspace, evolve, knowledge graph), 220+ tools, 64 providers, and the autonomous engineering loop"/></a>
+  <a href="docs/assets/infographic-code-buddy-2.webp"><img src="docs/assets/infographic-code-buddy-2.webp" width="900" alt="Code Buddy 2 architecture: interfaces, agent runtime, tools, provider routing, and the engineering loop"/></a>
   <br/>
   <sub>The big picture: interfaces, the agentic runtime, tools and providers, and the loop that turns an idea into an improvement.</sub>
 </p>
@@ -51,10 +51,9 @@ Code Buddy combines a terminal coding agent with cloud, gateway and local model 
 query-selected tools, and the following interfaces. Optional services require their documented
 configuration; enabling a feature does not replace its permission checks.
 
-**New in 2.1:** explicit resource discovery and selection, RagChat search with page citations,
-MCP configuration import, a bounded A2A JSON-RPC bridge, and fixes for terminal sessions,
-configuration diagnostics and Cowork workflows. Read the [release notes](docs/RELEASE-NOTES-2.2.0.md)
-for setup and the limits of each integration.
+For changes planned for 2.3.0, see the [changelog](CHANGELOG.md). The
+[2.2.0 release notes](docs/RELEASE-NOTES-2.2.0.md) describe the last published
+version and its integration limits.
 
 - **A multi-AI fleet hub.** Peers running `buddy server` observe each other's events and call each
   other's models: one-shot `peer.chat`, multi-turn `peer.chat-session.*`, and `peer.tool.invoke`
@@ -94,7 +93,7 @@ for setup and the limits of each integration.
 
 ## Install
 
-Three commands (Node.js ≥ 20):
+Three commands (Node.js 22 or 24 recommended; 20 is the declared minimum):
 
 ```bash
 npm i -g @phuetz/code-buddy   # the package is scoped; `code-buddy` alone is not on npm
@@ -114,6 +113,9 @@ git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy && npm install
 npm run build && npm link
 ```
+
+If the `@vscode/ripgrep` install script receives a GitHub 403, see the
+[source-install workaround](docs/install.md#ripgrep-download-blocked-during-npm-ci).
 
 The **Cowork** desktop app is a separate step needing Node.js ≥ 22: `buddy install-gui`, then
 `buddy gui`. Details in [Getting started](docs/getting-started.md).
@@ -150,7 +152,7 @@ buddy loop "make the failing tests pass" --verify-cmd "npm test"
 Other paths worth knowing on day one:
 
 ```bash
-buddy try                             # 60-second demo: writes FizzBuzz + a test, runs it, verifies
+buddy try                             # coding demo: writes FizzBuzz + a test, runs it, verifies
 buddy -p "explain the entry point"    # one-shot, headless — good for scripts and CI
 buddy research "map this repository"  # parallel research workers
 buddy cost --latency                  # measured per-model TTFT/TTFM, read-only
@@ -183,7 +185,11 @@ Read [activation conditions, source evidence and limitations](docs/learning-mech
 
 ## Opt-in
 
-Nothing below is needed to chat with a local model. Defaults stay off.
+Nothing in the table below is needed to chat with a local model. These switches
+stay off until configured. The separate telemetry setting defaults to
+`enabled: true`, but Sentry and OpenTelemetry exporters start only if you set
+`SENTRY_DSN` or `OTEL_EXPORTER_OTLP_ENDPOINT`. Use `/telemetry status` to inspect
+this and `/telemetry off` to disable collection even with an endpoint configured.
 
 | Switch | What it turns on |
 | --- | --- |
@@ -221,8 +227,9 @@ Honest limits for a first-time visitor:
   Check `buddy --version`, the npm dist-tag and the corresponding Git tag when identifying a build.
 - **CI gates all three operating systems.** Linux, macOS and Windows run Node.js 20 and 22
   jobs. A local pass or an earlier platform recipe does not replace the candidate’s CI results.
-- **Node ≥ 20 is the real floor**, for the CLI and for the test toolchain alike (`engines` says
-  so since 2.0.0).
+- **Node ≥ 20 is the declared CLI floor** (`engines.node`); Node 22 or 24 is
+  recommended when working from source. Some ancillary packages can warn about
+  their own Node ≥ 22 requirement during installation. The CI runs Node 20 and 22.
 - **Cowork** is a separate install (Node.js ≥ 22, `buddy install-gui`), not part of the three
   commands above.
 - **Film production** needs `ffmpeg`; without a local voice binary, scenes stay silent rather than
@@ -240,7 +247,9 @@ Honest limits for a first-time visitor:
 
 ## Test suite
 
-38 088 tests in 2 115 files at `788f0ef23` (measured 2026-09-10 with `npm test`; 26 failures on that run were environment-only: a running local server, `dist/` not built, 20 s timeouts under load). `npm test -- tests/path/to/file.test.ts` to run a slice.
+The suite is large and its count changes with the source revision. Run
+`npm test -- tests/path/to/file.test.ts` for a focused check; see the CI result
+for the commit you intend to use before treating the full suite as green.
 
 ## Part of a toolchain
 
@@ -261,7 +270,9 @@ to Apache 2.0 on 2030-08-31. Bundled Python skills stay MIT (see their `SKILL.md
 ## Documentation
 
 - **[Getting started](docs/getting-started.md)** — first run, headless mode, sessions.
-- **[Release notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)** — current changes and validation limits.
+- **[Changelog](CHANGELOG.md)** — 2.3.0 candidate and earlier changes.
+- **[2.3.0 preview and limits](docs/whats-new-2.3.md)** — behavior and boundaries of the candidate.
+- **[Release notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)** — last published release and validation limits.
 - **[Release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md)** — previous release.
 - [Release notes 2.0.0](docs/RELEASE-NOTES-2.0.0.md) — previous major release.
 - [Install](docs/install.md) — published npm, Docker/VPS, the one-command installer.

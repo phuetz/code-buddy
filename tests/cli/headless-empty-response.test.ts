@@ -26,6 +26,7 @@ describe('headless empty final response', () => {
     expect(isHeadlessFinalResponseEmpty('<think>plan the haiku</think>')).toBe(true);
     expect(isHeadlessFinalResponseEmpty('<think>x</think>\nVague sur le sable')).toBe(false);
     expect(isHeadlessFinalResponseEmpty('Sorry, I encountered an error: réponse vide du fournisseur')).toBe(true);
+    expect(isHeadlessFinalResponseEmpty('Empty provider response: no text or tool calls.')).toBe(true);
   });
 
   it('formats a stderr diagnostic with provider, model and duration', () => {
@@ -33,7 +34,7 @@ describe('headless empty final response', () => {
       provider: 'ollama',
       model: 'qwen3.8-ctx32k:latest',
       durationMs: 14270,
-    })).toBe("le modèle n'a rien renvoyé ; provider=ollama modèle=qwen3.8-ctx32k:latest durée=14s");
+    })).toBe('The model returned no response; provider=ollama model=qwen3.8-ctx32k:latest duration=14s. Check the model and provider logs, then retry.');
   });
 
   it('returns a non-zero exit code for an empty visible answer', () => {
@@ -124,8 +125,8 @@ describe('headless empty final response', () => {
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout.trim()).toBe('');
-      expect(result.stderr).toContain("le modèle n'a rien renvoyé");
-      expect(result.stderr).toContain('modèle=qa-mock-model');
+      expect(result.stderr).toContain('The model returned no response');
+      expect(result.stderr).toContain('model=qa-mock-model');
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       fs.rmSync(childHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

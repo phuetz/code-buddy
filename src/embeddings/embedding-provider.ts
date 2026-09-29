@@ -148,12 +148,16 @@ export class EmbeddingProvider extends EventEmitter {
 
       this.emit('model:loaded', { model: this.config.modelName });
     } catch (error) {
-      // If transformers.js is not installed, throw with helpful message
       const err = error as Error;
-      if (err.message?.includes('Cannot find module')) {
+      // A nested native sharp failure also says "Cannot find module". Do not
+      // misdiagnose it as a missing transformers package.
+      if (/Cannot find (?:module|package) ['"]?@xenova\/transformers\b/.test(err.message ?? '')) {
         throw new Error(
           'Local embeddings require @xenova/transformers. Install with: npm install @xenova/transformers'
         );
+      }
+      if (/sharp-linux|sharp.*build\/Release|@img\/sharp/i.test(err.message ?? '')) {
+        throw new Error('Local embeddings need a working sharp native module. Reinstall dependencies with install scripts enabled.', { cause: error });
       }
       throw error;
     }

@@ -2,6 +2,7 @@
  * Catalogue HTTP, partie A — 18 routes sans réseau ni API payante.
  * Serveur réel en processus, 127.0.0.1, port éphémère.
  */
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -19,6 +20,8 @@ const UNAUTHORIZED = {
   message: 'No authentication token provided',
   status: 401,
 };
+
+const PACKAGE_VERSION = (JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
 let ctx: CatalogueServer;
 
@@ -38,7 +41,7 @@ describe('catalogue HTTP partie A', () => {
     const checks = asObject(body.checks, 'health.checks');
     const heartbeat = asObject(body.apiHeartbeat, 'health.apiHeartbeat');
     expect(body.status).toBe('degraded');
-    expect(body.version).toBe('2.2.0');
+    expect(body.version).toBe(PACKAGE_VERSION);
     expect(checks.database).toBe('ok');
     expect(checks.api).toBe('unknown');
     expect(checks.memory).toBe('ok');
@@ -93,7 +96,7 @@ describe('catalogue HTTP partie A', () => {
     const first = asObject(servers[0], 'docs.servers[0]');
     expect(body.openapi).toBe('3.0.0');
     expect(info.title).toBe('Code Buddy API');
-    expect(info.version).toBe('2.2.0');
+    expect(info.version).toBe(PACKAGE_VERSION);
     expect(first.url, 'OpenAPI annonce le port 0').toBe(`http://127.0.0.1:${ctx.port}`);
     expect(ctx.port).toBeGreaterThan(0);
   });
