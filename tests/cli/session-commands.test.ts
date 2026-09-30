@@ -70,8 +70,8 @@ describe('CLI session commands', () => {
 
     expect(mocks.searchSessions).toHaveBeenCalledWith('hello');
     expect(logSpy).toHaveBeenCalledWith('Session search results for "hello" (1):\n');
-    expect(logSpy).toHaveBeenCalledWith('  session_ - Child session');
-    expect(logSpy).toHaveBeenCalledWith('    parent: session_');
+    expect(logSpy).toHaveBeenCalledWith('  session_child_123456 - Child session');
+    expect(logSpy).toHaveBeenCalledWith('    parent: session_parent_abcdef');
     expect(logSpy).toHaveBeenCalledWith('    match (user): [hello] from parent context');
     expect(logSpy).toHaveBeenCalledWith('\nUse `buddy session resume <id>` to resume a session');
   });
@@ -153,7 +153,7 @@ describe('CLI session commands', () => {
     expect(logSpy).toHaveBeenCalledWith('Recent sessions (1):\n');
     expect(logSpy).toHaveBeenCalledWith('  unknown - (unnamed)');
     expect(logSpy).toHaveBeenCalledWith('    0 messages | (no date)');
-    expect(logSpy).toHaveBeenCalledWith('    parent: session_');
+    expect(logSpy).toHaveBeenCalledWith('    parent: session_parent_abcdef');
     expect(logSpy).toHaveBeenCalledWith('    match: legacy hit');
   });
 
@@ -180,7 +180,7 @@ describe('CLI session commands', () => {
 
     expect(mocks.searchSessions).toHaveBeenCalledWith('hello world');
     expect(logSpy).toHaveBeenCalledWith('Session search results for "hello world" (1):\n');
-    expect(logSpy).toHaveBeenCalledWith('  session_ - Child session');
+    expect(logSpy).toHaveBeenCalledWith('  session_child_123456 - Child session');
     expect(logSpy).toHaveBeenCalledWith('\nUse `buddy session resume <id>` to resume a session');
   });
 
@@ -198,7 +198,7 @@ describe('CLI session commands', () => {
     await program.parseAsync(['node', 'buddy', 'session', 'resume', 'session_']);
 
     expect(mocks.resumeSession).toHaveBeenCalledWith('session_child_123456');
-    expect(logSpy).toHaveBeenCalledWith('Resuming session: Child session (session_)');
+    expect(logSpy).toHaveBeenCalledWith('Resuming session: Child session (session_child_123456)');
   });
 
   it('refuses a partial ID shared by several sessions', async () => {
@@ -220,5 +220,27 @@ describe('CLI session commands', () => {
     }
     expect(mocks.resumeSession).not.toHaveBeenCalled();
     expect(mocks.loggerError).toHaveBeenCalledWith('Ambiguous session id: session_ matches 2 sessions.');
+  });
+  it('prints resumable identifiers for sessions sharing the generated session_ prefix', async () => {
+    const program = new Command().exitOverride();
+    registerSessionCommands(program);
+    const ids = ['session_1790000000000_aaaa', 'session_1790000000000_bbbb'];
+    mocks.listUnifiedSessions.mockReturnValue(ids.map((id) => ({
+      id, title: id, origin: 'cli', messageCount: 1,
+      createdAt: '2026-09-30T08:00:00.000Z', updatedAt: '2026-09-30T08:00:00.000Z',
+      pointer: { kind: 'session-store' },
+    })));
+    await program.parseAsync(['node', 'buddy', 'session', 'list']);
+    const shownIds = logSpy.mock.calls
+      .map((call) => String(call[0]).match(/^ {2}(\S+) - /)?.[1])
+      .filter((id): id is string => id !== undefined);
+    expect(shownIds).toEqual(ids);
+    mocks.listSessions.mockReturnValue(ids.map((id) => ({ id, name: id, messages: [], lastAccessedAt: new Date() })));
+    for (const id of shownIds) {
+      const resumeProgram = new Command().exitOverride();
+      registerSessionCommands(resumeProgram);
+      await resumeProgram.parseAsync(['node', 'buddy', 'session', 'resume', id]);
+      expect(mocks.resumeSession).toHaveBeenCalledWith(id);
+    }
   });
 });

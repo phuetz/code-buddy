@@ -70,13 +70,13 @@ function printSessionSummary(session: CliSessionSummary, origin?: string): void 
     ?? (typeof metadata?.origin === 'string' ? metadata.origin : undefined)
     ?? (typeof metadata?.surface === 'string' ? metadata.surface : undefined);
 
-  console.log(`  ${sessionId(session).slice(0, 8)} - ${sessionName(session)}`);
+  console.log(`  ${sessionId(session)} - ${sessionName(session)}`);
   console.log(`    ${messageCount(session)} messages | ${date} ${time}`.trimEnd());
   if (surface) {
     console.log(`    origin: ${surface}`);
   }
   if (parent) {
-    console.log(`    parent: ${parent.slice(0, 8)}`);
+    console.log(`    parent: ${parent}`);
   }
   if (snippet) {
     const roleText = role ? ` (${role})` : '';
@@ -141,7 +141,6 @@ export function registerSessionCommands(program: Command): void {
       const picked = await pickRecentSession(options.limit);
       if (!picked) return;
       await resumeSessionById(picked);
-      console.log(`Continue it in the terminal with: buddy --resume ${picked.slice(0, 8)}`);
     });
 
   session
@@ -166,7 +165,7 @@ export async function resumeLastSession(): Promise<void> {
   }
 
   await sessionStore.resumeSession(lastSession.id);
-  console.log(`Resuming session: ${lastSession.name} (${lastSession.id.slice(0, 8)})`);
+  console.log(`Resuming session: ${lastSession.name} (${lastSession.id})`);
   console.log(
     `   ${lastSession.messages.length} messages, last accessed: ${lastSession.lastAccessedAt.toLocaleString()}\n`
   );
@@ -232,18 +231,19 @@ export async function resumeSessionById(sessionId: string): Promise<void> {
     console.log('\nRecent sessions:');
     const recent = await sessionStore.getRecentSessions(5);
     recent.forEach((s) => {
-      console.log(`   ${s.id.slice(0, 8)} - ${s.name} (${s.messages.length} messages)`);
+      console.log(`   ${s.id} - ${s.name} (${s.messages.length} messages)`);
     });
     process.exit(1);
   }
 
   await sessionStore.resumeSession(session.id);
-  console.log(`Resuming session: ${session.name} (${session.id.slice(0, 8)})`);
+  console.log(`Resuming session: ${session.name} (${session.id})`);
   console.log(
     `   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}`
   );
   const { buildSessionRecap, formatSessionRecap } = await import('./session-picker.js');
   console.log(`${formatSessionRecap(buildSessionRecap(session)).join('\n')}\n`);
+  console.log(`Continue it in the terminal with: buddy --resume ${session.id}`);
 }
 
 /**
@@ -289,7 +289,7 @@ export async function listSessions(count: number = 10): Promise<void> {
     if (unified.length > 0) {
       console.log(`Recent sessions (${unified.length}):\n`);
       for (const row of unified) {
-        console.log(`  ${row.id.slice(0, 8)} - ${row.title}`);
+        console.log(`  ${row.id} - ${row.title}`);
         console.log(`    ${row.messageCount} messages | ${new Date(row.updatedAt).toLocaleDateString()} ${new Date(row.updatedAt).toLocaleTimeString()}`.trimEnd());
         console.log(`    origin: ${row.origin}`);
       }
