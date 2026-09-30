@@ -6,6 +6,7 @@
 
 - **security:** Les lecteurs directs intégrés refusent les fichiers d’identifiants classés, y compris les lecteurs documentaires et multimédias ; les archives sont contrôlées avant lecture et extraction. `buddy server` et le serveur sans JWT de `buddy daemon` écoutent `127.0.0.1` par défaut. Le serveur limite le débit sans faire confiance aux en-têtes de proxy non configurés et refuse les JWT mal formés ; l’environnement Bash transmis aux commandes retire `*_PAT`, `*_HEADERS` et les proxys avec mot de passe. Les chemins personnels Windows sont aussi protégés (`c2948d198`, `15d704ed1`, `ed26c316b`, `58f729b58`, `5873af9b0`, `e68802997`, PR #275). **Limite connue : le filtre statique du shell ne couvre pas toutes les lectures récursives ni les chemins construits à l’exécution. Un secret suivi par Git peut encore être extrait par une commande shell qui lit les objets Git. La garantie « secret suivi par Git illisible » est reportée en 2.3.1.**
 - La liste des commandes dangereuses et leurs blocages utilisent une source commune ; la dépendance `fast-uri` corrige deux avis de sévérité haute (`7bb59e82a`, PR #276 ; PR #273).
+- Les chemins d'identifiants sont comparés sans tenir compte de la casse sur les volumes macOS concernés (`7bb473266`, PR #293). Le verrouillage des dépendances corrige `undici` et `brace-expansion` ; l'exception de l'audit npm est limitée et vérifiée (`d92d6183e`, `ec3c51b89`, PR #295).
 - `buddy security audit` vérifie les réglages de sécurité du profil, des skills et de MCP ; son option `--fix` resserre les permissions des fichiers après sauvegarde des modes. Les audits incomplets ou portant sur des fichiers spéciaux échouent explicitement (`36fac9ed1`, `16aa191df`, `aed8b35c9`).
 - Un serveur MCP ne peut plus lancer librement un shell ni écrire hors des emplacements autorisés ; ses outils d'écriture doivent être explicitement listés (`0d9c5b2c9`, `48adb3f31`, `1d713a409`, `c7e4066ca`).
 - L'App Studio limite l'environnement transmis aux commandes et masque les clés dans la console, le chat et l'historique des versions (`a508f43d4`, `ec47c2103`, `5390cb1d2`).
@@ -30,17 +31,21 @@
 
 - Le navigateur reconnaît mieux certaines consignes d'action en français, vérifiées dans Chromium réel (`e01e83cc3`).
 - Le renouvellement de connexion ChatGPT indique la cause effective de l'échec ; la vidéo expose la réponse du service et évite un blocage de téléchargement (`feb9e2072`, `2069d6007`).
+- `understand_video` borne ses appels externes et ferme ses processus et workers de transcription pour rendre la main après le traitement ; l'ingestion facultative en mémoire ne bloque plus indéfiniment la réponse (`c4028a815`, `d936f3a4c`, `e0bc69780`, PR #290).
 - L'interface affiche l'état réel d'une exécution et les outils de projet signalent leurs échecs au lieu de laisser croire qu'ils ont réussi (`eb7c32aaf`, `ab11749d8`).
 - La PWA mobile cesse les reconnexions après un refus d'authentification ; la déconnexion Telegram attend la fin du traitement en cours (`74a96cd82`, `d848352fb`).
 - Le suivi des skills continue à fonctionner quand la limite des observateurs noyau est atteinte (`31f02fd9e`).
 - Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias utilisent le prix de leur cible (`43f86fe6f`, PR #277).
 - Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré (`43f86fe6f`, PR #277).
 - Des correctifs de portabilité Windows et de la suite macOS stabilisent les vérifications sur ces systèmes, sans prétendre à une validation locale de ces plateformes (`51da4cb48`, PR #279 ; `343e5407f`, PR #274). Les rejets asynchrones sont couverts par des tests (`f7c82bf49`, PR #280).
+- Le diagnostic CLI LSP ferme le serveur après la réponse ; les déclencheurs des skills intégrés sont précisés sans détourner la météo ; la veille vidéo borne ses reprises (`de2bc197a`, `a73dfe5de`, `078d76896`, PR #296).
+- Les tests de sécurité macOS couvrent les volumes insensibles à la casse ; le parcours `/scan-todos` est isolé dans les tests (`ee7812cdb`, PR #292 ; `98720d626`, PR #295).
 
 ### Documentation
 
 - Le catalogue décrit 91 fonctionnalités avec un état et des preuves graduées ; les documents de prise en main et l'explication française ont été précisés (`6ee17ced4`, `de496d5c3`, `aa434d58a`, `5e42b991d`).
 - Le README suit les commandes réellement disponibles et les campagnes P5/P6 ajoutent des preuves d'utilisation au catalogue (`0f68f04a6`, PR #281 ; `7e0cbd8db`, PR #289).
+- La campagne P7 ajoute des preuves d'utilisation au catalogue (`ede88bcff`, PR #294).
 - Les exemples publics ne contiennent plus le prénom personnel auparavant présent dans le code (`b67d78b60`, PR #278).
 
 Voir les [notes de version 2.3.0](docs/RELEASE-NOTES-2.3.0.md) pour l'installation, les réglages et les limites.
