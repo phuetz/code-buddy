@@ -6,7 +6,7 @@ import { resolveNpmLaunch } from './local-binary-launch.js';
 
 export interface TestRunnerData {
   root: string;
-  runner: 'vitest' | 'jest' | 'unknown';
+  runner: 'vitest' | 'jest' | 'node' | 'unknown';
   exitCode: number | null;
   passed: number;
   failed: number;
@@ -49,15 +49,25 @@ function runNpmTest(cwd: string, timeoutMs: number): Promise<{ stdout: string; s
   });
 }
 
-function detectRunner(pkg: Record<string, unknown>): 'vitest' | 'jest' | 'unknown' {
+function detectRunner(pkg: Record<string, unknown>): TestRunnerData['runner'] {
   const scripts = isRecord(pkg.scripts) ? pkg.scripts : {};
   const test = typeof scripts.test === 'string' ? scripts.test : '';
   if (/\bvitest\b/.test(test)) return 'vitest';
   if (/\bjest\b/.test(test)) return 'jest';
+  if (/\bnode\s+--test\b/.test(test)) return 'node';
   return 'unknown';
 }
 
 function parseCounts(output: string): { passed: number; failed: number } {
+  // Node reports "# pass" / "# fail" (TAP) or "ℹ pass" / "ℹ fail" (spec).
+  // Select the last root-level footer, excluding nested subtest comments.
+  // eslint-disable-next-line no-control-regex -- Strip actual ANSI escape sequences from terminal output.
+  const clean = output.replace(/\x1b\[[0-9;]*m/g, '');
+  const tapPassed = [...clean.matchAll(/^(?:#|ℹ) pass ([0-9]+)\s*$/gm)].at(-1)?.[1];
+  const tapFailed = [...clean.matchAll(/^(?:#|ℹ) fail ([0-9]+)\s*$/gm)].at(-1)?.[1];
+  if (tapPassed !== undefined && tapFailed !== undefined) {
+    return { passed: Number(tapPassed), failed: Number(tapFailed) };
+  }
   let passed = 0;
   let failed = 0;
   const failedMatch = output.match(/(?:Tests?|Test Files)\s+([0-9]+)\s+failed/i) ?? output.match(/([0-9]+)\s+failed/i) ?? output.match(/([0-9]+)\s+failing/i);
@@ -69,7 +79,7 @@ function parseCounts(output: string): { passed: number; failed: number } {
 
 export class TestRunnerTool {
   readonly name = 'test_runner';
-  readonly description = 'Detect vitest/jest from package.json scripts and run only the declared npm test script with a bounded timeout.';
+  readonly description = 'Detect vitest/jest/Node from package.json scripts and run only the declared npm test script with a bounded timeout.';
 
   async execute(input: unknown): Promise<ToolResult> {
     try {

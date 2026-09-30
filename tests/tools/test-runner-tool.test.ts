@@ -39,4 +39,26 @@ describe('TestRunnerTool', () => {
     expect(data.failed).toBe(1);
     expect(data.stdoutTail).toContain('Tests 2 passed');
   });
+
+  it.each(['tap', 'spec'])('counts real Node %s results instead of declaring zero tests', async (reporter) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'test-runner-tap-'));
+    try {
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: { test: `node --test --test-reporter=${reporter} cases.mjs` } }));
+      await fs.writeFile(path.join(root, 'cases.mjs'), [
+        "import { test } from 'node:test';",
+        "import { strict as assert } from 'node:assert';",
+        "test('known sum', () => assert.equal(2 + 3, 5));",
+        "test('known failure', () => assert.equal(2 + 3, 6));",
+      ].join('\n'));
+
+      const result = await new TestRunnerTool().execute({ root, timeoutMs: 10_000 });
+
+      expect(result.success).toBe(false);
+      expect(result.data).toMatchObject({ runner: 'node', passed: 1, failed: 1, exitCode: 1, timedOut: false });
+      expect((result.data as { stdoutTail: string }).stdoutTail).toContain(`${reporter === 'tap' ? '#' : 'ℹ'} pass 1`);
+      expect((result.data as { stdoutTail: string }).stdoutTail).toContain(`${reporter === 'tap' ? '#' : 'ℹ'} fail 1`);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });
