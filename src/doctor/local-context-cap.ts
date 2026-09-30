@@ -20,9 +20,8 @@ export function persistDoctorLocalContextCap(model: string, maxContext: number):
   const document = existsSync(file) ? parseTOML(readFileSync(file, 'utf8')) : {};
   const source = document.models;
   const models = source && typeof source === 'object' && !Array.isArray(source) ? { ...source } as Record<string, unknown> : {};
-  // The current user-config reader retains quotes around table identifiers.
-  // Accept that spelling at this boundary; serialize the selected model once
-  // through the shared writer, without changing the catalogue implementation.
+  // Quote the tag so colon, dots and slashes remain one legal TOML key.
+  // Accept either spelling while the catalogue lane replaces its old parser.
   const quotedModel = JSON.stringify(model);
   const existing = models[model] ?? models[quotedModel];
   const entry = existing && typeof existing === 'object' && !Array.isArray(existing) ? { ...existing } as Record<string, unknown> : {};
@@ -32,8 +31,8 @@ export function persistDoctorLocalContextCap(model: string, maxContext: number):
   entry.provider ??= 'ollama';
   entry.max_context_tokens = cap;
   delete entry.context_window;
-  models[model] = entry;
-  delete models[quotedModel];
+  delete models[model];
+  models[quotedModel] = entry;
   getConfigManager().saveUserConfig('models', models);
   return cap;
 }

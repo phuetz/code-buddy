@@ -1,3 +1,4 @@
+import { readDoctorLocalContextCap } from '../doctor/local-context-cap.js';
 /**
  * Best-effort context discovery for inference runtimes.
  *
@@ -473,7 +474,11 @@ export async function primeLocalRuntimeModelConfig(
     pending = probeLocalRuntimeContext(options);
     probeCache.set(cacheKey, pending);
   }
-  const info = await pending;
+  const detected = await pending;
+  const cap = detected?.runtime === 'ollama' ? readDoctorLocalContextCap(options.model) : undefined;
+  const info = detected && cap !== undefined
+    ? { ...detected, contextWindow: Math.min(detected.contextWindow, cap) }
+    : detected;
   if (info) {
     cacheRuntimeModelContextWindow(
       options.model,
