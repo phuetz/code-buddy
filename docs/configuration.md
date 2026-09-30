@@ -230,6 +230,16 @@ Session-end auto-memory never writes accepted memory directly. It stores
 pending candidates in `.codebuddy/memory-candidates.json`; approve them with
 `/memory accept <id>` after review.
 
+### Variables qui réduisent une protection
+
+**Attention : l'activation de ces variables doit être réservée à des environnements de confiance (ex. conteneur jetable, CI) car elles réduisent les garanties de sécurité du produit.**
+
+| Variable | Effet | Reste refusé |
+|:---------|:-----------------------|:-------------|
+| `CODEBUDDY_AUTO_CONFIRM` | La valeur exacte `true` approuve sans demander les actions interactives admissibles. | L'auto-amélioration et les prompts forcés interactifs restent demandés. Le mode MCP refuse toujours l'escalade shell non confinée. |
+| `CODEBUDDY_MCP_ALLOW_WRITE` | La valeur `true` ou `1` expose les outils d'écriture et d'exécution autorisés dans le serveur MCP (équivalent de `--allow-write`). | Les autres outils d'écriture restent refusés ; les destinations sont confinées à l'espace de travail et le shell ne peut pas s'exécuter sans bac à sable. |
+| `CODEBUDDY_BROWSER_USE_NO_SANDBOX` | La valeur `true` ou `1` lance Browser Use avec `--no-sandbox`. Sous Linux, cette option est déjà activée par défaut si elle n'est pas définie. | Les navigations réseau restent soumises aux politiques du conteneur hôte. |
+
 ### Debugging
 
 | Variable | Description | Default |
