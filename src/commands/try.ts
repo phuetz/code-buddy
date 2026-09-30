@@ -7,7 +7,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Command } from 'commander';
@@ -16,6 +16,7 @@ import { normalizeOllamaBaseUrl } from './ollama.js';
 import { getModelToolConfig } from '../config/model-tools.js';
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import { resolveProviderFromCatalog } from '../providers/provider-catalog.js';
+import { getTrustFolderManager } from '../security/trust-folders.js';
 
 const OLLAMA_PROBE_TIMEOUT_MS = 2_000;
 const DEMO_MAX_TOOL_ROUNDS = 12;
@@ -81,7 +82,7 @@ export const TRY_DEMO_PROMPT = `You are driving a short coding-agent demo in an 
 
 Exact goal:
 1. Create fizzbuzz.js in CommonJS. Export a function fizzBuzz(value) that returns the number as a string, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and "FizzBuzz" for multiples of 15.
-2. Create fizzbuzz.test.js using node:test and node:assert/strict. Test at least 1, 3, 5, and 15.
+2. Create fizzbuzz.test.js using node:test and node:assert/strict. Import test with const { test } = require('node:test') and assert with const assert = require('node:assert/strict'). Use test() and assert.equal() to test at least 1, 3, 5, and 15. These APIs provide no Jest globals or expect().
 3. Run exactly: node --test fizzbuzz.test.js
 4. If a test fails, fix the code and run it again.
 5. Finish with a very short summary naming the two files you created and the test result.
@@ -208,7 +209,7 @@ export async function resolveTryProvider(
         label: 'ChatGPT OAuth',
         apiKey: provider.apiKey,
         baseURL: provider.baseURL,
-        model: provider.defaultModel,
+        model: options.modelOverride?.trim() || provider.defaultModel,
       };
     }
   }
@@ -221,10 +222,10 @@ export async function resolveTryProvider(
     });
     if (!response.ok) return null;
     const models = parseOllamaModels(await response.json());
-    const requestedModel = options.modelOverride?.trim();
+    const requestedModel = options.modelOverride?.trim() || env.OLLAMA_MODEL?.trim() || env.GROK_MODEL?.trim();
     const model = requestedModel
       ? models.find((candidate) => candidate.toLowerCase() === requestedModel.toLowerCase()) ?? null
-      : chooseOllamaModel(models, env.OLLAMA_MODEL);
+      : chooseOllamaModel(models);
     if (!model) return null;
     return {
       kind: 'ollama',
@@ -251,13 +252,11 @@ async function createDefaultAgent(
   const confirmation = ConfirmationService.getInstance();
   const previousFlags = confirmation.getSessionFlags();
   confirmation.setSessionFlag('allOperations', true);
-  // The permission mode is checked BEFORE session flags: in `default` mode with
-  // no TTY, create_file is refused ("User cancelled"). The demo runs in an
-  // isolated temporary sandbox (workspace), so we auto-approve for the duration
-  // of the demo and then restore the previous mode.
+  // The demo owns an isolated workspace. Non-destructive operations can run
+  // unattended; shell sandbox and trust/write policy gates still apply.
   const permMgr = getPermissionModeManager();
   const previousMode = permMgr.getMode();
-  permMgr.setMode('bypassPermissions');
+  permMgr.setMode('dontAsk');
   try {
     const agent = new CodeBuddyAgent(
       provider.apiKey,
@@ -291,11 +290,11 @@ async function createDefaultAgent(
   }
 }
 
-async function verifyDefaultDemo(workspace: string): Promise<TryVerification> {
+async function runVerification(workspace: string, args: string[]): Promise<TryVerification> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
-      ['--test', 'fizzbuzz.test.js'],
+      args,
       { cwd: workspace, timeout: 30_000, maxBuffer: 1024 * 1024 },
       (error, stdout, stderr) => {
         const output = `${stdout}${stderr}`.trim();
@@ -303,6 +302,28 @@ async function verifyDefaultDemo(workspace: string): Promise<TryVerification> {
       },
     );
   });
+}
+
+async function verifyDefaultDemo(workspace: string): Promise<TryVerification> {
+  const test = await runVerification(workspace, ['--test', 'fizzbuzz.test.js']);
+  if (!test.success) return test;
+  // A model-written empty/incorrect test must not turn the showcase green.
+  const oracle = await runVerification(workspace, ['-e', `
+    const assert = require('node:assert/strict');
+    const { fizzBuzz } = require('./fizzbuzz.js');
+    for (const [input, expected] of [[1, '1'], [2, '2'], [3, 'Fizz'], [5, 'Buzz'],
+      [15, 'FizzBuzz'], [6, 'Fizz'], [10, 'Buzz'], [30, 'FizzBuzz'], [7, '7']]) {
+      assert.equal(fizzBuzz(input), expected, 'fizzBuzz(' + input + ')');
+    }
+  `]);
+  return { success: oracle.success, output: [test.output, oracle.output].filter(Boolean).join('\n') };
+}
+
+async function createDefaultWorkspace(): Promise<string> {
+  const workspace = await mkdtemp(join(tmpdir(), 'code-buddy-try-'));
+  // TMPDIR can live under an ESM project; the demo explicitly requests CommonJS.
+  await writeFile(join(workspace, 'package.json'), '{"private":true,"type":"commonjs"}\n', { flag: 'wx' });
+  return workspace;
 }
 
 function latestAssistantMessage(entries: readonly ChatEntry[]): string | null {
@@ -381,7 +402,7 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   }
 
   const createWorkspace = options.createWorkspace
-    ?? (() => mkdtemp(join(tmpdir(), 'code-buddy-try-')));
+    ?? createDefaultWorkspace;
   const workspace = await createWorkspace();
   const createAgent = options.createAgent ?? createDefaultAgent;
   const verify = options.verify ?? verifyDefaultDemo;
@@ -390,6 +411,7 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
     setTemporaryEnv('CODEBUDDY_DISABLE_MCP', 'true'),
   ];
   let agent: TryDemoAgent | undefined;
+  let releaseTrust = () => {};
 
   write('Code Buddy — coding-agent demo (duration depends on the model and hardware)');
   write(`[1/3] Provider: ${provider.label}`);
@@ -397,6 +419,9 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   write('      The agent is creating FizzBuzz, writing its tests, and running them…');
 
   try {
+    // The agent's cwd differs from process.cwd(), which the trust gate uses.
+    // Keep this grant in memory and release it even when construction fails.
+    releaseTrust = getTrustFolderManager().trustFolderForSession(workspace);
     agent = await createAgent(provider, workspace);
     await agent.systemPromptReady;
     const entries = await agent.processUserMessage(TRY_DEMO_PROMPT, { surface: 'cli' });
@@ -432,8 +457,12 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
     writeError(`   The sandbox is kept: ${workspace}`);
     return 1;
   } finally {
-    agent?.dispose?.({ skipSessionLearning: true });
-    for (const restore of restoreEnv.reverse()) restore();
+    try {
+      agent?.dispose?.({ skipSessionLearning: true });
+    } finally {
+      releaseTrust();
+      for (const restore of restoreEnv.reverse()) restore();
+    }
   }
 }
 

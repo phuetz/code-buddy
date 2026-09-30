@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Command } from 'commander';
 import type { ChatEntry } from '../../src/agent/types.js';
 import {
@@ -21,6 +24,9 @@ const chatGptProvider: TryProvider = {
 };
 
 describe('buddy try', () => {
+  let workspace: string;
+  beforeEach(async () => { workspace = await mkdtemp(join(tmpdir(), 'try-unit-')); });
+  afterEach(async () => { await rm(workspace, { recursive: true, force: true }); });
   it('prefers a coding-oriented Ollama model while honoring an installed request', () => {
     const models = ['llama3.2:latest', 'qwen2.5-coder:7b', 'devstral:latest'];
 
@@ -40,7 +46,7 @@ describe('buddy try', () => {
       resolveProvider: async () => ({
         kind: 'ollama', label: 'Ollama', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', model: 'qwen2.5-coder:7b',
       } as TryProvider),
-      createWorkspace: async () => '/tmp/code-buddy-try-test',
+      createWorkspace: async () => workspace,
       createAgent: async () => ({
         systemPromptReady: Promise.resolve(),
         processUserMessage: async () => [],
@@ -75,6 +81,24 @@ describe('buddy try', () => {
 
     expect(provider).toMatchObject(chatGptProvider);
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('honors a configured model for both free providers, without substituting a missing local tag', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      models: [{ name: 'first-local' }, { name: 'requested-local' }],
+    }), { status: 200 }));
+    expect((await resolveTryProvider({ env: {}, hasChatGptCredentials: () => true,
+      modelOverride: 'requested-oauth', fetchImpl }))?.model).toBe('requested-oauth');
+    for (const key of ['GROK_MODEL', 'OLLAMA_MODEL']) {
+      expect((await resolveTryProvider({ env: { [key]: 'requested-local' },
+        hasChatGptCredentials: () => false, fetchImpl }))?.model).toBe('requested-local');
+      expect(await resolveTryProvider({ env: { [key]: 'missing-local' },
+        hasChatGptCredentials: () => false, fetchImpl })).toBeNull();
+    }
+    expect((await resolveTryProvider({
+      env: { GROK_MODEL: 'first-local', OLLAMA_MODEL: 'requested-local' },
+      hasChatGptCredentials: () => false, fetchImpl,
+    }))?.model).toBe('requested-local');
   });
 
   it('probes localhost and selects an installed Ollama model as the fallback', async () => {
@@ -184,16 +208,16 @@ describe('buddy try', () => {
 
     const exitCode = await runTryDemo({
       resolveProvider: async () => chatGptProvider,
-      createWorkspace: async () => '/tmp/code-buddy-try-test',
+      createWorkspace: async () => workspace,
       createAgent,
       verify,
       stdout: (message) => stdout.push(message),
     });
 
     expect(exitCode).toBe(0);
-    expect(createAgent).toHaveBeenCalledWith(chatGptProvider, '/tmp/code-buddy-try-test');
+    expect(createAgent).toHaveBeenCalledWith(chatGptProvider, workspace);
     expect(processUserMessage).toHaveBeenCalledWith(TRY_DEMO_PROMPT, { surface: 'cli' });
-    expect(verify).toHaveBeenCalledWith('/tmp/code-buddy-try-test');
+    expect(verify).toHaveBeenCalledWith(workspace);
     expect(stdout.join('\n')).toContain('Tools used: write_file');
     expect(stdout.join('\n')).toContain('✅ Demo succeeded');
     expect(dispose).toHaveBeenCalledWith({ skipSessionLearning: true });
@@ -213,7 +237,7 @@ describe('buddy try', () => {
       await runTryDemo({
         verbose: false,
         resolveProvider: async () => chatGptProvider,
-        createWorkspace: async () => '/tmp/code-buddy-try-test',
+        createWorkspace: async () => workspace,
         createAgent: async () => ({
           systemPromptReady: Promise.resolve(),
           processUserMessage: async () => {
@@ -274,7 +298,7 @@ describe('buddy try', () => {
     try {
       await runTryDemo({
         resolveProvider: async () => chatGptProvider,
-        createWorkspace: async () => '/tmp/code-buddy-try-test',
+        createWorkspace: async () => workspace,
         createAgent: async () => ({
           systemPromptReady: Promise.resolve(),
           processUserMessage: async () => {
@@ -310,7 +334,7 @@ describe('buddy try', () => {
       await runTryDemo({
         verbose: true,
         resolveProvider: async () => chatGptProvider,
-        createWorkspace: async () => '/tmp/code-buddy-try-test',
+        createWorkspace: async () => workspace,
         createAgent: async () => ({
           systemPromptReady: Promise.resolve(),
           processUserMessage: async () => {

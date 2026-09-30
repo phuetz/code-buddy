@@ -49,6 +49,7 @@ const ALWAYS_BLOCKED: string[] = [
 
 export class TrustFolderManager {
   private trustedFolders: Set<string> = new Set();
+  private sessionFolders: Map<string, number> = new Map();
   private enforcementEnabled: boolean = true;
   private readonly isTestMode: boolean = process.env.NODE_ENV === 'test';
 
@@ -75,7 +76,7 @@ export class TrustFolderManager {
     }
 
     // Check if the path is within any trusted folder
-    for (const trusted of this.trustedFolders) {
+    for (const trusted of [...this.trustedFolders, ...this.sessionFolders.keys()]) {
       if (resolved === trusted || resolved.startsWith(trusted + path.sep)) {
         return true;
       }
@@ -144,6 +145,23 @@ export class TrustFolderManager {
     this.trustedFolders.add(resolved);
     this.save();
     return true;
+  }
+
+  /** Trust an existing workspace in memory until the returned release is called. */
+  trustFolderForSession(dirPath: string): () => void {
+    const resolved = fs.realpathSync(dirPath);
+    if (this.isBlocked(resolved) || !fs.statSync(resolved).isDirectory()) {
+      throw new Error(`Cannot trust session workspace: ${resolved}`);
+    }
+    this.sessionFolders.set(resolved, (this.sessionFolders.get(resolved) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const remaining = (this.sessionFolders.get(resolved) ?? 1) - 1;
+      if (remaining > 0) this.sessionFolders.set(resolved, remaining);
+      else this.sessionFolders.delete(resolved);
+    };
   }
 
   /**
