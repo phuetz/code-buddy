@@ -4,7 +4,7 @@ import os from 'node:os';
 import { describe, it, expect } from 'vitest';
 // The QA helper is deliberately independent of the production tools.
 // @ts-expect-error Standalone Node QA script has no generated declaration file.
-import { evaluateEvidence, fileDigest } from '../../scripts/qa/evidence-oracles.mjs';
+import { evaluateEvidence, fileDigest, assistantReplyMatches } from '../../scripts/qa/evidence-oracles.mjs';
 
 const ocrOracle = {
   rules: [
@@ -15,6 +15,12 @@ const ocrOracle = {
 };
 
 describe('oracles des preuves réelles', () => {
+  it('refuse le texte utilisateur et exige une réponse assistant exacte', () => {
+    expect(assistantReplyMatches([{ role: 'user', content: 'P9_CHAT_OK' }], 'P9_CHAT_OK')).toBe(false);
+    expect(assistantReplyMatches([{ role: 'assistant', content: 'other answer' }], 'P9_CHAT_OK')).toBe(false);
+    expect(assistantReplyMatches([{ role: 'assistant', content: [{ type: 'text', text: 'P9_CHAT_OK\n[tokens: 42 in / 3 out | cost: $0.0000]' }] }], 'P9_CHAT_OK')).toBe(true);
+  });
+
   it('refuse la capture P9 : largeur correcte, texte OCR incorrect', () => {
     const capture = { success: true, data: { metadata: { width: 700 }, ocr: { attempted: true, ok: true, text: 'PO TEXT 42' } } };
     expect(evaluateEvidence(capture, ocrOracle).passed).toBe(false);

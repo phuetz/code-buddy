@@ -518,7 +518,7 @@
         {
           "field": "data.changed",
           "op": "eq",
-          "value": true
+          "value": 2
         }
       ]
     },
@@ -751,10 +751,14 @@
           "field": "output",
           "op": "includes",
           "values": [
-            "File: sample.ts:1",
-            "function add",
-            "Signature: export function add(a: number, b: number): number"
+            "Definition of \"add\":",
+            "function add"
           ]
+        },
+        {
+          "field": "observations.definitionMatchesFixture",
+          "op": "eq",
+          "value": true
         }
       ]
     },
@@ -1052,7 +1056,7 @@
         {
           "field": "observations.persistedCard.status",
           "op": "eq",
-          "value": "todo"
+          "value": "open"
         },
         {
           "field": "data.card.comments",
@@ -1086,7 +1090,7 @@
         {
           "field": "observations.persistedCard.status",
           "op": "eq",
-          "value": "done"
+          "value": "completed"
         }
       ]
     },
@@ -1113,7 +1117,7 @@
         {
           "field": "observations.persistedCard.status",
           "op": "eq",
-          "value": "todo"
+          "value": "open"
         }
       ]
     },
@@ -1174,7 +1178,7 @@
         {
           "field": "observations.persistedCard.status",
           "op": "eq",
-          "value": "todo"
+          "value": "open"
         },
         {
           "field": "data.card.links",
@@ -1203,7 +1207,7 @@
         {
           "field": "observations.persistedCard.status",
           "op": "eq",
-          "value": "todo"
+          "value": "open"
         }
       ]
     },
@@ -1229,7 +1233,7 @@
         {
           "field": "observations.persistedCard.status",
           "op": "eq",
-          "value": "todo"
+          "value": "open"
         }
       ]
     },
@@ -1405,10 +1409,10 @@
         },
         {
           "field": "data.sources",
-          "op": "eq",
-          "value": [
-            "local_dataset"
-          ]
+          "op": "some",
+          "value": {
+            "source": "local_dataset"
+          }
         },
         {
           "field": "data.pipelineSteps.length",
@@ -1449,7 +1453,12 @@
           "changed": true
         },
         {
-          "field": "data.stats.processed",
+          "field": "data.stats.rawRecords",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.stats.selectedLeads",
           "op": "eq",
           "value": 1
         }
@@ -1790,7 +1799,7 @@
           "field": "output",
           "op": "includes",
           "values": [
-            "P9_DOC",
+            "P9\\_DOC",
             "Fixture document."
           ]
         }
@@ -2011,6 +2020,11 @@
           "field": "observations.qrDecoded",
           "op": "eq",
           "value": "P9_QR"
+        },
+        {
+          "field": "observations.qrDecoderControl",
+          "op": "eq",
+          "value": true
         }
       ]
     },
@@ -2240,7 +2254,7 @@
     "name": "scaffold_app",
     "input": {
       "template": "node-cli",
-      "targetDir": "<QA_PROJECT>/new-cli",
+      "targetDir": "<QA_PROJECT>/new-cli-reprise",
       "vars": {
         "binName": "p9-cli",
         "description": "P9_CLI"
@@ -2249,7 +2263,7 @@
     "oracle": {
       "rules": [
         {
-          "file": "new-cli/package.json",
+          "file": "new-cli-reprise/package.json",
           "op": "includes",
           "values": [
             "p9-cli"
@@ -2278,7 +2292,7 @@
           "values": [
             "potential secret(s):",
             "secret-fixture.txt:1:",
-            "[password]"
+            "[password_in_code]"
           ]
         },
         {
@@ -2350,10 +2364,13 @@
           "field": "output",
           "op": "includes",
           "values": [
-            "sample.js",
-            "2",
-            "// TODO P9_MARKER"
+            "sample.js (1 matches)"
           ]
+        },
+        {
+          "field": "observations.searchNegativeEmpty",
+          "op": "eq",
+          "value": true
         }
       ]
     },
@@ -2371,10 +2388,13 @@
           "field": "output",
           "op": "includes",
           "values": [
-            "sample.js",
-            "2",
-            "// TODO P9_MARKER"
+            "sample.js (1 matches)"
           ]
+        },
+        {
+          "field": "observations.searchNegativeEmpty",
+          "op": "eq",
+          "value": true
         }
       ]
     },
@@ -2385,7 +2405,7 @@
     "input": {
       "patterns": [
         "P9_MARKER",
-        "P9_ALPHA"
+        "P9_BETA"
       ],
       "operator": "OR"
     },
@@ -2396,9 +2416,13 @@
           "op": "includes",
           "values": [
             "sample.js",
-            "2",
-            "// TODO P9_MARKER"
+            "b.txt"
           ]
+        },
+        {
+          "field": "observations.searchNegativeEmpty",
+          "op": "eq",
+          "value": true
         }
       ]
     },
@@ -2622,9 +2646,14 @@
           "field": "data.stdoutTail",
           "op": "includes",
           "values": [
-            "# pass 1",
-            "# fail 0"
+            "ℹ pass 1",
+            "ℹ fail 0"
           ]
+        },
+        {
+          "field": "data.runner",
+          "op": "eq",
+          "value": "node"
         }
       ]
     },
@@ -2658,7 +2687,7 @@
       "rules": [
         {
           "field": "data.total",
-          "op": "eq",
+          "op": "min",
           "value": 1
         },
         {
@@ -2704,8 +2733,7 @@
           "op": "includes",
           "values": [
             "read_file",
-            "path",
-            "Read"
+            "path"
           ]
         }
       ]

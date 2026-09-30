@@ -5,11 +5,21 @@ import { isDeepStrictEqual } from 'node:util';
 
 /** An oracle reads returned values, never the request or its serialization. */
 export function normalizeText(value) {
+  // eslint-disable-next-line no-control-regex -- Strip actual ANSI escape sequences from terminal output.
   return typeof value === 'string' ? value.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/\s+/g, ' ').trim() : value;
 }
 
 export function fileDigest(file) {
   return existsSync(file) ? createHash('sha256').update(readFileSync(file)).digest('hex') : null;
+}
+
+/** A prompt shown by the chat UI cannot count as an assistant response. */
+export function assistantReplyMatches(messages, expected) {
+  return Array.isArray(messages) && messages.some(message => {
+    if (message.role !== 'assistant') return false;
+    const text = typeof message.content === 'string' ? message.content : Array.isArray(message.content) ? message.content.filter(block => block.type === 'text').map(block => block.text).join('') : '';
+    return text.replace(/\s*\[tokens: [^\]\n]+\]\s*$/, '').trim() === expected;
+  });
 }
 
 function subset(actual, expected) {
