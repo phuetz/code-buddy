@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 
-it('sends actual repository reads before the first local explanation, even when the model never calls tools', async () => {
+it.each([
+  ['-p', 'explique le point d’entrée de ce projet', '--output-format', 'json', '--ephemeral'],
+  ['-p', 'explain this code', '--output-format', 'json', '--ephemeral'],
+  ['-p', 'analyze the codebase structure', '--output-format', 'json', '--ephemeral'],
+  ['--model', 'fixture-model', 'dev', 'explain'],
+])('reads repository files for %s %s even when the model never calls tools', async (...args) => {
   const root = await mkdtemp(join(tmpdir(), 'repository-read-'));
   const home = join(root, 'home');
   const workspace = join(root, 'workspace');
@@ -14,7 +19,7 @@ it('sends actual repository reads before the first local explanation, even when 
   await writeFile(join(workspace, 'package.json'), '{"main":"launch.js"}');
   await writeFile(join(workspace, 'launch.js'), 'console.log("ORACLE_TANGERINE");');
   await writeFile(join(workspace, 'README.md'), '# Tangerine\nEntry: launch.js');
-  const requests: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  const requests: Array<{ model?: string; messages: Array<{ role: string; content: string }> }> = [];
   const server = http.createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
@@ -38,11 +43,11 @@ it('sends actual repository reads before the first local explanation, even when 
     if (!address || typeof address === 'string') throw new Error('Missing port');
     const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((accept, reject) => {
       const child = spawn(process.execPath, [resolve('node_modules/tsx/dist/cli.mjs'), resolve('src/index.ts'),
-        '-p', 'explique le point d’entrée de ce projet', '--output-format', 'json', '--ephemeral'], {
+        ...args], {
         cwd: workspace, env: { PATH: process.env.PATH, HOME: home, USERPROFILE: home,
           XDG_CONFIG_HOME: join(home, 'config'), XDG_CACHE_HOME: join(home, 'cache'),
           CODEBUDDY_PROVIDER: 'ollama', OLLAMA_HOST: `http://127.0.0.1:${address.port}`,
-          GROK_MODEL: 'fixture-model', LOG_LEVEL: 'error', NODE_ENV: 'production' },
+          GROK_MODEL: args.includes('dev') ? 'ambient-default' : 'fixture-model', LOG_LEVEL: 'error', NODE_ENV: 'development' },
       });
       let stdout = ''; let stderr = '';
       child.stdout.on('data', chunk => { stdout += chunk; });
@@ -56,7 +61,8 @@ it('sends actual repository reads before the first local explanation, even when 
     const first = requests.find(r => r.messages?.some(m => m.role === 'user'));
     expect(first?.messages.filter(m => m.role === 'tool').map(m => m.content).join('\n'))
       .toContain('ORACLE_TANGERINE');
-    expect(result.stdout).toContain('view_file');
+    expect(first?.messages.some(m => m.role === 'tool')).toBe(true);
+    if (args.includes('dev')) expect(first?.model).toBe('fixture-model');
   } finally {
     await new Promise<void>(accept => server.close(() => accept()));
     await rm(root, { recursive: true, force: true });

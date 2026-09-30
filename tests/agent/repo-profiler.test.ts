@@ -38,6 +38,15 @@ describe('RepoProfiler', () => {
   });
 
   describe('Node/TypeScript detection', () => {
+    it('does not label a plain JavaScript package as TypeScript', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ main: 'index.js', scripts: { test: 'node --test' } }));
+      fs.writeFileSync(path.join(tmpDir, 'index.js'), 'module.exports = { hello: () => \'hello\' };');
+      const profile = await new RepoProfiler(tmpDir).inspect();
+      expect(profile.languages).toEqual(['JavaScript']);
+      expect(profile.contextPack).not.toContain('TypeScript');
+      expect(profile.commands.build).toBeUndefined();
+    });
+
     it('should detect npm from package.json', async () => {
       const pkg = {
         name: 'my-app',
@@ -212,7 +221,7 @@ describe('RepoProfiler', () => {
       expect(fs.existsSync(cachePath)).toBe(true);
 
       const cached = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
-      expect(cached.languages).toContain('TypeScript');
+      expect(cached.languages).toEqual(['JavaScript']);
     });
 
     it('should return cached profile on second call', async () => {

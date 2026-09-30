@@ -14,19 +14,24 @@ import type { CodeBuddyAgent } from '../../agent/codebuddy-agent.js';
 import { logger } from '../../utils/logger.js';
 
 /** Create an agent through the shared OAuth/local/API provider resolver. */
-async function createAgent() {
+async function createAgent(explicitModel?: string) {
   const dotenv = await import('dotenv');
   dotenv.config();
 
   const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
   const { resolveCommandProvider } = await import('../llm-provider-resolution.js');
-  const provider = resolveCommandProvider();
+  const provider = resolveCommandProvider({ explicitModel });
 
   if (!provider) {
     logger.error('No provider found. Run `buddy login` (recommended) or start local Ollama.');
     process.exit(1);
   }
 
+  const { isLocalLlmProvider } = await import('../../config/headless-local-prompt.js');
+  if (process.env.CODEBUDDY_HEADLESS === 'true' && process.env.CODEBUDDY_PROMPT_COMPACT === undefined
+    && isLocalLlmProvider({ CODEBUDDY_PROVIDER: provider.providerLabel })) {
+    process.env.CODEBUDDY_PROMPT_COMPACT = 'true';
+  }
   return new CodeBuddyAgent(provider.apiKey, provider.baseURL, provider.model);
 }
 
@@ -409,36 +414,43 @@ Repo context: ${profile.contextPack}`;
   dev
     .command('explain')
     .description('Summarise repo conventions, structure, and critical paths')
-    .action(async () => {
-      const { getRepoProfiler } = await import('../../agent/repo-profiler.js');
+    .action(async (_options, command: Command) => {
+      const previousHeadless = process.env.CODEBUDDY_HEADLESS;
+      const previousCompact = process.env.CODEBUDDY_PROMPT_COMPACT;
+      const previousDisableMCP = process.env.CODEBUDDY_DISABLE_MCP;
+      process.env.CODEBUDDY_HEADLESS = 'true';
+      process.env.CODEBUDDY_DISABLE_MCP ??= 'true';
+      let agent: CodeBuddyAgent | undefined;
+      try {
+        const { getRepoProfiler } = await import('../../agent/repo-profiler.js');
 
-      const profiler = getRepoProfiler();
-      const profile = await profiler.refresh(); // Force fresh profile
+        const profiler = getRepoProfiler();
+        const profile = await profiler.inspect(); // Fresh observations, no background indexer
 
-      console.log('\nRepo Profile:');
-      console.log(`  Languages:       ${profile.languages.join(', ') || 'unknown'}`);
-      if (profile.framework) console.log(`  Framework:       ${profile.framework}`);
-      if (profile.packageManager) console.log(`  Package manager: ${profile.packageManager}`);
-      const cmds = Object.entries(profile.commands);
-      if (cmds.length > 0) {
-        console.log('  Commands:');
-        for (const [k, v] of cmds) {
-          console.log(`    ${k}: ${v}`);
+        console.log('\nRepo Profile:');
+        console.log(`  Languages:       ${profile.languages.join(', ') || 'unknown'}`);
+        if (profile.framework) console.log(`  Framework:       ${profile.framework}`);
+        if (profile.packageManager) console.log(`  Package manager: ${profile.packageManager}`);
+        const cmds = Object.entries(profile.commands);
+        if (cmds.length > 0) {
+          console.log('  Commands:');
+          for (const [k, v] of cmds) {
+            console.log(`    ${k}: ${v}`);
+          }
         }
-      }
-      const dirs = Object.entries(profile.directories);
-      if (dirs.length > 0) {
-        console.log('  Directories:');
-        for (const [k, v] of dirs) {
-          console.log(`    ${k}: ${v}`);
+        const dirs = Object.entries(profile.directories);
+        if (dirs.length > 0) {
+          console.log('  Directories:');
+          for (const [k, v] of dirs) {
+            console.log(`    ${k}: ${v}`);
+          }
         }
-      }
-      console.log('');
+        console.log('');
 
-      const agent = await createAgent();
-      await agent.systemPromptReady;
+        agent = await createAgent(command.optsWithGlobals<{ model?: string }>().model);
+        await agent.systemPromptReady;
 
-      const prompt = `Repo context: ${profile.contextPack}
+        const prompt = `Repo context: ${profile.contextPack}
 
 Analyse the current repository and provide:
 1. Overview of the codebase structure and purpose
@@ -449,12 +461,20 @@ Analyse the current repository and provide:
 
 Be concise — this is a quick orientation for a developer.`;
 
-      for await (const chunk of agent.processUserMessageStream(prompt)) {
-        if (chunk.type === 'content' && chunk.content) {
-          process.stdout.write(chunk.content);
+        for await (const chunk of agent.processUserMessageStream(prompt, { surface: 'cli' })) {
+          if (chunk.type === 'content' && chunk.content) {
+            process.stdout.write(chunk.content);
+          }
         }
+        console.log('');
+      } finally {
+        if (agent) await disposePlanResources(agent);
+        if (previousHeadless === undefined) delete process.env.CODEBUDDY_HEADLESS;
+        else process.env.CODEBUDDY_HEADLESS = previousHeadless;
+        if (previousCompact === undefined) delete process.env.CODEBUDDY_PROMPT_COMPACT;
+        else process.env.CODEBUDDY_PROMPT_COMPACT = previousCompact;
+        if (previousDisableMCP === undefined) delete process.env.CODEBUDDY_DISABLE_MCP;
+        else process.env.CODEBUDDY_DISABLE_MCP = previousDisableMCP;
       }
-      console.log('');
-      await disposePlanResources(agent);
     });
 }

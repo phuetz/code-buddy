@@ -6,7 +6,7 @@ import type { ToolResult } from '../../types/index.js';
 
 /** Narrow first-contact requests: don't pre-read files for general conversation. */
 export function needsRepositoryRead(query: string): boolean {
-  return /\breadme\b|\bentry\s*point\b|\bpoint\s+d[’']?\s*entr[ée]e\b/i.test(query);
+  return /\breadme\b|\bentry\s*points?\b|\bpoint\s+d[’']?\s*entr[ée]e\b|\b(?:explain|analyse|analyze)\s+(?:this\s+code|(?:the\s+)?codebase(?:\s+structure)?)\b/i.test(query);
 }
 
 /**

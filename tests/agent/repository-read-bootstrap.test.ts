@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { CodeBuddyToolCall } from '../../src/codebuddy/client.js';
 import { expect, it, vi } from 'vitest';
-import { bootstrapRepositoryReads } from '../../src/agent/execution/repository-read-bootstrap.js';
+import { bootstrapRepositoryReads, needsRepositoryRead } from '../../src/agent/execution/repository-read-bootstrap.js';
 
 it('does not infer access from a denied read, escape through main/symlinks, or read for unrelated chat', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'bootstrap-boundary-'));
@@ -24,4 +24,9 @@ it('does not infer access from a denied read, escape through main/symlinks, or r
     await rm(root, { recursive: true, force: true });
     await rm(outside, { force: true });
   }
+});
+
+it('recognises the developer orientation command without treating unrelated chat as a repository request', () => {
+  expect(needsRepositoryRead('Analyse the repository. Critical entry points and important files')).toBe(true);
+  expect(needsRepositoryRead('How are you?')).toBe(false);
 });

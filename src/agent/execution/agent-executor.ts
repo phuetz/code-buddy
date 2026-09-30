@@ -1317,18 +1317,18 @@ export class AgentExecutor {
 
     // A small local model may deny file access without ever trying a tool.
     // Supply real, bounded reads before asking it to explain the repository.
-    if (surface === 'cli' && isHeadlessLocalPromptCompact()
-      && this.deps.client.isEffectiveTargetLocal?.() && isToolNameAllowed('view_file')) {
+    if (surface === 'cli' && this.deps.client.isEffectiveTargetLocal?.()
+      && isToolNameAllowed('view_file')) {
       for await (const { toolCall, toolResult } of bootstrapRepositoryReads(
         turnQueryText, turnCwd, call => this.executeToolViaLane(call, {
           ...(abortController ? { abortSignal: abortController.signal } : {}),
         }),
       )) {
         if (abortController?.signal.aborted) return;
-        messages.push({ role: 'assistant', content: 'Repository context read requested by Code Buddy.', tool_calls: [toolCall] });
+        messages.push({ role: 'assistant', content: 'Repository context read requested by Code Buddy. Base repository claims on these tool results; do not invent missing files, commands or purposes.', tool_calls: [toolCall] });
         messages.push({ role: 'tool', name: 'view_file', tool_call_id: toolCall.id,
           content: sanitizeToolResult(toolResult.success ? toolResult.output ?? 'Success' : toolResult.error ?? 'Read failed') } as CodeBuddyMessage);
-        history.push({ type: 'assistant', content: 'Repository context read requested by Code Buddy.',
+        history.push({ type: 'assistant', content: 'Repository context read requested by Code Buddy. Base repository claims on these tool results; do not invent missing files, commands or purposes.',
           timestamp: new Date(), toolCalls: [toolCall] });
         history.push({ type: 'tool_result', content: toolResult.output ?? toolResult.error ?? '',
           timestamp: new Date(), toolCall, toolResult });
