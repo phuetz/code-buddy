@@ -1120,6 +1120,7 @@ TEMPLATES.set('express-api', {
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "prestart": "npm run build",
     "start": "node dist/index.js",
     "test": "jest",
     "lint": "eslint src --ext .ts"
