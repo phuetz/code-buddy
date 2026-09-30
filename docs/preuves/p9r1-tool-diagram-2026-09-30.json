@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:diagram",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T17:39:45.738654Z",
+  "revision": "3bfe60064750d48b0ff3005072e623fd2e7f4478",
+  "sourceDigest": "691add4c37bc1d9e1b369734a7eafac99a42a877f2c2e297fcdcd6d2660cead8",
+  "artifact": "docs/preuves/p9r1-tool-diagram-2026-09-30.log",
+  "summary": "Oracle strict non satisfait : tool:diagram"
+}

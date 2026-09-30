@@ -1,0 +1,53 @@
+Date: 2026-09-30T17:39:45.740599Z
+Révision exécutée: 3bfe60064750d48b0ff3005072e623fd2e7f4478
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: ocr({"operation": "extract", "path": "ocr.png", "language": "eng"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Oracle strict non satisfait : tool:ocr
+Verdict: échec
+
+{
+  "name": "ocr",
+  "input": {
+    "operation": "extract",
+    "path": "ocr.png",
+    "language": "eng"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.text",
+        "op": "eq",
+        "normalize": true,
+        "value": "P9 TEXT 42"
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "result": {
+    "success": true,
+    "output": "🔍 OCR: ocr.png\n   Confidence: 92%\n   Language: eng\n   Processing time: 347ms\n\n--- Extracted Text ---\nPO TEXT 42\n",
+    "data": {
+      "text": "PO TEXT 42\n",
+      "confidence": 92,
+      "language": "eng",
+      "blocks": [],
+      "processingTime": 347
+    }
+  },
+  "passed": false,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.text eq",
+      "passed": false
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ]
+}

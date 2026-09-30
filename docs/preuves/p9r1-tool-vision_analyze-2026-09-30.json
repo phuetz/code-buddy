@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:vision_analyze",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T17:39:45.740960Z",
+  "revision": "3bfe60064750d48b0ff3005072e623fd2e7f4478",
+  "sourceDigest": "ea4ab10fe7eceff391c988a66c1696e1344227530e40067a68e48e39496b5bc5",
+  "artifact": "docs/preuves/p9r1-tool-vision_analyze-2026-09-30.log",
+  "summary": "Oracle strict non satisfait : tool:vision_analyze"
+}

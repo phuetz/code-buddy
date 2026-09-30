@@ -153,3 +153,9 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 ## Limits
 
 Most capabilities need a service, a second peer, media, hardware, credentials, or an Electron session before a live verdict is possible. See the per-feature reason in the [static audit](preuves/verification-statique.md) and the [mission report](reports/2026-09/RAPPORT-INVENTAIRE-FONCTIONNALITES-2026-09-27.md). The automatic CLI/tool discovery adds more names with **unknown** implementation status; they are not part of these 91 claims.
+
+## Limitations observed in the P9 follow-up
+
+Exact OCR fails on the `P9 TEXT 42` fixture: the engine returns `PO TEXT 42`. The oracle requires exact text after whitespace normalization; image width cannot validate recognition. [Vision/OCR failure](preuves/p9r1-tool-vision_analyze-2026-09-30.log), [OCR tool](preuves/p9r1-tool-ocr-2026-09-30.log).
+
+ASCII rendering of `graph TD; A[P9_START]-->B[P9_END]` fails with `No nodes found in flowchart`. Echoing Mermaid source in metadata does not establish rendering. [Failure trace](preuves/p9r1-tool-diagram-2026-09-30.log).

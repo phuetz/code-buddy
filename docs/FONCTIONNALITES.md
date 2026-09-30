@@ -153,3 +153,9 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 ## Limites
 
 La plupart des capacités demandent un service, un second pair, des médias, du matériel, des identifiants ou une session Electron avant de pouvoir être validées en situation. La raison figure pour chaque entrée dans l’[audit statique](preuves/verification-statique.md) et dans le [rapport de mission](reports/2026-09/RAPPORT-INVENTAIRE-FONCTIONNALITES-2026-09-27.md). La découverte automatique ajoute d’autres noms CLI/outils à implémentation **inconnue** ; ils ne font pas partie de ces 91 affirmations.
+
+## Limites constatées lors de la reprise P9
+
+L’OCR exact échoue sur la fixture `P9 TEXT 42` : le moteur renvoie `PO TEXT 42`. L’oracle exige le texte exact après normalisation des espaces et fins de ligne ; la largeur de l’image ne valide jamais la reconnaissance. [Vision et OCR : échec réel](preuves/p9r1-tool-vision_analyze-2026-09-30.log), [outil OCR](preuves/p9r1-tool-ocr-2026-09-30.log).
+
+Le rendu ASCII de `graph TD; A[P9_START]-->B[P9_END]` échoue avec `No nodes found in flowchart`. La recopie du code Mermaid dans les métadonnées ne constitue pas un rendu. [Trace de l’échec](preuves/p9r1-tool-diagram-2026-09-30.log).

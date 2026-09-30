@@ -5107,7 +5107,7 @@
         "en": "Use the diagram entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée diagram dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "Reprise P9 : rendu ASCII de Mermaid sur une ligne rejeté avec No nodes found in flowchart ; les labels recopiés dans data.mermaidCode ne valident pas le rendu.",
       "codePaths": [
         "src/tools/registry/multimodal-tools.ts",
         "src/tools/text-to-speech-tool.ts",
@@ -7936,7 +7936,7 @@
         "en": "Use the ocr entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée ocr dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : OCR local sur texte synthétique : TEXT 42 reconnu, P9 transcrit PO ; exactitude parfaite non établie.",
+      "verificationLimit": "Reprise P9 : échec du texte exact P9 TEXT 42, reconnu PO TEXT 42. Seuls espaces et fins de ligne sont normalisés ; aucune tolérance de caractère ni repli sur les métadonnées.",
       "codePaths": [
         "src/tools/registry/multimodal-tools.ts",
         "src/tools/text-to-speech-tool.ts",
@@ -10575,7 +10575,7 @@
         "en": "Use the vision_analyze entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée vision_analyze dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Métadonnées 700×180 et OCR local : TEXT 42 reconnu, P9 transcrit PO ; aucune perception sémantique d’un modèle vision.",
+      "verificationLimit": "Reprise P9 : échec du texte exact P9 TEXT 42, reconnu PO TEXT 42. Seuls espaces et fins de ligne sont normalisés ; aucune tolérance de caractère ni repli sur les métadonnées.",
       "codePaths": [
         "src/tools/registry/vision-tools.ts",
         "src/tools/vision/ocr-tool.ts",

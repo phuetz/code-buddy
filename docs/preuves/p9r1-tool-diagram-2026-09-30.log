@@ -1,0 +1,65 @@
+Date: 2026-09-30T17:39:45.738654Z
+Révision exécutée: 3bfe60064750d48b0ff3005072e623fd2e7f4478
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: diagram({"operation": "mermaid", "code": "graph TD; A[P9_START]-->B[P9_END]", "format": "ascii"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Oracle strict non satisfait : tool:diagram
+Verdict: échec
+
+{
+  "name": "diagram",
+  "input": {
+    "operation": "mermaid",
+    "code": "graph TD; A[P9_START]-->B[P9_END]",
+    "format": "ascii"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "P9_START",
+          "P9_END"
+        ]
+      },
+      {
+        "field": "output",
+        "op": "excludes",
+        "values": [
+          "No nodes found",
+          "Mermaid code:"
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "result": {
+    "success": true,
+    "output": "No nodes found in flowchart",
+    "data": {
+      "content": "No nodes found in flowchart",
+      "format": "ascii",
+      "mermaidCode": "graph TD; A[P9_START]-->B[P9_END]"
+    }
+  },
+  "passed": false,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": false
+    },
+    {
+      "check": "output excludes",
+      "passed": false
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ]
+}
