@@ -16,13 +16,17 @@ export function registerCodeExplorerCommands(program: Command): void {
     .description('Consult CodeExplorer for a query or code understanding request')
     .argument('<query>', 'The query or task description to ask CodeExplorer about')
     .action(async (query: string) => {
+      const { initializeMCPServers, getMCPManager } = await import('../../codebuddy/tools.js');
       try {
+        if (process.env.CODEBUDDY_DISABLE_MCP !== 'true') await initializeMCPServers();
         const codeExplorer = new CodeExplorerTool();
         const result = await codeExplorer.ask(query);
         console.log(JSON.stringify(result, null, 2));
       } catch (error) {
         console.error('Error querying CodeExplorer:', error);
-        process.exit(1);
+        process.exitCode = 1;
+      } finally {
+        await getMCPManager().dispose();
       }
     });
 
