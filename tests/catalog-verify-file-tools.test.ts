@@ -101,7 +101,7 @@ describe('File Tools Verification', () => {
     fs.writeFileSync(path.join(tempDir, 'sub', 'a.txt'), 'a');
 
     const result = await tool.execute(
-      { path: path.join(tempDir, 'sub') },
+      { path: path.join(tempDir, 'sub'), respectGitignore: false },
       { cwd: tempDir, workspaceRoot: tempDir } as any
     );
     expect(result.success).toBe(true);

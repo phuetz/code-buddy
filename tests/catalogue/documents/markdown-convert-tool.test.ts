@@ -10,6 +10,7 @@ beforeEach(async () => {
   tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cb-test-markdown-'));
   vi.stubEnv('HOME', tmpDir);
   vi.stubEnv('CODEBUDDY_HOME', tmpDir);
+  vi.stubEnv('CODEBUDDY_MARKITDOWN_BIN', path.join(tmpDir, 'absent-markitdown')); 
 });
 
 afterEach(async () => {
@@ -24,7 +25,7 @@ test('markdown_convert tool handles document conversion gracefully when markitdo
   const tool = new MarkdownConvertTool();
   const result = await tool.execute({ source: inputPath });
   
-  // We expect failure locally since markitdown is not installed
+  // Select a genuinely absent binary, regardless of the host installation.
   expect(result.success).toBe(false);
   expect(typeof result.error).toBe('string');
   expect(result.error).toMatch(/markitdown/i);
