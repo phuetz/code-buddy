@@ -5,8 +5,8 @@
 <!-- proven-features:start -->
 ## Ce qui est prouvé
 
-[`PROUVÉES 71/91 | ÉCHECS 2 | NON PROUVABLES ICI 18`](docs/FONCTIONNALITES-PROUVEES.md)
-**71/91 fonctionnalités prouvées en situation** ; 2 échecs affichés et 18 non prouvables ici, avec raison.
+[`PROUVÉES 14/91 | ÉCHECS 0 | NON PROUVABLES ICI 77`](docs/FONCTIONNALITES-PROUVEES.md)
+**14/91 fonctionnalités prouvées en situation** ; 0 échecs affichés et 77 non prouvables ici, avec raison.
 Chaque état « prouvée » renvoie à une exécution réelle : commande, date, résultat observé et limite du scénario lorsqu’elle est consignée.
 [Consulter les preuves par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: proven features](docs/PROVEN-FEATURES.md)
 <!-- proven-features:end -->
