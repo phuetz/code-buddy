@@ -324,6 +324,14 @@ prompts in a script or CI job.
 
 ## Session Management
 
+`buddy dev explain` reads up to six distinct files once, supplies bounded prefixes,
+and makes one synthesis call with no callable tools. It prints the observed scope,
+truncation notices and provider token usage; it does not claim the whole repository
+was read or tests executed. `CODEBUDDY_DEV_EXPLAIN_MAX_INPUT_TOKENS` can reduce the
+input budget (also capped by the model window with an output reserve).
+`CODEBUDDY_DEV_EXPLAIN_TIMEOUT_MS` overrides the local-aware synthesis deadline.
+A missing/empty answer or timeout exits nonzero with `Orientation incomplete`.
+
 ```bash
 # List recent saved sessions
 buddy session list
@@ -750,3 +758,35 @@ plus 60 seconds for generation. `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` and
 when no permission posture was selected, just like `buddy -p`. An explicit
 `--permission-mode default` or `plan`, configured denials, and shell safety
 checks remain authoritative. The independent verifier still runs before success.
+
+`doctor --fix` selects its local default from `docs/doctor-local-models.json`,
+separately from the model capability catalogue. The current order is
+`qwen3.5:4b`, then `gemma4:e4b`, with a context ceiling of 32,768 tokens
+persisted in the user configuration before selecting the model. Existing lower
+ceilings are preserved. If neither recommended tag is installed, doctor reports
+that fact and does not silently choose an unbenchmarked default. You can choose
+an installed model explicitly with `--model`, or supply an alternative policy
+file through `CODEBUDDY_DOCTOR_LOCAL_POLICY`. A policy is a JSON object containing
+`preferredModels`, `maxContext`, and `allowUnbenchmarkedFallback`.
+
+`--permission-mode dontAsk` still requires confinement for shell commands.
+Run `buddy doctor` to check the native sandbox. Commands outside that boundary,
+or on a machine without a working sandbox, require an approval channel;
+`dontAsk` does not grant permission to execute them on the host. A refused
+command is reported as a failed task in headless JSON output. File reading tools
+remain available without that shell escalation.
+
+In non-interactive mode, `buddy research` produces a draft from search excerpts:
+the linked pages are not fetched and the facts are not independently verified.
+Use the listed links to check claims before relying on them. Direct synthesis
+allows up to ten minutes on local providers and two minutes on cloud providers,
+within the overall `--timeout-ms` deadline. Set
+`CODEBUDDY_DIRECT_RESEARCH_TIMEOUT_MS` to override that synthesis budget. On
+timeout, the active provider request is cancelled.
+
+For literal edits, `str_replace_editor` also accepts `pattern` / `replacement`
+(with `regex: false`) and `operations` / `changes` batches. Textual operations
+must contain quoted before/after strings; textual changes can provide an
+old/new pair or a single-file unified diff. Expressions, regex replacements,
+and replacement-only overwrites are refused. Multiple replacements are applied
+atomically; a failed match leaves the file unchanged.
