@@ -2,6 +2,11 @@
 
 ### Corrigé
 
+### Sécurité des tâches sans terminal (candidat 2.3.0)
+
+- `buddy -p` expose `status`, `success`, `exitCode`, `reasons` et les vérifications réellement exécutées dans le JSON. Une modification sans outil d'action réussi ou une vérification encore rouge produit un code non nul. Un contrôle ultérieur ne réhabilite que la même commande dans le même répertoire.
+- Le mode implicite de `-p` est `acceptEdits` pour tous les fournisseurs : les éditions sont autorisées, les commandes nécessitant une approbation restent contrôlées. Un `--permission-mode` explicite et les règles de refus conservent la priorité.
+
 - Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.
 - Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré.
 
@@ -1054,6 +1059,7 @@ Index: [`docs/cb2/README.md`](docs/cb2/README.md).
 - **vision:** swallow EPIPE on a shell action's stdin (a command that ignores stdin would crash the host) ([b6fe1a4](https://github.com/phuetz/code-buddy/commit/b6fe1a4ac896a72c899d3611745db3b06f5b5fb6))
 
 # Changelog
+
 
 All notable changes to Code Buddy are documented here.
 

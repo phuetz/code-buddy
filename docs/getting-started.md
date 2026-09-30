@@ -300,8 +300,17 @@ buddy -p "reply with {\"ok\": true}" --output-schema schema.json
 Headless mode exits after completion. A successful process exit or valid JSON
 does not prove that a requested code change or explanation is correct: inspect
 `.result`, tool results and the generated files, then run your verification command.
+JSON and the final `stream-json` summary expose `status`, `success`, `exitCode`,
+`reasons`, `actionTools`, and `checks`. A repository modification with no successful
+write/execution tool is `unverified` and exits nonzero. An executed command/check
+still failing is `failed`, even when the model claims completion. A later passing
+result clears only the same check in the same directory. These fields attest to
+observed execution; they do not replace an independent oracle for correctness.
 The legacy `--auto-approve` session flag does not cover approvals tied to exact
-tool arguments. Use `--permission-mode dontAsk` for ordinary headless tools;
+tool arguments. Without an explicit permission mode, `-p` uses `acceptEdits`
+for every provider: file edits can proceed, while shell approvals and configured
+denials remain enforced. Explicit `default` and `plan` preserve their restrictions.
+Use `--permission-mode dontAsk` for ordinary headless tools;
 destructive operations and explicit deny rules keep their own gates.
 
 `-o`/`--output-last-message <file>` writes the agent's last text response

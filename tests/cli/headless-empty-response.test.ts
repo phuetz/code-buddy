@@ -100,7 +100,7 @@ describe('headless empty final response', () => {
           '--disabled-tools',
           '*',
           '--output-format',
-          'text',
+          'json',
         ], {
           cwd: process.cwd(),
           env: {
@@ -124,7 +124,7 @@ describe('headless empty final response', () => {
       });
 
       expect(result.exitCode).not.toBe(0);
-      expect(result.stdout.trim()).toBe('');
+      expect(JSON.parse(result.stdout)).toMatchObject({ status: 'failed', success: false, exitCode: 1 });
       expect(result.stderr).toContain('The model returned no response');
       expect(result.stderr).toContain('model=qa-mock-model');
     } finally {

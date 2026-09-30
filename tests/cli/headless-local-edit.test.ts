@@ -69,20 +69,22 @@ describe('headless local editing without permission recipes', () => {
         GROK_MODEL: 'fixture-model', CODEBUDDY_LEARNING_BACKGROUND_REVIEW: 'false',
         CODEBUDDY_TELEMETRY: 'false', LOG_LEVEL: 'error', NODE_ENV: 'production',
       };
-      const result = await new Promise<{ code: number | null; stderr: string }>((accept, reject) => {
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((accept, reject) => {
         const child = spawn(process.execPath, [resolve('node_modules/tsx/dist/cli.mjs'),
           resolve('src/index.ts'), '-p', 'Change value.mjs from 0 to 1.',
           '--model', 'fixture-model', '--output-format', 'json', '--ephemeral',
           '--max-tool-rounds', '2', ...(mode ? ['--permission-mode', mode] : []),
         ], { cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'] });
         let stderr = '';
-        child.stdout.resume();
+        let stdout = '';
+        child.stdout.on('data', chunk => { stdout += chunk; });
         child.stderr.on('data', chunk => { stderr += chunk; });
         const timer = setTimeout(() => child.kill('SIGKILL'), 30_000);
         child.once('error', error => { clearTimeout(timer); reject(error); });
-        child.once('close', code => { clearTimeout(timer); accept({ code, stderr }); });
+        child.once('close', code => { clearTimeout(timer); accept({ code, stdout, stderr }); });
       });
-      expect(result.code, result.stderr).toBe(0);
+      expect(result.code, result.stderr).toBe(mode ? 1 : 0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ success: !mode, status: mode ? 'unverified' : 'success', exitCode: mode ? 1 : 0 });
       expect(await readFile(file, 'utf8')).toBe(`export const value = ${mode ? 0 : 1};\n`);
       if (!mode) expect(toolResults.join('\n')).not.toMatch(/User cancelled|Permission denied/);
     } finally {
