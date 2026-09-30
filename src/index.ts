@@ -4545,7 +4545,7 @@ function isRootHelpRequest(argv: readonly string[]): boolean {
     return false;
   }
 
-  const commandNames = new Set(program.commands.map((command) => command.name()));
+  const commandNames = new Set(program.commands.flatMap((command) => [command.name(), ...command.aliases()]));
   const { operands } = program.parseOptions(args);
   return !operands.some((operand) => commandNames.has(operand));
 }

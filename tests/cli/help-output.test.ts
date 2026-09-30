@@ -106,7 +106,7 @@ describe('CLI help output', () => {
     expect(result.stdout.indexOf('Getting started')).toBeLessThan(result.stdout.indexOf('Usage:'));
     expect(result.stdout).toContain('1. buddy try');
     expect(result.stdout).toContain('/loop "Fix the failing tests"');
-    expect(result.stdout).toContain('buddy research "Map this repository"');
+    expect(result.stdout).toContain('buddy research "Compare TypeScript test runners"');
     expect(result.stdout).toContain('buddy dev pr "Add a small feature"');
     expect(result.stdout).toContain('/think deep "Propose the safest refactoring"');
     expect(result.stdout).toContain('/share create demo');

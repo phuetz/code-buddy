@@ -9,6 +9,28 @@ import { registerProvisionCommands } from '../../src/commands/cli/provision-comm
 describe('provision db-auth JSON output', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('prints the human-readable dry-run plan to stdout for terminal users and pipes', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'buddy-provision-human-'));
+    const chunks: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      chunks.push(String(chunk));
+      return true;
+    });
+    const program = new Command().exitOverride();
+    registerProvisionCommands(program);
+    try {
+      await program.parseAsync(['node', 'buddy', 'provision', 'db-auth', '--target', 'local', '--dir', dir, '--name', 'qa-human']);
+      const output = chunks.join('');
+      expect(output).toContain('qa-human');
+      expect(output).toContain('.env.local');
+      expect(output).toContain('Simulation (no files written)');
+      expect(output).not.toContain('INFO');
+      expect(fs.readdirSync(dir)).toEqual([]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('writes one parseable plan to stdout without writing planned files or secret contents', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'buddy-provision-json-'));
     const chunks: string[] = [];
