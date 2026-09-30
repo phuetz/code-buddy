@@ -3,7 +3,17 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Windows resolves os.homedir() from USERPROFILE, never from HOME. The flag
+// exercises that contract on Linux, where homedir() follows HOME.
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  const homedir = () =>
+    process.env.CI_PORTABLE_WIN32_HOME === '1' ? process.env.USERPROFILE! : actual.homedir();
+  return { ...actual, homedir, default: { ...actual, homedir } };
+});
+
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import { TextEditorTool } from '../../src/tools/text-editor.js';
 import { maybeReviewGatedWrite } from '../../src/tools/review-gate-helper.js';
@@ -20,6 +30,7 @@ describe('GK29 shadow write-gate on the real editor path', () => {
   let testRoot: string;
   let repo: string;
   let previousHome: string | undefined;
+  let previousUserProfile: string | undefined;
   let previousShadow: string | undefined;
   let previousCmd: string | undefined;
   let previousReview: string | undefined;
@@ -42,10 +53,12 @@ describe('GK29 shadow write-gate on the real editor path', () => {
     git(repo, 'commit', '-m', 'initial');
 
     previousHome = process.env.HOME;
+    previousUserProfile = process.env.USERPROFILE;
     previousShadow = process.env.CODEBUDDY_SHADOW_WORKSPACE;
     previousCmd = process.env.CODEBUDDY_SHADOW_CMD;
     previousReview = process.env.CODEBUDDY_DIFF_REVIEW;
     process.env.HOME = path.join(testRoot, 'home');
+    process.env.USERPROFILE = path.join(testRoot, 'home');
     process.env.CODEBUDDY_SHADOW_WORKSPACE = 'true';
     process.env.CODEBUDDY_SHADOW_CMD = 'node --test tests/sum.test.js';
     delete process.env.CODEBUDDY_DIFF_REVIEW;
@@ -56,16 +69,20 @@ describe('GK29 shadow write-gate on the real editor path', () => {
     ConfirmationService.getInstance().setSessionFlag('fileOperations', false);
     if (previousHome === undefined) delete process.env.HOME;
     else process.env.HOME = previousHome;
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previousUserProfile;
     if (previousShadow === undefined) delete process.env.CODEBUDDY_SHADOW_WORKSPACE;
     else process.env.CODEBUDDY_SHADOW_WORKSPACE = previousShadow;
     if (previousCmd === undefined) delete process.env.CODEBUDDY_SHADOW_CMD;
     else process.env.CODEBUDDY_SHADOW_CMD = previousCmd;
     if (previousReview === undefined) delete process.env.CODEBUDDY_DIFF_REVIEW;
     else process.env.CODEBUDDY_DIFF_REVIEW = previousReview;
+    vi.restoreAllMocks();
     fs.rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('rejects a test-breaking edit without touching the real tree, then applies a valid one after ghost validation', async () => {
+    expect(os.homedir()).toBe(path.join(testRoot, 'home'));
     const sumPath = path.join(repo, 'sum.js');
     const before = sha256File(sumPath);
     const editor = new TextEditorTool();
