@@ -790,3 +790,9 @@ must contain quoted before/after strings; textual changes can provide an
 old/new pair or a single-file unified diff. Expressions, regex replacements,
 and replacement-only overwrites are refused. Multiple replacements are applied
 atomically; a failed match leaves the file unchanged.
+
+Headless task status fails closed for ambiguous requests: without a successful
+write or execution, they return `unverified` and a nonzero exit code. Explicit
+informational requests such as `explain`, `summarize`, or `reply` may succeed
+without an action. A compound request such as “explain the code, then fix lint”
+still requires execution evidence for its modification.

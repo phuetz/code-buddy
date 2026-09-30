@@ -19,15 +19,18 @@ export interface HeadlessTaskOutcome {
 
 /** The CLI reports evidence of completion, never infers execution from prose. */
 export function requestsRepositoryAction(prompt: string): boolean {
-  const text = prompt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (/^(?:explain|describe|summari[sz]e|what|how|explique|decris|resume|comment|pourquoi)\b/.test(text)
-    && !/\b(?:and|et|puis)\s+(?:fix|edit|change|create|corrige|modifie|cree)\b/.test(text)) return false;
-  if (/\b(?:fix|repair|refactor|implement|scaffold|modify|correct|resolve|corrige[rz]?|repare[rz]?|refactorise[rz]?|implemente[rz]?|modifie[rz]?|remplace[rz]?|supprime[rz]?|mets?\s+a\s+jour)\b/.test(text)) return true;
-  // Imperative changes remain tasks when their object is not a file name
-  // (for example "add pagination" or "create a REST API").
-  if (/^(?:(?:please|s'il te plait|peux-tu|can you|could you)\s+)?(?:create|edit|change|update|add|remove|delete|switch|cree[rz]?|ajoute[rz]?|change[rz]?|retire[rz]?)\b/.test(text)) return true;
-  return /\b(?:create|write|edit|change|update|add|remove|delete|run|execute|make|ensure|build|cree[rz]?|ecris|ecrivez|ajoute[rz]?|lance[rz]?|execute[rz]?|fais|faites|rends|rendez)\b/.test(text)
-    && /\b(?:file|files|code|app|application|project|projet|fichier|fichiers|function|fonction|tests?|lint|eslint|script|server|serveur|package)\b|\.[cm]?[jt]sx?\b|\.txt\b/.test(text);
+  const text = prompt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+    .replace(/^(?:please|can you|could you|peux-tu|pourrais-tu|s'il te plait)\s+/, '');
+  const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|show|list|what|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|montre|liste|comment|pourquoi|reponds|dis|traduis)\b/;
+  const compoundAction = /\b(?:and|et|puis|then|ensuite)\s+(?:please\s+)?(?:fix|repair|refactor|scaffold|resolve|build|write|delete|replace|edit|change|create|run|execute|implement|add|remove|update|make|ensure|correct|modify|prepare|deploy|install|configure|start|stop|corrige|repare|refactorise|remplace|ecris|execute|modifie|cree|lance|ajoute|supprime|mets|installe|demarre|rends|fais)\b/.test(text)
+    || [...text.matchAll(/\b(?:then|puis|ensuite)\s+(?:please\s+)?(\S+)/g)].some(match => !informational.test(match[1]!));
+  if (!compoundAction && informational.test(text)) return false;
+  if (/^(?:hi|hello|hey|bonjour|salut)[!.?]*$/.test(text)) return false;
+  if (/^write (?:a |an )?(?:poem|story|essay|email|sql query)\b/.test(text) && !compoundAction) return false;
+  // An ambiguous request is not evidence that this is merely a conversation.
+  // Fail closed: only an explicit informational request can succeed without
+  // an action. This also covers imperative languages not in the verb list.
+  return true;
 }
 
 function argumentsOf(entry: TaskEvidenceEntry): Record<string, unknown> {

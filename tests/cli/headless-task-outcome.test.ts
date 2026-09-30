@@ -17,6 +17,9 @@ describe('headless task evidence', () => {
   it('does not count repository reads as a modification', () => {
     expect(exit('corrige les erreurs ESLint', [result('view_file', '', true)])).toBe(1);
   });
+  it.each(['explain the code, then fix lint errors', 'explain the code, then prepare the requested change', 'mets en place le serveur', 'cambia el archivo', 'prepare the requested change'])('fails closed for an unexecuted compound or ambiguous task: %s', prompt => {
+    expect(exit(prompt, [])).toBe(1);
+  });
   it.each(['make the failing tests pass', 'ensure the tests pass', 'fais passer les tests', 'rends ce code fonctionnel', 'Modify value.mjs', 'crée une API REST', 'switch the theme to dark', 'Please add pagination'])('requires execution for %s', prompt => {
     expect(exit(prompt, [])).toBe(1);
   });

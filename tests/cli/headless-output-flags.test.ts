@@ -70,7 +70,7 @@ function runCli(
     path.resolve('node_modules/tsx/dist/cli.mjs'),
     path.resolve('src/index.ts'),
     '--prompt',
-    'HEADLESS_OUTPUT_FLAGS_PROBE',
+    'reply for HEADLESS_OUTPUT_FLAGS_PROBE',
     '--api-key',
     'test-key',
     '--base-url',
