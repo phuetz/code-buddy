@@ -10,6 +10,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'node:url';
 import { getLSPClient } from '../lsp/lsp-client.js';
 import type { LSPWorkspaceEdit, LSPTextEdit } from '../lsp/lsp-client.js';
 import type { ToolResult } from '../types/index.js';
@@ -119,15 +120,7 @@ function extractEdits(workspaceEdit: LSPWorkspaceEdit): Map<string, LSPTextEdit[
  * Convert a file:// URI to a local file path.
  */
 function uriToPath(uri: string): string {
-  // Handle file:/// and file:// prefixes
-  let filePath = uri.replace(/^file:\/\/\//, '').replace(/^file:\/\//, '');
-  // Decode URI-encoded characters
-  filePath = decodeURIComponent(filePath);
-  // On Windows, convert forward slashes back if needed
-  if (process.platform === 'win32' && /^[A-Za-z]:/.test(filePath)) {
-    filePath = filePath.replace(/\//g, '\\');
-  }
-  return filePath;
+  return uri.startsWith('file:') ? fileURLToPath(uri) : uri;
 }
 
 /**
@@ -240,10 +233,12 @@ export async function executeLspRename(params: LspRenameParams): Promise<ToolRes
     }
 
     // Step 4: Format summary
+    const changedFiles = summaries.filter((summary) => summary.editCount > 0);
+    const failedFiles = summaries.length - changedFiles.length;
     const totalEdits = summaries.reduce((sum, s) => sum + s.editCount, 0);
     const parts: string[] = [
-      `Renamed "${prepareResult.placeholder || '(symbol)'}" to "${newName}"`,
-      `Files changed: ${summaries.length}`,
+      `${failedFiles ? 'Rename incomplete for' : 'Renamed'} "${prepareResult.placeholder || '(symbol)'}" to "${newName}"`,
+      `Files changed: ${changedFiles.length}`,
       `Total edits: ${totalEdits}`,
       '',
     ];
@@ -258,12 +253,13 @@ export async function executeLspRename(params: LspRenameParams): Promise<ToolRes
     }
 
     return {
-      success: true,
+      success: failedFiles === 0,
       output: parts.join('\n'),
+      ...(failedFiles ? { error: `LSP rename could not apply edits to ${failedFiles} file(s)` } : {}),
       data: {
-        filesChanged: summaries.length,
+        filesChanged: changedFiles.length,
         totalEdits,
-        files: summaries.map(s => s.file),
+        files: changedFiles.map(s => s.file),
       },
     };
   } catch (err) {
