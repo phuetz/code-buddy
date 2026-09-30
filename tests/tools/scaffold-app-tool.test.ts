@@ -5,6 +5,19 @@ import { describe, expect, it } from 'vitest';
 import { ScaffoldAppTool } from '../../src/tools/scaffold-app-tool.js';
 
 describe('ScaffoldAppTool', () => {
+  it('returns actual generated entry contents so the model can inspect behavior, rather than a file count alone', async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'scaffold-observation-'));
+    try {
+      const targetDir = path.join(tmp, 'api');
+      const result = await new ScaffoldAppTool().execute({ template: 'express-api', targetDir });
+      const entry = await fs.readFile(path.join(targetDir, 'src/index.ts'), 'utf8');
+      expect(result.success).toBe(true);
+      expect(result.output).toContain('src/index.ts');
+      expect(result.output).toContain(entry.slice(0, 3_000));
+      expect(result.output!.length).toBeLessThan(5_000);
+    } finally { await fs.rm(tmp, { recursive: true, force: true }); }
+  });
+
   it('exposes the presentation-ready React template to agent scaffolding', async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'scaffold-app-tool-'));
     const targetDir = path.join(tmp, 'styled-react');

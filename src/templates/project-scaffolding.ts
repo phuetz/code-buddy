@@ -1185,6 +1185,9 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.get('/', (_req, res) => {
+  res.send('Hello World!');
+});
 app.use('/health', healthRouter);
 
 // Error handler
