@@ -10,6 +10,7 @@
  */
 import { logger } from '../utils/logger.js';
 import { updateApiHeartbeat } from './routes/health.js';
+import { resolveServerProvider } from './provider-resolution.js';
 
 interface HeartbeatTimer {
   stop: () => void;
@@ -53,6 +54,13 @@ function pickProbeUrl(): { url: string; label: string } | null {
   }
   if (env.GEMINI_BASE_URL) {
     return { url: `${env.GEMINI_BASE_URL.replace(/\/$/, '')}/v1beta/models`, label: 'gemini' };
+  }
+  const selected = resolveServerProvider();
+  if (selected?.baseURL && ['ollama', 'lmstudio', 'vllm', 'lemonade'].includes(selected.provider)) {
+    const base = selected.baseURL.replace(/\/+$/, '');
+    return selected.provider === 'ollama'
+      ? { url: `${base.replace(/\/v1$/i, '')}/api/tags`, label: selected.provider }
+      : { url: `${base}/models`, label: selected.provider };
   }
   return null;
 }
