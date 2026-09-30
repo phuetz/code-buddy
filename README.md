@@ -1,272 +1,103 @@
-<div align="center">
-
 # Code Buddy 2
 
+**A local-first terminal coding agent.** The model proposes actions; Code Buddy runs
+repository tools under the configured permissions. Local execution needs an Ollama
+model that supports tool calls; cloud providers are optional.
+
+The release criterion for October 8 is a **fresh installation with a small local
+model**, including the first coding task and verification of its result. That
+criterion is **not proven by the traces on this branch**. A successful run on a
+developer's machine, a component test or a GIF does not establish it.
+
+[Français](README.fr.md) · [Install](#install) · [First run](#first-run) ·
+[Opt-in](#opt-in) · [Not ready](#not-ready) · [License](#license)
+
 <!-- proven-features:start -->
-## Ce qui est prouvé
+## État des fonctionnalités
 
-[`PROUVÉES 14/91 | ÉCHECS 0 | NON PROUVABLES ICI 77`](docs/FONCTIONNALITES-PROUVEES.md)
-**14/91 fonctionnalités prouvées en situation** ; 0 échecs affichés et 77 non prouvables ici, avec raison.
-Chaque état « prouvée » renvoie à une exécution réelle : commande, date, résultat observé et limite du scénario lorsqu’elle est consignée.
-[Consulter les preuves par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: proven features](docs/PROVEN-FEATURES.md)
+[`PROUVÉES 2/91 | NON PROUVÉES ICI 89 | DONT DERNIERS ESSAIS EN ÉCHEC 2`](docs/FONCTIONNALITES-PROUVEES.md)
+**2/91 fonctionnalités prouvées** ; 89 non prouvées ici, avec raison (dont 2 derniers essais en échec, historiques si l’empreinte est périmée).
+Chaque état « prouvée » est limité au composant et au scénario capturés, avec la limite du scénario lorsqu’elle est consignée. Ce total ne valide pas une installation neuve.
+[Statuts, raisons et traces par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: feature status](docs/PROVEN-FEATURES.md)
 <!-- proven-features:end -->
-
-**A local-first AI coding agent that can also run as a fleet, a desktop app, and a companion.**
-It reads your repository, writes code, runs commands, and you can watch it work — on your machine,
-at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
-
-<p>
-  <a href="https://www.npmjs.com/package/@phuetz/code-buddy"><img src="https://img.shields.io/npm/v/@phuetz/code-buddy.svg?style=flat-square&color=ff6b6b&label=version" alt="npm version"/></a>
-  <a href="https://github.com/phuetz/code-buddy/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/phuetz/code-buddy/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI on main"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL_1.1-feca57.svg?style=flat-square" alt="License: Business Source License 1.1"/></a>
-</p>
-
-[Français](README.fr.md) ·
-[What Code Buddy is](#what-code-buddy-is) ·
-[Install](#install) ·
-[First run](#first-run) ·
-[Opt-in](#opt-in) ·
-[Not ready](#not-ready) ·
-[License](#license) ·
-[Documentation](#documentation)
-
-<p>
-  <a href="docs/qa/code-buddy-studio/cowork-demo-moneyshot.mp4"><img src="docs/qa/code-buddy-studio/cowork-demo-moneyshot.gif" alt="A local model reasons, then uses a tool to create a real file — no cloud API bill" width="760"/></a>
-  <br/>
-  <sub>A local model reasons on screen, then uses a tool to create a real file. No cloud API bill.</sub>
-</p>
-
-<p>
-  <a href="docs/assets/infographic-code-buddy-2.webp"><img src="docs/assets/infographic-code-buddy-2.webp" width="900" alt="Code Buddy 2 architecture: interfaces, agent runtime, tools, provider routing, and the engineering loop"/></a>
-  <br/>
-  <sub>The big picture: interfaces, the agentic runtime, tools and providers, and the loop that turns an idea into an improvement.</sub>
-</p>
-
-</div>
-
----
-
-## What Code Buddy is
-
-### One minute with Lisa · French presentation
-
-[![Lisa introduces Code Buddy and its installation command](assets/site/lisa/presentation.jpg)](https://youtu.be/2XgFHxBeI8Q)
-
-[Watch on YouTube](https://youtu.be/2XgFHxBeI8Q) · [MP4 alternative](https://www.agile-up.com/code-buddy/lisa/presentation.mp4) · [French subtitles](assets/site/lisa/presentation.fr.srt)
-
-Lisa introduces the multi-AI hub, installation and optional perception components. Edited on September 13, 2026 from an existing September 10 master, with a synthetic voice and portrait, illustrative footage and French captions. Illustrations are not execution evidence. Voice and robotics require additional components beyond the npm package.
-
-Code Buddy combines a terminal coding agent with cloud, gateway and local model routing,
-query-selected tools, and the following interfaces. Optional services require their documented
-configuration; enabling a feature does not replace its permission checks.
-
-For changes planned for 2.3.0, see the [changelog](CHANGELOG.md). The
-[2.2.0 release notes](docs/RELEASE-NOTES-2.2.0.md) describe the last published
-version and its integration limits.
-
-- **A multi-AI fleet hub.** Peers running `buddy server` observe each other's events and call each
-  other's models: one-shot `peer.chat`, multi-turn `peer.chat-session.*`, and `peer.tool.invoke`
-  for remote **read-only** tools. That last one passes three ordered gates — an allowlist, a
-  per-tool `fleetSafe` flag, and a workspace root that **fails closed** when unset, so a
-  misconfigured peer cannot expose its disk. See [Fleet](docs/fleet-guide.md).
-
-- **Cowork, a desktop GUI.** An Electron app with a visual workflow runner, a media library and a
-  video studio. It is a separate package needing Node.js ≥ 22 — see [Cowork](docs/cowork.md).
-
-- **Ten opt-in innovations.** Speculative writes validated in a ghost worktree before touching
-  your files, per-turn time-travel sessions, falsifiable intent specs, pull-only knowledge-graph
-  federation between peers, a capability self-benchmark, recoverable ("zoom-in") compaction,
-  generative widgets, on-screen error watching, signed skill packages, and read-only multi-repo
-  search. Index: [`docs/cb2/README.md`](docs/cb2/README.md).
-
-- **A self-improvement loop with four learnable surfaces.** The agent can propose *lessons*,
-  *tools* it writes itself, *skills*, and *execution strategies* — and each proposal is
-  **empirically gated**: applied to a snapshot, re-scored, and rolled back on regression or no
-  gain. Authored tools face held-out cases hidden from the proposer, so a tool that hardcodes the
-  visible answers is rejected. A strategy is a schema-checked JSON in which no field can disable a
-  guard. The loop never edits the agent's own `src/` — that is a scanned invariant.
-
-- **A council that learns which model to trust.** Several models answer under a
-  falsifiable-output contract, a judge scores them, and a scoreboard records which model wins
-  which kind of task. The judge abstains rather than guess.
-
-- **A perception layer.** A Rust sense daemon (audio, vision, screen, UI focus, heartbeat) feeds
-  events to the agent over a loopback-only bridge; speech, camera reactions and spoken reminders
-  build on it. It stays silent until you turn it on.
-
-<p align="center">
-  <img src="buddy-sense/docs/architecture.svg" alt="Sense modules feed a thalamus that coalesces events and broadcasts them to a WebSocket bridge" width="720"/>
-</p>
-
----
 
 ## Install
 
-Three commands (Node.js 22 or 24 recommended; 20 is the declared minimum):
-
-```bash
-npm i -g @phuetz/code-buddy   # the package is scoped; `code-buddy` alone is not on npm
-buddy login                   # ChatGPT subscription — no API key, $0 marginal cost
-buddy                         # start chatting
-```
-
-`buddy login` also accepts `xai`. To stay entirely local instead, skip it, start
-[Ollama](https://ollama.com), and run `buddy onboard`. Either way `buddy doctor` tells you in one
-line whether you are ready, and `buddy doctor --fix` can point a running Ollama at a suitable
-installed model and say why it chose it.
-
-The published package can lag this repository. To track the source instead:
-
-```bash
-git clone https://github.com/phuetz/code-buddy.git
-cd code-buddy && npm install
-npm run build && npm link
-```
-
-If the `@vscode/ripgrep` install script receives a GitHub 403, see the
-[source-install workaround](docs/install.md#ripgrep-download-blocked-during-npm-ci).
-
-The **Cowork** desktop app is a separate step needing Node.js ≥ 22: `buddy install-gui`, then
-`buddy gui`. Details in [Getting started](docs/getting-started.md).
-
----
-
-## Use it from Claude Code (plugin, one command)
-
-This repository is also a Claude Code plugin marketplace. It installs a skill
-that teaches Claude Code how to drive `buddy` correctly (headless one-shot,
-provider and model pinning, permission modes, the verify loop) and a read-only
-MCP server exposing Code Buddy's tools:
+Node.js 20 is the declared CLI minimum; Node.js 22 or 24 is recommended in the
+[installation guide](docs/install.md). The source is a 2.3.0 candidate; the npm
+package may lag this checkout. Check the installed version.
 
 ```bash
 npm i -g @phuetz/code-buddy
-claude plugin marketplace add phuetz/code-buddy
-claude plugin install code-buddy@code-buddy
-# optional, same marketplace: the context filter
-claude plugin install lm-resizer@code-buddy
+buddy --version
+buddy doctor --offline
 ```
 
-Codex users: `cp -r .codex/skills/code-buddy ~/.codex/skills/`. Remove with
-`claude plugin uninstall code-buddy@code-buddy`.
+For local use, install and start [Ollama](https://ollama.com), make a tool-calling
+model available, then configure it:
+
+```bash
+buddy onboard
+buddy
+```
+
+See [Getting started](docs/getting-started.md) for configuration and
+[source installation](docs/install.md). Cloud login is optional; each provider
+has its own access requirements. A local model has no cloud API charge, but still
+uses your hardware.
 
 ## First run
 
-A real task, start to finish. `buddy loop` plans, edits, runs your verification command, and stops
-only when that command exits 0 — the model's word is not the proof:
+In a disposable project, `buddy try` offers a coding exercise. Inspect the written
+files and test output. A process exit code alone does not prove that the requested
+result exists.
 
 ```bash
-buddy loop "make the failing tests pass" --verify-cmd "npm test"
+buddy try
+buddy -p "explain the entry point"
 ```
 
-Other paths worth knowing on day one:
-
-```bash
-buddy try                             # coding demo: writes FizzBuzz + a test, runs it, verifies
-buddy -p "explain the entry point"    # one-shot, headless — good for scripts and CI
-buddy research "map this repository"  # parallel research workers
-buddy cost --latency                  # measured per-model TTFT/TTFM, read-only
-```
-
-<p align="center">
-  <img src="docs/assets/showcase-try.gif" alt="buddy try — the agent writes FizzBuzz and a test, runs it, independently verifies" width="760"/>
-</p>
-
-### Parallel sub-agents and self-improvement
-
-In a session, `/batch <goal>` splits independent work across multiplexed sub-agents; each unit is a
-real bounded agent, not a bare completion. `CODEBUDDY_BATCH_CONCURRENCY` caps how many run at once
-(default `1`).
-
-`buddy improve status` reports the local self-improvement state. `buddy improve cycle|tools|skills`
-is **propose-only** by default; to keep an empirically validated result you must opt in with
-`CODEBUDDY_SELF_IMPROVE=true` *and* pass `--apply`. Without the variable, `--apply` refuses and
-names it.
-
----
-
-## Memory and learning
-
-Code Buddy keeps project/user memory, retrieves relevant lessons and can propose review-gated lesson candidates after substantial sessions. Authored skills can be inspected, improved and consolidated; code evolution evaluates variants in isolated worktrees. These change external state and inference-time behavior, not model weights.
-
-Start with `buddy lessons candidate list`, `buddy lessons list`, `buddy improve status` and `buddy evolve list`. Council's role-based cooperation and the ToT/MCTS engine are separate mechanisms with their own execution paths and budgets. Inspiration from Manus, Sakana DGM/ShinkaEvolve/Fugu and reasoning papers is not a reproduction claim or a measured productivity gain.
-
-Read [activation conditions, source evidence and limitations](docs/learning-mechanisms.md), or the [French overview](README.fr.md). A [two-host fleet recipe](docs/reports/2026-09/fleet-two-hosts-learning-example.md) has combined a Windows RPC review, a Linux code correction and an independent five-case oracle passing on both hosts. The pilot explicitly relayed messages and files; this was not a Council run.
+These are entry points to try, not a successful cold-install transcript. The
+[feature index](docs/FONCTIONNALITES.md) states which scenarios have sufficient
+captured evidence and why the others remain unproven here.
 
 ## Opt-in
 
-Nothing in the table below is needed to chat with a local model. These switches
-stay off until configured. The separate telemetry setting defaults to
-`enabled: true`, but Sentry and OpenTelemetry exporters start only if you set
-`SENTRY_DSN` or `OTEL_EXPORTER_OTLP_ENDPOINT`. Use `/telemetry status` to inspect
-this and `/telemetry off` to disable collection even with an endpoint configured.
+`CODEBUDDY_PROVIDER=ollama` selects local routing. Optional mechanisms and their
+configuration are described separately:
 
-| Switch | What it turns on |
-| --- | --- |
-| `CODEBUDDY_PROVIDER=ollama` | Force the local Ollama path (no API key). |
-| `CODEBUDDY_MAX_CONTEXT` | Override the context window for every consumer, including the Ollama server itself. |
-| `CODEBUDDY_SELF_IMPROVE=true` | Enable the learned-layer proposal path. `true` stays propose-only; keeping validated changes needs explicit application authorization. The separate `buddy evolve` path can edit code in isolated worktrees. See [contracts](docs/learning-mechanisms.md). |
-| `CODEBUDDY_SHADOW_WORKSPACE` | Validate proposed writes in a ghost worktree *before* touching your files. |
-| `CODEBUDDY_TIMELINE` | Per-turn timeline; `buddy replay` inspects, restores or forks a session. |
-| `CODEBUDDY_INTENTS` | Falsifiable versioned specs, so "done" stays re-provable later. |
-| `CODEBUDDY_CONTEXT_ZOOM` | Compaction becomes recoverable — the agent can re-expand a summarised segment. |
-| `CODEBUDDY_WORKSPACE` | Read-only search and read across several repositories. |
-| `CODEBUDDY_SELF_BENCH` | Track capability over time and flag regressions. |
-| `CODEBUDDY_CKG_SYNC` | Pull-only knowledge-graph sync between fleet peers (fail-closed on both sides). |
-| `CODEBUDDY_COLLECTIVE_MEMORY` | Inject the shared cross-agent knowledge graph into context. |
-| `CODEBUDDY_DIFF_REVIEW` | Review every proposed diff before it is applied; an unreviewable diff is rejected, not applied. |
-| `CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` | Required for remote read-only tools between peers. Unset ⇒ every `peer.tool.invoke` fails closed. |
-| `CODEBUDDY_SENSORY=true` | Perception and companion wiring on `buddy server`. |
-| `CODEBUDDY_SENSORY_ERRORWATCH` | Offer help when an error appears on screen — debounced, capped, never acts on its own. |
-| `CODEBUDDY_TTS_VOICE` | Spoken replies. Unset ⇒ the agent may hear, but stays silent. |
-| `CODEBUDDY_INCLUDE_INTEROP_CONTEXT` | Also load interoperability context files (`CLAUDE.md`, `GEMINI.md`, `CONTEXT.md`, `INSTRUCTIONS.md`) into the system prompt. |
-| `JWT_SECRET` | Required by the HTTP server in production. |
-| `buddy --yolo` or `/yolo on` | Full autonomy with guardrails. Setting `YOLO_MODE=true` alone only warns; it does not arm it. |
+- [Cowork desktop](docs/cowork.md): separate Electron installation.
+- [Fleet](docs/fleet-guide.md): peer models and read-only remote tools.
+- [Memory and proposal mechanisms](docs/learning-mechanisms.md): inspectable
+  artifacts and experimental proposal paths; no measured improvement claimed here.
+- [Voice and perception](docs/FONCTIONNALITES-PROUVEES.md#domain-sensory): no
+  demonstrated speech conversation on this branch.
+- [Permissions and sandboxing](docs/security.md): the captured Linux bubblewrap
+  probe covers one component scenario, not every agent command or platform.
 
-Signed skill exchange, generative widgets, council-learned routing and kernel sandboxing have
-their own gates, listed in [`docs/cb2/README.md`](docs/cb2/README.md) and
-[Security](docs/security.md).
-
----
+Enabling an option or locating its code does not prove its user outcome. These
+areas use the same statuses as the generated feature index.
 
 ## Not ready
 
-Honest limits for a first-time visitor:
+- The fresh-install/small-model release criterion remains unproven here.
+- The latest recorded LSP and video-understanding attempts failed because of
+  missing prerequisites. Their source digests are stale; no current success or
+  current failure is established by those attempts.
+- The Telegram trace uses a simulated local Bot API, not a public Telegram account.
+- Voice configuration does not prove synthesis, microphone capture or a spoken
+  reply. The five Cowork entries have no execution trace in this catalogue.
+- The proposal traces show rollbacks, rejected tools or empty archives, not a
+  retained improvement or a measured productivity gain.
+- No Windows, macOS, phone, camera or microphone validation is claimed by this
+  documentary review. Consult the checks for the exact release you use.
 
-- **The npm release can lag this tree.** Releases use GitHub Actions trusted publication.
-  Check `buddy --version`, the npm dist-tag and the corresponding Git tag when identifying a build.
-- **CI gates all three operating systems.** Linux, macOS and Windows run Node.js 20 and 22
-  jobs. A local pass or an earlier platform recipe does not replace the candidate’s CI results.
-- **Node ≥ 20 is the declared CLI floor** (`engines.node`); Node 22 or 24 is
-  recommended when working from source. Some ancillary packages can warn about
-  their own Node ≥ 22 requirement during installation. The CI runs Node 20 and 22.
-- **Cowork** is a separate install (Node.js ≥ 22, `buddy install-gui`), not part of the three
-  commands above.
-- **Film production** needs `ffmpeg`; without a local voice binary, scenes stay silent rather than
-  getting a fake voice-over.
-- **`buddy loop` needs a model that really calls tools.** A very small model can stall or give up
-  without ever turning the test suite green.
-- **Fleet** is two processes and a JWT, not one flag. Remote tools expose nothing until the
-  workspace root is set.
-- **Voice and robot paths** need extra local binaries (speech-to-text, text-to-speech, optionally
-  a camera). They do not come from `npm install`.
-- **`better-sqlite3` is native.** It is optional and degrades cleanly, but Cowork rebuilds it
-  against Electron headers.
+## Existing illustrations
 
----
-
-## Test suite
-
-The suite is large and its count changes with the source revision. Run
-`npm test -- tests/path/to/file.test.ts` for a focused check; see the CI result
-for the commit you intend to use before treating the full suite as green.
-
-## Part of a toolchain
-
-<p align="center">
-  <a href="docs/assets/infographic-ai-engineering-stack.webp"><img src="docs/assets/infographic-ai-engineering-stack.webp" width="900" alt="The AI engineering stack: Code Explorer understands the repository, lm-resizer protects the context budget, Code Buddy 2 acts with AI agents"/></a>
-</p>
-
-Code Buddy is the agent. Two sibling tools carry the context work around it: [lm-resizer](https://github.com/phuetz/lm-resizer) filters noisy command output before it reaches the model (Rust, Apache-2.0, `npm i @phuetz/lm-resizer`), and Code Explorer pre-indexes a repository into a queryable knowledge graph served over MCP (available as a service on private codebases — [agile-up.com](https://agile-up.com)). Understand, compress, act.
+The [coding GIF](docs/assets/showcase-try.gif), [Cowork recording](docs/qa/code-buddy-studio/cowork-demo-moneyshot.mp4)
+and [French presentation](https://youtu.be/2XgFHxBeI8Q) are secondary illustrations.
+The presentation uses a synthetic voice and portrait. These media are not part of
+the evidence count and do not validate a fresh installation.
 
 ## License
 
@@ -274,21 +105,13 @@ Business Source License 1.1 — see [LICENSE](LICENSE). Self-host and personal /
 are free; providing Code Buddy as a commercial service to third parties is not permitted. Converts
 to Apache 2.0 on 2030-08-31. Bundled Python skills stay MIT (see their `SKILL.md`).
 
----
 
 ## Documentation
 
-- **[Getting started](docs/getting-started.md)** — first run, headless mode, sessions.
-- **[Changelog](CHANGELOG.md)** — 2.3.0 candidate and earlier changes.
-- **[2.3.0 preview and limits](docs/whats-new-2.3.md)** — behavior and boundaries of the candidate.
-- **[Release notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)** — last published release and validation limits.
-- **[Release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md)** — previous release.
-- [Release notes 2.0.0](docs/RELEASE-NOTES-2.0.0.md) — previous major release.
-- [Install](docs/install.md) — published npm, Docker/VPS, the one-command installer.
-- [Commands](docs/commands.md) · [Features](docs/features.md) · [Security](docs/security.md)
-- [Cowork Desktop](docs/cowork.md) · [Fleet](docs/fleet-guide.md) · [Code Buddy 2 features](docs/cb2/README.md)
-- [Honest comparison](docs/honest-comparison.md) — where other agents are still ahead.
+- [Feature status, reasons and traces](docs/PROVEN-FEATURES.md) · [French](docs/FONCTIONNALITES-PROUVEES.md)
+- [Getting started](docs/getting-started.md) · [Commands](docs/commands.md)
+- [Source areas and limits](docs/features.md)
+- [Changelog](CHANGELOG.md) · [2.3.0 preview](docs/whats-new-2.3.md)
+- [2.2.0 release notes](docs/RELEASE-NOTES-2.2.0.md)
 
-[Report a bug](https://github.com/phuetz/code-buddy/issues) ·
-[Discuss](https://github.com/phuetz/code-buddy/discussions) ·
-[Star on GitHub](https://github.com/phuetz/code-buddy)
+[Report a bug](https://github.com/phuetz/code-buddy/issues)

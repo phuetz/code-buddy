@@ -1,0 +1,652 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-10-01",
+  "policy": "Qualification documentaire des traces existantes, sans nouvelle exécution. Acceptation limitée au scénario capturé et à une empreinte source valide.",
+  "features": [
+    {
+      "id": "catalog-status",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-catalog-status-2026-09-29.log",
+      "artifactSha256": "53514a3ccbb2934a187c239dfadcc8311e59226c515c506a99b19d30bb2dd2d3",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "resource-catalog-tool",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-resource-catalog-tool-2026-09-29.log",
+      "artifactSha256": "e06be5aed831e9f63e4163b59b85d0f07a5a2237c5994a8635e42d44e8ad6c61",
+      "reason": "Résumé de sélection sans transcript ; la sonde HTTP_HEALTH_OK_NOT_USAGE_PROOF ne prouve aucun usage ni dispatch."
+    },
+    {
+      "id": "http-health",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-http-health-2026-09-29.log",
+      "artifactSha256": "316e1a7d642274822eb93152b9fb0cf992490c811b57a877b92bba3fbd41d434",
+      "reason": "Résumé citant des captures brutes absentes du dépôt."
+    },
+    {
+      "id": "telegram-channel",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-telegram-channel.log",
+      "artifactSha256": "4974af3dd465ecc5089036753c314e6c1d663ad130417ac1a5d17634390c9c80",
+      "reason": "Serveur Bot API local simulé ; aucun compte, token ni échange Telegram public utilisé."
+    },
+    {
+      "id": "fleet-cli",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-fleet-cli.log",
+      "artifactSha256": "ce4b881cfd96e760fbe90a7e1e22d3436080819a9134b04ff0808ed84390f28e",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-daemon",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-daemon.log",
+      "artifactSha256": "455b6164814d22a970bae4cc4ae2858d0cfc28a409e3fd2eecded7212fa6b3ca",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-ruche",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-ruche.log",
+      "artifactSha256": "19dca0864345562c18860fc174f2d713d0cd45007530e683420f2b50dc23cf65",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-trigger",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-trigger-2026-09-29.log",
+      "artifactSha256": "faa681cc182905b0a4040db2c0f6871b07331e519b329988a60a08bc4eb12fd7",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-speak",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune synthèse exécutée ni fichier audio livré ; backend vocal non démarré."
+    },
+    {
+      "id": "cli-assistant",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-cli-assistant.log",
+      "artifactSha256": "1fdd9a134e98427bd45a925c5408513c4abac75d02862a714e6e4724d49c85a1",
+      "reason": "La trace configure le moteur TTS ; elle exclut explicitement toute synthèse et toute écoute audio."
+    },
+    {
+      "id": "cli-widgets",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-widgets-2026-09-29.log",
+      "artifactSha256": "2a8a18c4d0a50e26675e5d9361d91374188870c483c962a649c468764e65a884",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-security",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-cli-security.log",
+      "artifactSha256": "a3bf481fb8ecf3d7b746677fa83222307c0e497fb6fa7a13876656bc5e6218d2",
+      "reason": "Projet jetable sans défaut planté ; findings=[] ne démontre pas la détection de défauts."
+    },
+    {
+      "id": "cli-heartbeat",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-cli-heartbeat.log",
+      "artifactSha256": "cc26af4c65c05d406d4254c5728f194bd8ba74ff7a08ce4e582538ec8209dda5",
+      "reason": "Résumé du chemin de suppression HEARTBEAT_OK ; aucun service périodique exercé, échec de contexte antérieur conservé."
+    },
+    {
+      "id": "cli-hub",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. An isolated hub search returned zero matches and list returned zero hub-installed skills (8 bundled); no shared skill was available to install or manage."
+    },
+    {
+      "id": "cli-curator",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-cli-curator.log",
+      "artifactSha256": "8507050fe6612d688c0e1dc6c838b33125104c73adc89c3789add288368bb3ca",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-triage",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-triage-2026-09-29.log",
+      "artifactSha256": "45e657b6bcebf8bed7c3c6cf30c848e421d4af2b1945be3963b7e9687c937435",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-gateway-pairing",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-gateway-pairing.log",
+      "artifactSha256": "f6ac7f7a96a78e5b14b6d86eecdaa4fbf57ffba4fbe0f3a4a32814939fe2b911",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-screen",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-screen.log",
+      "artifactSha256": "e3cc360fad184d881f0be4ff61f5203b173c59a1006366f4df713f17bbd14f15",
+      "reason": "Résumé d’un écran Xvfb 320×240 ; image absente du dépôt, bureau réel non exercé."
+    },
+    {
+      "id": "cli-device",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-device-2026-09-29.log",
+      "artifactSha256": "81e88f5592977f98c1a4e5625f0ffc0c07a9593c345b5e683f131ec241e45ef5",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-identity",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-identity-2026-09-29.log",
+      "artifactSha256": "e4496d46027d3b6e1f9d110c626b63d8fd780b6d285c9d456a2b429f8f3d3d88",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-companion",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-companion.log",
+      "artifactSha256": "901b6638eecda98882e006ec0a5237c4b3ef2a535f68959e0765806ded8ff906",
+      "reason": "La trace crée SOUL.md et BOOT.md avec --no-voice ; voix, caméra et authentification non exercées."
+    },
+    {
+      "id": "cli-groups",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-cli-groups.log",
+      "artifactSha256": "4ab8e785162badc439a017ef11573ad1171d8c2d275547b16caee3ed08a91426",
+      "reason": "Le résumé P8 sans stdout ne permet pas de départager le succès annoncé et la perte de blocage observée en P5."
+    },
+    {
+      "id": "cli-auth-profile",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-cli-auth-profile.log",
+      "artifactSha256": "51e3485511e0e522691d64820515bc4a4e70165ced56a128433a99950816b7c7",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-code-explorer",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune trace sur cet arbre ; la reconstruction de l’index et les rejeux indépendants P9 appartiennent à une autre branche."
+    },
+    {
+      "id": "cli-hermes",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-hermes-2026-09-29.log",
+      "artifactSha256": "9699d73e6ddc7322fc69ca7b108077b0603a1b3313f097a271abfde7defed89f",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-acp",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-acp.log",
+      "artifactSha256": "43673c83ee65dfa0b0327287c320b030488dd9420642197874d5a07a1ecc2379",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-tools",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-tools-2026-09-29.log",
+      "artifactSha256": "c82577471581c3b5d97d54bb73a1d5b3175ca060ffbddc8dba4dd9cf6220cd74",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-autonomous-code",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-autonomous-code.log",
+      "artifactSha256": "98c221d95eba6e544ed98a795d320b0ac1880fae9cad993943c8a1807d0cedba",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-session",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-session-2026-09-29.log",
+      "artifactSha256": "197baaf8b767ae0505d076b576032b3871c71841415fe9068a651a2f1d4af77a",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-config",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-config.log",
+      "artifactSha256": "7fd5c8776ccf68981a3786f0eb244e51587b1769f94454562f7ebe4ac0807271",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-policy",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-cli-policy.log",
+      "artifactSha256": "12dcc1ad3c1c9db5d6c14a8742f80f999bdfb63685c797d0beb1b1deced01635",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-dev",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-dev.log",
+      "artifactSha256": "9ae79996254be9012b42358f2d195b73c33514e9b8ccc66355f1c5e658121875",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-run",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-run-2026-09-29.log",
+      "artifactSha256": "4e45570030b4c371f5c255082ef320b017ec1eb31c8db8439b3cdcb112230359",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-cron",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-cron.log",
+      "artifactSha256": "922a072c193b35a78d0a78f88f11577393da7e36dc2295452acba97df732b174",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-skills",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-skills-2026-09-29.log",
+      "artifactSha256": "9457cdc9925c2a220cb46af23e548cc46aafcb23712655ecd9369c50286c2fc1",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-nodes",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-cli-nodes.log",
+      "artifactSha256": "04b8baf2609a8d686330baf77ebf53d3eaf62bc3e94508d0477ce8ab37c30ce1",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-secrets",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-secrets.log",
+      "artifactSha256": "b37dd9e3120da5e31cafca502d4e3b57a5d0ae1d61fc9af57595b6cb26b8fa79",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-approvals",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The production CLI has no request-creation path: ApprovalsStore.create is called only by an external harness, and a new CLI process lists no pending requests. No real tool approval was observed."
+    },
+    {
+      "id": "cli-insights",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-insights.log",
+      "artifactSha256": "74f34924ba02d9f9fa06b19ac61249a28ad6c0f0da75d4270fd770623ec3a834",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-bundles",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-bundles-2026-09-29.log",
+      "artifactSha256": "7929ddae42e30cdab80462f4c0a666d05adf37e5125cd08a3a83043261f6a631",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-improve",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-cli-improve.log",
+      "artifactSha256": "8bfc123c229a050ece7e2a9192244b20845f191fac41a7a1b597e00c847b5c8f",
+      "reason": "La commande status affiche une archive vide et une couverture 0/15 ; aucun cycle d’amélioration exécuté."
+    },
+    {
+      "id": "cli-evolve",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-evolve.log",
+      "artifactSha256": "76650c1322bbec10a7f7a4ecf5f2d937a532d580df75ade5bb34bf3c300e7abc",
+      "reason": "La trace exclut l’exécution d’une variante de code et sa fusion ; le gain de leçon est annulé."
+    },
+    {
+      "id": "cli-lsp",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-cli-lsp.log",
+      "artifactSha256": "fd7a1d184dc1690fdac15a450974f75c62d99c5649395f7a0dc83ce7b3d1a918",
+      "reason": "Dernier essai en échec : server_start_failed, rust-analyzer absent. Les correctifs et rejeux P9 sont sur une autre branche."
+    },
+    {
+      "id": "cli-proxy",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-proxy.log",
+      "artifactSha256": "8d61e8d66d2ed813287c8367d263245f74081e3e63157640656ff82a41f05c4a",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-deploy",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-cli-deploy.log",
+      "artifactSha256": "c7751c3026a3b6eca0e1e39160333501490554271afc1c24f5e9d84ac008e876",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-provision",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-provision-2026-09-29.log",
+      "artifactSha256": "874fb2fa62c14c0ffea3317a4937b1a9b293fb8c9605d0d71810cab7f2459247",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-film",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-cli-film.log",
+      "artifactSha256": "58c2340762968372da8aeb2205a63692e91ede41edad3c0cf25434031a74e8dc",
+      "reason": "Journal de clips de fixture 64×64 ; sortie ffprobe et MP4 absents, génération de film non démontrée."
+    },
+    {
+      "id": "cli-token",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-cli-token-2026-09-29.log",
+      "artifactSha256": "1fa4dcba00bef685f45b08c26feb17053b6cf8a625a8edb41e951b13264d1565",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-pair",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-pair.log",
+      "artifactSha256": "46fb68de1bafb6d6e79cc291e08ed3874467ae5bf81ecbf23cfacc220fdb8e44",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-devices",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-cli-devices.log",
+      "artifactSha256": "490370989146a07fd97bac0311fa9096971f64e1229bf8d81345773a54f6ed3f",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-user-model",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-cli-user-model.log",
+      "artifactSha256": "0a0256b9ad40d5673406fb67be530f1f20fd3dd4cf1d0061755f7c6d965d7613",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "cli-update",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-cli-update.log",
+      "artifactSha256": "4d8f2f3c0c4e8b66bfce8bb1fafd246ebda840c2d10964261520acec06a2f6b1",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "tool-web-search",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-tool-web-search.log",
+      "artifactSha256": "3e9b9d95c0a40920484df944f6138fb48d4271d8a4aec5f6d5f39bffb5c87da5",
+      "reason": "Résumé success=true sans corps HTTP ni résultats détaillés versés."
+    },
+    {
+      "id": "tool-browser",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-tool-browser.log",
+      "artifactSha256": "5c5b4e9aee72d773d6362e04812f10bbfa181006cc2c80c5b922f5794cc0385a",
+      "reason": "Résumé de booléens sur page locale ; ni capture, ni journal Chromium, ni fixture livrée."
+    },
+    {
+      "id": "tool-deep-research",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-tool-deep-research.log",
+      "artifactSha256": "4cd6840fa9c818b4504106415c5c061ac5a44f7c0f6b78dd5ec187d80cbbca2f",
+      "reason": "Résumé de deux sources sans URLs ni rapport généré ; exactitude non évaluée."
+    },
+    {
+      "id": "tool-verify",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The independent verifier requires a live LLM/tool bridge and an executed oracle. No complete verifier delegation was observed in this campaign."
+    },
+    {
+      "id": "tool-image-generate",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. No isolated ComfyUI endpoint or image-provider credential was configured; no bitmap generation completed."
+    },
+    {
+      "id": "tool-video-generate",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. No isolated ComfyUI video endpoint or xAI/Fal credential was configured; no video generation completed."
+    },
+    {
+      "id": "tool-understand-video",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p8-tool-understand-video.log",
+      "artifactSha256": "12399b0e2f1b45ad117564010d0a77cb25a46c8e55453ccbbe2a8c6ab528b3a0",
+      "reason": "Dernier essai en échec : faster_whisper absent, success=false. Le précédent success=true était un faux succès sans transcription."
+    },
+    {
+      "id": "http-chat",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-http-chat.log",
+      "artifactSha256": "eed2314ec677433af196ee77aa8e8a0fc4c2a775776c1803ac44ab5dd20cdca8",
+      "reason": "Résumé HTTP 200 avec réponse imposée READY ; corps brut non livré."
+    },
+    {
+      "id": "http-sessions",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-http-sessions.log",
+      "artifactSha256": "c0f02fc18f85f9e90e9a03d1b7b5b40c7a6391983adc816d2008a9e0f78c6a72",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "http-memory",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-http-memory.log",
+      "artifactSha256": "e269bb8c05277877dab799a7735c1bfe9162516a24e3997a2dbae6249a7f0b67",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant."
+    },
+    {
+      "id": "http-a2a",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-http-a2a-2026-09-29.log",
+      "artifactSha256": "bb42a5acf87e5654fd15ada29708479091f239639115f6d3a222c18ca839f221",
+      "reason": "Résumé des transitions et réponse imposée P5_A2A_OK ; échanges HTTP bruts absents."
+    },
+    {
+      "id": "cowork-studio",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; App Studio was not launched in a real window."
+    },
+    {
+      "id": "cowork-video-studio",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; Video Studio was not launched in a real window."
+    },
+    {
+      "id": "agent-loop",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-agent-loop-2026-09-29.log",
+      "artifactSha256": "7a973fbe0f784eebddeae87d6c8e2eba6395115df8501c9faec0d9a2ae354ee2",
+      "reason": "Résumé sans transcript brut modèle → outil → modèle ; fixture package.json absente du dépôt. Ne prouve pas une installation neuve."
+    },
+    {
+      "id": "provider-ollama",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-provider-ollama-2026-09-29.log",
+      "artifactSha256": "9662443e6cdb3089b6fcd92be42d9aefdb619e4db2a24c99e548466b840e14e0",
+      "reason": "Résumé sans journal des échanges Ollama ; première tâche sur installation neuve non documentée."
+    },
+    {
+      "id": "provider-failover",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. Only one local Ollama endpoint was authorized in the isolated HOME; no independent fallback provider was configured for a real failure handoff."
+    },
+    {
+      "id": "provider-chatgpt-oauth",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no ChatGPT OAuth login, and real credentials were not copied; no subscription request was made."
+    },
+    {
+      "id": "provider-gemini-cli",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no authenticated Gemini CLI session; the campaign used Ollama only."
+    },
+    {
+      "id": "provider-agy-cli",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no authenticated AGY CLI session; the campaign used Ollama only."
+    },
+    {
+      "id": "context-compaction",
+      "decision": "accept",
+      "artifact": "docs/preuves/p6-context-compaction.log",
+      "artifactSha256": "d5e3a9e9529451570f789025467a674207cfcab4a9e8357da8c9e5cf42316a33",
+      "reason": "Sortie capturée : 14 → 4 messages, 1096 → 129 jetons, requête courante conservée.",
+      "scope": {
+        "fr": "Compression du composant ContextManagerV2 sur une fixture ; aucun tour agent ni installation neuve prouvé. Script temporaire non livré.",
+        "en": "ContextManagerV2 component compression on a fixture; no agent turn or fresh installation proved. Temporary script not shipped."
+      }
+    },
+    {
+      "id": "memory-ckg",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-memory-ckg.log",
+      "artifactSha256": "220472fe08a93e398f7dd2b726251f392c470aa99840395a28997d49bb8634a6",
+      "reason": "La sortie capturée rappelle seulement ollamalocal ; aucun lien de graphe, aucun rappel de la proposition complète."
+    },
+    {
+      "id": "fleet-peer-chat",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-fleet-peer-chat.log",
+      "artifactSha256": "bf6e3d88663ec647567ef993d6dce2aa88e5b611b87e71de691da78fa9b26e11",
+      "reason": "Capture partagée avec la preuve outils ; un pair local et réponse imposée FLEET_OK, sans transcript complet des échanges."
+    },
+    {
+      "id": "fleet-peer-tools",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-fleet-peer-tools.log",
+      "artifactSha256": "60e55904d557cf0762e651c44c3b6a596c514eebf2df9ce7e337a6e2e543d350",
+      "reason": "Capture identique à celle du chat ; lecture et refus de traversal isolés, sans trace distincte de bout en bout."
+    },
+    {
+      "id": "security-sandbox",
+      "decision": "accept",
+      "artifact": "docs/preuves/p6-security-sandbox.log",
+      "artifactSha256": "5dee10aeed08c990ce9539d3230fa064c584b7dae623a2fee4819d1d0fb42cee",
+      "reason": "Sortie capturée : bubblewrap 0.9.0, sandbox-ok, écriture hors projet refusée.",
+      "scope": {
+        "fr": "confineSpawn et sous-processus sous Linux/bubblewrap ; aucun outil bash d’agent ni autre plateforme prouvé. Script temporaire non livré.",
+        "en": "confineSpawn and subprocesses on Linux/bubblewrap; no agent bash tool or other platform proved. Temporary script not shipped."
+      }
+    },
+    {
+      "id": "security-skill-firewall",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-security-skill-firewall-2026-09-29.log",
+      "artifactSha256": "a0baf1975782063b578ca4103c20646a93d3a8bc4ded436316ee20f086a53da4",
+      "reason": "Résumé de quarantaine sans stdout ni fixture malveillante versionnée."
+    },
+    {
+      "id": "sensory-voice-loop",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune capture micro ni boucle parole → réponse vocale exécutée ; faster_whisper absent."
+    },
+    {
+      "id": "media-film-assemble",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-media-film-assemble.log",
+      "artifactSha256": "b4ba9d3be3bcc5b3f8f44746669e38bcb9dd1a1fb015c094d1b4b54401c8d37b",
+      "reason": "Journal de montage de deux clips 64×64 ; MP4 et sortie ffprobe absents. Ne prouve pas la production du film annoncé."
+    },
+    {
+      "id": "tool-read-file",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p5-tool-read-file-2026-09-29.log",
+      "artifactSha256": "fed0784c64eeda6e8ae590dcbea4a9936151d5fb0a946c3e00235f3a564d8efd",
+      "reason": "Résumé sans sortie brute de read_file ni fichier de fixture versionné."
+    },
+    {
+      "id": "context-tool-selection",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-context-tool-selection.log",
+      "artifactSha256": "3de9989482d8cf8f2b01bc7f1287aebd7a8db353b8615e34d5c8a77585c25a0c",
+      "reason": "Résumé d’un appel direct sur une seule requête, sans sortie brute ni tour LLM ; pertinence générale non évaluée."
+    },
+    {
+      "id": "context-checkpoints",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-context-checkpoints.log",
+      "artifactSha256": "b41bb8c9db31546590272488ae5b8b041cd7dabf2105d3d676eaea8ccf4f280b",
+      "reason": "Résumé d’un appel direct sans sortie brute ni fixture ; déclenchement par l’agent non vérifié."
+    },
+    {
+      "id": "dgm-learning-cycle",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-dgm-learning-cycle.log",
+      "artifactSha256": "71febb2af566a2d993f4874954e19331d40fa1dff09cb4778df676bad7afc68c",
+      "reason": "Cycle propose-only annulé, couverture 0/15 ; aucune amélioration retenue."
+    },
+    {
+      "id": "dgm-authored-tools",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-dgm-authored-tools.log",
+      "artifactSha256": "142c67e40b9daff21fd375ce23de690d301e7644ca12e6e1b45cf56dbaf63f0e",
+      "reason": "Les outils proposés échouent et sont rejetés (visiblePassed=0, heldOutPassed=0) ; seule la porte de rejet est exercée."
+    },
+    {
+      "id": "dgm-evolve-propose",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no vetted experiment fiche or matching scholarly discovery record; no proposal archive was generated."
+    },
+    {
+      "id": "cowork-desktop-chat",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; no desktop chat window was exercised."
+    },
+    {
+      "id": "cowork-desktop-assistant",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent, and no microphone or camera session was opened."
+    },
+    {
+      "id": "cowork-desktop-settings",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; no settings window was exercised."
+    },
+    {
+      "id": "fleet-peer-sessions",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-fleet-peer-sessions.log",
+      "artifactSha256": "4feb0dc15c96a77b64d622adc61868346b21e9521d289062b7e42bb91abd2d40",
+      "reason": "Rappel du jeton 731 sur un pair local ; ne démontre pas la conversation annoncée, empreinte périmée."
+    },
+    {
+      "id": "media-video-stitch",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p6-media-video-stitch.log",
+      "artifactSha256": "ad982622bdbaa2191b86fe7fcc720a6151b00ba653af7ad2b17d5281910bc312",
+      "reason": "Sortie capturée pour deux clips 64×64 soudés par coupe ; empreinte périmée, aucun fondu ni génération prouvé."
+    },
+    {
+      "id": "dgm-capability-benchmark",
+      "decision": "insufficient",
+      "artifact": "docs/preuves/p7-dgm-capability-benchmark.log",
+      "artifactSha256": "8b9a18d67ac8075300118566f2ed49dfec8cb46ad696c80e09192b0dad2794e0",
+      "reason": "Résumé d’un scénario avec score=0 ; aucun gain de capacité démontré."
+    }
+  ]
+}

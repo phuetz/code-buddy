@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -29,7 +30,17 @@ function fixture(): string {
     entrypoint: { kind: 'cli', checks: [{ file: 'src/feature.ts', contains: 'export const feature = true;' }] },
   }] }));
   put(directory, 'README.md', '# Fixture\n\n<!-- proven-features:start -->\n<!-- proven-features:end -->\n\nUnrelated paragraph.\n');
+  put(directory, 'README.fr.md', '# Fixture FR\n\n<!-- proven-features:start --><!-- proven-features:end -->\n');
+  review(directory, 'insufficient');
   return directory;
+}
+
+function review(directory: string, decision: 'accept' | 'insufficient', artifact: string | null = null): void {
+  put(directory, 'docs/catalog/showcase-review.json', JSON.stringify({ schemaVersion: 1, features: [{
+    id: 'fixture', decision, artifact,
+    artifactSha256: artifact ? createHash('sha256').update(readFileSync(path.join(directory, artifact))).digest('hex') : null,
+    reason: 'Documentary qualification of this fixture only.',
+  }] }));
 }
 
 function proof(directory: string, result: 'passed' | 'failed', date: string, summary: string): void {
@@ -39,6 +50,7 @@ function proof(directory: string, result: 'passed' | 'failed', date: string, sum
     sourceDigest: currentCatalogSourceDigest(directory, 'fixture'),
     artifact: `docs/preuves/${result}.log`, summary,
   }));
+  review(directory, 'accept', `docs/preuves/${result}.log`);
 }
 
 afterEach(() => {
@@ -82,6 +94,7 @@ describe('generated proven features showcase', () => {
     writeFileSync(inventoryPath, JSON.stringify(inventory));
     expect(checkGenerated(directory, generateProvenFeatures(directory, revision))).toEqual([
       'docs/FONCTIONNALITES-PROUVEES.md', 'docs/PROVEN-FEATURES.md',
+      'docs/FONCTIONNALITES.md', 'docs/feature-catalog.md', 'docs/INVENTAIRE-FONCTIONNALITES.md',
     ]);
   });
 
@@ -91,8 +104,8 @@ describe('generated proven features showcase', () => {
     proof(directory, 'failed', '2026-09-29T12:00:00Z', 'NEW_FAILURE');
     const files = generateProvenFeatures(directory, revision);
     const fr = files['docs/FONCTIONNALITES-PROUVEES.md']!;
-    expect(fr).toContain('0/1 prouvées en situation · 1 échecs');
-    expect(fr).toContain('**Échec**');
+    expect(fr).toContain('0/1 prouvées · 1 non prouvées ici (dont 1 derniers essais en échec)');
+    expect(fr).toContain('**Non prouvée ici**');
     expect(fr).toContain('NEW\\_FAILURE');
     expect(fr).toContain('(preuves/failed.log)');
     expect(fr).not.toContain('OLD_SUCCESS');
@@ -113,9 +126,9 @@ describe('generated proven features showcase', () => {
   it('records a reason and no fabricated command or date for an unexecuted scenario', () => {
     const directory = fixture();
     const content = generateProvenFeatures(directory, revision)['docs/PROVEN-FEATURES.md']!;
-    expect(content).toContain('**Not verifiable here** · Execution date (UTC) : —.');
+    expect(content).toContain('**Not proven here** · Execution date (UTC) : —.');
     expect(content).toContain('Evidence command: no recorded execution.');
-    expect(content).toContain('Reason : Required service is unavailable in this environment.');
+    expect(content).toContain('Review : Documentary qualification of this fixture only.');
     expect(content).not.toContain('buddy fixture');
   });
 
@@ -131,7 +144,8 @@ describe('generated proven features showcase', () => {
     const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
     delete inventory.features[0].verificationLimit;
     writeFileSync(inventoryPath, JSON.stringify(inventory));
-    expect(() => generateProvenFeatures(directory, revision)).toThrow('Missing verification reason');
+    put(directory, 'docs/catalog/showcase-review.json', JSON.stringify({ schemaVersion: 1, features: [] }));
+    expect(() => generateProvenFeatures(directory, revision)).toThrow('Incomplete or invalid documentary review');
   });
 
   it('refuses a machine path or email from proof text before generating public pages', () => {
@@ -153,6 +167,7 @@ describe('generated proven features showcase', () => {
     const directory = fixture();
     proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUCCESS');
     put(directory, 'docs/preuves/passed.log', 'Commande : buddy fixture --json\n');
+    review(directory, 'accept', 'docs/preuves/passed.log');
     const files = generateProvenFeatures(directory, revision);
     expect(files['README.md']).toContain('limite du scénario lorsqu’elle est consignée');
     expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('Les observations et raisons, ainsi que les limites consignées,');
@@ -160,5 +175,48 @@ describe('generated proven features showcase', () => {
     expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('**Prouvée**');
     expect(files['docs/FONCTIONNALITES-PROUVEES.md']).not.toContain('Portée de l’essai :');
     expect(files['docs/PROVEN-FEATURES.md']).not.toContain('Run scope :');
+  });
+
+  it('does not promote a mechanically valid manifest whose trace review is insufficient', () => {
+    const directory = fixture();
+    proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUMMARY_ONLY');
+    review(directory, 'insufficient', 'docs/preuves/passed.log');
+    expect(generateProvenFeatures(directory, revision)['README.md']).toContain('PROUVÉES 0/1');
+  });
+
+  it('keeps a latest failed attempt visible after the source digest becomes stale', () => {
+    const directory = fixture();
+    proof(directory, 'failed', '2026-09-29T12:00:00Z', 'MISSING_BACKEND');
+    put(directory, 'src/feature.ts', 'export const feature = false;');
+    const files = generateProvenFeatures(directory, revision);
+    expect(files['README.md']).toContain('DONT DERNIERS ESSAIS EN ÉCHEC 1');
+    expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('MISSING\\_BACKEND');
+    expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('Preuve ancienne');
+  });
+
+  it('requires a new documentary review when an accepted trace is edited', () => {
+    const directory = fixture();
+    proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUCCESS');
+    put(directory, 'docs/preuves/passed.log', 'Commande : buddy fixture --json\nObservé : changed summary.');
+    const files = generateProvenFeatures(directory, revision);
+    expect(files['README.md']).toContain('PROUVÉES 0/1');
+    expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('Trace nouvelle ou modifiée');
+  });
+
+  it('uses the same feature statuses and counts in every generated summary', () => {
+    const files = generateProvenFeatures(root);
+    const result = JSON.parse(files['docs/catalog/showcase-status.json']!);
+    expect(result.counts.passed + result.counts.unavailable).toBe(result.counts.total);
+    expect(result.counts.failed).toBe(result.features.filter((feature: { latestRunFailed: boolean }) => feature.latestRunFailed).length);
+    for (const file of ['docs/FONCTIONNALITES.md', 'docs/INVENTAIRE-FONCTIONNALITES.md', 'docs/feature-catalog.md']) {
+      const rows = files[file]!.split('\n').filter((line) => line.startsWith('| ` '));
+      expect(rows).toHaveLength(result.counts.total);
+      for (const feature of result.features) {
+        const row = rows.find((line) => line.startsWith(`| \` ${feature.id} \``))!;
+        expect(row).toContain(file === 'docs/feature-catalog.md'
+          ? (feature.status === 'proven' ? '**Proven**' : '**Not proven here**')
+          : (feature.status === 'proven' ? '**Prouvée**' : '**Non prouvée ici**'));
+      }
+    }
   });
 });

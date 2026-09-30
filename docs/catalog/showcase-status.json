@@ -1,0 +1,745 @@
+{
+  "schemaVersion": 1,
+  "counts": {
+    "total": 91,
+    "passed": 2,
+    "failed": 2,
+    "unavailable": 89
+  },
+  "features": [
+    {
+      "id": "agent-loop",
+      "status": "not-proven-here",
+      "reason": "Résumé sans transcript brut modèle → outil → modèle ; fixture package.json absente du dépôt. Ne prouve pas une installation neuve.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-agent-loop-2026-09-29.log"
+    },
+    {
+      "id": "catalog-status",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-catalog-status-2026-09-29.log"
+    },
+    {
+      "id": "cli-acp",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-acp.log"
+    },
+    {
+      "id": "cli-approvals",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The production CLI has no request-creation path: ApprovalsStore.create is called only by an external harness, and a new CLI process lists no pending requests. No real tool approval was observed.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli-assistant",
+      "status": "not-proven-here",
+      "reason": "La trace configure le moteur TTS ; elle exclut explicitement toute synthèse et toute écoute audio. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p8-cli-assistant.log"
+    },
+    {
+      "id": "cli-auth-profile",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p8-cli-auth-profile.log"
+    },
+    {
+      "id": "cli-autonomous-code",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-autonomous-code.log"
+    },
+    {
+      "id": "cli-bundles",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-bundles-2026-09-29.log"
+    },
+    {
+      "id": "cli-code-explorer",
+      "status": "not-proven-here",
+      "reason": "Aucune trace sur cet arbre ; la reconstruction de l’index et les rejeux indépendants P9 appartiennent à une autre branche.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli-companion",
+      "status": "not-proven-here",
+      "reason": "La trace crée SOUL.md et BOOT.md avec --no-voice ; voix, caméra et authentification non exercées. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-companion.log"
+    },
+    {
+      "id": "cli-config",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-config.log"
+    },
+    {
+      "id": "cli-cron",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-cron.log"
+    },
+    {
+      "id": "cli-curator",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-cli-curator.log"
+    },
+    {
+      "id": "cli-daemon",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-daemon.log"
+    },
+    {
+      "id": "cli-deploy",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p8-cli-deploy.log"
+    },
+    {
+      "id": "cli-dev",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-dev.log"
+    },
+    {
+      "id": "cli-device",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-device-2026-09-29.log"
+    },
+    {
+      "id": "cli-devices",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-devices.log"
+    },
+    {
+      "id": "cli-evolve",
+      "status": "not-proven-here",
+      "reason": "La trace exclut l’exécution d’une variante de code et sa fusion ; le gain de leçon est annulé. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-evolve.log"
+    },
+    {
+      "id": "cli-film",
+      "status": "not-proven-here",
+      "reason": "Journal de clips de fixture 64×64 ; sortie ffprobe et MP4 absents, génération de film non démontrée. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-cli-film.log"
+    },
+    {
+      "id": "cli-gateway-pairing",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-gateway-pairing.log"
+    },
+    {
+      "id": "cli-groups",
+      "status": "not-proven-here",
+      "reason": "Le résumé P8 sans stdout ne permet pas de départager le succès annoncé et la perte de blocage observée en P5. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p8-cli-groups.log"
+    },
+    {
+      "id": "cli-heartbeat",
+      "status": "not-proven-here",
+      "reason": "Résumé du chemin de suppression HEARTBEAT_OK ; aucun service périodique exercé, échec de contexte antérieur conservé. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p8-cli-heartbeat.log"
+    },
+    {
+      "id": "cli-hermes",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-hermes-2026-09-29.log"
+    },
+    {
+      "id": "cli-hub",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. An isolated hub search returned zero matches and list returned zero hub-installed skills (8 bundled); no shared skill was available to install or manage.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli-identity",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-identity-2026-09-29.log"
+    },
+    {
+      "id": "cli-improve",
+      "status": "not-proven-here",
+      "reason": "La commande status affiche une archive vide et une couverture 0/15 ; aucun cycle d’amélioration exécuté. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-cli-improve.log"
+    },
+    {
+      "id": "cli-insights",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-insights.log"
+    },
+    {
+      "id": "cli-lsp",
+      "status": "not-proven-here",
+      "reason": "Dernier essai en échec : server_start_failed, rust-analyzer absent. Les correctifs et rejeux P9 sont sur une autre branche. Preuve ancienne ou révision courante inconnue. Dernier essai en échec (38708b7e4edc651287c6f30623eae01c2ebb67e6) : server_start_failed, code 1 ; composant rust-analyzer absent sous HOME isolé.",
+      "scope": null,
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p8-cli-lsp.log"
+    },
+    {
+      "id": "cli-nodes",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p8-cli-nodes.log"
+    },
+    {
+      "id": "cli-pair",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-pair.log"
+    },
+    {
+      "id": "cli-policy",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-cli-policy.log"
+    },
+    {
+      "id": "cli-provision",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-provision-2026-09-29.log"
+    },
+    {
+      "id": "cli-proxy",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-proxy.log"
+    },
+    {
+      "id": "cli-ruche",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-ruche.log"
+    },
+    {
+      "id": "cli-run",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-run-2026-09-29.log"
+    },
+    {
+      "id": "cli-screen",
+      "status": "not-proven-here",
+      "reason": "Résumé d’un écran Xvfb 320×240 ; image absente du dépôt, bureau réel non exercé. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-screen.log"
+    },
+    {
+      "id": "cli-secrets",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-cli-secrets.log"
+    },
+    {
+      "id": "cli-security",
+      "status": "not-proven-here",
+      "reason": "Projet jetable sans défaut planté ; findings=[] ne démontre pas la détection de défauts. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-cli-security.log"
+    },
+    {
+      "id": "cli-session",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-session-2026-09-29.log"
+    },
+    {
+      "id": "cli-skills",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-skills-2026-09-29.log"
+    },
+    {
+      "id": "cli-speak",
+      "status": "not-proven-here",
+      "reason": "Aucune synthèse exécutée ni fichier audio livré ; backend vocal non démarré.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli-token",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-token-2026-09-29.log"
+    },
+    {
+      "id": "cli-tools",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-tools-2026-09-29.log"
+    },
+    {
+      "id": "cli-triage",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-triage-2026-09-29.log"
+    },
+    {
+      "id": "cli-trigger",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-trigger-2026-09-29.log"
+    },
+    {
+      "id": "cli-update",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p8-cli-update.log"
+    },
+    {
+      "id": "cli-user-model",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-cli-user-model.log"
+    },
+    {
+      "id": "cli-widgets",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-cli-widgets-2026-09-29.log"
+    },
+    {
+      "id": "context-checkpoints",
+      "status": "not-proven-here",
+      "reason": "Résumé d’un appel direct sans sortie brute ni fixture ; déclenchement par l’agent non vérifié.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-context-checkpoints.log"
+    },
+    {
+      "id": "context-compaction",
+      "status": "proven",
+      "reason": "Sortie capturée : 14 → 4 messages, 1096 → 129 jetons, requête courante conservée.",
+      "scope": {
+        "fr": "Compression du composant ContextManagerV2 sur une fixture ; aucun tour agent ni installation neuve prouvé. Script temporaire non livré.",
+        "en": "ContextManagerV2 component compression on a fixture; no agent turn or fresh installation proved. Temporary script not shipped."
+      },
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-context-compaction.log"
+    },
+    {
+      "id": "context-tool-selection",
+      "status": "not-proven-here",
+      "reason": "Résumé d’un appel direct sur une seule requête, sans sortie brute ni tour LLM ; pertinence générale non évaluée.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-context-tool-selection.log"
+    },
+    {
+      "id": "cowork-desktop-assistant",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent, and no microphone or camera session was opened.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cowork-desktop-chat",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; no desktop chat window was exercised.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cowork-desktop-settings",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; no settings window was exercised.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cowork-studio",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; App Studio was not launched in a real window.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cowork-video-studio",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; Video Studio was not launched in a real window.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "dgm-authored-tools",
+      "status": "not-proven-here",
+      "reason": "Les outils proposés échouent et sont rejetés (visiblePassed=0, heldOutPassed=0) ; seule la porte de rejet est exercée. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-dgm-authored-tools.log"
+    },
+    {
+      "id": "dgm-capability-benchmark",
+      "status": "not-proven-here",
+      "reason": "Résumé d’un scénario avec score=0 ; aucun gain de capacité démontré. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-dgm-capability-benchmark.log"
+    },
+    {
+      "id": "dgm-evolve-propose",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no vetted experiment fiche or matching scholarly discovery record; no proposal archive was generated.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "dgm-learning-cycle",
+      "status": "not-proven-here",
+      "reason": "Cycle propose-only annulé, couverture 0/15 ; aucune amélioration retenue. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-dgm-learning-cycle.log"
+    },
+    {
+      "id": "fleet-cli",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-fleet-cli.log"
+    },
+    {
+      "id": "fleet-peer-chat",
+      "status": "not-proven-here",
+      "reason": "Capture partagée avec la preuve outils ; un pair local et réponse imposée FLEET_OK, sans transcript complet des échanges. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-fleet-peer-chat.log"
+    },
+    {
+      "id": "fleet-peer-sessions",
+      "status": "not-proven-here",
+      "reason": "Rappel du jeton 731 sur un pair local ; ne démontre pas la conversation annoncée, empreinte périmée. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-fleet-peer-sessions.log"
+    },
+    {
+      "id": "fleet-peer-tools",
+      "status": "not-proven-here",
+      "reason": "Capture identique à celle du chat ; lecture et refus de traversal isolés, sans trace distincte de bout en bout. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-fleet-peer-tools.log"
+    },
+    {
+      "id": "http-a2a",
+      "status": "not-proven-here",
+      "reason": "Résumé des transitions et réponse imposée P5_A2A_OK ; échanges HTTP bruts absents. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-http-a2a-2026-09-29.log"
+    },
+    {
+      "id": "http-chat",
+      "status": "not-proven-here",
+      "reason": "Résumé HTTP 200 avec réponse imposée READY ; corps brut non livré. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-http-chat.log"
+    },
+    {
+      "id": "http-health",
+      "status": "not-proven-here",
+      "reason": "Résumé citant des captures brutes absentes du dépôt. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-http-health-2026-09-29.log"
+    },
+    {
+      "id": "http-memory",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-http-memory.log"
+    },
+    {
+      "id": "http-sessions",
+      "status": "not-proven-here",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-http-sessions.log"
+    },
+    {
+      "id": "media-film-assemble",
+      "status": "not-proven-here",
+      "reason": "Journal de montage de deux clips 64×64 ; MP4 et sortie ffprobe absents. Ne prouve pas la production du film annoncé.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-media-film-assemble.log"
+    },
+    {
+      "id": "media-video-stitch",
+      "status": "not-proven-here",
+      "reason": "Sortie capturée pour deux clips 64×64 soudés par coupe ; empreinte périmée, aucun fondu ni génération prouvé. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-media-video-stitch.log"
+    },
+    {
+      "id": "memory-ckg",
+      "status": "not-proven-here",
+      "reason": "La sortie capturée rappelle seulement ollamalocal ; aucun lien de graphe, aucun rappel de la proposition complète.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-memory-ckg.log"
+    },
+    {
+      "id": "provider-agy-cli",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no authenticated AGY CLI session; the campaign used Ollama only.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "provider-chatgpt-oauth",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no ChatGPT OAuth login, and real credentials were not copied; no subscription request was made.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "provider-failover",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. Only one local Ollama endpoint was authorized in the isolated HOME; no independent fallback provider was configured for a real failure handoff.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "provider-gemini-cli",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no authenticated Gemini CLI session; the campaign used Ollama only.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "provider-ollama",
+      "status": "not-proven-here",
+      "reason": "Résumé sans journal des échanges Ollama ; première tâche sur installation neuve non documentée.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-provider-ollama-2026-09-29.log"
+    },
+    {
+      "id": "resource-catalog-tool",
+      "status": "not-proven-here",
+      "reason": "Résumé de sélection sans transcript ; la sonde HTTP_HEALTH_OK_NOT_USAGE_PROOF ne prouve aucun usage ni dispatch.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-resource-catalog-tool-2026-09-29.log"
+    },
+    {
+      "id": "security-sandbox",
+      "status": "proven",
+      "reason": "Sortie capturée : bubblewrap 0.9.0, sandbox-ok, écriture hors projet refusée.",
+      "scope": {
+        "fr": "confineSpawn et sous-processus sous Linux/bubblewrap ; aucun outil bash d’agent ni autre plateforme prouvé. Script temporaire non livré.",
+        "en": "confineSpawn and subprocesses on Linux/bubblewrap; no agent bash tool or other platform proved. Temporary script not shipped."
+      },
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p6-security-sandbox.log"
+    },
+    {
+      "id": "security-skill-firewall",
+      "status": "not-proven-here",
+      "reason": "Résumé de quarantaine sans stdout ni fixture malveillante versionnée.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-security-skill-firewall-2026-09-29.log"
+    },
+    {
+      "id": "sensory-voice-loop",
+      "status": "not-proven-here",
+      "reason": "Aucune capture micro ni boucle parole → réponse vocale exécutée ; faster_whisper absent.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "telegram-channel",
+      "status": "not-proven-here",
+      "reason": "Serveur Bot API local simulé ; aucun compte, token ni échange Telegram public utilisé. Preuve ancienne ou révision courante inconnue.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-telegram-channel.log"
+    },
+    {
+      "id": "tool-browser",
+      "status": "not-proven-here",
+      "reason": "Résumé de booléens sur page locale ; ni capture, ni journal Chromium, ni fixture livrée.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p7-tool-browser.log"
+    },
+    {
+      "id": "tool-deep-research",
+      "status": "not-proven-here",
+      "reason": "Résumé de deux sources sans URLs ni rapport généré ; exactitude non évaluée.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p8-tool-deep-research.log"
+    },
+    {
+      "id": "tool-image-generate",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. No isolated ComfyUI endpoint or image-provider credential was configured; no bitmap generation completed.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool-read-file",
+      "status": "not-proven-here",
+      "reason": "Résumé sans sortie brute de read_file ni fichier de fixture versionné.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p5-tool-read-file-2026-09-29.log"
+    },
+    {
+      "id": "tool-understand-video",
+      "status": "not-proven-here",
+      "reason": "Dernier essai en échec : faster_whisper absent, success=false. Le précédent success=true était un faux succès sans transcription. Preuve ancienne ou révision courante inconnue. Dernier essai en échec (38708b7e4edc651287c6f30623eae01c2ebb67e6) : success=false ; transcription failed ; ModuleNotFoundError: No module named 'faster_whisper'.",
+      "scope": null,
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p8-tool-understand-video.log"
+    },
+    {
+      "id": "tool-verify",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The independent verifier requires a live LLM/tool bridge and an executed oracle. No complete verifier delegation was observed in this campaign.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool-video-generate",
+      "status": "not-proven-here",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. No isolated ComfyUI video endpoint or xAI/Fal credential was configured; no video generation completed.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool-web-search",
+      "status": "not-proven-here",
+      "reason": "Résumé success=true sans corps HTTP ni résultats détaillés versés.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p8-tool-web-search.log"
+    }
+  ]
+}
