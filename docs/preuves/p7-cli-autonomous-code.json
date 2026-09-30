@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-autonomous-code",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "74277512d5c5dbc3f92c51442503ee26d4faf541d82fdbf3a1918074f0e0c085",
+  "artifact": "docs/preuves/p7-cli-autonomous-code.log",
+  "summary": "Code 0 ; autoExecutable=true ; vérification node -e : status=passed, exitCode=0 ; aucun fichier modifié."
+}

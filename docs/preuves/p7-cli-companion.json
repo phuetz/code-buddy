@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-companion",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "199d90acfb8b046dabc7a82fa960c3fa74534dae94d5451f42cde230a0f70e29",
+  "artifact": "docs/preuves/p7-cli-companion.log",
+  "summary": "Codes 0/0 ; SOUL.md et BOOT.md créés ; Buddy Companion Status affiché."
+}

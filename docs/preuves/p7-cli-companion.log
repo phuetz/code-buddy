@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-companion
+Commande: buddy companion setup --no-voice --no-set-model ; buddy companion status
+Attendu: Identité compagnon créée dans le projet jetable et état consulté.
+Observé: Codes 0/0 ; SOUL.md et BOOT.md créés ; Buddy Companion Status affiché.
+Verdict: prouvée
+Limite: Voix, caméra et authentification ChatGPT non activées.

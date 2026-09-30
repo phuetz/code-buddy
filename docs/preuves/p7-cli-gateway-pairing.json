@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-gateway-pairing",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "ec6065fa8f7b93b249d7ce538883b87977841634bc844d4a1ed8c30074ec8ea7",
+  "artifact": "docs/preuves/p7-cli-gateway-pairing.log",
+  "summary": "Codes 0 ; pending count=1 ; approve émet un jeton (non consigné) ; verifyToken=true ; revoke=true ; liste finale vide."
+}
