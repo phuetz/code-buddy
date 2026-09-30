@@ -26,6 +26,18 @@ describe('text-editor-tools aliases', () => {
     vi.clearAllMocks();
   });
 
+  it.each([
+    { file_path: 'value.js', pattern: 'old', replacement: 'new' },
+    { path: 'value.js', operations: [{ old_string: 'old', new_string: 'new' }] },
+    { path: 'value.js', changes: [{ find: 'old', replace: 'new' }] },
+  ])('accepts common local-model replacement arguments: %j', async args => {
+    mockEditor.strReplace.mockResolvedValue({ success: true, output: 'edited' });
+    const tool = new StrReplaceEditorTool();
+    expect(tool.validate(args)).toEqual({ valid: true });
+    expect((await tool.execute(args)).success).toBe(true);
+    expect(mockEditor.strReplace).toHaveBeenCalledWith('value.js', 'old', 'new', false);
+  });
+
   it('ViewFileTool accepts file_path alias', async () => {
     mockEditor.view.mockResolvedValue({ success: true, content: 'ok' });
     const tool = new ViewFileTool();

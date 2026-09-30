@@ -34,6 +34,45 @@ afterAll(() => {
 const PROBE = `meteo-cristal-${process.pid}.html`;
 
 describe('registry file tools honor context.cwd for relative paths', () => {
+  it('applies a batch atomically in the session cwd', async () => {
+    const file = join(sessionCwd, 'batch.txt');
+    writeFileSync(file, 'first old\nsecond old\n');
+    const tool = new StrReplaceEditorTool();
+    const args = { path: 'batch.txt', operations: [
+      { pattern: 'first old', replacement: 'first new' },
+      { old_string: 'second old', new_string: 'second new' },
+    ] };
+    expect(tool.validate(args).valid).toBe(true);
+    expect((await tool.execute(args, { cwd: sessionCwd })).success).toBe(true);
+    expect(readFileSync(file, 'utf8')).toBe('first new\nsecond new\n');
+  });
+  it('does not apply an earlier edit when a later batch edit fails', async () => {
+    const file = join(sessionCwd, 'rollback.txt');
+    writeFileSync(file, 'keep this\n');
+    const result = await new StrReplaceEditorTool().execute({ file_path: 'rollback.txt', changes: [
+      { find: 'keep this', replace: 'changed' },
+      { find: 'absent', replace: 'invented' },
+    ] }, { cwd: sessionCwd });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('No changes were applied');
+    expect(readFileSync(file, 'utf8')).toBe('keep this\n');
+  });
+  it('retains omission protection for every edit in a batch', async () => {
+    const file = join(sessionCwd, 'omission.txt');
+    writeFileSync(file, 'first\nsecond\n');
+    const result = await new StrReplaceEditorTool().execute({ path: 'omission.txt', operations: [
+      { old_str: 'first', new_str: 'changed' },
+      { old_str: 'second', new_str: '// ... remaining code' },
+    ] }, { cwd: sessionCwd });
+    expect(result.success).toBe(false);
+    expect(readFileSync(file, 'utf8')).toBe('first\nsecond\n');
+  });
+  it('treats pattern/replacement as literal text', async () => {
+    const file = join(sessionCwd, 'literal.txt');
+    writeFileSync(file, 'a.b axb\n');
+    expect((await new StrReplaceEditorTool().execute({ path: 'literal.txt', pattern: 'a.b', replacement: 'done' }, { cwd: sessionCwd })).success).toBe(true);
+    expect(readFileSync(file, 'utf8')).toBe('done axb\n');
+  });
   it('create_file writes a relative path into the session cwd, not process.cwd()', async () => {
     const tool = new CreateFileTool();
     const result = await tool.execute(
