@@ -409,6 +409,8 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   const restoreEnv = [
     setTemporaryEnv('CODEBUDDY_HEADLESS', 'true'),
     setTemporaryEnv('CODEBUDDY_DISABLE_MCP', 'true'),
+    // Auto-detected local demos need the same compact coding tools as -p.
+    ...(provider.kind === 'ollama' ? [setTemporaryEnv('CODEBUDDY_PROVIDER', 'ollama')] : []),
   ];
   let agent: TryDemoAgent | undefined;
   let releaseTrust = () => {};

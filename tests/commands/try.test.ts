@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Command } from 'commander';
 import type { ChatEntry } from '../../src/agent/types.js';
+import { isHeadlessPromptCompact } from '../../src/config/headless-local-prompt.js';
 import {
   NO_TRY_PROVIDER_MESSAGE,
   isChatOnlyModel,
@@ -99,6 +100,31 @@ describe('buddy try', () => {
       env: { GROK_MODEL: 'first-local', OLLAMA_MODEL: 'requested-local' },
       hasChatGptCredentials: () => false, fetchImpl,
     }))?.model).toBe('requested-local');
+  });
+
+  it('activates the local tool budget for auto-detected Ollama and restores the environment', async () => {
+    const previous = process.env.CODEBUDDY_PROVIDER;
+    vi.stubEnv('CODEBUDDY_PROVIDER', '');
+    vi.stubEnv('OLLAMA_HOST', '');
+    vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', '');
+    let witnessedCompact = false;
+    try {
+      const code = await runTryDemo({
+        resolveProvider: async () => ({ ...chatGptProvider, kind: 'ollama' }),
+        createWorkspace: async () => workspace,
+        createAgent: async () => ({ processUserMessage: async () => {
+          witnessedCompact = isHeadlessPromptCompact(process.env);
+          return [];
+        } }),
+        verify: async () => ({ success: true, output: '' }), stdout: () => {},
+      });
+      expect(code).toBe(0);
+      expect(witnessedCompact).toBe(true);
+      expect(process.env.CODEBUDDY_PROVIDER).toBe('');
+    } finally {
+      vi.unstubAllEnvs();
+      expect(process.env.CODEBUDDY_PROVIDER).toBe(previous);
+    }
   });
 
   it('probes localhost and selects an installed Ollama model as the fallback', async () => {
