@@ -207,6 +207,9 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
         if (!materialized?.ok) appendTerminal(`Assets créatifs: ${materialized?.error ?? 'matérialisation indisponible'}`);
       }
       setProjectRoot(nextProjectRoot);
+      // The old project's tree must not auto-open a path in the new root.
+      setTree([]);
+      setOpenTabs([]);
       setActiveFile(null);
       setFileContent('');
       setPreviewUrl(null);

@@ -230,7 +230,7 @@ export function AppStudioView({
         {...(lockedPaths ? { lockedPaths } : {})}
         {...(onToggleLock ? { onToggleLock } : {})}
       />
-      <section className="grid min-h-0 grid-rows-[minmax(0,1fr)_220px] gap-2">
+      <section className="grid min-h-0 grid-rows-[minmax(80px,1fr)_minmax(0,40%)] gap-2">
         <div className="flex min-h-0 flex-col border border-border bg-surface">
           <div className="flex h-10 shrink-0 items-center border-b border-border bg-muted px-2">
             <button
@@ -567,7 +567,9 @@ export function AppStudioView({
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <StudioComposer templates={templates} onScaffold={onScaffold} onGenerateWithAI={onGenerateWithAI} onPrompt={onPrompt} busy={busy} workingDir={workingDir} seedPrompt={seedPrompt} />
+      <div className={hasProject ? 'max-h-[35%] shrink-0 overflow-y-auto' : 'shrink-0'}>
+        <StudioComposer templates={templates} onScaffold={onScaffold} onGenerateWithAI={onGenerateWithAI} onPrompt={onPrompt} busy={busy} workingDir={workingDir} seedPrompt={seedPrompt} />
+      </div>
       <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} problem={buildProblem ?? null} {...(onFixProblem ? { onFix: onFixProblem } : {})} onStop={onStopBuild} />
       {!hasProject ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">

@@ -2846,7 +2846,12 @@ registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.we
     return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
   }
 });
-registerScaffoldIpc(ipcMain, new ScaffoldService());
+// A template created from the user's Studio form is a selected workspace.
+// Trust its canonical directory, without granting access to its parent/siblings.
+const studioCreatedRoots = new Set<string>();
+registerScaffoldIpc(ipcMain, new ScaffoldService(), async (projectDir) => {
+  studioCreatedRoots.add(await fs.promises.realpath(projectDir));
+});
 // Preview health probe: a vite build pass + a hidden, sandboxed window on the
 // loopback preview, so the auto-fix loop sees errors the dev server hides.
 registerPreviewProbeIpc(
@@ -2892,7 +2897,7 @@ const avatarBibleService = new AvatarBibleService({
 });
 registerAvatarBibleIpc(ipcMain, avatarBibleService);
 const creativeWorkspaceRoots = () => {
-  const roots = new Set<string>([join(app.getPath('userData'), 'default_working_dir')]);
+  const roots = new Set<string>([join(app.getPath('userData'), 'default_working_dir'), ...studioCreatedRoots]);
   if (currentWorkingDir) roots.add(currentWorkingDir);
   const activeWorkspace = projectManager?.getActive()?.workspacePath;
   if (activeWorkspace) roots.add(activeWorkspace);

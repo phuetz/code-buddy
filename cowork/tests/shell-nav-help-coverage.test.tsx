@@ -169,11 +169,12 @@ describe('shell navigation help coverage', () => {
     }
   });
 
-  it('keeps the cowork lockfile root license as MIT', () => {
+  it('keeps the generated lockfile license aligned with the package', () => {
     const lock = JSON.parse(
       fs.readFileSync(path.join(coworkRoot, 'package-lock.json'), 'utf8')
     ) as { packages: { '': { license?: string } } };
-    expect(lock.packages[''].license).toBe('MIT');
+    const manifest = JSON.parse(fs.readFileSync(path.join(coworkRoot, 'package.json'), 'utf8')) as { license: string };
+    expect(lock.packages[''].license).toBe(manifest.license);
   });
 
   it('does not leave the stray APPDATA directory at the repo root', () => {
