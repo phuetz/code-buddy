@@ -20,9 +20,9 @@ jobs:
     name: Test on Node.js ${{ matrix.node-version }} and ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
-    # All three operating systems are gating since 2026-09-08: the macOS and Windows
-    # legs went green end-to-end (6/6 shards on Node 20 and 22) after the portability
-    # campaign of that day, so they now block the merge like the Ubuntu legs.
+    # Windows and Ubuntu are gating on PRs. macOS blocks on main and develop
+    # (since the 2026-09-08 portability campaign) but is omitted from PRs due
+    # to runner costs.
 
     env:
       # Inherited by CLI subprocesses too; Vitest execArgv only caps its forks.
@@ -42,9 +42,8 @@ jobs:
         # macOS runners sont facturés dix fois le tarif Linux, Windows deux fois.
         # Sur une pull request, la matrice se limite donc à Ubuntu — la cible
         # bloquante — et à Windows, où vivent de vraies différences de chemins et
-        # d'arrêt de processus. macOS, non bloquant par construction
-        # (continue-on-error ci-dessus), s'exécute à la fusion sur main et
-        # develop, là où sa couverture sert encore à quelque chose.
+        # d'arrêt de processus. macOS, lui, est absent des pull requests mais
+        # s'exécute à la fusion sur main et develop, où il est bloquant.
         # Coût observé : environ 0,25 $ par pull request au lieu de 1 $.
         os: ${{ (github.event_name == 'pull_request' && fromJSON('["ubuntu-latest","windows-latest"]')) || fromJSON('["ubuntu-latest","windows-latest","macos-latest"]') }}
 
