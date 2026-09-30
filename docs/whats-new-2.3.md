@@ -8,11 +8,11 @@ The repository is prepared with `package.json` at 2.3.0; publication remains pen
 | One-click web publish | CLI & Engine | [one-click-deploy.md](one-click-deploy.md) |
 | Database & Auth overlay | CLI & Templates | [provision-db-auth.md](provision-db-auth.md) |
 | Unified recents (CLI / Cowork / mobile) | CLI & Persistence | [unified-history.md](unified-history.md) |
-| Figma import to React screens | CLI & Tool | [figma.md](figma.md) |
+| Figma import to React screens | CLI & Tool | [section 4](#4-figma-rest-export-import-buddy-figma-import) |
 | Expo / React Native starter | App Studio & Scaffolding | [expo-mobile-template.md](expo-mobile-template.md) |
 | Cowork folder instructions | Cowork UI & Context | [cowork.md](cowork.md#folder-instructions) |
 | Authored skills discovery | Self-improvement engine | [self-improvement-engine.md](self-improvement-engine.md#authored-skill-discovery) |
-| Kernel watcher limit resilience | Skills registry & inotify | [skills.md](skills.md#watcher-health) |
+| Kernel watcher limit resilience | Skills registry & inotify | [section 8](#8-kernel-inotify-watcher-resilience) |
 | Thin CLI bootstrap | CLI boot | [getting-started.md](getting-started.md#installation) |
 
 ---
