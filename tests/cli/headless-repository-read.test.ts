@@ -32,7 +32,7 @@ it.each([
     if (!body.messages) { res.end('{}'); return; }
     requests.push(body);
     const read = body.messages.some((m: { role: string; content: string }) =>
-      m.role === 'tool' && m.content.includes('ORACLE_TANGERINE'));
+      (m.role === 'tool' || m.role === 'user') && m.content.includes('ORACLE_TANGERINE'));
     res.end(JSON.stringify({ model: 'fixture-model', message: { role: 'assistant',
       content: read ? 'launch.js prints ORACLE_TANGERINE.' : 'I have no access to project files.' },
     done: true, done_reason: 'stop', prompt_eval_count: 10, eval_count: 10 }) + '\n');
@@ -59,9 +59,9 @@ it.each([
     expect(result.code, result.stderr).toBe(0);
     expect(result.stdout).toContain('launch.js prints ORACLE_TANGERINE');
     const first = requests.find(r => r.messages?.some(m => m.role === 'user'));
-    expect(first?.messages.filter(m => m.role === 'tool').map(m => m.content).join('\n'))
+    expect(first?.messages.filter(m => m.role === (args.includes('dev') ? 'user' : 'tool')).map(m => m.content).join('\n'))
       .toContain('ORACLE_TANGERINE');
-    expect(first?.messages.some(m => m.role === 'tool')).toBe(true);
+    expect(first?.messages.some(m => m.role === 'tool')).toBe(!args.includes('dev'));
     expect(first?.messages.filter(m => m.role === 'assistant' && m.tool_calls?.length)
       .every(m => m.content === '')).toBe(true);
     if (!args.includes('dev')) expect(result.stdout).toContain('Repository context read requested by Code Buddy');
