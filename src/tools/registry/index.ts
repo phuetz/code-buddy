@@ -586,9 +586,26 @@ export type {
  * Also registers canonical-prefix alias tools (shell_*, file_*, browser_*, etc.)
  * for Codex-style tool naming convention.
  */
+/**
+ * Tools intentionally omitted from createAllToolsAsync because they have
+ * side effects or are meant for specific interactive or sync usages.
+ */
+export const DOCUMENTED_ASYNC_REGISTRY_DISCREPANCIES = [
+  'gui_control',         // from createGuiTools()
+  'remind',              // from createRemindTools()
+  'codebase_replace',    // from createCodebaseReplaceTools()
+  'sessions_list',       // from createSessionTools()
+  'sessions_history',    // from createSessionTools()
+  'session_search',      // from createSessionTools()
+  'sessions_send',       // from createSessionTools()
+  'sessions_spawn'       // from createSessionTools()
+];
+
 export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createTextEditorTools } = await import('./text-editor-tools.js');
   const { createBashTools } = await import('./bash-tools.js');
+  const { createLsTools } = await import('./ls-tools.js');
+  const { createSelfDescribeTools } = await import('./self-describe-tools.js');
   const { createSearchTools } = await import('./search-tools.js');
   const { createWorkspaceTools } = await import('../workspace-tools.js');
   const { createWebTools } = await import('./web-tools.js');
@@ -654,6 +671,8 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const primaryTools: ITool[] = [
     ...createTextEditorTools(),
     ...createBashTools(),
+    ...createLsTools(),
+    ...createSelfDescribeTools(),
     ...createSearchTools(),
     ...createWorkspaceTools(),
     ...createWebTools(),
