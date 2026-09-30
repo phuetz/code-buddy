@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from 'node:util';
 import { TOOL_METADATA } from '../tools/metadata.js';
 import { TOOL_ALIASES } from '../tools/registry/tool-alias-map.js';
 
@@ -40,6 +41,21 @@ function argumentsOf(entry: TaskEvidenceEntry): Record<string, unknown> {
   } catch { return {}; }
 }
 
+function hasRedVerification(entry: TaskEvidenceEntry, name: string, command?: string): boolean {
+  const verifies = name === 'lint_project' || name === 'test_runner'
+    || /(?:^|[\s;&|])(?:npm|pnpm|yarn|bun|npx|node|vitest|jest|eslint|tsc|pytest|cargo|go|dotnet)(?=\s|$)/.test(command ?? '')
+      && /\b(?:test|tests|lint|eslint|vitest|jest|tsc|pytest|check|typecheck)\b/.test(command ?? '');
+  if (!verifies) return false;
+  const output = stripVTControlCharacters([entry.toolResult?.output, entry.toolResult?.error, entry.content].filter(Boolean).join('\n'));
+  return /^\s*# fail [1-9]\d*\b/m.test(output)
+    || /^\s*not ok \d+\b/m.test(output)
+    || /\b(?:Test Files|Tests|Test Suites):?\s+[1-9]\d*\s+failed\b/i.test(output)
+    || /\([1-9]\d* errors?,\s*\d+ warnings?\)/i.test(output)
+    || /\berror TS\d+:/i.test(output)
+    || /^FAILED(?:\s|$)/m.test(output)
+    || /(?:npm ERR!|npm error|Error: Cannot find module|(?:eslint|vitest|jest|tsc|pytest): command not found)/i.test(output);
+}
+
 export function evaluateHeadlessTaskOutcome(
   prompt: string,
   entries: readonly TaskEvidenceEntry[],
@@ -67,7 +83,7 @@ export function evaluateHeadlessTaskOutcome(
       if (name === 'bash' && /(?:^|[;&|]\s*)(?:cd|pushd|popd)(?:\s|$)/.test(command ?? '')) shellDirectoryGeneration++;
       const directory = args.cwd ?? args.root ?? args.directory ?? (name === 'bash' ? shellDirectoryGeneration : '');
       const key = JSON.stringify([name, command, directory, args.args ?? args.runner ?? '']);
-      checks.set(key, { tool: name, ...(command ? { command } : {}), success: entry.toolResult.success });
+      checks.set(key, { tool: name, ...(command ? { command } : {}), success: entry.toolResult.success && !hasRedVerification(entry, name, command) });
     }
   }
   const reasons: string[] = [];

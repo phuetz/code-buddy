@@ -26,6 +26,20 @@ describe('headless task evidence', () => {
   it('rejects a verification still red despite the claimed fix', () => {
     expect(exit('run tests and fix failures', [result('bash', 'npm test', false), result('str_replace_editor', 'str_replace', true)])).toBe(1);
   });
+  it.each([
+    ['npm test; true', '# tests 1\n# pass 0\n# fail 1'],
+    ['npx vitest run; echo done', 'Test Files 1 failed (1)\nTests 2 failed (2)'],
+    ['npm run lint; echo done', '✖ 2 problems (2 errors, 0 warnings)'],
+    ['npx tsc --noEmit; true', 'index.ts(2,1): error TS2322: Type mismatch'],
+  ])('rejects visible red verification masked by shell success: %s', (command, output) => {
+    const entry = { ...result('bash', command, true), content: output, toolResult: { success: true, output } };
+    expect(exit('run tests and fix failures', [entry])).toBe(1);
+  });
+  it('accepts ESLint warnings with zero errors', () => {
+    const output = '✖ 2 problems (0 errors, 2 warnings)';
+    const entry = { ...result('bash', 'npm run lint', true), content: output, toolResult: { success: true, output } };
+    expect(exit('fix lint errors', [entry])).toBe(0);
+  });
   it('accepts red then green for the same verification', () => {
     expect(exit('run tests and fix failures', [result('bash', 'npm test', false), result('str_replace_editor', 'str_replace', true), result('bash', 'npm test', true)])).toBe(0);
   });
