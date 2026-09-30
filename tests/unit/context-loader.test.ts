@@ -22,6 +22,7 @@ vi.mock('fs/promises', () => {
     access: mockFsAccess,
     readFile: mockFsReadFile,
     stat: mockFsStat,
+    readdir: vi.fn(async () => []),
   };
   return { ...impl, default: impl };
 });
