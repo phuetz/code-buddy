@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: http-memory
+Commande: POST puis GET /api/memory?scope=project sur le serveur local 18731
+Attendu: Note factice créée et retrouvée.
+Observé: POST 201 ; GET 200 ; contenu « P7 fixture note » relu ; serveur arrêté code 0.
+Verdict: prouvée
+Limite: Une exécution locale unique ; autres environnements non vérifiés.

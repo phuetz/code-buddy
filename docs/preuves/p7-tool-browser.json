@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-browser",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "0fca70bc9969303061d95c1eb8f4ab5673d877094e5bd5b5996cbd84bc6056ea",
+  "artifact": "docs/preuves/p7-tool-browser.log",
+  "summary": "launch=true ; navigate=true, titre P7 browser ; snapshot bouton [1] Go ; click=true ; assert_text « clicked »=true ; navigateur fermé."
+}

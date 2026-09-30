@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-screen
+Commande: Xvfb :188 + xlogo ; buddy screen capture --region 320x240 ; inspection PNG
+Attendu: Image du bureau X11 jetable capturée.
+Observé: Code 0 ; PNG 320x240 ; 1461 octets ; fenêtre xlogo visible (2 couleurs) ; Xvfb arrêté code 0.
+Verdict: prouvée
+Limite: Affichage Xvfb seulement ; bureau réel non capturé.

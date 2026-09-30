@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: telegram-channel
+Commande: TelegramChannel.connect/send/disconnect ; serveur Bot API local 18733
+Attendu: Connexion, envoi et déconnexion via vrais appels HTTP du canal.
+Observé: Code 0 ; méthodes observées getMe, setWebhook, sendMessage, deleteWebhook ; sendMessage chat_id=456, text=P7 bonjour ; delivery.success=true, messageId=321.
+Verdict: prouvée
+Limite: Serveur Bot API local simulé ; réseau Telegram public et réception non vérifiés.

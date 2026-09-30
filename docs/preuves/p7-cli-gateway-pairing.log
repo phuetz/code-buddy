@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-gateway-pairing
+Commande: Demande de jumelage locale ; buddy gateway-pairing pending/approve/list/revoke
+Attendu: Approbation à portée limitée, jeton vérifié puis révocation.
+Observé: Codes 0 ; pending count=1 ; approve émet un jeton (non consigné) ; verifyToken=true ; revoke=true ; liste finale vide.
+Verdict: prouvée
+Limite: Magasin local ; aucun appareil physique.

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-memory",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "23a0e6cf2c08f031ea50996feb11d6acf7415b5d77ad472552cd1885ec1de6c4",
+  "artifact": "docs/preuves/p7-http-memory.log",
+  "summary": "POST 201 ; GET 200 ; contenu « P7 fixture note » relu ; serveur arrêté code 0."
+}

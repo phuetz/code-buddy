@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-ruche
+Commande: buddy ruche heartbeat/bail/status/liberer/status sous clés Ed25519 jetables
+Attendu: Bail signé accordé, visible, puis libéré.
+Observé: Codes 0 ; événement heartbeat signé ; lease.grant pour p7-local-work-2 ; lease.release ; bail absent de l’état final.
+Verdict: prouvée
+Limite: Coordination signée sur un seul hôte ; pas de pair distant.
