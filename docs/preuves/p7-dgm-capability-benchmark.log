@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: dgm-capability-benchmark
+Commande: buddy improve bench --run --provider ollama --models qwen3:4b-instruct --scenarios 1 --json
+Attendu: Scénario réellement évalué et historique inscrit sous HOME isolé.
+Observé: Code 0 ; kind=continuous_capability_benchmark ; provider=ollama ; scenarios=1 ; score=0 ; status=ok.
+Verdict: prouvée
+Limite: Le score mesuré est 0 ; aucune amélioration de capacité déduite.

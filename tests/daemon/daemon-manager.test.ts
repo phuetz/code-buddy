@@ -82,4 +82,18 @@ describe('DaemonManager', () => {
 
     await expect(manager.start(false)).rejects.toThrow(/already running/);
   });
+
+  it('adopts the PID written by the parent when the detached child starts', async () => {
+    await fs.mkdir(path.dirname(manager.getConfig().pidFile), { recursive: true });
+    await fs.writeFile(manager.getConfig().pidFile, String(process.pid));
+    const previous = process.env.CODEBUDDY_DAEMON;
+    process.env.CODEBUDDY_DAEMON = 'true';
+    try {
+      await expect(manager.start(false)).resolves.toBeUndefined();
+      expect((await manager.status()).running).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_DAEMON;
+      else process.env.CODEBUDDY_DAEMON = previous;
+    }
+  });
 });

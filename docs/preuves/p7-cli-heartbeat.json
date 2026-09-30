@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-heartbeat",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "4d87dcd6f9a93b908916576701cc7db2e4b5d90d1f85b76744c8f106c6bc6f66",
+  "artifact": "docs/preuves/p7-cli-heartbeat.log",
+  "summary": "La commande affiche « Result: Sorry, I encountered an error » ; Ollama renvoie « request (66989 tokens) exceeds the available context size (16384 tokens) » ; processus interrompu après erreur."
+}

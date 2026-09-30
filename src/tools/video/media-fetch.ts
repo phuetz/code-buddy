@@ -218,10 +218,12 @@ function runYtdlpOnce(
 ): Promise<AttemptOutcome> {
   return new Promise<AttemptOutcome>((resolve) => {
     let settled = false;
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const finish = (result: AttemptOutcome): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       resolve(result);
     };
 
@@ -238,13 +240,13 @@ function runYtdlpOnce(
       return;
     }
 
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
+      timedOut = true;
       try {
         child.kill('SIGKILL');
       } catch {
         /* already gone */
       }
-      finish({ ok: false, error: `yt-dlp timed out after ${timeoutMs}ms`, stderr });
     }, timeoutMs);
 
     child.stderr?.on('data', (d) => {
@@ -252,6 +254,10 @@ function runYtdlpOnce(
     });
 
     child.on('error', (err) => {
+      if (timedOut) {
+        finish({ ok: false, error: `yt-dlp timed out after ${timeoutMs}ms`, stderr });
+        return;
+      }
       finish({
         ok: false,
         error: `yt-dlp failed to run (${invocation.label}): ${err instanceof Error ? err.message : String(err)}. ${YTDLP_HINT}`,
@@ -260,7 +266,9 @@ function runYtdlpOnce(
     });
 
     child.on('close', (code) => {
-      if (code === 0) {
+      if (timedOut) {
+        finish({ ok: false, error: `yt-dlp timed out after ${timeoutMs}ms`, stderr });
+      } else if (code === 0) {
         finish({ ok: true, stderr });
       } else {
         finish({
