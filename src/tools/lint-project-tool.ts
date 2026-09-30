@@ -58,34 +58,35 @@ async function exists(filePath: string): Promise<boolean> {
 // see local-binary-launch.ts.
 const ESLINT_JS_ENTRIES = ['node_modules/eslint/bin/eslint.js'];
 
-function runLocalBinary(root: string, file: string, args: string[], cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean }> {
+function runLocalBinary(root: string, file: string, args: string[], cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean; exitCode: number | null }> {
   const launch = resolveLocalBinaryLaunch(root, file, ESLINT_JS_ENTRIES, args);
   return new Promise((resolve) => {
     execFile(launch.file, launch.args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024, windowsVerbatimArguments: launch.windowsVerbatimArguments }, (error, stdout, stderr) => {
       const timedOut = Boolean(error && 'killed' in error && error.killed);
-      resolve({ stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), timedOut });
+      const exitCode = !error ? 0 : typeof error.code === 'number' ? error.code : null;
+      resolve({ stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), timedOut, exitCode });
     });
   });
 }
 
-function parseJsonOutput(stdout: string): unknown[] {
+function parseJsonOutput(stdout: string): unknown[] | null {
   const trimmed = stdout.trim();
-  if (!trimmed) return [];
+  if (!trimmed) return null;
   try {
     const parsed = JSON.parse(trimmed) as unknown;
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed : null;
   } catch {
     const start = trimmed.indexOf('[');
     const end = trimmed.lastIndexOf(']');
     if (start >= 0 && end > start) {
       try {
         const parsed = JSON.parse(trimmed.slice(start, end + 1)) as unknown;
-        return Array.isArray(parsed) ? parsed : [];
+        return Array.isArray(parsed) ? parsed : null;
       } catch {
-        return [];
+        return null;
       }
     }
-    return [];
+    return null;
   }
 }
 
@@ -105,7 +106,7 @@ export class LintProjectTool {
       }
 
       const timeoutMs = Math.min(Math.max(Number(input.timeoutMs) || DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS);
-      const { stdout, stderr, timedOut } = await runLocalBinary(root, eslintPath, ['.', '--format', 'json'], root, timeoutMs);
+      const { stdout, stderr, timedOut, exitCode } = await runLocalBinary(root, eslintPath, ['.', '--format', 'json'], root, timeoutMs);
       // ESLint reports absolute paths derived from its (canonical) cwd; when the
       // root was given lexically through a symlink (macOS /var → /private/var),
       // relativize against the canonical root too so summaries stay project-relative.
@@ -120,7 +121,7 @@ export class LintProjectTool {
         return rel;
       };
       const reports = parseJsonOutput(stdout);
-      const files: LintProjectFileSummary[] = reports.filter(isRecord).map((report) => {
+      const files: LintProjectFileSummary[] = (reports ?? []).filter(isRecord).map((report) => {
         const messages = Array.isArray(report.messages) ? report.messages.filter(isRecord).map((message) => ({
           ruleId: typeof message.ruleId === 'string' ? message.ruleId : undefined,
           severity: typeof message.severity === 'number' ? message.severity : 0,
@@ -139,7 +140,17 @@ export class LintProjectTool {
       const warningCount = files.reduce((sum, file) => sum + file.warnings, 0);
       const data: LintProjectData = { root, eslintPath, missing: false, errorCount, warningCount, files, timedOut };
       const suffix = timedOut ? ' (timed out)' : stderr.trim() ? ` (${stderr.trim().slice(0, 120)})` : '';
-      return { success: !timedOut && errorCount === 0, output: `ESLint: ${errorCount} error(s), ${warningCount} warning(s) in ${files.length} file(s)${suffix}`, data };
+      const diagnostics = files.flatMap((file) => file.messages.map((message) =>
+        `${file.filePath}:${message.line ?? 0}:${message.column ?? 0} ${message.severity === 2 ? 'error' : 'warning'} ${message.ruleId ?? 'parse'}: ${message.message}`,
+      ));
+      const executionIssue = exitCode !== 0 ? `ESLint exited with code ${exitCode ?? 'unknown'}.` : '';
+      const reportIssue = reports === null ? 'ESLint returned no valid JSON report.' : '';
+      const output = [
+        `ESLint: ${errorCount} error(s), ${warningCount} warning(s) in ${files.length} file(s)${suffix}`,
+        ...diagnostics, executionIssue, reportIssue,
+      ].filter(Boolean).join('\n');
+      const success = !timedOut && exitCode === 0 && reports !== null && errorCount === 0;
+      return { success, output, ...(success ? {} : { error: output }), data };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }

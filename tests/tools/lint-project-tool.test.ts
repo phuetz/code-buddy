@@ -46,6 +46,9 @@ process.exit(1);
     const result = await new LintProjectTool().execute({ root, timeoutMs: 5000 });
 
     expect(result.success).toBe(false);
+    expect(result.error).toContain('bad.ts:1:12');
+    expect(result.error).toContain('Missing semicolon.');
+    expect(result.error).toContain('semi');
     const data = result.data as { errorCount: number; warningCount: number; files: Array<{ filePath: string; errors: number; warnings: number }> };
     expect(data.errorCount).toBe(1);
     expect(data.warningCount).toBe(1);
@@ -57,5 +60,23 @@ process.exit(1);
     const result = await new LintProjectTool().execute({ root });
     expect(result.success).toBe(false);
     expect((result.data as { missing: boolean }).missing).toBe(true);
+  });
+
+  it.each([
+    { body: 'console.error("ESLint config missing"); process.exit(2);', success: false },
+    { body: 'console.log("this is not a JSON report");', success: false },
+    { body: 'console.log("[]");', success: true },
+  ])('does not confuse missing diagnostics with a successful lint ($body)', async ({ body, success }) => {
+    const root = path.join(homeDir, 'project');
+    const bin = path.join(root, 'node_modules', '.bin');
+    await fs.mkdir(bin, { recursive: true });
+    await writeExecutable(path.join(bin, 'eslint'), `#!/usr/bin/env node\n${body}\n`);
+    await fs.writeFile(path.join(bin, 'eslint.cmd'), '@node "%~dp0..\\eslint\\bin\\eslint.js" %*\r\n');
+    const entry = path.join(root, 'node_modules', 'eslint', 'bin');
+    await fs.mkdir(entry, { recursive: true });
+    await fs.writeFile(path.join(entry, 'eslint.js'), body);
+    const result = await new LintProjectTool().execute({ root, timeoutMs: 5000 });
+    expect(result.success).toBe(success);
+    if (!success) expect(result.error).toBeTruthy();
   });
 });
