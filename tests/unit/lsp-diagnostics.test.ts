@@ -32,6 +32,30 @@ describe('LSP diagnostic publication', () => {
     await expect(result).resolves.toEqual(expected);
   });
 
+  it('does not accept an initial empty publication before semantic diagnostics', async () => {
+    vi.useFakeTimers();
+    const { client, diagnostics } = diagnosticClient();
+    const path = await import('node:path');
+    const file = path.resolve('semantic.ts');
+    diagnostics.set(file, []);
+    const result = client.getDiagnostics(file);
+    await vi.advanceTimersByTimeAsync(500);
+    const expected: LSPDiagnostic[] = [{ file, line: 2, column: 7, severity: 'error', message: 'Semantic type error' }];
+    diagnostics.set(file, expected);
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(result).resolves.toEqual(expected);
+  });
+
+  it('returns a genuinely empty publication at the bounded deadline', async () => {
+    vi.useFakeTimers();
+    const { client, diagnostics } = diagnosticClient();
+    const path = await import('node:path');
+    diagnostics.set(path.resolve('clean.ts'), []);
+    const result = client.getDiagnostics('clean.ts');
+    await vi.advanceTimersByTimeAsync(5100);
+    await expect(result).resolves.toEqual([]);
+  });
+
   it('fails when the server never publishes instead of returning a clean result', async () => {
     vi.useFakeTimers();
     const { client } = diagnosticClient();

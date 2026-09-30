@@ -717,9 +717,12 @@ export class LSPClient {
     // Initialization does not mean the first analysis has completed. Wait for
     // the server's publication, including a valid empty publication for a
     // clean file, rather than treating a slow server as an empty result.
+    // Some servers first publish [] while semantic analysis is still pending.
+    // Only conclude "clean" at the bounded deadline; a later nonempty
+    // publication can complete the query sooner.
     const normalized = path.resolve(file);
     const deadline = Date.now() + 5000;
-    while (!conn.diagnostics.has(normalized) && Date.now() < deadline) {
+    while (!(conn.diagnostics.get(normalized)?.length) && Date.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     if (!conn.diagnostics.has(normalized)) {
