@@ -4,14 +4,18 @@
  * Before each agent turn, creates an automatic Git commit capturing
  * the workspace state. Enables single-command undo to any previous turn.
  *
- * Uses a shadow branch (.codebuddy/ghost) to avoid polluting the user's
- * git history. Ghost commits are lightweight stash-like references.
+ * Uses a temporary index and commit-tree, without moving HEAD or touching
+ * the user's index. Ghost commits are lightweight stash-like references.
  *
  * Inspired by OpenAI Codex CLI's ghost_snapshot.rs
  */
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { logger } from '../utils/logger.js';
 
 const execFileAsync = promisify(execFile);
@@ -84,7 +88,7 @@ export class GhostSnapshotManager {
     if (!await this.initialize()) return null;
 
     this.turnCounter++;
-    const id = new Date().toISOString().replace(/[:.]/g, '-');
+    const id = new Date().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID();
     // Sanitize description: cap length, strip control chars
     const rawDesc = description ?? `Turn ${this.turnCounter}`;
     // eslint-disable-next-line no-control-regex
@@ -94,7 +98,7 @@ export class GhostSnapshotManager {
       // The common case between turns is a clean workspace. Check it before
       // touching the index so large repositories avoid an unnecessary
       // `git add -A` on the first-token critical path.
-      const status = await this.git(['status', '--porcelain']);
+      const status = await this.git(['status', '--porcelain', '--', '.']);
       if (!status.trim()) {
         // No changes — create a reference to HEAD
         const headHash = (await this.git(['rev-parse', 'HEAD'])).trim();
@@ -108,26 +112,22 @@ export class GhostSnapshotManager {
         return snapshot;
       }
 
-      // Stage all changes (including untracked, excluding .gitignored) only
-      // when there is actually something to capture.
-      await this.git(['add', '-A']);
-
-      // Create a ghost commit (won't appear in regular git log)
-      const commitHash = (await this.git([
-        'commit', '--allow-empty', '-m', `[ghost] ${desc}`,
-        '--no-verify', '--no-gpg-sign',
-      ])).trim();
-
-      // Extract the actual hash from the commit output
-      const hashMatch = commitHash.match(/\[.*\s+([a-f0-9]+)\]/);
-      const hash = hashMatch?.[1] ?? (await this.git(['rev-parse', 'HEAD'])).trim();
-
-      // Store as a named ref (not on any branch)
-      const refName = `${GHOST_REF_PREFIX}${id}`;
-      await this.git(['update-ref', refName, hash]);
-
-      // Soft-reset to unstage (keep changes in working tree for the user)
-      await this.git(['reset', '--soft', 'HEAD~1']);
+      const headHash = (await this.git(['rev-parse', 'HEAD'])).trim();
+      const scratch = await mkdtemp(join(tmpdir(), 'codebuddy-ghost-index-'));
+      let hash: string;
+      try {
+        const indexEnv = { GIT_INDEX_FILE: join(scratch, 'index') };
+        await this.git(['read-tree', headHash], indexEnv);
+        await this.git(['add', '-A', '--', '.'], indexEnv);
+        const tree = (await this.git(['write-tree'], indexEnv)).trim();
+        hash = (await this.git([
+          '-c', 'user.name=Code Buddy Snapshots', '-c', 'user.email=snapshots@example.invalid',
+          'commit-tree', tree, '-p', headHash, '-m', `[ghost] ${desc}`,
+        ], indexEnv)).trim();
+        await this.git(['update-ref', `${GHOST_REF_PREFIX}${id}`, hash]);
+      } finally {
+        await rm(scratch, { recursive: true, force: true });
+      }
 
       const snapshot: GhostSnapshot = {
         id, commitHash: hash, description: desc,
@@ -238,11 +238,11 @@ export class GhostSnapshotManager {
   /**
    * Helper: run a git command.
    */
-  private async git(args: string[]): Promise<string> {
+  private async git(args: string[], extraEnv: NodeJS.ProcessEnv = {}): Promise<string> {
     const { stdout } = await execFileAsync('git', args, {
       cwd: this.cwd,
       timeout: SNAPSHOT_TIMEOUT_MS,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+      env: { ...process.env, ...extraEnv, GIT_OPTIONAL_LOCKS: '0' },
     });
     return stdout;
   }

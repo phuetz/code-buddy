@@ -7,7 +7,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Command } from 'commander';
@@ -81,7 +81,7 @@ export const TRY_DEMO_PROMPT = `You are driving a short coding-agent demo in an 
 
 Exact goal:
 1. Create fizzbuzz.js in CommonJS. Export a function fizzBuzz(value) that returns the number as a string, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and "FizzBuzz" for multiples of 15.
-2. Create fizzbuzz.test.js using node:test and node:assert/strict. Test at least 1, 3, 5, and 15.
+2. Create fizzbuzz.test.js in CommonJS too: use require('node:test'), require('node:assert/strict'), and require('./fizzbuzz.js'), never import/export syntax. Test at least 1, 3, 5, and 15.
 3. Run exactly: node --test fizzbuzz.test.js
 4. If a test fails, fix the code and run it again.
 5. Finish with a very short summary naming the two files you created and the test result.
@@ -291,11 +291,11 @@ async function createDefaultAgent(
   }
 }
 
-async function verifyDefaultDemo(workspace: string): Promise<TryVerification> {
+async function runVerificationCommand(workspace: string, args: string[]): Promise<TryVerification> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
-      ['--test', 'fizzbuzz.test.js'],
+      args,
       { cwd: workspace, timeout: 30_000, maxBuffer: 1024 * 1024 },
       (error, stdout, stderr) => {
         const output = `${stdout}${stderr}`.trim();
@@ -303,6 +303,32 @@ async function verifyDefaultDemo(workspace: string): Promise<TryVerification> {
       },
     );
   });
+}
+
+async function verifyDefaultDemo(workspace: string): Promise<TryVerification> {
+  try {
+    const contents = await Promise.all(['fizzbuzz.js', 'fizzbuzz.test.js']
+      .map((file) => readFile(join(workspace, file), 'utf8')));
+    if (contents.some((content) => !content.trim())) {
+      return { success: false, output: 'Demo files must contain code and tests; empty files are not a working demo.' };
+    }
+  } catch (error) {
+    return { success: false, output: error instanceof Error ? error.message : String(error) };
+  }
+  const generated = await runVerificationCommand(workspace, ['--test', 'fizzbuzz.test.js']);
+  if (!generated.success) return generated;
+  // The model's own test can be empty, trivial or wrong. Verify the requested
+  // behavior in a separate Node process using expectations owned by the product.
+  const oracle = await runVerificationCommand(workspace, ['--input-type=commonjs', '-e', `
+    const assert = require('node:assert/strict');
+    const { fizzBuzz } = require('./fizzbuzz.js');
+    assert.equal(typeof fizzBuzz, 'function', 'fizzbuzz.js must export fizzBuzz');
+    for (const [input, expected] of [[1,'1'], [2,'2'], [3,'Fizz'], [5,'Buzz'], [15,'FizzBuzz'], [16,'16'], [30,'FizzBuzz']]) {
+      assert.equal(fizzBuzz(input), expected, 'fizzBuzz(' + input + ')');
+    }
+    process.stdout.write('Independent FizzBuzz oracle: 7/7');
+  `]);
+  return { success: oracle.success, output: `${generated.output}\n${oracle.output}` };
 }
 
 function latestAssistantMessage(entries: readonly ChatEntry[]): string | null {
@@ -381,7 +407,13 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   }
 
   const createWorkspace = options.createWorkspace
-    ?? (() => mkdtemp(join(tmpdir(), 'code-buddy-try-')));
+    ?? (async () => {
+      const folder = await mkdtemp(join(tmpdir(), 'code-buddy-try-'));
+      // TMPDIR may sit under an ESM project. Pin the demo's requested CommonJS
+      // format locally rather than inheriting that project's package type.
+      await writeFile(join(folder, 'package.json'), '{"private":true,"type":"commonjs"}\n');
+      return folder;
+    });
   const workspace = await createWorkspace();
   const createAgent = options.createAgent ?? createDefaultAgent;
   const verify = options.verify ?? verifyDefaultDemo;
@@ -421,6 +453,9 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
     }
 
     write('✅ Demo succeeded: the code was written and its tests pass.');
+    if (verification.output.includes('Independent FizzBuzz oracle: 7/7')) {
+      write('      Independent FizzBuzz oracle: 7/7');
+    }
     if (verification.output) {
       const passLine = verification.output.split('\n').find((line) => /pass/i.test(line));
       if (passLine) write(`   ${passLine.trim()}`);
