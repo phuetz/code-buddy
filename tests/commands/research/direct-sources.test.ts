@@ -54,15 +54,24 @@ describe('runDirectResearch', () => {
     )).toBe(true);
   });
 
-  it('still returns a report with a Sources section when search fails', async () => {
-    const report = await runDirectResearch('topic', {
+  it.each(['empty', 'failed'])('refuses a source-free essay when search is %s', async (mode) => {
+    const chat = vi.fn(async () => 'Invented research.');
+    await expect(runDirectResearch('topic', {
       timeoutMs: 5_000,
-      search: async () => {
-        throw new Error('network down');
-      },
-      chat: async () => 'Essay without citations.',
-    });
-    expect(report).toContain('Essay without citations.');
-    expect(report).toContain('## Sources');
+      search: async () => { if (mode === 'failed') throw new Error('network down'); return []; },
+      chat,
+    })).rejects.toThrow('NO_RESEARCH_SOURCES');
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it('releases its deadline after a successful synthesis', async () => {
+    vi.useFakeTimers();
+    try {
+      await runDirectResearch('topic', { timeoutMs: 5_000,
+        search: async () => [{ title: 'A', url: 'https://a.example/' }],
+        chat: async () => 'Cited report.',
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
   });
 });

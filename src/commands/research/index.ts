@@ -107,6 +107,10 @@ export async function runDirectResearch(topic: string, deps: DirectResearchDeps)
     sources = [];
   }
 
+  if (sources.length === 0) {
+    throw new Error('NO_RESEARCH_SOURCES: web search returned no usable sources. No researched report was produced. Check search connectivity or configure a search provider.');
+  }
+
   const sourceBlock = sources.length
     ? sources
         .map((s, i) => {
@@ -134,20 +138,19 @@ export async function runDirectResearch(topic: string, deps: DirectResearchDeps)
     ((msgs) => defaultDirectChat(msgs, deps.apiKey ?? '', deps.providerConfig ?? {}));
 
   let body = '';
+  let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
     body = await Promise.race([
       chat(messages),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`Direct research timed out after ${timeoutMs}ms`)), timeoutMs),
-      ),
+      new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => reject(new Error(`Direct research timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
     ]);
-  } catch (err) {
-    if (!body) {
-      body = `# Research Report: ${topic}\n\n${err instanceof Error ? err.message : String(err)}`;
-    }
+  } finally {
+    if (deadline !== undefined) clearTimeout(deadline);
   }
   if (!body.trim()) {
-    body = `# Research Report: ${topic}\n\nNo content returned by provider.`;
+    throw new Error('NO_RESEARCH_CONTENT: provider returned no report.');
   }
   return appendDirectResearchSources(body, sources);
 }

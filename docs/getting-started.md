@@ -178,6 +178,15 @@ Code Buddy includes standalone CLI utilities for cost tracking, changelog genera
 | `buddy explain`     | One-shot repository explanation report (conventions, hotspots, risks) as Markdown or self-contained HTML | `--out <f.md\|.html>`, `--depth <quick\|deep>`, `--html` |
 | `buddy dev explain` | Summarise repository conventions, architecture, critical paths, and workflows from a fresh repo profile                        | `buddy dev explain`                                                                             |
 
+Local repository orientation reads available entry files before asking a local model
+to explain them; the reads appear in the tool transcript. `buddy dev explain --model
+<model>` honours the selected model and uses a fresh profile without starting a
+background indexer. Models can still make mistakes; compare their claims with the
+reported files and commands.
+
+`buddy research` requires usable web search sources. If search is blocked or returns
+none, it exits with an error instead of presenting a source-free essay as research.
+
 `buddy changelog` reads the local Git history. It must be run from a Git checkout;
 an installation npm pack does not include the `.git` directory. From
 an npm installation, the command exits with an explicit “Ce dossier n’est pas
