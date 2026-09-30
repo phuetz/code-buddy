@@ -27,6 +27,7 @@ import {
   formatSecretRefusal,
   type SecretFileAccess,
 } from '../security/secret-files.js';
+import { isPathInside } from '../security/path-comparison.js';
 
 // ============================================================================
 // Types
@@ -296,20 +297,7 @@ export class WorkspaceIsolation extends EventEmitter {
    * Check if a path is in the blocked list
    */
   private isBlockedPath(resolvedPath: string): boolean {
-    // Check exact matches
-    if (this.blockedPaths.has(resolvedPath)) {
-      return true;
-    }
-
-    // Check if path is under a blocked directory
-    const blockedPathsArray = Array.from(this.blockedPaths);
-    for (let i = 0; i < blockedPathsArray.length; i++) {
-      if (resolvedPath.startsWith(blockedPathsArray[i] + path.sep)) {
-        return true;
-      }
-    }
-
-    return false;
+    return Array.from(this.blockedPaths).some((blocked) => isPathInside(resolvedPath, blocked));
   }
 
   /**

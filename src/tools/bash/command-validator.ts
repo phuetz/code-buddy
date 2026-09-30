@@ -16,10 +16,9 @@ import {
   SAFE_ENV_VARS,
   BLOCKED_PATHS,
 } from './security-patterns.js';
-import * as os from 'node:os';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { classifySecretPath, getHomeCredentialRoots } from '../../security/secret-files.js';
+import { classifySecretPath, getHomeCredentialRoots, getHomeDirectories } from '../../security/secret-files.js';
+import { foldPathCase, isPathInside, pathForPlatform } from '../../security/path-comparison.js';
 import { parseShellCommand } from '../../security/bash-parser.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
@@ -366,8 +365,9 @@ export function getFilteredEnv(): Record<string, string> {
  * Replace `~`, `$HOME`, `${HOME}` with the home directory (POSIX shells).
  * Only the forms a shell would expand to the home directory are handled.
  */
-export function expandHomeReferences(command: string): string {
-  const home = os.homedir();
+export function expandHomeReferences(command: string, platform: NodeJS.Platform = process.platform): string {
+  const home = getHomeDirectories(platform)[0];
+  if (!home) return command;
   return command
     .replace(/\$\{HOME\}/g, home)
     .replace(/\$HOME(?![A-Za-z0-9_])/g, home)
@@ -407,14 +407,14 @@ export function findCredentialPathInCommand(command: string, platform: NodeJS.Pl
   const unquoted = command
     .replace(/\$(?:""|'')/g, '')
     .replace(/["']/g, '');
-  const variants = [expandHomeReferences(unquoted.replace(/\\([^\n])/g, '$1'))];
+  const variants = [expandHomeReferences(unquoted.replace(/\\([^\n])/g, '$1'), platform)];
   if (platform === 'win32') {
     // Preserve literal Windows separators too: replacing every backslash can
     // turn a doubled separator into an invalid mixed separator sequence.
-    variants.unshift(expandHomeReferences(unquoted));
-    variants.push(expandHomeReferences(unquoted.replace(/\\([^\n])/g, '/$1')));
+    variants.unshift(expandHomeReferences(unquoted, platform));
+    variants.push(expandHomeReferences(unquoted.replace(/\\([^\n])/g, '/$1'), platform));
   }
-  const roots = getHomeCredentialRoots();
+  const roots = getHomeCredentialRoots({ platform });
   for (const expanded of new Set(variants)) {
     const found = findCredentialPathInExpandedCommand(expanded, platform, roots);
     if (found) return found;
@@ -427,7 +427,8 @@ function findCredentialPathInExpandedCommand(
   platform: NodeJS.Platform,
   roots: readonly string[],
 ): string | null {
-  const fold = (value: string): string => platform === 'win32' ? value.toLowerCase() : value;
+  const paths = pathForPlatform(platform);
+  const fold = (value: string): string => foldPathCase(value, platform);
   const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
   const words = new Set(
     tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
@@ -441,7 +442,7 @@ function findCredentialPathInExpandedCommand(
       roots.some((root) => {
         const normalizedRoot = platform === 'win32' ? root.replace(/\\/g, '/') : root;
         const normalizedToken = platform === 'win32' ? token.replace(/\\/g, '/') : token;
-        const separator = platform === 'win32' ? '/' : path.sep;
+        const separator = platform === 'win32' ? '/' : paths.sep;
         return fold(normalizedToken).includes(fold(`${normalizedRoot}${separator}`)) && /\$|`/.test(token);
       }),
     );
@@ -450,37 +451,46 @@ function findCredentialPathInExpandedCommand(
 
   // `cd <credential root>` then a RELATIVE name: resolve relative tokens
   // against the last `cd` target seen in the command text.
-  let cdTarget = process.cwd();
+  let cdTarget = platform === process.platform ? process.cwd() : getHomeDirectories(platform)[0] ?? paths.sep;
   for (let i = 0; i < tokens.length; i += 1) {
     const raw = tokens[i] ?? '';
     const token = raw.replace(/^--?[A-Za-z0-9-]+=/, '');
-    const base = (platform === 'win32' ? path.win32 : path).basename(token).toLowerCase();
+    const base = paths.basename(token).toLowerCase();
     if (BASH_CREDENTIAL_BASENAMES.has(base)) return raw;
     if (i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd')) {
-      cdTarget = path.isAbsolute(token) ? path.normalize(token) : path.resolve(cdTarget, token);
+      cdTarget = paths.isAbsolute(token) ? paths.normalize(token) : paths.resolve(cdTarget, token);
     }
     let candidate = token;
-    if (!path.isAbsolute(token)) {
+    if (!paths.isAbsolute(token)) {
       if (token.startsWith('-')) continue;
-      candidate = path.resolve(cdTarget, token);
+      candidate = paths.resolve(cdTarget, token);
     }
-    const normalized = path.normalize(candidate).replace(/[\\/]+$/, '') || path.sep;
+    const normalized = paths.normalize(candidate).replace(/[\\/]+$/, '') || paths.sep;
     // A simple copy of a public template to a new .env is a supported
     // scaffolding operation. The source remains subject to the read guard.
     if (tokens[0] === 'cp' && i === tokens.length - 1 &&
-      tokens.length === 3 && !classifySecretPath(tokens[1] ?? '').secret) continue;
-    if (classifySecretPath(normalized).secret) return raw;
+      tokens.length === 3 && !classifySecretPath(tokens[1] ?? '', undefined, { platform }).secret) continue;
+    if (classifySecretPath(normalized, undefined, { platform }).secret) return raw;
     let canonical = normalized;
-    try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
-    const underRoot = roots.find(
-      (root) => fold(canonical) === fold(root) || fold(canonical).startsWith(fold(root + path.sep)),
-    );
+    if (platform === process.platform) {
+      try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
+    }
+    const underRoot = roots.find((root) => isPathInside(canonical, root, platform));
     if (!underRoot) continue;
     if (/[*?[\]{}]/.test(normalized)) return raw;
     const isCdTarget = i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd');
     let isDirectory = false;
-    try { isDirectory = fs.statSync(normalized).isDirectory(); } catch { /* missing path */ }
-    if (usesRecursiveReader && isDirectory && !isCdTarget) return raw;
+    let exists = false;
+    if (platform === process.platform) {
+      try {
+        isDirectory = fs.statSync(normalized).isDirectory();
+        exists = true;
+      } catch { /* missing path */ }
+    }
+    // A simulated platform may not have the directory on this host. A
+    // directory-shaped operand under a credential root is still unsafe.
+    if (usesRecursiveReader && !isCdTarget &&
+      (isDirectory || (!exists && /[\\/]/.test(token) && !paths.extname(normalized)))) return raw;
   }
   return null;
 }
