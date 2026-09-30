@@ -181,11 +181,13 @@ export function registerLspCommands(program: Command): void {
 
       if (emitJson) {
         console.log(JSON.stringify({ file, language, diagnostics }, null, 2));
+        await client.stopAll();
         return;
       }
 
       if (diagnostics.length === 0) {
         console.log(`\nNo diagnostics for ${file} (${language}). Looks clean.\n`);
+        await client.stopAll();
         return;
       }
 
@@ -194,5 +196,6 @@ export function registerLspCommands(program: Command): void {
         console.log(formatDiagnostic(diag));
       }
       console.log('');
+      await client.stopAll();
     });
 }

@@ -23,7 +23,7 @@ nativeEngine:
     - check it works
     - dev server
     - web app testing
-    - test ui
+    - test web ui
   examples:
     - "Build the login page and test that it works"
     - "Ajoute le formulaire et vérifie que ça marche dans le navigateur"

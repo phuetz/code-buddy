@@ -14,7 +14,7 @@ nativeEngine:
   category: development
   priority: 85
   triggers:
-    - commit
+    - make a commit
     - git commit
     - create commit
     - save changes
