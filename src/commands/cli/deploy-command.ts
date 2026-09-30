@@ -79,7 +79,8 @@ export function registerDeployCommands(
       write('  hetzner     Hetzner Cloud — European VPS');
       write('  northflank  Northflank — Kubernetes PaaS');
       write('  gcp         Google Cloud Platform');
-      write('  nix         Nix flake — declarative installation');
+      write('\nOther generators:\n');
+      write('  buddy deploy nix   Nix flake — declarative installation');
       write('\nUsage: buddy deploy run [--apply]   |   buddy deploy init <platform>');
     });
 

@@ -106,6 +106,7 @@ export async function writeNixConfigs(
   const flakePath = path.join(outputDir, 'flake.nix');
   const defaultPath = path.join(outputDir, 'default.nix');
 
+  await fs.mkdir(outputDir, { recursive: true });
   await fs.writeFile(flakePath, flakeContent, 'utf8');
   await fs.writeFile(defaultPath, defaultContent, 'utf8');
 

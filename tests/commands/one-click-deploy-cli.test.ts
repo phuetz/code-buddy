@@ -79,5 +79,7 @@ describe('buddy deploy run CLI', () => {
     expect(out).toMatch(/cloudflare-pages/);
     expect(out).toMatch(/netlify/);
     expect(out).toMatch(/dry-run|simulation|deploy run/i);
+    expect(out).toContain('buddy deploy nix');
+    expect(out.split('Config generators (buddy deploy init)')[1]?.split('Other generators')[0]).not.toMatch(/nix/);
   });
 });
