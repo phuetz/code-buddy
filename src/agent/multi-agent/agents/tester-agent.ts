@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../../config/model-defaults.js';
 /**
  * Tester Agent
  *
@@ -95,7 +96,7 @@ Always check for test configuration files (jest.config.js, vitest.config.ts, etc
     "search",
     "bash",
   ],
-  model: "grok-code-fast-1",
+  model: getModelForRole('xai', 'testing'),
   maxRounds: 30,
   temperature: 0.3,
 };

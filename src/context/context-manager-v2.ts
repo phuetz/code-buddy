@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Advanced Context Manager for LLM conversations (Primary)
  *
@@ -316,7 +317,7 @@ export class ContextManagerV2 {
     recentMessagesCount: 10,
     enableSummarization: true,
     compressionRatio: 4,
-    model: 'gpt-4',
+    model: getModelForRole('openai', 'tokenizer'),
     autoCompactThreshold: 200000, // Like mistral-vibe's 200K default
     warningThresholds: [50, 75, 90], // Warn at 50%, 75%, and 90%
     enableWarnings: true,

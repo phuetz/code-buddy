@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Context Manager V3
  *
@@ -41,7 +42,7 @@ export class ContextManagerV3 {
     recentMessagesCount: 10,
     enableSummarization: true,
     compressionRatio: 2,
-    model: 'gpt-4',
+    model: getModelForRole('openai', 'tokenizer'),
     autoCompactThreshold: 100000,
     warningThresholds: [80, 95],
     enableWarnings: true,

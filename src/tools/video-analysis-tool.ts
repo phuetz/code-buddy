@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
@@ -149,7 +150,7 @@ function resolveVideoAnalysisConfig(env: NodeJS.ProcessEnv): { baseUrl: string; 
   const model = (env.CODEBUDDY_VIDEO_ANALYSIS_MODEL
     ?? env.AUXILIARY_VIDEO_MODEL
     ?? env.AUXILIARY_VISION_MODEL
-    ?? 'gpt-4o-mini').trim();
+    ?? getModelForRole('openai', 'fast')).trim();
   if (!apiKey && !isLocalBaseUrl(baseUrl)) {
     throw new Error('No video analysis credentials configured. Set CODEBUDDY_VIDEO_ANALYSIS_API_KEY or OPENAI_API_KEY.');
   }

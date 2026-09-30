@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Smart Model Router
  *
@@ -15,7 +16,7 @@
  * router.configureChain({
  *   providers: ['grok', 'openai', 'anthropic'],
  *   models: {
- *     grok: ['grok-3-mini', 'grok-3', 'grok-3-reasoning'],
+ *     grok: [getModelForRole('xai', 'fast'), getProviderDefaultModel('xai'), getModelForRole('xai', 'reasoning')],
  *     openai: ['gpt-4o-mini', 'gpt-4o'],
  *     anthropic: ['claude-3-haiku', 'claude-3-sonnet']
  *   }
@@ -128,7 +129,7 @@ export interface SmartRouterEvents {
 const DEFAULT_CONFIG: SmartRouterConfig = {
   providers: ['grok'],
   models: {
-    grok: ['grok-3-mini', 'grok-3', 'grok-3-reasoning'],
+    grok: [getModelForRole('xai', 'fast'), getProviderDefaultModel('xai'), getModelForRole('xai', 'reasoning')],
   },
   sessionBudget: 10,
   autoDowngrade: true,

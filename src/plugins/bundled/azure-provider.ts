@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderFallbackModels } from '../../config/model-defaults.js';
 /**
  * Azure OpenAI Provider Plugin (Bundled)
  *
@@ -211,10 +212,10 @@ function buildOnboardingHooks(): ProviderOnboardingHooks {
 
     async 'wizard.modelPicker'(models: DiscoveredModel[]) {
       // Default: prefer gpt-4o, then gpt-4, then first available
-      const preferred = models.find(m => m.id === 'gpt-4o' || m.name === 'gpt-4o');
+      const preferred = models.find(m => m.id === getProviderDefaultModel('azure') || m.name === getProviderDefaultModel('azure'));
       if (preferred) return preferred.id;
 
-      const gpt4 = models.find(m => m.id.includes('gpt-4') || m.name?.includes('gpt-4'));
+      const gpt4 = models.find(m => getProviderFallbackModels('azure').some(fallback => m.id.includes(fallback) || m.name?.includes(fallback)));
       if (gpt4) return gpt4.id;
 
       return models[0]?.id ?? '';
@@ -257,7 +258,7 @@ export function createAzureProvider(): PluginProvider | null {
 
     async chat(messages: Array<{ role: string; content: string }>) {
       // Use the first available deployment or fallback to 'gpt-4o'
-      const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o';
+      const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || getProviderDefaultModel('azure');
       const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
       const authHeaders = getAuthHeaders();
 

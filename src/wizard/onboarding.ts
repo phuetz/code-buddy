@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../config/model-defaults.js';
 import { getOllamaBaseUrl, getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import * as readline from 'readline';
 import { spawn } from 'child_process';
@@ -77,13 +78,13 @@ export const PROVIDER_ENV_MAP: Record<string, string> = {
 };
 
 export const PROVIDER_DEFAULT_MODEL: Record<string, string> = {
-  chatgpt: 'gpt-6-sol',
-  grok: 'grok-3',
-  claude: 'claude-sonnet-4-20250514',
-  gemini: 'gemini-2.0-flash',
-  openai: 'gpt-4o',
-  openrouter: 'openai/gpt-4o',
-  ollama: 'qwen3:8b',
+  get chatgpt() { return getProviderDefaultModel('chatgpt'); },
+  get grok() { return getProviderDefaultModel('xai'); },
+  get claude() { return getProviderDefaultModel('anthropic'); },
+  get gemini() { return getProviderDefaultModel('google'); },
+  get openai() { return getProviderDefaultModel('openai'); },
+  get openrouter() { return getProviderDefaultModel('openrouter'); },
+  get ollama() { return getModelForRole('ollama', 'onboarding'); },
   lmstudio: 'default',
 };
 
@@ -104,7 +105,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'ChatGPT subscription — recommended (OAuth, no API key, $0 marginal cost)',
     authMode: 'oauth',
     envVar: '',
-    defaultModel: 'gpt-6-sol',
+    get defaultModel() { return getProviderDefaultModel('chatgpt'); },
     setupCommand: 'buddy login',
     verifyCommand: 'buddy whoami',
     help: 'One browser login unlocks the ChatGPT-backed Codex route; no OPENAI_API_KEY is required.',
@@ -114,7 +115,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'Ollama local model — free and private',
     authMode: 'local',
     envVar: '',
-    defaultModel: 'qwen3:8b',
+    get defaultModel() { return getProviderDefaultModel('ollama'); },
     baseURL: getOllamaV1BaseUrl(),
     setupCommand: 'ollama serve',
     verifyCommand: `curl ${getOllamaBaseUrl()}/api/tags`,
@@ -125,7 +126,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'Grok / xAI API key',
     authMode: 'api-key',
     envVar: 'GROK_API_KEY',
-    defaultModel: 'grok-3',
+    get defaultModel() { return getProviderDefaultModel('xai'); },
     baseURL: 'https://api.x.ai/v1',
     verifyCommand: 'buddy doctor',
     help: 'Set GROK_API_KEY in your shell or secret manager.',
@@ -135,7 +136,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'Anthropic Claude API key',
     authMode: 'api-key',
     envVar: 'ANTHROPIC_API_KEY',
-    defaultModel: 'claude-sonnet-4-20250514',
+    get defaultModel() { return getProviderDefaultModel('anthropic'); },
     baseURL: 'https://api.anthropic.com/v1',
     verifyCommand: 'buddy doctor',
     help: 'Set ANTHROPIC_API_KEY in your shell or secret manager.',
@@ -145,7 +146,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'Google Gemini API key',
     authMode: 'api-key',
     envVar: 'GEMINI_API_KEY',
-    defaultModel: 'gemini-2.0-flash',
+    get defaultModel() { return getProviderDefaultModel('google'); },
     baseURL: 'https://generativelanguage.googleapis.com/v1beta',
     verifyCommand: 'buddy doctor',
     help: 'Set GEMINI_API_KEY in your shell or secret manager.',
@@ -155,7 +156,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'OpenAI API key',
     authMode: 'api-key',
     envVar: 'OPENAI_API_KEY',
-    defaultModel: 'gpt-4o',
+    get defaultModel() { return getProviderDefaultModel('openai'); },
     baseURL: 'https://api.openai.com/v1',
     verifyCommand: 'buddy doctor',
     help: 'Set OPENAI_API_KEY (https://platform.openai.com/api-keys).',
@@ -165,7 +166,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'OpenRouter API key',
     authMode: 'api-key',
     envVar: 'OPENROUTER_API_KEY',
-    defaultModel: 'openai/gpt-4o',
+    get defaultModel() { return getProviderDefaultModel('openrouter'); },
     baseURL: 'https://openrouter.ai/api/v1',
     verifyCommand: 'buddy doctor',
     help: 'Set OPENROUTER_API_KEY (https://openrouter.ai/keys).',
@@ -361,7 +362,7 @@ export function getProviderGuide(provider: string): OnboardingProviderGuide {
       label: 'ChatGPT subscription (OAuth)',
       authMode: 'oauth',
       envVar: '',
-      defaultModel: 'gpt-6-sol',
+      get defaultModel() { return getProviderDefaultModel('chatgpt'); },
       setupCommand: 'buddy login',
       verifyCommand: 'buddy whoami',
       help: 'Use ChatGPT OAuth.',
@@ -585,7 +586,7 @@ async function runQuickStart(
 
   // Case B: Ollama is running but empty — offer to pull a model, then use it.
   if (ollama?.available && !(ollama.models?.length)) {
-    const DEFAULT_PULL = 'qwen3:8b';
+    const DEFAULT_PULL = getModelForRole('ollama', 'onboarding');
     const answer = (
       await ask(
         rl,

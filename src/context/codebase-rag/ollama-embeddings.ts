@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../config/model-defaults.js';
 /**
  * Ollama Embedding Provider
  *
@@ -45,7 +46,7 @@ export interface OllamaEmbeddingConfig {
  */
 export const DEFAULT_OLLAMA_EMBEDDING_CONFIG: OllamaEmbeddingConfig = {
   baseUrl: getOllamaBaseUrl(),
-  model: "nomic-embed-text",
+  model: getModelForRole('ollama', 'embedding'),
   timeout: 30000,
   batchSize: 32,
   retryAttempts: 3,

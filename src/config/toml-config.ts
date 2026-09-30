@@ -1,3 +1,4 @@
+import { registerModelDefaultsConfig, type ProviderModelDefaults } from './model-defaults.js';
 import { TOML_MODEL_DATA, TOML_DEFAULT_ACTIVE_MODEL } from './model-price-data.js';
 import { getModelPricing } from './model-pricing.js';
 /**
@@ -659,6 +660,8 @@ export const PROFILE_KNOWN_KEYS = new Set<keyof CodeBuddyConfig | 'baseURL' | 'm
 export interface CodeBuddyConfig {
   /** Active model name (key from models section) */
   active_model: string;
+  /** Provider primary, fallback and role choices; project and profiles may override. */
+  model_defaults?: ProviderModelDefaults;
   /** Provider configurations */
   providers: Record<string, ProviderConfig>;
   /** Model configurations */
@@ -953,6 +956,7 @@ const MODEL_STANDARD_KEYS = new Set([
 export interface PreservedUserConfig {
   catalogue?: Record<string, unknown>;
   modelRoles?: Record<string, unknown>;
+  modelDefaults?: Record<string, unknown>;
   modelAliases?: Record<string, unknown>;
   profiles?: Record<string, unknown>;
   modelExtras: Record<string, Record<string, unknown>>;
@@ -1030,6 +1034,7 @@ export function extractPreservedUserConfig(parsed: Record<string, unknown>): Pre
   const source = structuredClone(parsed);
   const preserved: PreservedUserConfig = { modelExtras: {}, source };
   if (isPlainObject(source.catalogue)) preserved.catalogue = source.catalogue;
+  if (isPlainObject(source.model_defaults)) preserved.modelDefaults = source.model_defaults;
   if (isPlainObject(source.model_roles)) preserved.modelRoles = source.model_roles;
   if (isPlainObject(source.model_aliases)) preserved.modelAliases = source.model_aliases;
   if (isPlainObject(source.profiles)) preserved.profiles = source.profiles;
@@ -1157,6 +1162,7 @@ function emitPreservedSections(lines: string[], preserved?: PreservedUserConfig 
   if (preserved.catalogue && Object.keys(preserved.catalogue).length > 0) {
     emitTomlTable(lines, 'catalogue', preserved.catalogue);
   }
+  if (preserved.modelDefaults) emitTomlTable(lines, 'model_defaults', preserved.modelDefaults);
   if (preserved.modelRoles && Object.keys(preserved.modelRoles).length > 0) {
     emitTomlTable(lines, 'model_roles', preserved.modelRoles);
   }
@@ -1364,6 +1370,9 @@ export function serializeTOML(config: CodeBuddyConfig, preserved?: PreservedUser
     );
   }
 
+  if (!preserved && config.model_defaults) {
+    emitTomlTable(lines, 'model_defaults', config.model_defaults);
+  }
   emitPreservedSections(lines, preserved);
   return lines.join('\n');
 }
@@ -1701,6 +1710,20 @@ class ConfigManager {
     }
     if (avecFournisseur.model) {
       (this.config as typeof avecFournisseur).model = avecFournisseur.model;
+    }
+    if (partial.model_defaults) {
+      const merged = { ...this.config.model_defaults };
+      for (const [provider, roles] of Object.entries(partial.model_defaults)) {
+        if (!isPlainObject(roles)) throw new Error('model_defaults must contain provider tables');
+        for (const [role, value] of Object.entries(roles)) {
+          if (['fallback', 'models'].includes(role) ? !Array.isArray(value) || value.some(m => typeof m !== 'string' || !m.trim()) : typeof value !== 'string' || !value.trim()) {
+            throw new Error(`Invalid model_defaults.${provider}.${role}`);
+          }
+        }
+        const key = provider as keyof ProviderModelDefaults;
+        merged[key] = { ...merged[key], ...roles };
+      }
+      this.config.model_defaults = merged;
     }
     if (partial.active_model) {
       this.config.active_model = partial.active_model;
@@ -2048,3 +2071,5 @@ export function resetConfigManager(): void {
 
 // Re-export types
 export type { ConfigManager };
+
+registerModelDefaultsConfig(() => getConfigManager().getConfig().model_defaults ?? {});

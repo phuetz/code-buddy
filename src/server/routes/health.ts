@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Health Routes
  *
@@ -507,7 +508,7 @@ router.get(
   '/config',
   asyncHandler(async (_req: Request, res: Response) => {
     res.json({
-      model: process.env.GROK_MODEL || 'grok-3-latest',
+      model: process.env.GROK_MODEL || getProviderDefaultModel('xai'),
       baseUrl: process.env.GROK_BASE_URL ? '(custom)' : 'https://api.x.ai',
       features: {
         yoloMode: process.env.YOLO_MODE === 'true',

@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Voice loop — closes the perception→cognition→action loop into speech. Given a
  * transcript of what the robot HEARD (the `onHeard` hook of `speech-reaction.ts`),
@@ -1338,7 +1339,7 @@ export async function resolveVoiceModel(
   // NOT reuse `override` here: reaching this point means override was empty or 'auto' (a real pin
   // already returned at the top), and `'auto' || 'llama3.2'` would wrongly yield the literal model
   // name 'auto' → the LLM endpoint 404s and the robot stays silent.
-  return { model: 'llama3.2', apiKey, baseURL, reason: 'fallback default' };
+  return { model: getProviderDefaultModel('ollama'), apiKey, baseURL, reason: 'fallback default' };
 }
 
 // Deliberately substantive: when a reviewed companion profile is active, boot

@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Fast Mode Handler
  *
@@ -20,17 +21,19 @@ import { failureFlag } from '../slash-failure.js';
 // ============================================================================
 
 let fastModeEnabled = false;
-let fastModel = 'grok-4-fast';
+let fastModel = getProviderDefaultModel('xai');
 let previousModel: string | null = null;
 
 // Default fast models per provider prefix
-const FAST_MODEL_DEFAULTS: Record<string, string> = {
-  'grok': 'grok-4-fast',
-  'claude': 'claude-haiku-4-5',
-  'gpt': 'gpt-4.1-mini',
-  'gemini': 'gemini-3.1-flash-lite',
-  'o4': 'o4-mini',
-};
+function fastModelDefaults(): Record<string, string> {
+  return {
+    grok: getModelForRole('xai', 'fast'),
+    claude: getModelForRole('anthropic', 'fast'),
+    gpt: getModelForRole('openai', 'fast'),
+    gemini: getModelForRole('google', 'fast'),
+    o4: getModelForRole('openai', 'fast'),
+  };
+}
 
 // ============================================================================
 // Public API
@@ -81,7 +84,7 @@ export function enableFastMode(currentModel?: string): void {
 
   // Auto-select fast model based on current model's provider
   if (currentModel) {
-    for (const [prefix, model] of Object.entries(FAST_MODEL_DEFAULTS)) {
+    for (const [prefix, model] of Object.entries(fastModelDefaults())) {
       if (currentModel.startsWith(prefix)) {
         fastModel = model;
         break;
@@ -175,7 +178,7 @@ export async function handleFastMode(args: string[]): Promise<CommandHandlerResu
       previousModel ? `**Previous Model**: \`${previousModel}\`` : '',
       '',
       '**Available fast models:**',
-      ...Object.entries(FAST_MODEL_DEFAULTS).map(([prefix, model]) => `  ${prefix}: \`${model}\``),
+      ...Object.entries(fastModelDefaults()).map(([prefix, model]) => `  ${prefix}: \`${model}\``),
     ].filter(Boolean);
 
     return {

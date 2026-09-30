@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel, getProviderFallbackModels } from '../config/model-defaults.js';
 /**
  * Operating Modes System
  *
@@ -72,8 +73,8 @@ const QUALITY_MODE: ModeConfig = {
   name: 'Quality',
   description: 'Best quality, thorough analysis, higher cost',
 
-  preferredModel: 'grok-3',
-  fallbackModel: 'grok-2-latest',
+  get preferredModel() { return getModelForRole('xai', 'quality'); },
+  get fallbackModel() { return getProviderFallbackModels('xai')[0] ?? getProviderDefaultModel('xai'); },
 
   maxInputTokens: 128000,
   maxOutputTokens: 16000,
@@ -105,8 +106,8 @@ const BALANCED_MODE: ModeConfig = {
   name: 'Balanced',
   description: 'Good balance of quality, speed, and cost',
 
-  preferredModel: 'grok-2-latest',
-  fallbackModel: 'grok-2-mini',
+  get preferredModel() { return getModelForRole('xai', 'balanced'); },
+  fallbackModel: getModelForRole('xai', 'fast'),
 
   maxInputTokens: 64000,
   maxOutputTokens: 8000,
@@ -138,7 +139,7 @@ const FAST_MODE: ModeConfig = {
   name: 'Fast',
   description: 'Speed optimized, lower cost, for simple tasks',
 
-  preferredModel: 'grok-2-mini',
+  get preferredModel() { return getModelForRole('xai', 'fast'); },
   fallbackModel: undefined,
 
   maxInputTokens: 32000,

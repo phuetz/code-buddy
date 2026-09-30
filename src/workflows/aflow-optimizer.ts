@@ -1,3 +1,4 @@
+import { getProviderModels } from '../config/model-defaults.js';
 /**
  * AFlow Optimizer for Lobster Workflows
  *
@@ -76,7 +77,7 @@ const DEFAULT_OPTIMIZATION_CONFIG: OptimizationConfig = {
   iterations: 50,
   explorationConstant: 1.414,
   maxParallelism: 4,
-  availableModels: ['grok-3', 'grok-3-mini', 'claude-sonnet-4-20250514'],
+  availableModels: [...getProviderModels('xai'), ...getProviderModels('anthropic')],
 };
 
 // ============================================================================

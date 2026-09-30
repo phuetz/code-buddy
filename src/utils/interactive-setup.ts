@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderModels } from '../config/model-defaults.js';
 /**
  * Interactive Setup - Inspired by Mistral Vibe CLI
  *
@@ -166,34 +167,12 @@ export async function runSetup(): Promise<SetupConfig> {
   console.log('\nStep 3/4: Default Model');
   console.log('-----------------------');
   console.log('Available models:');
-  console.log('  1. grok-3-latest (most capable)');
-  console.log('  2. grok-4-latest (latest)');
-  console.log('  3. grok-code-fast-1 (fast code generation)');
-  console.log('  4. Custom model name\n');
-
-  const modelChoice = await question(rl3, 'Select model (1-4, or press Enter for grok-3-latest): ');
-
-  switch (modelChoice) {
-    case '1':
-    case '':
-      config.model = 'grok-3-latest';
-      break;
-    case '2':
-      config.model = 'grok-4-latest';
-      break;
-    case '3':
-      config.model = 'grok-3-fast';
-      break;
-    case '4':
-      config.model = await question(rl3, 'Enter custom model name: ');
-      break;
-    default:
-      if (modelChoice) {
-        config.model = modelChoice;
-      } else {
-        config.model = 'grok-3-latest';
-      }
-  }
+  const models = getProviderModels('xai');
+  models.forEach((model, index) => console.log(`  ${index + 1}. ${model}`));
+  const modelChoice = await question(rl3, 'Select model number or enter a custom model name (Enter for default): ');
+  const index = Number(modelChoice) - 1;
+  config.model = !modelChoice ? getProviderDefaultModel('xai')
+    : models[index] ?? modelChoice;
 
   // Step 4: Theme
   console.log('\nStep 4/4: UI Theme');
@@ -314,7 +293,7 @@ async function saveConfig(config: SetupConfig): Promise<void> {
 
     console.log('  API Key: ' + (config.apiKey ? 'Saved' : 'Not set'));
     console.log('  Base URL: ' + (config.baseURL || 'https://api.x.ai/v1 (default)'));
-    console.log('  Model: ' + (config.model || 'grok-3-latest'));
+    console.log('  Model: ' + (config.model || getProviderDefaultModel('xai')));
     console.log('  Theme: ' + (config.theme || 'default'));
   } catch (error) {
     logger.error('Failed to save configuration:', error as Error);

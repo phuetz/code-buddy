@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Agent SDK
  *
@@ -75,7 +76,7 @@ export class AgentSDK {
 
   constructor(config: AgentSDKConfig = {}) {
     this.config = {
-      model: config.model ?? 'grok-3-mini',
+      model: config.model ?? getModelForRole('xai', 'fast'),
       tools: config.tools ?? [],
       maxTurns: config.maxTurns ?? 10,
       systemPrompt: config.systemPrompt ?? 'You are a helpful coding assistant.',

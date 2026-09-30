@@ -1,3 +1,6 @@
+import { CHATGPT_OAUTH_DEFAULT_MODEL, ChatGptModelCatalogClient } from '../providers/chatgpt-models.js';
+import type { ChatGptAuth } from '../providers/codex-oauth.js';
+
 export interface CliModelListItem {
   id: string;
   owned_by?: string;
@@ -13,6 +16,7 @@ export interface CliModelListOptions {
   provider?: string;
   defaultModel?: string;
   fetchImpl?: typeof fetch;
+  auth?: ChatGptAuth | null;
 }
 
 function isChatGptCodexBaseURL(baseURL: string): boolean {
@@ -26,7 +30,7 @@ export function shouldUseStaticChatGptModels(options: Pick<CliModelListOptions, 
 export function getStaticChatGptModels(defaultModel?: string): CliModelListItem[] {
   return [
     {
-      id: defaultModel || 'gpt-5.5',
+      id: defaultModel || process.env.CHATGPT_MODEL?.trim() || CHATGPT_OAUTH_DEFAULT_MODEL,
       owned_by: 'chatgpt',
     },
   ];
@@ -38,9 +42,13 @@ function joinBaseUrl(baseURL: string, path: string): string {
 
 export async function resolveCliModelList(options: CliModelListOptions): Promise<CliModelListResult> {
   if (shouldUseStaticChatGptModels(options)) {
+    const catalog = options.auth
+      ? await new ChatGptModelCatalogClient({ fetchImpl: options.fetchImpl }).discover(options.auth)
+      : null;
     return {
       source: 'chatgpt-oauth',
-      models: getStaticChatGptModels(options.defaultModel),
+      models: catalog?.models.map(model => ({ id: model.slug, owned_by: 'chatgpt' }))
+        ?? getStaticChatGptModels(options.defaultModel),
     };
   }
 

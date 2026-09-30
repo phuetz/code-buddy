@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../config/model-defaults.js';
 /**
  * Gemma 4 Provider Plugin (Bundled)
  *
@@ -38,7 +39,7 @@ function buildOnboardingHooks(apiKey: string): ProviderOnboardingHooks {
         }
         // Minimal ping to check key validity using Google Generative AI SDK
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemma-4-9b-it' }); 
+        const model = genAI.getGenerativeModel({ model: getModelForRole('google', 'gemma') });
         // Just verify client instantiates; a real API call might fail if the specific model isn't active for the user
         if (model) {
            return { valid: true };
@@ -78,7 +79,7 @@ function buildOnboardingHooks(apiKey: string): ProviderOnboardingHooks {
     },
     'wizard.modelPicker': async (models: DiscoveredModel[]) => {
       const first = models[0];
-      if (!first) return 'gemma-4-9b-it';
+      if (!first) return getModelForRole('google', 'gemma');
       return first.id;
     },
     onModelSelected: async (modelId: string) => {
@@ -118,7 +119,7 @@ export class GemmaProviderPlugin implements PluginProvider {
     }
     
     // Default to the 9b model if none is specified by the router context
-    const modelName = process.env.GROK_MODEL || 'gemma-4-9b-it';
+    const modelName = process.env.GROK_MODEL || getModelForRole('google', 'gemma');
     const model = this.genAI.getGenerativeModel({ model: modelName });
 
     // Format messages for the Gemini SDK (Gemma 4 uses the same interface via AI Studio)
@@ -142,7 +143,7 @@ export class GemmaProviderPlugin implements PluginProvider {
     if (!this.genAI) {
       throw new Error('Gemma Provider requires GEMINI_API_KEY to be set.');
     }
-    const modelName = process.env.GROK_MODEL || 'gemma-4-9b-it';
+    const modelName = process.env.GROK_MODEL || getModelForRole('google', 'gemma');
     const model = this.genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     return result.response.text();

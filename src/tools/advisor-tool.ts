@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Advisor Tool — second opinion from a stronger reviewer model
  *
@@ -58,7 +59,7 @@ export interface AdvisorConfig {
 
 const DEFAULT_ADVISOR_CONFIG: Required<Omit<AdvisorConfig, 'base_url'>> & { base_url?: string } = {
   enabled: true,
-  model: 'claude-opus-4-7',
+  model: getModelForRole('anthropic', 'advisor'),
   api_key_env: 'ANTHROPIC_API_KEY',
 };
 

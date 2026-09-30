@@ -336,8 +336,8 @@ describe("PREDEFINED_SUBAGENTS", () => {
       expect(config.systemPrompt).toContain("code reviewer");
     });
 
-    it("should use grok-3-latest model", () => {
-      expect(config.model).toBe("grok-3-latest");
+    it("should use the configured review role", () => {
+      expect(config.model).toBe("grok-4-latest");
     });
   });
 });

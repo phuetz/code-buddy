@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../config/model-defaults.js';
 /**
  * Adaptive Chunker
  *
@@ -29,7 +30,7 @@ const DEFAULT_ADAPTIVE_CONFIG: AdaptiveChunkConfig = {
  */
 export function calculateMessageStats(
   messages: ChatMessage[],
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): MessageStats {
   if (messages.length === 0) {
     return {
@@ -90,7 +91,7 @@ export function chunkMessages(
   messages: ChatMessage[],
   targetChunks: number = 4,
   config: Partial<AdaptiveChunkConfig> = {},
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): MessageChunk[] {
   const cfg = { ...DEFAULT_ADAPTIVE_CONFIG, ...config };
 

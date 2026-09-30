@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Native Voice Control System
  *
@@ -679,7 +680,7 @@ export class VoiceControl extends EventEmitter {
 
       const form = new FormData();
       form.append('file', fs.createReadStream(audioFile));
-      form.append('model', 'whisper-1');
+      form.append('model', getModelForRole('openai', 'transcription'));
       form.append('language', this.config.language);
 
       const response = await axios.post(

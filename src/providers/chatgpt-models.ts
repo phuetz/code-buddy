@@ -1,3 +1,5 @@
+import { getProviderDefaultModel, getProviderFallbackModels, hasProviderFallbackOverride } from '../config/model-defaults.js';
+import { CHATGPT_OAUTH_API_ALIAS, CHATGPT_OAUTH_API_ALIAS_TARGET, CHATGPT_OAUTH_SAFE_FALLBACK_MODEL, CHATGPT_CODEX_CLIENT_VERSION, CHATGPT_ULTRA_MODELS, CHATGPT_MAX_MODELS } from '../config/chatgpt-model-policy.js';
 /**
  * ChatGPT/Codex OAuth model discovery and routing policy.
  *
@@ -11,22 +13,14 @@ import type { ChatGptAuth } from './codex-oauth.js';
 import { logger } from '../utils/logger.js';
 import { getInstallationId } from '../utils/installation-id.js';
 
-// Codex CLI presents gpt-6-sol as the "workhorse model for coding and everyday
-// work" and files gpt-5.6-sol under "older" models (model picker, 2026-09-23).
-// `CHATGPT_MODEL=gpt-5.6-sol` restores the previous default.
-export const CHATGPT_OAUTH_DEFAULT_MODEL = 'gpt-6-sol';
-export const CHATGPT_OAUTH_API_ALIAS = 'gpt-5.6';
-/** The public `gpt-5.6` alias names Sol 5.6, whatever the current default is. */
-const CHATGPT_OAUTH_API_ALIAS_TARGET = 'gpt-5.6-sol';
-export const CHATGPT_OAUTH_SAFE_FALLBACK_MODEL = 'gpt-5.5';
+export {
+  CHATGPT_OAUTH_DEFAULT_MODEL,
+  CHATGPT_OAUTH_API_ALIAS,
+  CHATGPT_OAUTH_SAFE_FALLBACK_MODEL,
+  CHATGPT_CODEX_CLIENT_VERSION,
+} from '../config/chatgpt-model-policy.js';
 
-// The backend filters `/models` by this version. Measured on 2026-09-23: the
-// same account got no GPT-6 model with `0.144.1`, and gpt-6-astra, gpt-6-sol and
-// gpt-6-luna with `0.155.1` (Codex CLI of the day). Keep it close to the
-// current Codex CLI, or the newest models stay invisible to Code Buddy.
-export const CHATGPT_CODEX_CLIENT_VERSION =
-  process.env.CODEBUDDY_CODEX_CLIENT_VERSION?.trim() || '0.155.1';
-
+// The client version gates backend rollout. Override with CODEBUDDY_CODEX_CLIENT_VERSION.
 const MODELS_URL = 'https://chatgpt.com/backend-api/codex/models';
 const ORIGINATOR = 'codex_cli_rs';
 const MODEL_CATALOG_TIMEOUT_MS = 10_000;
@@ -127,18 +121,18 @@ export function selectChatGptOAuthModel(
 ): string {
   const requested = requestedModel
     ? normalizeChatGptOAuthModel(requestedModel)
-    : CHATGPT_OAUTH_DEFAULT_MODEL;
+    : getProviderDefaultModel('chatgpt');
 
   if (!catalog || catalog.models.length === 0) {
     return isChatGptSubscriptionModel(requested)
       ? requested
-      : CHATGPT_OAUTH_DEFAULT_MODEL;
+      : getProviderDefaultModel('chatgpt');
   }
 
   const requestedMatch = findChatGptModel(catalog, requested);
   if (requestedMatch) return requestedMatch.slug;
 
-  const preferred = findChatGptModel(catalog, CHATGPT_OAUTH_DEFAULT_MODEL);
+  const preferred = findChatGptModel(catalog, getProviderDefaultModel('chatgpt'));
   return preferred?.slug ?? catalog.models[0]?.slug ?? CHATGPT_OAUTH_SAFE_FALLBACK_MODEL;
 }
 
@@ -151,10 +145,11 @@ export function getChatGptOAuthFallbackModels(
   catalog?: ChatGptCodexModelCatalog | null,
 ): string[] {
   const current = normalizeChatGptOAuthModel(currentModel).toLowerCase();
-  if (!catalog || catalog.models.length === 0) {
-    return current === CHATGPT_OAUTH_SAFE_FALLBACK_MODEL
-      ? []
-      : [CHATGPT_OAUTH_SAFE_FALLBACK_MODEL];
+  if (hasProviderFallbackOverride('chatgpt') || !catalog || catalog.models.length === 0) {
+    const configured = getProviderFallbackModels('chatgpt')
+      .map(slug => catalog?.models.length ? findChatGptModel(catalog, slug)?.slug : normalizeChatGptOAuthModel(slug))
+      .filter((slug): slug is string => Boolean(slug) && slug!.toLowerCase() !== current);
+    return [...new Set(configured)];
   }
 
   return catalog.models
@@ -199,7 +194,7 @@ export function resolveChatGptReasoningEffort(
   )
     ? normalizedRequested as ChatGptReasoningEffort
     : modelInfo?.defaultReasoningEffort ??
-      (/^gpt-(?:5\.6-(?:sol|terra|luna)|6-(?:astra|sol|luna))$/i.test(normalizeChatGptOAuthModel(model))
+      (/^gpt-(?:5\.6-(?:sol|terra|luna)|6(?:\.1)?-(?:astra|sol|luna))$/i.test(normalizeChatGptOAuthModel(model))
         ? 'medium'
         : undefined);
 
@@ -226,10 +221,10 @@ function inferReasoningEfforts(model: string): ChatGptReasoningEffort[] {
   const normalized = normalizeChatGptOAuthModel(model).toLowerCase();
   // Offline fallback only: mirrors the catalogue's supported_reasoning_levels
   // (2026-09-23). GPT-6 has no `minimal`; luna stops at `max`.
-  if (['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'gpt-6-sol'].includes(normalized)) {
+  if (CHATGPT_ULTRA_MODELS.includes(normalized)) {
     return ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
   }
-  if (normalized === 'gpt-5.6-luna' || normalized === 'gpt-6-luna') {
+  if (CHATGPT_MAX_MODELS.includes(normalized)) {
     return ['low', 'medium', 'high', 'xhigh', 'max'];
   }
   return ['minimal', 'low', 'medium', 'high', 'xhigh'];
@@ -241,7 +236,7 @@ export function modelUsesResponsesLite(
 ): boolean {
   const info = findChatGptModel(catalog, model);
   if (info) return info.useResponsesLite;
-  return /^gpt-(?:5\.6-(?:sol|terra|luna)|6-(?:astra|sol|luna))$/i.test(normalizeChatGptOAuthModel(model));
+  return /^gpt-(?:5\.6-(?:sol|terra|luna)|6(?:\.1)?-(?:astra|sol|luna))$/i.test(normalizeChatGptOAuthModel(model));
 }
 
 export function parseChatGptModelCatalog(
@@ -330,7 +325,7 @@ export class ChatGptModelCatalogClient {
 
   constructor(opts: ChatGptModelCatalogClientOptions = {}) {
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
-    this.clientVersion = opts.clientVersion?.trim() || CHATGPT_CODEX_CLIENT_VERSION;
+    this.clientVersion = opts.clientVersion?.trim() || process.env.CODEBUDDY_CODEX_CLIENT_VERSION?.trim() || CHATGPT_CODEX_CLIENT_VERSION;
     this.timeoutMs = opts.timeoutMs ?? MODEL_CATALOG_TIMEOUT_MS;
     this.cacheTtlMs = opts.cacheTtlMs ?? MODEL_CATALOG_TTL_MS;
     this.retryBackoffMs = opts.retryBackoffMs ?? MODEL_CATALOG_RETRY_BACKOFF_MS;

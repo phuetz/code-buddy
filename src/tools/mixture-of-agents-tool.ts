@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 import type { ToolResult } from '../types/index.js';
 
 export interface MixtureOfAgentsOptions {
@@ -193,7 +194,7 @@ const FREE_MIXTURE_PROFILES: Record<MixtureOfAgentsUseCase, MixtureProfile> = {
 };
 
 const DEFAULT_USE_CASE: MixtureOfAgentsUseCase = 'balanced';
-const DEFAULT_AGGREGATOR_MODEL = 'openrouter/free';
+const DEFAULT_AGGREGATOR_MODEL = getProviderDefaultModel('openrouter');
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 const DEFAULT_MAX_RETRIES = 1;
 const DEFAULT_MIN_SUCCESSFUL_REFERENCES = 1;

@@ -66,7 +66,7 @@ describe('Command Palette', () => {
       const modelItems = items.filter(i => i.category === 'model');
       expect(modelItems.length).toBeGreaterThan(0);
 
-      const grok3 = modelItems.find(i => i.label === 'grok-3');
+      const grok3 = modelItems.find(i => i.label === 'grok-code-fast-1');
       expect(grok3).toBeDefined();
       expect(grok3!.icon).toBe('@');
     });

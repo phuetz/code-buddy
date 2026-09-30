@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Groq Provider Plugin (Bundled)
  *
@@ -94,7 +95,7 @@ function buildOnboardingHooks(apiKey: string): ProviderOnboardingHooks {
 
     async 'wizard.modelPicker'(models: DiscoveredModel[]) {
       // Default: prefer qwen/qwen3.8-27b if available
-      const preferred = models.find(m => m.id === 'qwen/qwen3.8-27b');
+      const preferred = models.find(m => m.id === getProviderDefaultModel('groq'));
       return preferred?.id ?? models[0]?.id ?? '';
     },
 
@@ -139,7 +140,7 @@ export function createGroqProvider(): PluginProvider | null {
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'qwen/qwen3.8-27b',
+          model: getProviderDefaultModel('groq'),
           messages,
           max_tokens: 4096,
           stream: false,

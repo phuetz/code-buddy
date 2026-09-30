@@ -15,6 +15,7 @@ vi.mock('../../src/providers/codex-oauth.js', () => ({
 describe('goal judge client routing', () => {
   it('recognizes ChatGPT judge models and providers', () => {
     expect(isChatGptJudgeModel('gpt-5.5')).toBe(true);
+    expect(isChatGptJudgeModel('gpt-6.1-sol')).toBe(true);
     expect(isChatGptJudgeModel('gpt-5.5-thinking')).toBe(true);
     expect(isChatGptJudgeModel('qwen3:8b')).toBe(false);
 

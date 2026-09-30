@@ -38,8 +38,8 @@ describe('CLI model listing', () => {
     })).toBe(false);
   });
 
-  it('falls back to gpt-5.5 for ChatGPT when no default model is configured', () => {
-    expect(getStaticChatGptModels()).toEqual([{ id: 'gpt-5.5', owned_by: 'chatgpt' }]);
+  it('falls back to the configured ChatGPT default for ChatGPT when no default model is configured', () => {
+    expect(getStaticChatGptModels()).toEqual([{ id: 'gpt-6-sol', owned_by: 'chatgpt' }]);
   });
 
   it('fetches models from OpenAI-compatible endpoints', async () => {

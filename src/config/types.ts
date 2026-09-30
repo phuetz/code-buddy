@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from './model-defaults.js';
 /**
  * Configuration Types
  *
@@ -181,7 +182,7 @@ export const DEFAULT_PROFILES: ConnectionProfile[] = [
     name: 'Grok API (xAI)',
     provider: 'grok',
     baseURL: 'https://api.x.ai/v1',
-    model: 'grok-code-fast-1',
+    model: getProviderDefaultModel('xai'),
     isDefault: true,
     icon: '🤖',
     description: 'xAI Grok API - production-ready AI inference',

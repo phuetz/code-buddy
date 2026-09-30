@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Vibe Handlers - Mistral Vibe CLI-inspired command handlers
  *
@@ -418,7 +419,7 @@ export async function handleConfig(args: string[]): Promise<CommandHandlerResult
         const userSettings = settingsManager.loadUserSettings();
         lines.push('--- User Settings (~/.codebuddy/user-settings.json) ---');
         lines.push(`  provider: ${userSettings.provider || 'grok'}`);
-        lines.push(`  defaultModel: ${userSettings.defaultModel || 'grok-code-fast-1'}`);
+        lines.push(`  defaultModel: ${userSettings.defaultModel || getProviderDefaultModel('xai')}`);
         lines.push(`  baseURL: ${userSettings.baseURL || 'https://api.x.ai/v1'}`);
         lines.push(`  apiKey: ${userSettings.apiKey ? '[SET]' : '[NOT SET]'}`);
         lines.push(`  models: ${userSettings.models?.length || 0} configured`);

@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Infra Handlers
  *
@@ -198,8 +199,8 @@ async function handleInfraDashboard(): Promise<CommandHandlerResult> {
   lines.push('TurboQuant Config:');
   lines.push(`  TURBOQUANT_VLLM_ENDPOINT    = ${process.env['TURBOQUANT_VLLM_ENDPOINT'] ?? '(not set)'}`);
   lines.push(`  TURBOQUANT_OLLAMA_ENDPOINT  = ${process.env['TURBOQUANT_OLLAMA_ENDPOINT'] ?? '(not set)'}`);
-  lines.push(`  TURBOQUANT_LIGHTWEIGHT_MODEL= ${process.env['TURBOQUANT_LIGHTWEIGHT_MODEL'] ?? 'llama3.2'}`);
-  lines.push(`  TURBOQUANT_HEAVY_MODEL      = ${process.env['TURBOQUANT_HEAVY_MODEL'] ?? 'qwen2.5-72b-instruct'}`);
+  lines.push(`  TURBOQUANT_LIGHTWEIGHT_MODEL= ${process.env['TURBOQUANT_LIGHTWEIGHT_MODEL'] ?? getProviderDefaultModel('ollama')}`);
+  lines.push(`  TURBOQUANT_HEAVY_MODEL      = ${process.env['TURBOQUANT_HEAVY_MODEL'] ?? getModelForRole('ollama', 'heavy')}`);
 
   const response = lines.join('\n');
   logger.debug('handleInfra: dashboard rendered');

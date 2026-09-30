@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../config/model-defaults.js';
 /**
  * OpenAI TTS Provider
  *
@@ -83,7 +84,7 @@ export class OpenAITTSProvider implements ITTSProvider {
     }
 
     const voice = this.extractVoice(options?.voice) || this.config.voice || 'alloy';
-    const model = this.config.model || 'tts-1';
+    const model = this.config.model || getModelForRole('openai', 'speech');
     const speed = options?.rate ?? this.config.speed ?? 1.0;
     const responseFormat = this.config.responseFormat || 'mp3';
 

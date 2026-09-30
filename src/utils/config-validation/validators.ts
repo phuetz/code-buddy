@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderModels } from '../../config/model-defaults.js';
 /**
  * Configuration Validators
  *
@@ -953,7 +954,7 @@ export async function loadValidatedSettings(filePath: string): Promise<Settings>
   if (!await fs.pathExists(filePath)) {
     // Return defaults if file doesn't exist
     return validator.getDefaults<Settings>('settings.json') || {
-      model: 'grok-3-latest',
+      model: getProviderDefaultModel('xai'),
       maxRounds: 30,
       autonomyLevel: 'confirm',
       enableRAG: true,
@@ -976,7 +977,7 @@ export async function loadValidatedSettings(filePath: string): Promise<Settings>
   }
 
   return validator.getDefaults<Settings>('settings.json') || {
-    model: 'grok-3-latest',
+    model: getProviderDefaultModel('xai'),
     maxRounds: 30,
     autonomyLevel: 'confirm',
     enableRAG: true,
@@ -995,8 +996,8 @@ export async function loadValidatedUserSettings(filePath: string): Promise<UserS
 
   if (!await fs.pathExists(filePath)) {
     return validator.getDefaults<UserSettings>('user-settings.json') || {
-      defaultModel: 'grok-code-fast-1',
-      models: ['grok-code-fast-1', 'grok-4-latest', 'grok-3-latest'],
+      defaultModel: getProviderDefaultModel('xai'),
+      models: getProviderModels('xai'),
       provider: 'grok',
       theme: 'auto',
       language: 'en',
@@ -1010,8 +1011,8 @@ export async function loadValidatedUserSettings(filePath: string): Promise<UserS
 
   logger.warn(`Invalid user settings at ${filePath}, using defaults`);
   return validator.getDefaults<UserSettings>('user-settings.json') || {
-    defaultModel: 'grok-code-fast-1',
-    models: ['grok-code-fast-1', 'grok-4-latest', 'grok-3-latest'],
+    defaultModel: getProviderDefaultModel('xai'),
+    models: getProviderModels('xai'),
     provider: 'grok',
     theme: 'auto',
     language: 'en',

@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 import _fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
@@ -242,7 +243,7 @@ export class SessionStore {
       id: this.generateSessionId(),
       name: name || `Session ${new Date().toLocaleDateString()}`,
       workingDirectory: process.cwd(),
-      model: model || 'grok-4-latest',
+      model: model || getProviderDefaultModel('xai'),
       messages: [],
       createdAt: new Date(),
       lastAccessedAt: new Date()

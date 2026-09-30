@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Voice Input Support (Aider inspired)
  *
@@ -136,7 +137,7 @@ export async function transcribeWithWhisperAPI(
 
   const buffer = await UnifiedVfsRouter.Instance.readFileBuffer(audioPath);
   form.append('file', buffer, { filename: path.basename(audioPath) });
-  form.append('model', 'whisper-1');
+  form.append('model', getModelForRole('openai', 'transcription'));
   if (language) {
     form.append('language', language);
   }

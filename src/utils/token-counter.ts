@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import { MODEL_PRICE_DATA } from '../config/model-price-data.js';
 
 /**
@@ -51,7 +52,7 @@ export class TokenCounter {
   private model: string;
   private initialized = false;
 
-  constructor(model: string = 'gpt-4') {
+  constructor(model: string = getModelForRole('openai', 'tokenizer')) {
     this.model = model;
   }
 

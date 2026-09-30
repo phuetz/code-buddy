@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../config/model-defaults.js';
 /**
  * Progressive Fallback
  *
@@ -40,7 +41,7 @@ export function applyTruncation(
   content: string,
   targetTokens: number,
   config: Partial<CompactionConfig> = {},
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): FallbackResult {
   const cfg = { ...DEFAULT_COMPACTION_CONFIG, ...config };
   const originalTokens = countTokens(content, model);
@@ -71,7 +72,7 @@ export function applyTruncation(
 export function removeMiddle(
   content: string,
   targetTokens: number,
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): FallbackResult {
   const originalTokens = countTokens(content, model);
   const charPerToken = content.length / originalTokens;
@@ -103,7 +104,7 @@ export function removeMiddle(
 export function extractKeyInfo(
   content: string,
   targetTokens: number,
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): FallbackResult {
   const originalTokens = countTokens(content, model);
   const charPerToken = content.length / originalTokens;
@@ -172,7 +173,7 @@ export function extractKeyInfo(
 export function aggressiveTruncate(
   content: string,
   targetTokens: number,
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): FallbackResult {
   const originalTokens = countTokens(content, model);
   const charPerToken = content.length / originalTokens;
@@ -202,7 +203,7 @@ export function applyProgressiveFallback(
   content: string,
   targetTokens: number,
   config: Partial<CompactionConfig> = {},
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): FallbackResult {
   const strategies: Array<(content: string, target: number, model: string) => FallbackResult> = [
     (c, t, m) => applyTruncation(c, t, config, m),
@@ -239,7 +240,7 @@ export function applyMessageFallback(
   messages: ChatMessage[],
   targetTokens: number,
   config: Partial<CompactionConfig> = {},
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): CompactionResult {
   const startTime = Date.now();
   const cfg = { ...DEFAULT_COMPACTION_CONFIG, ...config };

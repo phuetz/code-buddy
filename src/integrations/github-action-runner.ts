@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * GitHub Action Runner
  *
@@ -166,7 +167,7 @@ inputs:
   model:
     description: 'Model to use for AI tasks'
     required: false
-    default: 'grok-3-mini'
+    default: getModelForRole('xai', 'fast')
   max_turns:
     description: 'Maximum number of agent turns'
     required: false

@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../../config/model-defaults.js';
 /**
  * Coder Agent
  *
@@ -82,7 +83,7 @@ For modifications, use the str_replace_editor tool directly.`,
     "bash",
     "multi_edit",
   ],
-  model: "grok-3-latest",
+  model: getModelForRole('xai', 'coding'),
   maxRounds: 40,
   temperature: 0.3, // Lower temperature for more consistent code
 };

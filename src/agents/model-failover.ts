@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderFallbackModels, hasProviderFallbackOverride } from '../config/model-defaults.js';
 export interface FailoverEntry {
   provider: string;
   model: string;
@@ -61,7 +62,8 @@ export class ModelFailoverChain {
   }
 
   markFailed(provider: string, error: string): void {
-    const entry = this.chain.find(e => e.provider === provider);
+    const entry = this.chain.find(e => e.provider === provider && e.healthy)
+      ?? this.chain.find(e => e.provider === provider);
     if (entry) {
       entry.consecutiveFailures++;
       entry.healthy = false;
@@ -102,36 +104,44 @@ export class ModelFailoverChain {
     const chain = new ModelFailoverChain();
 
     if (process.env.GROK_API_KEY) {
-      chain.addProvider({
-        provider: 'grok',
-        model: 'grok-3',
-        apiKey: 'GROK_API_KEY',
-        baseURL: process.env.GROK_BASE_URL,
-      });
+      for (const model of [...new Set([getProviderDefaultModel('xai'), ...(hasProviderFallbackOverride('xai') ? getProviderFallbackModels('xai') : [])])]) {
+        chain.addProvider({
+          provider: 'grok',
+          model,
+          apiKey: 'GROK_API_KEY',
+          baseURL: process.env.GROK_BASE_URL,
+        });
+      }
     }
 
     if (process.env.ANTHROPIC_API_KEY) {
-      chain.addProvider({
-        provider: 'claude',
-        model: 'claude-sonnet-4-20250514',
-        apiKey: 'ANTHROPIC_API_KEY',
-      });
+      for (const model of [...new Set([getProviderDefaultModel('anthropic'), ...(hasProviderFallbackOverride('anthropic') ? getProviderFallbackModels('anthropic') : [])])]) {
+        chain.addProvider({
+          provider: 'claude',
+          model,
+          apiKey: 'ANTHROPIC_API_KEY',
+        });
+      }
     }
 
     if (process.env.OPENAI_API_KEY) {
-      chain.addProvider({
-        provider: 'chatgpt',
-        model: 'gpt-4o',
-        apiKey: 'OPENAI_API_KEY',
-      });
+      for (const model of [...new Set([getProviderDefaultModel('openai'), ...(hasProviderFallbackOverride('openai') ? getProviderFallbackModels('openai') : [])])]) {
+        chain.addProvider({
+          provider: 'chatgpt',
+          model,
+          apiKey: 'OPENAI_API_KEY',
+        });
+      }
     }
 
     if (process.env.GOOGLE_API_KEY) {
-      chain.addProvider({
-        provider: 'gemini',
-        model: 'gemini-2.0-flash',
-        apiKey: 'GOOGLE_API_KEY',
-      });
+      for (const model of [...new Set([getProviderDefaultModel('google'), ...(hasProviderFallbackOverride('google') ? getProviderFallbackModels('google') : [])])]) {
+        chain.addProvider({
+          provider: 'gemini',
+          model,
+          apiKey: 'GOOGLE_API_KEY',
+        });
+      }
     }
 
     return chain;

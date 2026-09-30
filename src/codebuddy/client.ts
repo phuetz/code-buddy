@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 import type {
   ChatCompletionMessageParam,
   ChatCompletionChunk,
@@ -266,7 +267,7 @@ export interface CodeBuddyResponse {
 }
 
 export class CodeBuddyClient {
-  private currentModel: string = "grok-code-fast-1";
+  private currentModel: string = getProviderDefaultModel('xai');
   /** Track the last model that was explicitly requested by the user */
   private lastRequestedModel: string | undefined;
   /** Track the last effective model that actually responded */
@@ -493,9 +494,9 @@ export class CodeBuddyClient {
       // leads to hard 404 errors at runtime.
       if (this.isGeminiProvider && !CodeBuddyClient.isGeminiModelName(model)) {
         logger.warn(
-          `Model '${model}' is incompatible with Gemini provider. Falling back to 'gemini-2.5-flash'.`
+          `Model '${model}' is incompatible with Gemini provider. Falling back to '${getProviderDefaultModel('google')}'.`
         );
-        this.currentModel = 'gemini-2.5-flash';
+        this.currentModel = getProviderDefaultModel('google');
       } else {
         this.currentModel = model;
       }

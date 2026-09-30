@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Fleet tick handler — Phase (d).18 (Autonomous Fleet Protocol v0.1).
  *
@@ -124,7 +125,7 @@ export interface FleetTickOptions {
 function buildGrokEnvProvider(reason: ResolvedTickProvider['reason']): ResolvedTickProvider {
   return {
     provider: 'grok',
-    model: process.env.GROK_MODEL || 'grok-3',
+    model: process.env.GROK_MODEL || getProviderDefaultModel('xai'),
     isLocal: false,
     apiKey: process.env.GROK_API_KEY || '',
     baseUrl: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',

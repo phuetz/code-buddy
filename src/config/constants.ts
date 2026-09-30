@@ -1,3 +1,4 @@
+import { MODEL_DEFAULTS } from './model-defaults.js';
 import { DANGEROUS_COMMANDS } from '../security/dangerous-command-data.js';
 import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 /**
@@ -62,7 +63,7 @@ export const API_CONFIG = {
   /** Default base URL for CodeBuddy API */
   DEFAULT_BASE_URL: 'https://api.x.ai/v1',
   /** Default model */
-  DEFAULT_MODEL: 'grok-3-fast',
+  DEFAULT_MODEL: MODEL_DEFAULTS.xai,
   /** Request timeout (ms) */
   REQUEST_TIMEOUT: 60000, // 1 minute
   /** Maximum retries for failed requests */

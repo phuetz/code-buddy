@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Offline Mode System
  *
@@ -94,7 +95,7 @@ const DEFAULT_CONFIG: OfflineConfig = {
   cacheMaxAge: 30, // 30 days
   localLLMEnabled: true,
   localLLMProvider: 'ollama',
-  localLLMModel: 'llama3.2',
+  localLLMModel: getProviderDefaultModel('ollama'),
   embeddingCacheEnabled: true,
   queueRequestsWhenOffline: true,
   autoSyncOnReconnect: true,

@@ -1,3 +1,4 @@
+import { isChatGptSubscriptionModel } from '../providers/chatgpt-models.js';
 import {
   CHATGPT_OAUTH_SENTINEL,
   CHATGPT_RESPONSES_BASE_URL,
@@ -15,8 +16,7 @@ export interface GoalJudgeClientLike {
 }
 
 export function isChatGptJudgeModel(model: string | undefined): boolean {
-  const normalized = model?.trim().toLowerCase() ?? '';
-  return normalized === 'gpt-5.5' || normalized.startsWith('gpt-5.5-');
+  return model ? isChatGptSubscriptionModel(model) : false;
 }
 
 export function isChatGptProvider(provider: GoalJudgeProviderInfo | undefined): boolean {
@@ -44,7 +44,7 @@ export async function createStandaloneChatGptJudgeClient(
 ): Promise<CodeBuddyClient> {
   const { hasCodexCredentials } = await import('../providers/codex-oauth.js');
   if (!hasCodexCredentials()) {
-    throw new Error('ChatGPT judge model gpt-5.5 requires `buddy login chatgpt` first.');
+    throw new Error(`ChatGPT judge model ${judgeModel} requires \`buddy login chatgpt\` first.`);
   }
 
   return new CodeBuddyClient(CHATGPT_OAUTH_SENTINEL, judgeModel, CHATGPT_RESPONSES_BASE_URL);

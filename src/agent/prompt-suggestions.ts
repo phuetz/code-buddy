@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Prompt Suggestion Engine
  *
@@ -166,7 +167,7 @@ export class PromptSuggestionEngine {
     }
 
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
-    this.client = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || 'grok-code-fast-1') as SuggestionClient;
+    this.client = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || getProviderDefaultModel('xai')) as SuggestionClient;
     return this.client;
   }
 

@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Analytics Dashboard
  *
@@ -268,7 +269,7 @@ export class AnalyticsDashboard extends EventEmitter {
   /**
    * Start a new session
    */
-  startSession(model: string = 'grok-3-latest'): string {
+  startSession(model: string = getProviderDefaultModel('xai')): string {
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const session: SessionMetrics = {

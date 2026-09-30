@@ -1,4 +1,5 @@
-import { execSync } from 'child_process';
+import { getModelForRole } from '../config/model-defaults.js';
+import { execSync, execFileSync } from 'child_process';
 import {
   accessSync,
   chmodSync,
@@ -839,7 +840,7 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
     return {
       name: 'AI provider ready',
       status: 'warn',
-      message: `Ollama is running but has no model — run \`buddy onboard\`, or --fix to pull ${DOCTOR_PULL_MODEL} ($0, can call tools)`,
+      message: `Ollama is running but has no model — run \`buddy onboard\`, or --fix to pull ${getModelForRole('ollama', 'onboarding')} ($0, can call tools)`,
       fixable: true,
       fix: async () => fixPullAndSelectOllama(baseURL),
     };
@@ -876,13 +877,13 @@ async function fixSelectRunningOllama(baseURL: string, model: string, reason?: s
  * tools: the qwen2.5 family under 14B is chat-only in model-tools.ts, so
  * `buddy try` could never go green with it.
  */
-export const DOCTOR_PULL_MODEL = 'qwen3:8b';
+export const DOCTOR_PULL_MODEL = getModelForRole('ollama', 'onboarding');
 
 /** Pull a small tool-capable model with Ollama, then select it. */
 async function fixPullAndSelectOllama(baseURL: string): Promise<FixResult> {
-  const model = DOCTOR_PULL_MODEL;
+  const model = getModelForRole('ollama', 'onboarding');
   try {
-    execSync(`ollama pull ${model}`, { stdio: 'inherit' });
+    execFileSync('ollama', ['pull', model], { stdio: 'inherit' });
   } catch (err) {
     return {
       success: false,

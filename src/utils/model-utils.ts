@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Model validation and utility functions
  */
@@ -91,19 +92,19 @@ export function validateModel(model: string, strict: boolean = false): void {
 export function getDefaultModel(provider: ModelProvider = 'xai'): string {
   switch (provider) {
     case 'xai':
-      return 'grok-4-latest';
+      return getProviderDefaultModel('xai');
     case 'anthropic':
-      return 'claude-opus-4-6';
+      return getProviderDefaultModel('anthropic');
     case 'openai':
-      return 'gpt-4o';
+      return getProviderDefaultModel('openai');
     case 'google':
-      return 'gemini-2.5-pro';
+      return getProviderDefaultModel('google');
     case 'lmstudio':
-      return 'local-model';
+      return getProviderDefaultModel('lmstudio');
     case 'ollama':
-      return 'llama3.2';
+      return getProviderDefaultModel('ollama');
     default:
-      return 'grok-4-latest';
+      return getProviderDefaultModel('xai');
   }
 }
 

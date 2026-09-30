@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderModels } from '../config/model-defaults.js';
 import { getPricingPer1M } from '../config/model-pricing.js';
 
 /**
@@ -63,7 +64,7 @@ type GeminiGenerateContentResponse = {
 export class GeminiProvider extends BaseProvider {
   readonly type: ProviderType = 'gemini';
   readonly name = 'Gemini (Google)';
-  readonly defaultModel = 'gemini-2.5-flash';
+  get defaultModel(): string { return getProviderDefaultModel('google'); }
 
   private client: unknown = null;
   private oauthClient: OAuth2Client | null = null;
@@ -368,14 +369,7 @@ export class GeminiProvider extends BaseProvider {
    * Returns a list of supported Gemini models.
    */
   async getModels(): Promise<string[]> {
-    return [
-      'gemini-2.5-flash',
-      'gemini-2.5-pro',
-      'gemini-2.0-flash',
-      'gemini-2.0-flash-thinking',
-      'gemini-1.5-pro',
-      'gemini-1.5-flash',
-    ];
+    return getProviderModels('google');
   }
 
   /**

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { getProviderDefaultModel } from './config/model-defaults.js';
 import { getOllamaBaseUrl, getOllamaV1BaseUrl } from './utils/ollama-url.js';
 // Record startup time as early as possible
 const STARTUP_TIME = Date.now();
@@ -359,7 +360,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
             provider: 'chatgpt',
             apiKey: 'oauth-chatgpt', // sentinel consumed by CodeBuddyClient
             baseURL: 'https://chatgpt.com/backend-api/codex',
-            defaultModel: process.env.CHATGPT_MODEL || 'gpt-6-sol',
+            defaultModel: process.env.CHATGPT_MODEL || getProviderDefaultModel('chatgpt'),
           };
         }
       }
@@ -378,7 +379,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
       provider: 'ollama',
       apiKey: 'ollama', // placeholder — Ollama OpenAI-compat ignores it
       baseURL: host,
-      defaultModel: process.env.GROK_MODEL || process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b',
+      defaultModel: process.env.GROK_MODEL || process.env.OLLAMA_MODEL || getProviderDefaultModel('ollama'),
     };
   }
 
@@ -390,7 +391,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
       provider: 'grok',
       apiKey: process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
       baseURL: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
-      defaultModel: process.env.GROK_MODEL || 'grok-3-fast',
+      defaultModel: process.env.GROK_MODEL || getProviderDefaultModel('xai'),
     };
   }
 
@@ -402,7 +403,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
       provider: 'gemini',
       apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '',
       baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-      defaultModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      defaultModel: process.env.GEMINI_MODEL || getProviderDefaultModel('google'),
     };
   }
 
@@ -411,7 +412,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
       provider: 'openai',
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-      defaultModel: process.env.OPENAI_MODEL || 'gpt-4o',
+      defaultModel: process.env.OPENAI_MODEL || getProviderDefaultModel('openai'),
     };
   }
 
@@ -420,7 +421,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
       provider: 'anthropic',
       apiKey: process.env.ANTHROPIC_API_KEY,
       baseURL: 'https://api.anthropic.com/v1',
-      defaultModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+      defaultModel: process.env.ANTHROPIC_MODEL || getProviderDefaultModel('anthropic'),
     };
   }
 
@@ -465,7 +466,7 @@ async function getDetectedProvider(): Promise<DetectedProvider | null> {
               baseURL: 'https://api.x.ai/v1',
               // grok-4-latest is an alias of the current flagship grok-4.3
               // (verified accessible on the SuperGrok plan; Hermes defaults here too).
-              defaultModel: process.env.GROK_MODEL || 'grok-4-latest',
+              defaultModel: process.env.GROK_MODEL || getProviderDefaultModel('xai'),
             };
           } else {
             logger.warn('xAI login found but no valid access token — run `buddy login xai` again.');
@@ -521,7 +522,7 @@ async function detectOnboardedLocalProvider(): Promise<DetectedProvider | null> 
       provider: provider as DetectedProvider['provider'],
       apiKey: provider, // placeholder — ignored by local OpenAI-compat servers
       baseURL,
-      defaultModel: settings.model || (provider === 'ollama' ? 'llama3' : 'default'),
+      defaultModel: settings.model || (provider === 'ollama' ? getProviderDefaultModel('ollama') : 'default'),
       source: 'environment',
     };
   } catch (_error) {
@@ -1924,6 +1925,9 @@ program
         const { models } = await resolveCliModelList({
           baseURL,
           provider: detected?.provider,
+          auth: detected?.provider === 'chatgpt' || baseURL.includes('chatgpt.com/backend-api/codex')
+            ? await (await import('./providers/codex-oauth.js')).getChatGptAuth()
+            : null,
           defaultModel: detected?.defaultModel || process.env.CHATGPT_MODEL,
         });
 
@@ -3362,7 +3366,7 @@ async function probeXaiInference(): Promise<void> {
     cli.error("❌ Could not load a valid token after login.");
     return;
   }
-  const probeModel = process.env.GROK_MODEL || "grok-3";
+  const probeModel = process.env.GROK_MODEL || getProviderDefaultModel('xai');
   try {
     const res = await fetch(`${XAI_OAUTH_BASE_URL}/chat/completions`, {
       method: "POST",

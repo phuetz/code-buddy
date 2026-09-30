@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * AWS Bedrock Provider Plugin (Bundled)
  *
@@ -328,7 +329,7 @@ function buildOnboardingHooks(): ProviderOnboardingHooks {
 
     async 'wizard.modelPicker'(models: DiscoveredModel[]) {
       // Default: prefer Claude 3.5 Sonnet, then first available
-      const preferred = models.find(m => m.id.includes('claude-3-5-sonnet'));
+      const preferred = models.find(m => m.id.includes(getProviderDefaultModel('bedrock')));
       return preferred?.id ?? models[0]?.id ?? '';
     },
 
@@ -369,7 +370,7 @@ export function createBedrockProvider(): PluginProvider | null {
 
     async chat(messages: Array<{ role: string; content: string }>) {
       // Use Bedrock's Converse API for a unified interface
-      const url = `${baseUrl}/model/anthropic.claude-3-5-sonnet-20241022-v2:0/converse`;
+      const url = `${baseUrl}/model/${encodeURIComponent(getProviderDefaultModel('bedrock'))}/converse`;
       const body = JSON.stringify({
         messages: messages.map(m => ({
           role: m.role === 'system' ? 'user' : m.role,

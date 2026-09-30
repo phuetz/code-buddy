@@ -39,7 +39,7 @@ describe('Model Routing', () => {
     it('should select mini model for simple tasks', () => {
       const classification = classifyTaskComplexity('hi');
       const decision = selectModel(classification);
-      expect(decision.recommendedModel).toBe('grok-3-mini');
+      expect(decision.recommendedModel).toBe('grok-code-fast-1');
     });
 
     it('should select vision model for vision tasks', () => {
@@ -51,7 +51,7 @@ describe('Model Routing', () => {
     it('should select reasoning model for heavy tasks', () => {
       const classification = classifyTaskComplexity('megathink about the architecture');
       const decision = selectModel(classification);
-      expect(decision.recommendedModel).toBe('grok-3-reasoning');
+      expect(decision.recommendedModel).toBe('grok-4-latest');
     });
 
     it('should respect user preference', () => {

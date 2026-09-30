@@ -515,12 +515,12 @@ describe('ModelRouter', () => {
 
     it('should route simple tasks to mini model', () => {
       const decision = router.route('list all files');
-      expect(decision.recommendedModel).toBe('grok-3-mini');
+      expect(decision.recommendedModel).toBe('grok-code-fast-1');
     });
 
     it('should route reasoning tasks to reasoning model', () => {
       const decision = router.route('think carefully about the design patterns we should use');
-      expect(decision.recommendedModel).toBe('grok-3-reasoning');
+      expect(decision.recommendedModel).toBe('grok-4-latest');
     });
 
     it('should respect user preferred model', () => {
@@ -581,7 +581,7 @@ describe('selectModel', () => {
   it('should select mini model for simple classification', () => {
     const classification = classifyTaskComplexity('list files');
     const decision = selectModel(classification);
-    expect(decision.recommendedModel).toBe('grok-3-mini');
+    expect(decision.recommendedModel).toBe('grok-code-fast-1');
     expect(decision.tier).toBe('mini');
   });
 

@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 import { CodeBuddyClient, CodeBuddyToolCall } from "../codebuddy/client.js";
 import type { CodeBuddyMessage, CodeBuddyTool } from "../codebuddy/client.js";
 import { ToolSelectionResult } from "../codebuddy/tools.js";
@@ -211,7 +212,7 @@ export class CodeBuddyAgent extends BaseAgent {
     // Determine model to use
     const manager = getSettingsManager();
     const savedModel = manager.getCurrentModel();
-    const modelToUse = model || savedModel || "grok-code-fast-1";
+    const modelToUse = model || savedModel || getProviderDefaultModel('xai');
 
     // YOLO mode: requires BOTH env var AND explicit config confirmation
     const autonomyManager = getAutonomyManager();

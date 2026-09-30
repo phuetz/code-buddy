@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { spawn as defaultSpawn, execSync as defaultExecSync } from 'child_process';
@@ -329,7 +330,7 @@ export class OCRTool {
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-4-vision-preview',
+          model: getModelForRole('openai', 'vision'),
           messages: [
             {
               role: 'user',

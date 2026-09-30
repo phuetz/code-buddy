@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Browser Use Runner
  *
@@ -99,7 +100,7 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 /** Local agentic navigation is multi-step against a local model — give it room. */
 const DEFAULT_LOCAL_TIMEOUT_MS = 180_000;
 const BROWSER_USE_API_URL = 'https://api.browser-use.com/api/v1/run-task';
-const DEFAULT_LOCAL_MODEL = 'qwen2.5:7b-instruct';
+const DEFAULT_LOCAL_MODEL = getProviderDefaultModel('ollama');
 const DEFAULT_OLLAMA_HOST = getOllamaBaseUrl();
 
 /** Sentinel the Python entrypoint wraps its JSON result with, so we can pull it

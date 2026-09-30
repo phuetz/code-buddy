@@ -1,3 +1,4 @@
+import { isChatGptSubscriptionModel } from '../providers/chatgpt-models.js';
 /**
  * Agent reply — the "voice COMMAND" brain. Turns a spoken instruction into a REAL
  * agent turn that can investigate AND act (edit files, run commands), then returns
@@ -235,21 +236,6 @@ function logSpeechResultTiming(agentMs: number, summaryMs: number, summary: Summ
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
-}
-
-/** Mirrors `isChatGptSubscriptionModel` in commands/llm-provider-resolution.ts (kept local to
- *  avoid sensory→commands coupling). A pinned voice agent model in this set routes to the fast,
- *  $0 ChatGPT OAuth / Codex Responses backend instead of the local Ollama endpoint. */
-function isChatGptSubscriptionModel(model: string): boolean {
-  const m = model.trim().toLowerCase();
-  return (
-    m === 'gpt-5.2' ||
-    m === 'gpt-5.5' ||
-    m.startsWith('gpt-5.5-') ||
-    m.includes('-codex') ||
-    m === 'codex-1' ||
-    m.startsWith('codex-mini')
-  );
 }
 
 type GroundedAgentRoute = { model: string; apiKey: string; baseURL?: string };

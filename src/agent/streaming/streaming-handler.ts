@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../config/model-defaults.js';
 /**
  * Streaming Handler Module
  *
@@ -272,7 +273,7 @@ export class StreamingHandler {
       sanitizeOutput: config.sanitizeOutput ?? true,
       extractToolCalls: config.extractToolCalls ?? true,
       trackTokens: config.trackTokens ?? true,
-      model: config.model ?? 'gpt-4',
+      model: config.model ?? getModelForRole('openai', 'tokenizer'),
       tokenUpdateInterval: config.tokenUpdateInterval ?? 500,
     };
 

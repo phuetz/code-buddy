@@ -13,7 +13,6 @@
 import {
   type ProviderKey,
   MODEL_DEFAULTS,
-  FALLBACK_MODEL,
   FALLBACK_PROVIDER,
   getProviderDefaultModel,
 } from './model-defaults.js';
@@ -114,7 +113,7 @@ export function resolveModel(input: ResolveModelInput = {}): ResolvedModel {
 
   // 5. Ultimate fallback
   return {
-    model: FALLBACK_MODEL,
+    model: getProviderDefaultModel(FALLBACK_PROVIDER),
     provider: FALLBACK_PROVIDER,
     source: 'fallback',
   };

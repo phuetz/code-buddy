@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Peer chat client factory (Phase (d).16a V0.4.1).
  *
@@ -77,7 +78,7 @@ interface ProviderSpec {
 const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   ollama: {
     id: 'ollama',
-    defaultModel: 'qwen2.5-coder:7b',
+    get defaultModel() { return getProviderDefaultModel('ollama'); },
     defaultBaseUrl: getOllamaV1BaseUrl(),
     isLocal: true,
     resolve: (explicit = false) => {
@@ -115,7 +116,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   // to chatgpt.com.
   'chatgpt-oauth': {
     id: 'chatgpt-oauth',
-    defaultModel: 'gpt-5.5',
+    get defaultModel() { return getProviderDefaultModel('chatgpt'); },
     defaultBaseUrl: CHATGPT_RESPONSES_BASE_URL,
     isLocal: false,
     resolve: () => {
@@ -137,7 +138,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
     // alias, which Google can auto-route to 3.2/3.3 etc.). Override
     // via CODEBUDDY_PEER_MODEL — works for both the alias and any
     // dotted version the binary accepts.
-    defaultModel: 'gemini-3.1-pro-preview',
+    get defaultModel() { return getModelForRole('google', 'cli'); },
     defaultBaseUrl: GEMINI_CLI_BASE_URL,
     isLocal: true,
     resolve: () => {
@@ -163,7 +164,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   // installing the daemon cannot unexpectedly replace another active brain.
   lemonade: {
     id: 'lemonade',
-    defaultModel: 'Qwen3.6-35B-A3B-MTP-GGUF',
+    get defaultModel() { return getProviderDefaultModel('lemonade'); },
     defaultBaseUrl: 'http://127.0.0.1:13305/api/v1',
     isLocal: true,
     resolve: (explicit = false) => {
@@ -180,7 +181,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   },
   openrouter: {
     id: 'openrouter',
-    defaultModel: 'openrouter/free',
+    get defaultModel() { return getProviderDefaultModel('openrouter'); },
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     isLocal: false,
     resolve: () => {
@@ -194,7 +195,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   },
   grok: {
     id: 'grok',
-    defaultModel: 'grok-3',
+    get defaultModel() { return getProviderDefaultModel('xai'); },
     defaultBaseUrl: 'https://api.x.ai/v1',
     isLocal: false,
     resolve: () => {
@@ -208,7 +209,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   },
   mistral: {
     id: 'mistral',
-    defaultModel: 'mistral-small-latest',
+    get defaultModel() { return getModelForRole('mistral', 'peer'); },
     defaultBaseUrl: 'https://api.mistral.ai/v1',
     isLocal: false,
     resolve: () => {
@@ -222,7 +223,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   },
   anthropic: {
     id: 'anthropic',
-    defaultModel: 'claude-sonnet-4-6',
+    get defaultModel() { return getProviderDefaultModel('anthropic'); },
     defaultBaseUrl: 'https://api.anthropic.com/v1',
     isLocal: false,
     resolve: () => {
@@ -233,7 +234,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   },
   gemini: {
     id: 'gemini',
-    defaultModel: 'gemini-2.5-flash',
+    get defaultModel() { return getProviderDefaultModel('google'); },
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     isLocal: false,
     resolve: () => {
@@ -244,7 +245,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   },
   openai: {
     id: 'openai',
-    defaultModel: 'gpt-4o',
+    get defaultModel() { return getProviderDefaultModel('openai'); },
     defaultBaseUrl: 'https://api.openai.com/v1',
     isLocal: false,
     resolve: () => {

@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Phase 3 — cloud video understanding via Gemini (OPT-IN, never default).
  *
@@ -34,7 +35,6 @@ export const CLOUD_PRIVACY_WARNING =
   "⚠️ Compréhension vidéo CLOUD (Gemini) : la vidéo/URL a été envoyée à Google. " +
   'À réserver aux vidéos PUBLIQUES et NON SENSIBLES.';
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_TIMEOUT_MS = 120_000;
 /** Inline base64 cap (~20 MB request limit on generateContent). Larger → degrade honestly. */
@@ -116,7 +116,7 @@ function resolveCloudConfig(env: NodeJS.ProcessEnv): CloudConfig | null {
   ).trim();
   if (!apiKey) return null;
   const baseUrl = (env.CODEBUDDY_VIDEO_CLOUD_BASE_URL ?? DEFAULT_BASE_URL).trim().replace(/\/+$/, '');
-  const model = (env.CODEBUDDY_VIDEO_CLOUD_MODEL ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  const model = (env.CODEBUDDY_VIDEO_CLOUD_MODEL ?? getProviderDefaultModel('google', env)).trim() || getProviderDefaultModel('google', env);
   return { apiKey, baseUrl, model };
 }
 

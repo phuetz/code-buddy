@@ -211,8 +211,8 @@ describe('agent-reply ACT model routing', () => {
     ]);
   });
 
-  it('uses the fallback model name when a pinned ChatGPT model has no OAuth credentials', async () => {
-    process.env.CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL = 'gpt-5.5';
+  it.each(['gpt-5.5', 'gpt-6.1-sol'])('uses the fallback model name when pinned %s has no OAuth credentials', async (model) => {
+    process.env.CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL = model;
 
     const reply = makeAgentReply({ summarize: async (output) => output });
     await expect(reply('inspecte le dépôt')).resolves.toBe('Route prête.');

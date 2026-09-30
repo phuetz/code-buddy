@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import { getPricingPer1M } from '../config/model-pricing.js';
 
 /**
@@ -748,7 +749,7 @@ export class InterpreterService extends EventEmitter {
       };
 
       // Calculate cost using existing method
-      const cost = this.calculateCost(model || 'grok-3-mini', tokens);
+      const cost = this.calculateCost(model || getModelForRole('xai', 'fast'), tokens);
 
       // Extract tool calls if present
       const toolCalls = choice?.message?.tool_calls?.map(tc => ({

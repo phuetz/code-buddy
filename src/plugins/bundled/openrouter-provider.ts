@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * OpenRouter Provider Plugin (Bundled)
  *
@@ -15,7 +16,7 @@ export const OPENROUTER_PROVIDER_ID = 'bundled-openrouter';
 export function createOpenRouterProvider(): PluginProvider | null {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null;
-  const model = process.env.OPENROUTER_MODEL?.trim() || 'openrouter/free';
+  const model = getProviderDefaultModel('openrouter');
 
   return {
     id: OPENROUTER_PROVIDER_ID,

@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 /**
  * Local-model resolution for Ollama.
@@ -19,7 +20,7 @@ import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 const OLLAMA_TAGS_TIMEOUT_MS = 2_000;
 
 /** Default coding model advertised during onboarding — the pull hint target. */
-export const DEFAULT_OLLAMA_MODEL = 'qwen2.5-coder:7b';
+export const DEFAULT_OLLAMA_MODEL = getModelForRole('ollama', 'hint');
 
 interface OllamaTagsResponse {
   models?: Array<{ name?: unknown; model?: unknown }>;
@@ -156,7 +157,7 @@ export function buildOllamaPullHint(options: {
   reachable: boolean;
   requested?: string;
 }): string {
-  const model = options.requested?.trim() || DEFAULT_OLLAMA_MODEL;
+  const model = options.requested?.trim() || getModelForRole('ollama', 'hint');
   if (!options.reachable) {
     return [
       `Ollama not reachable at ${options.baseURL}.`,
