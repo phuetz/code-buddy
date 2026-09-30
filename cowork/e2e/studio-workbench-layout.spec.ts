@@ -1,7 +1,9 @@
 import path from 'node:path';
 import { test, expect } from './fixtures';
+import { version } from '../package.json';
 
 test('the scaffold composer leaves the editor toolbar clickable at laptop size', async ({ electronApp, appPage, userDataDir }) => {
+  expect(await appPage.evaluate(() => window.electronAPI.getVersion())).toBe(version);
   await electronApp.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 800);
   });

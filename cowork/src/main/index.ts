@@ -12,6 +12,7 @@
  * Dependencies: session-manager, config-store, mcp-manager, sandbox-adapter,
  *               skills-manager, scheduled-task-manager, nav-server, remote-manager
  */
+import { version as sourceVersion } from '../../package.json';
 import {
   app,
   BrowserWindow,
@@ -2701,7 +2702,7 @@ ipcMain.handle('client-invoke', async (_event, data: ClientEvent) => {
 
 ipcMain.handle('get-version', () => {
   try {
-    return app.getVersion();
+    return app.isPackaged ? app.getVersion() : sourceVersion;
   } catch (error) {
     logError('[IPC] Error getting version:', error);
     return 'unknown';
