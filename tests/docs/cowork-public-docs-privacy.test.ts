@@ -207,7 +207,7 @@ describe('Cowork public QA documentation privacy', () => {
     const coworkReadmeText = fs.readFileSync(coworkReadme, 'utf8');
     const publicCoworkText = fs.readFileSync(publicCoworkDoc, 'utf8');
 
-    expect(rootReadmeText).toContain('[Cowork Desktop](docs/cowork.md)');
+    expect(rootReadmeText).toMatch(/\[Cowork desktop\]\(docs\/cowork\.md\)/i);
     expect(coworkReadmeText).toContain('[`docs/cowork.md`](../docs/cowork.md)');
     expect(publicCoworkText).toContain('## Visual Tour');
     expect(publicCoworkText).toContain('## Real Validation');

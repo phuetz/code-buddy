@@ -1,5 +1,12 @@
 # Fleet Guide — Multi-AI hub for real-time inter-AI collaboration
 
+**Current showcase status: not proven here.** The fleet entries in the
+[feature catalogue](PROVEN-FEATURES.md#domain-fleet) have no sufficient execution
+trace valid for this checkout. This guide describes configuration and intended
+behavior. Its historical accounts are outside the current evidence catalogue;
+they have not been revalidated here and do not establish this candidate's
+behavior, costs or cross-host compatibility.
+
 Pour relier plusieurs machines et obtenir un travail commun avec `buddy fleet check` et `buddy fleet collaborate`, voir le [parcours de coopération multi-instance](fleet-collaboration.md).
 
 > *« Le but est que toutes mes IA collaborent dans l'harmonie. »*
@@ -27,8 +34,8 @@ work or ask questions. Not just an HTTP API — a stateful, low-latency
 mesh where one AI can subscribe to another's events, react, and
 respond.
 
-**Today this is operational** for any pair of Code Buddy instances
-connected via WebSocket (typically over a Tailscale mesh on the lab):
+The intended behavior for configured Code Buddy instances connected via
+WebSocket is:
 - A peer's events (tool starts, workflow lifecycle, sub-agent spawns)
   stream live to subscribers
 - A peer's LLM can be invoked synchronously via `peer.chat`
@@ -38,7 +45,8 @@ connected via WebSocket (typically over a Tailscale mesh on the lab):
 ### Objective 2 — Pilot local LLMs for coding (and more)
 
 Cloud LLM quotas are limited and expensive. Local LLMs (Ollama, LM
-Studio, vLLM) are free and unlimited, but their tooling is rough.
+Studio, vLLM) avoid cloud API charges but use local hardware and remain bounded
+by its resources and the chosen model's capabilities.
 Code Buddy's **fleet auto-detects an Ollama instance via `OLLAMA_HOST`
 in priority over cloud providers**, so a peer with a local Ollama
 serves as the LLM endpoint of choice — for coding tasks, reasoning,
@@ -49,10 +57,12 @@ classification, anything you'd otherwise pay tokens for.
 > (`~/.codebuddy/codex-auth.json`) wins over `OLLAMA_HOST`. Force the local
 > model in the terminal with `CODEBUDDY_PROVIDER=ollama`.
 
-**Today this is operational**: set `OLLAMA_HOST=http://localhost:11434`
+To configure the local route, set `OLLAMA_HOST=http://localhost:11434`
 on a peer, start its `buddy server`, and any other peer can
 `/fleet send <peer-with-ollama> peer.chat {"prompt":"..."}` to get a
-**free, local response**. Mix and match: heavy reasoning on a Claude
+local response without a cloud API charge. A successful response remains
+**not proven here** by the current catalogue. The intended routing can combine
+heavy reasoning on a Claude
 Max peer, code drafting on a local Qwen via Ollama, vision on a
 Gemini peer, all from the same fleet topology.
 
@@ -85,12 +95,13 @@ buddy council "Propose une architecture pour X" --fleet
 #   per task type. ($0 on local LLMs; add --no-conductor for direct fan-out.)
 ```
 
-**Proven (this box, two real server PIDs, $0):** two `buddy server` (3010 qwen2.5:7b + 3020
-gemma4), a coordinator connected to both, `council --fleet` → both machines contributed an answer,
-judged together (`scripts/fleet-council-2proc-smoke.ts`). Current `council --fleet` also uses the
-adaptive conductor and final synthesis pass, so remote machines can receive specialized roles
-alongside local models and still fold into one final answer. A true multi-machine Tailscale run uses
-the same recipe with your real hosts.
+**Historical account — outside the current evidence catalogue, not revalidated
+here:** an earlier note described two `buddy server` processes (3010 qwen2.5:7b
+and 3020 gemma4), both returning answers to `council --fleet`
+(`scripts/fleet-council-2proc-smoke.ts`). The note does not supply a qualified
+trace for this checkout or establish a multi-machine Tailscale result.
+The conductor and synthesis pass are described as source behavior; their
+presence does not prove the resulting cooperation.
 
 ---
 
@@ -927,7 +938,7 @@ LLM (continuing with peer's answer in context): "gpuNode suggests …"
 >   capacity, utilization is reported as unknown and backpressure never triggers. Cowork renders per-actor load
 >   bars + the fleet-wide rate (`FleetUtilizationStrip`).
 > - **Provider-aware failover.** A provider is treated as a failure domain distinct from its
->   machine. A mono-peer robot exposing several backends can therefore retry once on another
+>   machine. A single peer exposing several backends can therefore retry once on another
 >   provider of the same peer after `PROVIDER_UNAVAILABLE`, 401/429/quota, network failure or
 >   HTTP 500/502/503/504. Business outcomes such as `review_rejected` remain terminal. Exact
 >   Fleet clients disable hidden `CodeBuddyClient` fallbacks, and each durable saga step records
@@ -1508,15 +1519,18 @@ buddy autonomy briefing --date 2026-07-12 --dir ~/.codebuddy/fleet
 
 ---
 
-## Cross-host round-trip — validated end-to-end (2026-06-04)
+## Cross-host round-trip — historical account (2026-06-04)
 
-The cross-host POC ("Niveau 2": one Code Buddy on machine A drives another
-on machine B over Tailscale) is validated end-to-end with a **100% local
-LLM** on the receiving side — a Windows workstation → `hub-linux`
+**Outside the current evidence catalogue; not revalidated here.** This earlier
+account describes a cross-host POC ("Niveau 2": one Code Buddy on machine A
+drives another on machine B over Tailscale) with a local LLM on the receiving
+side — a Windows workstation → `hub-linux`
 (Tailscale `203.0.113.10`), answered by hub's local Ollama
 `devstral-small-2:24b`. Connect+auth **58 ms**, `peer.chat` answer
 **15–22 s**, **$0**. A real coding task (a `chunk<T>` implementation) was
-also delegated and returned over the same channel.
+also reported as delegated and returned over the same channel. These historical
+timings, costs and outcomes do not validate the current candidate or replace
+the catalogue's **not proven here** status.
 
 ### The gotcha that blocks the naïve setup
 
@@ -1575,7 +1589,7 @@ and saves the request+response artifact.
   prints a `better-sqlite3 NODE_MODULE_VERSION` warning and `database: error`
   health — harmless for `peer.chat` (no DB needed); `npm rebuild
   better-sqlite3` clears it.
-- For ongoing use, rotate the shared `JWT_SECRET` (the validation above used a
+- For ongoing use, rotate the shared `JWT_SECRET` (the historical account above used a
   throwaway secret) and consider per-spoke keys; **V2.0** federated identity
   (above) removes the shared-secret requirement.
 

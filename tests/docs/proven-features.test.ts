@@ -116,10 +116,10 @@ describe('generated proven features showcase', () => {
   it('downgrades an outdated source digest and explains the unavailable evidence', () => {
     const directory = fixture();
     proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUCCESS');
-    expect(generateProvenFeatures(directory, revision)['README.md']).toContain('PROUVÉES 1/1');
+    expect(generateProvenFeatures(directory, revision)['README.md']).toContain('PROVEN 1/1');
     put(directory, 'src/feature.ts', 'export const feature = true;\nexport const changed = true;');
     const files = generateProvenFeatures(directory, revision);
-    expect(files['README.md']).toContain('PROUVÉES 0/1');
+    expect(files['README.md']).toContain('PROVEN 0/1');
     expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('Preuve ancienne ou révision courante inconnue.');
   });
 
@@ -169,7 +169,8 @@ describe('generated proven features showcase', () => {
     put(directory, 'docs/preuves/passed.log', 'Commande : buddy fixture --json\n');
     review(directory, 'accept', 'docs/preuves/passed.log');
     const files = generateProvenFeatures(directory, revision);
-    expect(files['README.md']).toContain('limite du scénario lorsqu’elle est consignée');
+    expect(files['README.md']).toContain('scenario limit when recorded');
+    expect(files['README.fr.md']).toContain('limite du scénario lorsqu’elle est consignée');
     expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('Les observations et raisons, ainsi que les limites consignées,');
     expect(files['docs/PROVEN-FEATURES.md']).toContain('Observations and reasons, along with recorded limits,');
     expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('**Prouvée**');
@@ -181,7 +182,7 @@ describe('generated proven features showcase', () => {
     const directory = fixture();
     proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUMMARY_ONLY');
     review(directory, 'insufficient', 'docs/preuves/passed.log');
-    expect(generateProvenFeatures(directory, revision)['README.md']).toContain('PROUVÉES 0/1');
+    expect(generateProvenFeatures(directory, revision)['README.md']).toContain('PROVEN 0/1');
   });
 
   it('keeps a latest failed attempt visible after the source digest becomes stale', () => {
@@ -189,7 +190,7 @@ describe('generated proven features showcase', () => {
     proof(directory, 'failed', '2026-09-29T12:00:00Z', 'MISSING_BACKEND');
     put(directory, 'src/feature.ts', 'export const feature = false;');
     const files = generateProvenFeatures(directory, revision);
-    expect(files['README.md']).toContain('DONT DERNIERS ESSAIS EN ÉCHEC 1');
+    expect(files['README.md']).toContain('INCLUDING LATEST FAILED RUNS 1');
     expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('MISSING\\_BACKEND');
     expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('Preuve ancienne');
   });
@@ -199,7 +200,7 @@ describe('generated proven features showcase', () => {
     proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUCCESS');
     put(directory, 'docs/preuves/passed.log', 'Commande : buddy fixture --json\nObservé : changed summary.');
     const files = generateProvenFeatures(directory, revision);
-    expect(files['README.md']).toContain('PROUVÉES 0/1');
+    expect(files['README.md']).toContain('PROVEN 0/1');
     expect(files['docs/FONCTIONNALITES-PROUVEES.md']).toContain('Trace nouvelle ou modifiée');
   });
 
@@ -218,5 +219,20 @@ describe('generated proven features showcase', () => {
           : (feature.status === 'proven' ? '**Prouvée**' : '**Non prouvée ici**'));
       }
     }
+  });
+
+  it('renders the README status in each language without changing the evidence counts', () => {
+    const directory = fixture();
+    proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUCCESS');
+    const files = generateProvenFeatures(directory, revision);
+    expect(files['README.md']).toContain('## Feature status');
+    expect(files['README.md']).toContain('PROVEN 1/1 | NOT PROVEN HERE 0 | INCLUDING LATEST FAILED RUNS 0');
+    expect(files['README.md']).not.toContain('## État des fonctionnalités');
+    expect(files['README.md']).toContain('](docs/PROVEN-FEATURES.md)');
+    expect(files['README.fr.md']).toContain('## État des fonctionnalités');
+    expect(files['README.fr.md']).toContain('PROUVÉES 1/1 | NON PROUVÉES ICI 0 | DONT DERNIERS ESSAIS EN ÉCHEC 0');
+    expect(files['README.fr.md']).toContain('](docs/FONCTIONNALITES-PROUVEES.md)');
+    expect(JSON.parse(files['docs/catalog/showcase-status.json']!).counts)
+      .toEqual({ total: 1, passed: 1, failed: 0, unavailable: 0 });
   });
 });

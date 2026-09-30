@@ -60,6 +60,20 @@ function count(rows: Row[]): Counts {
   };
 }
 
+function renderReadmeBlock(c: Counts, language: Language): string {
+  const fr = language === 'fr';
+  return [START, fr ? '## État des fonctionnalités' : '## Feature status', '',
+    fr ? `[\`PROUVÉES ${c.passed}/${c.total} | NON PROUVÉES ICI ${c.unavailable} | DONT DERNIERS ESSAIS EN ÉCHEC ${c.failed}\`](docs/FONCTIONNALITES-PROUVEES.md)`
+      : `[\`PROVEN ${c.passed}/${c.total} | NOT PROVEN HERE ${c.unavailable} | INCLUDING LATEST FAILED RUNS ${c.failed}\`](docs/PROVEN-FEATURES.md)`,
+    fr ? `**${c.passed}/${c.total} fonctionnalités prouvées** ; ${c.unavailable} non prouvées ici, avec raison (dont ${c.failed} derniers essais en échec, historiques si l’empreinte est périmée).`
+      : `**${c.passed}/${c.total} features proven**; ${c.unavailable} not proven here, with reasons (including ${c.failed} latest failed runs, historical when the source digest is stale).`,
+    fr ? 'Chaque état « prouvée » est limité au composant et au scénario capturés, avec la limite du scénario lorsqu’elle est consignée. Ce total ne valide pas une installation neuve.'
+      : 'Each “proven” state covers the captured component scenario, with its scenario limit when recorded. This total does not validate a fresh installation.',
+    fr ? '[Statuts, raisons et traces par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: feature status](docs/PROVEN-FEATURES.md)'
+      : '[Statuses, reasons and traces by domain](docs/PROVEN-FEATURES.md) · [Français : état des fonctionnalités](docs/FONCTIONNALITES-PROUVEES.md)',
+    END].join('\n');
+}
+
 function state(row: Row, language: Language): string {
   return language === 'fr' ? (row.proven ? 'Prouvée' : 'Non prouvée ici')
     : (row.proven ? 'Proven' : 'Not proven here');
@@ -229,12 +243,7 @@ export function generateProvenFeatures(root: string, revision?: string | null): 
   hash.update(JSON.stringify(features));
   const digest = hash.digest('hex');
   const c = count(rows);
-  const block = [START, '## État des fonctionnalités', '',
-    `[\`PROUVÉES ${c.passed}/${c.total} | NON PROUVÉES ICI ${c.unavailable} | DONT DERNIERS ESSAIS EN ÉCHEC ${c.failed}\`](docs/FONCTIONNALITES-PROUVEES.md)`,
-    `**${c.passed}/${c.total} fonctionnalités prouvées** ; ${c.unavailable} non prouvées ici, avec raison (dont ${c.failed} derniers essais en échec, historiques si l’empreinte est périmée).`,
-    'Chaque état « prouvée » est limité au composant et au scénario capturés, avec la limite du scénario lorsqu’elle est consignée. Ce total ne valide pas une installation neuve.',
-    '[Statuts, raisons et traces par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: feature status](docs/PROVEN-FEATURES.md)',
-    END].join('\n');
+  const blocks = { fr: renderReadmeBlock(c, 'fr'), en: renderReadmeBlock(c, 'en') };
   const status = {
     schemaVersion: 1,
     counts: c,
@@ -253,11 +262,13 @@ export function generateProvenFeatures(root: string, revision?: string | null): 
     'docs/FONCTIONNALITES.md': renderSummary(rows, digest, 'fr'),
     'docs/feature-catalog.md': renderSummary(rows, digest, 'en'),
     'docs/INVENTAIRE-FONCTIONNALITES.md': renderSummary(rows, digest, 'fr'),
-    'README.md': updateReadme(readFileSync(path.join(root, 'README.md'), 'utf8'), block),
+    'README.md': updateReadme(readFileSync(path.join(root, 'README.md'), 'utf8'), blocks.en),
     'docs/catalog/showcase-status.json': `${JSON.stringify(status, null, 2)}\n`,
-    'README.fr.md': updateReadme(readFileSync(path.join(root, 'README.fr.md'), 'utf8'), block),
+    'README.fr.md': updateReadme(readFileSync(path.join(root, 'README.fr.md'), 'utf8'), blocks.fr),
   };
-  for (const [file, content] of Object.entries(files)) assertPublic(file.startsWith('README') ? block : content);
+  for (const [file, content] of Object.entries(files)) {
+    assertPublic(file === 'README.md' ? blocks.en : file === 'README.fr.md' ? blocks.fr : content);
+  }
   return files;
 }
 
