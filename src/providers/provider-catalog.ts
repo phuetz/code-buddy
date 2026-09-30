@@ -159,6 +159,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     defaultModel: 'gpt-6-sol',
     apiKeyPlaceholder: 'oauth-chatgpt',
     models: [
+      'gpt-6.1-sol',
       'gpt-6-sol',
       'gpt-6-astra',
       'gpt-6-luna',

@@ -679,6 +679,21 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
   },
 
+  // GPT-6.1 family — served by the ChatGPT/Codex OAuth backend and API.
+  {
+    model: 'gpt-6.1-*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    supportsToolCalls: true,
+    supportsVision: true,
+    // Public API limit; the 272K threshold only changes token pricing.
+    contextWindow: 1_050_000,
+    maxOutputTokens: 128_000,
+    patchFormat: 'unified',
+    promptProfile: 'rich',
+  },
+
   // GPT-6 family (astra, sol, luna) — served by the ChatGPT/Codex OAuth backend.
   // Reasoning levels: the ones all three list in the catalogue (`ultra` is
   // astra/sol only).

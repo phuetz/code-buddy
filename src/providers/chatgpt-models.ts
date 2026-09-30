@@ -199,7 +199,7 @@ export function resolveChatGptReasoningEffort(
   )
     ? normalizedRequested as ChatGptReasoningEffort
     : modelInfo?.defaultReasoningEffort ??
-      (/^gpt-(?:5\.6-(?:sol|terra|luna)|6-(?:astra|sol|luna))$/i.test(normalizeChatGptOAuthModel(model))
+      (/^gpt-(?:5\.6-(?:sol|terra|luna)|6-(?:astra|sol|luna)|6\.1-sol)$/i.test(normalizeChatGptOAuthModel(model))
         ? 'medium'
         : undefined);
 
@@ -229,6 +229,9 @@ function inferReasoningEfforts(model: string): ChatGptReasoningEffort[] {
   if (['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-astra', 'gpt-6-sol'].includes(normalized)) {
     return ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
   }
+  if (normalized === 'gpt-6.1-sol') {
+    return ['low', 'medium', 'high', 'xhigh', 'max'];
+  }
   if (normalized === 'gpt-5.6-luna' || normalized === 'gpt-6-luna') {
     return ['low', 'medium', 'high', 'xhigh', 'max'];
   }
@@ -241,7 +244,7 @@ export function modelUsesResponsesLite(
 ): boolean {
   const info = findChatGptModel(catalog, model);
   if (info) return info.useResponsesLite;
-  return /^gpt-(?:5\.6-(?:sol|terra|luna)|6-(?:astra|sol|luna))$/i.test(normalizeChatGptOAuthModel(model));
+  return /^gpt-(?:5\.6-(?:sol|terra|luna)|6-(?:astra|sol|luna)|6\.1-sol)$/i.test(normalizeChatGptOAuthModel(model));
 }
 
 export function parseChatGptModelCatalog(

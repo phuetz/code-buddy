@@ -14,6 +14,7 @@ export const MODEL_PRICE_DATA: Record<string, { inputPerMillion: number; outputP
   'grok-code-fast': { inputPerMillion: 0.2, outputPerMillion: 1.5, source: 'https://x.ai/news/grok-code-fast-1', checkedAt: '2026-09-29', verified: true },
   'grok-2': { inputPerMillion: 2, outputPerMillion: 10, source: 'repository estimate at 3c1289862', checkedAt: '2026-09-29', verified: false },
   'grok-2-mini': { inputPerMillion: 0.2, outputPerMillion: 1, source: 'repository estimate at 3c1289862', checkedAt: '2026-09-29', verified: false },
+  'gpt-6.1-sol': { inputPerMillion: 2, outputPerMillion: 10, cachedInputPerMillion: 0.1, source: 'https://developers.openai.com/api/docs/models/gpt-6.1-sol', checkedAt: '2026-09-30', verified: true, scope: 'standard, prompt <= 272K; longer prompts have higher rates' },
   'gpt-5.6-sol': { inputPerMillion: 5, outputPerMillion: 30, source: 'repository estimate at 3c1289862', checkedAt: '2026-09-29', verified: false },
   'gpt-5.6-luna': { inputPerMillion: 1, outputPerMillion: 6, source: 'repository estimate at 3c1289862', checkedAt: '2026-09-29', verified: false },
   'gpt-5.6': { inputPerMillion: 5, outputPerMillion: 30, source: 'repository estimate at 3c1289862', checkedAt: '2026-09-29', verified: false },
