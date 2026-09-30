@@ -23,7 +23,8 @@ const callerHome = process.env[CALLER_HOME_ENV] ?? '';
 
 /**
  * Lance Vitest sur un fichier jetable avec le setup d'isolation (sans globalSetup : le HOME jetable
- * est créé sous `os.tmpdir()` du processus enfant). Renvoie la sortie brute et le code.
+ * est créé sous `os.tmpdir()` du processus enfant). Renvoie la sortie, le code et
+ * un témoin écrit par le corps du test, indépendant du reporter et de ses logs.
  */
 function runWithIsolationSetup(fixtureLines: string[], env: NodeJS.ProcessEnv = process.env) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-garde-home-'));
@@ -39,6 +40,7 @@ function runWithIsolationSetup(fixtureLines: string[], env: NodeJS.ProcessEnv = 
         'export default defineConfig({ test: {',
         `  root: ${JSON.stringify(dir)},`,
         "  include: ['garde.fixture.ts'],",
+        '  silent: true,',
         `  setupFiles: [${JSON.stringify(path.join(REPO_ROOT, 'tests', 'setup', 'home-isolation.ts'))}],`,
         '} });',
         '',
@@ -49,7 +51,12 @@ function runWithIsolationSetup(fixtureLines: string[], env: NodeJS.ProcessEnv = 
       [path.join(REPO_ROOT, 'node_modules', 'vitest', 'vitest.mjs'), 'run', '--config', config],
       { cwd: REPO_ROOT, encoding: 'utf8', timeout: 60_000, env },
     );
-    return { output: `${run.stdout}\n${run.stderr}`, status: run.status };
+    const witnessPath = path.join(dir, 'body-witness.txt');
+    return {
+      output: `${run.stdout}\n${run.stderr}`,
+      status: run.status,
+      witness: fs.existsSync(witnessPath) ? fs.readFileSync(witnessPath, 'utf8') : null,
+    };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -164,17 +171,18 @@ describe('fonctions de comparaison et d’environnement', () => {
 describe('garde : un test qui rend le HOME appelant échoue fort', () => {
   it('la garde du setup arrête un fichier dont le HOME redevient celui de l’appelant', () => {
     // Un beforeAll remet HOME sur le HOME appelant : le test ne doit pas s'exécuter.
-    const { output, status } = runWithIsolationSetup([
+    const { output, status, witness } = runWithIsolationSetup([
       "import { beforeAll, it } from 'vitest';",
+      "import fs from 'node:fs';",
       'beforeAll(() => {',
       `  process.env.HOME = process.env.${CALLER_HOME_ENV};`,
       `  process.env.USERPROFILE = process.env.${CALLER_HOME_ENV};`,
       '});',
-      "it('corps du test', () => { console.log('CORPS_EXECUTE'); });",
+      "it('corps du test', () => { fs.writeFileSync(new URL('./body-witness.txt', import.meta.url), 'CORPS_EXECUTE'); });",
     ]);
     expect(output).toContain('garde Vitest (HOME isolé)');
     expect(output).toContain('au début du test');
-    expect(output).not.toContain('CORPS_EXECUTE');
+    expect(witness).toBeNull();
     expect(status).not.toBe(0);
   }, 90_000);
 });
@@ -191,9 +199,10 @@ describe('dossier temporaire atteint par un lien (comme le TEMP 8.3 des runners 
       const helpers = JSON.stringify(
         path.join(REPO_ROOT, 'tests', 'setup', 'home-isolation-paths.ts').split(path.sep).join('/'),
       );
-      const { output, status } = runWithIsolationSetup(
+      const { output, status, witness } = runWithIsolationSetup(
         [
           "import os from 'node:os';",
+          "import fs from 'node:fs';",
           "import { expect, it } from 'vitest';",
           `import { isSameOrInside } from ${helpers};`,
           "it('xdg sous le home', () => {",
@@ -201,15 +210,15 @@ describe('dossier temporaire atteint par un lien (comme le TEMP 8.3 des runners 
           "  for (const k of ['XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME']) {",
           '    expect(isSameOrInside(process.env[k] ?? "", os.homedir()), k).toBe(true);',
           '  }',
-          "  console.log('XDG_SOUS_HOME');",
+          "  fs.writeFileSync(new URL('./body-witness.txt', import.meta.url), 'XDG_SOUS_HOME');",
           '});',
         ],
         // os.tmpdir() lit TMPDIR sous POSIX, TEMP/TMP sous Windows.
         // Sans le parent hérité du globalSetup, le HOME jetable de l'enfant est créé sous ce lien.
         { ...process.env, CODEBUDDY_VITEST_HOME_PARENT: '', TMPDIR: link, TEMP: link, TMP: link },
       );
-      expect(output).toContain('XDG_SOUS_HOME');
       expect(status, output).toBe(0);
+      expect(witness).toBe('XDG_SOUS_HOME');
     } finally {
       fs.rmSync(base, { recursive: true, force: true });
     }
