@@ -68,6 +68,33 @@ describe('peer-chat-bridge — Phase (d).15', () => {
     _resetFleetLoadForTests();
   });
 
+  it.each(['peer.chat', 'peer.chat-stream'])('refuses a source-free audit before calling the model: %s', async method => {
+    const { client, chat } = makeMockClient();
+    wirePeerChatBridge(() => client as never);
+    const result = await dispatchPeerRequest({ id: 'no-sources', method,
+      params: { prompt: 'Audit src/auth.ts for security bugs', dispatchProfile: 'review' } }, baseCtx);
+    expect(result.error?.message).toContain('SOURCES_REQUIRED');
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it.each(['Audit this project for security bugs', 'Audite les fichiers de ce projet'])('refuses source-free audit text without a profile: %s', async prompt => {
+    const { client, chat } = makeMockClient();
+    wirePeerChatBridge(() => client as never);
+    const result = await dispatchPeerRequest({ id: 'no-profile', method: 'peer.chat', params: { prompt } }, baseCtx);
+    expect(result.error?.message).toContain('SOURCES_REQUIRED');
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it('passes supplied excerpts to the model and marks their limited provenance', async () => {
+    const { client, chat } = makeMockClient();
+    wirePeerChatBridge(() => client as never);
+    const result = await dispatchPeerRequest({ id: 'sources', method: 'peer.chat',
+      params: { prompt: 'Audit src/auth.ts', sourceContext: 'src/auth.ts: export const ORACLE_SOURCE = true;' } }, baseCtx);
+    expect(result.ok).toBe(true);
+    expect(chat.mock.calls[0][0][1].content).toContain('ORACLE_SOURCE');
+    expect(result.payload).toMatchObject({ sourceAccess: 'supplied-text-only', sourceWarning: expect.stringContaining('No files were read') });
+  });
+
   describe('wire / unwire', () => {
     it('wire registers peer.chat on the registry', () => {
       expect(listPeerMethods()).not.toContain('peer.chat');
@@ -316,7 +343,7 @@ describe('peer-chat-bridge — Phase (d).15', () => {
         {
           id: 'p6-profile',
           method: 'peer.chat',
-          params: { prompt: 'Review this patch', dispatchProfile: 'review' },
+          params: { prompt: 'Review this patch', dispatchProfile: 'review', sourceContext: 'src/auth.ts: export const authorized = false;' },
         },
         baseCtx,
       );

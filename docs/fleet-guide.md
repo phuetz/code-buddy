@@ -1596,3 +1596,14 @@ and saves the request+response artifact.
 - `src/server/websocket/peer-rpc.ts` — registry + dispatcher
 - the handover repo's `propositions/AUDIT-COMPACTION-CLAUDE-CODE-2026-05-04.md` —
   comparative audit that informed two recent fixes
+
+### Source provenance for one-shot audits
+
+`peer.chat` and `peer.chat-stream` send text to a model without file tools.
+They do not copy the caller's files or read the peer's workspace. An audit or
+`dispatchProfile: "review"` without `sourceContext` is refused with
+`SOURCES_REQUIRED` before inference. Supply paths and actual source excerpts
+in `sourceContext` (maximum 48,000 characters), or first obtain them with
+`peer.tool.invoke` and explicitly include those results. A successful reply
+contains `sourceAccess: "supplied-text-only"` and `sourceWarning`; its review
+covers only the supplied text, with no claim of a repository-wide inspection.
