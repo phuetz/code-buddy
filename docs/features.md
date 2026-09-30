@@ -50,7 +50,7 @@ For long sessions, `ContextManagerV2` compresses with a sliding window + **impor
 
 ### Security & sandboxing
 
-Layered, fail-closed safety: the **Guardian Agent** scores each operation 0–100 (auto-approve <80, prompt 80–90, deny ≥90; read-only tools skip the LLM call), **permission modes** (`plan`/`acceptEdits`/`dontAsk`/`bypassPermissions`), **sandbox tiers** (read-only / workspace-write / full-access via bubblewrap·landlock·seatbelt, with `.git`/`.ssh`/`.aws` always read-only), an **SSRF guard** (blocks private ranges + IPv4/IPv6 bypass vectors with a DNS check before every fetch), an AES-256-GCM **secrets vault** (`buddy secrets`), a **write policy** (`strict` forces `apply_patch`), and an **output sanitizer** that strips model-leakage tokens. → [security.md](security.md)
+Layered, fail-closed safety: the **Guardian Agent** (an isolated module for operation risk evaluation), **permission modes** (`plan`/`acceptEdits`/`dontAsk`/`bypassPermissions`), **sandbox tiers** (read-only / workspace-write / full-access via bubblewrap·landlock·seatbelt, with `.git`/`.ssh`/`.aws` always read-only), an **SSRF guard** (blocks private ranges + IPv4/IPv6 bypass vectors with a DNS check before every fetch), an AES-256-GCM **secrets vault** (`buddy secrets`), a **write policy** (`strict` forces `apply_patch`), and an **output sanitizer** that strips model-leakage tokens. → [security.md](security.md)
 
 ### Server & infrastructure
 

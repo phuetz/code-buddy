@@ -14,17 +14,14 @@ Set via `--permission-mode <mode>` CLI flag. Checked by `ConfirmationService` be
 
 Security modes (`suggest`, `auto-edit`, `full-auto`) provide an additional layer of control via `/mode`.
 
-## Guardian Agent (AI-Powered Approval)
+## Guardian Agent (standalone evaluator)
 
-An AI-powered automatic approval reviewer (`src/security/guardian-agent.ts`):
+An AI-powered automatic approval reviewer (`src/security/guardian-agent.ts`). **Note: This module is currently tested in isolation and is NOT actively plugged into the approval chain** for safety reasons. It features:
 
 - Risk scoring 0-100 for each operation
-- **Auto-approves** score < 80
-- **Prompts user** score 80-90
-- **Denies** score >= 90
 - **Always-safe set** (no LLM call needed): `read_file`, `grep`, `glob`, `plan`, `reason`
 - **Always-denied patterns**: `rm -rf /`, fork bombs, `drop database`
-- 90-second timeout, fail-closed design
+- 90-second timeout
 
 ## Confirmation Service
 
@@ -32,7 +29,6 @@ Singleton for destructive operations. Check order:
 1. Permission mode
 2. Declarative rules (gitignore syntax: `Read(~/Documents/*.pdf)`, `Edit(src/**,!src/tests/**)`)
 3. Session flags
-4. Guardian Agent
 
 ## Sandbox Tiers
 
