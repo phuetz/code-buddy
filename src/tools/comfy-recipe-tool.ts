@@ -338,6 +338,16 @@ export class ComfyRecipeTool implements ITool {
     const directory = configured || path.join(this.homeDirectory, '.codebuddy', 'comfy-recipes');
     if (!path.isAbsolute(directory) || directory.includes('\0')) throw new Error('ComfyUI recipe directory must be an absolute local path');
     const registry = new ComfyUIRecipeRegistry();
+    if (!configured) {
+      try {
+        await lstat(directory);
+      } catch (error) {
+        // A fresh profile has no recipes yet. Do not create a directory just
+        // to list it, or hide errors from an explicitly configured registry.
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return registry;
+        throw error;
+      }
+    }
     await registry.loadDirectory(path.resolve(directory));
     return registry;
   }
