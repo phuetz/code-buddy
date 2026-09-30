@@ -31,7 +31,7 @@
         "en": "Inspect the evidence level of tracked features before presenting them.",
         "fr": "Consultez le niveau de preuve des fonctionnalités avant de les présenter."
       },
-      "verificationLimit": "Preuve de commande à confirmer pour cette révision."
+      "verificationLimit": "P9R2 : stdout CLI JSON complet conservé ; compteurs calculés séparément à partir des featureId uniques. Aucun featureCount ni states agrégé attribué au format CLI."
     },
     {
       "id": "resource-catalog-tool",
@@ -743,7 +743,7 @@
           }
         ]
       },
-      "verificationLimit": "P9R1 : buddy code-explorer ask add renvoie deux définitions réelles à froid. JSON natif ; aucun drapeau --json supporté.",
+      "verificationLimit": "P9R2 : CLI à froid via MCP stdio Code Explorer 0.1.1, binaire externe requis sur PATH ; deux projets neufs et index reconstruits par le harnais livré. JSON natif, sans drapeau --json ; synchronisation de session non vérifiée.",
       "discoveryKey": "cli:code-explorer"
     },
     {
@@ -4357,7 +4357,7 @@
         "en": "Use the code_explorer_ask entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée code_explorer_ask dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Interrogation réelle du graphe local via MCP.",
+      "verificationLimit": "P9R2 : adaptateur réel avec initialisation MCP explicite, binaire Code Explorer 0.1.1 externe requis ; fixture et index reconstruits, requête sans index rejetée. Harnais dédié run-p9-code-explorer-evidence.mjs, distinct des 131 scénarios généraux.",
       "codePaths": [
         "src/tools/registry/code-explorer-tools.ts",
         "src/tools/code-explorer-tool.ts",

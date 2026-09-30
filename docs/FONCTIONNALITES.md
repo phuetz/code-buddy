@@ -11,7 +11,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
 | `resource-catalog-tool` — Outil de sélection des ressources | Trouvez les ressources disponibles pour une tâche d’agent. | **Testée localement** | [Trace réelle](preuves/p5-resource-catalog-tool-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#resource-catalog-tool) |
-| `cli-code-explorer` — Code Explorer integration | Inspectez les relations du code et la synchronisation de session. | **Testée localement** | [Trace réelle](preuves/p9r1-cli-code-explorer-2026-09-30.log); [Maillons vérifiés](preuves/verification-statique.md#cli-code-explorer) |
+| `cli-code-explorer` — Code Explorer integration | Inspectez les relations du code et la synchronisation de session. | **Testée localement** | [Trace réelle](preuves/p9r2-cli-code-explorer-2026-09-30.log); [Maillons vérifiés](preuves/verification-statique.md#cli-code-explorer) |
 | `cli-tools` — Tool availability | Inspectez les outils disponibles et leurs profils. | **Preuve à renouveler** | [Trace historique](preuves/p5-cli-tools-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-tools) |
 | `cli-autonomous-code` — Guarded coding cell | Exécutez un contrat de codage autonome encadré. | **Preuve à renouveler** | [Trace historique](preuves/p7-cli-autonomous-code.log); [Maillons vérifiés](preuves/verification-statique.md#cli-autonomous-code) |
 | `cli-dev` — Developer workflows | Lancez des parcours guidés de planification, réalisation et vérification. | **Preuve à renouveler** | [Trace historique](preuves/p7-cli-dev.log); [Maillons vérifiés](preuves/verification-statique.md#cli-dev) |
@@ -137,7 +137,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `catalog-status` — Catalogue des états et preuves | Consultez le niveau de preuve des fonctionnalités avant de les présenter. | **Testée localement** | [Trace réelle](preuves/p9r1-catalog-status-2026-09-30.log); [Maillons vérifiés](preuves/verification-statique.md#catalog-status) |
+| `catalog-status` — Catalogue des états et preuves | Consultez le niveau de preuve des fonctionnalités avant de les présenter. | **Testée localement** | [Trace réelle](preuves/p9r2-catalog-status-2026-09-30.log); [Maillons vérifiés](preuves/verification-statique.md#catalog-status) |
 | `cli-daemon` — Background daemon | Exécutez Code Buddy comme processus de fond administré. | **Preuve à renouveler** | [Trace historique](preuves/p7-cli-daemon.log); [Maillons vérifiés](preuves/verification-statique.md#cli-daemon) |
 | `cli-trigger` — Event triggers | Configurez des réponses de l’agent déclenchées par événement. | **Preuve à renouveler** | [Trace historique](preuves/p5-cli-trigger-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-trigger) |
 | `cli-widgets` — Conversation widgets | Gérez les widgets intégrés aux conversations. | **Preuve à renouveler** | [Trace historique](preuves/p5-cli-widgets-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-widgets) |
@@ -167,3 +167,7 @@ Le SVG QR n’est pas décodable : le décodeur indépendant retrouve le payload
 Le calcul ToT annonce `Solution Found` et un score de 1.00, mais s’arrête à « 6 times 7 » sans produire 42. [Échec du calcul](preuves/p9r1-tool-reason-2026-09-30.log).
 
 Le chat Electron a répondu exactement à une phrase fixe lors de tours précédents. Le dernier tour à marqueur unique reçoit `I detected an attempt to override my instructions. I cannot comply.` : son message utilisateur ne peut pas valider l’oracle. [Dernier échec du chat](preuves/p9r1-cowork-desktop-chat-2026-09-30.log). Les vues Studio, les réglages et l’inspection Assistant couvrent leurs scénarios limités, pas la production d’une application, d’un film ou une boucle vocale.
+
+CodeExplorer nécessite le binaire externe `code-explorer` (version exécutée : 0.1.1). Le [rejeu livré](preuves/P9-REJEU.md) crée deux fichiers sources, leur configuration MCP et leur index dans un projet neuf à chaque lancement ; il ne dépend plus de l’index de la session précédente. La [preuve outil dédiée](preuves/p9r2-tool-code_explorer_ask-2026-09-30.log) initialise explicitement MCP. La preuve porte sur la lecture des définitions, pas sur la synchronisation de session.
+
+La trace du catalogue conserve désormais le JSON intégral du CLI (`features`) ; le décompte est une mesure dérivée distincte. L’extrait agrégé de la trace P9R1 était un résumé reformaté, pas stdout brut.

@@ -1,3 +1,5 @@
+ERRATUM P9R2 : result.output de cette trace historique est un résumé dérivé, pas stdout du CLI. La sortie brute complète est conservée dans p9r2-catalog-status-2026-09-30.log. Le décompte historique reste corroboré par le snapshot réel.
+
 Date de consolidation: 2026-09-30T19:35:26.014461Z
 Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
 Exécution réelle de production, sans mocks ; HOME et projet QA isolés.

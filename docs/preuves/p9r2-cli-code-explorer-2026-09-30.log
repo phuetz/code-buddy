@@ -1,0 +1,347 @@
+Date de consolidation: 2026-09-30T21:32:31.823063Z
+Révision exécutée: 3b033211733b2eea9c3c3e9418757c1e9c4e0cec
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: node scripts/qa/run-p9-code-explorer-evidence.mjs({"query": "p9add913e5669898a"})
+Attendu: Quatre processus froids sur deux projets neufs : deux définitions du symbole unique, sample.js/sample.ts ligne 1 ; deux contrôles sans index rejetés.
+Observé: Deux index reconstruits sur deux projets neufs ; quatre réponses à froid conformes par interface, contrôles négatifs rejetés.
+Verdict: prouvée
+
+{
+  "id": "cli-code-explorer",
+  "name": "cli-code-explorer",
+  "input": {
+    "query": "p9add913e5669898a"
+  },
+  "command": "node scripts/qa/run-p9-code-explorer-evidence.mjs",
+  "expected": "Quatre processus froids sur deux projets neufs : deux définitions du symbole unique, sample.js/sample.ts ligne 1 ; deux contrôles sans index rejetés.",
+  "result": {
+    "success": true,
+    "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n"
+  },
+  "attempts": [
+    {
+      "result": {
+        "success": true,
+        "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add85ff11a1ce9a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:p9add85ff11a1ce9a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add85ff11a1ce9a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:p9add85ff11a1ce9a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n"
+      },
+      "passed": true
+    },
+    {
+      "result": {
+        "success": true,
+        "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add85ff11a1ce9a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:p9add85ff11a1ce9a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add85ff11a1ce9a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:p9add85ff11a1ce9a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n"
+      },
+      "passed": true
+    },
+    {
+      "result": {
+        "success": true,
+        "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n"
+      },
+      "passed": true
+    },
+    {
+      "result": {
+        "success": true,
+        "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n"
+      },
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "observations": {
+    "independentRuns": [
+      {
+        "negativeRejected": true,
+        "indexStatus": "Code Explorer Status\n  Directory: <QA>/reprise-2/code-explorer-TFw9Bo\n  Status: INDEXED\n  Indexed at: 2026-09-30T21:30:38Z\n  Commit: 3b033211733b2eea9c3c3e9418757c1e9c4e0cec\n  Storage: <QA>/reprise-2/code-explorer-TFw9Bo/.codeexplorer\n  Index is up-to-date.\n\n  Statistics:\n    Files:       2\n    Nodes:       4\n    Edges:       2\n    Communities: 0\n    Processes:   0\n    Duration:    0.14s\n\n  Phase breakdown:\n    structure                2 ms\n    parsing                101 ms\n    imports                  1 ms\n    calls                   29 ms\n    heritage                 0 ms\n    todos                    0 ms\n    aspnet_mvc               0 ms\n    api_surface              1 ms\n    db_schema                0 ms\n    config_inventory         3 ms\n    communities              0 ms\n    processes                0 ms\n    dead_code                0 ms\n    local_enrichment_cache       3 ms\n  Throughput: 14 files/s, 28 nodes/s\n",
+        "root": "<QA>/reprise-2/code-explorer-TFw9Bo",
+        "sources": {
+          "sample.js": "export function p9add85ff11a1ce9a(a, b) { return a + b; }\n",
+          "sample.ts": "export function p9add85ff11a1ce9a(a: number, b: number): number { return a + b; }\n"
+        },
+        "mcp": {
+          "mcpServers": {
+            "code-explorer": {
+              "transport": {
+                "type": "stdio",
+                "command": "code-explorer",
+                "args": [
+                  "mcp"
+                ]
+              },
+              "autoReconnect": false
+            }
+          }
+        },
+        "steps": [
+          {
+            "command": "code-explorer",
+            "args": [
+              "--version"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "code-explorer 0.1.1\n",
+            "stderr": ""
+          },
+          {
+            "command": "code-explorer",
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "Code Explorer Status\n  Directory: <QA>/reprise-2/code-explorer-TFw9Bo\n  Status: NOT INDEXED\n\nRun `code-explorer analyze` to index this repository.\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/scripts/qa/run-p9-code-explorer-evidence.mjs",
+              "--worker",
+              "<QA>/reprise-2/code-explorer-TFw9Bo",
+              "p9add85ff11a1ce9a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\"success\":true,\"output\":\"{\\n  \\\"likelyFiles\\\": [],\\n  \\\"dependentSymbols\\\": [],\\n  \\\"testsToWatch\\\": [],\\n  \\\"notes\\\": \\\"Code Explorer is connected but returned no graph hits for repo <QA>/reprise-2/code-explorer-TFw9Bo.\\\"\\n}\"}\n",
+            "stderr": ""
+          },
+          {
+            "command": "code-explorer",
+            "args": [
+              "analyze",
+              "<QA>/reprise-2/code-explorer-TFw9Bo",
+              "--skip-git",
+              "--no-docs",
+              "--max-files",
+              "2"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "Indexing repository: <QA>/reprise-2/code-explorer-TFw9Bo\nExclusions:  node_modules, dist, build, target, .next, .venv, venv, __pycache__, +10 more\nCandidates:  2 parseable of 2 files walked (0.00s)\n\nIndexing complete!\n  Files:       2\n  Parsed:      2\n  Nodes:       4\n  Edges:       2\n  Communities: 0\n  Processes:   0\n  Duration:    0.14s (145 ms)\n  Phase breakdown:\n    structure                2 ms\n    parsing                101 ms\n    imports                  1 ms\n    calls                   29 ms\n    heritage                 0 ms\n    todos                    0 ms\n    aspnet_mvc               0 ms\n    api_surface              1 ms\n    db_schema                0 ms\n    config_inventory         3 ms\n    communities              0 ms\n    processes                0 ms\n    dead_code                0 ms\n    local_enrichment_cache       3 ms\n  Graph snapshot saved (1524 bytes)\n  File manifest saved (2 files)\n  Saving CSVs...\n  Done! Run 'code-explorer mcp' to start the MCP server.\n",
+            "stderr": ""
+          },
+          {
+            "command": "code-explorer",
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "Code Explorer Status\n  Directory: <QA>/reprise-2/code-explorer-TFw9Bo\n  Status: INDEXED\n  Indexed at: 2026-09-30T21:30:38Z\n  Commit: 3b033211733b2eea9c3c3e9418757c1e9c4e0cec\n  Storage: <QA>/reprise-2/code-explorer-TFw9Bo/.codeexplorer\n  Index is up-to-date.\n\n  Statistics:\n    Files:       2\n    Nodes:       4\n    Edges:       2\n    Communities: 0\n    Processes:   0\n    Duration:    0.14s\n\n  Phase breakdown:\n    structure                2 ms\n    parsing                101 ms\n    imports                  1 ms\n    calls                   29 ms\n    heritage                 0 ms\n    todos                    0 ms\n    aspnet_mvc               0 ms\n    api_surface              1 ms\n    db_schema                0 ms\n    config_inventory         3 ms\n    communities              0 ms\n    processes                0 ms\n    dead_code                0 ms\n    local_enrichment_cache       3 ms\n  Throughput: 14 files/s, 28 nodes/s\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/dist/cli-boot.js",
+              "code-explorer",
+              "ask",
+              "p9add85ff11a1ce9a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add85ff11a1ce9a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:p9add85ff11a1ce9a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add85ff11a1ce9a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:p9add85ff11a1ce9a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/dist/cli-boot.js",
+              "code-explorer",
+              "ask",
+              "p9add85ff11a1ce9a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add85ff11a1ce9a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:p9add85ff11a1ce9a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add85ff11a1ce9a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:p9add85ff11a1ce9a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/scripts/qa/run-p9-code-explorer-evidence.mjs",
+              "--worker",
+              "<QA>/reprise-2/code-explorer-TFw9Bo",
+              "p9add85ff11a1ce9a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\"success\":true,\"output\":\"{\\n  \\\"likelyFiles\\\": [],\\n  \\\"dependentSymbols\\\": [],\\n  \\\"testsToWatch\\\": [],\\n  \\\"notes\\\": \\\"{\\\\n  \\\\\\\"definitions\\\\\\\": [\\\\n    {\\\\n      \\\\\\\"endLine\\\\\\\": 1,\\\\n      \\\\\\\"filePath\\\\\\\": \\\\\\\"sample.js\\\\\\\",\\\\n      \\\\\\\"label\\\\\\\": \\\\\\\"Function\\\\\\\",\\\\n      \\\\\\\"name\\\\\\\": \\\\\\\"p9add85ff11a1ce9a\\\\\\\",\\\\n      \\\\\\\"nodeId\\\\\\\": \\\\\\\"Function:sample.js:p9add85ff11a1ce9a\\\\\\\",\\\\n      \\\\\\\"score\\\\\\\": 1.1042551635127404,\\\\n      \\\\\\\"startLine\\\\\\\": 1\\\\n    },\\\\n    {\\\\n      \\\\\\\"endLine\\\\\\\": 1,\\\\n      \\\\\\\"filePath\\\\\\\": \\\\\\\"sample.ts\\\\\\\",\\\\n      \\\\\\\"label\\\\\\\": \\\\\\\"Function\\\\\\\",\\\\n      \\\\\\\"name\\\\\\\": \\\\\\\"p9add85ff11a1ce9a\\\\\\\",\\\\n      \\\\\\\"nodeId\\\\\\\": \\\\\\\"Function:sample.ts:p9add85ff11a1ce9a\\\\\\\",\\\\n      \\\\\\\"score\\\\\\\": 1.1042551635127404,\\\\n      \\\\\\\"startLine\\\\\\\": 1\\\\n    }\\\\n  ],\\\\n  \\\\\\\"process_symbols\\\\\\\": [],\\\\n  \\\\\\\"processes\\\\\\\": []\\\\n}\\\"\\n}\"}\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/scripts/qa/run-p9-code-explorer-evidence.mjs",
+              "--worker",
+              "<QA>/reprise-2/code-explorer-TFw9Bo",
+              "p9add85ff11a1ce9a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\"success\":true,\"output\":\"{\\n  \\\"likelyFiles\\\": [],\\n  \\\"dependentSymbols\\\": [],\\n  \\\"testsToWatch\\\": [],\\n  \\\"notes\\\": \\\"{\\\\n  \\\\\\\"definitions\\\\\\\": [\\\\n    {\\\\n      \\\\\\\"endLine\\\\\\\": 1,\\\\n      \\\\\\\"filePath\\\\\\\": \\\\\\\"sample.js\\\\\\\",\\\\n      \\\\\\\"label\\\\\\\": \\\\\\\"Function\\\\\\\",\\\\n      \\\\\\\"name\\\\\\\": \\\\\\\"p9add85ff11a1ce9a\\\\\\\",\\\\n      \\\\\\\"nodeId\\\\\\\": \\\\\\\"Function:sample.js:p9add85ff11a1ce9a\\\\\\\",\\\\n      \\\\\\\"score\\\\\\\": 1.1042551635127404,\\\\n      \\\\\\\"startLine\\\\\\\": 1\\\\n    },\\\\n    {\\\\n      \\\\\\\"endLine\\\\\\\": 1,\\\\n      \\\\\\\"filePath\\\\\\\": \\\\\\\"sample.ts\\\\\\\",\\\\n      \\\\\\\"label\\\\\\\": \\\\\\\"Function\\\\\\\",\\\\n      \\\\\\\"name\\\\\\\": \\\\\\\"p9add85ff11a1ce9a\\\\\\\",\\\\n      \\\\\\\"nodeId\\\\\\\": \\\\\\\"Function:sample.ts:p9add85ff11a1ce9a\\\\\\\",\\\\n      \\\\\\\"score\\\\\\\": 1.1042551635127404,\\\\n      \\\\\\\"startLine\\\\\\\": 1\\\\n    }\\\\n  ],\\\\n  \\\\\\\"process_symbols\\\\\\\": [],\\\\n  \\\\\\\"processes\\\\\\\": []\\\\n}\\\"\\n}\"}\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "negativeRejected": true,
+        "indexStatus": "Code Explorer Status\n  Directory: <QA>/reprise-2/code-explorer-QiMW6n\n  Status: INDEXED\n  Indexed at: 2026-09-30T21:30:44Z\n  Commit: 3b033211733b2eea9c3c3e9418757c1e9c4e0cec\n  Storage: <QA>/reprise-2/code-explorer-QiMW6n/.codeexplorer\n  Index is up-to-date.\n\n  Statistics:\n    Files:       2\n    Nodes:       4\n    Edges:       2\n    Communities: 0\n    Processes:   0\n    Duration:    0.13s\n\n  Phase breakdown:\n    structure                5 ms\n    parsing                 95 ms\n    imports                  0 ms\n    calls                   17 ms\n    heritage                 0 ms\n    todos                    0 ms\n    aspnet_mvc               0 ms\n    api_surface              0 ms\n    db_schema                0 ms\n    config_inventory         0 ms\n    communities              0 ms\n    processes                0 ms\n    dead_code                0 ms\n    local_enrichment_cache       6 ms\n  Throughput: 15 files/s, 30 nodes/s\n",
+        "root": "<QA>/reprise-2/code-explorer-QiMW6n",
+        "sources": {
+          "sample.js": "export function p9add913e5669898a(a, b) { return a + b; }\n",
+          "sample.ts": "export function p9add913e5669898a(a: number, b: number): number { return a + b; }\n"
+        },
+        "mcp": {
+          "mcpServers": {
+            "code-explorer": {
+              "transport": {
+                "type": "stdio",
+                "command": "code-explorer",
+                "args": [
+                  "mcp"
+                ]
+              },
+              "autoReconnect": false
+            }
+          }
+        },
+        "steps": [
+          {
+            "command": "code-explorer",
+            "args": [
+              "--version"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "code-explorer 0.1.1\n",
+            "stderr": ""
+          },
+          {
+            "command": "code-explorer",
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "Code Explorer Status\n  Directory: <QA>/reprise-2/code-explorer-QiMW6n\n  Status: NOT INDEXED\n\nRun `code-explorer analyze` to index this repository.\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/scripts/qa/run-p9-code-explorer-evidence.mjs",
+              "--worker",
+              "<QA>/reprise-2/code-explorer-QiMW6n",
+              "p9add913e5669898a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\"success\":true,\"output\":\"{\\n  \\\"likelyFiles\\\": [],\\n  \\\"dependentSymbols\\\": [],\\n  \\\"testsToWatch\\\": [],\\n  \\\"notes\\\": \\\"Code Explorer is connected but returned no graph hits for repo <QA>/reprise-2/code-explorer-QiMW6n.\\\"\\n}\"}\n",
+            "stderr": ""
+          },
+          {
+            "command": "code-explorer",
+            "args": [
+              "analyze",
+              "<QA>/reprise-2/code-explorer-QiMW6n",
+              "--skip-git",
+              "--no-docs",
+              "--max-files",
+              "2"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "Indexing repository: <QA>/reprise-2/code-explorer-QiMW6n\nExclusions:  node_modules, dist, build, target, .next, .venv, venv, __pycache__, +10 more\nCandidates:  2 parseable of 2 files walked (0.01s)\n\nIndexing complete!\n  Files:       2\n  Parsed:      2\n  Nodes:       4\n  Edges:       2\n  Communities: 0\n  Processes:   0\n  Duration:    0.13s (133 ms)\n  Phase breakdown:\n    structure                5 ms\n    parsing                 95 ms\n    imports                  0 ms\n    calls                   17 ms\n    heritage                 0 ms\n    todos                    0 ms\n    aspnet_mvc               0 ms\n    api_surface              0 ms\n    db_schema                0 ms\n    config_inventory         0 ms\n    communities              0 ms\n    processes                0 ms\n    dead_code                0 ms\n    local_enrichment_cache       6 ms\n  Graph snapshot saved (1524 bytes)\n  File manifest saved (2 files)\n  Saving CSVs...\n  Done! Run 'code-explorer mcp' to start the MCP server.\n",
+            "stderr": ""
+          },
+          {
+            "command": "code-explorer",
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "Code Explorer Status\n  Directory: <QA>/reprise-2/code-explorer-QiMW6n\n  Status: INDEXED\n  Indexed at: 2026-09-30T21:30:44Z\n  Commit: 3b033211733b2eea9c3c3e9418757c1e9c4e0cec\n  Storage: <QA>/reprise-2/code-explorer-QiMW6n/.codeexplorer\n  Index is up-to-date.\n\n  Statistics:\n    Files:       2\n    Nodes:       4\n    Edges:       2\n    Communities: 0\n    Processes:   0\n    Duration:    0.13s\n\n  Phase breakdown:\n    structure                5 ms\n    parsing                 95 ms\n    imports                  0 ms\n    calls                   17 ms\n    heritage                 0 ms\n    todos                    0 ms\n    aspnet_mvc               0 ms\n    api_surface              0 ms\n    db_schema                0 ms\n    config_inventory         0 ms\n    communities              0 ms\n    processes                0 ms\n    dead_code                0 ms\n    local_enrichment_cache       6 ms\n  Throughput: 15 files/s, 30 nodes/s\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/dist/cli-boot.js",
+              "code-explorer",
+              "ask",
+              "p9add913e5669898a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/dist/cli-boot.js",
+              "code-explorer",
+              "ask",
+              "p9add913e5669898a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"p9add913e5669898a\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:p9add913e5669898a\\\",\\n      \\\"score\\\": 1.1042551635127404,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/scripts/qa/run-p9-code-explorer-evidence.mjs",
+              "--worker",
+              "<QA>/reprise-2/code-explorer-QiMW6n",
+              "p9add913e5669898a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\"success\":true,\"output\":\"{\\n  \\\"likelyFiles\\\": [],\\n  \\\"dependentSymbols\\\": [],\\n  \\\"testsToWatch\\\": [],\\n  \\\"notes\\\": \\\"{\\\\n  \\\\\\\"definitions\\\\\\\": [\\\\n    {\\\\n      \\\\\\\"endLine\\\\\\\": 1,\\\\n      \\\\\\\"filePath\\\\\\\": \\\\\\\"sample.ts\\\\\\\",\\\\n      \\\\\\\"label\\\\\\\": \\\\\\\"Function\\\\\\\",\\\\n      \\\\\\\"name\\\\\\\": \\\\\\\"p9add913e5669898a\\\\\\\",\\\\n      \\\\\\\"nodeId\\\\\\\": \\\\\\\"Function:sample.ts:p9add913e5669898a\\\\\\\",\\\\n      \\\\\\\"score\\\\\\\": 1.1042551635127404,\\\\n      \\\\\\\"startLine\\\\\\\": 1\\\\n    },\\\\n    {\\\\n      \\\\\\\"endLine\\\\\\\": 1,\\\\n      \\\\\\\"filePath\\\\\\\": \\\\\\\"sample.js\\\\\\\",\\\\n      \\\\\\\"label\\\\\\\": \\\\\\\"Function\\\\\\\",\\\\n      \\\\\\\"name\\\\\\\": \\\\\\\"p9add913e5669898a\\\\\\\",\\\\n      \\\\\\\"nodeId\\\\\\\": \\\\\\\"Function:sample.js:p9add913e5669898a\\\\\\\",\\\\n      \\\\\\\"score\\\\\\\": 1.1042551635127404,\\\\n      \\\\\\\"startLine\\\\\\\": 1\\\\n    }\\\\n  ],\\\\n  \\\\\\\"process_symbols\\\\\\\": [],\\\\n  \\\\\\\"processes\\\\\\\": []\\\\n}\\\"\\n}\"}\n",
+            "stderr": ""
+          },
+          {
+            "command": "<PRIVATE_PATH>",
+            "args": [
+              "<CHECKOUT>/scripts/qa/run-p9-code-explorer-evidence.mjs",
+              "--worker",
+              "<QA>/reprise-2/code-explorer-QiMW6n",
+              "p9add913e5669898a"
+            ],
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "stdout": "{\"success\":true,\"output\":\"{\\n  \\\"likelyFiles\\\": [],\\n  \\\"dependentSymbols\\\": [],\\n  \\\"testsToWatch\\\": [],\\n  \\\"notes\\\": \\\"{\\\\n  \\\\\\\"definitions\\\\\\\": [\\\\n    {\\\\n      \\\\\\\"endLine\\\\\\\": 1,\\\\n      \\\\\\\"filePath\\\\\\\": \\\\\\\"sample.js\\\\\\\",\\\\n      \\\\\\\"label\\\\\\\": \\\\\\\"Function\\\\\\\",\\\\n      \\\\\\\"name\\\\\\\": \\\\\\\"p9add913e5669898a\\\\\\\",\\\\n      \\\\\\\"nodeId\\\\\\\": \\\\\\\"Function:sample.js:p9add913e5669898a\\\\\\\",\\\\n      \\\\\\\"score\\\\\\\": 1.1042551635127404,\\\\n      \\\\\\\"startLine\\\\\\\": 1\\\\n    },\\\\n    {\\\\n      \\\\\\\"endLine\\\\\\\": 1,\\\\n      \\\\\\\"filePath\\\\\\\": \\\\\\\"sample.ts\\\\\\\",\\\\n      \\\\\\\"label\\\\\\\": \\\\\\\"Function\\\\\\\",\\\\n      \\\\\\\"name\\\\\\\": \\\\\\\"p9add913e5669898a\\\\\\\",\\\\n      \\\\\\\"nodeId\\\\\\\": \\\\\\\"Function:sample.ts:p9add913e5669898a\\\\\\\",\\\\n      \\\\\\\"score\\\\\\\": 1.1042551635127404,\\\\n      \\\\\\\"startLine\\\\\\\": 1\\\\n    }\\\\n  ],\\\\n  \\\\\\\"process_symbols\\\\\\\": [],\\\\n  \\\\\\\"processes\\\\\\\": []\\\\n}\\\"\\n}\"}\n",
+            "stderr": ""
+          }
+        ]
+      }
+    ],
+    "negativeRejectedInEveryRun": true
+  },
+  "summary": "Deux index reconstruits sur deux projets neufs ; quatre réponses à froid conformes par interface, contrôles négatifs rejetés.",
+  "executionRevision": "3b033211733b2eea9c3c3e9418757c1e9c4e0cec"
+}

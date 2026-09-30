@@ -11,7 +11,7 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 | Feature | User benefit | State | Evidence |
 |---|---|---|---|
 | `resource-catalog-tool` — Outil de sélection des ressources | Find available resources for an agent task. | **Tested locally** | [Run trace](preuves/p5-resource-catalog-tool-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#resource-catalog-tool) |
-| `cli-code-explorer` — Code Explorer integration | Inspect code relationships and session sync. | **Tested locally** | [Run trace](preuves/p9r1-cli-code-explorer-2026-09-30.log); [Wiring checks](preuves/verification-statique.md#cli-code-explorer) |
+| `cli-code-explorer` — Code Explorer integration | Inspect code relationships and session sync. | **Tested locally** | [Run trace](preuves/p9r2-cli-code-explorer-2026-09-30.log); [Wiring checks](preuves/verification-statique.md#cli-code-explorer) |
 | `cli-tools` — Tool availability | Inspect effective tools and tool profiles. | **Evidence needs renewal** | [Historical trace](preuves/p5-cli-tools-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-tools) |
 | `cli-autonomous-code` — Guarded coding cell | Run a guarded autonomous coding contract. | **Evidence needs renewal** | [Historical trace](preuves/p7-cli-autonomous-code.log); [Wiring checks](preuves/verification-statique.md#cli-autonomous-code) |
 | `cli-dev` — Developer workflows | Run guided plan, implementation and verification flows. | **Evidence needs renewal** | [Historical trace](preuves/p7-cli-dev.log); [Wiring checks](preuves/verification-statique.md#cli-dev) |
@@ -137,7 +137,7 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 
 | Feature | User benefit | State | Evidence |
 |---|---|---|---|
-| `catalog-status` — Catalogue des états et preuves | Inspect the evidence level of tracked features before presenting them. | **Tested locally** | [Run trace](preuves/p9r1-catalog-status-2026-09-30.log); [Wiring checks](preuves/verification-statique.md#catalog-status) |
+| `catalog-status` — Catalogue des états et preuves | Inspect the evidence level of tracked features before presenting them. | **Tested locally** | [Run trace](preuves/p9r2-catalog-status-2026-09-30.log); [Wiring checks](preuves/verification-statique.md#catalog-status) |
 | `cli-daemon` — Background daemon | Run Code Buddy as a managed background process. | **Evidence needs renewal** | [Historical trace](preuves/p7-cli-daemon.log); [Wiring checks](preuves/verification-statique.md#cli-daemon) |
 | `cli-trigger` — Event triggers | Configure event-driven agent responses. | **Evidence needs renewal** | [Historical trace](preuves/p5-cli-trigger-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-trigger) |
 | `cli-widgets` — Conversation widgets | Manage inline conversation widgets. | **Evidence needs renewal** | [Historical trace](preuves/p5-cli-widgets-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-widgets) |
@@ -167,3 +167,7 @@ The QR SVG cannot be decoded: an independent decoder recovers the control payloa
 ToT reports `Solution Found` with score 1.00 but stops at “6 times 7” without producing 42. [Calculation failure](preuves/p9r1-tool-reason-2026-09-30.log).
 
 Electron chat previously produced exact fixed-phrase replies. The latest unique-marker turn receives `I detected an attempt to override my instructions. I cannot comply.`; the user prompt cannot validate the oracle. [Latest chat failure](preuves/p9r1-cowork-desktop-chat-2026-09-30.log). Studio views, settings and Assistant inspection cover their limited scenarios, not application generation, film production or a voice loop.
+
+CodeExplorer requires the external `code-explorer` binary (executed version: 0.1.1). The [delivered replay](preuves/P9-REJEU.md) creates two source files, their MCP configuration and their index in a fresh project on every run. The [dedicated tool evidence](preuves/p9r2-tool-code_explorer_ask-2026-09-30.log) explicitly initializes MCP. This proves definition lookup; session synchronization remains unverified.
+
+The catalogue trace now preserves the complete CLI JSON (`features`); counts are measured separately. The aggregate excerpt in the P9R1 trace was a reformatted summary rather than raw stdout.
