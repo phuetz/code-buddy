@@ -36,7 +36,11 @@
  */
 
 import { EventEmitter } from 'events';
+import { mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import type { ChannelType, InboundMessage } from './index.js';
 
 // ============================================================================
@@ -79,6 +83,8 @@ export interface GroupConfig {
  * Global group security configuration
  */
 export interface GroupSecurityConfig {
+  /** Optional local store for CLI blocklist changes. */
+  persistPath?: string;
   /** Enable group security */
   enabled: boolean;
   /** Default activation mode for unconfigured groups */
@@ -157,6 +163,24 @@ export class GroupSecurityManager extends EventEmitter {
         ? [...config.mentionPatterns]
         : [...DEFAULT_GROUP_SECURITY_CONFIG.mentionPatterns],
     };
+    if (this.config.persistPath) {
+      const state = readJsonAtomicSync<{ blocklist: string[] } | null>(this.config.persistPath, null, {
+        mode: 0o600,
+        isValid: (value): value is { blocklist: string[] } => Boolean(
+          value && typeof value === 'object' && !Array.isArray(value)
+          && Array.isArray((value as { blocklist?: unknown }).blocklist)
+          && (value as { blocklist: unknown[] }).blocklist.every((item) => typeof item === 'string'),
+        ),
+      });
+      if (state) this.config.blocklist = [...new Set([...this.config.blocklist, ...state.blocklist])];
+    }
+  }
+
+  private saveBlocklist(): void {
+    const file = this.config.persistPath;
+    if (!file) return;
+    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+    writeJsonAtomicSync(file, { blocklist: this.config.blocklist }, { mode: 0o600 });
   }
 
   // ==========================================================================
@@ -463,6 +487,7 @@ export class GroupSecurityManager extends EventEmitter {
   addToBlocklist(userId: string): void {
     if (!this.config.blocklist.includes(userId)) {
       this.config.blocklist.push(userId);
+      this.saveBlocklist();
       logger.debug('Group security: added user to blocklist', { userId });
     }
   }
@@ -477,6 +502,7 @@ export class GroupSecurityManager extends EventEmitter {
     }
 
     this.config.blocklist.splice(index, 1);
+    this.saveBlocklist();
     logger.debug('Group security: removed user from blocklist', { userId });
     return true;
   }
@@ -538,7 +564,10 @@ let securityInstance: GroupSecurityManager | null = null;
  */
 export function getGroupSecurity(config?: Partial<GroupSecurityConfig>): GroupSecurityManager {
   if (!securityInstance) {
-    securityInstance = new GroupSecurityManager(config);
+    securityInstance = new GroupSecurityManager({
+      persistPath: join(homedir(), '.codebuddy', 'group-security.json'),
+      ...config,
+    });
   }
   return securityInstance;
 }

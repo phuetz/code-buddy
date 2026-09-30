@@ -291,9 +291,9 @@ export class HeartbeatEngine extends EventEmitter {
       return this.config.agentReviewFn(checklistContent);
     }
 
-    const apiKey = process.env.GROK_API_KEY || '';
-    const baseURL = process.env.GROK_BASE_URL;
-    const model = process.env.GROK_MODEL;
+    const { resolveCommandProvider } = await import('../commands/llm-provider-resolution.js');
+    const provider = resolveCommandProvider({ explicitModel: process.env.GROK_MODEL });
+    if (!provider) throw new Error('No model provider configured for heartbeat');
     const forceReview =
       this.consecutiveSuppressions >= this.config.maxConsecutiveSuppressions - 1;
     const suppressionContext = forceReview
@@ -312,11 +312,10 @@ export class HeartbeatEngine extends EventEmitter {
       checklistContent,
     ].join('\n');
 
-    const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
-    const agent = new CodeBuddyAgent(apiKey, baseURL, model, 10, false);
-    const entries = await agent.processUserMessage(prompt);
-    const assistantEntries = entries.filter((e) => e.type === 'assistant');
-    return assistantEntries.map((e) => e.content).join('\n') || 'No response';
+    const { CodeBuddyClient } = await import('../codebuddy/client.js');
+    const client = new CodeBuddyClient(provider.apiKey, provider.model, provider.baseURL);
+    const response = await client.chat([{ role: 'user', content: prompt }], [], { maxTokens: 256 });
+    return response.choices[0]?.message?.content || 'No response';
   }
 
   getStatus(): HeartbeatStatus {

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-web-search",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "7bcaf8f37d9bdc352f764e7a2ff382cf702964190e3e2557dc14529e3fa9d986",
+  "artifact": "docs/preuves/p8-tool-web-search.log",
+  "summary": "success=true ; deux résultats Example Domain et URL publique."
+}

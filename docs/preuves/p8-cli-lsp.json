@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-lsp",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "7710349157529365fac7ad2b59edfa2a990eadfa0c37f565efbe3a4af2ef3762",
+  "artifact": "docs/preuves/p8-cli-lsp.log",
+  "summary": "server_start_failed, code 1 ; composant rust-analyzer absent sous HOME isolé."
+}

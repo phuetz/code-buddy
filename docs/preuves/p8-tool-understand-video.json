@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-understand-video",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "727af954a85351a069b9989abbf055f9a0646055c1d99e9b5f30c939fb3f813b",
+  "artifact": "docs/preuves/p8-tool-understand-video.log",
+  "summary": "success=false ; transcription failed ; ModuleNotFoundError: No module named 'faster_whisper'."
+}
