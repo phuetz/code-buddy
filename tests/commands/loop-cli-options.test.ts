@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isHeadlessPromptCompact } from '../../src/config/headless-local-prompt.js';
 import {
   applyLocalLoopContextCap,
   createLoopCommand,
@@ -49,10 +50,13 @@ describe('loopRunSucceeded', () => {
 
 describe('applyLocalLoopContextCap', () => {
   const previous = process.env.CODEBUDDY_MAX_CONTEXT;
+  const previousCompact = process.env.CODEBUDDY_PROMPT_COMPACT;
 
   afterEach(() => {
     if (previous === undefined) delete process.env.CODEBUDDY_MAX_CONTEXT;
     else process.env.CODEBUDDY_MAX_CONTEXT = previous;
+    if (previousCompact === undefined) delete process.env.CODEBUDDY_PROMPT_COMPACT;
+    else process.env.CODEBUDDY_PROMPT_COMPACT = previousCompact;
   });
 
   it('caps an Ollama loop at 32768 unless the operator already set CODEBUDDY_MAX_CONTEXT', () => {
@@ -65,5 +69,29 @@ describe('applyLocalLoopContextCap', () => {
     process.env.CODEBUDDY_MAX_CONTEXT = '8192';
     applyLocalLoopContextCap({ apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', providerLabel: 'ollama' });
     expect(process.env.CODEBUDDY_MAX_CONTEXT).toBe('8192');
+  });
+});
+
+describe('loop with a provider selected by doctor instead of environment variables', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('fits the local tool profile inside the context cap without hidden provider variables', () => {
+    for (const key of ['CODEBUDDY_PROVIDER', 'OLLAMA_HOST', 'CODEBUDDY_PROMPT_COMPACT', 'CODEBUDDY_MAX_CONTEXT']) {
+      vi.stubEnv(key, undefined);
+    }
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true');
+    applyLocalLoopContextCap({ apiKey: 'ollama', providerLabel: 'ollama' });
+    expect(isHeadlessPromptCompact()).toBe(true);
+  });
+
+  it('preserves the operator opt-out and leaves remote providers unchanged', () => {
+    vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'false');
+    vi.stubEnv('CODEBUDDY_MAX_CONTEXT', '8192');
+    applyLocalLoopContextCap({ apiKey: 'ollama', providerLabel: 'ollama' });
+    expect(process.env.CODEBUDDY_PROMPT_COMPACT).toBe('false');
+    expect(process.env.CODEBUDDY_MAX_CONTEXT).toBe('8192');
+    vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', undefined);
+    applyLocalLoopContextCap({ apiKey: 'synthetic-key', providerLabel: 'remote' });
+    expect(process.env.CODEBUDDY_PROMPT_COMPACT).toBeUndefined();
   });
 });

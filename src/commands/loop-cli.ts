@@ -85,8 +85,13 @@ export function loopRunSucceeded(
  * vanished with exit 0. Cap unless the operator already set CODEBUDDY_MAX_CONTEXT.
  */
 export function applyLocalLoopContextCap(provider: GoalJudgeProviderInfo): void {
-  if (process.env.CODEBUDDY_MAX_CONTEXT?.trim()) return;
   if (!shouldUseLocalGoalActorPrompt(provider)) return;
+  // doctor/onboard can select Ollama without any provider environment variable.
+  // Fit the tools inside the local cap using the resolved provider as well.
+  if (!process.env.CODEBUDDY_PROMPT_COMPACT?.trim()) {
+    process.env.CODEBUDDY_PROMPT_COMPACT = 'true';
+  }
+  if (process.env.CODEBUDDY_MAX_CONTEXT?.trim()) return;
   process.env.CODEBUDDY_MAX_CONTEXT = '32768';
 }
 
