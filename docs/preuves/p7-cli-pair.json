@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-pair",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "84803e39f47f2197395c5b5a8e0803ce5d986486f49e9d376c7fa94b77ee31aa",
+  "artifact": "docs/preuves/p7-cli-pair.log",
+  "summary": "Code 0 ; code de 8 caractères ; appareil enregistré ; défi de 43 caractères ; jeton émis."
+}

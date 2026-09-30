@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-understand-video",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "2586ddad3e4ce86f4d8fb155a3fa9e962eb49dcd4c0dfed0582e21cb60ac09f5",
+  "artifact": "docs/preuves/p7-tool-understand-video.log",
+  "summary": "Le processus rend success=true et « Aucune parole détectée » ; journal réel : ModuleNotFoundError: No module named 'faster_whisper'."
+}

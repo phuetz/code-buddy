@@ -45,7 +45,9 @@ beforeAll(() => {
   write(path.join(work, '.env.example'), 'KEY=example\n');
   write(path.join(work, 'notes.txt'), 'ordinary searchable text\n');
   write(path.join(cb, 'skill-signing', 'key.pem'), `PRIVATE ${fake}\n`);
-  if (process.platform !== 'win32') fs.symlinkSync(cb, path.join(qa.home, '.CodeBuddy'), 'dir');
+  // macOS (APFS) and Windows are case-insensitive: ~/.CodeBuddy already resolves to ~/.codebuddy there.
+  const upperCaseHome = path.join(qa.home, '.CodeBuddy');
+  if (process.platform !== 'win32' && !fs.existsSync(upperCaseHome)) fs.symlinkSync(cb, upperCaseHome, 'dir');
 });
 
 afterAll(() => {
@@ -62,7 +64,9 @@ describe('reprise des lecteurs autonomes', () => {
   });
 
   it.skipIf(process.platform === 'win32')('résout la variante de casse du dossier Code Buddy vers le même jeton fictif', () => {
-    expect(fs.realpathSync(path.join(qa.home, '.CodeBuddy'))).toBe(fs.realpathSync(cb));
+    const variant = fs.statSync(path.join(qa.home, '.CodeBuddy'));
+    const original = fs.statSync(cb);
+    expect([variant.dev, variant.ino]).toEqual([original.dev, original.ino]);
   });
 
   it('json_query refuse le jeton OAuth mais lit un JSON ordinaire', async () => {

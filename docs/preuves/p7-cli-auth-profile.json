@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-auth-profile",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "910ed506f90cba9a49155490da5ef541454d68b615190ea1acadb3b6d8dbd59e",
+  "artifact": "docs/preuves/p7-cli-auth-profile.log",
+  "summary": "add code 0 « Added profile: p7-fixture (ollama) » ; list code 0 « No auth profiles configured. » ; remove code 0 « Profile not found: p7-fixture »."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-evolve",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "afd20d4a6eabad14aa0cc5327180cb8025014cdb7b0e8b9647092d7d5b6b20fe",
+  "artifact": "docs/preuves/p7-cli-evolve.log",
+  "summary": "Code 0 ; accepted=true ; score 0→1 ; rolledBack=true ; aucune rétention de la leçon."
+}

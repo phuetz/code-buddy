@@ -210,31 +210,30 @@ async function defaultCallGemini(req: GeminiVideoRequest, ctx: GeminiCallContext
   const body = { contents: [{ role: 'user', parts: req.parts }] };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ctx.timeoutMs);
-  let res: Response;
   try {
-    res = await ctx.fetch(url, {
+    const res = await ctx.fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': ctx.apiKey },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Gemini ${res.status}: ${text.slice(0, 300)}`);
+    }
+    const data = (await res.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const parts = data.candidates?.[0]?.content?.parts ?? [];
+    const answer = parts
+      .map((p) => p.text ?? '')
+      .join('')
+      .trim();
+    if (!answer) throw new Error('Gemini a renvoyé une réponse vide');
+    return answer;
   } finally {
     clearTimeout(timeout);
   }
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Gemini ${res.status}: ${text.slice(0, 300)}`);
-  }
-  const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  const answer = parts
-    .map((p) => p.text ?? '')
-    .join('')
-    .trim();
-  if (!answer) throw new Error('Gemini a renvoyé une réponse vide');
-  return answer;
 }
 
 /**

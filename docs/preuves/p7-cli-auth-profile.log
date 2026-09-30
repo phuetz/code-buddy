@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-auth-profile
+Commande: buddy auth-profile add p7-fixture ollama ; list ; remove
+Attendu: Profil ajouté, puis retrouvé et supprimé dans des commandes CLI successives.
+Observé: add code 0 « Added profile: p7-fixture (ollama) » ; list code 0 « No auth profiles configured. » ; remove code 0 « Profile not found: p7-fixture ».
+Verdict: échec
+Limite: Le gestionnaire conserve les profils en mémoire du processus ; aucune persistance utile entre commandes.

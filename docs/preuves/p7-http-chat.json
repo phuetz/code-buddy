@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-chat",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "d6aaa10300dc21bdfd109f6b4f4f431593f13cde6de0bfbc94f478abe5ccdcc3",
+  "artifact": "docs/preuves/p7-http-chat.log",
+  "summary": "HTTP 200 ; model=qwen3:4b-instruct ; content=READY ; serveur arrêté code 0."
+}

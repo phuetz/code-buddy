@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: http-sessions
+Commande: POST puis GET /api/sessions sur le serveur local 18731
+Attendu: Session créée et retrouvée.
+Observé: POST 201 ; GET 200 ; « P7 fixture session » retrouvée ; serveur arrêté code 0.
+Verdict: prouvée
+Limite: Une exécution locale unique ; autres environnements non vérifiés.
