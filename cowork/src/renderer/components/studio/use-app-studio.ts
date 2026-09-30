@@ -298,9 +298,11 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       const missing = await dependenciesMissing(cwd);
       if (!missing) return { ok: true };
       beginPhase('installing');
-      appendTerminal('$ npm install');
+      // Packaged Electron runs with NODE_ENV=production. Preview still needs
+      // the project's development dependencies (Vite, TypeScript, plugins).
+      appendTerminal('$ npm install --include=dev');
       const id = (options.commandIdFactory ?? defaultCommandId)();
-      const result = await apis.commands.runToEnd({ cwd, command: 'npm install', id });
+      const result = await apis.commands.runToEnd({ cwd, command: 'npm install --include=dev', id });
       if (!result.ok) return { ok: false, error: result.error };
       if (result.data.code !== 0) {
         return { ok: false, error: `npm install exited with code ${result.data.code ?? 'null'}` };
