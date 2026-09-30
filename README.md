@@ -143,7 +143,8 @@ Codex users: `cp -r .codex/skills/code-buddy ~/.codex/skills/`. Remove with
 ## First run
 
 A real task, start to finish. `buddy loop` plans, edits, runs your verification command, and stops
-only when that command exits 0 — the model's word is not the proof:
+with success only when that command exits 0 and the judge accepts the evidence.
+It exits with a failure on exhausted budgets, stalled progress or judge errors:
 
 ```bash
 buddy loop "make the failing tests pass" --verify-cmd "npm test"

@@ -137,6 +137,7 @@ export async function maybeContinueGoalAfterTurn(
         ...(config.judgeModel ? { model: config.judgeModel } : {}),
         maxTokens: config.judgeMaxTokens,
         timeoutMs: config.judgeTimeoutMs,
+        adaptiveTimeout: config.judgeTimeoutAdaptive,
       });
       if (verifyGate && base.verdict === 'done') {
         let verdict: 'CONFIRMED' | 'NEEDS REVIEW' | 'unverified' = 'unverified';

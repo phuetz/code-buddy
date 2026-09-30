@@ -415,6 +415,7 @@ export async function runDevLoop(
         ...(judgeModel ? { model: judgeModel } : {}),
         maxTokens: cfg.judgeMaxTokens,
         timeoutMs: cfg.judgeTimeoutMs,
+        adaptiveTimeout: cfg.judgeTimeoutAdaptive,
       });
       if (!options.noVerify && base.verdict === 'done' && lastVerifierVerdict !== 'CONFIRMED') {
         return {

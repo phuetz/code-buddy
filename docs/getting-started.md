@@ -711,3 +711,19 @@ runtime that launches the app.
 - [`docs/fleet-guide.md`](fleet-guide.md) — Fleet-specific issues and architecture
 - [`CHANGELOG.md`](../CHANGELOG.md) — what changed when
 - [GitHub Issues](https://github.com/phuetz/code-buddy/issues) — known problems
+
+### Local repository explanations and loop judge budget
+
+For local headless requests about an entry point or README, Code Buddy first
+reads bounded repository files through `view_file`. The transcript records
+these host-requested reads and their real results. The model answers from
+those observations; unsupported claims still require checking. Tool filters
+and file permissions apply to these reads as usual.
+
+The loop judge keeps a 30-second default for remote providers. On a local
+provider its default covers prompt evaluation using the first-token budget
+plus 60 seconds for generation. `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` and
+`CODEBUDDY_STALL_MAX_MS` tune prompt evaluation. An explicit
+`CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS` or `goals.judgeTimeoutMs` takes priority
+(environment before settings). This budget changes no verification gate:
+`--verify-cmd` must still succeed for a `CONFIRMED` result.
