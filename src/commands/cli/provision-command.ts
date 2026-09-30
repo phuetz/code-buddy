@@ -88,8 +88,12 @@ export function registerProvisionCommands(program: Command): void {
           )
           : formatProvisionPlan(plan);
         assertNoSecretLeak(rendered, process.env);
-        for (const line of rendered.split('\n')) {
-          writeLine(line);
+        if (opts.json) {
+          process.stdout.write(`${rendered}\n`);
+        } else {
+          for (const line of rendered.split('\n')) {
+            writeLine(line);
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
