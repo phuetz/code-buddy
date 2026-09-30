@@ -550,17 +550,25 @@ buddy token --env /etc/codebuddy/mobile.env --url https://your-host.example:3000
 `CODEBUDDY_SENSORY_ALERT_CHAT`. Scripts should use `--json` and read `.token`
 / `.url`. The signing secret is never printed.
 
-For a quick local check against your own
-machine, start the server with `--no-auth` and bind it to loopback so it
-never leaves your machine:
+For a quick local check, Ollama must already be running on
+`127.0.0.1:11434` with `qwen3:4b-instruct` installed. Check the available
+names with `curl -s http://127.0.0.1:11434/api/tags`; if you use another
+installed model, replace its name in both commands below. The server
+currently selects its provider from the environment, rather than the
+provider saved by `buddy doctor --fix`. Set that environment explicitly,
+start the server in one terminal, and run curl in a second terminal:
 
 ```bash
-buddy server --port 3721 --host 127.0.0.1 --no-auth
+CODEBUDDY_PROVIDER=ollama OLLAMA_HOST=http://127.0.0.1:11434 GROK_MODEL=qwen3:4b-instruct \
+  buddy server --port 3721 --host 127.0.0.1 --no-auth
 
 curl -s http://127.0.0.1:3721/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"qwen3:4b-instruct","messages":[{"role":"user","content":"say hi"}]}'
 ```
+
+Stop the server with Ctrl-C when you have received the response. These
+commands bind only to loopback and use the local model without an API key.
 
 `--no-auth` is explicitly loopback-only — the server logs a warning if you
 combine it with a non-loopback `--host`. Drop `--no-auth` and set
