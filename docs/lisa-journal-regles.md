@@ -32,7 +32,7 @@ buddy lisa regime lecture
 | ------------------- | ------------------- | ------------------- |
 | observer            | parole              | commande-shell      |
 | rappel              | autre               | ecrire-fichier      |
-| message-patrice     |                     | publier             |
+| message-utilisateur |                     | publier             |
 |                     |                     | payer               |
 
 Une action absente des colonnes demande un accord. Une configuration illisible,

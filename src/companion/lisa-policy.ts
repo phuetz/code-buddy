@@ -27,7 +27,7 @@ import { TOOL_METADATA } from '../tools/metadata.js';
 export const LISA_ACTIONS = [
   'observer',
   'rappel',
-  'message-patrice',
+  'message-utilisateur',
   'parole',
   'commande-shell',
   'ecrire-fichier',
@@ -110,7 +110,7 @@ export function defaultLisaRules(): LisaRules {
   return {
     version: 1,
     regime: 'lecture',
-    autorise: ['observer', 'rappel', 'message-patrice'],
+    autorise: ['observer', 'rappel', 'message-utilisateur'],
     demander: ['parole', 'autre'],
     interdit: ['commande-shell', 'ecrire-fichier', 'publier', 'payer'],
   };
@@ -282,7 +282,7 @@ export function lisaTelegramAction(
 ): LisaAction {
   const ownerChat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT?.trim();
   return chat && !chat.startsWith('-') && (chat === ownerChat || allowedUsers.includes(chat))
-    ? 'message-patrice'
+    ? 'message-utilisateur'
     : 'autre';
 }
 
@@ -374,8 +374,8 @@ export async function runLisaAction<T>(
           const remote = getRemoteApprovalService();
           if (
             !remote.hasChannels() &&
-            rules.autorise.includes('message-patrice') &&
-            lisaTelegramAction(process.env.CODEBUDDY_SENSORY_ALERT_CHAT) === 'message-patrice' &&
+            rules.autorise.includes('message-utilisateur') &&
+            lisaTelegramAction(process.env.CODEBUDDY_SENSORY_ALERT_CHAT) === 'message-utilisateur' &&
             process.env.CODEBUDDY_SENSORY_ALERT_CHAT &&
             (process.env.CODEBUDDY_SENSORY_ALERT_TOKEN || process.env.TELEGRAM_BOT_TOKEN)
           ) {
@@ -387,7 +387,7 @@ export async function runLisaAction<T>(
           }
           if (remote.hasChannels()) service.setRemoteApprovalService(remote);
           const promptGrants = new Set(context.getStore()?.grants ?? []);
-          promptGrants.add('message-patrice');
+          promptGrants.add('message-utilisateur');
           promptGrants.add('autre'); // Authenticated approval-channel notification only; tools cannot inherit it.
           return (
             await context.run({ trigger: intent.trigger, grants: promptGrants }, () =>

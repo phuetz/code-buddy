@@ -498,7 +498,7 @@ export async function executeSensoryAction(
   deps: KillProcessDeps = {},
 ): Promise<ActionResult> {
   if (!lisaPolicyEnabled()) return executeSensoryActionImpl(action, ctx, deps);
-  const category = action.type === 'alert' ? 'message-patrice'
+  const category = action.type === 'alert' ? 'message-utilisateur'
     : action.type === 'webhook' ? 'publier' : 'commande-shell';
   return runLisaAction({ action: category, trigger: 'sensory-rule', operation: 'regle-sensorielle' },
     () => executeSensoryActionImpl(action, ctx, deps), { ok: false, detail: LISA_REFUSAL });

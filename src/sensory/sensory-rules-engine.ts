@@ -450,7 +450,7 @@ export function wireSensoryRules(
 
       void (async () => {
         try {
-          const category = rule.action.type === 'alert' ? 'message-patrice'
+          const category = rule.action.type === 'alert' ? 'message-utilisateur'
             : rule.action.type === 'webhook' ? 'publier' : 'commande-shell';
           const res = await runLisaAction({ action: category, trigger: 'sensory-rule', operation: 'regle-sensorielle' },
             () => execute(rule.action, ctx).catch((e) => ({ ok: false, detail: String(e) })),

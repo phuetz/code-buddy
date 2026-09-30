@@ -52,7 +52,7 @@ describe('Lisa — règles et journal sans contenu privé', () => {
     rmSync(root, { recursive: true, force: true });
   });
   const intent = {
-    action: 'message-patrice',
+    action: 'message-utilisateur',
     trigger: 'morning',
     operation: 'initiative',
   } as const;
@@ -109,7 +109,7 @@ describe('Lisa — règles et journal sans contenu privé', () => {
     'demander : aucun appel avant la réponse explicite %s',
     async (approved) => {
       actionMode();
-      setLisaRule('message-patrice', 'demander');
+      setLisaRule('message-utilisateur', 'demander');
       let resolve!: (value: boolean) => void;
       const answer = new Promise<boolean>((r) => {
         resolve = r;
@@ -125,7 +125,7 @@ describe('Lisa — règles et journal sans contenu privé', () => {
   );
   it('demander force la confirmation malgré bypassPermissions, AUTO_CONFIRM et flags', async () => {
     actionMode();
-    setLisaRule('message-patrice', 'demander');
+    setLisaRule('message-utilisateur', 'demander');
     vi.stubEnv('CODEBUDDY_AUTO_CONFIRM', 'true');
     getPermissionModeManager().setMode('bypassPermissions');
     const service = ConfirmationService.getInstance();
@@ -158,10 +158,10 @@ describe('Lisa — règles et journal sans contenu privé', () => {
   );
   it('changement de règle pendant une confirmation annule la requête', async () => {
     actionMode();
-    setLisaRule('message-patrice', 'demander');
+    setLisaRule('message-utilisateur', 'demander');
     const execute = vi.fn();
     await runLisaAction(intent, execute, false, async () => {
-      setLisaRule('message-patrice', 'interdit');
+      setLisaRule('message-utilisateur', 'interdit');
       return true;
     });
     expect(execute).not.toHaveBeenCalled();

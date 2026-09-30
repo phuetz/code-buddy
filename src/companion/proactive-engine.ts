@@ -351,7 +351,7 @@ async function deliverAwayInitiative(
   const decision = canSendAway({ state, clock });
   if (!decision.ok) return null;
 
-  return await runLisaAction({ action: 'message-patrice', trigger: 'away', operation: 'initiative' }, async () => {
+  return await runLisaAction({ action: 'message-utilisateur', trigger: 'away', operation: 'initiative' }, async () => {
     let line = pickAwayLine(decision.angle, { rng: deps.rng, avoid: state.lastLine, now });
     if (!line.trim() || isAwayShameLine(line)) return null;
     const guardedLine = guardRelationshipReply(line);
@@ -454,7 +454,7 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
     });
     if (!candidate) return null;
 
-    return await runLisaAction({ action: present ? 'parole' : 'message-patrice', trigger: candidate.trigger, operation: 'initiative' }, async () => {
+    return await runLisaAction({ action: present ? 'parole' : 'message-utilisateur', trigger: candidate.trigger, operation: 'initiative' }, async () => {
       let line = pickProactiveLine(candidate, deps.rng ?? Math.random);
       if (!line.trim()) return null;
       if (deps.refine) {

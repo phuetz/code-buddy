@@ -90,7 +90,7 @@ async function notifyAndRecord(
   deps: ReminderRunnerDeps,
   notify: (content: string) => Promise<boolean | void>,
 ): Promise<void> {
-  const accepted = await runLisaAction({ action: 'message-patrice', trigger: 'reminder', operation: 'telegram' },
+  const accepted = await runLisaAction({ action: 'message-utilisateur', trigger: 'reminder', operation: 'telegram' },
     () => notify(text), false);
   if (lisaPolicyEnabled() && accepted === false) throw new Error('Reminder notification was not accepted');
   if (accepted !== false && (!deps.notify || deps.recordRemote)) {
