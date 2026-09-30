@@ -10,6 +10,7 @@
 import { spawn } from 'child_process';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import {
   getElectronBaseDirs,
@@ -58,19 +59,29 @@ export interface LaunchOptions {
  * @returns The child process exit code (or 0 if detached)
  */
 export async function launchDesktop(options: LaunchOptions = {}): Promise<number> {
-  if (!isElectronAvailable()) {
-    console.error('\n  Desktop GUI is not installed.');
-    console.error('  Run: buddy install-gui\n');
-    process.exit(1);
-  }
-
-  const projectRoot = resolve(__dirname, '..', '..');
+  const projectRoot = getProjectRoot();
   const coworkDir = resolve(projectRoot, 'cowork');
+  if (!existsSync(resolve(coworkDir, 'package.json'))) {
+    process.stderr.write(
+      '  Cowork is not included in the npm CLI package. Use a source checkout\n'
+      + '  and follow cowork/DEV-LINUX.md on Linux or docs/cowork.md on Windows/macOS.\n',
+    );
+    return 1;
+  }
+  if (!isElectronAvailable()) {
+    process.stderr.write('  Cowork Electron is not installed. From the source checkout, run buddy install-gui.\n');
+    return 1;
+  }
 
   // Determine entry point
   const entryPoint = options.dev
     ? resolve(coworkDir, 'src', 'main', 'index.ts')
     : resolve(coworkDir, 'dist-electron', 'main', 'index.js');
+
+  if (!existsSync(entryPoint)) {
+    process.stderr.write('  Cowork application is not built. Follow the source build guide before running buddy gui.\n');
+    return 1;
+  }
 
   const electronBin = getElectronBinaryPath();
 

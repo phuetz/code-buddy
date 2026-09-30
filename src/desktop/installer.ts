@@ -10,7 +10,7 @@
 import { execFileSync } from 'child_process';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { hasElectronBinary } from './electron-paths.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,96 +24,48 @@ export async function installGUI(): Promise<void> {
   const coworkPackageJson = resolve(coworkDir, 'package.json');
   const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
-  console.log('\n  Installing Code Buddy Desktop GUI...\n');
+  process.stdout.write('\n  Installing Code Buddy Desktop GUI...\n');
 
-  // Step 1: Install Electron
-  console.log('  [1/3] Installing Electron and Cowork dependencies...');
+  // The npm CLI tarball does not contain Cowork. Fail before changing its
+  // dependencies or rebuilding the CLI's native modules against Electron.
+  if (!existsSync(coworkPackageJson)) {
+    process.stderr.write(
+      '  Cowork sources are not included in the npm CLI package. Nothing was installed.\n'
+      + '  Use a Code Buddy source checkout and follow cowork/DEV-LINUX.md on Linux\n'
+      + '  (or docs/cowork.md on Windows/macOS). Run the checkout CLI, not the global buddy.\n',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   try {
-    execFileSync(npmCmd, [
-      'install', 'electron', 'electron-store', 'electron-updater',
-      '--save-optional',
-    ], {
-      cwd: projectRoot,
-      stdio: 'inherit',
-    });
-    reinstallElectronBinaryIfMissing(projectRoot);
-    if (existsSync(coworkPackageJson) && !existsSync(resolve(coworkDir, 'node_modules'))) {
-      execFileSync(npmCmd, ['install'], {
-        cwd: coworkDir,
-        stdio: 'inherit',
-      });
+    process.stdout.write('  [1/3] Installing Cowork dependencies...\n');
+    execFileSync(npmCmd, ['install'], { cwd: coworkDir, stdio: 'inherit' });
+    reinstallElectronBinaryIfMissing(coworkDir);
+    if (!hasElectronBinary(coworkDir)) {
+      throw new Error('Cowork Electron binary is missing after dependency installation');
     }
-    if (existsSync(coworkPackageJson)) {
-      reinstallElectronBinaryIfMissing(coworkDir);
+
+    process.stdout.write('\n  [2/3] Rebuilding Cowork native modules for Electron...\n');
+    execFileSync(npmCmd, ['run', 'rebuild'], { cwd: coworkDir, stdio: 'inherit' });
+
+    process.stdout.write('\n  [3/3] Checking Cowork build...\n');
+    const entryPoint = resolve(coworkDir, 'dist-electron', 'main', 'index.js');
+    if (!existsSync(entryPoint)) {
+      // Build the application, without downloading standalone runtimes or
+      // invoking the platform installer packager.
+      execFileSync(npmCmd, ['exec', '--', 'vite', 'build'], { cwd: coworkDir, stdio: 'inherit' });
+    }
+    if (!existsSync(entryPoint)) {
+      throw new Error('Cowork build did not produce dist-electron/main/index.js');
     }
   } catch (error) {
-    console.error('  Failed to install Electron/Cowork dependencies:', (error as Error).message);
-    process.exit(1);
+    process.stderr.write(`  Desktop GUI installation failed: ${(error as Error).message}\n`);
+    process.exitCode = 1;
+    return;
   }
 
-  // Step 2: Rebuild native modules for Electron
-  console.log('\n  [2/3] Rebuilding native modules for Electron...');
-  try {
-    if (existsSync(coworkPackageJson)) {
-      execFileSync(npmCmd, ['run', 'rebuild'], {
-        cwd: coworkDir,
-        stdio: 'inherit',
-      });
-    } else {
-      const electronVersion = getElectronVersion(projectRoot);
-      if (!electronVersion) {
-        console.log('  Skipping electron-rebuild (version not detected)');
-      } else {
-        const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-        execFileSync(npxCmd, [
-          'electron-rebuild',
-          '--version', electronVersion,
-          '--module-dir', '.',
-        ], {
-          cwd: projectRoot,
-          stdio: 'inherit',
-        });
-      }
-    }
-  } catch (error) {
-    console.warn('  Warning: electron-rebuild failed:', (error as Error).message);
-    console.warn('  Native modules may not work correctly in the GUI.');
-  }
-
-  // Step 3: Build Cowork if not already built
-  console.log('\n  [3/3] Checking Cowork build...');
-  const coworkDist = resolve(coworkDir, 'dist-electron');
-  if (!existsSync(coworkDist)) {
-    console.log('  Building Cowork desktop app...');
-    try {
-      const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-      execFileSync(npmCmd, ['run', 'build:gui'], {
-        cwd: projectRoot,
-        stdio: 'inherit',
-      });
-    } catch {
-      console.warn('  Warning: Cowork build skipped (run npm run build:gui manually)');
-    }
-  } else {
-    console.log('  Cowork already built.');
-  }
-
-  console.log('\n  Desktop GUI installed successfully!');
-  console.log('  Run: buddy gui\n');
-}
-
-/**
- * Get the installed Electron version.
- */
-function getElectronVersion(projectRoot: string): string | null {
-  try {
-    const packageJsonPath = resolve(projectRoot, 'node_modules', 'electron', 'package.json');
-    if (existsSync(packageJsonPath)) {
-      const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as { version: string };
-      return pkg.version;
-    }
-  } catch { /* ignore */ }
-  return null;
+  process.stdout.write('\n  Desktop GUI installed successfully!\n  Run: buddy gui\n');
 }
 
 function reinstallElectronBinaryIfMissing(baseDir: string): void {
@@ -138,7 +90,9 @@ function reinstallElectronBinaryIfMissing(baseDir: string): void {
 export function isGUIInstalled(): boolean {
   try {
     const projectRoot = resolve(__dirname, '..', '..');
-    return [resolve(projectRoot, 'cowork'), projectRoot].some(hasElectronBinary);
+    const coworkDir = resolve(projectRoot, 'cowork');
+    return existsSync(resolve(coworkDir, 'dist-electron', 'main', 'index.js'))
+      && [coworkDir, projectRoot].some(hasElectronBinary);
   } catch {
     return false;
   }
