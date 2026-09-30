@@ -2,12 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { handlePostTool } from './post-tool-handlers.js';
+import { handlePostTool } from '../../../src/agent/execution/post-tool-handlers.js';
 import {
   beginSession,
   loadSessionMetrics,
   resetSessionMetricsForTests,
-} from '../../memory/session-metrics-tracker.js';
+} from '../../../src/memory/session-metrics-tracker.js';
 
 let tmp: string;
 

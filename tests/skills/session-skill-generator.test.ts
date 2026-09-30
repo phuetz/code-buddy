@@ -7,7 +7,7 @@ import {
   generateSessionSkill,
   isComplexSession,
   type SessionMetrics,
-} from './session-skill-generator.js';
+} from '../../src/skills/session-skill-generator.js';
 
 function complexMetrics(over: Partial<SessionMetrics> = {}): SessionMetrics {
   return {

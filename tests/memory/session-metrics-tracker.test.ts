@@ -13,7 +13,7 @@ import {
   loadSessionMetricsFromDisk,
   currentSessionMetricsEnv,
   resetSessionMetricsForTests,
-} from './session-metrics-tracker.js';
+} from '../../src/memory/session-metrics-tracker.js';
 
 let tmp: string;
 

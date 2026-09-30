@@ -9,10 +9,10 @@ import {
   generateSkillFromSession,
   resetSessionSkillGenerator,
   type SessionTranscript,
-} from './session-skill-generator.js';
+} from '../../../src/agent/self-improvement/session-skill-generator.js';
 // LiveSkillMutator vit dans skill-mutator ; create-skill-tool ne fait que l'importer.
-import { LiveSkillMutator } from './skill-mutator.js';
-import { resetCreateSkillTool } from '../../tools/create-skill-tool.js';
+import { LiveSkillMutator } from '../../../src/agent/self-improvement/skill-mutator.js';
+import { resetCreateSkillTool } from '../../../src/tools/create-skill-tool.js';
 
 function makeSession(overrides: Partial<SessionTranscript> = {}): SessionTranscript {
   return {
