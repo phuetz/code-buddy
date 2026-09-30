@@ -59,6 +59,31 @@ describe('comfy_recipe contract and registry wiring', () => {
 });
 
 describe('comfy_recipe safe execution surface', () => {
+  it('lists an empty default registry in a fresh home without creating directories', async () => {
+    const home = await mkdtemp(path.join(tmpdir(), 'comfy-fresh-home-'));
+    temporaryRoots.push(home);
+    const tool = new ComfyRecipeTool({ environment: {}, homeDirectory: home });
+
+    const result = await tool.execute({ action: 'list', commercial_use: false });
+
+    expect(result).toMatchObject({ success: true, data: { recipes: [] } });
+    await expect(access(path.join(home, '.codebuddy'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('reports a missing explicitly configured registry as an error', async () => {
+    const home = await mkdtemp(path.join(tmpdir(), 'comfy-explicit-home-'));
+    temporaryRoots.push(home);
+    const tool = new ComfyRecipeTool({
+      environment: { CODEBUDDY_COMFY_RECIPE_DIR: path.join(home, 'missing') },
+      homeDirectory: home,
+    });
+
+    const result = await tool.execute({ action: 'list', commercial_use: false });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('ENOENT');
+  });
+
   it('lists only bounded recipe summaries without exposing workflow bodies or source paths', async () => {
     const fixture = await setupFixture();
     const runtimeFactory = vi.fn();
