@@ -315,7 +315,11 @@ install_managed_launcher() { # <npm-prefix>
     > "$_launcher_tmp" \
     || die "could not stage launcher in $MANAGED_BIN_DIR"
   chmod 755 "$_launcher_tmp"
-  mv -f "$_package_tmp" "$_package_link"
+  # POSIX mv follows a destination symlink to a directory. Rename the link
+  # itself atomically so a changed npm prefix never keeps the old package.
+  node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2]);' \
+    "$_package_tmp" "$_package_link" \
+    || die "could not replace package link in $MANAGED_BIN_DIR"
   mv -f "$_launcher_tmp" "$_launcher"
 
   PATH="$MANAGED_BIN_DIR:$PATH"

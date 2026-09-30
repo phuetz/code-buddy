@@ -31,7 +31,7 @@ describe.skipIf(process.platform === 'win32')('one-command installer launcher', 
     scratchRoots.push(scratchRoot);
     const fakeBin = path.join(scratchRoot, 'fake-bin');
     const home = path.join(scratchRoot, 'home');
-    const prefix = path.join(scratchRoot, 'npm-prefix');
+    let prefix = path.join(scratchRoot, 'npm-prefix');
     const packageRoot = path.join(prefix, 'lib', 'node_modules', '@phuetz', 'code-buddy');
     const packageEntry = path.join(packageRoot, 'dist', entry);
     const npmLauncher = path.join(prefix, 'bin', 'buddy');
@@ -137,5 +137,20 @@ if (process._eval?.includes('fs.realpathSync')) {
     const secondRun = runInstaller();
     expect(secondRun.status, secondRun.stderr).toBe(0);
     expect(fs.readFileSync(path.join(home, '.profile'), 'utf8').split(profileEntry)).toHaveLength(2);
+    // An existing package link is a symlink to a directory. Reinstalling to a
+    // different prefix must replace that link, rather than move a file inside it.
+    const previousPrefix = prefix;
+    prefix = path.join(scratchRoot, 'next-prefix');
+    fs.cpSync(previousPrefix, prefix, { recursive: true, verbatimSymlinks: true });
+    const moved = runInstaller();
+    expect(moved.status, moved.stderr).toBe(0);
+    expect(fs.realpathSync(packageLink)).toBe(path.join(prefix, 'lib', 'node_modules', '@phuetz', 'code-buddy'));
+    fs.rmSync(previousPrefix, { recursive: true, force: true });
+    const relocatedVersion = spawnBashScript(managedLauncher, ['--version'], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH ?? ''].join(path.delimiter) },
+    });
+    expect(relocatedVersion.status, relocatedVersion.stderr).toBe(0);
+    expect(relocatedVersion.stdout).toBe('2.0.0-test\n');
   });
 });
