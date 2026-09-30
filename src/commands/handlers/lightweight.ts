@@ -303,7 +303,8 @@ export async function handleTelemetry(args: string[]): Promise<CommandHandlerRes
 function telemetryResult(content: string): CommandHandlerResult {
   return {
     handled: true,
-    ...failureFlag(content),
+    // All callers have completed successfully. Their explanatory text mentions
+    // error reports; that does not make the telemetry operation a failure.
     entry: { type: 'assistant', content, timestamp: new Date() },
   };
 }

@@ -251,6 +251,17 @@ export const SettingsSchema = z.object({
     .default(true)
     .describe('Enable automatic checkpoints for file changes'),
 
+  // Transport-specific validation belongs to the MCP loader. Preserve both
+  // modern transport objects and legacy stdio configurations here.
+  mcpServers: z.record(z.object({}).passthrough()).optional()
+    .describe('Project MCP servers persisted by buddy mcp add'),
+
+  telemetry: z.object({
+    enabled: z.boolean(),
+    level: z.enum(['full', 'errors-only', 'none']),
+  }).strict().optional()
+    .describe('Telemetry preferences persisted by /telemetry'),
+
   enableTelemetry: z.boolean()
     .default(false)
     .describe('Enable anonymous usage telemetry'),
