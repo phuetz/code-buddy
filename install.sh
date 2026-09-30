@@ -380,14 +380,14 @@ main() {
   # honest so a fresh machine does not hit a surprising provider error.
   if detect_ollama; then
     ok "Local Ollama detected — use the free path (no API key):"
-    info "    ${C_BOLD}buddy try${C_RESET}         — 60-second demo using an installed Ollama model"
+    info "    ${C_BOLD}buddy try${C_RESET}         — real coding demo using an installed tool-capable Ollama model"
     info "    ${C_BOLD}buddy onboard${C_RESET}     — save Ollama as your default (interactive)"
     info ""
     info "  ${C_DIM}Prefer a hosted brain? ${C_RESET}${C_BOLD}buddy login${C_RESET}${C_DIM} — ChatGPT Plus/Pro OAuth, \$0 marginal cost.${C_RESET}"
   else
     info "  1. ${C_BOLD}buddy login${C_RESET}     — sign in with ChatGPT Plus/Pro (OAuth, \$0 marginal cost)"
-    info "  2. ${C_BOLD}buddy try${C_RESET}       — run the 60-second demo after login"
-    info "     ${C_DIM}...or install Ollama (https://ollama.com), run 'ollama serve', then 'ollama pull qwen2.5-coder:7b'.${C_RESET}"
+    info "  2. ${C_BOLD}buddy try${C_RESET}       — run the coding demo after login (duration depends on the model)"
+    info "     ${C_DIM}...or install Ollama (https://ollama.com), run 'ollama serve', then 'ollama pull qwen3:8b'.${C_RESET}"
     info "  3. ${C_BOLD}buddy onboard${C_RESET}   — interactive setup for the local or API path"
     info "  4. ${C_BOLD}buddy${C_RESET}           — start chatting after a provider is configured"
   fi

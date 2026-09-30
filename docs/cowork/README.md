@@ -27,8 +27,9 @@ les workflows visuels, le build, les réglages et le dépannage.
 ## Démarrage rapide
 
 ```bash
-buddy install-gui          # une fois : installe Electron + build le bundle desktop
-buddy gui                  # lance l'application (alias : buddy desktop)
+npm install && npm run build  # depuis un checkout source, Node ≥ 22
+node dist/index.js install-gui
+node dist/index.js gui                  # lance l'application (alias : buddy desktop)
 # Dev :
 cd cowork && npm run dev
 ```

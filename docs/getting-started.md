@@ -661,12 +661,15 @@ buddy
 ```
 Trade-off: a retried stream restarts from the beginning, so you may see duplicated content across the retry boundary. Still opt-in as of 1.0.0.
 
-### Cowork launch fails after a Windows or Electron update
-If Cowork reports that it cannot locate `better_sqlite3.node`, rebuild the
-native Electron module:
+### Cowork installation and native modules
+Cowork requires a built source checkout and Node.js ≥ 22; the npm CLI
+package does not contain the desktop app. Release 2.2.0 has no desktop
+installer. From the source checkout, install its dependencies and bundle:
 
 ```bash
-buddy install-gui
+npm install && npm run build
+node dist/index.js install-gui
+node dist/index.js gui
 ```
 
 For source checkouts you can also run:

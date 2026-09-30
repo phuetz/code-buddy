@@ -66,24 +66,28 @@ sanitization, tools, memory, and Hermes features can surface in the GUI too.
 
 ## Quick Start From Source
 
-From a fresh checkout:
+From a fresh source checkout (Node.js ≥ 22). The npm CLI package does not
+include Cowork, and release 2.2.0 has no desktop installer:
 
 ```bash
 npm install
 npm run build
-npm run dev:gui
+node dist/index.js install-gui
+xvfb-run -a node dist/index.js gui
 ```
 
 For a production-like Electron validation without packaging the installer:
 
 ```bash
 cd cowork
+npm install
+npm run rebuild
 npm run build:e2e
-npx playwright test e2e/cowork-smoke.spec.ts --reporter=list --workers=1
+xvfb-run -a npx playwright test e2e/cowork-smoke.spec.ts --reporter=list --workers=1
 ```
 
 Cowork itself requires Node.js 22 or newer. The root CLI still supports Node.js
-18 or newer.
+20 or newer.
 
 ## Visual Tour
 

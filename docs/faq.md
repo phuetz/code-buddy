@@ -9,7 +9,7 @@ No. The LLM is one piece. Code Buddy is an **agentic loop**: it plans, calls ~11
 It works — with a caveat we're honest about: **not every local model can drive tools** (some emit tool calls as plain text). Code Buddy gates tool-calling per model (`getModelToolConfig`) and uses tool-capable local models (e.g. `qwen3.6`, `devstral`) for agentic work. The README demos (reasoning + a real file-creation task) are unedited captures on local Ollama at ~`$0.0001`. Chat-only models work for chat; agentic tasks want a tool-capable one.
 
 ### Is my code sent to the cloud?
-In **local mode (Ollama), nothing leaves your machine** — no API, no telemetry required. If you choose a cloud provider or the ChatGPT login, requests go to that provider (your choice, your keys). Secrets are redacted before fleet routing (`privacy-lint`), and peer tools are fail-closed behind a workspace root.
+With **local Ollama**, model inference stays on the configured Ollama host; no cloud model API or telemetry is required. Web research, network tools and configured integrations can still contact external services. If you choose a cloud provider or the ChatGPT login, model requests go to that provider. Secrets are redacted before fleet routing (`privacy-lint`), and peer tools are fail-closed behind a workspace root.
 
 ### What does it cost?
 - **Local (Ollama): `$0`** marginal.
@@ -20,16 +20,20 @@ In **local mode (Ollama), nothing leaves your machine** — no API, no telemetry
 Code Buddy's niche is **local-first + multi-surface**: the *same* engine runs in your terminal, an Electron desktop app (Cowork), an HTTP/WS server, on your phone, and as a 24/7 autonomous background service — plus a peer-to-peer **fleet** so machines share models/tools over your network. If you want a free, self-owned agent that's the same everywhere, that's the lane. Try it and see if it fits your workflow.
 
 ### Which OSes / models / providers?
-Linux, macOS, Windows. **15 providers** (Claude, GPT, Grok, Gemini, Ollama, LM Studio, Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral) with auto-failover. Cowork desktop needs Node ≥ 22; the CLI needs ≥ 18.
+Linux, macOS, Windows. **15 providers** (Claude, GPT, Grok, Gemini, Ollama, LM Studio, Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral) with opt-in failover (`CODEBUDDY_PROVIDER_FALLBACK=true`). Cowork desktop needs Node ≥ 22; the CLI needs ≥ 20.
 
 ### Is it production-ready?
-**Yes — 1.0.0 GA** (tagged 2026-06-10): ~30k tests, a [documented validation campaign](qa/v1.0.0-validation.md) covering the built artifact end-to-end (CLI, server, local agentic loop), and a [production deployment guide](deployment.md). Pin a version and file issues for anything rough.
+The published CLI is 2.2.0; the repository is a 2.3.0 candidate. Validate the exact
+version and the workflows you need. Cowork currently requires a source checkout;
+release 2.2.0 contains no desktop installer. A test count or an earlier validation
+campaign does not certify the current candidate. See [Cowork setup](cowork.md).
 
-### How do I try it in 60 seconds?
+### How do I try it locally?
 ```bash
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy && npm install && npm run build && npm link
-buddy            # then set a provider, or point it at local Ollama for $0
+buddy doctor --fix  # select a suitable installed Ollama model, if Ollama is running
+buddy try           # real coding demo; duration depends on your model
 ```
 
 ### Can I extend it?

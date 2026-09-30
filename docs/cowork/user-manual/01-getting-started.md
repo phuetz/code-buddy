@@ -6,17 +6,11 @@ Ce chapitre vous mène de zéro à votre première tâche réalisée.
 
 Cowork est disponible pour **Windows, macOS et Linux**.
 
-### Option A — App précompilée (recommandé)
-Téléchargez l'installateur de votre plateforme depuis la page **Releases** du dépôt :
+### Paquets publiés
 
-| Plateforme | Artefact |
-|---|---|
-| Windows | installateur NSIS (`.exe`) |
-| macOS | bundle d'application (`.app`, Apple Silicon) |
-| Linux | `AppImage` |
-
-Lancez-le comme n'importe quelle app. Sur macOS, si Gatekeeper bloque un build non signé,
-clic-droit → **Ouvrir**, ou autorisez-le dans **Réglages Système → Confidentialité et sécurité**.
+La release 2.2.0 contient uniquement le paquet CLI npm. Aucun installateur
+Cowork `.exe`, `.app` ou `AppImage` n’est publié dans cette release. Utilisez
+les sources ci-dessous ; installer le CLI avec npm ne fournit pas Cowork.
 
 ### Option B — Depuis les sources (développeurs)
 Nécessite **Node.js ≥ 22**.
@@ -24,11 +18,14 @@ Nécessite **Node.js ≥ 22**.
 ```bash
 git clone https://github.com/phuetz/code-buddy
 cd code-buddy
-buddy install-gui     # une fois : installe Electron + build le bundle desktop
-buddy gui             # lance l'application (alias : buddy desktop)
+npm install
+npm run build
+node dist/index.js install-gui  # installe les dépendances Cowork et construit le bundle
+node dist/index.js gui             # lance l'application (alias : buddy desktop)
 
 # Boucle de dev (hot reload) :
-cd cowork && npm install && npm run dev
+cd cowork && npx vite build
+xvfb-run -a env NODE_ENV=production ./node_modules/electron/dist/electron --no-sandbox --disable-gpu ./dist-electron/main/index.js
 ```
 
 > _[capture : premier lancement de l'app]_

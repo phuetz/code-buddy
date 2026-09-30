@@ -117,8 +117,11 @@ npm run build && npm link
 If the `@vscode/ripgrep` install script receives a GitHub 403, see the
 [source-install workaround](docs/install.md#ripgrep-download-blocked-during-npm-ci).
 
-The **Cowork** desktop app is a separate step needing Node.js ≥ 22: `buddy install-gui`, then
-`buddy gui`. Details in [Getting started](docs/getting-started.md).
+The **Cowork** desktop app requires a source checkout and Node.js ≥ 22.
+The npm CLI package does not include it, and release 2.2.0 has no desktop installer.
+From the built source checkout, run `node dist/index.js install-gui`, then
+`node dist/index.js gui` (headless Linux: `xvfb-run -a node dist/index.js gui`).
+Details in [Cowork](docs/cowork.md).
 
 ---
 
@@ -154,7 +157,7 @@ Other paths worth knowing on day one:
 ```bash
 buddy try                             # coding demo: writes FizzBuzz + a test, runs it, verifies
 buddy -p "explain the entry point"    # one-shot, headless — good for scripts and CI
-buddy research "map this repository"  # parallel research workers
+buddy research "Compare SQLite and PostgreSQL" # web research; needs reachable search sources
 buddy cost --latency                  # measured per-model TTFT/TTFM, read-only
 ```
 

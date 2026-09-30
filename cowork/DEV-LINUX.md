@@ -55,23 +55,20 @@ Flags:
 - `--no-sandbox` — skip the chrome-sandbox suid setup (would otherwise
   abort on a fresh `node_modules/electron/`).
 - `--disable-gpu` — avoid GL context probing in xrdp / VNC sessions.
-- `DISPLAY=:0` — local X server. xrdp users typically run on
-  `:10.0` instead.
+- `xvfb-run -a` — allocate a private virtual display for headless checks.
 
-For headless smoke tests via CDP:
+For a headless smoke, keep the app in the foreground and close its own window
+when finished:
 
 ```bash
-DISPLAY=:0 NODE_ENV=production \
+xvfb-run -a env NODE_ENV=production \
   ./node_modules/electron/dist/electron \
   --no-sandbox --disable-gpu \
-  --remote-debugging-port=9222 \
-  ./dist-electron/main/index.js &
-
-curl -s http://localhost:9222/json | jq -r '.[] | select(.type=="page") | .webSocketDebuggerUrl'
-# → ws://localhost:9222/devtools/page/<id>
-# Use a small ws client (e.g. `ws` package + a 30-line CDP eval helper) to
-# Runtime.evaluate JS into the renderer.
+  ./dist-electron/main/index.js
 ```
+
+For automated checks, use the Playwright Electron fixture under `xvfb-run -a`.
+It owns and closes its app process; do not attach to another desktop session.
 
 ## Debugging the embedded engine
 
@@ -117,7 +114,7 @@ If you see this near the top of the log:
 
   ```bash
   CODEBUDDY_ENGINE_PATH=~/DEV/code-buddy/dist \
-  DISPLAY=:0 NODE_ENV=production \
+  xvfb-run -a env NODE_ENV=production \
     ./cowork/node_modules/electron/dist/electron \
     --no-sandbox --disable-gpu \
     ./cowork/dist-electron/main/index.js
@@ -150,7 +147,7 @@ If you see `database: 'error'`, the most common causes are:
 - `better-sqlite3` ABI mismatch (run electron-rebuild as above).
 - `JWT_SECRET` not set in production (the bridge mints one
   automatically since commit `cc2d2260`).
-- A previous `buddy serve` lingering on port 3000 (`ss -tlnp | grep
+- A previous `buddy server` lingering on port 3000 (`ss -tlnp | grep
   ':3000'`).
 
 ## Debugging the renderer
@@ -193,5 +190,5 @@ under `xvfb-run -a`, and trace the main process's call to
 | `chrome-sandbox` SUID error | first `npm install` | use `--no-sandbox` flag |
 | Electron freezes on boot | xrdp without `--disable-gpu` | always set the flag in dev |
 | `prepare:python:all HTTP 504` | GitHub releases API rate limit | skip — use `npx vite build` instead of `npm run build` |
-| `port 3000 already in use` | leftover `buddy serve` | `pkill -f "buddy serve"` or kill the PID from `ss -tlnp` |
+| `port 3000 already in use` | leftover `buddy server` | choose another port in Settings → Server; stop only a PID you started |
 | `mainWindow=false` log on every event | regression of the dual-mainWindow bug | run electron with `--enable-logging`; if the log shows up, `setMainWindow()` is missing somewhere — see `ARCHITECTURE.md` |

@@ -20,14 +20,14 @@
 <p align="center">
   <img src="https://img.shields.io/badge/平台-Windows%20%7C%20macOS-blue" alt="Platform" />
   <img src="https://img.shields.io/badge/协议-MIT-green" alt="License" />
-  <img src="https://img.shields.io/badge/Node.js-18+-brightgreen" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Node.js-22+-brightgreen" alt="Node.js" />
 </p>
 
 ---
 
 ## 📖 简介
 
-**Cowork** 是 **Claude Cowork** 的开源实现，提供 **Windows** 和 **macOS** 一键安装包，无需任何编程知识。
+**Cowork** 是 **Claude Cowork** 的开源实现，当前需要从源码安装（Node.js ≥ 22）。2.2.0 Release 只有 CLI npm 包，没有桌面安装包。
 
 它为 AI 提供了一个沙盒化的工作环境，可以管理文件、通过内置的 **Skills** 系统生成专业文件（PPTX、DOCX、XLSX等）和 **通过MCP链接桌面APP**（浏览器、Notion等）进行人机协作等等。
 
@@ -46,7 +46,7 @@
 | Cowork    | ✓            | ✓              | ✓             |
 
 
-- **一键安装，开箱即用**：提供 Windows 和 macOS 预构建安装包，无需配置环境，下载即可开始使用。。
+- **一键安装，开箱即用**：当前需要从源码安装并配置模型；桌面安装包尚未发布。
 - **灵活模型支持**：支持 **Claude**、**OpenAI 兼容接口**，以及国产大模型 **GLM**、**MiniMax**、**Kimi** 等。使用你的 OpenRouter、Anthropic等API Key，灵活配置。更多模型持续接入中！
 - **远程控制**：可以接入**飞书**等协作平台和远程服务，实现工作流自动化和跨平台操作。
 - **图形界面操作**：可以控制和操作电脑上的各种桌面 GUI 应用程序。**推荐使用 Gemini-3-Pro 模型**以获得最佳的 GUI 理解和控制效果。
@@ -80,7 +80,7 @@ https://github.com/user-attachments/assets/f57b9106-4b2c-4747-aecd-a07f78af5dfc
 
 ### 下载安装包（推荐）
 
-请访问我们的 [Release 页面](https://github.com/phuetz/code-buddy/releases) 下载最新版本（Windows / macOS / Linux）。
+[Release 页面](https://github.com/phuetz/code-buddy/releases) 的 2.2.0 只有 CLI npm 包；没有 Windows / macOS / Linux 桌面安装包。请使用以下源码步骤。
 
 > macOS：若安装后提示"无法验证开发者"，请右键点击应用 → **打开**，或前往 **系统设置 > 隐私与安全性** 点击"仍要打开"。
 
@@ -97,8 +97,10 @@ https://github.com/user-attachments/assets/f57b9106-4b2c-4747-aecd-a07f78af5dfc
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy
 npm install
-npm run rebuild
-npm run dev
+npm run build
+node dist/index.js install-gui
+node dist/index.js gui
+# Linux 无显示器：xvfb-run -a node dist/index.js gui
 ```
 
 构建安装包：`npm run build`
