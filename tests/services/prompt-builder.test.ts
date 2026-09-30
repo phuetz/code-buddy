@@ -232,6 +232,27 @@ describe('PromptBuilder — Phase T4', () => {
     vi.restoreAllMocks();
   });
 
+  it('keeps compact action and security instructions within budget instead of truncating the legacy base', async () => {
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true');
+    vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
+    promptMocks.getSystemPromptForModeMock.mockReturnValue(getBaseSystemPrompt(false, '/tmp/test'));
+    const { builder } = buildBuilder();
+    const prompt = await builder.buildSystemPrompt(undefined, 'fixture-local', null);
+    expect(prompt.length).toBeLessThanOrEqual(6_000);
+    expect(prompt).toContain('Never reveal credentials');
+    expect(prompt).toContain('Describing corrected code does not change a file');
+    expect(prompt).toContain('permission');
+  });
+
+  it('preserves explicit prompts when compact mode is requested', async () => {
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true');
+    vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
+    const { builder } = buildBuilder();
+    const prompt = await builder.buildSystemPrompt('custom-prompt', 'fixture-local', null);
+    expect(prompt).toContain('NEW_PROMPT_MANAGER_BODY');
+    expect(prompt).not.toContain('Describing corrected code does not change a file');
+  });
+
   describe('construction + updateConfig', () => {
     it('constructs without optional dependencies', () => {
       const { builder } = buildBuilder();

@@ -10,6 +10,7 @@
  * - Supports project-level and global intro hooks
  */
 
+import { getHeadlessCompactSystemPrompt } from "../prompts/headless-compact.js";
 import { logger } from "../utils/logger.js";
 import { getErrorMessage } from "../errors/index.js";
 import { createHash } from "node:crypto";
@@ -427,6 +428,8 @@ export class PromptBuilder {
         logger.debug(
           `[prompt-builder] Using chat-only base prompt for ${modelName} (supportsToolCalls=false)`,
         );
+      } else if (isHeadlessPromptCompact()) {
+        systemPrompt = getHeadlessCompactSystemPrompt(this.config.cwd, customInstructions || undefined);
       } else {
         // Use legacy system (current behavior)
         const promptMode = this.config.yoloMode ? "yolo" : "default";
@@ -448,7 +451,9 @@ export class PromptBuilder {
           ? 'prompts/auto-selected.md + src/prompts/prompt-manager.ts'
           : toolCfg.supportsToolCalls === false && !forceTools
             ? 'src/prompts/system-base.ts (chat-only)'
-            : 'src/prompts/system-base.ts';
+            : isHeadlessPromptCompact()
+              ? 'src/prompts/headless-compact.ts'
+              : 'src/prompts/system-base.ts';
       this.recordPromptBlock('base', baseSource, systemPrompt, PROMPT_PRIORITIES.security, false);
 
       // Inject persistent memory context for paths that don't already
