@@ -534,12 +534,15 @@ buddy token --env /etc/codebuddy/mobile.env --url https://your-host.example:3000
 `CODEBUDDY_SENSORY_ALERT_CHAT`. Scripts should use `--json` and read `.token`
 / `.url`. The signing secret is never printed.
 
-For a quick local check against your own
-machine, start the server with `--no-auth` and bind it to loopback so it
-never leaves your machine:
+For a local check, first run Ollama on `127.0.0.1:11434` with
+`qwen3:4b-instruct` installed. Configure that inference provider explicitly,
+then bind the HTTP server to loopback. `--no-auth` disables HTTP authentication;
+it does not select an LLM or provide its credentials. A fresh profile without
+a configured provider cannot answer a chat request.
 
 ```bash
-buddy server --port 3721 --host 127.0.0.1 --no-auth
+CODEBUDDY_PROVIDER=ollama OLLAMA_HOST=http://127.0.0.1:11434 \
+  buddy server --port 3721 --host 127.0.0.1 --no-auth
 
 curl -s http://127.0.0.1:3721/v1/chat/completions \
   -H "Content-Type: application/json" \

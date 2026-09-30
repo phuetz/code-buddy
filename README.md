@@ -233,7 +233,8 @@ Honest limits for a first-time visitor:
 - **Node ≥ 20 is the declared CLI floor** (`engines.node`); Node 22 or 24 is
   recommended when working from source. Some ancillary packages can warn about
   their own Node ≥ 22 requirement during installation. The CI runs Node 20 and 22.
-- **Cowork** is a separate install (Node.js ≥ 22, `buddy install-gui`), not part of the three
+- **Cowork** is built separately from a Code Buddy source checkout (Node.js ≥ 22,
+  `node dist/index.js install-gui`), not part of the three
   commands above.
 - **Film production** needs `ffmpeg`; without a local voice binary, scenes stay silent rather than
   getting a fake voice-over.

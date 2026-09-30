@@ -140,8 +140,9 @@ couverture (logique testée côté main/IPC).
 
 ## Aller plus loin
 
-- Lancement « one-liner » côté CLI : `buddy install-gui` puis `buddy gui`
-  (alias `buddy desktop`) — installe Electron et build le bundle desktop.
+- Depuis un checkout Code Buddy installé et construit : `node dist/index.js install-gui`
+  puis `node dist/index.js gui` (alias `desktop`). Le paquet npm CLI seul ne contient
+  pas les sources Cowork ; voir [Installation](README.md).
 - Détails Linux, résolution du moteur embarqué (4 couches), vérification du
   serveur embarqué : [`cowork/DEV-LINUX.md`](../../cowork/DEV-LINUX.md).
 - Gotchas (dual-`mainWindow`, ABI sqlite, GPU) :
