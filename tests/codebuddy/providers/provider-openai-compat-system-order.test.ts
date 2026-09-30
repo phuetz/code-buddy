@@ -138,7 +138,7 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
 
   it('LOCAL (Ollama): emits exactly one system message in position 0', async () => {
     process.env.CODEBUDDY_PROVIDER = 'ollama';
-    const provider = makeProvider('http://localhost:11434/v1', 'qwen3.8:27b');
+    const provider = makeProvider('http://127.0.0.1:11434/v1', 'qwen3.8:27b');
     const { seen } = stubOllamaWire();
 
     try {

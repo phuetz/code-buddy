@@ -242,7 +242,7 @@ describe('listActiveLlmModelPool — local expansion', () => {
     buildActiveLlmRegistry.mockResolvedValue({
       all: [
         active({ provider: 'lmstudio', model: 'meta-llama-3.1-8b-instruct', isLocal: true, apiKey: 'lmstudio', baseURL: 'http://localhost:1234/v1', costInputUsdPerMtok: 0 }),
-        active({ provider: 'ollama', model: 'qwen3:8b', isLocal: true, apiKey: 'ollama', baseURL: 'http://localhost:11434/v1', costInputUsdPerMtok: 0 }),
+        active({ provider: 'ollama', model: 'qwen3:8b', isLocal: true, apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', costInputUsdPerMtok: 0 }),
       ],
     });
     getLocalCapabilities.mockResolvedValue({

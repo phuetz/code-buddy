@@ -9,6 +9,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 import type { ToolResult } from '../types/index.js';
 
 // ============================================================================
@@ -135,6 +136,7 @@ export async function resolveAllConflicts(
   llmCall?: (prompt: string) => Promise<string>,
 ): Promise<{ resolved: number; content: string }> {
   const absolutePath = path.resolve(filePath);
+  assertNotSecretConflictFile(absolutePath);
   const fileContent = fs.readFileSync(absolutePath, 'utf-8');
   const conflicts = parseConflicts(fileContent, absolutePath);
 
@@ -196,6 +198,11 @@ export async function resolveAllConflicts(
   return { resolved: conflicts.length, content: resolvedContent };
 }
 
+function assertNotSecretConflictFile(filePath: string): void {
+  const verdict = checkSecretFileAccess(filePath, 'read');
+  if (verdict.secret) throw new Error(formatSecretRefusal(filePath, verdict));
+}
+
 // ============================================================================
 // Tool Entry Point
 // ============================================================================
@@ -217,6 +224,7 @@ export async function executeResolveConflicts(args: {
     }
 
     const filePath = path.resolve(cwd, args.file_path);
+    assertNotSecretConflictFile(filePath);
 
     if (!fs.existsSync(filePath)) {
       return { success: false, error: `File not found: ${filePath}` };
@@ -249,6 +257,7 @@ export async function executeResolveConflicts(args: {
     }
 
     const result = await resolveAllConflicts(filePath, strategy);
+    assertNotSecretConflictFile(filePath);
     fs.writeFileSync(filePath, result.content, 'utf-8');
 
     return {
@@ -321,6 +330,7 @@ function scanForConflicts(cwd: string): ToolResult {
 
   for (const file of files) {
     const fullPath = path.join(root, file);
+    if (checkSecretFileAccess(fullPath, 'read').secret) continue;
     try {
       const content = fs.readFileSync(fullPath, 'utf-8');
       const conflicts = parseConflicts(content, fullPath);

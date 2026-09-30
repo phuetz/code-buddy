@@ -4,11 +4,13 @@
  * ITool-compliant adapters for OCR and Image Processing operations.
  */
 
+import { getOllamaV1BaseUrl } from '../../utils/ollama-url.js';
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { OcrTool } from '../vision/ocr-tool.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../../security/secret-files.js';
 import { ImageProcessorTool } from '../vision/image-processor.js';
 import {
   analyzeVisionImage,
@@ -30,6 +32,18 @@ import {
 // VisionAnalyzeTool (Hermes vision_analyze parity)
 // ============================================================================
 
+/**
+ * Image tools read a file from disk and hand its bytes to a model or OCR
+ * engine: the same credential deny list as view_file applies
+ * (src/security/secret-files.ts).
+ */
+function secretImagePathError(input: Record<string, unknown>, cwd?: string): ToolResult | null {
+  const raw = input.image_path;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const verdict = checkSecretFileAccess(raw, 'read', { baseDir: cwd ?? process.cwd() });
+  return verdict.secret ? { success: false, error: formatSecretRefusal(raw, verdict) } : null;
+}
+
 export class VisionAnalyzeTool implements ITool {
   readonly name = 'vision_analyze';
   readonly description = 'Analyze a local image with real metadata, color, and optional local OCR evidence.';
@@ -37,6 +51,8 @@ export class VisionAnalyzeTool implements ITool {
   constructor(private readonly options: VisionAnalysisOptions = {}) {}
 
   async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
+    const secretError = secretImagePathError(input, context?.cwd);
+    if (secretError) return secretError;
     try {
       const result = await analyzeVisionImage(requiredString(input, 'image_path'), {
         ...this.options,
@@ -317,6 +333,8 @@ export class OcrExtractTool implements ITool {
   readonly description = 'Extract text from an image file using Tesseract OCR.';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    const secretError = secretImagePathError(input);
+    if (secretError) return secretError;
     const imagePath = input.image_path as string;
     const language = input.language as string || 'eng';
 
@@ -382,6 +400,8 @@ export class ImageAnalyzeTool implements ITool {
   readonly description = 'Analyze an image to get dimensions, format, and metadata.';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    const secretError = secretImagePathError(input);
+    if (secretError) return secretError;
     const imagePath = input.image_path as string;
 
     try {
@@ -446,6 +466,8 @@ export class ObjectDetectTool implements ITool {
   ) {}
 
   async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
+    const secretError = secretImagePathError(input, context?.cwd);
+    if (secretError) return secretError;
     try {
       const result = await detectObjectsInImage({
         imagePath: requiredString(input, 'image_path'),
@@ -750,6 +772,8 @@ export class CameraAnalyzeTool implements ITool {
 
     let imagePath: string;
     if (providedPath) {
+      const secretError = secretImagePathError(input, cwd);
+      if (secretError) return secretError;
       imagePath = path.isAbsolute(providedPath)
         ? path.resolve(providedPath)
         : path.resolve(cwd ?? process.cwd(), providedPath);
@@ -1027,11 +1051,7 @@ export function createVisionTools(options: VisionAnalysisOptions = {}): ITool[] 
  * OLLAMA_HOST is typically `host:port` with no scheme and no /v1 path.
  */
 export function resolveOllamaChatEndpoint(env: NodeJS.ProcessEnv): string {
-  const raw = (env.OLLAMA_HOST ?? '').trim();
-  if (!raw) return 'http://localhost:11434/v1/chat/completions';
-  const withScheme = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
-  const base = withScheme.replace(/\/+$/, '').replace(/\/v1$/i, '');
-  return `${base}/v1/chat/completions`;
+  return `${getOllamaV1BaseUrl(env)}/chat/completions`;
 }
 
 /**

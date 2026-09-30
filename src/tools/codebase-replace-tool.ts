@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
 import { getRipgrepPath } from '../utils/ripgrep-path.js';
+import { checkSecretFileAccess } from '../security/secret-files.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -68,36 +69,46 @@ export async function codebaseReplace(
     throw new Error('searchPattern is required');
   }
 
-  // Build ripgrep args to find matching files. Use execFile instead of a
-  // shell command so Windows quoting never changes the pattern/glob meaning.
-  const rgFlags: string[] = ['-l', '--no-messages'];
-
-  if (!isRegex) {
-    rgFlags.push('-F'); // Fixed string (literal)
-  }
-
-  // Add glob filter
+  // Enumerate names before asking ripgrep to inspect content. A direct `rg -l`
+  // over `.` would read secret files even if the returned names were filtered.
+  const rgGlobs: string[] = [];
   if (glob !== '**/*') {
-    rgFlags.push('--glob', glob);
+    rgGlobs.push('--glob', glob);
   }
 
   // Exclude common non-text directories
-  rgFlags.push('--glob', '!node_modules');
-  rgFlags.push('--glob', '!.git');
-  rgFlags.push('--glob', '!dist');
-  rgFlags.push('--glob', '!build');
-  rgFlags.push('--glob', '!*.min.*');
-  rgFlags.push('--glob', '!.codebuddy/screenshots');
-  rgFlags.push('--glob', '!.codebuddy/tool-results');
-  rgFlags.push('--', searchPattern, '.');
+  rgGlobs.push('--glob', '!node_modules');
+  rgGlobs.push('--glob', '!.git');
+  rgGlobs.push('--glob', '!dist');
+  rgGlobs.push('--glob', '!build');
+  rgGlobs.push('--glob', '!*.min.*');
+  rgGlobs.push('--glob', '!.codebuddy/screenshots');
+  rgGlobs.push('--glob', '!.codebuddy/tool-results');
 
   let matchingFiles: string[];
   try {
-    const { stdout } = await execFileAsync(getRipgrepPath(), rgFlags, {
-      cwd: process.cwd(),
-      maxBuffer: 1024 * 1024,
+    const cwd = process.cwd();
+    const rg = getRipgrepPath();
+    const { stdout: fileList } = await execFileAsync(rg, ['--files', '-0', '--no-messages', ...rgGlobs, '.'], {
+      cwd,
+      maxBuffer: 16 * 1024 * 1024,
     });
-    matchingFiles = stdout.trim().split('\n').filter(Boolean);
+    const safeFiles = fileList.split('\0').filter((file) =>
+      file.length > 0 && !checkSecretFileAccess(path.resolve(cwd, file), 'read').secret,
+    );
+    matchingFiles = [];
+    // Keep each argv below OS limits, and retain ripgrep's regex semantics.
+    for (let index = 0; index < safeFiles.length; index += 200) {
+      const flags = ['-l', '-0', '--no-messages'];
+      if (!isRegex) flags.push('-F');
+      flags.push('--', searchPattern, ...safeFiles.slice(index, index + 200));
+      try {
+        const { stdout } = await execFileAsync(rg, flags, { cwd, maxBuffer: 1024 * 1024 });
+        matchingFiles.push(...stdout.split('\0').filter(Boolean));
+      } catch (error: unknown) {
+        if ((error as { code?: number }).code !== 1) throw error;
+      }
+    }
   } catch (error: unknown) {
     // rg returns exit code 1 when no matches found
     const exitCode = (error as { code?: number }).code;
@@ -139,6 +150,7 @@ export async function codebaseReplace(
 
   for (const file of matchingFiles) {
     const filePath = path.resolve(process.cwd(), file);
+    if (checkSecretFileAccess(filePath, 'read').secret) continue;
 
     // Skip binary files
     try {
@@ -196,6 +208,7 @@ export async function codebaseReplace(
       }
     } else {
       // Actually perform replacement
+      if (checkSecretFileAccess(filePath, 'read').secret) continue;
       const newContent = content.replace(regex, replacement);
       fs.writeFileSync(filePath, newContent, 'utf-8');
     }

@@ -71,7 +71,7 @@ describe('Settings Migration', () => {
     });
 
     it('should detect ollama from port 11434', () => {
-      expect(detectProviderFromSettings({ baseURL: 'http://localhost:11434/v1' })).toBe('ollama');
+      expect(detectProviderFromSettings({ baseURL: 'http://127.0.0.1:11434/v1' })).toBe('ollama');
     });
 
     it('should detect local from localhost', () => {

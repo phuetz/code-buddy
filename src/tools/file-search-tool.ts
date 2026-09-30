@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
+import { checkSecretFileAccess } from '../security/secret-files.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -47,6 +48,7 @@ async function walk(
     if (out.length >= max) return;
     if (entry.name === 'node_modules' || entry.name === '.git') continue;
     const full = path.join(dir, entry.name);
+    if (checkSecretFileAccess(full, 'read').secret) continue;
     if (entry.isDirectory()) await walk(full, root, regex, max, out);
     else if (entry.isFile()) {
       const buf = await fs.readFile(full);

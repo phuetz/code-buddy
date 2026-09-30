@@ -3,6 +3,7 @@ import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { createLoopGuard } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 
 export interface DocumentContent {
   text: string;
@@ -67,6 +68,8 @@ export class DocumentTool {
   async readDocument(filePath: string): Promise<ToolResult> {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
+      const secret = checkSecretFileAccess(resolvedPath, 'read');
+      if (secret.secret) return { success: false, error: formatSecretRefusal(resolvedPath, secret) };
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -138,6 +141,8 @@ export class DocumentTool {
   async extractEmbeddedImages(filePath: string, outputDir?: string): Promise<ToolResult> {
     try {
       const resolvedPath = path.resolve(process.cwd(), filePath);
+      const secret = checkSecretFileAccess(resolvedPath, 'read');
+      if (secret.secret) return { success: false, error: formatSecretRefusal(resolvedPath, secret) };
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {

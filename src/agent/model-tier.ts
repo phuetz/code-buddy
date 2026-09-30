@@ -16,6 +16,7 @@
  */
 
 import { normalizeBaseURL } from '../utils/base-url.js';
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 
 export type ModelTier = 'local' | 'network' | 'escalated';
 
@@ -76,7 +77,7 @@ export interface AutonomousModelChoice {
 }
 
 const DEFAULT_LOCAL_MODEL = 'llama3.2';
-const DEFAULT_LOCAL_BASE_URL = 'http://localhost:11434/v1';
+const DEFAULT_LOCAL_BASE_URL = getOllamaV1BaseUrl();
 const DEFAULT_ESCALATE_AFTER_FAILURES = 2;
 
 /**

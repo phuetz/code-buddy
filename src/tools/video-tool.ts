@@ -382,14 +382,14 @@ export class VideoTool {
           '-acodec', 'libmp3lame',
           '-q:a', '2',
           audioPath
-        ]);
+        ], { stdio: ['ignore', 'ignore', 'ignore'] });
 
         let settled = false;
+        let timedOut = false;
         const timeout = setTimeout(() => {
           if (!settled) {
-            settled = true;
+            timedOut = true;
             ffmpeg.kill('SIGKILL');
-            resolve({ success: false, error: 'Audio extraction timed out after 120s' });
           }
         }, 120000);
 
@@ -397,7 +397,9 @@ export class VideoTool {
           if (!settled) {
             settled = true;
             clearTimeout(timeout);
-            if (code === 0) {
+            if (timedOut) {
+              resolve({ success: false, error: 'Audio extraction timed out after 120s' });
+            } else if (code === 0) {
               resolve({
                 success: true,
                 output: `Audio extracted to: ${audioPath}`,
@@ -436,13 +438,16 @@ export class VideoTool {
    */
   private async checkFFmpeg(): Promise<boolean> {
     return new Promise((resolve) => {
-      const ffmpeg = spawn('ffmpeg', ['-version']);
+      const ffmpeg = spawn('ffmpeg', ['-version'], { stdio: ['ignore', 'ignore', 'ignore'] });
+      const timeout = setTimeout(() => ffmpeg.kill('SIGKILL'), 5_000);
 
       ffmpeg.on('close', (code) => {
+        clearTimeout(timeout);
         resolve(code === 0);
       });
 
       ffmpeg.on('error', () => {
+        clearTimeout(timeout);
         resolve(false);
       });
     });

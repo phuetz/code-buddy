@@ -20,7 +20,7 @@ vi.mock('../../src/doctor/index.js', () => doctorMocks);
 
 const ollamaMocks = vi.hoisted(() => ({
   fetchOllamaStatus: vi.fn(async () => ({
-    baseUrl: 'http://localhost:11434',
+    baseUrl: 'http://127.0.0.1:11434',
     reachable: true,
     version: '0.30.0',
     models: ['phi4:latest'],

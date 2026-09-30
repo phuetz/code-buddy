@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
 import type { ToolResult } from '../types/index.js';
+import { checkSecretFileAccess, formatSecretRefusal } from './secret-files.js';
 import { SECRET_PATTERNS, type SecretType, type SecretPattern } from './secret-patterns.js';
 
 // Re-exported for API stability (consumers + the runtime scrubber import these).
@@ -114,7 +115,7 @@ function isCommentOrTestFixture(line: string): boolean {
  * Scan a single file for secrets
  */
 export function scanFileForSecrets(filePath: string): SecretFinding[] {
-  if (shouldSkipFile(filePath)) return [];
+  if (shouldSkipFile(filePath) || checkSecretFileAccess(filePath, 'read').secret) return [];
 
   let content: string;
   try {
@@ -177,6 +178,8 @@ function collectFiles(dirPath: string, excludes: string[], recursive: boolean): 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
 
+    if (checkSecretFileAccess(fullPath, 'read').secret) continue;
+
     if (entry.isDirectory()) {
       if (recursive && !shouldSkipDir(entry.name, excludes)) {
         files.push(...collectFiles(fullPath, excludes, true));
@@ -205,6 +208,7 @@ export async function scanForSecrets(
   options?: ScanOptions,
 ): Promise<SecretFinding[]> {
   const resolvedPath = path.resolve(targetPath);
+  if (checkSecretFileAccess(resolvedPath, 'read').secret) return [];
   const recursive = options?.recursive ?? true;
   const excludes = options?.exclude ?? [];
 
@@ -277,6 +281,8 @@ export async function executeScanSecrets(args: {
   exclude?: string[];
 }): Promise<ToolResult> {
   try {
+    const verdict = checkSecretFileAccess(args.path, 'read');
+    if (verdict.secret) return { success: false, error: formatSecretRefusal(args.path, verdict) };
     const findings = await scanForSecrets(args.path, {
       recursive: args.recursive,
       exclude: args.exclude,

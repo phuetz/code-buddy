@@ -28,6 +28,7 @@ describe('R28 D6/D8 — EnhancedMemory refuse un état non chargé', () => {
     fs.mkdirSync(testRoot, { recursive: true });
     home = fs.mkdtempSync(path.join(testRoot, 'enhanced-corrupt-'));
     homeHolder.dir = home;
+    vi.stubEnv('CODEBUDDY_HOME', path.join(home, '.codebuddy'));
     memory = null;
   });
 
@@ -39,6 +40,7 @@ describe('R28 D6/D8 — EnhancedMemory refuse un état non chargé', () => {
       // L’état corrompu doit précisément interdire ce flush.
     }
     memory = null;
+    vi.unstubAllEnvs();
     fs.rmSync(home, { recursive: true, force: true });
     try {
       fs.rmdirSync(testRoot);

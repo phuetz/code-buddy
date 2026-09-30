@@ -337,7 +337,7 @@ describe('runGoalCommandWithAgent lifecycle', () => {
     await runGoalCommandWithAgent(agent, 'goal', {
       provider: {
         apiKey: 'ollama',
-        baseURL: 'http://localhost:11434/v1',
+        baseURL: 'http://127.0.0.1:11434/v1',
         providerLabel: 'ollama',
       },
       workingDirectory: '/tmp/local-goal-project',
@@ -357,7 +357,7 @@ describe('local goal actor prompt routing', () => {
     expect(
       shouldUseLocalGoalActorPrompt({
         apiKey: 'ollama',
-        baseURL: 'http://localhost:11434/v1',
+        baseURL: 'http://127.0.0.1:11434/v1',
         providerLabel: 'ollama',
       })
     ).toBe(true);
@@ -374,7 +374,7 @@ describe('local goal actor prompt routing', () => {
     expect(
       resolveLocalGoalActorSystemPrompt({
         apiKey: 'ollama',
-        baseURL: 'http://localhost:11434/v1',
+        baseURL: 'http://127.0.0.1:11434/v1',
         providerLabel: 'ollama',
       }, '/tmp/project')
     ).toBe(buildLocalGoalActorSystemPrompt('/tmp/project'));

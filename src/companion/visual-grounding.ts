@@ -10,6 +10,7 @@
  * @module companion/visual-grounding
  */
 
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, rm, stat, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -26,7 +27,7 @@ const MAX_VISUAL_UTTERANCE_CHARS = 600;
 const MAX_VISUAL_DESCRIPTION_CHARS = 1_200;
 const MAX_VISUAL_RESPONSE_CHARS = 1_600;
 const MAX_ONE_SHOT_IMAGE_BYTES = 12 * 1024 * 1024;
-const DEFAULT_VISION_BASE_URL = 'http://127.0.0.1:11434/v1';
+const DEFAULT_VISION_BASE_URL = getOllamaV1BaseUrl();
 const DEFAULT_VISION_ANALYSIS_TIMEOUT_MS = 30_000;
 
 export type VisualGroundingStatus =

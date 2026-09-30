@@ -70,12 +70,12 @@ const taskBase = (overrides: Partial<FleetTask> = {}): Pick<FleetTask, 'preferLo
 
 describe('resolveTickProvider — priority cascade', () => {
   it('preferLocal=true with OLLAMA_HOST → ollama (local)', () => {
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     const r = resolveTickProvider(taskBase({ preferLocal: true }), 'cloud');
     expect(r.provider).toBe('ollama');
     expect(r.isLocal).toBe(true);
     expect(r.reason).toBe('preferLocal');
-    expect(r.baseUrl).toBe('http://localhost:11434/v1');
+    expect(r.baseUrl).toBe('http://127.0.0.1:11434/v1');
   });
 
   it('preferLocal=true WITHOUT Ollama → falls through to llm_provider=cloud', () => {
@@ -115,7 +115,7 @@ describe('resolveTickProvider — priority cascade', () => {
   });
 
   it('llm_provider="ollama" forces ollama', () => {
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     const r = resolveTickProvider(taskBase(), 'ollama');
     expect(r.provider).toBe('ollama');
     expect(r.reason).toBe('config:explicit');
@@ -146,7 +146,7 @@ describe('resolveTickProvider — priority cascade', () => {
   });
 
   it('preferLocal=true OVERRIDES llm_provider config', () => {
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     process.env.ANTHROPIC_API_KEY = 'sk-ant';
     // Config says anthropic, task says preferLocal — preferLocal wins
     const r = resolveTickProvider(taskBase({ preferLocal: true }), 'anthropic');
@@ -155,14 +155,14 @@ describe('resolveTickProvider — priority cascade', () => {
   });
 
   it('CODEBUDDY_PEER_MODEL overrides default model on explicit provider', () => {
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     process.env.CODEBUDDY_PEER_MODEL = 'qwen2.5-coder:32b';
     const r = resolveTickProvider(taskBase(), 'ollama');
     expect(r.model).toBe('qwen2.5-coder:32b');
   });
 
   it('default model used when CODEBUDDY_PEER_MODEL not set', () => {
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     const r = resolveTickProvider(taskBase(), 'ollama');
     expect(r.model).toBe('qwen2.5-coder:7b');
   });

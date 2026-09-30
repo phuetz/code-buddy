@@ -63,6 +63,8 @@ export interface LongTranscribeOptions {
   workDir?: string;
   /** Injectable spawn (tests). */
   spawn?: typeof realSpawn;
+  /** Per-chunk transcription wall-clock limit. */
+  sttTimeoutMs?: number;
 }
 
 /**
@@ -131,10 +133,11 @@ function runProcess(
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const finish = (r: { code: number | null; stdout: string; stderr: string }): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       resolve(r);
     };
     let child: ReturnType<typeof realSpawn>;
@@ -144,13 +147,14 @@ function runProcess(
       finish({ code: null, stdout: '', stderr: err instanceof Error ? err.message : String(err) });
       return;
     }
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       try {
         child.kill('SIGKILL');
       } catch {
         /* gone */
       }
-      finish({ code: null, stdout, stderr: `${stderr}\n[timeout ${timeoutMs}ms]` });
+      // Wait for close so the pipes are released before returning to the caller.
+      stderr = `${stderr}\n[timeout ${timeoutMs}ms]`;
     }, timeoutMs);
     child.stdout?.on('data', (d) => (stdout += String(d)));
     child.stderr?.on('data', (d) => (stderr += String(d)));
@@ -192,8 +196,10 @@ export async function transcribeLong(
   // `CODEBUDDY_SPEECH_ENGINE`. An injected transcriber (tests / callers) bypasses this entirely.
   // Kept as a lazy import so the STT module only loads when we actually need the default engine.
   let transcriber = options.transcriber;
+  let closeDefaultWorker: (() => Promise<void>) | undefined;
   if (!transcriber) {
-    const { transcribeWav } = await import('../../sensory/speech-reaction.js');
+    const { transcribeWav, closeIdleSpeechWorkers } = await import('../../sensory/speech-reaction.js');
+    closeDefaultWorker = closeIdleSpeechWorkers;
     const engine = options.engine ?? resolveVideoSttEngine();
     transcriber = (wav: string): Promise<string> => transcribeWav(wav, engine);
   }
@@ -235,11 +241,27 @@ export async function transcribeLong(
     for (const chunk of chunks) {
       const chunkPath = join(workDir, chunk);
       let said = '';
+      let sttTimer: ReturnType<typeof setTimeout> | undefined;
       try {
-        said = (await transcriber(chunkPath))?.trim() ?? '';
+        const transcription = transcriber(chunkPath);
+        if (options.transcriber) {
+          const timeoutMs = options.sttTimeoutMs ?? 125_000;
+          said = (await Promise.race([
+            transcription,
+            new Promise<string>((_, reject) => {
+              sttTimer = setTimeout(() => reject(new Error(`STT chunk timed out after ${timeoutMs}ms`)), timeoutMs);
+            }),
+          ]))?.trim() ?? '';
+        } else {
+          // The built-in engines own their deadlines and terminate their child
+          // before rejecting; racing them here would return with a live process.
+          said = (await transcription)?.trim() ?? '';
+        }
       } catch (err) {
         logger.warn(`[video] transcription failed for ${chunk}: ${err instanceof Error ? err.message : String(err)}`);
         if (options.failOnTranscriptionError) throw err;
+      } finally {
+        if (sttTimer) clearTimeout(sttTimer);
       }
       const dur = (await probeDuration(spawn, ffprobeBin, chunkPath)) ?? chunkSec;
       if (said) {
@@ -254,6 +276,7 @@ export async function transcribeLong(
     if (ownWorkDir && workDir) {
       await rm(workDir, { recursive: true, force: true }).catch(() => {});
     }
+    await closeDefaultWorker?.();
   }
 }
 

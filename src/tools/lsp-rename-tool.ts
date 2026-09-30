@@ -10,10 +10,12 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { getLSPClient } from '../lsp/lsp-client.js';
 import type { LSPWorkspaceEdit, LSPTextEdit } from '../lsp/lsp-client.js';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 
 // ============================================================================
 // Types
@@ -119,15 +121,15 @@ function extractEdits(workspaceEdit: LSPWorkspaceEdit): Map<string, LSPTextEdit[
  * Convert a file:// URI to a local file path.
  */
 function uriToPath(uri: string): string {
-  // Handle file:/// and file:// prefixes
-  let filePath = uri.replace(/^file:\/\/\//, '').replace(/^file:\/\//, '');
-  // Decode URI-encoded characters
-  filePath = decodeURIComponent(filePath);
-  // On Windows, convert forward slashes back if needed
-  if (process.platform === 'win32' && /^[A-Za-z]:/.test(filePath)) {
-    filePath = filePath.replace(/\//g, '\\');
+  // Preserve the leading root separator; stripping `file:///` turned an
+  // absolute LSP edit into a path relative to the agent's current directory.
+  try {
+    return fileURLToPath(uri);
+  } catch {
+    // Windows rejects a drive-less URI such as file:///src/main.ts ("File URL
+    // path must be absolute"); keep its rooted, decoded pathname instead.
+    return decodeURIComponent(new URL(uri).pathname);
   }
-  return filePath;
 }
 
 /**
@@ -173,6 +175,8 @@ export async function executeLspRename(params: LspRenameParams): Promise<ToolRes
 
   // Resolve the file path
   const resolvedPath = path.resolve(filePath);
+  const initialSecret = checkSecretFileAccess(resolvedPath, 'read');
+  if (initialSecret.secret) return { success: false, error: formatSecretRefusal(resolvedPath, initialSecret) };
   if (!fs.existsSync(resolvedPath)) {
     return { success: false, error: `File not found: ${resolvedPath}` };
   }
@@ -216,12 +220,23 @@ export async function executeLspRename(params: LspRenameParams): Promise<ToolRes
       };
     }
 
+    // Reject the entire workspace edit before applying any file. A language
+    // server can return edits for paths other than the initially requested one.
+    for (const editFilePath of editsByFile.keys()) {
+      const verdict = checkSecretFileAccess(editFilePath, 'read');
+      if (verdict.secret) return { success: false, error: formatSecretRefusal(editFilePath, verdict) };
+    }
+
     const summaries: FileEditSummary[] = [];
 
     for (const [editFilePath, edits] of editsByFile) {
+      const verdict = checkSecretFileAccess(editFilePath, 'read');
+      if (verdict.secret) return { success: false, error: formatSecretRefusal(editFilePath, verdict) };
       try {
         const content = fs.readFileSync(editFilePath, 'utf-8');
         const modified = applyEditsToContent(content, edits);
+        const beforeWrite = checkSecretFileAccess(editFilePath, 'read');
+        if (beforeWrite.secret) return { success: false, error: formatSecretRefusal(editFilePath, beforeWrite) };
         fs.writeFileSync(editFilePath, modified, 'utf-8');
 
         summaries.push({

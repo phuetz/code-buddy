@@ -11,6 +11,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as os from 'os';
+import * as path from 'path';
+import { pathToFileURL } from 'url';
 
 // Mock the LSP client before importing the tool
 const mockPrepareRename = vi.fn();
@@ -211,6 +214,37 @@ describe('LSP Rename Tool', () => {
   // ==========================================================================
 
   describe('executeLspRename', () => {
+    it('refuse un fichier d’identifiants avant tout appel au serveur LSP', async () => {
+      const secret = path.join(os.homedir(), '.codebuddy', 'auth.ts');
+      const result = await executeLspRename({ filePath: secret, line: 1, character: 1, newName: 'newName' });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/credential\/secret/i);
+      expect(mockPrepareRename).not.toHaveBeenCalled();
+      expect(mockReadFileSync).not.toHaveBeenCalled();
+    });
+
+    it('refuse un lot de renommage si une édition cible un secret', async () => {
+      const secret = path.join(os.homedir(), '.codebuddy', 'auth.ts');
+      mockPrepareRename.mockResolvedValue({
+        range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } },
+        placeholder: 'foo',
+      });
+      mockRename.mockResolvedValue({
+        changes: {
+          [pathToFileURL(secret).href]: [{
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } },
+            newText: 'bar',
+          }],
+        },
+      });
+      mockReadFileSync.mockReturnValue('foo');
+      const result = await executeLspRename({ filePath: 'ordinary.ts', line: 1, character: 1, newName: 'bar' });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/credential\/secret/i);
+      expect(mockReadFileSync).not.toHaveBeenCalled();
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
+    });
+
     it('should return error for missing filePath', async () => {
       const result = await executeLspRename({
         filePath: '',

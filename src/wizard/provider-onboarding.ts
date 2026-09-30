@@ -1,3 +1,4 @@
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 /**
  * Provider validation library
  *
@@ -77,7 +78,7 @@ export const PROVIDER_CONFIGS: ProviderOnboardingConfig[] = [
     id: 'ollama',
     name: 'Ollama (Local)',
     envKey: 'OLLAMA_HOST',
-    baseUrl: 'http://localhost:11434',
+    baseUrl: getOllamaBaseUrl(),
     validateEndpoint: '/api/tags',
     instructions: 'Install Ollama from https://ollama.ai and run `ollama serve`',
   },

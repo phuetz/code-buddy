@@ -32,10 +32,13 @@ describe('profile paths after module import', () => {
     expect(JSON.parse(await readFile(join(home, '.codebuddy/auth-profiles.json'), 'utf8')).cooldowns).toEqual({});
   });
   it('writes user memory into the current home', async () => {
+    const profileRoot = join(home, 'configured-codebuddy-home');
+    vi.stubEnv('CODEBUDDY_HOME', profileRoot);
     const memory = new PersistentMemoryManager();
     await memory.initialize();
     await memory.remember('preferred-language', 'French', { scope: 'user', category: 'preferences' });
-    expect(await readFile(join(home, '.codebuddy/memory.md'), 'utf8')).toContain('French');
+    expect(await readFile(join(profileRoot, 'memory.md'), 'utf8')).toContain('French');
+    await expect(readFile(join(home, '.codebuddy/memory.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('discovers skills from the current project instead of the import-time directory', async () => {
     const dir = join(home, '.codebuddy/skills/isolated-skill');

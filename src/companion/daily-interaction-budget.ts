@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { resolveZonedDateTime } from '../life-rhythm/day-context.js';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 const SCHEMA_VERSION = 1;
 const RETAIN_DAYS = 14;
@@ -60,7 +61,7 @@ export interface DailyInteractionReservation {
 
 function defaultStatePath(): string {
   return process.env.CODEBUDDY_COMPANION_INTERACTION_BUDGET_FILE
-    || join(homedir(), '.codebuddy', 'companion', 'daily-interactions.json');
+    || getCodeBuddyPath('companion', 'daily-interactions.json');
 }
 
 function emptyState(): DailyBudgetState {

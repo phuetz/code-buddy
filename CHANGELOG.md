@@ -9,6 +9,7 @@
 
 ### Sécurité
 
+- **security:** Les lecteurs directs intégrés refusent les fichiers d’identifiants classés, y compris les lecteurs documentaires et multimédias ; les archives sont contrôlées avant lecture et extraction. `buddy server` et le serveur sans JWT de `buddy daemon` écoutent `127.0.0.1` par défaut. Le serveur limite le débit sans faire confiance aux en-têtes de proxy non configurés et refuse les JWT mal formés ; l’environnement Bash transmis aux commandes retire `*_PAT`, `*_HEADERS` et les proxys avec mot de passe. **Limite connue : le filtre statique du shell ne couvre pas toutes les lectures récursives ni les chemins construits à l’exécution. Un secret suivi par Git peut encore être extrait par une commande shell qui lit les objets Git. La garantie « secret suivi par Git illisible » est reportée en 2.3.1.**
 - `buddy security audit` vérifie les réglages de sécurité du profil, des skills et de MCP ; son option `--fix` resserre les permissions des fichiers après sauvegarde des modes. Les audits incomplets ou portant sur des fichiers spéciaux échouent explicitement (`36fac9ed1`, `16aa191df`, `aed8b35c9`).
 - Un serveur MCP ne peut plus lancer librement un shell ni écrire hors des emplacements autorisés ; ses outils d'écriture doivent être explicitement listés (`0d9c5b2c9`, `48adb3f31`, `1d713a409`, `c7e4066ca`).
 - L'App Studio limite l'environnement transmis aux commandes et masque les clés dans la console, le chat et l'historique des versions (`a508f43d4`, `ec47c2103`, `5390cb1d2`).
@@ -34,6 +35,7 @@
 - Le renouvellement de connexion ChatGPT indique la cause effective de l'échec ; la vidéo expose la réponse du service et évite un blocage de téléchargement (`feb9e2072`, `2069d6007`).
 - L'interface affiche l'état réel d'une exécution et les outils de projet signalent leurs échecs au lieu de laisser croire qu'ils ont réussi (`eb7c32aaf`, `ab11749d8`).
 - La PWA mobile cesse les reconnexions après un refus d'authentification ; la déconnexion Telegram attend la fin du traitement en cours (`74a96cd82`, `d848352fb`).
+- Le suivi des skills continue à fonctionner quand la limite des observateurs noyau est atteinte (`31f02fd9e`).
 
 ### Documentation
 
@@ -43,7 +45,7 @@
 
 ### Added
 
-- **mcp:** OAuth for hosted ElevenLabs over `streamable_http`: loopback PKCE sign-in, cancellation releases the local port, bounded retry of token exchange and `tools/list`, invalid tokens are dropped without losing the configured client. OAuth is refused on transports that do not support it. The ElevenLabs template stays disabled until configured.
+- **mcp** (`36d73e6`): OAuth for hosted ElevenLabs over `streamable_http`: loopback PKCE sign-in, cancellation releases the local port, bounded retry of token exchange and `tools/list`, invalid tokens are dropped without losing the configured client. OAuth is refused on transports that do not support it. The ElevenLabs template stays disabled until configured.
 - **mcp:** `buddy mcp add-json -y/--yes` adds a server without the interactive confirmation; without a TTY and without `--yes` the command exits with an explicit error instead of waiting.
 - **status:** the effective theme is shown in `/status` and exposed as `theme` in `buddy doctor --json`.
 - **fleet:** add `peer_tool_invoke` agent tool wrapping `peer.tool.invoke` so a local agent can read/search on a connected peer (`view_file`, `list_directory`, `search`). Outbound only (`fleetSafe: false`); the three remote gates (allowlist, fleetSafe, workspace root) stay on the peer. Paths are forwarded, not resolved on the caller. Unrecognized peer errors are redacted (no absolute paths or secrets). The tool is force-included only when fleet peers are connected or the query is a fleet inspection.
@@ -82,7 +84,7 @@ See [release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md) for setup and known integ
 
 ### Fixed
 
-- `buddy login` prints the complete sign-in URL and keeps waiting for a manual browser callback if automatic browser launch fails.
+- `ae883f5`: `buddy login` prints the complete sign-in URL and keeps waiting for a manual browser callback if automatic browser launch fails.
 - ChatGPT login and token refresh no longer report success when credentials cannot be saved; login explains how to resolve the storage failure.
 - Cancelled or timed-out ChatGPT logins ignore late token responses instead of replacing saved credentials after the login has ended.
 
@@ -106,7 +108,7 @@ Surveillance cadencée par les battements du système nerveux, durcissement déf
   *Fichiers clés* : `src/sensory/system-vitals-emitter.ts`, `src/sensory/heartbeat-fallback.ts`, `src/sensory/sensory-status.ts`, `src/commands/cli/sensory-command.ts`, `src/sensory/sensory-rules-engine.ts`, `src/server/index.ts`.
   *Preuves* : Suite `tests/sensory` + `tests/cli` à 98 fichiers / 867 tests verts (`f31004d6f`, `62ef2559d`, `1de88f026`). Vérification agy v2 (`docs/reports/2026-09/VERIF-SURV2-AGY.md`) : 38 tests de lecture de queue dans `tests/sensory/rule-runs-tail.test.ts`, validation quota cgroup v2 et bornage [0, 100] (`14296b1c7`, fusion `c89051551`).
 
-- **Sécurité (4 failles B fermées, déobfuscation, chemins d'identifiants, formats de clés)** :
+- **Sécurité (`3c50434`, 4 failles B fermées, déobfuscation, chemins d'identifiants, formats de clés)** :
   L'audit défensif de la flotte et du bac à sable ferme 4 failles B : contournement du pare-feu de skills par obfuscation (homoglyphes, césures, zero-width) étendu à toutes les classes de motifs (destructif, exfiltration, réseau, identifiants) par la couche sûre de `src/security/text-deobfuscation.ts` (`deobfuscateSafeForScan`), le décodage agressif Base64/URL restant réservé à l'injection de prompt pour garantir 0 faux positif sur les compétences importées ; lecture de secrets en dur par des outils authored via chemin absolu fermée par le motif `sensitive-credential-path` dans `dangerous-patterns.ts` (`52efd0109`) ; omission des clés OpenAI (`sk-`, `sk-proj-`), Anthropic (`sk-ant-`) et xAI (`xai-`) dans le scanner `scan_secrets` fermée par leur intégration dans `SECRET_PATTERNS` avec ancrage anti faux positifs (`105c10797`). Les surfaces 1 (`peer.tool.invoke` avec vérification de chemin et approbation fail-closed) et 3 (SSRF avec IP obfusquées décimales/hex/octales, métadonnées cloud, pinning DNS et rejet JWT absent en production) sont prouvées solides par des tests de refus (`899149fab`, `545a42621`). La chasse adversariale étendue ferme la déobfuscation pour les homoglyphes grecs (α, ϲ), latin étendu (ă), contrôles bidi `\p{Cf}`, encodage URL `%XX` et Base64 (blobs ≥ 16 car. ASCII) dans `deobfuscateForScan` (`a14d8012b`) ; étend `sensitive-credential-path` à 9 chemins d'identifiants (`~/.config/gh/hosts.yml`, Google gcloud ADC, `~/.azure`, `.terraformrc`, `~/.npmrc`, `~/.cargo/credentials[.toml]`, `~/.pypirc`, `~/.git-credentials`, `baa21afbc`) ; et élargit `SECRET_PATTERNS` aux clés Hugging Face (`hf_`), DigitalOcean (`dop_v1_`), SendGrid (`SG.`), Twilio (`SK`/`AC`), npm (`npm_`), PyPI (`pypi-`), Vercel (`vcp_`/`vci_`...), Supabase (`sb_secret_`/`sb_publishable_`), Azure (`AccountKey=`), Cloudflare (`CF_API_TOKEN=`) et `mongodb+srv://` (`e1cfda32c`).
   *Variables d'environnement* : Aucune (moteur défensif permanent).
   *Opt-in / défaut* : Actif par défaut sans régression ni faux positif (0 hit sur 2 414 fichiers TS de `src/` et 421 fichiers Markdown de `docs/`).

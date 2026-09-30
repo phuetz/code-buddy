@@ -10,6 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { checkSecretFileAccess } from '../security/secret-files.js';
 import type { ToolResult } from '../types/index.js';
 
 export type BugSeverity = 'critical' | 'high' | 'medium' | 'low';
@@ -381,6 +382,7 @@ const BUG_PATTERNS: BugPattern[] = [
 export function scanFile(filePath: string, severityFilter?: BugSeverity): BugReport[] {
   const language = detectLanguage(filePath);
   if (language === 'unknown') return [];
+  if (checkSecretFileAccess(filePath, 'read').secret) return [];
 
   let content: string;
   try {

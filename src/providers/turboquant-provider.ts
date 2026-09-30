@@ -12,6 +12,7 @@
 
 import { logger } from '../utils/logger.js';
 import type { CodeBuddyMessage, CodeBuddyTool, CodeBuddyResponse, ChatOptions } from '../codebuddy/client.js';
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 
 // ---------------------------------------------------------------------------
 // Configuration types
@@ -46,7 +47,7 @@ export interface ModelRoutingConfig {
 export interface TurboQuantProviderConfig {
   /** vLLM endpoint, e.g. "http://203.0.113.20:8000" */
   vllmEndpoint?: string;
-  /** Ollama endpoint, e.g. "http://localhost:11434" */
+  /** Ollama endpoint, e.g. getOllamaBaseUrl() */
   ollamaEndpoint?: string;
   turboquant: TurboQuantConfig;
   modelRouting: ModelRoutingConfig;
@@ -127,7 +128,7 @@ export class TurboQuantProvider {
   constructor(config: TurboQuantProviderConfig) {
     this.config = config;
     this.vllmBase = (config.vllmEndpoint ?? '').replace(/\/$/, '');
-    this.ollamaBase = (config.ollamaEndpoint ?? 'http://localhost:11434').replace(/\/$/, '');
+    this.ollamaBase = (config.ollamaEndpoint ?? getOllamaBaseUrl()).replace(/\/$/, '');
   }
 
   // ---------------------------------------------------------------------------
@@ -547,7 +548,7 @@ export function createTurboQuantProvider(
 
   const config: TurboQuantProviderConfig = {
     vllmEndpoint: vllmEndpoint || undefined,
-    ollamaEndpoint: ollamaEndpoint || 'http://localhost:11434',
+    ollamaEndpoint: ollamaEndpoint || getOllamaBaseUrl(),
     turboquant: {
       enabled: true,
       nbits: 4,

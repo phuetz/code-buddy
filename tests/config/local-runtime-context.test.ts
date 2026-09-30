@@ -91,7 +91,7 @@ describe('Ollama local runtime context discovery', () => {
 
     const result = await probeLocalRuntimeContext({
       model: 'llama-local:latest',
-      baseURL: 'http://localhost:11434',
+      baseURL: 'http://127.0.0.1:11434',
       fetchImpl,
     });
     expect(result).toMatchObject({
@@ -105,7 +105,7 @@ describe('Ollama local runtime context discovery', () => {
     const missing = routedFetch(() => response({ model_info: { 'general.architecture': 'qwen' } }));
     await expect(probeLocalRuntimeContext({
       model: 'broken-local',
-      baseURL: 'http://localhost:11434',
+      baseURL: 'http://127.0.0.1:11434',
       fetchImpl: missing,
     })).resolves.toBeNull();
   });
@@ -214,7 +214,7 @@ describe('synchronous config cache priming', () => {
       : response({ models: [] }));
     const options = {
       model: 'x7-probe-once',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       fetchImpl,
     };
     await primeLocalRuntimeModelConfig(options);

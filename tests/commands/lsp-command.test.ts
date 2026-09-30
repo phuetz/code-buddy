@@ -28,10 +28,12 @@ jest.mock('../../src/utils/command-exists.js', () => ({
 const mockGetDiagnostics = jest.fn();
 const mockEnsureServerForFile = jest.fn();
 const mockDetectLanguage = jest.fn();
+const mockStopAll = jest.fn();
 const mockClient = {
   getDiagnostics: mockGetDiagnostics,
   ensureServerForFile: mockEnsureServerForFile,
   detectLanguage: mockDetectLanguage,
+  stopAll: mockStopAll,
 };
 
 jest.mock('../../src/lsp/lsp-client.js', async (importOriginal: () => Promise<Record<string, unknown>>) => {
@@ -166,6 +168,7 @@ describe('buddy lsp CLI', () => {
       expect(out).toContain('ERROR');
       expect(out).toContain("Cannot find name 'bar'.");
       expect(mockGetDiagnostics).toHaveBeenCalledWith('foo.ts');
+      expect(mockStopAll).toHaveBeenCalled();
       expect(processExitSpy).not.toHaveBeenCalled();
     });
 

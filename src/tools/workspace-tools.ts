@@ -1,6 +1,7 @@
 import { constants as fsConstants, promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { ToolResult } from '../types/index.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 import {
   getWorkspace,
   type Workspace,
@@ -309,6 +310,8 @@ export class WorkspaceReadTool implements ITool {
       if (!isInside(repo.path, canonical)) {
         return { success: false, error: 'workspace_read path resolves through a symlink outside the repository root' };
       }
+      const secret = checkSecretFileAccess(canonical, 'read');
+      if (secret.secret) return { success: false, error: formatSecretRefusal(canonical, secret) };
       const maxFileKb = parsePositiveEnv(
         process.env.CODEBUDDY_WORKSPACE_MAX_FILE_KB,
         DEFAULT_MAX_FILE_KB,

@@ -37,6 +37,7 @@ import type { StockQuoteMetadata } from '../tools/stock-quote.js';
 import type { SearchResult } from '../tools/web-search.js';
 import type { ToolResult } from '../types/index.js';
 import type { StockWidgetData } from '../widgets/widget-types.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 
 export interface PrefetchEntry {
   key: string;
@@ -92,7 +93,7 @@ export interface PrefetchDeps {
 export function defaultPrefetchCachePath(env: NodeJS.ProcessEnv = process.env): string {
   return (
     env.CODEBUDDY_PREFETCH_CACHE_FILE?.trim() ||
-    join(homedir(), '.codebuddy', 'companion', 'prefetch-cache.json')
+    getCodeBuddyPathForEnv(env, 'companion', 'prefetch-cache.json')
   );
 }
 

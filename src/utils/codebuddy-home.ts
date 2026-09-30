@@ -42,9 +42,9 @@ import fs from 'fs';
  * 2. GROK_HOME legacy environment variable
  * 3. ~/.codebuddy/ (default)
  */
-export function getCodeBuddyHome(): string {
+export function getCodeBuddyHome(env: NodeJS.ProcessEnv = process.env): string {
   // A blank value (e.g. `CODEBUDDY_HOME=" "`) counts as unset: it must never become a relative path.
-  const explicit = process.env.CODEBUDDY_HOME?.trim() || process.env.GROK_HOME?.trim();
+  const explicit = env.CODEBUDDY_HOME?.trim() || env.GROK_HOME?.trim();
   return explicit || path.join(os.homedir(), '.codebuddy');
 }
 
@@ -56,6 +56,11 @@ export function getCodeBuddyHome(): string {
  */
 export function getCodeBuddyPath(...relativePath: string[]): string {
   return path.join(getCodeBuddyHome(), ...relativePath);
+}
+
+/** Resolve a path for a caller's scoped environment. */
+export function getCodeBuddyPathForEnv(env: NodeJS.ProcessEnv, ...relativePath: string[]): string {
+  return path.join(getCodeBuddyHome(env), ...relativePath);
 }
 
 /**

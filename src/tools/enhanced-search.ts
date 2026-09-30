@@ -16,6 +16,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import { getRipgrepPath } from '../utils/ripgrep-path.js';
 import { logger } from '../utils/logger.js';
+import { classifySecretPath, isSecretFileReadAllowedByOperator, SECRET_SEARCH_EXCLUDE_GLOBS } from '../security/secret-files.js';
 import * as path from 'node:path';
 
 // ============================================================================
@@ -270,6 +271,7 @@ export class EnhancedSearch extends EventEmitter {
 
           if (parsed.type === 'match') {
             const match = this.parseMatchData(parsed.data, options.contextLines);
+            if (this.isSecretMatch(match)) continue;
             results.push(match);
             matchCount++;
 
@@ -302,8 +304,10 @@ export class EnhancedSearch extends EventEmitter {
           const parsed = JSON.parse(buffer);
           if (parsed.type === 'match') {
             const match = this.parseMatchData(parsed.data, options.contextLines);
-            results.push(match);
-            matchCount++;
+            if (!this.isSecretMatch(match)) {
+              results.push(match);
+              matchCount++;
+            }
           }
         } catch {
           // Ignore
@@ -734,10 +738,23 @@ export class EnhancedSearch extends EventEmitter {
       '--glob', '!*.log'
     );
 
+    // Credential files never feed a search result (security/secret-files.ts).
+    if (!isSecretFileReadAllowedByOperator()) {
+      for (const glob of SECRET_SEARCH_EXCLUDE_GLOBS) {
+        args.push('--glob', glob);
+      }
+    }
+
     // Add query
     args.push(query);
 
     return args;
+  }
+
+  /** Second barrier: drop matches inside credential files (incl. via symlink). */
+  private isSecretMatch(match: SearchMatch): boolean {
+    if (isSecretFileReadAllowedByOperator()) return false;
+    return classifySecretPath(match.file, this.workdir).secret;
   }
 
   private parseMatchData(data: unknown, contextLines?: number): SearchMatch {

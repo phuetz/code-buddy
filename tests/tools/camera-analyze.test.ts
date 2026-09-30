@@ -78,7 +78,7 @@ describe('CameraAnalyzeTool', () => {
     // The fetch hit the local Ollama /v1 endpoint with a real data-URL image part.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('http://localhost:11434/v1/chat/completions');
+    expect(url).toBe('http://127.0.0.1:11434/v1/chat/completions');
     const body = JSON.parse(init.body as string);
     expect(body.model).toBe('gemma4:12b');
     const content = body.messages[0].content;
@@ -240,7 +240,7 @@ describe('resolveCameraVisionModel', () => {
 
 describe('resolveOllamaChatEndpoint', () => {
   it('defaults to localhost when OLLAMA_HOST is unset', () => {
-    expect(resolveOllamaChatEndpoint({})).toBe('http://localhost:11434/v1/chat/completions');
+    expect(resolveOllamaChatEndpoint({})).toBe('http://127.0.0.1:11434/v1/chat/completions');
   });
 
   it('prepends http:// for a bare host:port and appends /v1/chat/completions', () => {

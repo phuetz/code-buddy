@@ -1,3 +1,4 @@
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 /**
  * Runtime provider catalog.
  *
@@ -197,7 +198,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     apiKeyEnvKeys: [],
     baseUrlEnvKeys: ['OLLAMA_HOST'],
     modelEnvKeys: ['GROK_MODEL', 'OLLAMA_MODEL'],
-    defaultBaseURL: 'http://localhost:11434/v1',
+    defaultBaseURL: getOllamaV1BaseUrl(),
     defaultModel: 'qwen2.5-coder:7b',
     apiKeyPlaceholder: 'ollama',
     models: ['qwen2.5-coder:7b', 'llama3.2', 'mistral', 'devstral-small-2'],

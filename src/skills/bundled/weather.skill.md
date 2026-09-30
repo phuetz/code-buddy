@@ -15,9 +15,10 @@ nativeEngine:
   priority: 85
   triggers:
     - météo
-    - meteo
+    - prévisions météo
+    - previsions meteo
     - quel temps
-    - weather
+    - weather forecast
     - forecast
     - température demain
     - il va pleuvoir

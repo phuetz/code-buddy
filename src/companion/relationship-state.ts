@@ -16,6 +16,7 @@
 import { homedir } from 'os';
 import { join } from 'path';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 /** Personality traits (0–100) that slowly DRIFT with the kind of time spent together. */
 export interface RelationshipTraits {
@@ -65,7 +66,7 @@ export const MAX_RELATIONSHIP_SESSIONS = 100;
 function defaultStatePath(): string {
   return (
     process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'relationship-state.json')
+    getCodeBuddyPath('companion', 'relationship-state.json')
   );
 }
 

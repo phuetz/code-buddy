@@ -48,6 +48,8 @@ DEFAULT_WORKDIR = Path('~/.codebuddy/veille').expanduser()
 DEFAULT_MODEL = 'gemini-3.6-flash-low'
 DEFAULT_OLLAMA_MODEL = 'qwen3:4b-instruct'
 DEFAULT_DAYS = 14
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_WHISPER_MODEL = 'small'
 DEFAULT_MAX_VIDEOS = 2
 MAX_TRANSCRIPT_CHARS = 120_000
 VISION_IA_CHANNEL_ID = 'UCyc03X3uRuxM9n7fyRH_gIw'
@@ -183,6 +185,7 @@ def default_state() -> dict[str, Any]:
         'version': 1,
         'created_at': now_iso(),
         'seen_videos': {},
+        'failed_videos': {},
         'items': {},
     }
 
@@ -196,6 +199,7 @@ def load_state(path: Path) -> dict[str, Any]:
             f"version d'index inconnue : {value.get('version')!r}"
         )
     value.setdefault('seen_videos', {})
+    value.setdefault('failed_videos', {})
     value.setdefault('items', {})
     return value
 
@@ -660,9 +664,66 @@ def download_transcript(
             files = sorted(root.glob(f'{video.video_id}.*.vtt'))
         if not files:
             detail = (result.stderr or result.stdout).strip()[-700:]
-            raise RuntimeError(
-                f'aucun transcript fr/en pour {video.video_id}: {detail}'
+            try:
+                import faster_whisper
+            except ImportError:
+                raise ValueError("pas de sous-titres")
+
+            audio_command = [
+                *yt_dlp_base(),
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--output', template,
+                video.url,
+            ]
+            audio_command = [c for c in audio_command if c != '--skip-download']
+            add_auth_options(audio_command, args)
+            audio_result = subprocess.run(
+                audio_command,
+                capture_output=True,
+                text=True,
+                timeout=600,
+                check=False,
             )
+            audio_files = sorted(root.glob(f'{video.video_id}.mp3'))
+            if not audio_files:
+                audio_detail = (audio_result.stderr or audio_result.stdout).strip()[-700:]
+                raise RuntimeError(
+                    f"aucun transcript fr/en et impossible de télécharger l'audio "
+                    f"pour {video.video_id}: yt-dlp subs={detail}, audio={audio_detail}"
+                )
+
+            audio_path = audio_files[0]
+            m = faster_whisper.WhisperModel(args.whisper_model, compute_type='int8')
+            segs, info = m.transcribe(str(audio_path))
+            transcript_lines = []
+            for s in segs:
+                if s.text:
+                    transcript_lines.append(s.text.strip())
+            transcript = "\n".join(transcript_lines) + "\n"
+
+            if len(transcript) < 80:
+                raise RuntimeError(
+                    f'transcript généré trop court pour {video.video_id} '
+                    f'({len(transcript)} caractères)'
+                )
+
+            language = info.language
+            temporary = transcript_path.with_suffix('.txt.tmp')
+            temporary.write_text(transcript, encoding='utf-8')
+            os.replace(temporary, transcript_path)
+            atomic_json(
+                metadata_path,
+                {
+                    'video_id': video.video_id,
+                    'language': language,
+                    'source': 'faster-whisper',
+                    'downloaded_at': now_iso(),
+                    'characters': len(transcript),
+                },
+            )
+            return transcript, language
+
         preferred = sorted(
             files,
             key=lambda path: (
@@ -1842,17 +1903,48 @@ def write_knowledge_base(
     os.replace(temporary, path)
 
 
+
+def record_failure(
+    state: dict[str, Any],
+    args: argparse.Namespace,
+    video_id: str,
+    error_msg: str,
+) -> bool:
+    failed_videos = state.setdefault('failed_videos', {})
+    current = failed_videos.setdefault(video_id, {'count': 0})
+    current['count'] += 1
+    current['reason'] = error_msg
+    current['last_failed_at'] = now_iso()
+    durable = current['count'] >= args.max_retries
+    if durable:
+        current['durable'] = True
+    return durable
+
+
 def choose_videos(
     channels: tuple[Channel, ...],
     args: argparse.Namespace,
     state: dict[str, Any],
     inventory: list[Video],
 ) -> list[Video]:
+    def is_eligible(video_id: str) -> bool:
+        if args.force:
+            return True
+        if video_id in state['seen_videos']:
+            return False
+        failure = state.get('failed_videos', {}).get(video_id)
+        if failure:
+            if failure.get('durable'):
+                return False
+            if failure.get('count', 0) >= args.max_retries:
+                return False
+        return True
+
     if args.video_id:
         return [
             targeted_video(video_id, channels, args)
             for video_id in args.video_id
-            if args.force or video_id not in state['seen_videos']
+            if is_eligible(video_id)
         ]
     if args.backfill:
         selected = [
@@ -1860,7 +1952,7 @@ def choose_videos(
             for video in inventory
             if (
                 video.channel_id == VISION_IA_CHANNEL_ID
-                and (args.force or video.video_id not in state['seen_videos'])
+                and is_eligible(video.video_id)
             )
         ]
         selected.sort(
@@ -1884,7 +1976,7 @@ def choose_videos(
             published = parse_date(video.published)
             if published and published < threshold:
                 continue
-            if video.video_id in state['seen_videos'] and not args.force:
+            if not is_eligible(video.video_id):
                 continue
             unseen.append(video)
         selected.extend(unseen[: args.max_videos])
@@ -1896,6 +1988,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
     parser.add_argument('--workdir', type=Path, default=DEFAULT_WORKDIR)
     parser.add_argument('--days', type=int, default=DEFAULT_DAYS)
+    parser.add_argument(
+        '--max-retries',
+        type=int,
+        default=DEFAULT_MAX_RETRIES,
+        help='maximum de tentatives après échec',
+    )
+    parser.add_argument(
+        '--whisper-model',
+        default=os.environ.get('VEILLE_YOUTUBE_WHISPER_MODEL', DEFAULT_WHISPER_MODEL),
+        help='modèle faster-whisper en cas de secours local',
+    )
     parser.add_argument(
         '--max-videos',
         type=int,
@@ -1993,11 +2096,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if (
         args.days < 1
         or args.max_videos < 1
+        or args.max_retries < 1
         or args.workers < 1
         or args.batch_size < 1
     ):
         parser.error(
-            '--days, --max-videos, --workers et --batch-size doivent être '
+            '--days, --max-videos, --max-retries, --workers et --batch-size doivent être '
             'supérieurs à zéro'
         )
     for video_id in args.video_id:
@@ -2039,11 +2143,14 @@ def run_batch_backfill(
                 ValueError,
             ) as error:
                 failures += 1
+                durable = record_failure(state, args, video.video_id, str(error))
+                atomic_json(state_path, state)
                 journal(
                     journal_path,
                     'video_failed',
                     video_id=video.video_id,
                     error=str(error),
+                    durable=durable,
                 )
         if not inputs:
             continue
@@ -2173,7 +2280,15 @@ def run(args: argparse.Namespace) -> int:
 
         if args.transcripts_only:
             candidates = (
-                inventory
+                [
+                    video for video in inventory
+                    if args.force or (
+                        video.video_id not in state['seen_videos']
+                        and not state.get('failed_videos', {}).get(video.video_id, {}).get('durable')
+                        and state.get('failed_videos', {}).get(video.video_id, {}).get('count', 0)
+                        < args.max_retries
+                    )
+                ]
                 if args.backfill
                 else choose_videos(channels, args, state, inventory)
             )
@@ -2221,11 +2336,14 @@ def run(args: argparse.Namespace) -> int:
                         ValueError,
                     ) as error:
                         failures += 1
+                        durable = record_failure(state, args, video.video_id, str(error))
+                        atomic_json(state_path, state)
                         journal(
                             journal_path,
                             'transcript_failed',
                             video_id=video.video_id,
                             error=str(error),
+                            durable=durable,
                         )
                         print(
                             f'ERREUR transcript {video.video_id}: {error}',
@@ -2389,11 +2507,14 @@ def run(args: argparse.Namespace) -> int:
                 ValueError,
             ) as error:
                 failures += 1
+                durable = record_failure(state, args, video.video_id, str(error))
+                atomic_json(state_path, state)
                 journal(
                     journal_path,
                     'video_failed',
                     video_id=video.video_id,
                     error=str(error),
+                    durable=durable,
                 )
                 print(
                     f'  ERREUR {video.video_id}: {error}',

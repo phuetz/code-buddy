@@ -65,6 +65,10 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '*CREDENTIAL*', '*PRIVATE*', '*AUTH*',
   // Specific suffix patterns
   '*_CERT', '*_CERTIFICATE',
+  // Personal access tokens and header bundles that usually carry
+  // `Authorization=Bearer …` (GH_PAT, GITHUB_PAT, OTEL_EXPORTER_OTLP_HEADERS,
+  // CODEBUDDY_LLM_EXTRA_HEADERS…)
+  '*_PAT', '*_HEADERS',
   // Injection de code dans les sous-processus (voir env-blocklist.ts)
   'NODE_OPTIONS', 'NODE_PATH',
   // Substitution de module / de bibliothèque à l'interpréteur ou au chargeur
@@ -102,6 +106,12 @@ function globMatch(pattern: string, str: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** True when a URL-ish value embeds `user:password@` or `user@`. */
+export function hasUrlCredentials(value: string | undefined): boolean {
+  if (!value) return false;
+  return /^[a-z][a-z0-9+.-]*:\/\/[^/@\s]+@/i.test(value.trim());
 }
 
 function matchesAny(patterns: string[], key: string): boolean {
@@ -159,6 +169,15 @@ export class ShellEnvPolicy {
           delete env[key];
           logger.debug(`ShellEnvPolicy: stripped env var ${key}`);
         }
+      }
+    }
+
+    // Step 3b: a proxy URL with embedded credentials (`http://user:pass@host`)
+    // is a secret too — drop it rather than leak the password to the child.
+    for (const key of Object.keys(env)) {
+      if (/^(?:https?|all|ftp|no)_proxy$/i.test(key) && hasUrlCredentials(env[key])) {
+        delete env[key];
+        logger.debug(`ShellEnvPolicy: stripped proxy with credentials ${key}`);
       }
     }
 
