@@ -17,7 +17,7 @@ describe('headless task evidence', () => {
   it('does not count repository reads as a modification', () => {
     expect(exit('corrige les erreurs ESLint', [result('view_file', '', true)])).toBe(1);
   });
-  it.each(['make the failing tests pass', 'ensure the tests pass', 'fais passer les tests', 'rends ce code fonctionnel'])('requires execution for %s', prompt => {
+  it.each(['make the failing tests pass', 'ensure the tests pass', 'fais passer les tests', 'rends ce code fonctionnel', 'Modify value.mjs', 'crée une API REST', 'switch the theme to dark', 'Please add pagination'])('requires execution for %s', prompt => {
     expect(exit(prompt, [])).toBe(1);
   });
   it('rejects a verification still red despite the claimed fix', () => {
@@ -28,6 +28,9 @@ describe('headless task evidence', () => {
   });
   it('does not let a green test erase red lint', () => {
     expect(exit('fix lint errors', [result('bash', 'npm run lint', false), result('bash', 'npm test', true)])).toBe(1);
+  });
+  it('does not clear red tests with the same command after a shell directory change', () => {
+    expect(exit('fix failures', [result('bash', 'npm test', false), result('bash', 'cd other-project', true), result('bash', 'npm test', true)])).toBe(1);
   });
   it('rejects failed verification even for a reading task', () => {
     expect(exit('explain the code', [result('bash', 'node --test', false)])).toBe(1);

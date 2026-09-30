@@ -1321,6 +1321,9 @@ async function processPromptHeadless(
           const slashEffectiveModel = modelToUse || process.env.GROK_MODEL || 'unknown';
           const slashCostExtended = agent.getSessionCostExtended?.() ?? { total: agent.getSessionCost(), estimated: true, pricing: 'unknown' as const, billing: 'pay-per-use' as const, inputTokens: 0, outputTokens: 0 };
           const slashOutputData: Record<string, unknown> = {
+            status: slash.failed || slash.denied ? 'failed' : 'success',
+            success: !slash.failed && !slash.denied,
+            exitCode: slash.failed || slash.denied ? 1 : 0,
             result: resultText,
             cost: {
               total: slashCostExtended.total,
@@ -1453,7 +1456,7 @@ async function processPromptHeadless(
         for (const error of validation.errors) {
           cli.error(`  - ${error}`);
         }
-        return 1;
+        throw new Error(`Output schema validation failed: ${validation.errors.join('; ')}`);
       }
     }
 
