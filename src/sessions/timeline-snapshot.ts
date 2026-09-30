@@ -41,6 +41,14 @@ export interface TimelineRestoreResult {
 
 const SKIP_DIR_NAMES = new Set(['.git', 'node_modules']);
 
+function canonicalPath(target: string): string {
+  try {
+    return fs.realpathSync.native(target);
+  } catch {
+    return fs.realpathSync(target);
+  }
+}
+
 export function timelineSnapshotDirectory(explicit?: string): string {
   return explicit ?? path.join(os.homedir(), '.codebuddy', 'timelines', 'snapshots');
 }
@@ -82,7 +90,7 @@ export function listWorkingTreeFiles(cwd: string): string[] {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
-    if (path.resolve(root) !== path.resolve(cwd)) {
+    if (canonicalPath(root) !== canonicalPath(cwd)) {
       return walkFiles(cwd, cwd);
     }
     const listed = execFileSync(
