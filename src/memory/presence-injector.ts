@@ -27,8 +27,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomic } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
-const PRESENCE_FILE = path.join(os.homedir(), '.codebuddy', 'presence', 'current.json');
+const PRESENCE_FILE = getCodeBuddyPath('presence', 'current.json');
 
 /**
  * After this much time without an update from Cowork, we ignore the

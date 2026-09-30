@@ -8,6 +8,7 @@
  *   - ANY critical            -> FAIL (no exceptions; keep the count at zero)
  *   - ANY high not allowlisted -> FAIL
  *   - high listed in audit-allowlist.json with a future reviewBy -> ALLOWED (logged)
+ *   - optional entry.nodes -> every vulnerable instance must be in that scope
  *   - an allowlist entry whose reviewBy has passed -> FAIL (forces periodic review)
  *   - moderate / low           -> reported, non-blocking
  *
@@ -71,6 +72,11 @@ for (const [name, v] of Object.entries(vulns)) {
   const entry = allow.get(name);
   if (!entry) {
     failures.push(`${name} [high] — not in audit-allowlist.json (review and either fix or document it)`);
+    continue;
+  }
+  // A tooling-only exception must never hide a vulnerable runtime instance.
+  if (entry.nodes && (!v.nodes?.length || v.nodes.some((node) => !entry.nodes.includes(node)))) {
+    failures.push(`${name} [high] — vulnerable nodes outside the allowlisted scope: ${(v.nodes ?? []).join(', ')}`);
     continue;
   }
   usedAllow.add(name);

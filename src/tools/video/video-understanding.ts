@@ -20,6 +20,7 @@ import { basename, join, isAbsolute, resolve as resolvePath } from 'path';
 import type { ToolResult } from '../../types/index.js';
 import type { Transcriber } from '../../sensory/speech-reaction.js';
 import { logger } from '../../utils/logger.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../../security/secret-files.js';
 import {
   fetchYoutubeCaptions,
   extractYoutubeVideoId,
@@ -187,6 +188,21 @@ export interface UnderstandVideoDeps {
 }
 
 const DEFAULT_MAX_OUTPUT_CHARS = 6000;
+const DEFAULT_EXTERNAL_TIMEOUT_MS = 120_000;
+
+async function withinTimeout<T>(label: string, timeoutMs: number, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 /**
  * Default wall-clock budget (ms) for the whole visual leg. The visual path (download the
@@ -281,12 +297,16 @@ async function resolveSegments(
 
   // --- YouTube: captions first, then audio download + local STT ---
   if (isYoutubeUrl(source)) {
-    const captions = await fetchCaptions(source, uniqueLangs);
+    const captions = await withinTimeout('video captions', 30_000, () => fetchCaptions(source, uniqueLangs))
+      .catch((err) => {
+        logger.warn(`[video] caption lookup skipped: ${err instanceof Error ? err.message : String(err)}`);
+        return null;
+      });
     if (captions && captions.length > 0) {
       return { segments: captionsToSegments(captions), method: 'youtube-captions' };
     }
     logger.info('[video] no captions — falling back to yt-dlp + local STT');
-    const dl = await downloadAudio(source, outDir);
+    const dl = await withinTimeout('video audio download', 10 * 60_000 + 1_000, () => downloadAudio(source, outDir));
     if (!isDownloadOk(dl)) return { error: dl.error };
     return { segments: await runTranscribe(dl.wavPath, transcribeOpts), method: 'youtube-audio' };
   }
@@ -295,8 +315,10 @@ async function resolveSegments(
   const localPath = isAbsolute(source) ? source : resolvePath(deps.cwd ?? process.cwd(), source);
   if (existsSync(source) || existsSync(localPath)) {
     const filePath = existsSync(source) ? source : localPath;
+    const secret = checkSecretFileAccess(filePath, 'read');
+    if (secret.secret) return { error: formatSecretRefusal(filePath, secret) };
     const extract = deps.extractAudio ?? (await defaultExtractAudio());
-    const extracted = await extract(filePath);
+    const extracted = await withinTimeout('video audio extraction', DEFAULT_EXTERNAL_TIMEOUT_MS + 1_000, () => extract(filePath));
     if (!extracted.success) {
       return { error: extracted.error ?? 'audio extraction failed' };
     }
@@ -308,7 +330,7 @@ async function resolveSegments(
 
   // --- Direct media URL: yt-dlp handles generic URLs too ---
   if (/^https?:\/\//i.test(source)) {
-    const dl = await downloadAudio(source, outDir);
+    const dl = await withinTimeout('video audio download', 10 * 60_000 + 1_000, () => downloadAudio(source, outDir));
     if (!isDownloadOk(dl)) return { error: dl.error };
     return { segments: await runTranscribe(dl.wavPath, transcribeOpts), method: 'direct-url' };
   }
@@ -426,7 +448,7 @@ async function resolveVisualSource(
       deps.downloadVideo ??
       ((s: string, d: string) =>
         downloadVideoFile(s, d, downloadTimeoutMs !== undefined ? { timeoutMs: downloadTimeoutMs } : {}));
-    const dl = await download(input.source, outDir);
+    const dl = await withinTimeout('video picture download', (downloadTimeoutMs ?? DEFAULT_VISUAL_BUDGET_MS) + 1_000, () => download(input.source, outDir));
     if (isVideoDownloadOk(dl)) return { videoPath: dl.videoPath };
 
     // YouTube can expose captions + public storyboard sheets while refusing the
@@ -437,11 +459,11 @@ async function resolveVisualSource(
         deps.sampleYoutubeStoryboard ??
         ((source: string, dir: string, timeoutMs: number) =>
           sampleYoutubeStoryboardFrames(source, dir, { timeoutMs }));
-      const storyboard = await sampleStoryboard(
+      const storyboard = await withinTimeout('video storyboard', Math.max(1000, downloadTimeoutMs ?? DEFAULT_VISUAL_BUDGET_MS), () => sampleStoryboard(
         input.source,
         outDir,
         Math.max(1000, downloadTimeoutMs ?? DEFAULT_VISUAL_BUDGET_MS),
-      );
+      ));
       if (isStoryboardSampleOk(storyboard)) {
         return {
           frames: storyboard.frames,
@@ -511,13 +533,20 @@ async function runVisualPipeline(
     ...(input.ocr ? { withOcr: true } : {}),
   };
 
+  const frameBudgetMs = Math.max(1000, deadline - now());
   const frames = 'frames' in resolved
     ? resolved.frames
-    : await sampleFramesFn(resolved.videoPath, deps.frameSampleOptions);
+    : await withinTimeout('video frame sampling', frameBudgetMs + 1_000, () => sampleFramesFn(
+      resolved.videoPath,
+      deps.sampleFrames ? deps.frameSampleOptions : {
+        ...deps.frameSampleOptions,
+        timeoutMs: Math.min(deps.frameSampleOptions?.timeoutMs ?? Infinity, Math.max(1000, Math.floor(frameBudgetMs / 3))),
+      },
+    ));
   if (frames.length === 0) {
     return { fused: segments.map((s) => ({ ...s })), framesSampled: 0, framesDistinct: 0, note: 'aucune frame échantillonnée' };
   }
-  const distinct = await dedupFramesFn(frames);
+  const distinct = await withinTimeout('video frame deduplication', Math.max(1000, deadline - now()), () => dedupFramesFn(frames));
 
   // Budgeted describe: the costly per-frame VLM calls (~1–10 s each) are bounded by the
   // wall-clock budget. When not all distinct frames plausibly fit, spread the candidates
@@ -540,7 +569,10 @@ async function runVisualPipeline(
       budgetHit = true;
       return '';
     }
-    const text = await describeFrameFn(imagePath, undefined, describeOptions);
+    const text = await withinTimeout('video frame description', remaining, () => describeFrameFn(imagePath, undefined, {
+      ...describeOptions,
+      timeoutMs: remaining,
+    }));
     described++;
     return text;
   };
@@ -582,7 +614,7 @@ export async function understandVideo(
   try {
     resolved = await resolveSegments({ ...input, source }, deps, outDir);
   } catch (err) {
-    return { error: `transcription failed: ${err instanceof Error ? err.message : String(err)}` };
+    return { error: `video input failed: ${err instanceof Error ? err.message : String(err)}` };
   }
   if ('error' in resolved) return resolved;
 
@@ -686,14 +718,16 @@ export async function understandVideo(
   // across the app. This is a pure side effect: `result` above is already final and is
   // returned UNCHANGED below regardless of what happens here.
   if (process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true') {
-    await ingestVideoCkg({
+    await withinTimeout('video memory ingestion', 5_000, () => ingestVideoCkg({
       source,
       method,
       segments,
       answer: cloud?.answer,
       question: input.question,
       candidates: experimentBacklog?.candidates.map(({ title, category }) => ({ title, category })),
-    }, deps);
+    }, deps)).catch((err) => {
+      logger.warn(`[video] memory ingestion skipped: ${err instanceof Error ? err.message : String(err)}`);
+    });
   }
 
   return result;
@@ -737,7 +771,7 @@ async function runCloudUnderstanding(
     (async (s: string, q: string | undefined, d?: CloudUnderstandDeps) =>
       (await import('./cloud-understand.js')).understandVideoCloud(s, q, d));
   try {
-    const outcome = await run(input.source, input.question, deps.cloudDeps);
+    const outcome = await withinTimeout('video cloud understanding', (deps.cloudDeps?.timeoutMs ?? DEFAULT_EXTERNAL_TIMEOUT_MS) + 1_000, () => run(input.source, input.question, deps.cloudDeps));
     if (outcome.ok) {
       return {
         provider: 'gemini',

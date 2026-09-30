@@ -27,6 +27,7 @@ import { getModelPricing } from '../config/model-pricing.js';
  * @module fleet/capability-registry
  */
 
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 import * as fs from 'node:fs';
 import * as os from 'os';
 import * as path from 'node:path';
@@ -539,7 +540,7 @@ function buildOpenRouterCatalog(): FleetModelDescriptor[] {
 // ─── Local probes ───────────────────────────────────────────────────
 
 async function probeOllama(): Promise<FleetModelDescriptor[]> {
-  const url = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+  const url = process.env.OLLAMA_BASE_URL || getOllamaBaseUrl();
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 800);

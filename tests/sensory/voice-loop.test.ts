@@ -247,7 +247,7 @@ describe('voice loop — adaptive latency buffers', () => {
   it('recognizes remote routes without treating loopback or invalid URLs as cloud', () => {
     expect(isRemoteVoiceRoute('https://chatgpt.com/backend-api/codex')).toBe(true);
     expect(isRemoteVoiceRoute('http://127.0.0.1:11434/v1')).toBe(false);
-    expect(isRemoteVoiceRoute('http://localhost:11434/v1')).toBe(false);
+    expect(isRemoteVoiceRoute('http://127.0.0.1:11434/v1')).toBe(false);
     expect(isRemoteVoiceRoute('http://[::1]:11434/v1')).toBe(false);
     expect(isRemoteVoiceRoute('not a URL')).toBe(false);
   });
@@ -423,7 +423,7 @@ describe('voice loop — model resolution (env authoritative)', () => {
     const r = await resolveVoiceModel('Bonjour', {
       env: {
         CODEBUDDY_SENSORY_SPEAK_MODEL: 'gpt-5.6-luna',
-        CODEBUDDY_SENSORY_SPEAK_BASE_URL: 'http://localhost:11434/v1',
+        CODEBUDDY_SENSORY_SPEAK_BASE_URL: 'http://127.0.0.1:11434/v1',
       } as NodeJS.ProcessEnv,
       hasCodexOAuth: () => false,
     });
@@ -618,6 +618,29 @@ describe('voice loop — runtime prewarming', () => {
       model: 'qwen2.5:7b-instruct',
       keep_alive: '45m',
     });
+  });
+
+  it('keeps the configured BASE_URL route warm when HOST is also present', async () => {
+    let requestedUrl = '';
+    const result = await prewarmVoiceModel({
+      route: {
+        model: 'qwen2.5:7b-instruct',
+        apiKey: 'ollama',
+        baseURL: 'http://127.0.0.1:11500/v1',
+        reason: 'test',
+      },
+      env: {
+        OLLAMA_BASE_URL: 'http://127.0.0.1:11500',
+        OLLAMA_HOST: 'http://127.0.0.1:11434',
+      },
+      fetchFn: async (input) => {
+        requestedUrl = String(input);
+        return new Response('{}', { status: 200 });
+      },
+    });
+
+    expect(result).toMatchObject({ attempted: true, warmed: true });
+    expect(requestedUrl).toBe('http://127.0.0.1:11500/api/generate');
   });
 
   it('never sends a warmup generation to a non-Ollama route', async () => {

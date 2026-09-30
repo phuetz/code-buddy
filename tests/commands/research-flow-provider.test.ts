@@ -40,7 +40,7 @@ vi.mock('../../src/utils/provider-detector.js', () => ({
     }
 
     if (override === 'ollama' || (!override && process.env.OLLAMA_HOST)) {
-      let host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+      let host = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
       if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
       if (!host.endsWith('/v1')) host = host.replace(/\/+$/, '') + '/v1';
       return {
@@ -122,13 +122,13 @@ describe('resolveCommandProvider', () => {
 
   it('falls back to local Ollama instead of failing when no paid key exists', () => {
     process.env.CODEBUDDY_PROVIDER = 'ollama';
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
 
     const resolved = resolveCommandProvider();
 
     expect(resolved).not.toBeNull();
     expect(resolved!.apiKey).toBe('ollama');
-    expect(resolved!.baseURL).toBe('http://localhost:11434/v1');
+    expect(resolved!.baseURL).toBe('http://127.0.0.1:11434/v1');
     expect(resolved!.providerLabel).toBe('ollama');
   });
 
@@ -164,7 +164,7 @@ describe('resolveCommandProvider', () => {
 
     expect(resolved).toMatchObject({
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       model: 'qwen3.5-ctx32k:latest',
       providerLabel: 'ollama',
     });
@@ -181,7 +181,7 @@ describe('resolveCommandProvider', () => {
 
     expect(resolved).toMatchObject({
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       model: 'devstral-small-2:24b-instruct-2512-q4_K_M',
       providerLabel: 'ollama',
     });
@@ -196,7 +196,7 @@ describe('resolveCommandProvider', () => {
 
     expect(resolved).toMatchObject({
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       model: 'qwen3.5-ctx32k:latest',
       providerLabel: 'ollama',
     });
@@ -233,7 +233,7 @@ describe('resolveCommandProvider', () => {
 
   it('an explicit --model override wins on both paths', () => {
     process.env.CODEBUDDY_PROVIDER = 'ollama';
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     expect(resolveCommandProvider({ explicitModel: 'qwen3.6:27b' })!.model).toBe('qwen3.6:27b');
 
     delete process.env.CODEBUDDY_PROVIDER;
@@ -245,7 +245,7 @@ describe('resolveCommandProvider', () => {
 
   it('the detected path ignores the settings model (a paid default would 404 on Ollama)', () => {
     process.env.CODEBUDDY_PROVIDER = 'ollama';
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     process.env.OLLAMA_MODEL = 'qwen2.5:7b-instruct';
     settingsState.model = 'gpt-5.5';
 

@@ -24,6 +24,7 @@ import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.j
 import { logger } from '../utils/logger.js';
 import { appendConversationLog } from './mobile-conversation-log.js';
 import type { CompanionHistoryTurn } from './companion-history.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 
 /** user+assistant entries kept, all surfaces. */
 export const MOBILE_HISTORY_MAX_TURNS = 20;
@@ -62,7 +63,7 @@ export function isMobileHistoryPersistenceEnabled(
 export function resolveMobileHistoryDir(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.CODEBUDDY_MOBILE_HISTORY_DIR?.trim();
   if (configured) return configured;
-  return path.join(os.homedir(), '.codebuddy', 'companion', 'mobile-history');
+  return getCodeBuddyPathForEnv(env, 'companion', 'mobile-history');
 }
 
 /**

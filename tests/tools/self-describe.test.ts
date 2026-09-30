@@ -199,7 +199,7 @@ describe('buildSelfDescription', () => {
     root = makeFakeRepo();
     const d = buildSelfDescription({
       root,
-      env: { OPENAI_API_KEY: 'x', OLLAMA_HOST: 'http://localhost:11434', CODEBUDDY_SENSORY_CAMERA: 'true', CODEBUDDY_REMINDERS: 'true' },
+      env: { OPENAI_API_KEY: 'x', OLLAMA_HOST: 'http://127.0.0.1:11434', CODEBUDDY_SENSORY_CAMERA: 'true', CODEBUDDY_REMINDERS: 'true' },
     });
     expect(d.faculties.activeProviders).toEqual(expect.arrayContaining(['OpenAI/ChatGPT', 'Ollama (local)']));
     expect(d.faculties.sensory).toEqual(expect.arrayContaining(['vision (caméra)', 'rappels']));

@@ -16,6 +16,7 @@
  */
 
 import { logger } from '../../utils/logger.js';
+import { getOllamaV1BaseUrl } from '../../utils/ollama-url.js';
 
 export interface DescribeFrameDeps {
   /** Injectable VLM describer (default: local Ollama vision model). */
@@ -30,6 +31,8 @@ export interface DescribeFrameDeps {
   visionModel?: string;
   /** Override the vision base URL (default `CODEBUDDY_VISION_BASE_URL` / local Ollama). */
   visionBaseURL?: string;
+  /** Wall-clock limit for a frame's VLM and OCR work. */
+  timeoutMs?: number;
 }
 
 const DEFAULT_PROMPT =
@@ -41,20 +44,25 @@ async function defaultAnalyze(
   prompt: string,
   visionModel?: string,
   visionBaseURL?: string,
+  timeoutMs = 30_000,
 ): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const { loadImageFromFile, buildMultimodalContent } = await import('../image-input.js');
     const { CodeBuddyClient } = await import('../../codebuddy/client.js');
     const img = await loadImageFromFile(imagePath);
     const content = buildMultimodalContent(prompt, [img]);
     const model = visionModel || process.env.CODEBUDDY_VISION_MODEL || 'moondream';
-    const baseURL = visionBaseURL || process.env.CODEBUDDY_VISION_BASE_URL || 'http://127.0.0.1:11434/v1';
+    const baseURL = visionBaseURL || process.env.CODEBUDDY_VISION_BASE_URL || getOllamaV1BaseUrl();
     const client = new CodeBuddyClient(process.env.OLLAMA_API_KEY || 'ollama', model, baseURL);
-    const resp = await client.chat([{ role: 'user', content } as never], []);
+    const resp = await client.chat([{ role: 'user', content } as never], [], { signal: controller.signal });
     return (resp?.choices?.[0]?.message?.content ?? '').trim();
   } catch (err) {
     logger.warn(`[video] frame VLM describe failed: ${err instanceof Error ? err.message : String(err)}`);
     return '';
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -80,7 +88,7 @@ export async function describeFrame(
   prompt: string = DEFAULT_PROMPT,
   deps: DescribeFrameDeps = {},
 ): Promise<string> {
-  const analyze = deps.analyze ?? ((p: string, q: string) => defaultAnalyze(p, q, deps.visionModel, deps.visionBaseURL));
+  const analyze = deps.analyze ?? ((p: string, q: string) => defaultAnalyze(p, q, deps.visionModel, deps.visionBaseURL, deps.timeoutMs));
   const ocrLanguage = deps.ocrLanguage ?? 'eng';
 
   const [desc, ocrText] = await Promise.all([

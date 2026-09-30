@@ -51,6 +51,7 @@ import {
   saveAwayState,
 } from './away-mode.js';
 import { pickUnsaidLine, rememberSaid } from './recent-said.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 /** The closed set of reasons Lisa might reach out. */
 export type ProactiveTrigger =
@@ -189,7 +190,7 @@ export interface ProactiveState {
 function defaultProactiveStatePath(): string {
   return (
     process.env.CODEBUDDY_COMPANION_PROACTIVE_STATE_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'proactive-state.json')
+    getCodeBuddyPath('companion', 'proactive-state.json')
   );
 }
 

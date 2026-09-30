@@ -32,7 +32,7 @@ describe('reconcileModelForBackend', () => {
     expect(reconcileModelForBackend('grok-code-fast-1', 'https://api.x.ai/v1', 'grok-3-fast')).toBe(
       'grok-code-fast-1',
     );
-    expect(reconcileModelForBackend('llama3.1', 'http://localhost:11434/v1', 'llama3.1')).toBe('llama3.1');
+    expect(reconcileModelForBackend('llama3.1', 'http://127.0.0.1:11434/v1', 'llama3.1')).toBe('llama3.1');
     expect(reconcileModelForBackend('grok-code-fast-1', undefined, 'grok-3-fast')).toBe('grok-code-fast-1');
   });
 });

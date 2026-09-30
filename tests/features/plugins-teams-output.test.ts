@@ -538,8 +538,8 @@ describe('SubagentMemory', () => {
 
   it('should compute default memory dir for user scope', () => {
     const dir = SubagentMemory.getMemoryDir('my-agent', 'user');
-    expect(dir).toContain('.codebuddy');
-    expect(dir).toContain('my-agent');
+    const profileRoot = process.env.CODEBUDDY_HOME || path.join(os.homedir(), '.codebuddy');
+    expect(dir).toBe(path.join(profileRoot, 'agents', 'my-agent', 'memory'));
   });
 
   it('should compute default memory dir for project scope', () => {

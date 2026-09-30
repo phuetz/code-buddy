@@ -97,6 +97,7 @@ describe('camera-share — capture factice + faux Telegram', () => {
 
   afterEach(() => {
     resetCameraShareCooldown();
+    vi.unstubAllEnvs();
   });
 
   it('maybeHandle ignore le bavardage', async () => {
@@ -204,6 +205,28 @@ describe('camera-share — capture factice + faux Telegram', () => {
     expect(result!.telegramSent).toBe(true);
     expect(sendPhoto).toHaveBeenCalledOnce();
     await fs.rm(path.dirname(frame), { recursive: true, force: true });
+  });
+
+  it('refuse le VLM distant de l’environnement ciblé même si le processus pointe en local', async () => {
+    vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11434');
+    const frame = await fakeFrame();
+    const analyze = vi.fn(async () => 'ne doit pas tourner');
+    try {
+      const result = await maybeHandleCameraShareRequest("qu'est-ce que tu vois ?", {
+        env: env({
+          CODEBUDDY_VISION_BASE_URL: undefined,
+          OLLAMA_HOST: 'https://vision.example.test',
+          CODEBUDDY_VISION_REMOTE_IMAGE: 'false',
+        }),
+        capture: async () => ({ success: true, path: frame }),
+        analyze,
+      });
+      expect(result?.success).toBe(true);
+      expect(analyze).not.toHaveBeenCalled();
+      expect(result?.spokenReply).toContain("je n'arrive pas à la décrire localement");
+    } finally {
+      await fs.rm(path.dirname(frame), { recursive: true, force: true });
+    }
   });
 
   it('sur la voix, ne joint pas la photo sans demande d’envoi explicite', async () => {

@@ -84,7 +84,7 @@ describe('OllamaProvider', () => {
       await provider.initialize({});
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:11434/api/tags',
+        'http://127.0.0.1:11434/api/tags',
         expect.anything()
       );
     });
@@ -130,7 +130,7 @@ describe('OllamaProvider', () => {
       await provider.initialize({ model: 'llama3.1' });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:11434/api/pull',
+        'http://127.0.0.1:11434/api/pull',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ name: 'llama3.1', stream: true }),
@@ -178,7 +178,7 @@ describe('OllamaProvider', () => {
 
       expect(readyListener).toHaveBeenCalledWith({
         model: 'llama3.1',
-        endpoint: 'http://localhost:11434',
+        endpoint: 'http://127.0.0.1:11434',
       });
     });
   });
@@ -234,7 +234,7 @@ describe('OllamaProvider', () => {
       await provider.pullModel('llama3.1');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:11434/api/pull',
+        'http://127.0.0.1:11434/api/pull',
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -387,7 +387,7 @@ describe('OllamaProvider', () => {
       await provider.complete([{ role: 'user', content: 'Hello' }]);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:11434/api/chat',
+        'http://127.0.0.1:11434/api/chat',
         expect.anything()
       );
     });
@@ -797,7 +797,7 @@ describe('OllamaProvider', () => {
       await provider.getModels();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:11434/api/tags',
+        'http://127.0.0.1:11434/api/tags',
         expect.objectContaining({ method: 'GET' })
       );
     });

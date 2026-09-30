@@ -724,7 +724,7 @@ describe('CodeBuddyClient', () => {
         isSupported: true,
       });
 
-      client = new CodeBuddyClient(mockApiKey, 'llama3.2', 'http://localhost:11434/v1');
+      client = new CodeBuddyClient(mockApiKey, 'llama3.2', 'http://127.0.0.1:11434/v1');
       const seen = stubOllamaNativeWire();
 
       const messages: CodeBuddyMessage[] = [{ role: 'user', content: 'Hi' }];

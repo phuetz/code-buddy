@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 import { inferColumnTypes, numericStats, parseCsv } from './csv/csv-parse.js';
 
 const MAX_CSV_BYTES = 5 * 1024 * 1024;
@@ -54,6 +55,8 @@ async function resolveReadableCsvPath(inputPath: string): Promise<string> {
   }
 
   const resolved = path.resolve(inputPath);
+  const verdict = checkSecretFileAccess(resolved, 'read');
+  if (verdict.secret) throw new Error(formatSecretRefusal(resolved, verdict));
   const root = path.parse(resolved).root;
   if (resolved === root || ['/dev', '/proc', '/sys', '/run'].includes(resolved)) {
     throw new Error(`Refusing unsafe path: ${resolved}`);

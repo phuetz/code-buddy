@@ -15,6 +15,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 
 export type PrefetchKind = 'weather' | 'news' | 'market' | 'agenda' | 'date';
 export const PREFETCH_KINDS: readonly PrefetchKind[] = [
@@ -74,7 +75,7 @@ export function loadMarketSymbols(env: NodeJS.ProcessEnv = process.env): string[
 export function defaultPrefetchItemsPath(env: NodeJS.ProcessEnv = process.env): string {
   return (
     env.CODEBUDDY_PREFETCH_ITEMS_FILE?.trim() ||
-    join(homedir(), '.codebuddy', 'companion', 'prefetch-items.json')
+    getCodeBuddyPathForEnv(env, 'companion', 'prefetch-items.json')
   );
 }
 

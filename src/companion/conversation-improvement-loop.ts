@@ -18,6 +18,7 @@ import {
 import type { ConversationTurn } from '../conversation/types.js';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import {
   addVoiceGuidance,
   defaultVoiceGuidancePath,
@@ -164,11 +165,11 @@ const GUIDANCE_BY_ISSUE: Partial<Record<ConversationEpisodeIssue, string>> = {
 };
 
 export function defaultConversationQualityStatePath(): string {
-  return join(homedir(), '.codebuddy', 'companion', 'conversation-quality-state.json');
+  return getCodeBuddyPath('companion', 'conversation-quality-state.json');
 }
 
 export function defaultConversationQualityJournalPath(): string {
-  return join(homedir(), '.codebuddy', 'companion', 'conversation-quality.jsonl');
+  return getCodeBuddyPath('companion', 'conversation-quality.jsonl');
 }
 
 async function defaultReadConversation(limit: number, now = Date.now()): Promise<ConversationTurn[]> {

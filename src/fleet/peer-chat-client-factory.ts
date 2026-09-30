@@ -23,6 +23,7 @@
  * A leftover ChatGPT id must never be sent to Ollama.
  */
 
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -77,7 +78,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   ollama: {
     id: 'ollama',
     defaultModel: 'qwen2.5-coder:7b',
-    defaultBaseUrl: 'http://localhost:11434/v1',
+    defaultBaseUrl: getOllamaV1BaseUrl(),
     isLocal: true,
     resolve: (explicit = false) => {
       const host = process.env.OLLAMA_HOST;

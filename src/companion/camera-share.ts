@@ -13,6 +13,7 @@
  * @module companion/camera-share
  */
 
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import { readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -22,6 +23,7 @@ import { shouldAllowVisionImageEndpoint } from '../sensory/vision-reaction.js';
 import { redactVisionDescriptionForEgress } from '../sensory/vision-description-safety.js';
 import { safeCameraKeyframePath } from '../sensory/camera-keyframe-policy.js';
 import { isLisaSelfieRequest } from './lisa-selfie.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 import type {
   CameraSnapshotOptions,
   CameraSnapshotResult,
@@ -165,7 +167,7 @@ function isConfiguredAlertChat(inboundChatId: string | undefined, env: NodeJS.Pr
 
 function visionEndpointAllowed(env: NodeJS.ProcessEnv): boolean {
   if (!env.CODEBUDDY_VISION_MODEL?.trim()) return false;
-  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || 'http://127.0.0.1:11434/v1';
+  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || getOllamaV1BaseUrl(env);
   return shouldAllowVisionImageEndpoint(baseURL, env.CODEBUDDY_VISION_REMOTE_IMAGE === 'true');
 }
 
@@ -198,7 +200,7 @@ async function defaultAnalyze(imagePath: string, env: NodeJS.ProcessEnv): Promis
     [img],
   );
   const model = env.CODEBUDDY_VISION_MODEL?.trim() || 'moondream';
-  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || 'http://127.0.0.1:11434/v1';
+  const baseURL = env.CODEBUDDY_VISION_BASE_URL?.trim() || getOllamaV1BaseUrl(env);
   const client = new CodeBuddyClient(env.OLLAMA_API_KEY || 'ollama', model, baseURL);
   const resp = await client.chat([{ role: 'user', content } as never], []);
   return String(resp?.choices?.[0]?.message?.content ?? '').trim();
@@ -206,7 +208,7 @@ async function defaultAnalyze(imagePath: string, env: NodeJS.ProcessEnv): Promis
 
 function eyeKeyframeRoot(env: NodeJS.ProcessEnv): string {
   const configured = env.BUDDY_SENSE_FRAME_DIR?.trim();
-  if (!configured) return path.join(homedir(), '.codebuddy', 'companion');
+  if (!configured) return getCodeBuddyPathForEnv(env, 'companion');
   if (configured.startsWith('~/')) return path.join(homedir(), configured.slice(2));
   return path.resolve(configured);
 }

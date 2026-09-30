@@ -554,7 +554,7 @@ describe('CodeBuddyAgent', () => {
 
       agent = new CodeBuddyAgent(
         'ollama',
-        'http://localhost:11434/v1',
+        'http://127.0.0.1:11434/v1',
         'x7-agent-local:latest',
       );
       await agent.systemPromptReady;

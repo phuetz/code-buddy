@@ -12,6 +12,7 @@
  * @module sensory/vision-reaction
  */
 
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
 import type { BaseEvent } from '../events/types.js';
@@ -122,7 +123,7 @@ export function shouldAllowVisionImageEndpoint(
 async function defaultAnalyze(prompt: string, imagePath?: string): Promise<VisionAnalysis> {
   if (imagePath) {
     try {
-      const baseURL = process.env.CODEBUDDY_VISION_BASE_URL || 'http://127.0.0.1:11434/v1';
+      const baseURL = process.env.CODEBUDDY_VISION_BASE_URL || getOllamaV1BaseUrl();
       if (!shouldAllowVisionImageEndpoint(baseURL)) {
         logger.warn('[vision] refusing raw image egress to a non-loopback VLM endpoint');
         return { success: false, imagePath };

@@ -59,7 +59,8 @@ describe('EnhancedMemory', () => {
 
   describe('Constructor', () => {
     it('should keep the production default data directory', () => {
-      expect(getDefaultMemoryDataDir()).toBe(path.join(os.homedir(), '.codebuddy', 'memory'));
+      const profileRoot = process.env.CODEBUDDY_HOME || path.join(os.homedir(), '.codebuddy');
+      expect(getDefaultMemoryDataDir()).toBe(path.join(profileRoot, 'memory'));
     });
 
     it('should accept custom config', async () => {

@@ -12,6 +12,7 @@ import path from 'path';
 import { AVATAR_STYLE_IDS, type AvatarStyleId } from '../lora/lisa-avatar-bible.js';
 import { logger } from '../utils/logger.js';
 import { writeJsonAtomic } from '../utils/atomic-write.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 import {
   inferLisaContentTier,
   inferLisaSelfieStyle,
@@ -26,7 +27,7 @@ const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 export function resolveSelfieCacheDir(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.CODEBUDDY_LISA_SELFIE_CACHE_DIR?.trim();
   if (configured) return configured;
-  return path.join(homedir(), '.codebuddy', 'companion', 'lisa', 'selfie-cache');
+  return getCodeBuddyPathForEnv(env, 'companion', 'lisa', 'selfie-cache');
 }
 
 export function resolveLisaSelfieCacheDir(
@@ -39,7 +40,7 @@ export function resolveLisaSelfieCacheDir(
 export function resolveLisaSelfieRecentPath(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.CODEBUDDY_LISA_SELFIE_RECENT_FILE?.trim();
   if (configured) return configured;
-  return path.join(homedir(), '.codebuddy', 'companion', 'recent-selfies.json');
+  return getCodeBuddyPathForEnv(env, 'companion', 'recent-selfies.json');
 }
 
 export function lisaSelfieCacheMax(env: NodeJS.ProcessEnv = process.env): number {

@@ -24,6 +24,7 @@ import { SessionLock } from '../persistence/session-lock.js';
 import { readJsonAtomicSync, readJsonAtomicSyncReadOnly, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { logger } from '../utils/logger.js';
 import type { ConversationTurn } from '../conversation/types.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 
 export const CHANNEL_HISTORY_MAX_TURNS = 20;
 export const CHANNEL_HISTORY_TURN_CHAR_CAP = 2000;
@@ -49,7 +50,7 @@ export function isChannelHistoryPersistenceEnabled(
 export function resolveChannelHistoryDir(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.CODEBUDDY_CHANNEL_HISTORY_DIR?.trim();
   if (configured) return configured;
-  return path.join(os.homedir(), '.codebuddy', 'companion', 'channel-history');
+  return getCodeBuddyPathForEnv(env, 'companion', 'channel-history');
 }
 
 /**

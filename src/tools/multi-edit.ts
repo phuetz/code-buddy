@@ -68,7 +68,11 @@ export class MultiEditTool {
     }
 
     // ── Resolve and validate path ─────────────────────────────────
-    const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
+    // An in-place edit reads AND writes: both rule sets apply.
+    const readValidation = this.vfs.resolvePath(filePath, this.baseDirectory, 'read');
+    const pathValidation = readValidation.valid
+      ? this.vfs.resolvePath(filePath, this.baseDirectory, 'write')
+      : readValidation;
     if (!pathValidation.valid) {
       return { success: false, error: pathValidation.error };
     }

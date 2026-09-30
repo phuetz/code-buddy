@@ -1,3 +1,4 @@
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 /**
  * Environment capability detection for onboarding / `buddy try` / `buddy doctor`.
  *
@@ -53,7 +54,7 @@ export interface EnvironmentSnapshot {
   ready: boolean;
 }
 
-const OLLAMA_DEFAULT_HOST = 'http://localhost:11434';
+const OLLAMA_DEFAULT_HOST = getOllamaBaseUrl();
 const LMSTUDIO_DEFAULT_HOST = 'http://localhost:1234';
 
 async function fetchJson(url: string, timeoutMs = 1500): Promise<unknown | null> {

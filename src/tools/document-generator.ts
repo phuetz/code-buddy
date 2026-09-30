@@ -12,6 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 import { logger } from '../utils/logger.js';
 import type { ToolResult } from '../types/index.js';
 
@@ -230,7 +231,9 @@ function resolveLocalImagePath(imagePath: string, outputPath: string): string | 
         path.resolve(process.cwd(), unquoted),
       ];
 
-  return candidates.find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile()) ?? null;
+  return candidates.find(candidate =>
+    !checkSecretFileAccess(candidate, 'read').secret && fs.existsSync(candidate) && fs.statSync(candidate).isFile(),
+  ) ?? null;
 }
 
 function readPngDimensions(data: Buffer): ImageDimensions | null {
@@ -490,7 +493,7 @@ async function generateDocx(
     if (imageReference) {
       const resolvedImagePath = resolveLocalImagePath(imageReference.imagePath, outputPath);
       const imageType = resolvedImagePath ? getDocxImageType(resolvedImagePath) : null;
-      if (resolvedImagePath && imageType) {
+      if (resolvedImagePath && imageType && !checkSecretFileAccess(resolvedImagePath, 'read').secret) {
         const imageName = sanitizeDocxText(imageReference.altText || path.basename(resolvedImagePath));
         const imageData = fs.readFileSync(resolvedImagePath);
         const transformation = fitImageToDocxBox(readImageDimensions(imageData, imageType));
@@ -730,6 +733,8 @@ export async function generateDocument(input: DocumentGeneratorInput): Promise<D
         error: `outputPath must end with ${expectedExt} for ${type.toUpperCase()} documents`
       };
     }
+    const outputVerdict = checkSecretFileAccess(outputPath, 'write');
+    if (outputVerdict.secret) return { success: false, error: formatSecretRefusal(outputPath, outputVerdict) };
 
     // Ensure output directory exists
     const outDir = path.dirname(path.resolve(outputPath));
@@ -853,6 +858,8 @@ export async function* executeGenerateDocumentStreaming(args: {
     if (path.extname(outputPath).toLowerCase() !== expectedExt) {
       return { success: false, error: `outputPath must end with ${expectedExt} for ${label} documents` };
     }
+    const outputVerdict = checkSecretFileAccess(outputPath, 'write');
+    if (outputVerdict.secret) return { success: false, error: formatSecretRefusal(outputPath, outputVerdict) };
 
     yield `📄 Preparing ${label} "${title}"…\n`;
     const outDir = path.dirname(path.resolve(outputPath));

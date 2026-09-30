@@ -62,6 +62,10 @@ export function generateToken(
  * Verify and decode a JWT token
  */
 export function verifyToken(token: string, secret: string): JwtPayload | null {
+  // An empty secret is a key everyone knows: never accept a token signed with it.
+  if (typeof secret !== 'string' || secret.length === 0) {
+    return null;
+  }
   try {
     const parts = token.split('.');
     if (parts.length !== 3) {
@@ -94,9 +98,10 @@ export function verifyToken(token: string, secret: string): JwtPayload | null {
     // Decode payload
     const payload: JwtPayload = JSON.parse(base64UrlDecode(payloadEncoded));
 
-    // Check expiration
+    // Check expiration. `exp` is mandatory: a signed token without it would
+    // never expire (generateToken always sets it).
     const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
+    if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp < now) {
       return null;
     }
 
