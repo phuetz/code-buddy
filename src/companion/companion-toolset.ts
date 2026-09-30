@@ -1,3 +1,4 @@
+import { lisaActionStillCurrent, lisaPolicyEnabled, lisaToolIntent, runLisaAction, LISA_REFUSAL } from './lisa-policy.js';
 /**
  * Companion Toolset definition, authorization and execution gates.
  *
@@ -294,6 +295,16 @@ export async function executeCompanionTool(
   args: Record<string, unknown>,
   context: CompanionToolExecutionContext,
 ): Promise<ToolResult> {
+  if (!lisaPolicyEnabled()) return executeCompanionToolImpl(toolName, args, context);
+  return runLisaAction(lisaToolIntent(toolName, 'companion-tool'),
+    () => executeCompanionToolImpl(toolName, args, context), { success: false, error: LISA_REFUSAL });
+}
+
+async function executeCompanionToolImpl(
+  toolName: string,
+  args: Record<string, unknown>,
+  context: CompanionToolExecutionContext,
+): Promise<ToolResult> {
   const env = context.env ?? process.env;
 
   // 1. Hard invariant: forbidden tool
@@ -364,6 +375,9 @@ export async function executeCompanionTool(
       error: `Companion tool "${toolName}" is not registered in the tool registry.`,
     };
   }
+
+  // Recheck after the existing identity and confirmation gates.
+  if (!lisaActionStillCurrent()) return { success: false, error: LISA_REFUSAL };
 
   // 5. Execute
   try {

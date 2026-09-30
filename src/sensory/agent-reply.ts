@@ -1,3 +1,4 @@
+import { lisaPolicyEnabled, withLisaContext, lisaTrigger, runLisaAction } from '../companion/lisa-policy.js';
 /**
  * Agent reply — the "voice COMMAND" brain. Turns a spoken instruction into a REAL
  * agent turn that can investigate AND act (edit files, run commands), then returns
@@ -669,13 +670,13 @@ export function makeAgentReply(options: AgentReplyOptions = {}): AgentReplyHandl
     ]);
     // The turn is marked as voice-originated so the shell policy never runs a
     // mutation on heard speech without a human approval (see execution-policy).
-    return withTurnOriginAsync('voice', () =>
+    return withLisaContext(lisaTrigger('voice-command'), () => withTurnOriginAsync('voice', () =>
       getWorkspaceIsolation().withWorkspaceRootAsync(cwd, () =>
         getOperatingModeManager().withModeAsync('balanced', () =>
           getPermissionModeManager().withModeAsync(mode, fn)
         )
       )
-    );
+    ));
   }
 
   const reply = async (heard: string, replyOpts?: VoiceStepOptions): Promise<string> => {
@@ -705,7 +706,8 @@ export function makeAgentReply(options: AgentReplyOptions = {}): AgentReplyHandl
             },
           };
           return await runInVoiceTurn(() =>
-            agentRunner(heard, agentOptions)
+            runLisaAction({ action: 'observer', trigger: lisaTrigger('voice-command'), operation: 'commande-vocale' },
+              () => agentRunner(heard, agentOptions), '')
           );
         } finally {
           agentMs = Date.now() - agentStartedAt;
@@ -800,6 +802,11 @@ export function makeAgentReply(options: AgentReplyOptions = {}): AgentReplyHandl
     heard: string,
     replyOpts?: VoiceStepOptions,
   ): AsyncGenerator<string, void, unknown> {
+    if (lisaPolicyEnabled()) {
+      const result = await reply(heard, replyOpts);
+      if (result && !replyOpts?.signal?.aborted) yield result;
+      return;
+    }
     if (!agentRunner.stream || replyOpts?.signal?.aborted) return;
     let agentProvider: Parameters<NonNullable<VoiceStepOptions['onProviderResolved']>>[0] | undefined;
     const iterator = agentRunner.stream(heard, {

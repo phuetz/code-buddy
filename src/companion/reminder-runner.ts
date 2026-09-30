@@ -1,3 +1,4 @@
+import { lisaPolicyEnabled, runLisaAction } from './lisa-policy.js';
 /**
  * Reminder runner — the cadence that fires due reminders, announces them (voice + Telegram),
  * opens the bounded ack window, gently re-nags, and escalates a missed dose to Telegram.
@@ -60,7 +61,8 @@ async function defaultSay(text: string): Promise<void> {
   const { sayNow } = await import('../sensory/voice-loop.js');
   // The runner owns its Telegram notification separately; never emit a second
   // voice note through sayNow's legacy environment-controlled phone path.
-  await sayNow(text, { phoneDelivery: 'never', ttsRouteHint: 'reminder' });
+  const played = await sayNow(text, { phoneDelivery: 'never', ttsRouteHint: 'reminder' });
+  if (lisaPolicyEnabled() && !played) throw new Error('Reminder speech was not played');
 }
 async function defaultNotify(text: string): Promise<boolean> {
   const { sendTelegramAlert } = await import('../sensory/alert.js');
@@ -88,7 +90,9 @@ async function notifyAndRecord(
   deps: ReminderRunnerDeps,
   notify: (content: string) => Promise<boolean | void>,
 ): Promise<void> {
-  const accepted = await notify(text);
+  const accepted = await runLisaAction({ action: 'message-patrice', trigger: 'reminder', operation: 'telegram' },
+    () => notify(text), false);
+  if (lisaPolicyEnabled() && accepted === false) throw new Error('Reminder notification was not accepted');
   if (accepted !== false && (!deps.notify || deps.recordRemote)) {
     await (deps.recordRemote ?? defaultRecordRemote)(text, externalId);
   }
@@ -109,8 +113,9 @@ async function announceChannels(
   let voiced = false;
   let notified = false;
   try {
-    await say(spoken);
-    voiced = true;
+    const played = await runLisaAction({ action: 'rappel', trigger: 'reminder', operation: 'parole' },
+      async () => { await say(spoken); return true; }, false);
+    voiced = played;
   } catch (err) {
     logger.warn(
       `[reminders] voice announce failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -132,6 +137,22 @@ async function announceChannels(
  * controlled clock + injected delivery. Never-throws.
  */
 export async function runReminderTick(now: Date, deps: ReminderRunnerDeps = {}): Promise<void> {
+  if (!lisaPolicyEnabled()) return runReminderTickImpl(now, deps);
+  // An idle scheduler pass is not an action. Inspect due work without consuming it.
+  const time = now.getTime();
+  const ready = (await dueReminders(now)).length > 0 || dueSnoozes(time).length > 0 ||
+    pendingAcks(time, Infinity).some((a) => {
+      const elapsed = time - a.firedAt;
+      return elapsed >= (deps.windowMs ?? ackWindowMs()) ||
+        (a.nags < renagMax(deps) && elapsed >= renagMs(deps) * (a.nags + 1));
+    });
+  if (!ready) return;
+  // Decide before expireAcks mutates the acknowledgement store, even with no due reminder.
+  await runLisaAction({ action: 'rappel', trigger: 'reminder', operation: 'rappel' },
+    async () => { await runReminderTickImpl(now, deps); return true; }, false);
+}
+
+async function runReminderTickImpl(now: Date, deps: ReminderRunnerDeps = {}): Promise<void> {
   const say = deps.say ?? defaultSay;
   const notify = deps.notify ?? defaultNotify;
   const window = deps.windowMs ?? ackWindowMs();
@@ -147,92 +168,108 @@ export async function runReminderTick(now: Date, deps: ReminderRunnerDeps = {}):
     logger.warn(`[reminders] due check failed: ${err instanceof Error ? err.message : String(err)}`);
   }
   for (const r of due) {
-    try {
-      await markFired(r.id, now);
-      // A one-shot (dated) reminder retires the moment it fires — it must never come back tomorrow.
-      // The isDue date check already prevents that, but disabling makes it explicit + visible in the
-      // list, and closes any same-day double-fire edge.
-      if (isOneShot(r)) await setReminderEnabled(r.id, false);
-      openAck(r, nowMs);
-      const msg = reminderMessage(r);
-      await announceChannels(
-        msg,
-        `⏰ ${msg}`,
-        `reminder:${r.id}:fired:${now.toISOString()}`,
-        say,
-        notify,
-        deps,
-      );
-      logger.info(`[reminders] fired '${r.label}'${isOneShot(r) ? ' (one-shot → retired)' : ''} (awaiting ack)`);
-    } catch (err) {
-      logger.warn(`[reminders] fire '${r.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    await runLisaAction({ action: 'rappel', trigger: 'reminder', operation: 'rappel' }, async () => {
+      try {
+        await markFired(r.id, now);
+        // A one-shot (dated) reminder retires the moment it fires — it must never come back tomorrow.
+        // The isDue date check already prevents that, but disabling makes it explicit + visible in the
+        // list, and closes any same-day double-fire edge.
+        if (isOneShot(r)) await setReminderEnabled(r.id, false);
+        openAck(r, nowMs);
+        const msg = reminderMessage(r);
+        const delivered = await announceChannels(
+          msg,
+          `⏰ ${msg}`,
+          `reminder:${r.id}:fired:${now.toISOString()}`,
+          say,
+          notify,
+          deps,
+        );
+        logger.info(`[reminders] fired '${r.label}'${isOneShot(r) ? ' (one-shot → retired)' : ''} (awaiting ack)`);
+        return delivered.voiced || delivered.notified;
+      } catch (err) {
+        logger.warn(`[reminders] fire '${r.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
+        return false;
+      }
+    }, false);
   }
 
   // 1b. Re-announce any SNOOZED reminders now due (a "rappelle-moi dans 10 min" deferral) — reopens
   // a fresh ack cycle so it can be acked or snoozed again.
   for (const s of dueSnoozes(nowMs)) {
-    try {
-      const r = (await loadReminders()).find((x) => x.id === s.id);
-      const msg = r ? reminderMessage(r) : `C'est l'heure : ${s.label}.`;
-      openAck({ id: s.id, label: s.label }, nowMs);
-      const delivered = await announceChannels(
-        msg,
-        `⏰ ${msg}`,
-        `reminder:${s.id}:snoozed:${nowMs}`,
-        say,
-        notify,
-        deps,
-      );
-      if (!delivered.voiced && !delivered.notified) {
-        throw new Error('snooze re-announce failed on voice and Telegram');
+    await runLisaAction({ action: 'rappel', trigger: 'reminder', operation: 'rappel' }, async () => {
+      try {
+        const r = (await loadReminders()).find((x) => x.id === s.id);
+        const msg = r ? reminderMessage(r) : `C'est l'heure : ${s.label}.`;
+        openAck({ id: s.id, label: s.label }, nowMs);
+        const delivered = await announceChannels(
+          msg,
+          `⏰ ${msg}`,
+          `reminder:${s.id}:snoozed:${nowMs}`,
+          say,
+          notify,
+          deps,
+        );
+        if (!delivered.voiced && !delivered.notified) {
+          throw new Error('snooze re-announce failed on voice and Telegram');
+        }
+        await logReminderEvent('fired', { id: s.id, label: s.label }, { snoozed: true }, now);
+        const consumed = await consumeSnooze(s.id);
+        if (!consumed) {
+          logger.warn(`[reminders] snooze re-fire '${s.label}' announced but not consumed durably`);
+        }
+        logger.info(`[reminders] snoozed reminder re-fired '${s.label}'`);
+      } catch (err) {
+        logger.warn(`[reminders] snooze re-fire '${s.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
+        return false;
       }
-      await logReminderEvent('fired', { id: s.id, label: s.label }, { snoozed: true }, now);
-      const consumed = await consumeSnooze(s.id);
-      if (!consumed) {
-        logger.warn(`[reminders] snooze re-fire '${s.label}' announced but not consumed durably`);
-      }
-      logger.info(`[reminders] snoozed reminder re-fired '${s.label}'`);
-    } catch (err) {
-      logger.warn(`[reminders] snooze re-fire '${s.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+        return true;
+    }, false);
   }
 
   // 2. Gentle re-nag of still-pending reminders (voice only — don't spam Telegram per nag).
   for (const a of pendingAcks(nowMs, window)) {
     const elapsed = nowMs - a.firedAt;
     if (a.nags < maxNags && elapsed >= gap * (a.nags + 1)) {
-      try {
-        bumpNag(a.id);
-        await logReminderEvent('renag', a, { nag: a.nags }, now);
-        const line = `Petit rappel : ${a.label}.`;
-        await say(line);
-        if (!deps.say || deps.recordLocal) {
-          await (deps.recordLocal ?? defaultRecordLocal)(
-            line,
-            `reminder:${a.id}:renag:${a.firedAt}:${a.nags + 1}`,
-          );
+      await runLisaAction({ action: 'rappel', trigger: 'reminder', operation: 'rappel' }, async () => {
+        try {
+          bumpNag(a.id);
+          await logReminderEvent('renag', a, { nag: a.nags }, now);
+          const line = `Petit rappel : ${a.label}.`;
+          await say(line);
+          if (!deps.say || deps.recordLocal) {
+            await (deps.recordLocal ?? defaultRecordLocal)(
+              line,
+              `reminder:${a.id}:renag:${a.firedAt}:${a.nags + 1}`,
+            );
+          }
+        } catch (err) {
+          logger.warn(`[reminders] renag '${a.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
+        return false;
         }
-      } catch (err) {
-        logger.warn(`[reminders] renag '${a.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
+          return true;
+      }, false);
     }
   }
 
   // 3. Escalate the ones whose window lapsed with no ack → Telegram + log 'missed'.
   for (const a of expireAcks(nowMs, window)) {
-    try {
-      await logReminderEvent('missed', a, {}, now);
-      await notifyAndRecord(
-        `⚠️ Pas de confirmation : ${a.label}. (à vérifier)`,
-        `reminder:${a.id}:missed:${a.firedAt}`,
-        deps,
-        notify,
-      );
-      logger.warn(`[reminders] '${a.label}' not acknowledged → escalated to Telegram, logged missed`);
-    } catch (err) {
-      logger.warn(`[reminders] missed-escalation '${a.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    await runLisaAction({ action: 'rappel', trigger: 'reminder', operation: 'rappel' }, async () => {
+      try {
+        await logReminderEvent('missed', a, {}, now);
+        await notifyAndRecord(
+          `⚠️ Pas de confirmation : ${a.label}. (à vérifier)`,
+          `reminder:${a.id}:missed:${a.firedAt}`,
+          deps,
+          notify,
+        );
+        logger.warn(`[reminders] '${a.label}' not acknowledged → escalated to Telegram, logged missed`);
+      } catch (err) {
+        logger.warn(`[reminders] missed-escalation '${a.label}' failed: ${err instanceof Error ? err.message : String(err)}`);
+        return false;
+      }
+        return true;
+    }, false);
   }
 }
 

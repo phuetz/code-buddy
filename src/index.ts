@@ -3948,6 +3948,13 @@ addLazyCommandGroup(program, 'identity', 'Manage agent identity files (SOUL.md, 
   registerIdentityCommands(program);
 });
 
+if (process.env.CODEBUDDY_LISA_REGLES === 'true') {
+  addLazyCommandGroup(program, 'lisa', 'Journal et règles des actions de Lisa', async () => {
+    const { registerLisaCommands } = await import('./commands/cli/lisa-commands.js');
+    registerLisaCommands(program);
+  });
+}
+
 addLazyCommandGroup(program, 'companion', 'Configure Buddy as a ChatGPT-backed voice companion', async () => {
   const { registerCompanionCommands } = await import('./commands/cli/native-engine-commands.js');
   registerCompanionCommands(program);

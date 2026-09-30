@@ -1,3 +1,4 @@
+import { lisaPolicyEnabled, lisaTelegramAction, lisaTrigger, runLisaAction } from '../companion/lisa-policy.js';
 /**
  * Sensory alert — best-effort Telegram push (photo + caption) for the remote
  * watch. Token + chat id come from env (`CODEBUDDY_SENSORY_ALERT_TOKEN` /
@@ -17,6 +18,19 @@ import { prepareSpeech } from './speech-sanitizer.js';
  * Injectable (`synthesize` / `post`) for deterministic tests.
  */
 export async function sendTelegramVoice(
+  text: string,
+  deps: {
+    synthesize?: (t: string) => Promise<string>;
+    post?: (url: string, form: FormData) => Promise<{ ok: boolean }>;
+    fallback?: (t: string) => Promise<boolean>;
+  } = {},
+): Promise<boolean> {
+  if (!lisaPolicyEnabled()) return sendTelegramVoiceImpl(text, deps);
+  return runLisaAction({ action: lisaTelegramAction(process.env.CODEBUDDY_SENSORY_ALERT_CHAT), trigger: lisaTrigger('telegram'), operation: 'telegram' },
+    () => sendTelegramVoiceImpl(text, deps), false);
+}
+
+async function sendTelegramVoiceImpl(
   text: string,
   deps: {
     synthesize?: (t: string) => Promise<string>;
@@ -59,6 +73,19 @@ export async function sendTelegramVoice(
 }
 
 export async function sendTelegramAlert(
+  caption: string,
+  imagePath?: string,
+  deps: {
+    fetch?: (url: string, init: RequestInit) => Promise<unknown>;
+    readFile?: (p: string) => Promise<Buffer>;
+  } = {},
+): Promise<boolean> {
+  if (!lisaPolicyEnabled()) return sendTelegramAlertImpl(caption, imagePath, deps);
+  return runLisaAction({ action: lisaTelegramAction(process.env.CODEBUDDY_SENSORY_ALERT_CHAT), trigger: lisaTrigger('telegram'), operation: 'telegram' },
+    () => sendTelegramAlertImpl(caption, imagePath, deps), false);
+}
+
+async function sendTelegramAlertImpl(
   caption: string,
   imagePath?: string,
   deps: {

@@ -1,3 +1,4 @@
+import { lisaActionStillCurrent, inLisaTurn, lisaToolIntent, lisaTrigger, runLisaAction, LISA_REFUSAL } from '../companion/lisa-policy.js';
 /**
  * Tool Handler Module
  *
@@ -47,6 +48,7 @@ import {
 import { getTrustFolderManager } from "../security/trust-folders.js";
 import {
   getToolHooksManager,
+  ToolHooksManager,
   registerDefaultHooks,
   setCurrentProvider,
   type ToolHookContext,
@@ -543,6 +545,15 @@ export class ToolHandler {
     toolCall: CodeBuddyToolCall,
     executionExtra?: Record<string, unknown>,
   ): Promise<ToolResult> {
+    if (!inLisaTurn()) return this.executeStrictSelfInspectionToolImpl(toolCall, executionExtra);
+    return runLisaAction(lisaToolIntent(toolCall.function.name, lisaTrigger('companion-tool')),
+      () => this.executeStrictSelfInspectionToolImpl(toolCall, executionExtra), { success: false, error: LISA_REFUSAL });
+  }
+
+  private async executeStrictSelfInspectionToolImpl(
+    toolCall: CodeBuddyToolCall,
+    executionExtra?: Record<string, unknown>,
+  ): Promise<ToolResult> {
     const toolName = toolCall.function.name;
     let args: Record<string, unknown>;
     try {
@@ -595,12 +606,33 @@ export class ToolHandler {
     };
   }
 
+  /** A nominally read-only tool must not invoke arbitrary executable hooks in Lisa turns. */
+  private async executeLifecycleHooks(
+    ...args: Parameters<ToolHandlerDependencies['hooksManager']['executeHooks']>
+  ): ReturnType<ToolHandlerDependencies['hooksManager']['executeHooks']> {
+    if (inLisaTurn()) return [];
+    return this.deps.hooksManager.executeHooks(...args);
+  }
+
   public async executeTool(
     toolCall: CodeBuddyToolCall,
     executionExtra?: Record<string, unknown>,
   ): Promise<ToolResult> {
+    if (!inLisaTurn()) return this.executeToolImpl(toolCall, executionExtra);
+    let name = toolCall.function.name;
+    try {
+      name = normalizeHallucinatedLocalToolCall(name, JSON.parse(toolCall.function.arguments))?.toolName ?? name;
+    } catch { /* malformed calls remain guarded */ }
+    return runLisaAction(lisaToolIntent(name, lisaTrigger('companion-tool')),
+      () => this.executeToolImpl(toolCall, executionExtra), { success: false, error: LISA_REFUSAL });
+  }
+
+  private async executeToolImpl(
+    toolCall: CodeBuddyToolCall,
+    executionExtra?: Record<string, unknown>,
+  ): Promise<ToolResult> {
     const startTime = Date.now();
-    const hooksManager = getToolHooksManager();
+    const hooksManager = inLisaTurn() ? new ToolHooksManager() : getToolHooksManager();
 
     try {
       let args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
@@ -672,7 +704,7 @@ export class ToolHandler {
       let lifecycleModifiedArgs = { ...modifiedArgs };
 
       try {
-        const lifecycleBeforeResult = await this.deps.hooksManager.executeHooks('before-tool-call', {
+        const lifecycleBeforeResult = await this.executeLifecycleHooks('before-tool-call', {
           toolName,
           toolArgs: modifiedArgs,
           sessionId: this.currentRunId,
@@ -719,6 +751,8 @@ export class ToolHandler {
         );
         if (modifiedAuthorizationError) return modifiedAuthorizationError;
       }
+
+      if (!lisaActionStillCurrent()) return { success: false, error: LISA_REFUSAL };
 
       // Execute tool with potentially modified args
       let result: ToolResult;
@@ -804,7 +838,7 @@ export class ToolHandler {
       const finalHookResult = await hooksManager.executeAfterHooks(hookContext, hookResult);
 
       // Axe 4: run lifecycle after-tool-call hooks
-      await this.deps.hooksManager.executeHooks('after-tool-call', {
+      await this.executeLifecycleHooks('after-tool-call', {
         toolName,
         toolArgs: finalArgs,
         output: finalHookResult.output,
@@ -820,7 +854,7 @@ export class ToolHandler {
         );
         // CC12: Emit on-tool-failure lifecycle hook
         try {
-          await this.deps.hooksManager.executeHooks("on-tool-failure", {
+          await this.executeLifecycleHooks("on-tool-failure", {
             toolName: toolCall.function.name,
             error: finalHookResult.error,
           });
@@ -1445,11 +1479,11 @@ export class ToolHandler {
       } catch { /* best-effort checkpoint — still apply the patch */ }
 
       for (const file of affected) {
-        await this.deps.hooksManager.executeHooks('pre-edit', { file, content: '' });
+        await this.executeLifecycleHooks('pre-edit', { file, content: '' });
       }
       const result = await this.registry.execute(toolName, args, context);
       for (const file of affected) {
-        await this.deps.hooksManager.executeHooks('post-edit', { file, content: '', output: result.output });
+        await this.executeLifecycleHooks('post-edit', { file, content: '', output: result.output });
       }
       return result;
     }
@@ -1467,7 +1501,7 @@ export class ToolHandler {
       }
 
       // Execute pre-edit hooks
-      await this.deps.hooksManager.executeHooks("pre-edit", {
+      await this.executeLifecycleHooks("pre-edit", {
         file: filePath,
         content: (args.content || args.new_str || '') as string,
       });
@@ -1476,7 +1510,7 @@ export class ToolHandler {
       const result = await this.registry.execute(toolName, args, context);
 
       // Execute post-edit hooks
-      await this.deps.hooksManager.executeHooks("post-edit", {
+      await this.executeLifecycleHooks("post-edit", {
         file: filePath,
         content: (args.content || args.new_str || '') as string,
         output: result.output,
@@ -1507,7 +1541,7 @@ export class ToolHandler {
 
     // Execute pre-bash hooks
     try {
-      await this.deps.hooksManager.executeHooks("pre-bash", { command });
+      await this.executeLifecycleHooks("pre-bash", { command });
     } catch (hookError) {
       logger.warn("Pre-bash hook failed, continuing with execution", {
         error: getErrorMessage(hookError),
@@ -1545,7 +1579,7 @@ export class ToolHandler {
 
     // Execute post-bash hooks
     try {
-      await this.deps.hooksManager.executeHooks("post-bash", {
+      await this.executeLifecycleHooks("post-bash", {
         command,
         output: bashResult.output,
         error: bashResult.error,
@@ -1571,7 +1605,7 @@ export class ToolHandler {
     startTime: number,
   ): AsyncGenerator<string, ToolResult, undefined> {
     const toolName = 'bash';
-    const hooksManager = getToolHooksManager();
+    const hooksManager = inLisaTurn() ? new ToolHooksManager() : getToolHooksManager();
     let args: Record<string, unknown>;
     try {
       args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
@@ -1614,7 +1648,7 @@ export class ToolHandler {
     let abortExecution = false;
     let lifecycleModifiedArgs = { ...modifiedArgs };
     try {
-      const lifecycleBeforeResult = await this.deps.hooksManager.executeHooks('before-tool-call', {
+      const lifecycleBeforeResult = await this.executeLifecycleHooks('before-tool-call', {
         toolName,
         toolArgs: modifiedArgs,
         sessionId: this.currentRunId,
@@ -1669,7 +1703,7 @@ export class ToolHandler {
         };
       } else {
         try {
-          await this.deps.hooksManager.executeHooks('pre-bash', { command });
+          await this.executeLifecycleHooks('pre-bash', { command });
         } catch (hookError) {
           logger.warn('Pre-bash hook failed, continuing with execution', {
             error: getErrorMessage(hookError),
@@ -1704,7 +1738,7 @@ export class ToolHandler {
         }
 
         try {
-          await this.deps.hooksManager.executeHooks('post-bash', {
+          await this.executeLifecycleHooks('post-bash', {
             command,
             output: bashResult.output,
             error: bashResult.error,
@@ -1722,7 +1756,7 @@ export class ToolHandler {
       };
       const finalHookResult = await hooksManager.executeAfterHooks(hookContext, hookResult);
 
-      await this.deps.hooksManager.executeHooks('after-tool-call', {
+      await this.executeLifecycleHooks('after-tool-call', {
         toolName,
         toolArgs: finalArgs,
         output: finalHookResult.output,
@@ -1736,7 +1770,7 @@ export class ToolHandler {
           new Error(finalHookResult.error),
         );
         try {
-          await this.deps.hooksManager.executeHooks('on-tool-failure', {
+          await this.executeLifecycleHooks('on-tool-failure', {
             toolName,
             error: finalHookResult.error,
           });
@@ -1779,6 +1813,9 @@ export class ToolHandler {
   ): AsyncGenerator<string, ToolResult, undefined> {
     const startTime = Date.now();
     const toolName = toolCall.function.name;
+    if (inLisaTurn()) {
+      return yield* streamToolOutput(() => this.executeTool(toolCall, executionExtra), abortSignalFromExecutionExtra(executionExtra));
+    }
     const filterBlock = this.checkActiveToolFilter(toolName, toolCall.id, startTime);
     if (filterBlock) {
       return filterBlock;

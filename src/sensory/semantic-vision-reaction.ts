@@ -1,3 +1,4 @@
+import { runLisaAction } from '../companion/lisa-policy.js';
 /**
  * Semantic vision reaction — turns the HIGH-LEVEL vision events from the Python
  * vision sidecar (`person_entered` / `person_lost` / `drowsy`) into a remote
@@ -282,119 +283,123 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
           logger.info('[vision] arrival greeting skipped: voice active');
           return;
         }
-        if (!conductor.claim('arrival')) {
-          logger.info('[vision] arrival greeting skipped: conductor gap');
-          return;
-        }
-        lastGreetAt = t;
-        try {
-          const { getActivePersonaVoiceAsync } = await import('../personas/persona-manager.js');
-          const persona = await getActivePersonaVoiceAsync();
-          // Varied, context-aware opener (time of day / gap since last seen) with anti-repetition,
-          // instead of the single fixed persona.greeting that made it say the same line every time.
-          const state = loadArrivalState(options.arrivalStatePath);
-          let episodeLine = '';
-          if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
-            try {
-              const { readFile } = await import('node:fs/promises');
-              const { join } = await import('node:path');
-              const raw = await readFile(
-                join(options.cwd ?? process.cwd(), '.codebuddy', 'companion', 'episodes.jsonl'),
-                'utf8',
-              );
-              const last = raw.trim().split('\n').filter(Boolean).at(-1);
-              if (last) {
-                const parsed = JSON.parse(last) as { line?: unknown };
-                if (typeof parsed.line === 'string') episodeLine = parsed.line;
-              }
-            } catch {
-              /* episode hint is optional */
-            }
+        await runLisaAction({ action: 'parole', trigger: 'arrival', operation: 'initiative' }, async () => {
+          if (!conductor.claim('arrival')) {
+            logger.info('[vision] arrival greeting skipped: conductor gap');
+            return;
           }
-          const opener = buildArrivalOpener({
-            now: t,
-            lastSeenAt: state.lastSeenAt ?? null,
-            recent: state.recent,
-            ...(arrivalName ? { name: arrivalName } : {}),
-            recognizedUser: recognizedArrival,
-            ...(episodeLine ? { episodeLine } : {}),
-          });
-          let greeting = opener.text || persona.greeting || 'Bonjour ! Je suis là si tu as besoin.';
-
-          // Natural, non-scripted layer (opt-in CODEBUDDY_SENSORY_GREET_LLM): a fresh
-          // LLM line seeded with the recent lines to AVOID + the last things heard so it
-          // can reference the conversation. Times out to the instant opener above.
-          if (process.env.CODEBUDDY_SENSORY_GREET_LLM === 'true') {
-            try {
-              let recentHeard: string[] = [];
+          lastGreetAt = t;
+          try {
+            const { getActivePersonaVoiceAsync } = await import('../personas/persona-manager.js');
+            const persona = await getActivePersonaVoiceAsync();
+            // Varied, context-aware opener (time of day / gap since last seen) with anti-repetition,
+            // instead of the single fixed persona.greeting that made it say the same line every time.
+            const state = loadArrivalState(options.arrivalStatePath);
+            let episodeLine = '';
+            if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
               try {
-                const { readRecentDialogueHearing } = await import(
-                  '../companion/dialogue-percepts.js'
+                const { readFile } = await import('node:fs/promises');
+                const { join } = await import('node:path');
+                const raw = await readFile(
+                  join(options.cwd ?? process.cwd(), '.codebuddy', 'companion', 'episodes.jsonl'),
+                  'utf8',
                 );
-                recentHeard = (await readRecentDialogueHearing(4, options.cwd)).reverse();
-              } catch {
-                /* memory context optional */
-              }
-              // Relational context (opt-in): accepted facts about him + Lisa's mood + presence, so the
-              // opener can reference the relationship, not just the last things heard. The env gate is
-              // checked BEFORE the dynamic import so the (heavy) user-model graph is never loaded when
-              // the feature is off — keeps the default path import-free and fast. Best-effort.
-              let relationalContext = '';
-              if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
-                try {
-                  const { buildRelationalContext } = await import('../companion/relational-context.js');
-                  relationalContext = await buildRelationalContext({
-                    ...(options.cwd ? { cwd: options.cwd } : {}),
-                    includeSelfEvolution: false,
-                  });
-                } catch {
-                  /* relational context optional */
+                const last = raw.trim().split('\n').filter(Boolean).at(-1);
+                if (last) {
+                  const parsed = JSON.parse(last) as { line?: unknown };
+                  if (typeof parsed.line === 'string') episodeLine = parsed.line;
                 }
+              } catch {
+                /* episode hint is optional */
               }
-              const llmLine = await buildLlmArrivalOpener({
-                now: t,
-                lastSeenAt: state.lastSeenAt ?? null,
-                recentTexts: [...(state.recentSpoken ?? []), ...state.recent],
-                recentHeard,
-                ...(persona.spokenPrompt ? { personaPrompt: persona.spokenPrompt } : {}),
-                ...(relationalContext ? { relationalContext } : {}),
-                ...(episodeLine ? { episodeLine } : {}),
-                ...(arrivalName ? { name: arrivalName } : {}),
-                ...(options.llmChat ? { chat: options.llmChat } : {}),
-              });
-              if (llmLine) greeting = llmLine;
-            } catch {
-              /* keep the deterministic opener */
             }
-          }
-
-          const { guardRelationshipReply } = await import(
-            '../conversation/relationship-safety.js'
-          );
-          const safeGreeting = guardRelationshipReply(greeting).response;
-          const greet =
-            options.greet ??
-            (async (text: string) => {
-              const [{ sayNow }, { speakCanonicalVoiceInitiative }] = await Promise.all([
-                import('./voice-loop.js'),
-                import('../conversation/voice-continuity.js'),
-              ]);
-              await speakCanonicalVoiceInitiative(
-                text,
-                (content) => sayNow(content, { phoneDelivery: 'never', ttsRouteHint: 'opening' }),
-              );
+            const opener = buildArrivalOpener({
+              now: t,
+              lastSeenAt: state.lastSeenAt ?? null,
+              recent: state.recent,
+              ...(arrivalName ? { name: arrivalName } : {}),
+              recognizedUser: recognizedArrival,
+              ...(episodeLine ? { episodeLine } : {}),
             });
-          await greet(safeGreeting);
-          saveArrivalState({
-            lastSeenAt: t,
-            recent: pushRecent(state.recent, opener.template),
-            recentSpoken: pushRecent(state.recentSpoken ?? [], safeGreeting),
-          }, options.arrivalStatePath);
-          options.onEngage?.(); // open the conversation window — follow-ups are now treated as addressed
-          logger.info(`[vision] greeted arrival (${opener.trigger}) → ${safeGreeting}`);
-        } catch (err) {
-          logger.warn(`[vision] arrival greeting failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
+            let greeting = opener.text || persona.greeting || 'Bonjour ! Je suis là si tu as besoin.';
+
+            // Natural, non-scripted layer (opt-in CODEBUDDY_SENSORY_GREET_LLM): a fresh
+            // LLM line seeded with the recent lines to AVOID + the last things heard so it
+            // can reference the conversation. Times out to the instant opener above.
+            if (process.env.CODEBUDDY_SENSORY_GREET_LLM === 'true') {
+              try {
+                let recentHeard: string[] = [];
+                try {
+                  const { readRecentDialogueHearing } = await import(
+                    '../companion/dialogue-percepts.js'
+                  );
+                  recentHeard = (await readRecentDialogueHearing(4, options.cwd)).reverse();
+                } catch {
+                  /* memory context optional */
+                }
+                // Relational context (opt-in): accepted facts about him + Lisa's mood + presence, so the
+                // opener can reference the relationship, not just the last things heard. The env gate is
+                // checked BEFORE the dynamic import so the (heavy) user-model graph is never loaded when
+                // the feature is off — keeps the default path import-free and fast. Best-effort.
+                let relationalContext = '';
+                if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
+                  try {
+                    const { buildRelationalContext } = await import('../companion/relational-context.js');
+                    relationalContext = await buildRelationalContext({
+                      ...(options.cwd ? { cwd: options.cwd } : {}),
+                      includeSelfEvolution: false,
+                    });
+                  } catch {
+                    /* relational context optional */
+                  }
+                }
+                const llmLine = await buildLlmArrivalOpener({
+                  now: t,
+                  lastSeenAt: state.lastSeenAt ?? null,
+                  recentTexts: [...(state.recentSpoken ?? []), ...state.recent],
+                  recentHeard,
+                  ...(persona.spokenPrompt ? { personaPrompt: persona.spokenPrompt } : {}),
+                  ...(relationalContext ? { relationalContext } : {}),
+                  ...(episodeLine ? { episodeLine } : {}),
+                  ...(arrivalName ? { name: arrivalName } : {}),
+                  ...(options.llmChat ? { chat: options.llmChat } : {}),
+                });
+                if (llmLine) greeting = llmLine;
+              } catch {
+                /* keep the deterministic opener */
+              }
+            }
+
+            const { guardRelationshipReply } = await import(
+              '../conversation/relationship-safety.js'
+            );
+            const safeGreeting = guardRelationshipReply(greeting).response;
+            const greet =
+              options.greet ??
+              (async (text: string) => {
+                const [{ sayNow }, { speakCanonicalVoiceInitiative }] = await Promise.all([
+                  import('./voice-loop.js'),
+                  import('../conversation/voice-continuity.js'),
+                ]);
+                await speakCanonicalVoiceInitiative(
+                  text,
+                  (content) => sayNow(content, { phoneDelivery: 'never', ttsRouteHint: 'opening' }),
+                );
+              });
+            await greet(safeGreeting);
+            saveArrivalState({
+              lastSeenAt: t,
+              recent: pushRecent(state.recent, opener.template),
+              recentSpoken: pushRecent(state.recentSpoken ?? [], safeGreeting),
+            }, options.arrivalStatePath);
+            options.onEngage?.(); // open the conversation window — follow-ups are now treated as addressed
+            logger.info(`[vision] greeted arrival (${opener.trigger}) → ${safeGreeting}`);
+            return true;
+          } catch (err) {
+            logger.warn(`[vision] arrival greeting failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+            return false;
+        }, false);
       }
     })();
   });

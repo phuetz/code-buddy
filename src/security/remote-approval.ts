@@ -166,6 +166,9 @@ export class RemoteApprovalService extends EventEmitter {
       `Expires in: ${expiresIn}s`,
       ``,
       `Reply with \`/approve ${request.id}\` or \`/deny ${request.id}\``,
+      ...(process.env.CODEBUDDY_LISA_REGLES === 'true' && request.toolName.startsWith('lisa:')
+        ? [`Lisa : réponds « oui » s'il n'y a qu'une demande, « non », ou dis « confirme lisa ${request.id} » dans une note vocale privée.`]
+        : []),
     ].join('\n');
   }
 }

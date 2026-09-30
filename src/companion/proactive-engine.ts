@@ -1,3 +1,4 @@
+import { runLisaAction } from './lisa-policy.js';
 /**
  * Proactive engine — Lisa reaches out FIRST.
  *
@@ -350,46 +351,48 @@ async function deliverAwayInitiative(
   const decision = canSendAway({ state, clock });
   if (!decision.ok) return null;
 
-  let line = pickAwayLine(decision.angle, { rng: deps.rng, avoid: state.lastLine, now });
-  if (!line.trim() || isAwayShameLine(line)) return null;
-  const guardedLine = guardRelationshipReply(line);
-  line = guardedLine.response;
-  if (!line.trim()) return null;
+  return await runLisaAction({ action: 'message-patrice', trigger: 'away', operation: 'initiative' }, async () => {
+    let line = pickAwayLine(decision.angle, { rng: deps.rng, avoid: state.lastLine, now });
+    if (!line.trim() || isAwayShameLine(line)) return null;
+    const guardedLine = guardRelationshipReply(line);
+    line = guardedLine.response;
+    if (!line.trim()) return null;
 
-  const conductor = deps.conductor ?? getCompanionConductor();
-  if (!conductor.claim('proactive')) return null;
-  try {
-    if (!(await (deps.telegramAlert ?? defaultTelegramAlert)(line))) {
-      throw new Error('away telegram delivery was not accepted');
-    }
+    const conductor = deps.conductor ?? getCompanionConductor();
+    if (!conductor.claim('proactive')) return null;
     try {
-      const { sendMobilePush } = await import('../server/mobile/push.js');
-      await sendMobilePush({ title: 'Lisa', body: line });
-    } catch {
-      /* push is optional */
+      if (!(await (deps.telegramAlert ?? defaultTelegramAlert)(line))) {
+        throw new Error('away telegram delivery was not accepted');
+      }
+      try {
+        const { sendMobilePush } = await import('../server/mobile/push.js');
+        await sendMobilePush({ title: 'Lisa', body: line });
+      } catch {
+        /* push is optional */
+      }
+      if (!deps.telegramAlert || deps.recordRemote) {
+        await (deps.recordRemote ?? defaultRecordRemote)(line);
+      }
+    } catch (error) {
+      logger.warn(
+        `[proactive] away delivery failed → silent: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
     }
-    if (!deps.telegramAlert || deps.recordRemote) {
-      await (deps.recordRemote ?? defaultRecordRemote)(line);
-    }
-  } catch (error) {
-    logger.warn(
-      `[proactive] away delivery failed → silent: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return null;
-  }
 
-  const next = recordAwaySend(state, { angle: decision.angle, clock, line });
-  if (!saveAwayState(next, awayPath)) return null;
-  saveProactiveState(
-    {
-      lastSentAt: now,
-      recentLines: [...loadProactiveState(deps.statePath).recentLines, line].slice(-8),
-    },
-    deps.statePath,
-  );
-  rememberSaid(line, 'telegram', now);
-  logger.info(`[proactive] away:${decision.angle} (telegram) → ${line}`);
-  return line;
+    const next = recordAwaySend(state, { angle: decision.angle, clock, line });
+    if (!saveAwayState(next, awayPath)) return null;
+    saveProactiveState(
+      {
+        lastSentAt: now,
+        recentLines: [...loadProactiveState(deps.statePath).recentLines, line].slice(-8),
+      },
+      deps.statePath,
+    );
+    rememberSaid(line, 'telegram', now);
+    logger.info(`[proactive] away:${decision.angle} (telegram) → ${line}`);
+    return line;
+  }, null);
 }
 
 /**
@@ -451,81 +454,83 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
     });
     if (!candidate) return null;
 
-    let line = pickProactiveLine(candidate, deps.rng ?? Math.random);
-    if (!line.trim()) return null;
-    if (deps.refine) {
-      try {
-        const fresh = await deps.refine(candidate.trigger, line, state.recentLines);
-        if (fresh && fresh.trim()) line = fresh.trim();
-      } catch {
-        /* keep the template */
+    return await runLisaAction({ action: present ? 'parole' : 'message-patrice', trigger: candidate.trigger, operation: 'initiative' }, async () => {
+      let line = pickProactiveLine(candidate, deps.rng ?? Math.random);
+      if (!line.trim()) return null;
+      if (deps.refine) {
+        try {
+          const fresh = await deps.refine(candidate.trigger, line, state.recentLines);
+          if (fresh && fresh.trim()) line = fresh.trim();
+        } catch {
+          /* keep the template */
+        }
       }
-    }
-    const guardedLine = guardRelationshipReply(line);
-    if (guardedLine.intervened) {
-      logger.warn('[proactive] relationship safety gate intervened', {
-        trigger: candidate.trigger,
-        issues: guardedLine.issues,
-      });
-    }
-    line = guardedLine.response;
+      const guardedLine = guardRelationshipReply(line);
+      if (guardedLine.intervened) {
+        logger.warn('[proactive] relationship safety gate intervened', {
+          trigger: candidate.trigger,
+          issues: guardedLine.issues,
+        });
+      }
+      line = guardedLine.response;
 
-    let reservation: DailyInteractionReservation | null = null;
-    if (homeDecision && deps.claimDailyBudget) {
-      reservation = await deps.claimDailyBudget(homeDecision.spontaneousDailyLimit, new Date(now));
-      if (!reservation.granted) {
-        logger.info('[proactive] shared household invitation budget exhausted');
+      let reservation: DailyInteractionReservation | null = null;
+      if (homeDecision && deps.claimDailyBudget) {
+        reservation = await deps.claimDailyBudget(homeDecision.spontaneousDailyLimit, new Date(now));
+        if (!reservation.granted) {
+          logger.info('[proactive] shared household invitation budget exhausted');
+          return null;
+        }
+      }
+
+      // Deliver: aloud if he's here, otherwise reach his phone. Every initiative
+      // yields to the conductor (spoken or Telegram) so two surfaces cannot land
+      // inside CODEBUDDY_COMPANION_MIN_GAP_MS. A denied floor releases the budget.
+      const conductor = deps.conductor ?? getCompanionConductor();
+      if (!conductor.claim('proactive')) {
+        await reservation?.release();
         return null;
       }
-    }
-
-    // Deliver: aloud if he's here, otherwise reach his phone. Every initiative
-    // yields to the conductor (spoken or Telegram) so two surfaces cannot land
-    // inside CODEBUDDY_COMPANION_MIN_GAP_MS. A denied floor releases the budget.
-    const conductor = deps.conductor ?? getCompanionConductor();
-    if (!conductor.claim('proactive')) {
-      await reservation?.release();
-      return null;
-    }
-    try {
-      if (present) {
-        if (!(await (deps.say ?? defaultSay)(line))) {
-          throw new Error('local proactive delivery was not accepted');
+      try {
+        if (present) {
+          if (!(await (deps.say ?? defaultSay)(line))) {
+            throw new Error('local proactive delivery was not accepted');
+          }
+        } else {
+          if (!(await (deps.telegramVoice ?? defaultTelegramVoice)(line))) {
+            throw new Error('remote proactive delivery was not accepted');
+          }
+          rememberSaid(line, 'telegram', now);
+          // An injected phone transport belongs to its test/integration caller;
+          // production records the already-delivered turn once, with no mirror.
+          if (!deps.telegramVoice || deps.recordRemote) {
+            await (deps.recordRemote ?? defaultRecordRemote)(line);
+          }
         }
-      } else {
-        if (!(await (deps.telegramVoice ?? defaultTelegramVoice)(line))) {
-          throw new Error('remote proactive delivery was not accepted');
-        }
-        rememberSaid(line, 'telegram', now);
-        // An injected phone transport belongs to its test/integration caller;
-        // production records the already-delivered turn once, with no mirror.
-        if (!deps.telegramVoice || deps.recordRemote) {
-          await (deps.recordRemote ?? defaultRecordRemote)(line);
-        }
+      } catch (error) {
+        await reservation?.release();
+        throw error;
       }
-    } catch (error) {
-      await reservation?.release();
-      throw error;
-    }
 
-    // Persist throttle + per-occurrence locks so a trigger fires exactly once.
-    const saved = saveProactiveState(
-      { lastSentAt: now, recentLines: [...state.recentLines, line].slice(-8) },
-      deps.statePath
-    );
-    if (!saved) {
-      logger.warn('[proactive] cooldown cursor was not persisted; not treating the tick as sent');
-      return null;
-    }
-    if (candidate.trigger === 'milestone') {
-      rel.celebratedMilestones = markMilestonesUpTo(rel.celebratedMilestones, daysTogether);
-      saveRelationshipState(rel, deps.relationshipStatePath);
-    }
-    if (candidate.trigger === 'followUp' && due) {
-      markFired(due.id, now, deps.eventFollowUpsPath);
-    }
-    logger.info(`[proactive] ${candidate.trigger} (${present ? 'spoken' : 'telegram'}) → ${line}`);
-    return line;
+      // Persist throttle + per-occurrence locks so a trigger fires exactly once.
+      const saved = saveProactiveState(
+        { lastSentAt: now, recentLines: [...state.recentLines, line].slice(-8) },
+        deps.statePath
+      );
+      if (!saved) {
+        logger.warn('[proactive] cooldown cursor was not persisted; not treating the tick as sent');
+        return null;
+      }
+      if (candidate.trigger === 'milestone') {
+        rel.celebratedMilestones = markMilestonesUpTo(rel.celebratedMilestones, daysTogether);
+        saveRelationshipState(rel, deps.relationshipStatePath);
+      }
+      if (candidate.trigger === 'followUp' && due) {
+        markFired(due.id, now, deps.eventFollowUpsPath);
+      }
+      logger.info(`[proactive] ${candidate.trigger} (${present ? 'spoken' : 'telegram'}) → ${line}`);
+      return line;
+    }, null);
   } catch (err) {
     logger.warn(
       `[proactive] tick failed → silent: ${err instanceof Error ? err.message : String(err)}`

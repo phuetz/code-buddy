@@ -1,3 +1,4 @@
+import { runLisaAction } from './lisa-policy.js';
 /** Fresh owner confirmation for reminder commands heard by the room microphone. */
 import { randomBytes } from 'node:crypto';
 import type { CompanionIdentity } from './companion-identity.js';
@@ -32,7 +33,7 @@ function addressedBody(text: string, robotName: string): string | null {
   return body;
 }
 
-function isAuthenticatedOwner(identity: CompanionIdentity): boolean {
+export function isAuthenticatedOwner(identity: CompanionIdentity): boolean {
   if (identity.role !== 'owner' || identity.confidence !== 'high') return false;
   if (identity.channel === 'pwa') return true;
   if (identity.channel !== 'telegram' || !identity.userId) return false;
@@ -163,7 +164,10 @@ export function createReminderVoiceCoordinator(options: {
       }
       pending.delete(key); // one-shot, before asynchronous store writes
       try {
-        const result = await execute(request.action, now());
+        const result = await runLisaAction({ action: 'rappel', trigger: 'voice-command', operation: 'rappel' },
+          () => execute(request.action, now()), null,
+          // This coordinator has already verified the owner and consumed a fresh nonce.
+          async () => true);
         return result
           ? { handled: true, success: true, text: result }
           : { handled: true, success: false, text: 'Le rappel a changé ou sa fenêtre a expiré. Redemande à Lisa.' };

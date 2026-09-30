@@ -1948,8 +1948,26 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         allowedUsers: telegramChannel.config?.allowedUsers ?? [],
         env: process.env,
       }).role === 'owner';
+      let lisaApprovalOwner = false;
+      if (process.env.CODEBUDDY_LISA_REGLES === 'true') {
+        const { handleLisaApproval } = await import('../../companion/lisa-policy.js');
+        const { isAuthenticatedOwner } = await import('../../companion/reminder-voice-auth.js');
+        const identity = resolveCompanionIdentity({
+          channel: 'telegram', chatId: message.channel.id, senderId: message.sender?.id,
+          senderUsername: message.sender?.username, allowedUsers: telegramChannel.config?.allowedUsers ?? [],
+          env: process.env,
+        });
+        lisaApprovalOwner = channel.type === 'telegram' && isAuthenticatedOwner(identity);
+        const answer = await handleLisaApproval(message.content, lisaApprovalOwner);
+        if (answer) {
+          await channel.send({ channelId: message.channel.id, content: answer, replyTo: message.id });
+          return;
+        }
+      }
       if (approvalCmd && approvalCmd[1] && approvalCmd[2]) {
-        if (!approvalOwner) {
+        const lisaRequest = process.env.CODEBUDDY_LISA_REGLES === 'true' &&
+          approvalSvc.getPending().some((r) => r.id === approvalCmd[2] && r.toolName.startsWith('lisa:'));
+        if (!approvalOwner || (lisaRequest && !lisaApprovalOwner)) {
           await channel.send({ channelId: message.channel.id, content: 'Confirmation réservée au propriétaire.', replyTo: message.id });
           return;
         }

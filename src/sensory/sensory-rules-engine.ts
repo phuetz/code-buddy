@@ -1,3 +1,4 @@
+import { runLisaAction, LISA_REFUSAL } from '../companion/lisa-policy.js';
 /**
  * Sensory rules engine — declarative event→action.
  *
@@ -449,7 +450,11 @@ export function wireSensoryRules(
 
       void (async () => {
         try {
-          const res = await execute(rule.action, ctx).catch((e) => ({ ok: false, detail: String(e) }));
+          const category = rule.action.type === 'alert' ? 'message-patrice'
+            : rule.action.type === 'webhook' ? 'publier' : 'commande-shell';
+          const res = await runLisaAction({ action: category, trigger: 'sensory-rule', operation: 'regle-sensorielle' },
+            () => execute(rule.action, ctx).catch((e) => ({ ok: false, detail: String(e) })),
+            { ok: false, detail: LISA_REFUSAL });
           logger.info(`[rules] ${rule.id} (${rule.action.type}) → ${res.ok ? 'ok' : 'FAIL'}${res.detail ? `: ${res.detail.slice(0, 80)}` : ''}`);
           try {
             await appendRuleRun({
