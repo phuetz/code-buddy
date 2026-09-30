@@ -102,6 +102,17 @@
       ],
       "reason": "Only the bundled undici 6.28.0 in dev-only semantic-release -> @semantic-release/npm -> npm 11.19.1 -> node-gyp 12.4.0. npm 11.20.0 and 12.1.0 still bundle 6.28.0; npm overrides do not replace bundled files. node-gyp uses undici fetch to download Node headers during native builds, not its vulnerable WebSocket client. Not shipped in production installs; runtime undici 6.29.0 and @semantic-release/github undici 7.29.1 are patched. No runtime path is exempted: the gate restricts this exception to the listed node. Remove when npm ships a patched bundle; re-review within two weeks.",
       "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "brace-expansion",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
+        "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
+        "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p"
+      ],
+      "reason": "Every reachable copy is upgraded to a fixed release (1.1.21 / 2.1.7). The only remaining vulnerable copy is brace-expansion 5.0.9 bundled inside npm 11.19.1, which dev-only semantic-release -> @semantic-release/npm ships as a bundleDependency: an override cannot reach it and it only expands glob patterns written by the release workflow, never user input. Remove when @semantic-release/npm bundles an npm with brace-expansion >= 5.0.12.",
+      "reviewBy": "2026-10-14"
     }
   ]
 }
