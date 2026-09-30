@@ -28,10 +28,12 @@ jest.mock('../../src/utils/command-exists.js', () => ({
 const mockGetDiagnostics = jest.fn();
 const mockEnsureServerForFile = jest.fn();
 const mockDetectLanguage = jest.fn();
+const mockStopAll = jest.fn().mockResolvedValue(undefined);
 const mockClient = {
   getDiagnostics: mockGetDiagnostics,
   ensureServerForFile: mockEnsureServerForFile,
   detectLanguage: mockDetectLanguage,
+  stopAll: mockStopAll,
 };
 
 jest.mock('../../src/lsp/lsp-client.js', async (importOriginal: () => Promise<Record<string, unknown>>) => {
@@ -146,6 +148,29 @@ describe('buddy lsp CLI', () => {
   // =========================================================================
 
   describe('lsp diagnostics', () => {
+    it('stops the server after rendering diagnostics', async () => {
+      mockCommandExists.mockResolvedValue(true);
+      mockGetDiagnostics.mockResolvedValue([]);
+
+      await createProgram().parseAsync(['node', 'test', 'lsp', 'diagnostics', 'foo.ts', '--json']);
+
+      expect(mockStopAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a diagnostic timeout and stops the server instead of declaring the file clean', async () => {
+      mockCommandExists.mockResolvedValue(true);
+      mockGetDiagnostics.mockRejectedValue(new Error('No diagnostics received for foo.ts'));
+      const previousExitCode = process.exitCode;
+      try {
+        await createProgram().parseAsync(['node', 'test', 'lsp', 'diagnostics', 'foo.ts', '--json']);
+        expect(JSON.parse(getLogOutput())).toMatchObject({ error: 'diagnostics_failed' });
+        expect(process.exitCode).toBe(1);
+        expect(mockStopAll).toHaveBeenCalledTimes(1);
+      } finally {
+        process.exitCode = previousExitCode;
+      }
+    });
+
     it('prints diagnostics when the server is installed and reports issues', async () => {
       mockCommandExists.mockResolvedValue(true);
       mockGetDiagnostics.mockResolvedValue([

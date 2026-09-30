@@ -177,7 +177,21 @@ export function registerLspCommands(program: Command): void {
         return;
       }
       logger.debug('Running LSP diagnostics', { file, language, command: config.command });
-      const diagnostics = await client.getDiagnostics(file);
+      let diagnostics: LSPDiagnostic[];
+      try {
+        diagnostics = await client.getDiagnostics(file);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (emitJson) {
+          console.log(JSON.stringify({ error: 'diagnostics_failed', file, language, message }));
+        } else {
+          console.error(`LSP diagnostics failed: ${message}`);
+        }
+        process.exitCode = 1;
+        return;
+      } finally {
+        await client.stopAll();
+      }
 
       if (emitJson) {
         console.log(JSON.stringify({ file, language, diagnostics }, null, 2));
