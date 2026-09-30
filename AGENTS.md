@@ -30,7 +30,7 @@ npm run dev:gui        # Cowork dev (Vite + Electron)
 
 | Variable | Purpose |
 | --- | --- |
-| `CODEBUDDY_COMPANION_CORE` | **Opt-in (default off)** : loads `@phuetz/companion-core` for the relational layer. Byte-identical when unset. |
+| `CODEBUDDY_COMPANION_CORE` | **Opt-in (default off)** : is inert because `src/companion/core-adapter.ts` is not imported by any production code. Byte-identical when unset. |
 | `CODEBUDDY_LISA_SELFIE_REFILL` | **Opt-in (default off)** : enables heartbeat refill of Lisa selfie cache from ComfyUI when load < 4. |
 | `CODEBUDDY_MOBILE_PWA` | **Opt-in (default off)** : enables `/__codebuddy__/mobile/` PWA and WebSocket approval bridge. |
 | `CODEBUDDY_COMPANION_RELATIONAL` | **Opt-in (default off)** : injects Lisa's mood/traits/rapport into companion replies via `src/companion/relational-context.ts`. |
@@ -55,7 +55,7 @@ Pour les changements utilisateur CLI/flotte/DGM : lancer l'application réelle a
 - **CLI command tests:** Commander `parseAsync()` + `exitOverride()`, mock `console.log` / `process.exit`.
 - **Channel adapter tests:** mock `global.fetch` for health checks, mock dynamic imports via virtual modules.
 - **`DeviceNodeManager` tests:** mock `ssh-transport` / `adb-transport` / `local-transport` and `fs` (prevents `devices.json` bleed between tests). `pairDevice()` is async.
-- **`AgentRegistry`** ships 8 built-in agents: PDF, Excel, DataAnalysis, SQL, Archive, CodeGuardian, SecurityReview, SWE.
+- **`AgentRegistry`** ships 9 built-in agents: PDF, Excel, DataAnalysis, SQL, Archive, CodeGuardian, SecurityReview, SWE, Verifier.
 - **`better-sqlite3`** is a native module — three test files are skipped where Electron headers aren't available. If your test loads the DB layer, expect a rebuild step.
 
 ## Architecture
@@ -84,7 +84,7 @@ User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
 - `src/index.ts` — CLI entry (Commander), lazy-loaded commands, `--profile` flag
 - `src/agent/codebuddy-agent.ts` — main agentic loop, `executePlan()`
 - `src/agent/execution/agent-executor.ts` — middleware pipeline, reasoning, tool streaming. **Single source of truth via `runTurnLoop` async generator (task #5 fusion done 2026-04-26).** `processUserMessageStream` is a thin `yield*` wrapper; `processUserMessage` is a thin sequential collector that consumes events and returns the new entries pushed to history. Per-turn injections, transcript repair, output sanitization, and the `__SESSIONS_YIELD__` signal all live in `runTurnLoop` — touch them in one place. Streaming-only events (`ask_user`, `tool_stream`, `token_count`, `reasoning`, `steer`) are silently dropped in the sequential collector (décision #3).
-- `src/codebuddy/client.ts` — thin dispatcher (~400 LOC) that delegates to a `Provider` strategy: `GeminiNativeProvider` when the baseURL points at `generativelanguage.googleapis.com`, `OpenAICompatProvider` otherwise. Strategies live under `src/codebuddy/providers/`. Adding a new provider = one new strategy file + a branch in the constructor. `defaultMaxTokens` comes from `getModelToolConfig(model).maxOutputTokens`. Anthropic-specific message hooks (`injectAnthropicCacheBreakpoints`, `injectJsonSystemPromptForAnthropic`) live in `provider-openai-compat-hooks.ts` and are called by both `chat()` and `chatStream()` on the OpenAI-compat strategy.
+- `src/codebuddy/client.ts` — thin dispatcher (~400 LOC) that delegates to a `Provider` strategy: `GeminiNativeProvider`, `ChatGptResponsesProvider`, `GeminiCliProvider`, `AgyCliProvider`, or `OpenAICompatProvider`, according to the selected backend. Strategies live under `src/codebuddy/providers/`. Adding a new provider = one new strategy file + a branch in the constructor. `defaultMaxTokens` comes from `getModelToolConfig(model).maxOutputTokens`. Anthropic-specific message hooks (`injectAnthropicCacheBreakpoints`, `injectJsonSystemPromptForAnthropic`) live in `provider-openai-compat-hooks.ts` and are called by both `chat()` and `chatStream()` on the OpenAI-compat strategy.
 - `src/services/prompt-builder.ts` — **real** system prompt builder (not the deleted `src/agent/system-prompt-builder.ts`). Applies model-aware token-budget truncation.
 - `src/codebuddy/tools.ts` — ~110 tool definitions + RAG selection
 - `src/ui/components/ChatInterface.tsx` — React/Ink terminal UI
@@ -105,7 +105,7 @@ User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
    | `QualityGateMiddleware` | 200 | Auto-delegate to CodeGuardian and SecurityReview agents |
 
    Register in `codebuddy-agent.ts` constructor.
-6. **Confirmation service** — Singleton. Check order: permission mode → declarative rules → session flags → Guardian Agent.
+6. **Confirmation service** — Singleton. Check order: permission mode → declarative rules → session flags.
 7. **Per-turn context injection** — Each LLM turn appends `<lessons_context>` (before) and `<todo_context>` (after). Must be applied in both agent-executor paths.
 8. **Pluggable ContextEngine** — Plugins can register a custom context pipeline via `PluginContext.registerContextEngine()`. If `ownsCompaction` is set, built-in auto-compact is skipped. Trust check blocks non-trusted plugins from owning compaction.
 9. **Output sanitizer** (`src/utils/output-sanitizer.ts`) — strips model leakage tokens (`<think>`, `<|im_start|>`, `[INST]`, `<<SYS>>`, GLM-5/DeepSeek artifacts, zero-width chars) from LLM output. Wired into agent-executor + message-processor. Tests assert sanitized output, so don't bypass.
@@ -145,7 +145,7 @@ Electron app, separate `package.json`, Node ≥22, Vite + React + better-sqlite3
 
 1. Create class in `src/tools/` returning `Promise<ToolResult>` (`{ success, output?, error? }`).
 2. Add OpenAI function definition in `src/codebuddy/tools.ts`.
-3. Add execution case in `CodeBuddyAgent.executeTool()`.
+3. Add execution via `ToolHandler` and the factories in `src/tools/registry/`.
 4. Register in `src/tools/registry/` via the right factory.
 5. Add metadata in `src/tools/metadata.ts` (keywords + priority — used by RAG selection and BM25 `tool_search`). Set `fleetSafe: true` only for read-only tools you want exposed via `peer.tool.invoke`.
 
