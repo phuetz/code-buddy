@@ -44,6 +44,7 @@ import {
 import { wireFleetAggregator } from './fleet/aggregator-wiring';
 import { registerOsIpcHandlers } from './ipc/os-ipc';
 import { setMainWindow, setTray, getMainWindow } from './window-management';
+import { requestSingleInstanceLock } from './utils/single-instance-lock.js';
 import {
   activeSessionIdFromMainWindow,
   registerQuickAskAppshot,
@@ -793,7 +794,7 @@ if (isDev) {
   );
 }
 
-const hasSingleInstanceLock = isDev || isE2E || app.requestSingleInstanceLock();
+const hasSingleInstanceLock = isDev || isE2E || requestSingleInstanceLock(app);
 if (!hasSingleInstanceLock) {
   logWarn('[App] Another instance is already running, quitting this instance');
   app.quit();

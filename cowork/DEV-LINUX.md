@@ -170,6 +170,23 @@ when chasing a UI bug.
 
 ## Common gotchas on Linux
 
+### `Illegal instruction` before the window with a long `TMPDIR`
+
+Electron 35's Chromium single-instance lock creates
+`TMPDIR/scoped_dirXXXXXX/SingletonSocket`. On Linux the full socket path must
+fit in 107 UTF-8 bytes; an oversized path hits a native `CHECK` (`int3`/`ud2`)
+inside `app.requestSingleInstanceLock()`. A minimal Electron app without that
+lock can still open a window, so this symptom does not imply a CPU or GPU issue.
+
+Cowork checks this path before acquiring the lock and logs when it uses `/tmp`
+for the synchronous native lock call. It restores `TMPDIR` immediately afterward;
+the real lock and second-instance handling stay enabled. Native lock failures
+still propagate. This is independent of the better-sqlite3 Electron ABI rebuild.
+
+To diagnose an older build, compare the same command with a short `TMPDIR`
+under `xvfb-run -a`, and trace the main process's call to
+`app.requestSingleInstanceLock()`. Do not attach to another user's X11 session.
+
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
 | `Cannot find package '@phuetz/ai-providers'` | leftover import of the old sibling package | not required: commit `5757b197` inlined it under `src/providers/_shared/` |
