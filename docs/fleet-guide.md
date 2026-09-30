@@ -35,6 +35,8 @@ connected via WebSocket (typically over a Tailscale mesh on the lab):
 - Presence beacons + compaction notices keep peers aware of each
   other's availability
 
+> **Note:** Since version 2.3.0, `buddy server` defaults to listening only on the local loopback (`127.0.0.1`). For multi-machine fleet deployments, you MUST pass the `--host 0.0.0.0` argument (or a specific Tailscale/LAN address) and provide a shared `JWT_SECRET`.
+
 ### Objective 2 — Pilot local LLMs for coding (and more)
 
 Cloud LLM quotas are limited and expensive. Local LLMs (Ollama, LM
@@ -50,7 +52,7 @@ classification, anything you'd otherwise pay tokens for.
 > model in the terminal with `CODEBUDDY_PROVIDER=ollama`.
 
 **Today this is operational**: set `OLLAMA_HOST=http://localhost:11434`
-on a peer, start its `buddy server`, and any other peer can
+on a peer, start its `buddy server --host 0.0.0.0` (with a shared `JWT_SECRET`), and any other peer can
 `/fleet send <peer-with-ollama> peer.chat {"prompt":"..."}` to get a
 **free, local response**. Mix and match: heavy reasoning on a Claude
 Max peer, code drafting on a local Qwen via Ollama, vision on a
@@ -133,12 +135,12 @@ id `qwen2.5*` : la table `model-tools` les marque `supportsToolCalls: false`.
 ## Architecture
 
 ```
-                     ┌──────────────────────────┐
-                     │  Hub (any Code Buddy)    │
-                     │  buddy server --port N   │
-                     │  ws://host:N/ws          │
-                     │  /api/health, /api/chat  │
-                     └────────────┬─────────────┘
+                     ┌────────────────────────────────────────┐
+                     │  Hub (any Code Buddy)                  │
+                     │  buddy server --port N --host 0.0.0.0  │
+                     │  ws://host:N/ws                        │
+                     │  /api/health, /api/chat                │
+                     └──────────────────┬─────────────────────┘
                                   │
               ┌───────────────────┼───────────────────┐
               │                   │                   │
@@ -685,7 +687,7 @@ export OLLAMA_HOST="http://localhost:11434"   # → priority 1
 export CODEBUDDY_FLEET_HOSTNAME="hub-ubuntu"
 export JWT_SECRET="<shared-secret>"          # same value on every machine; mint tokens with it
 
-buddy server --port 3000
+buddy server --port 3000 --host 0.0.0.0
 # log: [fleet] peer.chat wired: ollama (<model>, local)
 #   <model> is OLLAMA_MODEL, else the built-in default qwen2.5-coder:7b (fine for peer.chat;
 #   for agent work set CODEBUDDY_PEER_MODEL to a tool-capable model such as a qwen3 tag)
@@ -726,7 +728,7 @@ After deploying / restart, validate the fleet end-to-end:
 # Terminal 1 — start a server with peer.chat wired
 export JWT_SECRET="<secret>"   # also export it in terminal 2, then:
 # export CODEBUDDY_FLEET_TOKEN="$(buddy fleet token --scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke | head -1)"
-GOOGLE_API_KEY="..." buddy server --port 3001
+GOOGLE_API_KEY="..." buddy server --port 3001 --host 0.0.0.0
 # → wait for the boot log: "[fleet] peer.chat wired: gemini (gemini-2.5-flash)"
 
 # Terminal 2 — connect + smoke
