@@ -12,14 +12,27 @@ describe('doctor Ollama selection', () => {
     const selection = selectOllamaModel(
       [
         { name: 'gemma4-moe-rag:latest', sizeBytes: 15 * gibibyte },
-        { name: 'qwen3:4b-instruct', sizeBytes: 4 * gibibyte },
+        { name: 'qwen3:4b-instruct', sizeBytes: 2 * gibibyte },
+        { name: 'qwen3.5:4b', sizeBytes: 4 * gibibyte },
+        { name: 'gemma4:e4b', sizeBytes: 6 * gibibyte },
       ],
       20 * gibibyte,
     );
 
-    expect(selection.model).toBe('qwen3:4b-instruct');
+    expect(selection.model).toBe('qwen3.5:4b');
+    expect(selection.maxContext).toBe(32768);
     expect(selection.reason).toContain('tool-calling');
     expect(selection.reason).toContain('4.0 GiB < 20.0 GiB');
+  });
+  it('uses the measured second choice when the preferred tag is absent', () => {
+    const selection = selectOllamaModel([{ name: 'gemma4:e4b', sizeBytes: 6 * 1024 ** 3 }], 20 * 1024 ** 3);
+    expect(selection.model).toBe('gemma4:e4b');
+    expect(selection.maxContext).toBe(32768);
+  });
+  it('does not replace an absent recommendation with an unbenchmarked default', () => {
+    const selection = selectOllamaModel([{ name: 'qwen3:4b-instruct', sizeBytes: 2 * 1024 ** 3 }], 20 * 1024 ** 3);
+    expect(selection.model).toBeNull();
+    expect(selection.reason).toContain('recommended');
   });
 
   it('returns no choice when every installed model is unsuitable or too large', () => {

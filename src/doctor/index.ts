@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import {
   accessSync,
   chmodSync,
@@ -28,6 +28,7 @@ import {
   type OllamaModelSelection,
 } from './ollama-model-selection.js';
 import { checkDomainPolicy } from './domain-policy-check.js';
+import { loadDoctorLocalModelPolicy } from './local-model-policy.js';
 import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
 import { isDeclaredProviderFallbackEnabled } from '../providers/provider-failover-policy.js';
 import { formatProviderHealthLines, readProviderHealthSnapshot } from '../providers/provider-health.js';
@@ -811,6 +812,22 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
     )
     : undefined;
 
+  if (p === 'ollama' && ollama?.available && ollama.baseURL && isOllamaSelectionCurrent(ollama.models ?? [], userSettings)) {
+    const policy = loadDoctorLocalModelPolicy();
+    const model = advertisedModel(ollama.models ?? [], userSettings?.model)!;
+    if (policy.preferredModels.includes(model)) {
+      const { readDoctorLocalContextCap } = await import('./local-context-cap.js');
+      const cap = readDoctorLocalContextCap(model);
+      if (cap === undefined || cap > policy.maxContext) {
+        return {
+          name: 'AI provider ready', status: 'warn', fixable: true,
+          message: `Selected local model ${model} has no safe context ceiling — --fix to cap it at ${policy.maxContext} tokens`,
+          fix: () => fixSelectRunningOllama(ollama.baseURL!, model, 'retained existing selection; capped context', policy.maxContext),
+        };
+      }
+    }
+  }
+
   if (ollama?.available && ollamaModels > 0 && ollama.baseURL && !isOllamaSelectionCurrent(ollama.models ?? [], userSettings)) {
     const selection = liveOllamaSelection;
     if (!selection?.model) {
@@ -830,7 +847,7 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
       status: 'warn',
       message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but ${selectionContext} — --fix to select ${selection.model} ($0; ${selection.reason})`,
       fixable: true,
-      fix: async () => fixSelectRunningOllama(ollama.baseURL!, selection.model!, selection.reason),
+      fix: async () => fixSelectRunningOllama(ollama.baseURL!, selection.model!, selection.reason, selection.maxContext),
     };
   }
 
@@ -872,9 +889,13 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
 }
 
 /** Point buddy at an already-running Ollama by writing user-settings (no download). */
-async function fixSelectRunningOllama(baseURL: string, model: string, reason?: string): Promise<FixResult> {
+async function fixSelectRunningOllama(baseURL: string, model: string, reason?: string, maxContext?: number): Promise<FixResult> {
   try {
     const { getSettingsManager } = await import('../utils/settings-manager.js');
+    if (maxContext !== undefined) {
+      const { persistDoctorLocalContextCap } = await import('./local-context-cap.js');
+      persistDoctorLocalContextCap(model, maxContext);
+    }
     getSettingsManager().saveUserSettings({ provider: 'ollama', baseURL, model, defaultModel: model });
     return {
       success: true,
@@ -891,17 +912,15 @@ async function fixSelectRunningOllama(baseURL: string, model: string, reason?: s
 }
 
 /**
- * Model pulled by `buddy doctor --fix` when Ollama has none. It must call
- * tools: the qwen2.5 family under 14B is chat-only in model-tools.ts, so
- * `buddy try` could never go green with it.
+ * Configured first choice when Ollama has no installed model.
  */
-export const DOCTOR_PULL_MODEL = 'qwen3:8b';
+export const DOCTOR_PULL_MODEL = loadDoctorLocalModelPolicy().preferredModels[0]!;
 
 /** Pull a small tool-capable model with Ollama, then select it. */
 async function fixPullAndSelectOllama(baseURL: string): Promise<FixResult> {
   const model = DOCTOR_PULL_MODEL;
   try {
-    execSync(`ollama pull ${model}`, { stdio: 'inherit' });
+    execFileSync('ollama', ['pull', model], { stdio: 'inherit' });
   } catch (err) {
     return {
       success: false,
@@ -909,7 +928,7 @@ async function fixPullAndSelectOllama(baseURL: string): Promise<FixResult> {
       action: 'pull-ollama-model',
     };
   }
-  return fixSelectRunningOllama(baseURL, model);
+  return fixSelectRunningOllama(baseURL, model, undefined, loadDoctorLocalModelPolicy().maxContext);
 }
 
 // ============================================================================

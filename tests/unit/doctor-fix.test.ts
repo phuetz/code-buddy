@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { runDoctorChecks, runFixes } from '../../src/doctor/index.js';
 import type { DoctorCheck, FixResult } from '../../src/doctor/index.js';
 import type { EnvironmentSnapshot } from '../../src/wizard/environment-detection.js';
@@ -9,6 +9,7 @@ import type { EnvironmentSnapshot } from '../../src/wizard/environment-detection
 // Mock external commands so doctor checks don't depend on system state
 vi.mock('child_process', () => ({
   execSync: vi.fn(() => ''),
+  execFileSync: vi.fn(() => ''),
   spawnSync: vi.fn(() => ({ status: 0, stdout: '', stderr: '' })),
 }));
 
@@ -34,6 +35,7 @@ vi.mock('../../src/utils/settings-manager.js', () => ({
     readUserSettingsIfPresent: mockReadUserSettingsIfPresent,
   }),
 }));
+vi.mock('../../src/doctor/local-context-cap.js', () => ({ persistDoctorLocalContextCap: vi.fn(() => 32768), readDoctorLocalContextCap: vi.fn(() => undefined) }));
 
 const EMPTY_ENVIRONMENT: EnvironmentSnapshot = { capabilities: [], ready: false };
 
@@ -101,7 +103,7 @@ describe('doctor --fix', () => {
       expect(providerCheck).toBeDefined();
       expect(providerCheck!.status).toBe('warn');
       expect(providerCheck!.fixable).toBe(true);
-      expect(providerCheck!.message).toContain('qwen3:8b');
+      expect(providerCheck!.message).toContain('qwen3.5:4b');
     });
 
     it('should pull the model with `ollama pull` then select it', async () => {
@@ -109,25 +111,25 @@ describe('doctor --fix', () => {
       const results = await runFixes(checks);
 
       // VERIF3 T16 : remplacer `ollama pull` par `ollama run` restait vert.
-      expect(execSync).toHaveBeenCalledWith('ollama pull qwen3:8b', {
+      expect(execFileSync).toHaveBeenCalledWith('ollama', ['pull', 'qwen3.5:4b'], {
         stdio: 'inherit',
       });
       expect(mockSaveUserSettings).toHaveBeenCalledWith({
         provider: 'ollama',
         baseURL: 'http://127.0.0.1:11434',
-        model: 'qwen3:8b',
-        defaultModel: 'qwen3:8b',
+        model: 'qwen3.5:4b',
+        defaultModel: 'qwen3.5:4b',
       });
 
       const selection = results.find(r => r.action === 'select-running-ollama');
       expect(selection).toBeDefined();
       expect(selection!.success).toBe(true);
-      expect(selection!.message).toContain('qwen3:8b');
+      expect(selection!.message).toContain('qwen3.5:4b');
     });
 
     it('should report a failure and select nothing when the pull fails', async () => {
-      vi.mocked(execSync).mockImplementation((command: string) => {
-        if (String(command).startsWith('ollama pull')) {
+      vi.mocked(execFileSync).mockImplementation((command: string) => {
+        if (String(command) === 'ollama') {
           throw new Error('ollama introuvable');
         }
         return '';
@@ -139,9 +141,21 @@ describe('doctor --fix', () => {
       const pullFix = results.find(r => r.action === 'pull-ollama-model');
       expect(pullFix).toBeDefined();
       expect(pullFix!.success).toBe(false);
-      expect(pullFix!.message).toContain('Failed to pull qwen3:8b');
+      expect(pullFix!.message).toContain('Failed to pull qwen3.5:4b');
       expect(mockSaveUserSettings).not.toHaveBeenCalled();
     });
+  });
+
+  it('repairs an already-selected preferred local model whose context cap is missing', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen3.5:4b'] }], ready: true });
+    mockReadUserSettingsIfPresent.mockReturnValue({ provider: 'ollama', model: 'qwen3.5:4b', defaultModel: 'qwen3.5:4b' });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready');
+    expect(check?.status).toBe('warn');
+    expect(check?.message).toContain('32768');
+    expect(check?.fixable).toBe(true);
+    await runFixes([check!]);
+    expect(mockSaveUserSettings).toHaveBeenCalledWith(expect.objectContaining({ model: 'qwen3.5:4b' }));
   });
 
   describe('missing .codebuddy directory', () => {

@@ -1,5 +1,6 @@
 import { findModelToolConfig } from '../config/model-tools.js';
 import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
+import { loadDoctorLocalModelPolicy, type DoctorLocalModelPolicy } from './local-model-policy.js';
 
 const NON_AGENT_MODEL_NAME = /(?:^|[-_.:/])(?:embed(?:ding)?|rag|vision(?:[-_]?only)?)(?:$|[-_.:/])/i;
 const CODING_MODEL_NAME = /(?:code|coder|coding|instruct|instruction)/i;
@@ -8,6 +9,7 @@ export interface OllamaModelSelection {
   model: string | null;
   /** A one-line explanation suitable for `buddy doctor --fix` output. */
   reason: string;
+  maxContext?: number;
 }
 
 function formatGiB(bytes: number): string {
@@ -36,6 +38,7 @@ function isCodingModel(candidate: OllamaModelCandidate): boolean {
 export function selectOllamaModel(
   candidates: readonly OllamaModelCandidate[],
   availableMemoryBytes: number,
+  policy: DoctorLocalModelPolicy = loadDoctorLocalModelPolicy(),
 ): OllamaModelSelection {
   const availableMemory = Number.isFinite(availableMemoryBytes) && availableMemoryBytes > 0
     ? availableMemoryBytes
@@ -47,15 +50,20 @@ export function selectOllamaModel(
     .filter((candidate) => findModelToolConfig(candidate.name)?.supportsToolCalls === true)
     .filter(hasKnownSize)
     .filter((candidate) => candidate.sizeBytes < availableMemory);
+  const eligible = policy.allowUnbenchmarkedFallback ? normalized
+    : normalized.filter(candidate => policy.preferredModels.includes(candidate.name));
 
-  if (normalized.length === 0) {
+  if (eligible.length === 0) {
     return {
       model: null,
-      reason: `no installed model meets tool-calling, non-embed/rag/vision-only, known-size < ${formatGiB(availableMemory)} free RAM`,
+      reason: `no installed model meets the recommended agent policy (${policy.preferredModels.join(', ')}), tool-calling and known-size < ${formatGiB(availableMemory)} free RAM; no unbenchmarked default or download was substituted`,
     };
   }
 
-  const ranked = [...normalized].sort((left, right) => {
+  const ranked = [...eligible].sort((left, right) => {
+    const rank = (name: string) => { const index = policy.preferredModels.indexOf(name); return index < 0 ? policy.preferredModels.length : index; };
+    const preferredDelta = rank(left.name) - rank(right.name);
+    if (preferredDelta) return preferredDelta;
     const codingDelta = Number(isCodingModel(right)) - Number(isCodingModel(left));
     if (codingDelta !== 0) return codingDelta;
     const sizeDelta = left.sizeBytes - right.sizeBytes;
@@ -66,6 +74,7 @@ export function selectOllamaModel(
   const family = isCodingModel(selected) ? ', instruct/coder family' : '';
   return {
     model: selected.name,
-    reason: `tool-calling, ${formatGiB(selected.sizeBytes)} < ${formatGiB(availableMemory)} free RAM${family}`,
+    maxContext: policy.maxContext,
+    reason: `tool-calling, ${formatGiB(selected.sizeBytes)} < ${formatGiB(availableMemory)} free RAM${family}, context capped at ${policy.maxContext}`,
   };
 }

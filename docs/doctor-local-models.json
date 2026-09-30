@@ -1,0 +1,5 @@
+{
+  "preferredModels": ["qwen3.5:4b", "gemma4:e4b"],
+  "maxContext": 32768,
+  "allowUnbenchmarkedFallback": false
+}
