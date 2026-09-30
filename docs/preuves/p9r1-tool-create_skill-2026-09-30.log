@@ -1,0 +1,68 @@
+Date de consolidation: 2026-09-30T19:33:55.675405Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: create_skill({"name": "P9 Fixture", "description": "Procédure synthétique de preuve P9", "body": "# P9_SKILL\nUse for P9 fixture only. Run node --test check.test.js.", "tags": ["p9"]})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "create_skill",
+  "input": {
+    "name": "P9 Fixture",
+    "description": "Procédure synthétique de preuve P9",
+    "body": "# P9_SKILL\nUse for P9 fixture only. Run node --test check.test.js.",
+    "tags": [
+      "p9"
+    ]
+  },
+  "oracle": {
+    "rules": [
+      {
+        "file": ".codebuddy/skills/authored-p9-fixture/SKILL.md",
+        "op": "includes",
+        "values": [
+          "P9_SKILL",
+          "Run node --test check.test.js."
+        ],
+        "changed": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Skill created and loaded: authored-p9-fixture\nPath: <QA>/reprise-1/project/.codebuddy/skills/authored-p9-fixture/SKILL.md",
+    "data": {
+      "name": "authored-p9-fixture",
+      "loaded": true
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "écriture effective de .codebuddy/skills/authored-p9-fixture/SKILL.md",
+      "passed": true
+    },
+    {
+      "check": ".codebuddy/skills/authored-p9-fixture/SKILL.md includes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 46,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:create_skill",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

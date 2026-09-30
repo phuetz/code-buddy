@@ -1,0 +1,92 @@
+Date de consolidation: 2026-09-30T19:33:55.945098Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: web_test({"url": "http://127.0.0.1:18870", "steps": [{"action": "type", "selector": "#name", "value": "P9_WEBTEST"}, {"action": "click", "selector": "button"}], "assertions": [{"type": "text", "value": "P9_CLICK:P9_WEBTEST"}], "screenshot": true})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "web_test",
+  "input": {
+    "url": "http://127.0.0.1:18870",
+    "steps": [
+      {
+        "action": "type",
+        "selector": "#name",
+        "value": "P9_WEBTEST"
+      },
+      {
+        "action": "click",
+        "selector": "button"
+      }
+    ],
+    "assertions": [
+      {
+        "type": "text",
+        "value": "P9_CLICK:P9_WEBTEST"
+      }
+    ],
+    "screenshot": true
+  },
+  "result": {
+    "success": true,
+    "output": "Web test PASSED — http://127.0.0.1:18870\n✓ navigation: loaded http://127.0.0.1:18870\n✓ step 1 type \"P9_WEBTEST\" into \"#name\": ok\n✓ step 2 click \"button\": ok\n✓ console: no console/page errors\n✓ network: no failed requests\n✓ assert text \"P9_CLICK:P9_WEBTEST\": found\n✓ screenshot: <QA_HOME>/.codebuddy/browser-screenshots/screenshot-1790796090389.png\nScreenshot: <QA_HOME>/.codebuddy/browser-screenshots/screenshot-1790796090389.png\n\nInteractive elements:\n# Web Snapshot\nURL: http://127.0.0.1:18870/\nTitle: P9_BROWSER\nElements: 3\n\n## Interactive Elements\n\n### textbox\n  [1] Name = \"P9_WEBTEST\"\n\n### button\n  [2] Save\n  [3] Dialog\n",
+    "data": {
+      "passed": true,
+      "url": "http://127.0.0.1:18870",
+      "checks": [
+        {
+          "name": "navigation",
+          "passed": true,
+          "detail": "loaded http://127.0.0.1:18870"
+        },
+        {
+          "name": "step 1 type \"P9_WEBTEST\" into \"#name\"",
+          "passed": true,
+          "detail": "ok"
+        },
+        {
+          "name": "step 2 click \"button\"",
+          "passed": true,
+          "detail": "ok"
+        },
+        {
+          "name": "console",
+          "passed": true,
+          "detail": "no console/page errors"
+        },
+        {
+          "name": "network",
+          "passed": true,
+          "detail": "no failed requests"
+        },
+        {
+          "name": "assert text \"P9_CLICK:P9_WEBTEST\"",
+          "passed": true,
+          "detail": "found"
+        },
+        {
+          "name": "screenshot",
+          "passed": true,
+          "detail": "<QA_HOME>/.codebuddy/browser-screenshots/screenshot-1790796090389.png"
+        }
+      ],
+      "consoleErrorCount": 0,
+      "networkFailureCount": 0,
+      "networkFailures": [],
+      "screenshotPath": "<QA_HOME>/.codebuddy/browser-screenshots/screenshot-1790796090389.png"
+    }
+  },
+  "observations": {
+    "allChecks": true,
+    "textFound": true,
+    "screenshot1280x720": true,
+    "actualDom": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:web_test",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

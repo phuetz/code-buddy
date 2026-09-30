@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:weather",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.925003Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "a4ee761752b71987e044a41b6460fccfaaf3c4fd06a2e9a7a002917f453a7f8f",
+  "artifact": "docs/preuves/p9r1-tool-weather-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

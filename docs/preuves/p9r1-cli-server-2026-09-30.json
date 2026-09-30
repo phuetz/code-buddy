@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:server",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:56.007519Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "6912de15ed09a8c884b5ddab428dd5801b936c41a6fca090ad8ef85c684ab490",
+  "artifact": "docs/preuves/p9r1-cli-server-2026-09-30.log",
+  "summary": "Vraie route health JSON de cette version et port fermé après arrêt"
+}

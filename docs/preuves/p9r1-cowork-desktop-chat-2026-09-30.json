@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cowork-desktop-chat",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T19:33:56.019213Z",
+  "revision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "sourceDigest": "179a08b9e530ebb00551ca89b0a9ba45f962393ca0f437e6a15de71944431a27",
+  "artifact": "docs/preuves/p9r1-cowork-desktop-chat-2026-09-30.log",
+  "summary": "Marqueur unique refusé par le modèle : I detected an attempt to override my instructions. I cannot comply. Les tours à phrase fixe ont réussi auparavant, avec rôle assistant vérifié."
+}

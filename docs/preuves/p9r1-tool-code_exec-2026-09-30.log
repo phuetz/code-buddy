@@ -1,0 +1,32 @@
+Date de consolidation: 2026-09-30T19:33:55.979659Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: code_exec({"code": "const r=await tools.read_file({path:'data.json'}); text(r.output);"})
+Attendu: Toutes les clauses spécifiques de l’oracle sont nécessaires.
+Observé: Toutes les clauses de l’oracle spécifique sont satisfaites.
+Verdict: prouvée
+
+{
+  "name": "code_exec",
+  "input": {
+    "code": "const r=await tools.read_file({path:'data.json'}); text(r.output);"
+  },
+  "result": {
+    "success": true,
+    "output": "Script completed in 63ms\n\nContents of <QA>/reprise-1/project/data.json:\n1: {\"marker\":\"P9_JSON\",\"nested\":{\"value\":42}}"
+  },
+  "results": [
+    {
+      "success": true,
+      "output": "Script completed in 63ms\n\nContents of <QA>/reprise-1/project/data.json:\n1: {\"marker\":\"P9_JSON\",\"nested\":{\"value\":42}}"
+    }
+  ],
+  "observations": {
+    "actualReadContent": true,
+    "noRequestEcho": true
+  },
+  "passed": true,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:code_exec",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

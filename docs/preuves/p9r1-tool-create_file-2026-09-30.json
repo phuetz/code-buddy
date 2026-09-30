@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:create_file",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.673824Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "79ade7f532314a0f6a76f101230ed180ae69b15722be74a2216970708826d0a1",
+  "artifact": "docs/preuves/p9r1-tool-create_file-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

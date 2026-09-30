@@ -1,0 +1,24 @@
+Date de consolidation: 2026-09-30T19:33:55.996355Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy whoami ({"args": []})
+Attendu: ['ChatGPT: not connected']
+Observé: ['ChatGPT: not connected']
+Verdict: prouvée
+
+{
+  "id": "cli:whoami",
+  "name": "whoami",
+  "input": {
+    "args": []
+  },
+  "result": {
+    "success": true,
+    "output": "ChatGPT: not connected (run `buddy login` to authenticate)\nProvider health:\n  custom: unreachable (disponible)\n  last failover: custom → ollama:qwen3:4b-instruct (unreachable)\n"
+  },
+  "expected": "['ChatGPT: not connected']",
+  "passed": true,
+  "command": "buddy whoami ",
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['ChatGPT: not connected']"
+}

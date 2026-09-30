@@ -1,0 +1,55 @@
+Date de consolidation: 2026-09-30T19:33:55.835848Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: reason({"problem": "Compute 6 times (5 plus 2). Show the calculation.", "mode": "shallow"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Solution Found annoncé avec score 1.00, mais la solution ne calcule pas 42 : elle se termine à 6 times 7.
+Verdict: échec
+
+{
+  "name": "reason",
+  "input": {
+    "problem": "Compute 6 times (5 plus 2). Show the calculation.",
+    "mode": "shallow"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.solution42",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "\n════════════════════════════════════════════════════════════\n🧠 TREE-OF-THOUGHT REASONING RESULT\n════════════════════════════════════════════════════════════\n\nStatus: ✅ Solution Found\nIterations: 1\nNodes Created: 3\nNodes Evaluated: 2\nNodes Refined: 0\nMax Depth: 1\nBest Score: 1.00\nTime: 35.06s\n\n────────────────────────────────────────\n📋 SOLUTION:\n────────────────────────────────────────\nFirst, evaluate the expression inside the parentheses: 5 plus 2, which equals 7. Then multiply that result by 6: 6 times 7. This step-by-step breakdown ensures we follow the order of operations and clearly shows the intermediate calculation.\n\n────────────────────────────────────────\n🛤️  REASONING PATH:\n────────────────────────────────────────\n1. [analysis] Understanding the problem: Compute 6 times (5 plus 2). Show the calculation....\n   Score: 0.50\n2. [analysis] First, evaluate the expression inside the parentheses: 5 plus 2, which equals 7. Then multiply that ...\n   Score: 1.00\n\n\n════════════════════════════════════════════════════════════\n",
+    "dataSerialization": "cyclic data omitted"
+  },
+  "observations": {
+    "solution42": false
+  },
+  "verificationCalls": [],
+  "passed": false,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.solution42 eq",
+      "passed": false
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 35060,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:reason",
+  "summary": "Solution Found annoncé avec score 1.00, mais la solution ne calcule pas 42 : elle se termine à 6 times 7."
+}

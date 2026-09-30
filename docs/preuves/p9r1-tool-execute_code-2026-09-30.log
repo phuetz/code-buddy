@@ -1,0 +1,97 @@
+Date de consolidation: 2026-09-30T19:33:55.701668Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: execute_code({"code": "console.log(6*7)", "language": "javascript"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "execute_code",
+  "input": {
+    "code": "console.log(6*7)",
+    "language": "javascript"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.exitCode",
+        "op": "eq",
+        "value": 0
+      },
+      {
+        "field": "data.ok",
+        "op": "eq",
+        "value": true
+      },
+      {
+        "field": "data.stdout",
+        "op": "eq",
+        "normalize": true,
+        "value": "42"
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "{\n  \"kind\": \"execute_code_result\",\n  \"ok\": true,\n  \"runId\": \"exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85\",\n  \"language\": \"javascript\",\n  \"startedAt\": \"2026-09-30T18:50:54.299Z\",\n  \"completedAt\": \"2026-09-30T18:50:54.352Z\",\n  \"durationMs\": 53,\n  \"commandPreview\": \"node script.mjs\",\n  \"runDir\": \"<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85\",\n  \"scriptPath\": \"<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85/script.mjs\",\n  \"stdoutPath\": \"<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85/stdout.log\",\n  \"stderrPath\": \"<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85/stderr.log\",\n  \"resultPath\": \"<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85/result.json\",\n  \"exitCode\": 0,\n  \"signal\": null,\n  \"timedOut\": false,\n  \"stdout\": \"42\\n\",\n  \"stderr\": \"\",\n  \"files\": [\n    \"result.json\",\n    \"script.mjs\",\n    \"stderr.log\",\n    \"stdout.log\"\n  ]\n}",
+    "data": {
+      "kind": "execute_code_result",
+      "ok": true,
+      "runId": "exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85",
+      "language": "javascript",
+      "startedAt": "2026-09-30T18:50:54.299Z",
+      "completedAt": "2026-09-30T18:50:54.352Z",
+      "durationMs": 53,
+      "commandPreview": "node script.mjs",
+      "runDir": "<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85",
+      "scriptPath": "<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85/script.mjs",
+      "stdoutPath": "<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85/stdout.log",
+      "stderrPath": "<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85/stderr.log",
+      "resultPath": "<QA>/reprise-1/project/.codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85/result.json",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "stdout": "42\n",
+      "stderr": "",
+      "files": [
+        "result.json",
+        "script.mjs",
+        "stderr.log",
+        "stdout.log"
+      ]
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.exitCode eq",
+      "passed": true
+    },
+    {
+      "check": "data.ok eq",
+      "passed": true
+    },
+    {
+      "check": "data.stdout eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 56,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:execute_code",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

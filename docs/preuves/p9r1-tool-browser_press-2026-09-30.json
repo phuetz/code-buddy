@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:browser_press",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.960556Z",
+  "revision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "sourceDigest": "1c2e6fcdfedad3fb4545130dcdd66cb75e70397c538fa8dfccc2561437540730",
+  "artifact": "docs/preuves/p9r1-tool-browser_press-2026-09-30.log",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

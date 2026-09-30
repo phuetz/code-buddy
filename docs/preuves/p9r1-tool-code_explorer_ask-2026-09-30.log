@@ -1,0 +1,23 @@
+Date de consolidation: 2026-09-30T19:33:56.017335Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: code_explorer_ask({"query": "add"})
+Attendu: Définitions add issues de sample.js et sample.ts, ligne 1, par l’adaptateur réel.
+Observé: Définitions add issues de sample.js et sample.ts, ligne 1, par l’adaptateur réel.
+Verdict: prouvée
+
+{
+  "name": "code_explorer_ask",
+  "input": {
+    "query": "add"
+  },
+  "result": {
+    "success": true,
+    "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}"
+  },
+  "passed": true,
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "expected": "Définitions add issues de sample.js et sample.ts, ligne 1, par l’adaptateur réel.",
+  "id": "tool:code_explorer_ask",
+  "summary": "Définitions add issues de sample.js et sample.ts, ligne 1, par l’adaptateur réel."
+}

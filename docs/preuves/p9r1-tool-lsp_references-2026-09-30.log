@@ -1,0 +1,97 @@
+Date de consolidation: 2026-09-30T19:33:55.802875Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: lsp_references({"file": "sample.ts", "symbol": "add"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "lsp_references",
+  "input": {
+    "file": "sample.ts",
+    "symbol": "add"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.total",
+        "op": "eq",
+        "value": 2
+      },
+      {
+        "field": "data.locations.1.file",
+        "op": "includes",
+        "values": [
+          "sample.ts"
+        ]
+      },
+      {
+        "field": "data.locations.1.line",
+        "op": "eq",
+        "value": 3
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "References for symbol \"add\" (2):\n- <QA>/reprise-1/project/sample.ts:1:17-1:20\n- <QA>/reprise-1/project/sample.ts:3:13-3:16",
+    "data": {
+      "file": "<QA>/reprise-1/project/sample.ts",
+      "language": "typescript",
+      "position": {
+        "line": 1,
+        "column": 1
+      },
+      "locations": [
+        {
+          "file": "<QA>/reprise-1/project/sample.ts",
+          "line": 1,
+          "column": 17,
+          "endLine": 1,
+          "endColumn": 20
+        },
+        {
+          "file": "<QA>/reprise-1/project/sample.ts",
+          "line": 3,
+          "column": 13,
+          "endLine": 3,
+          "endColumn": 16
+        }
+      ],
+      "total": 2
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.total eq",
+      "passed": true
+    },
+    {
+      "check": "data.locations.1.file includes",
+      "passed": true
+    },
+    {
+      "check": "data.locations.1.line eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 31,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:lsp_references",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

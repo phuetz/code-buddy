@@ -743,7 +743,7 @@
           }
         ]
       },
-      "verificationLimit": "Portée P9 : Deux requêtes froides de définitions via MCP local après correction ; pas un benchmark de grands dépôts.",
+      "verificationLimit": "P9R1 : buddy code-explorer ask add renvoie deux définitions réelles à froid. JSON natif ; aucun drapeau --json supporté.",
       "discoveryKey": "cli:code-explorer"
     },
     {
@@ -1334,7 +1334,7 @@
           }
         ]
       },
-      "verificationLimit": "Portée P9 : TypeScript seulement, trois diagnostics identiques et fin du processus ; composant Rust toujours absent.",
+      "verificationLimit": "P9R1 : erreur sémantique TypeScript retrouvée cinq fois à froid et une fermeture par processus. Publication vide provisoire corrigée ; Rust non rejoué.",
       "discoveryKey": "cli:lsp"
     },
     {
@@ -1976,7 +1976,7 @@
           }
         ]
       },
-      "verificationLimit": "Portée P9 : Navigation App Studio et pont IPC écriture/lecture/arbre de fichiers ; pas d’application complète générée."
+      "verificationLimit": "P9R1 : fichier à nom et contenu uniques écrit puis relu par IPC, App Studio visible. Pas une application complète générée."
     },
     {
       "id": "cowork-video-studio",
@@ -2560,7 +2560,7 @@
           }
         ]
       },
-      "verificationLimit": "Portée P9 : Linux/Xvfb uniquement ; Windows et macOS non exécutés."
+      "verificationLimit": "Marqueur unique refusé par le modèle : I detected an attempt to override my instructions. I cannot comply. Les tours à phrase fixe ont réussi auparavant, avec rôle assistant vérifié."
     },
     {
       "id": "cowork-desktop-assistant",
@@ -3022,7 +3022,7 @@
         "en": "Use the self entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée self dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Inspection de l’historique CLI vide dans le projet QA ; aucun mécanisme d’auto-modification exécuté.",
+      "verificationLimit": "P9R1 : historique CLI relu sur un CHANGELOG synthétique non vide ; aucun mécanisme d’auto-modification exécuté.",
       "codePaths": [
         "src/index.ts",
         "src/commands/self.ts"
@@ -4062,7 +4062,7 @@
         "en": "Use the browser_vision entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée browser_vision dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Séquence réelle contrôlée sur profil et projet isolés.",
+      "verificationLimit": "P9R1 : capture PNG réelle 1280×720 et snapshot Name/Save/Dialog. Ne prouve ni OCR exact ni compréhension visuelle sémantique.",
       "codePaths": [
         "src/tools/registry/vision-tools.ts",
         "src/tools/vision/ocr-tool.ts",
@@ -4234,7 +4234,7 @@
         "en": "Use the clipboard entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée clipboard dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Presse-papiers du DISPLAY QA uniquement ; groupe de processus arrêté après le délai.",
+      "verificationLimit": "write_text ne revient pas avant la limite QA de 12 secondes sous X11/Xvfb ; processus arrêtés.",
       "codePaths": [
         "src/tools/registry/multimodal-tools.ts",
         "src/tools/text-to-speech-tool.ts",
@@ -4395,7 +4395,7 @@
         "en": "Use the code_graph entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée code_graph dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Auto-références add → add et answer → answer fabriquées par le scan des déclarations.",
+      "verificationLimit": "Auto-appels fn:add → fn:add et fn:answer → fn:answer issus des déclarations ; absents des sources.",
       "codePaths": [
         "src/tools/registry/advanced-tools.ts",
         "src/tools/multi-edit.ts",
@@ -5107,7 +5107,7 @@
         "en": "Use the diagram entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée diagram dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Reprise P9 : rendu ASCII de Mermaid sur une ligne rejeté avec No nodes found in flowchart ; les labels recopiés dans data.mermaidCode ne valident pas le rendu.",
+      "verificationLimit": "Mermaid à séparateurs point-virgule : No nodes found in flowchart ; aucun rendu ASCII.",
       "codePaths": [
         "src/tools/registry/multimodal-tools.ts",
         "src/tools/text-to-speech-tool.ts",
@@ -5775,7 +5775,7 @@
         "en": "Use the find_bugs entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée find_bugs dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "P9R1 : variable non initialisée de la fixture détectée avec fichier et ligne connus.",
       "codePaths": [
         "src/tools/registry/bug-finder-tools.ts",
         "src/tools/bug-finder-tool.ts",
@@ -7387,7 +7387,7 @@
         "en": "Use the lint_project entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée lint_project dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "P9R1 : ESLint réel détecte missingValue/no-undef dans bad.js ligne 1. success:false est le résultat attendu du scanner.",
       "codePaths": [
         "src/tools/lint-project-tool.ts",
         "src/tools/local-binary-launch.ts"
@@ -7936,7 +7936,7 @@
         "en": "Use the ocr entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée ocr dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Reprise P9 : échec du texte exact P9 TEXT 42, reconnu PO TEXT 42. Seuls espaces et fins de ligne sont normalisés ; aucune tolérance de caractère ni repli sur les métadonnées.",
+      "verificationLimit": "OCR exact : attendu P9 TEXT 42, observé PO TEXT 42, malgré confiance 92 %.",
       "codePaths": [
         "src/tools/registry/multimodal-tools.ts",
         "src/tools/text-to-speech-tool.ts",
@@ -8422,7 +8422,7 @@
         "en": "Use the qr entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée qr dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "SVG non décodable : jsQR renvoie null ; le même décodeur réussit le QR témoin P9_QR_CONTROL.",
       "codePaths": [
         "src/tools/registry/multimodal-tools.ts",
         "src/tools/text-to-speech-tool.ts",
@@ -8569,7 +8569,7 @@
         "en": "Use the reason entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée reason dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Calcul 6*(5+2)=42 via Tree of Thoughts et modèle local ; trois nœuds, une itération.",
+      "verificationLimit": "Solution Found annoncé avec score 1.00, mais la solution ne calcule pas 42 : elle se termine à 6 times 7.",
       "codePaths": [
         "src/tools/registry/misc-tools.ts",
         "src/companion/percepts.ts",
@@ -8716,7 +8716,7 @@
         "en": "Use the remember entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée remember dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "P9R1 : valeur locale réellement mémorisée puis relue. FactsMemory émet invalid_date et utilise le fallback ; la réconciliation typée n’est pas prouvée.",
       "codePaths": [
         "src/tools/registry/memory-tools.ts",
         "src/memory/persistent-memory.ts",
@@ -8981,7 +8981,7 @@
         "en": "Use the scaffold_app entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée scaffold_app dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "P9R1 : nouveau squelette node-cli, compilation TypeScript réelle et exécution du binaire --help. Aucun déploiement.",
       "codePaths": [
         "src/tools/scaffold-app-tool.ts",
         "src/templates/project-scaffolding.ts",
@@ -9010,7 +9010,7 @@
         "en": "Use the scan_secrets entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée scan_secrets dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "P9R1 : mot de passe synthétique détecté à la ligne 1 avec valeur masquée, pas seulement un scan vide.",
       "codePaths": [
         "src/tools/registry/secrets-tools.ts",
         "src/codebuddy/tool-definitions/secrets-tools.ts",
@@ -9048,7 +9048,7 @@
         "en": "Use the scan_vulnerabilities entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée scan_vulnerabilities dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "P9R1 : npm audit réel sur lockfile lodash 4.17.20, vulnérabilité high connue identifiée.",
       "codePaths": [
         "src/tools/registry/vuln-scanner-tools.ts",
         "src/security/dependency-vuln-scanner.ts",
@@ -9098,7 +9098,7 @@
         "en": "Use the screenshot entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée screenshot dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Capture du DISPLAY Xvfb de test ; aucun bureau personnel ou session Windows capturé.",
+      "verificationLimit": "P9R1 : fichier PNG nouveau sous Xvfb/Linux, en-tête et dimensions relus ; aucune capture Windows.",
       "codePaths": [
         "src/tools/registry/misc-tools.ts",
         "src/companion/percepts.ts",
@@ -9922,7 +9922,7 @@
         "en": "Use the text_to_speech entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée text_to_speech dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "P9R1 : nouveau WAV eSpeak, RIFF/WAVE et données relues ; ni microphone ni boucle vocale.",
       "codePaths": [
         "src/tools/registry/multimodal-tools.ts",
         "src/tools/text-to-speech-tool.ts",
@@ -10575,7 +10575,7 @@
         "en": "Use the vision_analyze entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée vision_analyze dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Reprise P9 : échec du texte exact P9 TEXT 42, reconnu PO TEXT 42. Seuls espaces et fins de ligne sont normalisés ; aucune tolérance de caractère ni repli sur les métadonnées.",
+      "verificationLimit": "OCR exact : attendu P9 TEXT 42, observé PO TEXT 42 ; largeur 700 exclue de l’oracle.",
       "codePaths": [
         "src/tools/registry/vision-tools.ts",
         "src/tools/vision/ocr-tool.ts",
@@ -10756,7 +10756,7 @@
         "en": "Use the web_scrape entry through its dedicated user-facing workflow.",
         "fr": "Utilisez l’entrée web_scrape dans son parcours utilisateur dédié."
       },
-      "verificationLimit": "Portée P9 : Outil réel exécuté sur une fixture isolée ; oracle contrôlé.",
+      "verificationLimit": "P9R1 : contenu example.com récupéré par le fallback web_fetch. Scrapling absent : backend natif non exécuté.",
       "codePaths": [
         "src/tools/registry/web-tools.ts",
         "src/tools/web-scrape-tool.ts",

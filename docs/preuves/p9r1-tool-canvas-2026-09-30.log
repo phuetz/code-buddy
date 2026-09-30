@@ -1,0 +1,45 @@
+Date de consolidation: 2026-09-30T19:33:55.968612Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: canvas({"sequence": ["create", "add_element", "export"]})
+Attendu: Toutes les clauses spécifiques de l’oracle sont nécessaires.
+Observé: Toutes les clauses de l’oracle spécifique sont satisfaites.
+Verdict: prouvée
+
+{
+  "name": "canvas",
+  "input": {
+    "sequence": [
+      "create",
+      "add_element",
+      "export"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "{\n  \"id\": \"17e5fc69-1c55-43ab-b66f-a85c09bc2f1d\",\n  \"config\": {\n    \"name\": \"Untitled Workspace\",\n    \"width\": 1920,\n    \"height\": 1080,\n    \"backgroundColor\": \"#ffffff\",\n    \"gridSize\": 20,\n    \"showGrid\": true,\n    \"snapToGrid\": true,\n    \"zoom\": 1,\n    \"panOffset\": {\n      \"x\": 0,\n      \"y\": 0\n    },\n    \"maxHistory\": 50\n  },\n  \"elements\": [\n    {\n      \"id\": \"6cc2b818-9f2b-4be7-aeb9-390c79dfb6e1\",\n      \"type\": \"text\",\n      \"content\": \"P9_CANVAS\",\n      \"position\": {\n        \"x\": 20,\n        \"y\": 40\n      },\n      \"size\": {\n        \"width\": 100,\n        \"height\": 60\n      },\n      \"zIndex\": 0,\n      \"locked\": false,\n      \"visible\": true,\n      \"createdAt\": \"2026-09-30T19:09:40.160Z\",\n      \"updatedAt\": \"2026-09-30T19:09:40.160Z\"\n    }\n  ],\n  \"selectedIds\": [],\n  \"createdAt\": \"2026-09-30T19:09:40.159Z\",\n  \"updatedAt\": \"2026-09-30T19:09:40.160Z\",\n  \"version\": 2\n}"
+  },
+  "results": [
+    {
+      "success": true,
+      "output": "Canvas created: 17e5fc69-1c55-43ab-b66f-a85c09bc2f1d"
+    },
+    {
+      "success": true,
+      "output": "Element added: 6cc2b818-9f2b-4be7-aeb9-390c79dfb6e1 (text)"
+    },
+    {
+      "success": true,
+      "output": "{\n  \"id\": \"17e5fc69-1c55-43ab-b66f-a85c09bc2f1d\",\n  \"config\": {\n    \"name\": \"Untitled Workspace\",\n    \"width\": 1920,\n    \"height\": 1080,\n    \"backgroundColor\": \"#ffffff\",\n    \"gridSize\": 20,\n    \"showGrid\": true,\n    \"snapToGrid\": true,\n    \"zoom\": 1,\n    \"panOffset\": {\n      \"x\": 0,\n      \"y\": 0\n    },\n    \"maxHistory\": 50\n  },\n  \"elements\": [\n    {\n      \"id\": \"6cc2b818-9f2b-4be7-aeb9-390c79dfb6e1\",\n      \"type\": \"text\",\n      \"content\": \"P9_CANVAS\",\n      \"position\": {\n        \"x\": 20,\n        \"y\": 40\n      },\n      \"size\": {\n        \"width\": 100,\n        \"height\": 60\n      },\n      \"zIndex\": 0,\n      \"locked\": false,\n      \"visible\": true,\n      \"createdAt\": \"2026-09-30T19:09:40.160Z\",\n      \"updatedAt\": \"2026-09-30T19:09:40.160Z\"\n    }\n  ],\n  \"selectedIds\": [],\n  \"createdAt\": \"2026-09-30T19:09:40.159Z\",\n  \"updatedAt\": \"2026-09-30T19:09:40.160Z\",\n  \"version\": 2\n}"
+    }
+  ],
+  "observations": {
+    "uniqueCanvas": true,
+    "renderedContent": true,
+    "actualSnapping": true
+  },
+  "passed": true,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:canvas",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

@@ -1,0 +1,76 @@
+Date de consolidation: 2026-09-30T19:33:55.906793Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: user_model_observe({"kind": "preference", "content": "P9_SYNTHETIC prefers concise output 1790794409510", "confidence": 1})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "user_model_observe",
+  "input": {
+    "kind": "preference",
+    "content": "P9_SYNTHETIC prefers concise output 1790794409510",
+    "confidence": 1
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.userProposalPersisted",
+        "op": "eq",
+        "value": true
+      },
+      {
+        "field": "observations.userNotAccepted",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Proposed observation [um-muogr5t41ec] (preference): P9_SYNTHETIC prefers concise output 1790794409510\nIt is awaiting human review and is NOT yet part of the user model. Accept with: buddy user-model accept um-muogr5t41ec --by <name>"
+  },
+  "observations": {
+    "userProposalPersisted": true,
+    "userNotAccepted": true
+  },
+  "verificationCalls": [
+    {
+      "name": "user_model_recall",
+      "input": {
+        "query": "P9_SYNTHETIC"
+      },
+      "result": {
+        "success": true,
+        "output": "No matching observations about the user."
+      }
+    }
+  ],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.userProposalPersisted eq",
+      "passed": true
+    },
+    {
+      "check": "observations.userNotAccepted eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 6,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:user_model_observe",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

@@ -1,0 +1,24 @@
+Date de consolidation: 2026-09-30T19:33:55.966413Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: browser_back({})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "browser_back",
+  "input": {},
+  "result": {
+    "success": true,
+    "output": "Navigated back"
+  },
+  "observations": {
+    "actualPreviousUrl": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:browser_back",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

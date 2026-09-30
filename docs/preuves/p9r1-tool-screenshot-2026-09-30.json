@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:screenshot",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.861452Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "cf42b27d465f2db61b6d497c8f4df2a266d556bfbe60bfdc6028d8fa73094a1f",
+  "artifact": "docs/preuves/p9r1-tool-screenshot-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

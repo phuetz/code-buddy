@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:text_to_speech",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.894545Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "5ac2f3db572a2ce56ce78e1bd7721cc377d18172b1abdf5074d968ff814b98bf",
+  "artifact": "docs/preuves/p9r1-tool-text_to_speech-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

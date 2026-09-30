@@ -1,0 +1,183 @@
+Date de consolidation: 2026-09-30T19:33:55.754733Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: kanban_unblock({"id": "p9r1-kanban_unblock-1790794266916", "comment": "P9_UNBLOCK"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "kanban_unblock",
+  "input": {
+    "id": "p9r1-kanban_unblock-1790794266916",
+    "comment": "P9_UNBLOCK"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.card.title",
+        "op": "eq",
+        "value": "P9_CARD"
+      },
+      {
+        "field": "data.card.status",
+        "op": "eq",
+        "value": "in_progress"
+      },
+      {
+        "field": "observations.persistedCard.status",
+        "op": "eq",
+        "value": "in_progress"
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [
+    {
+      "name": "kanban_create",
+      "input": {
+        "id": "p9r1-kanban_unblock-1790794266916",
+        "title": "P9_CARD"
+      },
+      "result": {
+        "success": true,
+        "output": "{\n  \"action\": \"kanban_create\",\n  \"boardPath\": \"<QA>/reprise-1/project/.codebuddy/colab-tasks.json\",\n  \"card\": {\n    \"id\": \"p9r1-kanban_unblock-1790794266916\",\n    \"title\": \"P9_CARD\",\n    \"status\": \"todo\",\n    \"priority\": \"medium\",\n    \"tags\": [],\n    \"links\": [],\n    \"comments\": [],\n    \"heartbeats\": [],\n    \"createdAt\": \"2026-09-30T18:51:06.916Z\",\n    \"updatedAt\": \"2026-09-30T18:51:06.916Z\"\n  }\n}",
+        "data": {
+          "action": "kanban_create",
+          "boardPath": "<QA>/reprise-1/project/.codebuddy/colab-tasks.json",
+          "card": {
+            "id": "p9r1-kanban_unblock-1790794266916",
+            "title": "P9_CARD",
+            "status": "todo",
+            "priority": "medium",
+            "tags": [],
+            "links": [],
+            "comments": [],
+            "heartbeats": [],
+            "createdAt": "2026-09-30T18:51:06.916Z",
+            "updatedAt": "2026-09-30T18:51:06.916Z"
+          }
+        }
+      }
+    },
+    {
+      "name": "kanban_block",
+      "input": {
+        "id": "p9r1-kanban_unblock-1790794266916",
+        "reason": "QA precondition"
+      },
+      "result": {
+        "success": true,
+        "output": "{\n  \"action\": \"kanban_block\",\n  \"boardPath\": \"<QA>/reprise-1/project/.codebuddy/colab-tasks.json\",\n  \"card\": {\n    \"id\": \"p9r1-kanban_unblock-1790794266916\",\n    \"title\": \"P9_CARD\",\n    \"status\": \"blocked\",\n    \"priority\": \"medium\",\n    \"tags\": [],\n    \"links\": [],\n    \"comments\": [\n      {\n        \"id\": \"cmt-1790794266923-1\",\n        \"text\": \"Blocked: QA precondition\",\n        \"createdAt\": \"2026-09-30T18:51:06.923Z\"\n      }\n    ],\n    \"heartbeats\": [],\n    \"createdAt\": \"2026-09-30T18:51:06.916Z\",\n    \"updatedAt\": \"2026-09-30T18:51:06.916Z\",\n    \"blockedReason\": \"QA precondition\"\n  }\n}",
+        "data": {
+          "action": "kanban_block",
+          "boardPath": "<QA>/reprise-1/project/.codebuddy/colab-tasks.json",
+          "card": {
+            "id": "p9r1-kanban_unblock-1790794266916",
+            "title": "P9_CARD",
+            "status": "blocked",
+            "priority": "medium",
+            "tags": [],
+            "links": [],
+            "comments": [
+              {
+                "id": "cmt-1790794266923-1",
+                "text": "Blocked: QA precondition",
+                "createdAt": "2026-09-30T18:51:06.923Z"
+              }
+            ],
+            "heartbeats": [],
+            "createdAt": "2026-09-30T18:51:06.916Z",
+            "updatedAt": "2026-09-30T18:51:06.916Z",
+            "blockedReason": "QA precondition"
+          }
+        }
+      }
+    }
+  ],
+  "result": {
+    "success": true,
+    "output": "{\n  \"action\": \"kanban_unblock\",\n  \"boardPath\": \"<QA>/reprise-1/project/.codebuddy/colab-tasks.json\",\n  \"card\": {\n    \"id\": \"p9r1-kanban_unblock-1790794266916\",\n    \"title\": \"P9_CARD\",\n    \"status\": \"in_progress\",\n    \"priority\": \"medium\",\n    \"tags\": [],\n    \"links\": [],\n    \"comments\": [\n      {\n        \"id\": \"cmt-1790794266923-1\",\n        \"text\": \"Blocked: QA precondition\",\n        \"createdAt\": \"2026-09-30T18:51:06.923Z\"\n      },\n      {\n        \"id\": \"cmt-1790794266927-1\",\n        \"text\": \"P9_UNBLOCK\",\n        \"createdAt\": \"2026-09-30T18:51:06.927Z\"\n      }\n    ],\n    \"heartbeats\": [],\n    \"createdAt\": \"2026-09-30T18:51:06.916Z\",\n    \"updatedAt\": \"2026-09-30T18:51:06.916Z\"\n  }\n}",
+    "data": {
+      "action": "kanban_unblock",
+      "boardPath": "<QA>/reprise-1/project/.codebuddy/colab-tasks.json",
+      "card": {
+        "id": "p9r1-kanban_unblock-1790794266916",
+        "title": "P9_CARD",
+        "status": "in_progress",
+        "priority": "medium",
+        "tags": [],
+        "links": [],
+        "comments": [
+          {
+            "id": "cmt-1790794266923-1",
+            "text": "Blocked: QA precondition",
+            "createdAt": "2026-09-30T18:51:06.923Z"
+          },
+          {
+            "id": "cmt-1790794266927-1",
+            "text": "P9_UNBLOCK",
+            "createdAt": "2026-09-30T18:51:06.927Z"
+          }
+        ],
+        "heartbeats": [],
+        "createdAt": "2026-09-30T18:51:06.916Z",
+        "updatedAt": "2026-09-30T18:51:06.916Z"
+      }
+    }
+  },
+  "observations": {
+    "persistedCard": {
+      "id": "p9r1-kanban_unblock-1790794266916",
+      "title": "P9_CARD",
+      "status": "in_progress",
+      "priority": "medium",
+      "assignedAgent": null,
+      "claimedBy": null,
+      "claimedAt": null,
+      "createdBy": "<PRIVATE_NAME>/project",
+      "createdAt": "2026-09-30T18:51:06.916Z",
+      "comments": [
+        {
+          "id": "cmt-1790794266923-1",
+          "text": "Blocked: QA precondition",
+          "createdAt": "2026-09-30T18:51:06.923Z"
+        },
+        {
+          "id": "cmt-1790794266927-1",
+          "text": "P9_UNBLOCK",
+          "createdAt": "2026-09-30T18:51:06.927Z"
+        }
+      ]
+    }
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.card.title eq",
+      "passed": true
+    },
+    {
+      "check": "data.card.status eq",
+      "passed": true
+    },
+    {
+      "check": "observations.persistedCard.status eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 15,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:kanban_unblock",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

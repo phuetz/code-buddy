@@ -1,0 +1,67 @@
+Date de consolidation: 2026-09-30T19:33:55.853019Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: sbom_generate({"root": "<QA>/reprise-1/project"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "sbom_generate",
+  "input": {
+    "root": "<QA>/reprise-1/project"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.packages",
+        "op": "some",
+        "value": {
+          "name": "p9-fixture-lib",
+          "version": "1.0.0",
+          "license": "MIT"
+        }
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "{\n  \"format\": \"codebuddy-minimal-sbom\",\n  \"generatedAt\": \"2026-09-30T18:53:26.888Z\",\n  \"root\": \"<QA>/reprise-1/project\",\n  \"packages\": [\n    {\n      \"name\": \"p9-fixture-lib\",\n      \"version\": \"1.0.0\",\n      \"license\": \"MIT\"\n    }\n  ]\n}",
+    "data": {
+      "format": "codebuddy-minimal-sbom",
+      "generatedAt": "2026-09-30T18:53:26.888Z",
+      "root": "<QA>/reprise-1/project",
+      "packages": [
+        {
+          "name": "p9-fixture-lib",
+          "version": "1.0.0",
+          "license": "MIT"
+        }
+      ]
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.packages some",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 1,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:sbom_generate",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

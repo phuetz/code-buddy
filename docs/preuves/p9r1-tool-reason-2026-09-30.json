@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:reason",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T19:33:55.835848Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "82eb053be18467389bc6b6380dbf794bafaa2c0bc6d292e967d45136a397a4e8",
+  "artifact": "docs/preuves/p9r1-tool-reason-2026-09-30.log",
+  "summary": "Solution Found annoncé avec score 1.00, mais la solution ne calcule pas 42 : elle se termine à 6 times 7."
+}

@@ -1,9 +1,9 @@
-Date: 2026-09-30T17:39:45.738654Z
-Révision exécutée: 3bfe60064750d48b0ff3005072e623fd2e7f4478
+Date de consolidation: 2026-09-30T19:33:55.690187Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
 Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
 Commande/scénario: diagram({"operation": "mermaid", "code": "graph TD; A[P9_START]-->B[P9_END]", "format": "ascii"})
 Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
-Observé: Oracle strict non satisfait : tool:diagram
+Observé: Mermaid à séparateurs point-virgule : No nodes found in flowchart ; aucun rendu ASCII.
 Verdict: échec
 
 {
@@ -20,7 +20,12 @@ Verdict: échec
         "op": "includes",
         "values": [
           "P9_START",
-          "P9_END"
+          "P9_END",
+          "┌",
+          "┐",
+          "│",
+          "└",
+          "┘"
         ]
       },
       {
@@ -34,6 +39,7 @@ Verdict: échec
     ]
   },
   "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
   "result": {
     "success": true,
     "output": "No nodes found in flowchart",
@@ -43,6 +49,8 @@ Verdict: échec
       "mermaidCode": "graph TD; A[P9_START]-->B[P9_END]"
     }
   },
+  "observations": {},
+  "verificationCalls": [],
   "passed": false,
   "checks": [
     {
@@ -61,5 +69,10 @@ Verdict: échec
       "check": "oracle spécifique déclaré",
       "passed": true
     }
-  ]
+  ],
+  "echoRejected": true,
+  "ms": 2,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:diagram",
+  "summary": "Mermaid à séparateurs point-virgule : No nodes found in flowchart ; aucun rendu ASCII."
 }

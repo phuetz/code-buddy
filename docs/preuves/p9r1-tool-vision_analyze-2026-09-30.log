@@ -1,9 +1,9 @@
-Date: 2026-09-30T17:39:45.740960Z
-Révision exécutée: 3bfe60064750d48b0ff3005072e623fd2e7f4478
+Date de consolidation: 2026-09-30T19:33:55.922454Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
 Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
 Commande/scénario: vision_analyze({"image_path": "ocr.png", "include_ocr": true})
 Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
-Observé: Oracle strict non satisfait : tool:vision_analyze
+Observé: OCR exact : attendu P9 TEXT 42, observé PO TEXT 42 ; largeur 700 exclue de l’oracle.
 Verdict: échec
 
 {
@@ -33,16 +33,17 @@ Verdict: échec
     ]
   },
   "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
   "result": {
     "success": true,
-    "output": "{\n  \"kind\": \"vision_analyze_result\",\n  \"ok\": true,\n  \"source\": \"image\",\n  \"imagePath\": \"<QA_PROJECT>/ocr.png\",\n  \"reportPath\": \"<QA_PROJECT>/.codebuddy/vision-analysis/vision-e0d98898-4394-41b3-864d-72488cda8fc0.json\",\n  \"generatedAt\": \"2026-09-30T17:38:00.872Z\",\n  \"metadata\": {\n    \"width\": 700,\n    \"height\": 180,\n    \"format\": \"png\",\n    \"sizeBytes\": 6137,\n    \"channels\": 3,\n    \"hasAlpha\": false,\n    \"density\": 72\n  },\n  \"colors\": {\n    \"dominant\": {\n      \"r\": 248,\n      \"g\": 248,\n      \"b\": 248\n    },\n    \"isOpaque\": true\n  },\n  \"labels\": [\n    \"image\",\n    \"png\",\n    \"landscape\"\n  ],\n  \"ocr\": {\n    \"attempted\": true,\n    \"ok\": true,\n    \"language\": \"eng\",\n    \"text\": \"PO TEXT 42\"\n  }\n}",
+    "output": "{\n  \"kind\": \"vision_analyze_result\",\n  \"ok\": true,\n  \"source\": \"image\",\n  \"imagePath\": \"<QA>/reprise-1/project/ocr.png\",\n  \"reportPath\": \"<QA>/reprise-1/project/.codebuddy/vision-analysis/vision-dd59af1c-457a-4905-9a93-f08df0e3a497.json\",\n  \"generatedAt\": \"2026-09-30T18:53:30.309Z\",\n  \"metadata\": {\n    \"width\": 700,\n    \"height\": 180,\n    \"format\": \"png\",\n    \"sizeBytes\": 6137,\n    \"channels\": 3,\n    \"hasAlpha\": false,\n    \"density\": 72\n  },\n  \"colors\": {\n    \"dominant\": {\n      \"r\": 248,\n      \"g\": 248,\n      \"b\": 248\n    },\n    \"isOpaque\": true\n  },\n  \"labels\": [\n    \"image\",\n    \"png\",\n    \"landscape\"\n  ],\n  \"ocr\": {\n    \"attempted\": true,\n    \"ok\": true,\n    \"language\": \"eng\",\n    \"text\": \"PO TEXT 42\"\n  }\n}",
     "data": {
       "kind": "vision_analyze_result",
       "ok": true,
       "source": "image",
-      "imagePath": "<QA_PROJECT>/ocr.png",
-      "reportPath": "<QA_PROJECT>/.codebuddy/vision-analysis/vision-e0d98898-4394-41b3-864d-72488cda8fc0.json",
-      "generatedAt": "2026-09-30T17:38:00.872Z",
+      "imagePath": "<QA>/reprise-1/project/ocr.png",
+      "reportPath": "<QA>/reprise-1/project/.codebuddy/vision-analysis/vision-dd59af1c-457a-4905-9a93-f08df0e3a497.json",
+      "generatedAt": "2026-09-30T18:53:30.309Z",
       "metadata": {
         "width": 700,
         "height": 180,
@@ -73,6 +74,8 @@ Verdict: échec
       }
     }
   },
+  "observations": {},
+  "verificationCalls": [],
   "passed": false,
   "checks": [
     {
@@ -95,5 +98,10 @@ Verdict: échec
       "check": "oracle spécifique déclaré",
       "passed": true
     }
-  ]
+  ],
+  "echoRejected": true,
+  "ms": 230,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:vision_analyze",
+  "summary": "OCR exact : attendu P9 TEXT 42, observé PO TEXT 42 ; largeur 700 exclue de l’oracle."
 }

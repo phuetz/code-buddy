@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:canvas",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.968612Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "fe121800556310a21015730e13a71d802e77bb19a17933fe91154c700cd9b979",
+  "artifact": "docs/preuves/p9r1-tool-canvas-2026-09-30.log",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

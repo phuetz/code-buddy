@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:str_replace_editor",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.885784Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "152bc9b123009c695f37f7a9c532e2309787a68814800d08f7d7ea6c24f80082",
+  "artifact": "docs/preuves/p9r1-tool-str_replace_editor-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

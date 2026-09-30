@@ -1,0 +1,57 @@
+Date de consolidation: 2026-09-30T19:33:55.937754Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: write_file({"path": "alias.txt", "content": "P9_ALIAS"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "write_file",
+  "input": {
+    "path": "alias.txt",
+    "content": "P9_ALIAS"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "file": "alias.txt",
+        "op": "eq",
+        "value": "P9_ALIAS",
+        "changed": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Updated alias.txt with 1 addition\n--- a/alias.txt\n+++ b/alias.txt\n@@ -1,0 +1,1 @@\n+P9_ALIAS"
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "écriture effective de alias.txt",
+      "passed": true
+    },
+    {
+      "check": "alias.txt eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 2,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:write_file",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

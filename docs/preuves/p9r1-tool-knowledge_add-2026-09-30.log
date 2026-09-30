@@ -1,0 +1,57 @@
+Date de consolidation: 2026-09-30T19:33:55.756991Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: knowledge_add({"title": "P9 Knowledge 1790794266935", "content": "P9_KNOWLEDGE", "tags": ["p9"]})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "knowledge_add",
+  "input": {
+    "title": "P9 Knowledge 1790794266935",
+    "content": "P9_KNOWLEDGE",
+    "tags": [
+      "p9"
+    ]
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.knowledgePersisted",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Knowledge entry \"P9 Knowledge 1790794266935\" saved to <QA_HOME>/.codebuddy/knowledge/p9-knowledge-1790794266935.md"
+  },
+  "observations": {
+    "knowledgePersisted": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.knowledgePersisted eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 8,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:knowledge_add",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

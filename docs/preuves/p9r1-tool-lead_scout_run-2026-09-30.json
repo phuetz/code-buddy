@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:lead_scout_run",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.773892Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "663eea9d74f869af5d16024d4b16b12d18d529128f22953862f3c8c03a295bc8",
+  "artifact": "docs/preuves/p9r1-tool-lead_scout_run-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

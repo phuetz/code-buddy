@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:apply_patch",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.977598Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "697616eaaf2e96baef0fd1167a03e07cdd48350c84a84ada1552805d67b4b94e",
+  "artifact": "docs/preuves/p9r1-tool-apply_patch-2026-09-30.log",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

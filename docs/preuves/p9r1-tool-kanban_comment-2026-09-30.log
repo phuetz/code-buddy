@@ -1,0 +1,150 @@
+Date de consolidation: 2026-09-30T19:33:55.739034Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: kanban_comment({"id": "p9r1-kanban_comment-1790794266844", "text": "P9_COMMENT"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "kanban_comment",
+  "input": {
+    "id": "p9r1-kanban_comment-1790794266844",
+    "text": "P9_COMMENT"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.card.title",
+        "op": "eq",
+        "value": "P9_CARD"
+      },
+      {
+        "field": "data.card.status",
+        "op": "eq",
+        "value": "todo"
+      },
+      {
+        "field": "observations.persistedCard.status",
+        "op": "eq",
+        "value": "open"
+      },
+      {
+        "field": "data.card.comments",
+        "op": "some",
+        "value": {
+          "text": "P9_COMMENT"
+        }
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [
+    {
+      "name": "kanban_create",
+      "input": {
+        "id": "p9r1-kanban_comment-1790794266844",
+        "title": "P9_CARD"
+      },
+      "result": {
+        "success": true,
+        "output": "{\n  \"action\": \"kanban_create\",\n  \"boardPath\": \"<QA>/reprise-1/project/.codebuddy/colab-tasks.json\",\n  \"card\": {\n    \"id\": \"p9r1-kanban_comment-1790794266844\",\n    \"title\": \"P9_CARD\",\n    \"status\": \"todo\",\n    \"priority\": \"medium\",\n    \"tags\": [],\n    \"links\": [],\n    \"comments\": [],\n    \"heartbeats\": [],\n    \"createdAt\": \"2026-09-30T18:51:06.844Z\",\n    \"updatedAt\": \"2026-09-30T18:51:06.844Z\"\n  }\n}",
+        "data": {
+          "action": "kanban_create",
+          "boardPath": "<QA>/reprise-1/project/.codebuddy/colab-tasks.json",
+          "card": {
+            "id": "p9r1-kanban_comment-1790794266844",
+            "title": "P9_CARD",
+            "status": "todo",
+            "priority": "medium",
+            "tags": [],
+            "links": [],
+            "comments": [],
+            "heartbeats": [],
+            "createdAt": "2026-09-30T18:51:06.844Z",
+            "updatedAt": "2026-09-30T18:51:06.844Z"
+          }
+        }
+      }
+    }
+  ],
+  "result": {
+    "success": true,
+    "output": "{\n  \"action\": \"kanban_comment\",\n  \"boardPath\": \"<QA>/reprise-1/project/.codebuddy/colab-tasks.json\",\n  \"card\": {\n    \"id\": \"p9r1-kanban_comment-1790794266844\",\n    \"title\": \"P9_CARD\",\n    \"status\": \"todo\",\n    \"priority\": \"medium\",\n    \"tags\": [],\n    \"links\": [],\n    \"comments\": [\n      {\n        \"id\": \"cmt-1790794266847-1\",\n        \"text\": \"P9_COMMENT\",\n        \"createdAt\": \"2026-09-30T18:51:06.847Z\"\n      }\n    ],\n    \"heartbeats\": [],\n    \"createdAt\": \"2026-09-30T18:51:06.844Z\",\n    \"updatedAt\": \"2026-09-30T18:51:06.844Z\"\n  }\n}",
+    "data": {
+      "action": "kanban_comment",
+      "boardPath": "<QA>/reprise-1/project/.codebuddy/colab-tasks.json",
+      "card": {
+        "id": "p9r1-kanban_comment-1790794266844",
+        "title": "P9_CARD",
+        "status": "todo",
+        "priority": "medium",
+        "tags": [],
+        "links": [],
+        "comments": [
+          {
+            "id": "cmt-1790794266847-1",
+            "text": "P9_COMMENT",
+            "createdAt": "2026-09-30T18:51:06.847Z"
+          }
+        ],
+        "heartbeats": [],
+        "createdAt": "2026-09-30T18:51:06.844Z",
+        "updatedAt": "2026-09-30T18:51:06.844Z"
+      }
+    }
+  },
+  "observations": {
+    "persistedCard": {
+      "id": "p9r1-kanban_comment-1790794266844",
+      "title": "P9_CARD",
+      "status": "open",
+      "priority": "medium",
+      "assignedAgent": null,
+      "claimedBy": null,
+      "claimedAt": null,
+      "createdBy": "<PRIVATE_NAME>/project",
+      "createdAt": "2026-09-30T18:51:06.844Z",
+      "comments": [
+        {
+          "id": "cmt-1790794266847-1",
+          "text": "P9_COMMENT",
+          "createdAt": "2026-09-30T18:51:06.847Z"
+        }
+      ]
+    }
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.card.title eq",
+      "passed": true
+    },
+    {
+      "check": "data.card.status eq",
+      "passed": true
+    },
+    {
+      "check": "observations.persistedCard.status eq",
+      "passed": true
+    },
+    {
+      "check": "data.card.comments some",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 7,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:kanban_comment",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

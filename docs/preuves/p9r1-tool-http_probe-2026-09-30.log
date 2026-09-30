@@ -1,0 +1,39 @@
+Date de consolidation: 2026-09-30T19:33:55.943338Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: http_probe({"url": "http://127.0.0.1:18870"})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "http_probe",
+  "input": {
+    "url": "http://127.0.0.1:18870"
+  },
+  "result": {
+    "success": true,
+    "output": "HTTP 200, 460 byte(s)",
+    "data": {
+      "url": "http://127.0.0.1:18870/",
+      "status": 200,
+      "headers": {
+        "content-type": "text/html",
+        "date": "Wed, 30 Sep 2026 19:21:29 GMT",
+        "connection": "keep-alive",
+        "keep-alive": "timeout=5",
+        "content-length": "460"
+      },
+      "size": 460
+    }
+  },
+  "observations": {
+    "status200": true,
+    "actualBodySize": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:http_probe",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

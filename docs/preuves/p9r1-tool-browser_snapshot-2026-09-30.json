@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:browser_snapshot",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.950562Z",
+  "revision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "sourceDigest": "cc0b2a937fab210ea54811085c874338b58cc2158139357e5ece89853d7e043a",
+  "artifact": "docs/preuves/p9r1-tool-browser_snapshot-2026-09-30.log",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

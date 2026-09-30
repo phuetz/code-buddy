@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:clipboard",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T19:33:56.011544Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "59398946b745e1b0c61d85a9e32c49ca995e25dd0c1fc960a5aabb5923ee52f0",
+  "artifact": "docs/preuves/p9r1-tool-clipboard-2026-09-30.log",
+  "summary": "write_text ne revient pas avant la limite QA de 12 secondes sous X11/Xvfb ; processus arrêtés."
+}

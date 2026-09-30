@@ -1,0 +1,41 @@
+Date de consolidation: 2026-09-30T19:33:55.958558Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: browser_get_images({})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "browser_get_images",
+  "input": {},
+  "result": {
+    "success": true,
+    "output": "[0] P9_IMAGE 30x30 -> http://127.0.0.1:18870/image.svg",
+    "data": {
+      "images": [
+        {
+          "index": 0,
+          "src": "http://127.0.0.1:18870/image.svg",
+          "currentSrc": "http://127.0.0.1:18870/image.svg",
+          "alt": "P9_IMAGE",
+          "title": "",
+          "width": 30,
+          "height": 30,
+          "naturalWidth": 30,
+          "naturalHeight": 30,
+          "visible": true,
+          "loading": "auto"
+        }
+      ]
+    }
+  },
+  "observations": {
+    "decodedImage": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:browser_get_images",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

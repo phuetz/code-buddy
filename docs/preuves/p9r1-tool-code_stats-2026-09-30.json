@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:code_stats",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.661291Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "a7ccb6058f222aba3df87a9976164bc092d5704a441ac920060cb8162090bc3d",
+  "artifact": "docs/preuves/p9r1-tool-code_stats-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

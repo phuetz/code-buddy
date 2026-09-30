@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-lsp",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:56.002782Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "dab9d556d076d303d0eb7b08c162976e08d97c3c8b66a3782bbe54e067058c40",
+  "artifact": "docs/preuves/p9r1-cli-lsp-2026-09-30.log",
+  "summary": "Même erreur sémantique connue cinq fois et une fermeture par processus froid"
+}

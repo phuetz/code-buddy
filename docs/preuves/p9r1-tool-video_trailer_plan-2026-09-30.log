@@ -1,0 +1,98 @@
+Date de consolidation: 2026-09-30T19:33:55.918363Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: video_trailer_plan({"operation": "validate", "plan": {}})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "video_trailer_plan",
+  "input": {
+    "operation": "validate",
+    "plan": {}
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.status",
+        "op": "eq",
+        "value": "INCOMPLETE"
+      },
+      {
+        "field": "data.blockers.length",
+        "op": "min",
+        "value": 1
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "{\n  \"status\": \"INCOMPLETE\",\n  \"claimedStatus\": \"INCOMPLETE\",\n  \"qualifiedStatus\": \"INCOMPLETE\",\n  \"blockers\": [\n    \"invalid-status\",\n    \"malformed-plan:book\",\n    \"malformed-plan:sound\",\n    \"malformed-plan:retention\",\n    \"malformed-plan:cost\",\n    \"malformed-plan:approvals\",\n    \"malformed-plan:publication\",\n    \"malformed-plan:characters\",\n    \"malformed-plan:shots\",\n    \"malformed-plan:overlays\",\n    \"unsupported-schema\",\n    \"missing-book-metadata\",\n    \"missing-staging-sentence\",\n    \"missing-spoiler-limit\",\n    \"missing-commercial-action\",\n    \"non-safe-trailer-tier:\",\n    \"master-duration-out-of-range\",\n    \"missing-function:hook\",\n    \"missing-function:world\",\n    \"missing-function:protagonist\",\n    \"missing-function:escalation\",\n    \"missing-function:price\",\n    \"missing-function:withheld\",\n    \"missing-function:brand\",\n    \"missing-function:cta\",\n    \"incomplete-sound-layers\",\n    \"missing-sound-master\",\n    \"incomplete-retention-hypotheses\",\n    \"unsafe-publication-gate\"\n  ],\n  \"warnings\": []\n}",
+    "data": {
+      "status": "INCOMPLETE",
+      "claimedStatus": "INCOMPLETE",
+      "qualifiedStatus": "INCOMPLETE",
+      "blockers": [
+        "invalid-status",
+        "malformed-plan:book",
+        "malformed-plan:sound",
+        "malformed-plan:retention",
+        "malformed-plan:cost",
+        "malformed-plan:approvals",
+        "malformed-plan:publication",
+        "malformed-plan:characters",
+        "malformed-plan:shots",
+        "malformed-plan:overlays",
+        "unsupported-schema",
+        "missing-book-metadata",
+        "missing-staging-sentence",
+        "missing-spoiler-limit",
+        "missing-commercial-action",
+        "non-safe-trailer-tier:",
+        "master-duration-out-of-range",
+        "missing-function:hook",
+        "missing-function:world",
+        "missing-function:protagonist",
+        "missing-function:escalation",
+        "missing-function:price",
+        "missing-function:withheld",
+        "missing-function:brand",
+        "missing-function:cta",
+        "incomplete-sound-layers",
+        "missing-sound-master",
+        "incomplete-retention-hypotheses",
+        "unsafe-publication-gate"
+      ],
+      "warnings": []
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.status eq",
+      "passed": true
+    },
+    {
+      "check": "data.blockers.length min",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 1,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:video_trailer_plan",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

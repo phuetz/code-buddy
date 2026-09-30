@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:license_check",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.788672Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "dd7d3055976ae1f6590b16dab493fd1fde5ee4ab8f51a24357fe73d505f01f7e",
+  "artifact": "docs/preuves/p9r1-tool-license_check-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

@@ -1,0 +1,26 @@
+Date de consolidation: 2026-09-30T19:33:55.986092Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy cloud list({"args": ["list"]})
+Attendu: ['No cloud tasks found.']
+Observé: ['No cloud tasks found.']
+Verdict: prouvée
+
+{
+  "id": "cli:cloud",
+  "name": "cloud",
+  "input": {
+    "args": [
+      "list"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "No cloud tasks found.\nSubmit one with: cloud submit \"<goal>\"\n"
+  },
+  "expected": "['No cloud tasks found.']",
+  "passed": true,
+  "command": "buddy cloud list",
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['No cloud tasks found.']"
+}

@@ -1,0 +1,43 @@
+Date de consolidation: 2026-09-30T19:33:55.998386Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy spec init P9_SPEC_R1({"args": ["init", "P9_SPEC_R1"]})
+Attendu: ['Created spec project', 'P9_SPEC_R1']
+Observé: ['Created spec project', 'P9_SPEC_R1']
+Verdict: prouvée
+
+{
+  "id": "cli:spec",
+  "name": "spec",
+  "input": {
+    "args": [
+      "init",
+      "P9_SPEC_R1"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "Created spec project [sp-muoga5iyugxil]: P9_SPEC_R1\nAdd stories with: buddy spec story add \"<title>\"\n"
+  },
+  "expected": "['Created spec project', 'P9_SPEC_R1']",
+  "passed": true,
+  "command": "buddy spec init P9_SPEC_R1",
+  "verificationCall": {
+    "id": "cli:spec",
+    "name": "spec",
+    "input": {
+      "args": [
+        "list"
+      ]
+    },
+    "result": {
+      "success": true,
+      "output": "* [sp-muoga5iyugxil] P9_SPEC_R1  (phase: sharding)\n"
+    },
+    "expected": "['P9_SPEC_R1', 'phase: sharding']",
+    "passed": true,
+    "command": "buddy spec list"
+  },
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['Created spec project', 'P9_SPEC_R1']"
+}

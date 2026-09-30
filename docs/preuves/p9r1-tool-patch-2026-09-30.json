@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:patch",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.821584Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "a7d291f3b0495de9184c1fb1740930f360e19be12eabff7a56bbdfba2179478f",
+  "artifact": "docs/preuves/p9r1-tool-patch-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

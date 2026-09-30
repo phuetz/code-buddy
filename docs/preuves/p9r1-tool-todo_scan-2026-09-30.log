@@ -1,0 +1,93 @@
+Date de consolidation: 2026-09-30T19:33:55.896540Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: todo_scan({"root": "<QA>/reprise-1/project"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "todo_scan",
+  "input": {
+    "root": "<QA>/reprise-1/project"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.total",
+        "op": "min",
+        "value": 1
+      },
+      {
+        "field": "data.byType.TODO",
+        "op": "some",
+        "value": {
+          "file": "sample.js",
+          "line": 2,
+          "text": "P9_MARKER"
+        }
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Found 3 todo markers",
+    "data": {
+      "root": "<QA>/reprise-1/project",
+      "total": 3,
+      "byType": {
+        "TODO": [
+          {
+            "file": ".codebuddy/index/workspace.bin.meta.json",
+            "line": 144,
+            "type": "TODO",
+            "text": "P9_MARKER\\nconsole.log(add(1, 2));\\n\""
+          },
+          {
+            "file": "sample.js",
+            "line": 2,
+            "type": "TODO",
+            "text": "P9_MARKER"
+          },
+          {
+            "file": "todo.md",
+            "line": 1,
+            "type": "TODO",
+            "text": ""
+          }
+        ],
+        "FIXME": [],
+        "HACK": [],
+        "XXX": []
+      }
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.total min",
+      "passed": true
+    },
+    {
+      "check": "data.byType.TODO some",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 78,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:todo_scan",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

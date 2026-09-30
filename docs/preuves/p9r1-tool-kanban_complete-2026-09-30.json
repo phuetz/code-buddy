@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:kanban_complete",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.740929Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "461fdb60bb9b6ddaf1a02e6c6bf4c74b6f55099bf85bd58079add5f543a23170",
+  "artifact": "docs/preuves/p9r1-tool-kanban_complete-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

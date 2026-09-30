@@ -1,0 +1,70 @@
+Date de consolidation: 2026-09-30T19:33:55.758937Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: knowledge_graph({"action": "add", "subject": "p9r1-entity-1790794266947", "predicate": "calls", "object": "p9-b"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "knowledge_graph",
+  "input": {
+    "action": "add",
+    "subject": "p9r1-entity-1790794266947",
+    "predicate": "calls",
+    "object": "p9-b"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.graphHasEdge",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Added: p9r1-entity-1790794266947 --calls--> p9-b"
+  },
+  "observations": {
+    "graphHasEdge": true
+  },
+  "verificationCalls": [
+    {
+      "name": "knowledge_graph",
+      "input": {
+        "action": "query",
+        "subject": "p9r1-entity-1790794266947",
+        "predicate": "calls",
+        "object": "p9-b"
+      },
+      "result": {
+        "success": true,
+        "output": "Found 1 triple(s):\np9r1-entity-1790794266947 --calls--> p9-b"
+      }
+    }
+  ],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.graphHasEdge eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 4,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:knowledge_graph",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

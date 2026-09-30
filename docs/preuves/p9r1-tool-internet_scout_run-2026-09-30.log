@@ -1,0 +1,165 @@
+Date de consolidation: 2026-09-30T19:33:55.729938Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: internet_scout_run({"goal": "Verify the title Example Domain", "sourceUrl": "https://example.com", "useBrowser": false, "maxPages": 1})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "internet_scout_run",
+  "input": {
+    "goal": "Verify the title Example Domain",
+    "sourceUrl": "https://example.com",
+    "useBrowser": false,
+    "maxPages": 1
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.success",
+        "op": "eq",
+        "value": true
+      },
+      {
+        "field": "data.evidence.length",
+        "op": "min",
+        "value": 1
+      },
+      {
+        "field": "observations.scoutFetchedBody",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "# Internet Scout Plan: Verify the title Example Domain\nIntent: research\nQuery: Verify the title Example Domain\nSource URL: https://example.com\nPage budget: 1\n## Steps\n1. Read the source before opening a browser [web_fetch, required] - Cheap static fetch may already contain the needed evidence.\n2. Extract structured page evidence [browser.extract, required] - Collect URL, title, headings, links, actions, and goal-focused text snippets as proof.\n## Stop Conditions\n- Captcha, device challenge, security checkpoint, or bot-verification wall appears.\n- A login wall, paywall, or private member area is required.\n- HTTP 403, 429, rate-limit warning, or explicit crawling prohibition appears.\n- The task asks for stealth, captcha solving, scraping behind access controls, or credential harvesting.\n- The page exposes sensitive personal data that is not necessary for the user-authorized goal.\n## Evidence Checklist\n- Final URL and page title.\n- At least one source snippet or heading tied to the goal.\n- Source timestamps or observed-at time when available.\n- Clear note of any blocker, missing evidence, or uncertainty.\n## Safety Rules\n- Use public web pages or user-authorized pages only.\n- Prefer web_fetch before browser automation to reduce page load and side effects.\n- Observe before clicking or typing, and use visible refs rather than blind selectors.\n- Interactive plans may execute only the exact reviewed action and require a second confirmation immediately before it runs.\n- Do not bypass captcha, bot checks, paywalls, access controls, or robots/rate-limit signals.\n- Do not infer or persist identity for unknown people without explicit permission and evidence.\n- Persist only compact facts with source evidence; avoid storing raw page dumps or private data.\n## Run Result\nStatus: success\nSelected URLs: https://example.com\n## Trace\n- static-read: web_fetch success - Content from https://example.com:\n\n• Example DomainThis domain is for use in documentation examples without needing permission. This is not a service, avoid relying on it for te...\n## Evidence\n- https://example.com\n\nStructured result:\n{\n  \"success\": true,\n  \"stopped\": false,\n  \"plan\": {\n    \"goal\": \"Verify the title Example Domain\",\n    \"query\": \"Verify the title Example Domain\",\n    \"intent\": \"research\",\n    \"sourceUrl\": \"https://example.com\",\n    \"maxPages\": 1,\n    \"allowLoginPages\": false,\n    \"steps\": [\n      {\n        \"id\": \"static-read\",\n        \"title\": \"Read the source before opening a browser\",\n        \"tool\": \"web_fetch\",\n        \"stage\": \"read\",\n        \"evidence\": \"static-content\",\n        \"required\": true,\n        \"reason\": \"Cheap static fetch may already contain the needed evidence.\",\n        \"inputs\": {\n          \"url\": \"https://example.com\"\n        }\n      },\n      {\n        \"id\": \"extract\",\n        \"title\": \"Extract structured page evidence\",\n        \"tool\": \"browser\",\n        \"stage\": \"extract\",\n        \"evidence\": \"structured-facts\",\n        \"required\": true,\n        \"action\": \"extract\",\n        \"reason\": \"Collect URL, title, headings, links, actions, and goal-focused text snippets as proof.\",\n        \"inputs\": {\n          \"query\": \"Verify the title Example Domain\"\n        }\n      }\n    ],\n    \"safetyRules\": [\n      \"Use public web pages or user-authorized pages only.\",\n      \"Prefer web_fetch before browser automation to reduce page load and side effects.\",\n      \"Observe before clicking or typing, and use visible refs rather than blind selectors.\",\n      \"Interactive plans may execute only the exact reviewed action and require a second confirmation immediately before it runs.\",\n      \"Do not bypass captcha, bot checks, paywalls, access controls, or robots/rate-limit signals.\",\n      \"Do not infer or persist identity for unknown people without explicit permission and evidence.\",\n      \"Persist only compact facts with source evidence; avoid storing raw page dumps or private data.\"\n    ],\n    \"stopConditions\": [\n      \"Captcha, device challenge, security checkpoint, or bot-verification wall appears.\",\n      \"A login wall, paywall, or private member area is required.\",\n      \"HTTP 403, 429, rate-limit warning, or explicit crawling prohibition appears.\",\n      \"The task asks for stealth, captcha solving, scraping behind access controls, or credential harvesting.\",\n      \"The page exposes sensitive personal data that is not necessary for the user-authorized goal.\"\n    ],\n    \"evidenceChecklist\": [\n      \"Final URL and page title.\",\n      \"At least one source snippet or heading tied to the goal.\",\n      \"Source timestamps or observed-at time when available.\",\n      \"Clear note of any blocker, missing evidence, or uncertainty.\"\n    ],\n    \"rateLimit\": {\n      \"maxPages\": 1,\n      \"pauseBetweenPagesMs\": 1500,\n      \"retryPolicy\": \"Retry transient network failures once; do not retry 403, 429, captcha, or auth walls.\"\n    }\n  },\n  \"selectedUrls\": [\n    \"https://example.com\"\n  ],\n  \"evidence\": [\n    {\n      \"url\": \"https://example.com\",\n      \"title\": \"\",\n      \"headings\": [],\n      \"matches\": [],\n      \"snippet\": \"Content from https://example.com: • Example DomainThis domain is for use in documentation examples without needing permission. This is not a service, avoid relying on it for testing and monitoring purposes. Learn more\"\n    }\n  ],\n  \"traces\": [\n    {\n      \"stepId\": \"static-read\",\n      \"tool\": \"web_fetch\",\n      \"status\": \"success\",\n      \"url\": \"https://example.com\",\n      \"input\": {\n        \"url\": \"https://example.com\",\n        \"prompt\": \"Verify the title Example Domain\"\n      },\n      \"output\": \"Content from https://example.com:\\n\\n• Example DomainThis domain is for use in documentation examples without needing permission. This is not a service, avoid relying on it for testing and monitoring purposes.\\n\\nLearn more\"\n    }\n  ]\n}",
+    "data": {
+      "success": true,
+      "stopped": false,
+      "plan": {
+        "goal": "Verify the title Example Domain",
+        "query": "Verify the title Example Domain",
+        "intent": "research",
+        "sourceUrl": "https://example.com",
+        "maxPages": 1,
+        "allowLoginPages": false,
+        "steps": [
+          {
+            "id": "static-read",
+            "title": "Read the source before opening a browser",
+            "tool": "web_fetch",
+            "stage": "read",
+            "evidence": "static-content",
+            "required": true,
+            "reason": "Cheap static fetch may already contain the needed evidence.",
+            "inputs": {
+              "url": "https://example.com"
+            }
+          },
+          {
+            "id": "extract",
+            "title": "Extract structured page evidence",
+            "tool": "browser",
+            "stage": "extract",
+            "evidence": "structured-facts",
+            "required": true,
+            "action": "extract",
+            "reason": "Collect URL, title, headings, links, actions, and goal-focused text snippets as proof.",
+            "inputs": {
+              "query": "Verify the title Example Domain"
+            }
+          }
+        ],
+        "safetyRules": [
+          "Use public web pages or user-authorized pages only.",
+          "Prefer web_fetch before browser automation to reduce page load and side effects.",
+          "Observe before clicking or typing, and use visible refs rather than blind selectors.",
+          "Interactive plans may execute only the exact reviewed action and require a second confirmation immediately before it runs.",
+          "Do not bypass captcha, bot checks, paywalls, access controls, or robots/rate-limit signals.",
+          "Do not infer or persist identity for unknown people without explicit permission and evidence.",
+          "Persist only compact facts with source evidence; avoid storing raw page dumps or private data."
+        ],
+        "stopConditions": [
+          "Captcha, device challenge, security checkpoint, or bot-verification wall appears.",
+          "A login wall, paywall, or private member area is required.",
+          "HTTP 403, 429, rate-limit warning, or explicit crawling prohibition appears.",
+          "The task asks for stealth, captcha solving, scraping behind access controls, or credential harvesting.",
+          "The page exposes sensitive personal data that is not necessary for the user-authorized goal."
+        ],
+        "evidenceChecklist": [
+          "Final URL and page title.",
+          "At least one source snippet or heading tied to the goal.",
+          "Source timestamps or observed-at time when available.",
+          "Clear note of any blocker, missing evidence, or uncertainty."
+        ],
+        "rateLimit": {
+          "maxPages": 1,
+          "pauseBetweenPagesMs": 1500,
+          "retryPolicy": "Retry transient network failures once; do not retry 403, 429, captcha, or auth walls."
+        }
+      },
+      "selectedUrls": [
+        "https://example.com"
+      ],
+      "evidence": [
+        {
+          "url": "https://example.com",
+          "title": "",
+          "headings": [],
+          "matches": [],
+          "snippet": "Content from https://example.com: • Example DomainThis domain is for use in documentation examples without needing permission. This is not a service, avoid relying on it for testing and monitoring purposes. Learn more"
+        }
+      ],
+      "traces": [
+        {
+          "stepId": "static-read",
+          "tool": "web_fetch",
+          "status": "success",
+          "url": "https://example.com",
+          "input": {
+            "url": "https://example.com",
+            "prompt": "Verify the title Example Domain"
+          },
+          "output": "Content from https://example.com:\n\n• Example DomainThis domain is for use in documentation examples without needing permission. This is not a service, avoid relying on it for testing and monitoring purposes.\n\nLearn more"
+        }
+      ]
+    }
+  },
+  "observations": {
+    "scoutFetchedBody": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.success eq",
+      "passed": true
+    },
+    {
+      "check": "data.evidence.length min",
+      "passed": true
+    },
+    {
+      "check": "observations.scoutFetchedBody eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 52,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:internet_scout_run",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

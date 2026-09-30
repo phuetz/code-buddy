@@ -1,0 +1,74 @@
+Date de consolidation: 2026-09-30T19:33:55.839943Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: relationship_context({"subject": "P9 Organization", "subjectType": "organization", "publicFacts": ["P9_PUBLIC"], "sensitiveFacts": ["P9_SECRET"], "permissions": {"usePublicKnowledge": true}})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "relationship_context",
+  "input": {
+    "subject": "P9 Organization",
+    "subjectType": "organization",
+    "publicFacts": [
+      "P9_PUBLIC"
+    ],
+    "sensitiveFacts": [
+      "P9_SECRET"
+    ],
+    "permissions": {
+      "usePublicKnowledge": true
+    }
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "P9_PUBLIC"
+        ]
+      },
+      {
+        "field": "output",
+        "op": "excludes",
+        "values": [
+          "P9_SECRET"
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "# Relationship Context: P9 Organization\n\nSubject type: organization\nMode: general\nConfidence: 0.50 (low)\nContext level: public_context\n\nAllowed uses:\n- visible conversation context\n- public knowledge\n\nPublic context:\n- P9_PUBLIC\n\nWithheld:\n- 1 sensitive fact(s) withheld\n\nSafety warnings:\n- Public context has no attached evidence; treat it as unverified until sourced.\n\nRecommended next action: Use the assembled context conservatively and cite evidence when making factual claims.\n\nStructured result:\n{\n  \"subject\": \"P9 Organization\",\n  \"subjectType\": \"organization\",\n  \"mode\": \"general\",\n  \"confidence\": 0.5,\n  \"confidenceBand\": \"low\",\n  \"contextLevel\": \"public_context\",\n  \"needsConfirmation\": false,\n  \"publicContext\": [\n    \"P9_PUBLIC\"\n  ],\n  \"relationshipContext\": [],\n  \"visibleContext\": [],\n  \"withheld\": [\n    \"1 sensitive fact(s) withheld\"\n  ],\n  \"safetyWarnings\": [\n    \"Public context has no attached evidence; treat it as unverified until sourced.\"\n  ],\n  \"evidence\": [],\n  \"allowedUses\": [\n    \"visible conversation context\",\n    \"public knowledge\"\n  ],\n  \"recommendedNextAction\": \"Use the assembled context conservatively and cite evidence when making factual claims.\",\n  \"promptCard\": \"# Relationship Context: P9 Organization\\n\\nSubject type: organization\\nMode: general\\nConfidence: 0.50 (low)\\nContext level: public_context\\n\\nAllowed uses:\\n- visible conversation context\\n- public knowledge\\n\\nPublic context:\\n- P9_PUBLIC\\n\\nWithheld:\\n- 1 sensitive fact(s) withheld\\n\\nSafety warnings:\\n- Public context has no attached evidence; treat it as unverified until sourced.\\n\\nRecommended next action: Use the assembled context conservatively and cite evidence when making factual claims.\"\n}"
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "output excludes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 1,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:relationship_context",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

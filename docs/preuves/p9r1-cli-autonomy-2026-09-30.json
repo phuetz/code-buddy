@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:autonomy",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.981945Z",
+  "revision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "sourceDigest": "7756ab375f8fdd895a0f8aff528918074e44d55e93698fa2c9dcf93c87e81ed7",
+  "artifact": "docs/preuves/p9r1-cli-autonomy-2026-09-30.log",
+  "summary": "['Tasks:', 'Blocked by deps:', 'Agents:']"
+}

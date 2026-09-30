@@ -3,9 +3,9 @@
   "featureId": "tool:ocr",
   "kind": "integration",
   "result": "failed",
-  "date": "2026-09-30T17:39:45.740599Z",
-  "revision": "3bfe60064750d48b0ff3005072e623fd2e7f4478",
-  "sourceDigest": "e8365e333e5f0c068552eaf57ac4b204432037b27229e08ffca959487c7aa9db",
+  "date": "2026-09-30T19:33:55.817526Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "891cc79dab6032a2e4accbe684be8b20b3b176e6204bd3c834d5b30849aa2a6f",
   "artifact": "docs/preuves/p9r1-tool-ocr-2026-09-30.log",
-  "summary": "Oracle strict non satisfait : tool:ocr"
+  "summary": "OCR exact : attendu P9 TEXT 42, observé PO TEXT 42, malgré confiance 92 %."
 }

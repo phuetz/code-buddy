@@ -1,0 +1,67 @@
+Date de consolidation: 2026-09-30T19:33:55.859530Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: scan_vulnerabilities({"path": "<QA>/reprise-1/project/audit-fixture", "package_manager": "npm"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "scan_vulnerabilities",
+  "input": {
+    "path": "<QA>/reprise-1/project/audit-fixture",
+    "package_manager": "npm"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "[HIGH] lodash@",
+          "NPM ("
+        ]
+      },
+      {
+        "field": "output",
+        "op": "excludes",
+        "values": [
+          "NPM (0 vulnerabilities)",
+          "No known vulnerabilities found."
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "## NPM (1 vulnerabilities)\n  Critical: 0 | High: 1 | Medium: 0 | Low: 0\n\n  [HIGH] lodash@<=4.17.23\n    lodash\n    Fix: upgrade to 4.18.1"
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "output excludes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 509,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:scan_vulnerabilities",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

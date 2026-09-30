@@ -1,0 +1,931 @@
+Date de consolidation: 2026-09-30T19:33:56.021052Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: cowork-studio({"marker": "P9R1_CHAT_1790795786187"})
+Attendu: Écriture puis lecture IPC du nouveau fichier à marqueur unique ; pas une application générée.
+Observé: Écriture puis lecture IPC du nouveau fichier à marqueur unique ; pas une application générée.
+Verdict: prouvée
+
+{
+  "id": "cowork-studio",
+  "name": "cowork-studio",
+  "input": {
+    "marker": "P9R1_CHAT_1790795786187"
+  },
+  "result": {
+    "success": true,
+    "output": "{\"write\": {\"ok\": true, \"data\": {\"path\": \"P9R1_CHAT_1790795786187.txt\"}}, \"read\": {\"ok\": true, \"data\": \"P9R1_CHAT_1790795786187\"}, \"tree\": {\"ok\": true, \"data\": [{\"name\": \".codebuddy\", \"path\": \".codebuddy\", \"type\": \"directory\", \"children\": [{\"name\": \"browser-vision\", \"path\": \".codebuddy/browser-vision\", \"type\": \"directory\", \"children\": [{\"name\": \"browser-vision-1790747385248.png\", \"path\": \".codebuddy/browser-vision/browser-vision-1790747385248.png\", \"type\": \"file\"}, {\"name\": \"browser-vision-1790747731928.png\", \"path\": \".codebuddy/browser-vision/browser-vision-1790747731928.png\", \"type\": \"file\"}]}, {\"name\": \"companion\", \"path\": \".codebuddy/companion\", \"type\": \"directory\", \"children\": [{\"name\": \"percepts.jsonl\", \"path\": \".codebuddy/companion/percepts.jsonl\", \"type\": \"file\"}]}, {\"name\": \"docs\", \"path\": \".codebuddy/docs\", \"type\": \"directory\", \"children\": [{\"name\": \"overview.md\", \"path\": \".codebuddy/docs/overview.md\", \"type\": \"file\"}]}, {\"name\": \"execute-code\", \"path\": \".codebuddy/execute-code\", \"type\": \"directory\", \"children\": [{\"name\": \"exec-ce29846a-b281-42f4-8b6b-b1306f6889f8\", \"path\": \".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8\", \"type\": \"directory\", \"children\": [{\"name\": \"rpc\", \"path\": \".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/rpc\", \"type\": \"directory\", \"children\": []}, {\"name\": \"result.json\", \"path\": \".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/result.json\", \"type\": \"file\"}, {\"name\": \"script.mjs\", \"path\": \".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/script.mjs\", \"type\": \"file\"}, {\"name\": \"stderr.log\", \"path\": \".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stderr.log\", \"type\": \"file\"}, {\"name\": \"stdout.log\", \"path\": \".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stdout.log\", \"type\": \"file\"}]}]}, {\"name\": \"exports\", \"path\": \".codebuddy/exports\", \"type\": \"directory\", \"children\": []}, {\"name\": \"media-generation\", \"path\": \".codebuddy/media-generation\", \"type\": \"directory\", \"children\": [{\"name\": \"films\", \"path\": \".codebuddy/media-generation/films\", \"type\": \"directory\", \"children\": [{\"name\": \"stitched-second.mp4\", \"path\": \".codebuddy/media-generation/films/stitched-second.mp4\", \"type\": \"file\"}, {\"name\": \"stitched-second.mp4.meta.json\", \"path\": \".codebuddy/media-generation/films/stitched-second.mp4.meta.json\", \"type\": \"file\"}, {\"name\": \"stitched.mp4\", \"path\": \".codebuddy/media-generation/films/stitched.mp4\", \"type\": \"file\"}, {\"name\": \"stitched.mp4.meta.json\", \"path\": \".codebuddy/media-generation/films/stitched.mp4.meta.json\", \"type\": \"file\"}]}, {\"name\": \"images\", \"path\": \".codebuddy/media-generation/images\", \"type\": \"directory\", \"children\": [{\"name\": \"image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png\", \"path\": \".codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png\", \"type\": \"file\"}, {\"name\": \"image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png.meta.json\", \"path\": \".codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png.meta.json\", \"type\": \"file\"}]}]}, {\"name\": \"paper-qa\", \"path\": \".codebuddy/paper-qa\", \"type\": \"directory\", \"children\": [{\"name\": \"index\", \"path\": \".codebuddy/paper-qa/index\", \"type\": \"directory\", \"children\": [{\"name\": \"documents\", \"path\": \".codebuddy/paper-qa/index/documents\", \"type\": \"directory\", \"children\": [{\"name\": \"ab\", \"path\": \".codebuddy/paper-qa/index/documents/ab\", \"type\": \"directory\", \"children\": [{\"name\": \"abea6e46c14e196f57b38f7eb76ab48bed1244eb.json\", \"path\": \".codebuddy/paper-qa/index/documents/ab/abea6e46c14e196f57b38f7eb76ab48bed1244eb.json\", \"type\": \"file\"}]}]}, {\"name\": \"embeddings\", \"path\": \".codebuddy/paper-qa/index/embeddings\", \"type\": \"directory\", \"children\": [{\"name\": \"03\", \"path\": \".codebuddy/paper-qa/index/embeddings/03\", \"type\": \"directory\", \"children\": [{\"name\": \"0345df7155f9577d07ff3d2ec60b5aebedffe3ea.f32\", \"path\": \".codebuddy/paper-qa/index/embeddings/03/0345df7155f9577d07ff3d2ec60b5aebedffe3ea.f32\", \"type\": \"file\"}]}]}]}]}, {\"name\": \"qrcodes\", \"path\": \".codebuddy/qrcodes\", \"type\": \"directory\", \"children\": [{\"name\": \"qr_1790743220213.svg\", \"path\": \".codebuddy/qrcodes/qr_1790743220213.svg\", \"type\": \"file\"}]}, {\"name\": \"self-model\", \"path\": \".codebuddy/self-model\", \"type\": \"directory\", \"children\": [{\"name\": \"evolution.json\", \"path\": \".codebuddy/self-model/evolution.json\", \"type\": \"file\"}]}, {\"name\": \"skills\", \"path\": \".codebuddy/skills\", \"type\": \"directory\", \"children\": [{\"name\": \"authored-p9-fixture\", \"path\": \".codebuddy/skills/authored-p9-fixture\", \"type\": \"directory\", \"children\": [{\"name\": \"SKILL.md\", \"path\": \".codebuddy/skills/authored-p9-fixture/SKILL.md\", \"type\": \"file\"}]}]}, {\"name\": \"specs\", \"path\": \".codebuddy/specs\", \"type\": \"directory\", \"children\": [{\"name\": \"sp-munms2bim7fjb\", \"path\": \".codebuddy/specs/sp-munms2bim7fjb\", \"type\": \"directory\", \"children\": [{\"name\": \"epics\", \"path\": \".codebuddy/specs/sp-munms2bim7fjb/epics\", \"type\": \"directory\", \"children\": []}, {\"name\": \"stories\", \"path\": \".codebuddy/specs/sp-munms2bim7fjb/stories\", \"type\": \"directory\", \"children\": []}, {\"name\": \"project.json\", \"path\": \".codebuddy/specs/sp-munms2bim7fjb/project.json\", \"type\": \"file\"}]}, {\"name\": \"active.json\", \"path\": \".codebuddy/specs/active.json\", \"type\": \"file\"}]}, {\"name\": \"tool-results\", \"path\": \".codebuddy/tool-results\", \"type\": \"directory\", \"children\": [{\"name\": \"session-01d71189205e1a7a0845c5c14435e374a721c04281948c0241f5ffd81efe2513\", \"path\": \".codebuddy/tool-results/session-01d71189205e1a7a0845c5c14435e374a721c04281948c0241f5ffd81efe2513\", \"type\": \"directory\", \"children\": [{\"name\": \"server_tool_1790743670678_igub2f.txt\", \"path\": \".codebuddy/tool-results/session-01d71189205e1a7a0845c5c14435e374a721c04281948c0241f5ffd81efe2513/server_tool_1790743670678_igub2f.txt\", \"type\": \"file\"}]}, {\"name\": \"session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a\", \"path\": \".codebuddy/tool-results/session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a\", \"type\": \"directory\", \"children\": [{\"name\": \"code_9a20110b-e11b-45cb-8e1e-b56f93ad9b3b.txt\", \"path\": \".codebuddy/tool-results/session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a/code_9a20110b-e11b-45cb-8e1e-b56f93ad9b3b.txt\", \"type\": \"file\"}, {\"name\": \"server_tool_1790746130931_wxpkmg.txt\", \"path\": \".codebuddy/tool-results/session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a/server_tool_1790746130931_wxpkmg.txt\", \"type\": \"file\"}, {\"name\": \"server_tool_1790746130944_xvm6cz.txt\", \"path\": \".codebuddy/tool-results/session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a/server_tool_1790746130944_xvm6cz.txt\", \"type\": \"file\"}]}, {\"name\": \"session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6\", \"path\": \".codebuddy/tool-results/session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6\", \"type\": \"directory\", \"children\": [{\"name\": \"server_tool_1790743827428_scbjvf.txt\", \"path\": \".codebuddy/tool-results/session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6/server_tool_1790743827428_scbjvf.txt\", \"type\": \"file\"}, {\"name\": \"server_tool_1790743830278_gi8bdv.txt\", \"path\": \".codebuddy/tool-results/session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6/server_tool_1790743830278_gi8bdv.txt\", \"type\": \"file\"}]}, {\"name\": \"session-7c6e1ed823ce20d7d40547457d8cc8ab3a87dc181f9649453dcbd1d22cf62a2c\", \"path\": \".codebuddy/tool-results/session-7c6e1ed823ce20d7d40547457d8cc8ab3a87dc181f9649453dcbd1d22cf62a2c\", \"type\": \"directory\", \"children\": [{\"name\": \"server_tool_1790746815914_6l8xgz.txt\", \"path\": \".codebuddy/tool-results/session-7c6e1ed823ce20d7d40547457d8cc8ab3a87dc181f9649453dcbd1d22cf62a2c/server_tool_1790746815914_6l8xgz.txt\", \"type\": \"file\"}, {\"name\": \"server_tool_1790746815944_cjy2gu.txt\", \"path\": \".codebuddy/tool-results/session-7c6e1ed823ce20d7d40547457d8cc8ab3a87dc181f9649453dcbd1d22cf62a2c/server_tool_1790746815944_cjy2gu.txt\", \"type\": \"file\"}]}, {\"name\": \"session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e\", \"path\": \".codebuddy/tool-results/session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e\", \"type\": \"directory\", \"children\": [{\"name\": \"server_tool_1790744119475_68e2ln.txt\", \"path\": \".codebuddy/tool-results/session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e/server_tool_1790744119475_68e2ln.txt\", \"type\": \"file\"}, {\"name\": \"server_tool_1790744120655_srycr8.txt\", \"path\": \".codebuddy/tool-results/session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e/server_tool_1790744120655_srycr8.txt\", \"type\": \"file\"}]}, {\"name\": \"session-ebcc880036890d8e00ddae6e126d5ee22f0d48d004b8a9406b09d6dd08eecfdd\", \"path\": \".codebuddy/tool-results/session-ebcc880036890d8e00ddae6e126d5ee22f0d48d004b8a9406b09d6dd08eecfdd\", \"type\": \"directory\", \"children\": [{\"name\": \"server_tool_1790746815823_85qak7.txt\", \"path\": \".codebuddy/tool-results/session-ebcc880036890d8e00ddae6e126d5ee22f0d48d004b8a9406b09d6dd08eecfdd/server_tool_1790746815823_85qak7.txt\", \"type\": \"file\"}, {\"name\": \"server_tool_1790746818832_r5mvce.txt\", \"path\": \".codebuddy/tool-results/session-ebcc880036890d8e00ddae6e126d5ee22f0d48d004b8a9406b09d6dd08eecfdd/server_tool_1790746818832_r5mvce.txt\", \"type\": \"file\"}]}]}, {\"name\": \"video\", \"path\": \".codebuddy/video\", \"type\": \"directory\", \"children\": [{\"name\": \"experiments-spoken.json\", \"path\": \".codebuddy/video/experiments-spoken.json\", \"type\": \"file\"}, {\"name\": \"research-spoken.md\", \"path\": \".codebuddy/video/research-spoken.md\", \"type\": \"file\"}, {\"name\": \"transcript-spoken.txt\", \"path\": \".codebuddy/video/transcript-spoken.txt\", \"type\": \"file\"}]}, {\"name\": \"vision-analysis\", \"path\": \".codebuddy/vision-analysis\", \"type\": \"directory\", \"children\": [{\"name\": \"browser-vision-b1129fef-0bb2-4975-a3d7-db51c276ff1b.json\", \"path\": \".codebuddy/vision-analysis/browser-vision-b1129fef-0bb2-4975-a3d7-db51c276ff1b.json\", \"type\": \"file\"}, {\"name\": \"browser-vision-b4be4d99-7415-4df4-a885-1e7d3115cef2.json\", \"path\": \".codebuddy/vision-analysis/browser-vision-b4be4d99-7415-4df4-a885-1e7d3115cef2.json\", \"type\": \"file\"}, {\"name\": \"vision-b2cc3883-06f4-4736-bd69-c025cb9b078d.json\", \"path\": \".codebuddy/vision-analysis/vision-b2cc3883-06f4-4736-bd69-c025cb9b078d.json\", \"type\": \"file\"}, {\"name\": \"vision-e0d98898-4394-41b3-864d-72488cda8fc0.json\", \"path\": \".codebuddy/vision-analysis/vision-e0d98898-4394-41b3-864d-72488cda8fc0.json\", \"type\": \"file\"}]}, {\"name\": \"workspace\", \"path\": \".codebuddy/workspace\", \"type\": \"directory\", \"children\": [{\"name\": \"script_e60c064e.py\", \"path\": \".codebuddy/workspace/script_e60c064e.py\", \"type\": \"file\"}]}, {\"name\": \"code-graph.json\", \"path\": \".codebuddy/code-graph.json\", \"type\": \"file\"}, {\"name\": \"CODEBUDDY_MEMORY.md\", \"path\": \".codebuddy/CODEBUDDY_MEMORY.md\", \"type\": \"file\"}, {\"name\": \"colab-tasks.json\", \"path\": \".codebuddy/colab-tasks.json\", \"type\": \"file\"}, {\"name\": \"colab-worklog.json\", \"path\": \".codebuddy/colab-worklog.json\", \"type\": \"file\"}, {\"name\": \"knowledge-graph.json\", \"path\": \".codebuddy/knowledge-graph.json\", \"type\": \"file\"}, {\"name\": \"lesson-candidates.json\", \"path\": \".codebuddy/lesson-candidates.json\", \"type\": \"file\"}, {\"name\": \"lessons.md\", \"path\": \".codebuddy/lessons.md\", \"type\": \"file\"}, {\"name\": \"mcp.json\", \"path\": \".codebuddy/mcp.json\", \"type\": \"file\"}, {\"name\": \"memory-candidates.json\", \"path\": \".codebuddy/memory-candidates.json\", \"type\": \"file\"}, {\"name\": \"repoProfile.json\", \"path\": \".codebuddy/repoProfile.json\", \"type\": \"file\"}, {\"name\": \"user-model.json\", \"path\": \".codebuddy/user-model.json\", \"type\": \"file\"}, {\"name\": \"workspace.json\", \"path\": \".codebuddy/workspace.json\", \"type\": \"file\"}]}, {\"name\": \".codeexplorer\", \"path\": \".codeexplorer\", \"type\": \"directory\", \"children\": [{\"name\": \"csv\", \"path\": \".codeexplorer/csv\", \"type\": \"directory\", \"children\": [{\"name\": \"CodeRelation.csv\", \"path\": \".codeexplorer/csv/CodeRelation.csv\", \"type\": \"file\"}, {\"name\": \"File.csv\", \"path\": \".codeexplorer/csv/File.csv\", \"type\": \"file\"}, {\"name\": \"Function.csv\", \"path\": \".codeexplorer/csv/Function.csv\", \"type\": \"file\"}, {\"name\": \"TodoMarker.csv\", \"path\": \".codeexplorer/csv/TodoMarker.csv\", \"type\": \"file\"}]}, {\"name\": \"analyze.json\", \"path\": \".codeexplorer/analyze.json\", \"type\": \"file\"}, {\"name\": \"graph.bin\", \"path\": \".codeexplorer/graph.bin\", \"type\": \"file\"}, {\"name\": \"local-enrichment.bin\", \"path\": \".codeexplorer/local-enrichment.bin\", \"type\": \"file\"}, {\"name\": \"manifest.json\", \"path\": \".codeexplorer/manifest.json\", \"type\": \"file\"}, {\"name\": \"meta.json\", \"path\": \".codeexplorer/meta.json\", \"type\": \"file\"}, {\"name\": \"metrics.json\", \"path\": \".codeexplorer/metrics.json\", \"type\": \"file\"}, {\"name\": \"parse-cache.bin\", \"path\": \".codeexplorer/parse-cache.bin\", \"type\": \"file\"}]}, {\"name\": \"docs\", \"path\": \"docs\", \"type\": \"directory\", \"children\": [{\"name\": \"p9.md\", \"path\": \"docs/p9.md\", \"type\": \"file\"}]}, {\"name\": \"format-fixture\", \"path\": \"format-fixture\", \"type\": \"directory\", \"children\": [{\"name\": \"messy.js\", \"path\": \"format-fixture/messy.js\", \"type\": \"file\"}]}, {\"name\": \"new-cli\", \"path\": \"new-cli\", \"type\": \"directory\", \"children\": [{\"name\": \"src\", \"path\": \"new-cli/src\", \"type\": \"directory\", \"children\": [{\"name\": \"index.ts\", \"path\": \"new-cli/src/index.ts\", \"type\": \"file\"}]}, {\"name\": \"tests\", \"path\": \"new-cli/tests\", \"type\": \"directory\", \"children\": []}, {\"name\": \".gitignore\", \"path\": \"new-cli/.gitignore\", \"type\": \"file\"}, {\"name\": \"package.json\", \"path\": \"new-cli/package.json\", \"type\": \"file\"}, {\"name\": \"README.md\", \"path\": \"new-cli/README.md\", \"type\": \"file\"}, {\"name\": \"tsconfig.json\", \"path\": \"new-cli/tsconfig.json\", \"type\": \"file\"}]}, {\"name\": \"src\", \"path\": \"src\", \"type\": \"directory\", \"children\": [{\"name\": \"math.ts\", \"path\": \"src/math.ts\", \"type\": \"file\"}]}, {\"name\": \"a.txt\", \"path\": \"a.txt\", \"type\": \"file\"}, {\"name\": \"alias.txt\", \"path\": \"alias.txt\", \"type\": \"file\"}, {\"name\": \"b.txt\", \"path\": \"b.txt\", \"type\": \"file\"}, {\"name\": \"bad.rs\", \"path\": \"bad.rs\", \"type\": \"file\"}, {\"name\": \"browser-page.html\", \"path\": \"browser-page.html\", \"type\": \"file\"}, {\"name\": \"browser-server.mjs\", \"path\": \"browser-server.mjs\", \"type\": \"file\"}, {\"name\": \"build.js\", \"path\": \"build.js\", \"type\": \"file\"}, {\"name\": \"bundle.zip\", \"path\": \"bundle.zip\", \"type\": \"file\"}, {\"name\": \"CHANGELOG.md\", \"path\": \"CHANGELOG.md\", \"type\": \"file\"}, {\"name\": \"check.test.js\", \"path\": \"check.test.js\", \"type\": \"file\"}, {\"name\": \"clean.env\", \"path\": \"clean.env\", \"type\": \"file\"}, {\"name\": \"clip.mp4\", \"path\": \"clip.mp4\", \"type\": \"file\"}, {\"name\": \"conflict.txt\", \"path\": \"conflict.txt\", \"type\": \"file\"}, {\"name\": \"data.csv\", \"path\": \"data.csv\", \"type\": \"file\"}, {\"name\": \"data.json\", \"path\": \"data.json\", \"type\": \"file\"}, {\"name\": \"eng.traineddata\", \"path\": \"eng.traineddata\", \"type\": \"file\"}, {\"name\": \"eslint.config.js\", \"path\": \"eslint.config.js\", \"type\": \"file\"}, {\"name\": \"export.csv\", \"path\": \"export.csv\", \"type\": \"file\"}, {\"name\": \"leads.json\", \"path\": \"leads.json\", \"type\": \"file\"}, {\"name\": \"LICENSE\", \"path\": \"LICENSE\", \"type\": \"file\"}, {\"name\": \"meeting-report.json\", \"path\": \"meeting-report.json\", \"type\": \"file\"}, {\"name\": \"meeting-report.md\", \"path\": \"meeting-report.md\", \"type\": \"file\"}, {\"name\": \"meeting.txt\", \"path\": \"meeting.txt\", \"type\": \"file\"}, {\"name\": \"new.txt\", \"path\": \"new.txt\", \"type\": \"file\"}, {\"name\": \"note.md\", \"path\": \"note.md\", \"type\": \"file\"}, {\"name\": \"ocr.png\", \"path\": \"ocr.png\", \"type\": \"file\"}, {\"name\": \"p9-apply.txt\", \"path\": \"p9-apply.txt\", \"type\": \"file\"}, {\"name\": \"p9-screen.png\", \"path\": \"p9-screen.png\", \"type\": \"file\"}, {\"name\": \"p9-studio-r1.txt\", \"path\": \"p9-studio-r1.txt\", \"type\": \"file\"}, {\"name\": \"p9-studio.txt\", \"path\": \"p9-studio.txt\", \"type\": \"file\"}, {\"name\": \"p9.docx\", \"path\": \"p9.docx\", \"type\": \"file\"}, {\"name\": \"p9.pdf\", \"path\": \"p9.pdf\", \"type\": \"file\"}, {\"name\": \"P9R1_CHAT_1790795786187.txt\", \"path\": \"P9R1_CHAT_1790795786187.txt\", \"type\": \"file\"}, {\"name\": \"package.json\", \"path\": \"package.json\", \"type\": \"file\"}, {\"name\": \"patch-nine.txt\", \"path\": \"patch-nine.txt\", \"type\": \"file\"}, {\"name\": \"PLAN.md\", \"path\": \"PLAN.md\", \"type\": \"file\"}, {\"name\": \"rename-space test.ts\", \"path\": \"rename-space test.ts\", \"type\": \"file\"}, {\"name\": \"review-leads.json\", \"path\": \"review-leads.json\", \"type\": \"file\"}, {\"name\": \"sample.js\", \"path\": \"sample.js\", \"type\": \"file\"}, {\"name\": \"sample.ts\", \"path\": \"sample.ts\", \"type\": \"file\"}, {\"name\": \"speech.wav\", \"path\": \"speech.wav\", \"type\": \"file\"}, {\"name\": \"spoken.mp3\", \"path\": \"spoken.mp3\", \"type\": \"file\"}, {\"name\": \"spoken.mp4\", \"path\": \"spoken.mp4\", \"type\": \"file\"}, {\"name\": \"todo.md\", \"path\": \"todo.md\", \"type\": \"file\"}, {\"name\": \"tsconfig.json\", \"path\": \"tsconfig.json\", \"type\": \"file\"}, {\"name\": \"tts-p9.wav\", \"path\": \"tts-p9.wav\", \"type\": \"file\"}, {\"name\": \"voicebox.wav\", \"path\": \"voicebox.wav\", \"type\": \"file\"}]}}"
+  },
+  "observations": {
+    "write": {
+      "ok": true,
+      "data": {
+        "path": "P9R1_CHAT_1790795786187.txt"
+      }
+    },
+    "read": {
+      "ok": true,
+      "data": "P9R1_CHAT_1790795786187"
+    },
+    "tree": {
+      "ok": true,
+      "data": [
+        {
+          "name": ".codebuddy",
+          "path": ".codebuddy",
+          "type": "directory",
+          "children": [
+            {
+              "name": "browser-vision",
+              "path": ".codebuddy/browser-vision",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "browser-vision-1790747385248.png",
+                  "path": ".codebuddy/browser-vision/browser-vision-1790747385248.png",
+                  "type": "file"
+                },
+                {
+                  "name": "browser-vision-1790747731928.png",
+                  "path": ".codebuddy/browser-vision/browser-vision-1790747731928.png",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "companion",
+              "path": ".codebuddy/companion",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "percepts.jsonl",
+                  "path": ".codebuddy/companion/percepts.jsonl",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "docs",
+              "path": ".codebuddy/docs",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "overview.md",
+                  "path": ".codebuddy/docs/overview.md",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "execute-code",
+              "path": ".codebuddy/execute-code",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "exec-ce29846a-b281-42f4-8b6b-b1306f6889f8",
+                  "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "rpc",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/rpc",
+                      "type": "directory",
+                      "children": []
+                    },
+                    {
+                      "name": "result.json",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/result.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "script.mjs",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/script.mjs",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stderr.log",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stderr.log",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stdout.log",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stdout.log",
+                      "type": "file"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "exports",
+              "path": ".codebuddy/exports",
+              "type": "directory",
+              "children": []
+            },
+            {
+              "name": "media-generation",
+              "path": ".codebuddy/media-generation",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "films",
+                  "path": ".codebuddy/media-generation/films",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "stitched-second.mp4",
+                      "path": ".codebuddy/media-generation/films/stitched-second.mp4",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stitched-second.mp4.meta.json",
+                      "path": ".codebuddy/media-generation/films/stitched-second.mp4.meta.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stitched.mp4",
+                      "path": ".codebuddy/media-generation/films/stitched.mp4",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stitched.mp4.meta.json",
+                      "path": ".codebuddy/media-generation/films/stitched.mp4.meta.json",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "images",
+                  "path": ".codebuddy/media-generation/images",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png",
+                      "path": ".codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png",
+                      "type": "file"
+                    },
+                    {
+                      "name": "image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png.meta.json",
+                      "path": ".codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png.meta.json",
+                      "type": "file"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "paper-qa",
+              "path": ".codebuddy/paper-qa",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "index",
+                  "path": ".codebuddy/paper-qa/index",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "documents",
+                      "path": ".codebuddy/paper-qa/index/documents",
+                      "type": "directory",
+                      "children": [
+                        {
+                          "name": "ab",
+                          "path": ".codebuddy/paper-qa/index/documents/ab",
+                          "type": "directory",
+                          "children": [
+                            {
+                              "name": "abea6e46c14e196f57b38f7eb76ab48bed1244eb.json",
+                              "path": ".codebuddy/paper-qa/index/documents/ab/abea6e46c14e196f57b38f7eb76ab48bed1244eb.json",
+                              "type": "file"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "name": "embeddings",
+                      "path": ".codebuddy/paper-qa/index/embeddings",
+                      "type": "directory",
+                      "children": [
+                        {
+                          "name": "03",
+                          "path": ".codebuddy/paper-qa/index/embeddings/03",
+                          "type": "directory",
+                          "children": [
+                            {
+                              "name": "0345df7155f9577d07ff3d2ec60b5aebedffe3ea.f32",
+                              "path": ".codebuddy/paper-qa/index/embeddings/03/0345df7155f9577d07ff3d2ec60b5aebedffe3ea.f32",
+                              "type": "file"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "qrcodes",
+              "path": ".codebuddy/qrcodes",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "qr_1790743220213.svg",
+                  "path": ".codebuddy/qrcodes/qr_1790743220213.svg",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "self-model",
+              "path": ".codebuddy/self-model",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "evolution.json",
+                  "path": ".codebuddy/self-model/evolution.json",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "skills",
+              "path": ".codebuddy/skills",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "authored-p9-fixture",
+                  "path": ".codebuddy/skills/authored-p9-fixture",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "SKILL.md",
+                      "path": ".codebuddy/skills/authored-p9-fixture/SKILL.md",
+                      "type": "file"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "specs",
+              "path": ".codebuddy/specs",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "sp-munms2bim7fjb",
+                  "path": ".codebuddy/specs/sp-munms2bim7fjb",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "epics",
+                      "path": ".codebuddy/specs/sp-munms2bim7fjb/epics",
+                      "type": "directory",
+                      "children": []
+                    },
+                    {
+                      "name": "stories",
+                      "path": ".codebuddy/specs/sp-munms2bim7fjb/stories",
+                      "type": "directory",
+                      "children": []
+                    },
+                    {
+                      "name": "project.json",
+                      "path": ".codebuddy/specs/sp-munms2bim7fjb/project.json",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "active.json",
+                  "path": ".codebuddy/specs/active.json",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "tool-results",
+              "path": ".codebuddy/tool-results",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "session-01d71189205e1a7a0845c5c14435e374a721c04281948c0241f5ffd81efe2513",
+                  "path": ".codebuddy/tool-results/session-01d71189205e1a7a0845c5c14435e374a721c04281948c0241f5ffd81efe2513",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "server_tool_1790743670678_igub2f.txt",
+                      "path": ".codebuddy/tool-results/session-01d71189205e1a7a0845c5c14435e374a721c04281948c0241f5ffd81efe2513/server_tool_1790743670678_igub2f.txt",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a",
+                  "path": ".codebuddy/tool-results/session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "code_9a20110b-e11b-45cb-8e1e-b56f93ad9b3b.txt",
+                      "path": ".codebuddy/tool-results/session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a/code_9a20110b-e11b-45cb-8e1e-b56f93ad9b3b.txt",
+                      "type": "file"
+                    },
+                    {
+                      "name": "server_tool_1790746130931_wxpkmg.txt",
+                      "path": ".codebuddy/tool-results/session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a/server_tool_1790746130931_wxpkmg.txt",
+                      "type": "file"
+                    },
+                    {
+                      "name": "server_tool_1790746130944_xvm6cz.txt",
+                      "path": ".codebuddy/tool-results/session-456162ad27415a5ebdae5851eb109d2625aa5917514ab149bf412e76539e650a/server_tool_1790746130944_xvm6cz.txt",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6",
+                  "path": ".codebuddy/tool-results/session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "server_tool_1790743827428_scbjvf.txt",
+                      "path": ".codebuddy/tool-results/session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6/server_tool_1790743827428_scbjvf.txt",
+                      "type": "file"
+                    },
+                    {
+                      "name": "server_tool_1790743830278_gi8bdv.txt",
+                      "path": ".codebuddy/tool-results/session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6/server_tool_1790743830278_gi8bdv.txt",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "session-7c6e1ed823ce20d7d40547457d8cc8ab3a87dc181f9649453dcbd1d22cf62a2c",
+                  "path": ".codebuddy/tool-results/session-7c6e1ed823ce20d7d40547457d8cc8ab3a87dc181f9649453dcbd1d22cf62a2c",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "server_tool_1790746815914_6l8xgz.txt",
+                      "path": ".codebuddy/tool-results/session-7c6e1ed823ce20d7d40547457d8cc8ab3a87dc181f9649453dcbd1d22cf62a2c/server_tool_1790746815914_6l8xgz.txt",
+                      "type": "file"
+                    },
+                    {
+                      "name": "server_tool_1790746815944_cjy2gu.txt",
+                      "path": ".codebuddy/tool-results/session-7c6e1ed823ce20d7d40547457d8cc8ab3a87dc181f9649453dcbd1d22cf62a2c/server_tool_1790746815944_cjy2gu.txt",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e",
+                  "path": ".codebuddy/tool-results/session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "server_tool_1790744119475_68e2ln.txt",
+                      "path": ".codebuddy/tool-results/session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e/server_tool_1790744119475_68e2ln.txt",
+                      "type": "file"
+                    },
+                    {
+                      "name": "server_tool_1790744120655_srycr8.txt",
+                      "path": ".codebuddy/tool-results/session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e/server_tool_1790744120655_srycr8.txt",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "session-ebcc880036890d8e00ddae6e126d5ee22f0d48d004b8a9406b09d6dd08eecfdd",
+                  "path": ".codebuddy/tool-results/session-ebcc880036890d8e00ddae6e126d5ee22f0d48d004b8a9406b09d6dd08eecfdd",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "server_tool_1790746815823_85qak7.txt",
+                      "path": ".codebuddy/tool-results/session-ebcc880036890d8e00ddae6e126d5ee22f0d48d004b8a9406b09d6dd08eecfdd/server_tool_1790746815823_85qak7.txt",
+                      "type": "file"
+                    },
+                    {
+                      "name": "server_tool_1790746818832_r5mvce.txt",
+                      "path": ".codebuddy/tool-results/session-ebcc880036890d8e00ddae6e126d5ee22f0d48d004b8a9406b09d6dd08eecfdd/server_tool_1790746818832_r5mvce.txt",
+                      "type": "file"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "video",
+              "path": ".codebuddy/video",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "experiments-spoken.json",
+                  "path": ".codebuddy/video/experiments-spoken.json",
+                  "type": "file"
+                },
+                {
+                  "name": "research-spoken.md",
+                  "path": ".codebuddy/video/research-spoken.md",
+                  "type": "file"
+                },
+                {
+                  "name": "transcript-spoken.txt",
+                  "path": ".codebuddy/video/transcript-spoken.txt",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "vision-analysis",
+              "path": ".codebuddy/vision-analysis",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "browser-vision-b1129fef-0bb2-4975-a3d7-db51c276ff1b.json",
+                  "path": ".codebuddy/vision-analysis/browser-vision-b1129fef-0bb2-4975-a3d7-db51c276ff1b.json",
+                  "type": "file"
+                },
+                {
+                  "name": "browser-vision-b4be4d99-7415-4df4-a885-1e7d3115cef2.json",
+                  "path": ".codebuddy/vision-analysis/browser-vision-b4be4d99-7415-4df4-a885-1e7d3115cef2.json",
+                  "type": "file"
+                },
+                {
+                  "name": "vision-b2cc3883-06f4-4736-bd69-c025cb9b078d.json",
+                  "path": ".codebuddy/vision-analysis/vision-b2cc3883-06f4-4736-bd69-c025cb9b078d.json",
+                  "type": "file"
+                },
+                {
+                  "name": "vision-e0d98898-4394-41b3-864d-72488cda8fc0.json",
+                  "path": ".codebuddy/vision-analysis/vision-e0d98898-4394-41b3-864d-72488cda8fc0.json",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "workspace",
+              "path": ".codebuddy/workspace",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "script_e60c064e.py",
+                  "path": ".codebuddy/workspace/script_e60c064e.py",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "code-graph.json",
+              "path": ".codebuddy/code-graph.json",
+              "type": "file"
+            },
+            {
+              "name": "CODEBUDDY_MEMORY.md",
+              "path": ".codebuddy/CODEBUDDY_MEMORY.md",
+              "type": "file"
+            },
+            {
+              "name": "colab-tasks.json",
+              "path": ".codebuddy/colab-tasks.json",
+              "type": "file"
+            },
+            {
+              "name": "colab-worklog.json",
+              "path": ".codebuddy/colab-worklog.json",
+              "type": "file"
+            },
+            {
+              "name": "knowledge-graph.json",
+              "path": ".codebuddy/knowledge-graph.json",
+              "type": "file"
+            },
+            {
+              "name": "lesson-candidates.json",
+              "path": ".codebuddy/lesson-candidates.json",
+              "type": "file"
+            },
+            {
+              "name": "lessons.md",
+              "path": ".codebuddy/lessons.md",
+              "type": "file"
+            },
+            {
+              "name": "mcp.json",
+              "path": ".codebuddy/mcp.json",
+              "type": "file"
+            },
+            {
+              "name": "memory-candidates.json",
+              "path": ".codebuddy/memory-candidates.json",
+              "type": "file"
+            },
+            {
+              "name": "repoProfile.json",
+              "path": ".codebuddy/repoProfile.json",
+              "type": "file"
+            },
+            {
+              "name": "user-model.json",
+              "path": ".codebuddy/user-model.json",
+              "type": "file"
+            },
+            {
+              "name": "workspace.json",
+              "path": ".codebuddy/workspace.json",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": ".codeexplorer",
+          "path": ".codeexplorer",
+          "type": "directory",
+          "children": [
+            {
+              "name": "csv",
+              "path": ".codeexplorer/csv",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "CodeRelation.csv",
+                  "path": ".codeexplorer/csv/CodeRelation.csv",
+                  "type": "file"
+                },
+                {
+                  "name": "File.csv",
+                  "path": ".codeexplorer/csv/File.csv",
+                  "type": "file"
+                },
+                {
+                  "name": "Function.csv",
+                  "path": ".codeexplorer/csv/Function.csv",
+                  "type": "file"
+                },
+                {
+                  "name": "TodoMarker.csv",
+                  "path": ".codeexplorer/csv/TodoMarker.csv",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "analyze.json",
+              "path": ".codeexplorer/analyze.json",
+              "type": "file"
+            },
+            {
+              "name": "graph.bin",
+              "path": ".codeexplorer/graph.bin",
+              "type": "file"
+            },
+            {
+              "name": "local-enrichment.bin",
+              "path": ".codeexplorer/local-enrichment.bin",
+              "type": "file"
+            },
+            {
+              "name": "manifest.json",
+              "path": ".codeexplorer/manifest.json",
+              "type": "file"
+            },
+            {
+              "name": "meta.json",
+              "path": ".codeexplorer/meta.json",
+              "type": "file"
+            },
+            {
+              "name": "metrics.json",
+              "path": ".codeexplorer/metrics.json",
+              "type": "file"
+            },
+            {
+              "name": "parse-cache.bin",
+              "path": ".codeexplorer/parse-cache.bin",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "docs",
+          "path": "docs",
+          "type": "directory",
+          "children": [
+            {
+              "name": "p9.md",
+              "path": "docs/p9.md",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "format-fixture",
+          "path": "format-fixture",
+          "type": "directory",
+          "children": [
+            {
+              "name": "messy.js",
+              "path": "format-fixture/messy.js",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "new-cli",
+          "path": "new-cli",
+          "type": "directory",
+          "children": [
+            {
+              "name": "src",
+              "path": "new-cli/src",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "index.ts",
+                  "path": "new-cli/src/index.ts",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "tests",
+              "path": "new-cli/tests",
+              "type": "directory",
+              "children": []
+            },
+            {
+              "name": ".gitignore",
+              "path": "new-cli/.gitignore",
+              "type": "file"
+            },
+            {
+              "name": "package.json",
+              "path": "new-cli/package.json",
+              "type": "file"
+            },
+            {
+              "name": "README.md",
+              "path": "new-cli/README.md",
+              "type": "file"
+            },
+            {
+              "name": "tsconfig.json",
+              "path": "new-cli/tsconfig.json",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "src",
+          "path": "src",
+          "type": "directory",
+          "children": [
+            {
+              "name": "math.ts",
+              "path": "src/math.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "a.txt",
+          "path": "a.txt",
+          "type": "file"
+        },
+        {
+          "name": "alias.txt",
+          "path": "alias.txt",
+          "type": "file"
+        },
+        {
+          "name": "b.txt",
+          "path": "b.txt",
+          "type": "file"
+        },
+        {
+          "name": "bad.rs",
+          "path": "bad.rs",
+          "type": "file"
+        },
+        {
+          "name": "browser-page.html",
+          "path": "browser-page.html",
+          "type": "file"
+        },
+        {
+          "name": "browser-server.mjs",
+          "path": "browser-server.mjs",
+          "type": "file"
+        },
+        {
+          "name": "build.js",
+          "path": "build.js",
+          "type": "file"
+        },
+        {
+          "name": "bundle.zip",
+          "path": "bundle.zip",
+          "type": "file"
+        },
+        {
+          "name": "CHANGELOG.md",
+          "path": "CHANGELOG.md",
+          "type": "file"
+        },
+        {
+          "name": "check.test.js",
+          "path": "check.test.js",
+          "type": "file"
+        },
+        {
+          "name": "clean.env",
+          "path": "clean.env",
+          "type": "file"
+        },
+        {
+          "name": "clip.mp4",
+          "path": "clip.mp4",
+          "type": "file"
+        },
+        {
+          "name": "conflict.txt",
+          "path": "conflict.txt",
+          "type": "file"
+        },
+        {
+          "name": "data.csv",
+          "path": "data.csv",
+          "type": "file"
+        },
+        {
+          "name": "data.json",
+          "path": "data.json",
+          "type": "file"
+        },
+        {
+          "name": "eng.traineddata",
+          "path": "eng.traineddata",
+          "type": "file"
+        },
+        {
+          "name": "eslint.config.js",
+          "path": "eslint.config.js",
+          "type": "file"
+        },
+        {
+          "name": "export.csv",
+          "path": "export.csv",
+          "type": "file"
+        },
+        {
+          "name": "leads.json",
+          "path": "leads.json",
+          "type": "file"
+        },
+        {
+          "name": "LICENSE",
+          "path": "LICENSE",
+          "type": "file"
+        },
+        {
+          "name": "meeting-report.json",
+          "path": "meeting-report.json",
+          "type": "file"
+        },
+        {
+          "name": "meeting-report.md",
+          "path": "meeting-report.md",
+          "type": "file"
+        },
+        {
+          "name": "meeting.txt",
+          "path": "meeting.txt",
+          "type": "file"
+        },
+        {
+          "name": "new.txt",
+          "path": "new.txt",
+          "type": "file"
+        },
+        {
+          "name": "note.md",
+          "path": "note.md",
+          "type": "file"
+        },
+        {
+          "name": "ocr.png",
+          "path": "ocr.png",
+          "type": "file"
+        },
+        {
+          "name": "p9-apply.txt",
+          "path": "p9-apply.txt",
+          "type": "file"
+        },
+        {
+          "name": "p9-screen.png",
+          "path": "p9-screen.png",
+          "type": "file"
+        },
+        {
+          "name": "p9-studio-r1.txt",
+          "path": "p9-studio-r1.txt",
+          "type": "file"
+        },
+        {
+          "name": "p9-studio.txt",
+          "path": "p9-studio.txt",
+          "type": "file"
+        },
+        {
+          "name": "p9.docx",
+          "path": "p9.docx",
+          "type": "file"
+        },
+        {
+          "name": "p9.pdf",
+          "path": "p9.pdf",
+          "type": "file"
+        },
+        {
+          "name": "P9R1_CHAT_1790795786187.txt",
+          "path": "P9R1_CHAT_1790795786187.txt",
+          "type": "file"
+        },
+        {
+          "name": "package.json",
+          "path": "package.json",
+          "type": "file"
+        },
+        {
+          "name": "patch-nine.txt",
+          "path": "patch-nine.txt",
+          "type": "file"
+        },
+        {
+          "name": "PLAN.md",
+          "path": "PLAN.md",
+          "type": "file"
+        },
+        {
+          "name": "rename-space test.ts",
+          "path": "rename-space test.ts",
+          "type": "file"
+        },
+        {
+          "name": "review-leads.json",
+          "path": "review-leads.json",
+          "type": "file"
+        },
+        {
+          "name": "sample.js",
+          "path": "sample.js",
+          "type": "file"
+        },
+        {
+          "name": "sample.ts",
+          "path": "sample.ts",
+          "type": "file"
+        },
+        {
+          "name": "speech.wav",
+          "path": "speech.wav",
+          "type": "file"
+        },
+        {
+          "name": "spoken.mp3",
+          "path": "spoken.mp3",
+          "type": "file"
+        },
+        {
+          "name": "spoken.mp4",
+          "path": "spoken.mp4",
+          "type": "file"
+        },
+        {
+          "name": "todo.md",
+          "path": "todo.md",
+          "type": "file"
+        },
+        {
+          "name": "tsconfig.json",
+          "path": "tsconfig.json",
+          "type": "file"
+        },
+        {
+          "name": "tts-p9.wav",
+          "path": "tts-p9.wav",
+          "type": "file"
+        },
+        {
+          "name": "voicebox.wav",
+          "path": "voicebox.wav",
+          "type": "file"
+        }
+      ]
+    }
+  },
+  "passed": true,
+  "expected": "Écriture puis lecture IPC du nouveau fichier à marqueur unique ; pas une application générée.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "summary": "Écriture puis lecture IPC du nouveau fichier à marqueur unique ; pas une application générée."
+}

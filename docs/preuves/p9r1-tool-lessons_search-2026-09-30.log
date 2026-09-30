@@ -1,0 +1,66 @@
+Date de consolidation: 2026-09-30T19:33:55.786655Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: lessons_search({"query": "P9_LESSON"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "lessons_search",
+  "input": {
+    "query": "P9_LESSON"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "**RULE** P9_LESSON"
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [
+    {
+      "name": "lessons_add",
+      "input": {
+        "category": "RULE",
+        "content": "P9_LESSON",
+        "source": "manual"
+      },
+      "result": {
+        "success": true,
+        "output": "Lesson saved [muogo3w0lej] (RULE): P9_LESSON"
+      }
+    }
+  ],
+  "result": {
+    "success": true,
+    "output": "Found 10 lesson(s):\n\n[muoer3uel04] **RULE** P9_LESSON\n[muoer3ujde1] **RULE** P9_LESSON\n[muoer3upsr5] **RULE** P9_LESSON\n[muoer3uz33s] **RULE** P9_LESSON\n[muofk17clmx] **RULE** P9_LESSON\n[muofk17g8sl] **RULE** P9_LESSON\n[muofk17mp3g] **RULE** P9_LESSON\n[muofk17ughr] **RULE** P9_LESSON\n[muogo3uodr1] **RULE** P9_LESSON 1790794267005\n[muogo3uzhmc] **RULE** P9_LESSON"
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 4,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:lessons_search",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

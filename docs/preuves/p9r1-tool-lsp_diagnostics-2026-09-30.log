@@ -1,0 +1,77 @@
+Date de consolidation: 2026-09-30T19:33:55.798622Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: lsp_diagnostics({"file": "sample.ts"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "lsp_diagnostics",
+  "input": {
+    "file": "sample.ts"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.diagnostics",
+        "op": "some",
+        "value": {
+          "line": 2,
+          "severity": "error",
+          "message": "Type 'string' is not assignable to type 'number'."
+        }
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Diagnostics for <QA>/reprise-1/project/sample.ts (2):\n- ERROR <QA>/reprise-1/project/sample.ts:2:7 [typescript] — Type 'string' is not assignable to type 'number'.\n- HINT <QA>/reprise-1/project/sample.ts:2:7 [typescript] — 'bad' is declared but its value is never read.",
+    "data": {
+      "file": "<QA>/reprise-1/project/sample.ts",
+      "language": "typescript",
+      "diagnostics": [
+        {
+          "file": "<QA>/reprise-1/project/sample.ts",
+          "line": 2,
+          "column": 7,
+          "severity": "error",
+          "message": "Type 'string' is not assignable to type 'number'.",
+          "source": "typescript"
+        },
+        {
+          "file": "<QA>/reprise-1/project/sample.ts",
+          "line": 2,
+          "column": 7,
+          "severity": "hint",
+          "message": "'bad' is declared but its value is never read.",
+          "source": "typescript"
+        }
+      ]
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.diagnostics some",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 1363,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:lsp_diagnostics",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

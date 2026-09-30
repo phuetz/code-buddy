@@ -1,0 +1,27 @@
+Date de consolidation: 2026-09-30T19:33:55.962584Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: browser_scroll({"direction": "down", "amount": 800})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "browser_scroll",
+  "input": {
+    "direction": "down",
+    "amount": 800
+  },
+  "result": {
+    "success": true,
+    "output": "Scrolled down 800px"
+  },
+  "observations": {
+    "actualScroll": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:browser_scroll",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

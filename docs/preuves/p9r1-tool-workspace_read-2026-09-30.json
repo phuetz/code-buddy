@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:workspace_read",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.933611Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "c4b7dc064db1c36d5c3fa725cfc5db746dcca8755755fbe73b2004ea27ae8708",
+  "artifact": "docs/preuves/p9r1-tool-workspace_read-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

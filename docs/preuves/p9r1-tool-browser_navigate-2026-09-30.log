@@ -1,0 +1,27 @@
+Date de consolidation: 2026-09-30T19:33:55.948833Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: browser_navigate({"url": "http://127.0.0.1:18870"})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "browser_navigate",
+  "input": {
+    "url": "http://127.0.0.1:18870"
+  },
+  "result": {
+    "success": true,
+    "output": "Navigated to: http://127.0.0.1:18870\nTitle: P9_BROWSER"
+  },
+  "observations": {
+    "actualUrl": true,
+    "actualTitle": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:browser_navigate",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:rules",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.992068Z",
+  "revision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "sourceDigest": "5d1f5ec5518dfdff8d72240bbaff327909fde0201f49e75ef997a06a5a6db5a3",
+  "artifact": "docs/preuves/p9r1-cli-rules-2026-09-30.log",
+  "summary": "['process-runaway-alert', 'disk-low-alert', 'agent-loop-alert']"
+}

@@ -1,0 +1,537 @@
+Date de consolidation: 2026-09-30T19:33:55.749447Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: kanban_list({"id": "p9r1-kanban_list-1790794266900"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "kanban_list",
+  "input": {
+    "id": "p9r1-kanban_list-1790794266900"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.cards",
+        "op": "some",
+        "value": {
+          "title": "P9_CARD",
+          "status": "todo"
+        }
+      },
+      {
+        "field": "observations.persistedCard.status",
+        "op": "eq",
+        "value": "open"
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [
+    {
+      "name": "kanban_create",
+      "input": {
+        "id": "p9r1-kanban_list-1790794266900",
+        "title": "P9_CARD"
+      },
+      "result": {
+        "success": true,
+        "output": "{\n  \"action\": \"kanban_create\",\n  \"boardPath\": \"<QA>/reprise-1/project/.codebuddy/colab-tasks.json\",\n  \"card\": {\n    \"id\": \"p9r1-kanban_list-1790794266900\",\n    \"title\": \"P9_CARD\",\n    \"status\": \"todo\",\n    \"priority\": \"medium\",\n    \"tags\": [],\n    \"links\": [],\n    \"comments\": [],\n    \"heartbeats\": [],\n    \"createdAt\": \"2026-09-30T18:51:06.900Z\",\n    \"updatedAt\": \"2026-09-30T18:51:06.900Z\"\n  }\n}",
+        "data": {
+          "action": "kanban_create",
+          "boardPath": "<QA>/reprise-1/project/.codebuddy/colab-tasks.json",
+          "card": {
+            "id": "p9r1-kanban_list-1790794266900",
+            "title": "P9_CARD",
+            "status": "todo",
+            "priority": "medium",
+            "tags": [],
+            "links": [],
+            "comments": [],
+            "heartbeats": [],
+            "createdAt": "2026-09-30T18:51:06.900Z",
+            "updatedAt": "2026-09-30T18:51:06.900Z"
+          }
+        }
+      }
+    }
+  ],
+  "result": {
+    "success": true,
+    "output": "{\n  \"action\": \"kanban_list\",\n  \"boardPath\": \"<QA>/reprise-1/project/.codebuddy/colab-tasks.json\",\n  \"count\": 25,\n  \"cards\": [\n    {\n      \"id\": \"p9r1-kanban_block\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"blocked\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [\n        {\n          \"id\": \"cmt-1790791047640-1\",\n          \"text\": \"Blocked: P9_BLOCK\",\n          \"createdAt\": \"2026-09-30T17:57:27.640Z\"\n        },\n        {\n          \"id\": \"cmt-1790792397242-1\",\n          \"text\": \"Blocked: P9_BLOCK\",\n          \"createdAt\": \"2026-09-30T18:19:57.242Z\"\n        }\n      ],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T17:57:27.634Z\",\n      \"updatedAt\": \"2026-09-30T17:57:27.634Z\",\n      \"blockedReason\": \"P9_BLOCK\"\n    },\n    {\n      \"id\": \"p9r1-kanban_block-1790794266830\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"blocked\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [\n        {\n          \"id\": \"cmt-1790794266838-1\",\n          \"text\": \"Blocked: P9_BLOCK\",\n          \"createdAt\": \"2026-09-30T18:51:06.838Z\"\n        }\n      ],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:51:06.831Z\",\n      \"updatedAt\": \"2026-09-30T18:51:06.831Z\",\n      \"blockedReason\": \"P9_BLOCK\"\n    },\n    {\n      \"id\": \"p9r1-kanban_heartbeat\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"in_progress\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [\n        {\n          \"id\": \"cmt-1790791047670-1\",\n          \"text\": \"Unblocked\",\n          \"createdAt\": \"2026-09-30T17:57:27.670Z\"\n        },\n        {\n          \"id\": \"cmt-1790792397274-1\",\n          \"text\": \"Unblocked\",\n          \"createdAt\": \"2026-09-30T18:19:57.274Z\"\n        }\n      ],\n      \"heartbeats\": [\n        {\n          \"id\": \"hb-1790791047673-1\",\n          \"createdAt\": \"2026-09-30T17:57:27.673Z\",\n          \"message\": \"P9_HEARTBEAT\"\n        },\n        {\n          \"id\": \"hb-1790792397277-1\",\n          \"createdAt\": \"2026-09-30T18:19:57.277Z\",\n          \"message\": \"P9_HEARTBEAT\"\n        }\n      ],\n      \"createdAt\": \"2026-09-30T17:57:27.667Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.277Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_unblock\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"in_progress\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [\n        {\n          \"id\": \"cmt-1790791047696-1\",\n          \"text\": \"Blocked: QA precondition\",\n          \"createdAt\": \"2026-09-30T17:57:27.696Z\"\n        },\n        {\n          \"id\": \"cmt-1790791047699-1\",\n          \"text\": \"P9_UNBLOCK\",\n          \"createdAt\": \"2026-09-30T17:57:27.699Z\"\n        },\n        {\n          \"id\": \"cmt-1790792397305-1\",\n          \"text\": \"Blocked: QA precondition\",\n          \"createdAt\": \"2026-09-30T18:19:57.305Z\"\n        },\n        {\n          \"id\": \"cmt-1790792397307-1\",\n          \"text\": \"P9_UNBLOCK\",\n          \"createdAt\": \"2026-09-30T18:19:57.307Z\"\n        }\n      ],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T17:57:27.691Z\",\n      \"updatedAt\": \"2026-09-30T17:57:27.691Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_heartbeat-1790794266872\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"in_progress\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [\n        {\n          \"id\": \"cmt-1790794266876-1\",\n          \"text\": \"Unblocked\",\n          \"createdAt\": \"2026-09-30T18:51:06.876Z\"\n        }\n      ],\n      \"heartbeats\": [\n        {\n          \"id\": \"hb-1790794266880-1\",\n          \"createdAt\": \"2026-09-30T18:51:06.880Z\",\n          \"message\": \"P9_HEARTBEAT\"\n        }\n      ],\n      \"createdAt\": \"2026-09-30T18:51:06.872Z\",\n      \"updatedAt\": \"2026-09-30T18:51:06.880Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_comment\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [\n        {\n          \"id\": \"cmt-1790791047647-1\",\n          \"text\": \"P9_COMMENT\",\n          \"createdAt\": \"2026-09-30T17:57:27.647Z\"\n        },\n        {\n          \"id\": \"cmt-1790792397250-1\",\n          \"text\": \"P9_COMMENT\",\n          \"createdAt\": \"2026-09-30T18:19:57.250Z\"\n        }\n      ],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T17:57:27.644Z\",\n      \"updatedAt\": \"2026-09-30T17:57:27.644Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_create\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T17:57:27.663Z\",\n      \"updatedAt\": \"2026-09-30T17:57:27.663Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_link\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [\n        {\n          \"id\": \"lnk-1790791047680-1\",\n          \"target\": \"note.md\",\n          \"createdAt\": \"2026-09-30T17:57:27.680Z\"\n        },\n        {\n          \"id\": \"lnk-1790792397285-1\",\n          \"target\": \"note.md\",\n          \"createdAt\": \"2026-09-30T18:19:57.285Z\"\n        }\n      ],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T17:57:27.677Z\",\n      \"updatedAt\": \"2026-09-30T17:57:27.677Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_list\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T17:57:27.683Z\",\n      \"updatedAt\": \"2026-09-30T17:57:27.683Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_show\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T17:57:27.687Z\",\n      \"updatedAt\": \"2026-09-30T17:57:27.687Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_block\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:19:57.236Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.236Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_comment\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:19:57.247Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.247Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_complete\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:19:57.254Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.254Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_create\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:19:57.267Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.267Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_heartbeat\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:19:57.272Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.272Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_link\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:19:57.282Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.282Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_list\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:19:57.289Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.289Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_show\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:19:57.294Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.294Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_unblock\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:19:57.299Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.299Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_comment-1790794266844\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [\n        {\n          \"id\": \"cmt-1790794266847-1\",\n          \"text\": \"P9_COMMENT\",\n          \"createdAt\": \"2026-09-30T18:51:06.847Z\"\n        }\n      ],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:51:06.844Z\",\n      \"updatedAt\": \"2026-09-30T18:51:06.844Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_create-1790794266867\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:51:06.867Z\",\n      \"updatedAt\": \"2026-09-30T18:51:06.867Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_link-1790794266887\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [\n        {\n          \"id\": \"lnk-1790794266891-1\",\n          \"target\": \"note.md\",\n          \"createdAt\": \"2026-09-30T18:51:06.891Z\"\n        }\n      ],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:51:06.887Z\",\n      \"updatedAt\": \"2026-09-30T18:51:06.887Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_list-1790794266900\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"todo\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:51:06.900Z\",\n      \"updatedAt\": \"2026-09-30T18:51:06.900Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_complete\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"done\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [\n        {\n          \"id\": \"cmt-1790791047659-2\",\n          \"text\": \"P9_DONE\",\n          \"createdAt\": \"2026-09-30T17:57:27.659Z\"\n        },\n        {\n          \"id\": \"cmt-1790792397263-2\",\n          \"text\": \"P9_DONE\",\n          \"createdAt\": \"2026-09-30T18:19:57.263Z\"\n        }\n      ],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T17:57:27.651Z\",\n      \"updatedAt\": \"2026-09-30T18:19:57.257Z\",\n      \"completedAt\": \"2026-09-30T18:19:57.257Z\"\n    },\n    {\n      \"id\": \"p9r1-kanban_complete-1790794266852\",\n      \"title\": \"P9_CARD\",\n      \"status\": \"done\",\n      \"priority\": \"medium\",\n      \"tags\": [],\n      \"links\": [],\n      \"comments\": [\n        {\n          \"id\": \"cmt-1790794266862-2\",\n          \"text\": \"P9_DONE\",\n          \"createdAt\": \"2026-09-30T18:51:06.862Z\"\n        }\n      ],\n      \"heartbeats\": [],\n      \"createdAt\": \"2026-09-30T18:51:06.853Z\",\n      \"updatedAt\": \"2026-09-30T18:51:06.856Z\",\n      \"completedAt\": \"2026-09-30T18:51:06.856Z\"\n    }\n  ]\n}",
+    "data": {
+      "action": "kanban_list",
+      "boardPath": "<QA>/reprise-1/project/.codebuddy/colab-tasks.json",
+      "count": 25,
+      "cards": [
+        {
+          "id": "p9r1-kanban_block",
+          "title": "P9_CARD",
+          "status": "blocked",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [
+            {
+              "id": "cmt-1790791047640-1",
+              "text": "Blocked: P9_BLOCK",
+              "createdAt": "2026-09-30T17:57:27.640Z"
+            },
+            {
+              "id": "cmt-1790792397242-1",
+              "text": "Blocked: P9_BLOCK",
+              "createdAt": "2026-09-30T18:19:57.242Z"
+            }
+          ],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T17:57:27.634Z",
+          "updatedAt": "2026-09-30T17:57:27.634Z",
+          "blockedReason": "P9_BLOCK"
+        },
+        {
+          "id": "p9r1-kanban_block-1790794266830",
+          "title": "P9_CARD",
+          "status": "blocked",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [
+            {
+              "id": "cmt-1790794266838-1",
+              "text": "Blocked: P9_BLOCK",
+              "createdAt": "2026-09-30T18:51:06.838Z"
+            }
+          ],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:51:06.831Z",
+          "updatedAt": "2026-09-30T18:51:06.831Z",
+          "blockedReason": "P9_BLOCK"
+        },
+        {
+          "id": "p9r1-kanban_heartbeat",
+          "title": "P9_CARD",
+          "status": "in_progress",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [
+            {
+              "id": "cmt-1790791047670-1",
+              "text": "Unblocked",
+              "createdAt": "2026-09-30T17:57:27.670Z"
+            },
+            {
+              "id": "cmt-1790792397274-1",
+              "text": "Unblocked",
+              "createdAt": "2026-09-30T18:19:57.274Z"
+            }
+          ],
+          "heartbeats": [
+            {
+              "id": "hb-1790791047673-1",
+              "createdAt": "2026-09-30T17:57:27.673Z",
+              "message": "P9_HEARTBEAT"
+            },
+            {
+              "id": "hb-1790792397277-1",
+              "createdAt": "2026-09-30T18:19:57.277Z",
+              "message": "P9_HEARTBEAT"
+            }
+          ],
+          "createdAt": "2026-09-30T17:57:27.667Z",
+          "updatedAt": "2026-09-30T18:19:57.277Z"
+        },
+        {
+          "id": "p9r1-kanban_unblock",
+          "title": "P9_CARD",
+          "status": "in_progress",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [
+            {
+              "id": "cmt-1790791047696-1",
+              "text": "Blocked: QA precondition",
+              "createdAt": "2026-09-30T17:57:27.696Z"
+            },
+            {
+              "id": "cmt-1790791047699-1",
+              "text": "P9_UNBLOCK",
+              "createdAt": "2026-09-30T17:57:27.699Z"
+            },
+            {
+              "id": "cmt-1790792397305-1",
+              "text": "Blocked: QA precondition",
+              "createdAt": "2026-09-30T18:19:57.305Z"
+            },
+            {
+              "id": "cmt-1790792397307-1",
+              "text": "P9_UNBLOCK",
+              "createdAt": "2026-09-30T18:19:57.307Z"
+            }
+          ],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T17:57:27.691Z",
+          "updatedAt": "2026-09-30T17:57:27.691Z"
+        },
+        {
+          "id": "p9r1-kanban_heartbeat-1790794266872",
+          "title": "P9_CARD",
+          "status": "in_progress",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [
+            {
+              "id": "cmt-1790794266876-1",
+              "text": "Unblocked",
+              "createdAt": "2026-09-30T18:51:06.876Z"
+            }
+          ],
+          "heartbeats": [
+            {
+              "id": "hb-1790794266880-1",
+              "createdAt": "2026-09-30T18:51:06.880Z",
+              "message": "P9_HEARTBEAT"
+            }
+          ],
+          "createdAt": "2026-09-30T18:51:06.872Z",
+          "updatedAt": "2026-09-30T18:51:06.880Z"
+        },
+        {
+          "id": "p9r1-kanban_comment",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [
+            {
+              "id": "cmt-1790791047647-1",
+              "text": "P9_COMMENT",
+              "createdAt": "2026-09-30T17:57:27.647Z"
+            },
+            {
+              "id": "cmt-1790792397250-1",
+              "text": "P9_COMMENT",
+              "createdAt": "2026-09-30T18:19:57.250Z"
+            }
+          ],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T17:57:27.644Z",
+          "updatedAt": "2026-09-30T17:57:27.644Z"
+        },
+        {
+          "id": "p9r1-kanban_create",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T17:57:27.663Z",
+          "updatedAt": "2026-09-30T17:57:27.663Z"
+        },
+        {
+          "id": "p9r1-kanban_link",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [
+            {
+              "id": "lnk-1790791047680-1",
+              "target": "note.md",
+              "createdAt": "2026-09-30T17:57:27.680Z"
+            },
+            {
+              "id": "lnk-1790792397285-1",
+              "target": "note.md",
+              "createdAt": "2026-09-30T18:19:57.285Z"
+            }
+          ],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T17:57:27.677Z",
+          "updatedAt": "2026-09-30T17:57:27.677Z"
+        },
+        {
+          "id": "p9r1-kanban_list",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T17:57:27.683Z",
+          "updatedAt": "2026-09-30T17:57:27.683Z"
+        },
+        {
+          "id": "p9r1-kanban_show",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T17:57:27.687Z",
+          "updatedAt": "2026-09-30T17:57:27.687Z"
+        },
+        {
+          "id": "p9r1-kanban_block",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:19:57.236Z",
+          "updatedAt": "2026-09-30T18:19:57.236Z"
+        },
+        {
+          "id": "p9r1-kanban_comment",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:19:57.247Z",
+          "updatedAt": "2026-09-30T18:19:57.247Z"
+        },
+        {
+          "id": "p9r1-kanban_complete",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:19:57.254Z",
+          "updatedAt": "2026-09-30T18:19:57.254Z"
+        },
+        {
+          "id": "p9r1-kanban_create",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:19:57.267Z",
+          "updatedAt": "2026-09-30T18:19:57.267Z"
+        },
+        {
+          "id": "p9r1-kanban_heartbeat",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:19:57.272Z",
+          "updatedAt": "2026-09-30T18:19:57.272Z"
+        },
+        {
+          "id": "p9r1-kanban_link",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:19:57.282Z",
+          "updatedAt": "2026-09-30T18:19:57.282Z"
+        },
+        {
+          "id": "p9r1-kanban_list",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:19:57.289Z",
+          "updatedAt": "2026-09-30T18:19:57.289Z"
+        },
+        {
+          "id": "p9r1-kanban_show",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:19:57.294Z",
+          "updatedAt": "2026-09-30T18:19:57.294Z"
+        },
+        {
+          "id": "p9r1-kanban_unblock",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:19:57.299Z",
+          "updatedAt": "2026-09-30T18:19:57.299Z"
+        },
+        {
+          "id": "p9r1-kanban_comment-1790794266844",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [
+            {
+              "id": "cmt-1790794266847-1",
+              "text": "P9_COMMENT",
+              "createdAt": "2026-09-30T18:51:06.847Z"
+            }
+          ],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:51:06.844Z",
+          "updatedAt": "2026-09-30T18:51:06.844Z"
+        },
+        {
+          "id": "p9r1-kanban_create-1790794266867",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:51:06.867Z",
+          "updatedAt": "2026-09-30T18:51:06.867Z"
+        },
+        {
+          "id": "p9r1-kanban_link-1790794266887",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [
+            {
+              "id": "lnk-1790794266891-1",
+              "target": "note.md",
+              "createdAt": "2026-09-30T18:51:06.891Z"
+            }
+          ],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:51:06.887Z",
+          "updatedAt": "2026-09-30T18:51:06.887Z"
+        },
+        {
+          "id": "p9r1-kanban_list-1790794266900",
+          "title": "P9_CARD",
+          "status": "todo",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:51:06.900Z",
+          "updatedAt": "2026-09-30T18:51:06.900Z"
+        },
+        {
+          "id": "p9r1-kanban_complete",
+          "title": "P9_CARD",
+          "status": "done",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [
+            {
+              "id": "cmt-1790791047659-2",
+              "text": "P9_DONE",
+              "createdAt": "2026-09-30T17:57:27.659Z"
+            },
+            {
+              "id": "cmt-1790792397263-2",
+              "text": "P9_DONE",
+              "createdAt": "2026-09-30T18:19:57.263Z"
+            }
+          ],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T17:57:27.651Z",
+          "updatedAt": "2026-09-30T18:19:57.257Z",
+          "completedAt": "2026-09-30T18:19:57.257Z"
+        },
+        {
+          "id": "p9r1-kanban_complete-1790794266852",
+          "title": "P9_CARD",
+          "status": "done",
+          "priority": "medium",
+          "tags": [],
+          "links": [],
+          "comments": [
+            {
+              "id": "cmt-1790794266862-2",
+              "text": "P9_DONE",
+              "createdAt": "2026-09-30T18:51:06.862Z"
+            }
+          ],
+          "heartbeats": [],
+          "createdAt": "2026-09-30T18:51:06.853Z",
+          "updatedAt": "2026-09-30T18:51:06.856Z",
+          "completedAt": "2026-09-30T18:51:06.856Z"
+        }
+      ]
+    }
+  },
+  "observations": {
+    "persistedCard": {
+      "id": "p9r1-kanban_list-1790794266900",
+      "title": "P9_CARD",
+      "status": "open",
+      "priority": "medium",
+      "assignedAgent": null,
+      "claimedBy": null,
+      "claimedAt": null,
+      "createdBy": "<PRIVATE_NAME>/project",
+      "createdAt": "2026-09-30T18:51:06.900Z"
+    }
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.cards some",
+      "passed": true
+    },
+    {
+      "check": "observations.persistedCard.status eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 5,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:kanban_list",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

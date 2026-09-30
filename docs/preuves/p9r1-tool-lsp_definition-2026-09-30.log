@@ -1,0 +1,90 @@
+Date de consolidation: 2026-09-30T19:33:55.796020Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: lsp_definition({"file": "sample.ts", "symbol": "add"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "lsp_definition",
+  "input": {
+    "file": "sample.ts",
+    "symbol": "add"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.total",
+        "op": "eq",
+        "value": 1
+      },
+      {
+        "field": "data.locations.0.file",
+        "op": "includes",
+        "values": [
+          "sample.ts"
+        ]
+      },
+      {
+        "field": "data.locations.0.line",
+        "op": "eq",
+        "value": 1
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Definition for symbol \"add\" (1):\n- <QA>/reprise-1/project/sample.ts:1:17-1:20",
+    "data": {
+      "file": "<QA>/reprise-1/project/sample.ts",
+      "language": "typescript",
+      "position": {
+        "line": 1,
+        "column": 1
+      },
+      "locations": [
+        {
+          "file": "<QA>/reprise-1/project/sample.ts",
+          "line": 1,
+          "column": 17,
+          "endLine": 1,
+          "endColumn": 20
+        }
+      ],
+      "total": 1
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.total eq",
+      "passed": true
+    },
+    {
+      "check": "data.locations.0.file includes",
+      "passed": true
+    },
+    {
+      "check": "data.locations.0.line eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 629,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:lsp_definition",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

@@ -1,0 +1,69 @@
+Date de consolidation: 2026-09-30T19:33:55.665407Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: codebase_replace({"search_pattern": "P9_MARKER", "replacement": "P9_CHANGED", "glob": "*.js", "dry_run": true})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "codebase_replace",
+  "input": {
+    "search_pattern": "P9_MARKER",
+    "replacement": "P9_CHANGED",
+    "glob": "*.js",
+    "dry_run": true
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "1 replacements in 1 files",
+          "// TODO P9_MARKER",
+          "// TODO P9_CHANGED"
+        ]
+      },
+      {
+        "field": "observations.sourceUnchanged",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Dry run preview (1 replacements in 1 files):\n\n  ./sample.js:2\n    - // TODO P9_MARKER\n    + // TODO P9_CHANGED"
+  },
+  "observations": {
+    "sourceUnchanged": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "observations.sourceUnchanged eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 26,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:codebase_replace",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:kanban_comment",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.739034Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "46f998f5ab62c9c744fa7c7fdc4ac194c69b8af6d1f93459aa15cc343583fc28",
+  "artifact": "docs/preuves/p9r1-tool-kanban_comment-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

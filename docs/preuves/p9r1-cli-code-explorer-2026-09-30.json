@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-code-explorer",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:56.005378Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "b74186b7b532b703262a4e6539fbbcc543da9218679031d96b831bc1102a9263",
+  "artifact": "docs/preuves/p9r1-cli-code-explorer-2026-09-30.log",
+  "summary": "Deux définitions réelles add, sample.js et sample.ts ligne 1, deux processus froids"
+}

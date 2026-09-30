@@ -1,0 +1,65 @@
+Date de consolidation: 2026-09-30T19:33:55.878601Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: skill_view({"name": "code-explorer"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "skill_view",
+  "input": {
+    "name": "code-explorer"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.content",
+        "op": "includes",
+        "values": [
+          "name: code-explorer"
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "{\n  \"action\": \"skill_view\",\n  \"skill\": {\n    \"name\": \"code-explorer\",\n    \"description\": \"Use the Code Explorer (gitnexus) code-graph MCP tools to understand a codebase through precise relationships — callers, callees, blast radius — instead of reading many files\",\n    \"source\": \"bundled\",\n    \"path\": \"<CHECKOUT>/dist/skills/bundled/code-explorer.skill.md\",\n    \"version\": \"1.0.0\",\n    \"available\": true\n  },\n  \"content\": \"---\\nname: code-explorer\\ndescription: Use the Code Explorer (gitnexus) code-graph MCP tools to understand a codebase through precise relationships — callers, callees, blast radius — instead of reading many files\\nversion: 1.0.0\\ntags: [codebase, architecture, impact, blast-radius, callers, callees, refactor, dead-code, hotspots, complexity, dependencies, cycles, who-calls, where-used, gitnexus, code-explorer, code-graph]\\ntier: bundled\\nnativeEngine:\\n  category: development\\n  priority: 85\\n  triggers:\\n    - analyze code structure\\n    - explore codebase\\n    - code blast radius\\n    - circular dependencies\\n    - gitnexus graph\\n---\\n\\n# Code Explorer — code-graph intelligence\\n\\nWhen the **Code Explorer / gitnexus** MCP tools are available, prefer them over reading or grepping many files to reason about a codebase's structure. They query a pre-indexed knowledge graph and return precise relationships instantly, which keeps your context window free for actual reasoning.\\n\\n**Prefer the gitnexus tools over the built-in `code_graph` / `codebase_map` tools** for relationship questions (callers, callees, blast radius, dead code, cycles). Both are graph-backed, but when Code Explorer is installed its graph is the broader, multi-language one and is what the user opted into — so reach for `mcp__gitnexus__impact` / `mcp__gitnexus__context` / `mcp__gitnexus__query` rather than `code_graph` / `codebase_map`. (If the gitnexus tools are absent, the built-ins are the right choice — this preference only applies when both are on the table.)\\n\\nCode Explorer is an **optional proprietary add-on** — if its tools are not present, ignore this skill and work normally; Code Buddy does not depend on it. The repository must be indexed once: `gitnexus analyze .` (then `--incremental` after changes).\\n\\n## First: select the repo (the tools fail closed without it)\\n\\nThe graph tools (`context`, `impact`, `query`, `coverage`, `find_cycles`, …) operate on **one indexed repository**, chosen by a `repo` argument. The server keeps a **global registry** of every repo ever indexed (often many — test dirs, sibling projects), so when more than one is present it **cannot guess** and returns an error like *\\\"Multiple repos indexed (N). Specify 'repo' parameter.\\\"*\\n\\nSo, **once per session before the first graph call:**\\n\\n1. Call **`list_repos`** to see what's indexed — each entry has a `name`, a `path`, and an `id`.\\n2. Pick the one whose `path` matches the project you're working in.\\n3. Pass it as `repo` on **every** subsequent call: **use the full `path` (or `id`), not the bare `name`** — names collide (two different projects can both be `src`), paths and ids don't.\\n\\nIf `list_repos` shows the current project isn't indexed yet, that's the `gitnexus analyze .` step — surface it rather than guessing a repo.\\n\\n## Reach for the graph when the question is about *relationships*\\n\\n| You need to… | Tool | Instead of |\\n|---|---|---|\\n| Find where a symbol is defined | `query` / `search_code` | reading many files |\\n| See a symbol's callers, callees, imports, hierarchy | `context` | tracing call chains by hand |\\n| Know what breaks if you change X (blast radius) | `impact` | guessing / reading the whole module |\\n| Assess the risk of the current uncommitted diff | `detect_changes` | eyeballing the diff |\\n| Find circular dependencies | `find_cycles` | — |\\n| Find duplicate / near-duplicate code | `find_similar_code` | — |\\n| Find churn/coupling hotspots, complexity, dead code | `hotspots` / `coupling` / `get_complexity` / `coverage` | — |\\n| Multi-file rename, graph-confirmed | `rename` (keep `dry_run` first) | risky text replace |\\n| Anything else the named tools don't cover | `cypher` (read-only) | — |\\n\\n## Rules\\n\\n- **Always pass `repo` (the project's `path` or `id` from `list_repos`).** Omitting it errors out whenever more than one repo is indexed, and the bare `name` is ambiguous. Resolve it once at the start of the session and reuse it.\\n- **Before refactoring or changing a shared/core symbol, run `impact <symbol>` first** and state the blast radius. This is the single highest-value habit — it turns \\\"I think this is safe\\\" into \\\"these 6 callers are affected.\\\"\\n- For \\\"how does X work?\\\" on a large or unfamiliar codebase, start with `context <symbol>` (360° view) before opening files.\\n- These tools are **read-only analysis** (except `rename`, which defaults to a dry run). They tell you *where* and *what's affected*; they don't replace editing.\\n- The graph is a snapshot — if you've made large structural changes, re-index with `gitnexus analyze . --incremental` before trusting impact/context results.\\n- **Static analysis caveat:** call edges that flow through **dynamic imports** (`await import(...)`) may be missing from the graph. So `impact` can under-report, and \\\"no callers / dead code\\\" is a *candidate*, not proof — confirm with a text search before deleting anything. Treat the graph as a fast, precise navigation aid, not an exhaustive call graph.\\n\"\n}",
+    "data": {
+      "action": "skill_view",
+      "skill": {
+        "name": "code-explorer",
+        "description": "Use the Code Explorer (gitnexus) code-graph MCP tools to understand a codebase through precise relationships — callers, callees, blast radius — instead of reading many files",
+        "source": "bundled",
+        "path": "<CHECKOUT>/dist/skills/bundled/code-explorer.skill.md",
+        "version": "1.0.0",
+        "available": true
+      },
+      "content": "---\nname: code-explorer\ndescription: Use the Code Explorer (gitnexus) code-graph MCP tools to understand a codebase through precise relationships — callers, callees, blast radius — instead of reading many files\nversion: 1.0.0\ntags: [codebase, architecture, impact, blast-radius, callers, callees, refactor, dead-code, hotspots, complexity, dependencies, cycles, who-calls, where-used, gitnexus, code-explorer, code-graph]\ntier: bundled\nnativeEngine:\n  category: development\n  priority: 85\n  triggers:\n    - analyze code structure\n    - explore codebase\n    - code blast radius\n    - circular dependencies\n    - gitnexus graph\n---\n\n# Code Explorer — code-graph intelligence\n\nWhen the **Code Explorer / gitnexus** MCP tools are available, prefer them over reading or grepping many files to reason about a codebase's structure. They query a pre-indexed knowledge graph and return precise relationships instantly, which keeps your context window free for actual reasoning.\n\n**Prefer the gitnexus tools over the built-in `code_graph` / `codebase_map` tools** for relationship questions (callers, callees, blast radius, dead code, cycles). Both are graph-backed, but when Code Explorer is installed its graph is the broader, multi-language one and is what the user opted into — so reach for `mcp__gitnexus__impact` / `mcp__gitnexus__context` / `mcp__gitnexus__query` rather than `code_graph` / `codebase_map`. (If the gitnexus tools are absent, the built-ins are the right choice — this preference only applies when both are on the table.)\n\nCode Explorer is an **optional proprietary add-on** — if its tools are not present, ignore this skill and work normally; Code Buddy does not depend on it. The repository must be indexed once: `gitnexus analyze .` (then `--incremental` after changes).\n\n## First: select the repo (the tools fail closed without it)\n\nThe graph tools (`context`, `impact`, `query`, `coverage`, `find_cycles`, …) operate on **one indexed repository**, chosen by a `repo` argument. The server keeps a **global registry** of every repo ever indexed (often many — test dirs, sibling projects), so when more than one is present it **cannot guess** and returns an error like *\"Multiple repos indexed (N). Specify 'repo' parameter.\"*\n\nSo, **once per session before the first graph call:**\n\n1. Call **`list_repos`** to see what's indexed — each entry has a `name`, a `path`, and an `id`.\n2. Pick the one whose `path` matches the project you're working in.\n3. Pass it as `repo` on **every** subsequent call: **use the full `path` (or `id`), not the bare `name`** — names collide (two different projects can both be `src`), paths and ids don't.\n\nIf `list_repos` shows the current project isn't indexed yet, that's the `gitnexus analyze .` step — surface it rather than guessing a repo.\n\n## Reach for the graph when the question is about *relationships*\n\n| You need to… | Tool | Instead of |\n|---|---|---|\n| Find where a symbol is defined | `query` / `search_code` | reading many files |\n| See a symbol's callers, callees, imports, hierarchy | `context` | tracing call chains by hand |\n| Know what breaks if you change X (blast radius) | `impact` | guessing / reading the whole module |\n| Assess the risk of the current uncommitted diff | `detect_changes` | eyeballing the diff |\n| Find circular dependencies | `find_cycles` | — |\n| Find duplicate / near-duplicate code | `find_similar_code` | — |\n| Find churn/coupling hotspots, complexity, dead code | `hotspots` / `coupling` / `get_complexity` / `coverage` | — |\n| Multi-file rename, graph-confirmed | `rename` (keep `dry_run` first) | risky text replace |\n| Anything else the named tools don't cover | `cypher` (read-only) | — |\n\n## Rules\n\n- **Always pass `repo` (the project's `path` or `id` from `list_repos`).** Omitting it errors out whenever more than one repo is indexed, and the bare `name` is ambiguous. Resolve it once at the start of the session and reuse it.\n- **Before refactoring or changing a shared/core symbol, run `impact <symbol>` first** and state the blast radius. This is the single highest-value habit — it turns \"I think this is safe\" into \"these 6 callers are affected.\"\n- For \"how does X work?\" on a large or unfamiliar codebase, start with `context <symbol>` (360° view) before opening files.\n- These tools are **read-only analysis** (except `rename`, which defaults to a dry run). They tell you *where* and *what's affected*; they don't replace editing.\n- The graph is a snapshot — if you've made large structural changes, re-index with `gitnexus analyze . --incremental` before trusting impact/context results.\n- **Static analysis caveat:** call edges that flow through **dynamic imports** (`await import(...)`) may be missing from the graph. So `impact` can under-report, and \"no callers / dead code\" is a *candidate*, not proof — confirm with a text search before deleting anything. Treat the graph as a fast, precise navigation aid, not an exhaustive call graph.\n"
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.content includes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 12,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:skill_view",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

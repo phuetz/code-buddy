@@ -1,0 +1,31 @@
+Date de consolidation: 2026-09-30T19:33:56.013715Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: code_graph({"operation": "file_map", "query": "src/math"})
+Attendu: add ne contient aucun appel et answer appelle add, sans récursion de déclaration.
+Observé: Auto-appels fn:add → fn:add et fn:answer → fn:answer issus des déclarations ; absents des sources.
+Verdict: échec
+
+{
+  "name": "code_graph",
+  "input": {
+    "operation": "file_map",
+    "query": "src/math"
+  },
+  "precondition": {
+    "added": 13
+  },
+  "result": {
+    "success": true,
+    "output": "mod:src/math — 2 functions/methods:\n\nfn:add:1 (function) (a: number, b: number): number\n  → calls: fn:add\n  ← called by: fn:add, fn:answer\nfn:answer:4 (function) (): number\n  → calls: fn:answer, fn:add\n  ← called by: fn:answer"
+  },
+  "passed": false,
+  "expected": "add ne contient aucun appel et answer appelle add, sans récursion de déclaration.",
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "observations": {
+    "selfCallsReported": true,
+    "source": "export function add(a: number, b: number): number {\n  return a + b;\n}\nexport function answer(): number {\n  return add(20, 22);\n}\n"
+  },
+  "id": "tool:code_graph",
+  "summary": "Auto-appels fn:add → fn:add et fn:answer → fn:answer issus des déclarations ; absents des sources."
+}

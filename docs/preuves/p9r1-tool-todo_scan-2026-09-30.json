@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:todo_scan",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.896540Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "7d1dbc5fede114cf8556044d926afa2b011ec92a6a29f438f375df838b1d3641",
+  "artifact": "docs/preuves/p9r1-tool-todo_scan-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

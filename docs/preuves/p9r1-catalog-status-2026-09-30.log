@@ -1,0 +1,26 @@
+Date de consolidation: 2026-09-30T19:35:26.014461Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: catalog-status({"args": ["catalog", "status", "--json"]})
+Attendu: 338 entrées et zéro avertissement de manifeste ; états calculés par le catalogue réel
+Observé: Oracle strict satisfait : catalog-status
+Verdict: prouvée
+
+{
+  "id": "catalog-status",
+  "name": "catalog-status",
+  "input": {
+    "args": [
+      "catalog",
+      "status",
+      "--json"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "{\"schemaVersion\": 1, \"sourceRevision\": \"be7f81998adadf19b7448a5080435f290eb28a76\", \"featureCount\": 338, \"warnings\": [], \"states\": {\"inconnu\": 146, \"vrai\": 184, \"faux\": 8}}"
+  },
+  "passed": true,
+  "expected": "338 entrées et zéro avertissement de manifeste ; états calculés par le catalogue réel",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76"
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:cronjob",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.975273Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "cea9a7016b8c7942aa11633fc18e3c3e0c178a2ccdd714a32ac6075560c910fd",
+  "artifact": "docs/preuves/p9r1-tool-cronjob-2026-09-30.log",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

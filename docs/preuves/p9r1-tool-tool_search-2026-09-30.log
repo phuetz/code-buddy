@@ -1,0 +1,241 @@
+Date de consolidation: 2026-09-30T19:33:55.900707Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: tool_search({"query": "read_file", "max_results": 5})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "tool_search",
+  "input": {
+    "query": "read_file",
+    "max_results": 5
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "read_file",
+          "path"
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Found 5 tools:\n\n1. **read_file** (score: 112.07)\n   effect: read\n   [alias → view_file] View file contents with optional line range\n   Schema: {\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Path to the file or directory to view\"},\"file_path\":{\"type\":\"string\",\"description\":\"Alias for path\"},\"target_file\":{\"type\":\"string\",\"description\":\"Alias for path\"},\"start_line\":{\"type\":\"number\",\"description\":\"Start line for partial view (1-indexed)\"},\"end_line\":{\"type\":\"number\",\"description\":\"End line for partial view (1-indexed)\"}},\"required\":[\"path\"]}\n\n2. **file_read** (score: 12.07)\n   effect: unknown\n   [alias → view_file] View file contents with optional line range\n   Schema: {\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Path to the file or directory to view\"},\"file_path\":{\"type\":\"string\",\"description\":\"Alias for path\"},\"target_file\":{\"type\":\"string\",\"description\":\"Alias for path\"},\"start_line\":{\"type\":\"number\",\"description\":\"Start line for partial view (1-indexed)\"},\"end_line\":{\"type\":\"number\",\"description\":\"End line for partial view (1-indexed)\"}},\"required\":[\"path\"]}\n\n3. **workspace_read** (score: 5.61)\n   effect: read\n   Read a bounded file from a named repository in the opt-in multi-repository workspace.\n   Schema: {\"type\":\"object\",\"properties\":{\"repo\":{\"type\":\"string\",\"description\":\"Workspace repository name.\"},\"path\":{\"type\":\"string\",\"description\":\"Repository-relative file path.\"},\"offset\":{\"type\":\"number\",\"description\":\"Zero-based first line offset.\",\"minimum\":0},\"limit\":{\"type\":\"number\",\"description\":\"Maximum number of lines to return.\",\"minimum\":1}},\"required\":[\"repo\",\"path\"],\"additionalProperties\":false}\n\n4. **peer_tool_invoke** (score: 4.71)\n   effect: emission\n   Read or search a file on a connected fleet peer (read-only, allowlist on that peer). Always pass peer and tool; never call with empty arguments. Example: {\"peer\":\"B\",\"tool\":\"view_file\",\"args\":{\"path\":\"oracle.txt\"}}. Allowed tools: view_file, list_directory, search. Do not use local view_file for files that live on another peer.\n   Schema: {\"type\":\"object\",\"properties\":{\"peer\":{\"type\":\"string\",\"minLength\":1,\"description\":\"Required. Connected peer id from list_peers (the --name of /fleet listen). Example: \\\"B\\\".\"},\"tool\":{\"type\":\"string\",\"minLength\":1,\"description\":\"Required. Read-only tool on that peer. Default set: view_file, list_directory, search. Extra names from peer.describe are accepted only when CODEBUDDY_PEER_TRUST_DESCRIBE=true. Example: \\\"view_file\\\".\"},\"args\":{\"type\":\"object\",\"description\":\"Object of arguments for the remote tool. For view_file use {\\\"path\\\":\\\"oracle.txt\\\"} or {\\\"file_path\\\":\\\"oracle.txt\\\"}. For list_directory use {\\\"path\\\":\\\".\\\"}. For search use {\\\"query\\\":\\\"TODO\\\",\\\"path\\\":\\\"src\\\"}. Paths are relative to the peer workspace and are not resolved on this host.\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Peer-relative path, e.g. \\\"oracle.txt\\\" (accepted by view_file and list_directory).\"},\"file_path\":{\"type\":\"string\",\"description\":\"Alias of path for view_file.\"},\"query\":{\"type\":\"string\",\"description\":\"Search query when tool is search.\"}}},\"timeoutMs\":{\"type\":\"number\",\"description\":\"Optional timeout in milliseconds. Default 15000. Min 1000. Max 120000.\"}},\"required\":[\"peer\",\"tool\"]}\n\n5. **lsp_diagnostics** (score: 4.69)\n   effect: read\n   Return diagnostics published by the configured language server for a source file. Read-only; distinguishes a clean file from an unavailable server.\n   Schema: {\"type\":\"object\",\"properties\":{\"file\":{\"type\":\"string\",\"description\":\"Path to the source file, relative to the active workspace (or absolute, inside it)\"}},\"required\":[\"file\"],\"additionalProperties\":false}",
+    "data": {
+      "tools": [
+        {
+          "name": "read_file",
+          "description": "[alias → view_file] View file contents with optional line range",
+          "score": 112.07145361359632,
+          "effect": "read",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to the file or directory to view"
+              },
+              "file_path": {
+                "type": "string",
+                "description": "Alias for path"
+              },
+              "target_file": {
+                "type": "string",
+                "description": "Alias for path"
+              },
+              "start_line": {
+                "type": "number",
+                "description": "Start line for partial view (1-indexed)"
+              },
+              "end_line": {
+                "type": "number",
+                "description": "End line for partial view (1-indexed)"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "name": "file_read",
+          "description": "[alias → view_file] View file contents with optional line range",
+          "score": 12.071453613596326,
+          "effect": "unknown",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Path to the file or directory to view"
+              },
+              "file_path": {
+                "type": "string",
+                "description": "Alias for path"
+              },
+              "target_file": {
+                "type": "string",
+                "description": "Alias for path"
+              },
+              "start_line": {
+                "type": "number",
+                "description": "Start line for partial view (1-indexed)"
+              },
+              "end_line": {
+                "type": "number",
+                "description": "End line for partial view (1-indexed)"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "name": "workspace_read",
+          "description": "Read a bounded file from a named repository in the opt-in multi-repository workspace.",
+          "score": 5.609321590543132,
+          "effect": "read",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "repo": {
+                "type": "string",
+                "description": "Workspace repository name."
+              },
+              "path": {
+                "type": "string",
+                "description": "Repository-relative file path."
+              },
+              "offset": {
+                "type": "number",
+                "description": "Zero-based first line offset.",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "number",
+                "description": "Maximum number of lines to return.",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "repo",
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "peer_tool_invoke",
+          "description": "Read or search a file on a connected fleet peer (read-only, allowlist on that peer). Always pass peer and tool; never call with empty arguments. Example: {\"peer\":\"B\",\"tool\":\"view_file\",\"args\":{\"path\":\"oracle.txt\"}}. Allowed tools: view_file, list_directory, search. Do not use local view_file for files that live on another peer.",
+          "score": 4.710786836783429,
+          "effect": "emission",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "peer": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Required. Connected peer id from list_peers (the --name of /fleet listen). Example: \"B\"."
+              },
+              "tool": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Required. Read-only tool on that peer. Default set: view_file, list_directory, search. Extra names from peer.describe are accepted only when CODEBUDDY_PEER_TRUST_DESCRIBE=true. Example: \"view_file\"."
+              },
+              "args": {
+                "type": "object",
+                "description": "Object of arguments for the remote tool. For view_file use {\"path\":\"oracle.txt\"} or {\"file_path\":\"oracle.txt\"}. For list_directory use {\"path\":\".\"}. For search use {\"query\":\"TODO\",\"path\":\"src\"}. Paths are relative to the peer workspace and are not resolved on this host.",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Peer-relative path, e.g. \"oracle.txt\" (accepted by view_file and list_directory)."
+                  },
+                  "file_path": {
+                    "type": "string",
+                    "description": "Alias of path for view_file."
+                  },
+                  "query": {
+                    "type": "string",
+                    "description": "Search query when tool is search."
+                  }
+                }
+              },
+              "timeoutMs": {
+                "type": "number",
+                "description": "Optional timeout in milliseconds. Default 15000. Min 1000. Max 120000."
+              }
+            },
+            "required": [
+              "peer",
+              "tool"
+            ]
+          }
+        },
+        {
+          "name": "lsp_diagnostics",
+          "description": "Return diagnostics published by the configured language server for a source file. Read-only; distinguishes a clean file from an unavailable server.",
+          "score": 4.6914697795438824,
+          "effect": "read",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "Path to the source file, relative to the active workspace (or absolute, inside it)"
+              }
+            },
+            "required": [
+              "file"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ],
+      "names": [
+        "read_file",
+        "file_read",
+        "workspace_read",
+        "peer_tool_invoke",
+        "lsp_diagnostics"
+      ],
+      "effects": {
+        "read_file": "read",
+        "file_read": "unknown",
+        "workspace_read": "read",
+        "peer_tool_invoke": "emission",
+        "lsp_diagnostics": "read"
+      }
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 2,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:tool_search",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

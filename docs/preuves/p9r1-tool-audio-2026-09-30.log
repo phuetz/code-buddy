@@ -1,0 +1,88 @@
+Date de consolidation: 2026-09-30T19:33:55.653942Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: audio({"operation": "info", "path": "speech.wav"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "audio",
+  "input": {
+    "operation": "info",
+    "path": "speech.wav"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.sampleRate",
+        "op": "eq",
+        "value": 22050
+      },
+      {
+        "field": "data.channels",
+        "op": "eq",
+        "value": 1
+      },
+      {
+        "field": "data.duration",
+        "op": "min",
+        "value": 3
+      },
+      {
+        "field": "data.duration",
+        "op": "max",
+        "value": 4
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "🎵 Audio: speech.wav\n   Format: WAV\n   Size: 145.75 KB\n   Duration: 0:03\n   Sample Rate: 22050 Hz\n   Channels: 1 (Mono)\n   Bitrate: 353 kbps",
+    "data": {
+      "filename": "speech.wav",
+      "format": "WAV",
+      "size": "145.75 KB",
+      "sampleRate": 22050,
+      "channels": 1,
+      "bitrate": 353,
+      "duration": 3.38
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.sampleRate eq",
+      "passed": true
+    },
+    {
+      "check": "data.channels eq",
+      "passed": true
+    },
+    {
+      "check": "data.duration min",
+      "passed": true
+    },
+    {
+      "check": "data.duration max",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 6,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:audio",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

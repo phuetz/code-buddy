@@ -1,0 +1,72 @@
+Date de consolidation: 2026-09-30T19:33:55.725858Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: git_summary({"root": "<QA>/reprise-1/project"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "git_summary",
+  "input": {
+    "root": "<QA>/reprise-1/project"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.isRepo",
+        "op": "eq",
+        "value": true
+      },
+      {
+        "field": "observations.gitSummaryMatches",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Git master: 0 modified, 0 staged, 51 untracked",
+    "data": {
+      "root": "<QA>/reprise-1/project",
+      "isRepo": true,
+      "branch": "master",
+      "ahead": 0,
+      "behind": 0,
+      "staged": 0,
+      "modified": 0,
+      "untracked": 51
+    }
+  },
+  "observations": {
+    "gitSummaryMatches": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.isRepo eq",
+      "passed": true
+    },
+    {
+      "check": "observations.gitSummaryMatches eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 37,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:git_summary",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

@@ -1,0 +1,27 @@
+Date de consolidation: 2026-09-30T19:33:56.030540Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: cowork-desktop-settings({"marker": "P9R1_CHAT_1790795786187"})
+Attendu: Transition light vers dark et relecture par IPC du profil QA.
+Observé: Transition light vers dark et relecture par IPC du profil QA.
+Verdict: prouvée
+
+{
+  "id": "cowork-desktop-settings",
+  "name": "cowork-desktop-settings",
+  "input": {
+    "marker": "P9R1_CHAT_1790795786187"
+  },
+  "result": {
+    "success": true,
+    "output": "{\"beforeTheme\": \"light\", \"persistedTheme\": \"dark\"}"
+  },
+  "observations": {
+    "beforeTheme": "light",
+    "persistedTheme": "dark"
+  },
+  "passed": true,
+  "expected": "Transition light vers dark et relecture par IPC du profil QA.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "summary": "Transition light vers dark et relecture par IPC du profil QA."
+}

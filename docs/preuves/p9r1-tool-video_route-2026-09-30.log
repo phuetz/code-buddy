@@ -1,0 +1,91 @@
+Date de consolidation: 2026-09-30T19:33:55.914071Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: video_route({"request": {"id": "p9-route", "use_case": "bulk-variation", "content_tier": "safe", "quantity": 1, "requires_lip_sync": false, "premium": false}, "capacity": {"gpuNode": true, "localGpu": false, "google_flow": false, "remaining_flow_credits": 0, "max_flow_credits_per_batch": 0}})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "video_route",
+  "input": {
+    "request": {
+      "id": "p9-route",
+      "use_case": "bulk-variation",
+      "content_tier": "safe",
+      "quantity": 1,
+      "requires_lip_sync": false,
+      "premium": false
+    },
+    "capacity": {
+      "gpuNode": true,
+      "localGpu": false,
+      "google_flow": false,
+      "remaining_flow_credits": 0,
+      "max_flow_credits_per_batch": 0
+    }
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.requestId",
+        "op": "eq",
+        "value": "p9-route"
+      },
+      {
+        "field": "data.primary",
+        "op": "eq",
+        "value": "gpuNode-comfyui"
+      },
+      {
+        "field": "data.estimatedFlowCredits",
+        "op": "eq",
+        "value": 0
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "{\n  \"requestId\": \"p9-route\",\n  \"primary\": \"gpuNode-comfyui\",\n  \"fallbacks\": [],\n  \"executionMode\": \"automatic-local\",\n  \"estimatedFlowCredits\": 0,\n  \"reason\": \"The Flow credit ceiling or availability guardrail selected a local engine\"\n}",
+    "data": {
+      "requestId": "p9-route",
+      "primary": "gpuNode-comfyui",
+      "fallbacks": [],
+      "executionMode": "automatic-local",
+      "estimatedFlowCredits": 0,
+      "reason": "The Flow credit ceiling or availability guardrail selected a local engine"
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.requestId eq",
+      "passed": true
+    },
+    {
+      "check": "data.primary eq",
+      "passed": true
+    },
+    {
+      "check": "data.estimatedFlowCredits eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 1,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:video_route",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

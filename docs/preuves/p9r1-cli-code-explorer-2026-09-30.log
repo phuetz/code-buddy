@@ -1,0 +1,42 @@
+Date de consolidation: 2026-09-30T19:33:56.005378Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: code-explorer({"args": ["ask", "add"]})
+Attendu: Deux définitions réelles add, sample.js et sample.ts ligne 1, deux processus froids
+Observé: Deux définitions réelles add, sample.js et sample.ts ligne 1, deux processus froids
+Verdict: prouvée
+
+{
+  "id": "cli-code-explorer",
+  "name": "code-explorer",
+  "input": {
+    "args": [
+      "ask",
+      "add"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n"
+  },
+  "attempts": [
+    {
+      "result": {
+        "success": true,
+        "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n"
+      },
+      "passed": true
+    },
+    {
+      "result": {
+        "success": true,
+        "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n"
+      },
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "expected": "Deux définitions réelles add, sample.js et sample.ts ligne 1, deux processus froids",
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "summary": "Deux définitions réelles add, sample.js et sample.ts ligne 1, deux processus froids"
+}

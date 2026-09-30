@@ -1,0 +1,26 @@
+Date de consolidation: 2026-09-30T19:33:55.981945Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy autonomy status({"args": ["status"]})
+Attendu: ['Tasks:', 'Blocked by deps:', 'Agents:']
+Observé: ['Tasks:', 'Blocked by deps:', 'Agents:']
+Verdict: prouvée
+
+{
+  "id": "cli:autonomy",
+  "name": "autonomy",
+  "input": {
+    "args": [
+      "status"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "\nFleet store: <QA>/reprise-1/project/.codebuddy\nTasks: 18 (blocked=1, open=14, completed=1, in_progress=2)\nNext auto-claimable: P9_CARD [medium]\nBlocked by deps: 0\nAgents: none\n\n"
+  },
+  "expected": "['Tasks:', 'Blocked by deps:', 'Agents:']",
+  "passed": true,
+  "command": "buddy autonomy status",
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['Tasks:', 'Blocked by deps:', 'Agents:']"
+}

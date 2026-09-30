@@ -1,0 +1,85 @@
+Date de consolidation: 2026-09-30T19:33:55.855292Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: scaffold_app({"template": "node-cli", "targetDir": "<QA>/reprise-1/project/new-cli-reprise", "vars": {"binName": "p9-cli", "description": "P9_CLI"}})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "scaffold_app",
+  "input": {
+    "template": "node-cli",
+    "targetDir": "<QA>/reprise-1/project/new-cli-reprise",
+    "vars": {
+      "binName": "p9-cli",
+      "description": "P9_CLI"
+    }
+  },
+  "oracle": {
+    "rules": [
+      {
+        "file": "new-cli-reprise/package.json",
+        "op": "includes",
+        "values": [
+          "p9-cli"
+        ],
+        "changed": true
+      },
+      {
+        "field": "observations.scaffoldRun",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Created 5 files in <QA>/reprise-1/project/new-cli-reprise",
+    "data": {
+      "template": "node-cli",
+      "targetDir": "<QA>/reprise-1/project/new-cli-reprise",
+      "filesCreated": [
+        ".gitignore",
+        "README.md",
+        "package.json",
+        "src/index.ts",
+        "tsconfig.json"
+      ]
+    }
+  },
+  "observations": {
+    "scaffoldRun": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "écriture effective de new-cli-reprise/package.json",
+      "passed": true
+    },
+    {
+      "check": "new-cli-reprise/package.json includes",
+      "passed": true
+    },
+    {
+      "check": "observations.scaffoldRun eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 1141,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:scaffold_app",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}
