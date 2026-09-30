@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-deep-research",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "2f9cd192eba80293cf7ca0950f5b14bc868797081bea2f69cb40970750093bdf",
+  "artifact": "docs/preuves/p8-tool-deep-research.log",
+  "summary": "success=true ; Sources: 2 ; Planner: LLM ; Synthesis: LLM."
+}

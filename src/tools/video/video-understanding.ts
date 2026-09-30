@@ -287,7 +287,10 @@ async function resolveSegments(
   const runTranscribe = deps.transcribeLong
     ?? ((audioPath: string, opts?: LongTranscribeOptions) => transcribeLong(audioPath, opts));
   const existsSync = deps.existsSync ?? realExistsSync;
-  const transcribeOpts: LongTranscribeOptions = deps.transcriber ? { transcriber: deps.transcriber } : {};
+  const transcribeOpts: LongTranscribeOptions = {
+    ...(deps.transcriber ? { transcriber: deps.transcriber } : {}),
+    failOnTranscriptionError: true,
+  };
 
   const langs = [input.language, 'en', 'fr'].filter((l): l is string => !!l && l.trim().length > 0);
   const uniqueLangs = [...new Set(langs)];
