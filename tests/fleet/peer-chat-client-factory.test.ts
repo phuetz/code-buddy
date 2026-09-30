@@ -22,6 +22,9 @@ import {
   pickCompatibleModelForProvider,
 } from '../../src/fleet/compatible-model.js';
 import { logger } from '../../src/utils/logger.js';
+import type { ResolvedCommandProvider } from '../../src/commands/llm-provider-resolution.js';
+const { commandProvider } = vi.hoisted(() => ({ commandProvider: vi.fn<() => ResolvedCommandProvider | null>(() => null) }));
+vi.mock('../../src/commands/llm-provider-resolution.js', () => ({ resolveCommandProvider: commandProvider }));
 
 /** Snapshot env vars we touch so each test can reset them cleanly. */
 const ENV_KEYS_TO_PRESERVE = [
@@ -63,6 +66,7 @@ let originalEnv: Record<string, string | undefined>;
 let tempAuthDir: string | null = null;
 
 beforeEach(() => {
+  commandProvider.mockReset().mockReturnValue(null);
   originalEnv = {};
   for (const key of ENV_KEYS_TO_PRESERVE) {
     originalEnv[key] = process.env[key];
@@ -76,6 +80,13 @@ beforeEach(() => {
   // the PATH walk in `resolveGeminiCliBinary()`.
   process.env.GEMINI_CLI_PATH = '/tmp/__no_gemini_cli_in_tests__';
   process.env.AGY_CLI_PATH = '/tmp/__no_agy_cli_in_tests__';
+});
+
+it('inherits the saved doctor target without ambient provider variables', () => {
+  commandProvider.mockReturnValue({ providerLabel: 'ollama', model: 'qwen3:4b-instruct', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1' });
+  const factory = createPeerChatClientFromEnv();
+  expect(factory?.info).toMatchObject({ provider: 'ollama', model: 'qwen3:4b-instruct', isLocal: true });
+  expect(resolveProviderFromEnv()).toMatchObject({ provider: 'ollama', model: 'qwen3:4b-instruct', baseUrl: 'http://127.0.0.1:11434/v1' });
 });
 
 afterEach(() => {
