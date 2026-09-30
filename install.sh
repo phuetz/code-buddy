@@ -278,7 +278,8 @@ install_managed_launcher() { # <npm-prefix>
     "$_npm_launcher") \
     || die "could not resolve the installed buddy entry point at $_npm_launcher"
   case "$_installed_entry" in
-    */dist/index.js) _package_root=${_installed_entry%/dist/index.js} ;;
+    */dist/index.js) _package_root=${_installed_entry%/dist/index.js}; _entry_file=index.js ;;
+    */dist/cli-boot.js) _package_root=${_installed_entry%/dist/cli-boot.js}; _entry_file=cli-boot.js ;;
     *) die "unexpected buddy entry point: $_installed_entry" ;;
   esac
 
@@ -310,7 +311,7 @@ install_managed_launcher() { # <npm-prefix>
     "$_marker" \
     'set -eu' \
     'BUDDY_BIN_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)' \
-    'exec node "$BUDDY_BIN_DIR/.code-buddy-package/dist/index.js" "$@"' \
+    "exec node \"\$BUDDY_BIN_DIR/.code-buddy-package/dist/$_entry_file\" \"\$@\"" \
     > "$_launcher_tmp" \
     || die "could not stage launcher in $MANAGED_BIN_DIR"
   chmod 755 "$_launcher_tmp"

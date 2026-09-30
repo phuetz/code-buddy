@@ -19,7 +19,12 @@ afterEach(() => {
 // install.sh refuses MINGW/MSYS by design (Windows users install via WSL2 or npm), so even with
 // Git Bash present the installer cannot be exercised on a Windows runner.
 describe.skipIf(process.platform === 'win32')('one-command installer launcher', () => {
-  it.each([false, true])('creates a package-relative launcher over a stale wrapper (Windows Node paths=%s)', (windowsNodePaths) => {
+  it.each([
+    { windowsNodePaths: false, entry: 'index.js' },
+    { windowsNodePaths: true, entry: 'index.js' },
+    { windowsNodePaths: false, entry: 'cli-boot.js' },
+    { windowsNodePaths: true, entry: 'cli-boot.js' },
+  ])('creates a package-relative launcher ($entry, Windows Node paths=$windowsNodePaths)', ({ windowsNodePaths, entry }) => {
     const scratchRoot = fs.mkdtempSync(
       path.join(process.env.TMPDIR || os.tmpdir(), 'e17-installer-')
     );
@@ -28,7 +33,7 @@ describe.skipIf(process.platform === 'win32')('one-command installer launcher', 
     const home = path.join(scratchRoot, 'home');
     const prefix = path.join(scratchRoot, 'npm-prefix');
     const packageRoot = path.join(prefix, 'lib', 'node_modules', '@phuetz', 'code-buddy');
-    const packageEntry = path.join(packageRoot, 'dist', 'index.js');
+    const packageEntry = path.join(packageRoot, 'dist', entry);
     const npmLauncher = path.join(prefix, 'bin', 'buddy');
 
     fs.mkdirSync(fakeBin, { recursive: true });
@@ -40,7 +45,7 @@ describe.skipIf(process.platform === 'win32')('one-command installer launcher', 
       "#!/usr/bin/env node\nprocess.stdout.write('2.0.0-test\\n');\n",
       { mode: 0o755 }
     );
-    fs.symlinkSync('../lib/node_modules/@phuetz/code-buddy/dist/index.js', npmLauncher);
+    fs.symlinkSync(`../lib/node_modules/@phuetz/code-buddy/dist/${entry}`, npmLauncher);
     fs.writeFileSync(
       path.join(home, '.local', 'bin', 'buddy'),
       '#!/bin/sh\nCODEBUDDY_ROOT=/old/checkout\nexit 99\n',
@@ -116,7 +121,7 @@ if (process._eval?.includes('fs.realpathSync')) {
     expect(path.isAbsolute(fs.readlinkSync(packageLink))).toBe(false);
 
     const launcherSource = fs.readFileSync(managedLauncher, 'utf8');
-    expect(launcherSource).toContain('$BUDDY_BIN_DIR/.code-buddy-package/dist/index.js');
+    expect(launcherSource).toContain(`$BUDDY_BIN_DIR/.code-buddy-package/dist/${entry}`);
     expect(launcherSource).not.toContain(scratchRoot);
     expect(launcherSource).not.toContain('CODEBUDDY_ROOT');
 
