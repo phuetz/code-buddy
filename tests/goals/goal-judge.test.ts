@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildJudgeUserPrompt, judgeGoal, parseJudgeResponse } from '../../src/goals/goal-judge.js';
+import { CodeBuddyClient } from '../../src/codebuddy/client.js';
 import { JUDGE_SYSTEM_PROMPT } from '../../src/goals/goal-state.js';
 
 const recordUsageSpy = vi.hoisted(() => vi.fn());
@@ -24,9 +25,10 @@ describe('judgeGoal', () => {
     vi.useFakeTimers();
     vi.stubEnv('CODEBUDDY_PROVIDER', 'openai'); // actual judge provider wins
     try {
-      const client = { getProviderName: () => 'Ollama', chat: vi.fn(() => new Promise(resolve => {
-        setTimeout(() => resolve({ choices: [{ message: { content: '{"done":true,"reason":"verified","evidence":"exit 0"}' } }] }), 35_000);
-      })) } as never;
+      const client = new CodeBuddyClient('ollama', 'fixture-model', 'http://127.0.0.1:11434/v1');
+      vi.spyOn(client, 'chat').mockImplementation(() => new Promise(resolve => {
+        setTimeout(() => resolve({ choices: [{ message: { role: 'assistant', content: '{"done":true,"reason":"verified","evidence":"exit 0"}' }, finish_reason: 'stop', index: 0 }] } as Awaited<ReturnType<CodeBuddyClient['chat']>>), 35_000);
+      }));
       const pending = judgeGoal(client, { goal: 'explain project', lastResponse: 'Read entry file.' });
       await vi.advanceTimersByTimeAsync(35_001);
       expect((await pending).verdict).toBe('done');

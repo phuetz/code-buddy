@@ -426,6 +426,18 @@ describe('declared provider failover (CODEBUDDY_PROVIDER_FALLBACK)', () => {
     expect(sent.some((m) => m.content?.includes('conversation reprise par'))).toBe(true);
   });
 
+  it('derives locality from the configured client even without provider environment variables', () => {
+    vi.stubEnv('CODEBUDDY_PROVIDER', undefined);
+    vi.stubEnv('OLLAMA_HOST', undefined);
+    try {
+      const local = new CodeBuddyClient('ollama', 'fixture-model', 'http://127.0.0.1:11434/v1');
+      expect(local.isEffectiveTargetLocal()).toBe(true);
+      vi.stubEnv('CODEBUDDY_PROVIDER', 'ollama');
+      const remote = new CodeBuddyClient('fixture-key', 'fixture-model', 'https://api.x.ai/v1');
+      expect(remote.isEffectiveTargetLocal()).toBe(false);
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('exposes effective target and local status after failover', async () => {
     process.env.CODEBUDDY_PROVIDER_FALLBACK = 'true';
     mockCreate.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(okResponse('local ok'));
