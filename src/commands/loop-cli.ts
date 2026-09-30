@@ -152,11 +152,19 @@ export function createLoopCommand(): Command {
       try {
         const cwd = await prepareGoalCliWorkspace(command);
 
-        await applyRequestedPermissionMode(
+        const requestedPermission = await applyRequestedPermissionMode(
           options,
           command,
           (mode, values) => `Posture de permission inconnue : ${mode}. Valeurs : ${values}`,
         );
+
+        // This command is headless. Match -p for ordinary edits while keeping
+        // every explicitly selected posture and configured denial authoritative.
+        if (!requestedPermission) {
+          const { getPermissionModeManager } = await import('../security/permission-modes.js');
+          const permissions = getPermissionModeManager();
+          if (permissions.getMode() === 'default') permissions.setMode('acceptEdits');
+        }
 
         const modelOverride: string | undefined = options.model ?? command?.optsWithGlobals?.()?.model;
         const resolved = resolveCommandProvider({ explicitModel: modelOverride });

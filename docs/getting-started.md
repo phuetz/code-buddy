@@ -727,3 +727,8 @@ plus 60 seconds for generation. `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` and
 `CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS` or `goals.judgeTimeoutMs` takes priority
 (environment before settings). This budget changes no verification gate:
 `--verify-cmd` must still succeed for a `CONFIRMED` result.
+
+`buddy loop` runs headlessly and defaults to `acceptEdits` for ordinary edits
+when no permission posture was selected, just like `buddy -p`. An explicit
+`--permission-mode default` or `plan`, configured denials, and shell safety
+checks remain authoritative. The independent verifier still runs before success.
