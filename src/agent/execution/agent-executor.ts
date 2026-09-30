@@ -1325,7 +1325,9 @@ export class AgentExecutor {
         }),
       )) {
         if (abortController?.signal.aborted) return;
-        messages.push({ role: 'assistant', content: 'Repository context read requested by Code Buddy. Base repository claims on these tool results; do not invent missing files, commands or purposes.', tool_calls: [toolCall] });
+        // This call is host-authored. Keep the human-readable provenance in
+        // history, without teaching the model to repeat it as assistant prose.
+        messages.push({ role: 'assistant', content: '', tool_calls: [toolCall] });
         messages.push({ role: 'tool', name: 'view_file', tool_call_id: toolCall.id,
           content: sanitizeToolResult(toolResult.success ? toolResult.output ?? 'Success' : toolResult.error ?? 'Read failed') } as CodeBuddyMessage);
         history.push({ type: 'assistant', content: 'Repository context read requested by Code Buddy. Base repository claims on these tool results; do not invent missing files, commands or purposes.',

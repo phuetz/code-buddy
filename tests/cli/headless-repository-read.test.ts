@@ -19,7 +19,7 @@ it.each([
   await writeFile(join(workspace, 'package.json'), '{"main":"launch.js"}');
   await writeFile(join(workspace, 'launch.js'), 'console.log("ORACLE_TANGERINE");');
   await writeFile(join(workspace, 'README.md'), '# Tangerine\nEntry: launch.js');
-  const requests: Array<{ model?: string; messages: Array<{ role: string; content: string }> }> = [];
+  const requests: Array<{ model?: string; messages: Array<{ role: string; content: string; tool_calls?: unknown[] }> }> = [];
   const server = http.createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
@@ -62,6 +62,9 @@ it.each([
     expect(first?.messages.filter(m => m.role === 'tool').map(m => m.content).join('\n'))
       .toContain('ORACLE_TANGERINE');
     expect(first?.messages.some(m => m.role === 'tool')).toBe(true);
+    expect(first?.messages.filter(m => m.role === 'assistant' && m.tool_calls?.length)
+      .every(m => m.content === '')).toBe(true);
+    if (!args.includes('dev')) expect(result.stdout).toContain('Repository context read requested by Code Buddy');
     if (args.includes('dev')) expect(first?.model).toBe('fixture-model');
   } finally {
     await new Promise<void>(accept => server.close(() => accept()));
