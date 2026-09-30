@@ -714,13 +714,21 @@ export class LSPClient {
     await this.openDocument(conn, file, lang);
     this.stats.queriesExecuted++;
 
-    // Wait briefly for diagnostics to arrive via notification
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Initialization does not mean the first analysis has completed. Wait for
+    // the server's publication, including a valid empty publication for a
+    // clean file, rather than treating a slow server as an empty result.
+    const normalized = path.resolve(file);
+    const deadline = Date.now() + 5000;
+    while (!conn.diagnostics.has(normalized) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    if (!conn.diagnostics.has(normalized)) {
+      throw new Error(`No diagnostics received for ${file} within 5000ms`);
+    }
 
     this.stats.totalResponseMs += Date.now() - start;
 
     // Check cached diagnostics from publishDiagnostics notification
-    const normalized = path.resolve(file);
     return conn.diagnostics.get(normalized) || [];
   }
 
