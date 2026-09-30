@@ -13,7 +13,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as os from 'os';
 import * as path from 'path';
-import { pathToFileURL } from 'url';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // Mock the LSP client before importing the tool
 const mockPrepareRename = vi.fn();
@@ -196,6 +197,11 @@ describe('LSP Rename Tool', () => {
   // ==========================================================================
 
   describe('uriToPath', () => {
+    it('preserves the absolute filesystem path when decoding a standard file URI', () => {
+      const file = resolve('fixture with spaces.ts');
+      expect(uriToPath(pathToFileURL(file).href)).toBe(file);
+    });
+
     it('should strip file:/// prefix', () => {
       const result = uriToPath('file:///src/main.ts');
       expect(result).toContain('src');
@@ -447,6 +453,37 @@ describe('LSP Rename Tool', () => {
       expect(data.filesChanged).toBe(1);
       expect(data.totalEdits).toBe(1);
       expect(data.files).toHaveLength(1);
+    });
+    it('writes to the absolute path returned by the language server', async () => {
+      const file = resolve('fixture with spaces.ts');
+      mockPrepareRename.mockResolvedValue({ placeholder: 'foo' });
+      mockRename.mockResolvedValue({ changes: {
+        [pathToFileURL(file).href]: [{
+          range: { start: { line: 0, character: 6 }, end: { line: 0, character: 9 } },
+          newText: 'bar',
+        }],
+      } });
+      mockReadFileSync.mockReturnValue('const foo = 42;');
+      const result = await executeLspRename({ filePath: file, line: 1, character: 7, newName: 'bar' });
+      expect(result.success).toBe(true);
+      expect(mockWriteFileSync).toHaveBeenCalledWith(file, 'const bar = 42;', 'utf-8');
+    });
+
+    it('reports a failed write instead of claiming a file was changed', async () => {
+      const file = resolve('fixture.ts');
+      mockPrepareRename.mockResolvedValue({ placeholder: 'foo' });
+      mockRename.mockResolvedValue({ changes: {
+        [pathToFileURL(file).href]: [{
+          range: { start: { line: 0, character: 6 }, end: { line: 0, character: 9 } },
+          newText: 'bar',
+        }],
+      } });
+      mockReadFileSync.mockImplementationOnce(() => { throw new Error('EACCES'); });
+      const result = await executeLspRename({ filePath: file, line: 1, character: 7, newName: 'bar' });
+      expect(result.success).toBe(false);
+      expect(result.output).toContain('Files changed: 0');
+      expect(result.error).toContain('could not apply edits');
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
     });
   });
 });

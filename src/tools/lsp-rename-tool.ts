@@ -10,7 +10,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 import { getLSPClient } from '../lsp/lsp-client.js';
 import type { LSPWorkspaceEdit, LSPTextEdit } from '../lsp/lsp-client.js';
 import type { ToolResult } from '../types/index.js';
@@ -121,13 +121,12 @@ function extractEdits(workspaceEdit: LSPWorkspaceEdit): Map<string, LSPTextEdit[
  * Convert a file:// URI to a local file path.
  */
 function uriToPath(uri: string): string {
-  // Preserve the leading root separator; stripping `file:///` turned an
-  // absolute LSP edit into a path relative to the agent's current directory.
+  if (!uri.startsWith('file:')) return uri;
+  // Keep both the absolute-path correction and the upstream Windows fallback
+  // for file URIs whose pathname has no drive letter.
   try {
     return fileURLToPath(uri);
   } catch {
-    // Windows rejects a drive-less URI such as file:///src/main.ts ("File URL
-    // path must be absolute"); keep its rooted, decoded pathname instead.
     return decodeURIComponent(new URL(uri).pathname);
   }
 }
@@ -255,10 +254,12 @@ export async function executeLspRename(params: LspRenameParams): Promise<ToolRes
     }
 
     // Step 4: Format summary
+    const changedFiles = summaries.filter((summary) => summary.editCount > 0);
+    const failedFiles = summaries.length - changedFiles.length;
     const totalEdits = summaries.reduce((sum, s) => sum + s.editCount, 0);
     const parts: string[] = [
-      `Renamed "${prepareResult.placeholder || '(symbol)'}" to "${newName}"`,
-      `Files changed: ${summaries.length}`,
+      `${failedFiles ? 'Rename incomplete for' : 'Renamed'} "${prepareResult.placeholder || '(symbol)'}" to "${newName}"`,
+      `Files changed: ${changedFiles.length}`,
       `Total edits: ${totalEdits}`,
       '',
     ];
@@ -273,12 +274,13 @@ export async function executeLspRename(params: LspRenameParams): Promise<ToolRes
     }
 
     return {
-      success: true,
+      success: failedFiles === 0,
       output: parts.join('\n'),
+      ...(failedFiles ? { error: `LSP rename could not apply edits to ${failedFiles} file(s)` } : {}),
       data: {
-        filesChanged: summaries.length,
+        filesChanged: changedFiles.length,
         totalEdits,
-        files: summaries.map(s => s.file),
+        files: changedFiles.map(s => s.file),
       },
     };
   } catch (err) {
