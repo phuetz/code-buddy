@@ -68,7 +68,8 @@ Reading these boundaries prevents runtime surprises:
    - It will never download or install `wrangler` or `netlify-cli`.
    - It never uploads unless `--apply` is specified.
    - It does not create cloud accounts, manage DNS, or perform automated rollbacks.
-   - Targets like `fly`, `railway`, `render`, `hetzner`, `northflank`, `gcp`, and `nix` remain config generators under `buddy deploy init` and cannot be published via `buddy deploy run`.
+   - Targets like `fly`, `railway`, `render`, `hetzner`, `northflank`, and `gcp` remain config generators under `buddy deploy init <platform>` and cannot be published via `buddy deploy run`.
+   - Nix configuration uses the separate `buddy deploy nix` command; `buddy deploy init nix` is not supported.
 
 2. **`buddy provision db-auth` does NOT provision remote cloud infrastructure:**
    - `--target supabase` does not create remote Supabase projects, databases, or organizations. The token is used solely as a prerequisite presence check.
