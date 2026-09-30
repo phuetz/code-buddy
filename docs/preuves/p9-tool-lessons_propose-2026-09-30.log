@@ -1,0 +1,30 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → lessons_propose({"category": "RULE", "content": "P9_RULE: require independent file oracle"})
+Attendu: P9_RULE|pending|candidate
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture lessons_propose.json ===
+{
+  "name": "lessons_propose",
+  "input": {
+    "category": "RULE",
+    "content": "P9_RULE: require independent file oracle"
+  },
+  "expected": "P9_RULE|pending|candidate",
+  "result": {
+    "success": true,
+    "output": "Proposed lesson candidate [lc-munny9qb8rw] (RULE): P9_RULE: require independent file oracle\nIt is awaiting human review and was NOT written to lessons.md. Approve with: buddy lessons candidate approve lc-munny9qb8rw --by <name>"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 3
+}

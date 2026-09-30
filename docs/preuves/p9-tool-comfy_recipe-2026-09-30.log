@@ -1,0 +1,33 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → comfy_recipe({"action": "list", "commercial_use": false})
+Attendu: Liste vide sans mutation du profil
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture comfy_recipe.json ===
+{
+  "name": "comfy_recipe",
+  "input": {
+    "action": "list",
+    "commercial_use": false
+  },
+  "expected": "Liste vide sans mutation du profil",
+  "result": {
+    "success": true,
+    "output": "No registered ComfyUI recipes were found.",
+    "data": {
+      "recipes": []
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 0
+}

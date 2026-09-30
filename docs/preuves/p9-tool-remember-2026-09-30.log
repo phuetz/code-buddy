@@ -1,0 +1,31 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → remember({"key": "p9-marker", "value": "P9_MEMORY", "scope": "project"})
+Attendu: saved|remember|stored|P9_MEMORY
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture remember.json ===
+{
+  "name": "remember",
+  "input": {
+    "key": "p9-marker",
+    "value": "P9_MEMORY",
+    "scope": "project"
+  },
+  "expected": "saved|remember|stored|P9_MEMORY",
+  "result": {
+    "success": true,
+    "output": "Stored \"p9-marker\" in project memory. Usage: 20/2200 chars (1%)."
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 10023
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:whoami",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "041f83e6a82499b224589216a40db124fc33d9f66e8861af8e984c1df9010600",
+  "artifact": "docs/preuves/p9-cli-whoami-2026-09-30.log",
+  "summary": "Sous-parcours CLI exécuté avec HOME isolé."
+}

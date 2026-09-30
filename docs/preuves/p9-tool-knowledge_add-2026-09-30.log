@@ -1,0 +1,33 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → knowledge_add({"title": "P9 Knowledge", "content": "P9_KNOWLEDGE", "tags": ["p9"]})
+Attendu: P9|saved|added
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture knowledge_add.json ===
+{
+  "name": "knowledge_add",
+  "input": {
+    "title": "P9 Knowledge",
+    "content": "P9_KNOWLEDGE",
+    "tags": [
+      "p9"
+    ]
+  },
+  "expected": "P9|saved|added",
+  "result": {
+    "success": true,
+    "output": "Knowledge entry \"P9 Knowledge\" saved to <QA_HOME>/.codebuddy/knowledge/p9-knowledge.md"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 6
+}

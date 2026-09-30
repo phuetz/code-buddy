@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:browser_back",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "e054b9682021691f16c6e805714d6eee44874ca3045e3210831f8ce8eb56653d",
+  "artifact": "docs/preuves/p9-tool-browser_back-2026-09-30.log",
+  "summary": "Séquence réelle contrôlée sur profil et projet isolés."
+}

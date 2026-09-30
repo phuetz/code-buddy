@@ -1,0 +1,39 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: CodeBuddyClient.chat : primaire loopback indisponible, repli déclaré vers Ollama
+Attendu: Bascule unreachable puis réponse 42
+Observé: Bascule effective du primaire inaccessible vers Ollama local.
+Portée: Connexion primaire refusée puis réponse Ollama 42 ; aucun quota cloud ni échec d’authentification.
+Verdict: prouvée
+
+=== Capture failover-live.log ===
+[2026-09-30T04:45:08.934Z]  WARN  API call failed, retrying (attempt 1) in 239ms... {"source":"OpenAICompatProvider","error":"fetch failed"}
+[2026-09-30T04:45:09.182Z]  WARN  API call failed, retrying (attempt 2) in 430ms... {"source":"OpenAICompatProvider","error":"fetch failed"}
+[2026-09-30T04:45:09.616Z]  WARN  API call failed, retrying (attempt 3) in 707ms... {"source":"OpenAICompatProvider","error":"fetch failed"}
+[2026-09-30T04:45:10.350Z]  INFO  [fallback] handoff ollama:qwen3:4b-instruct tools 0→0 (~41 tok, fenêtre 32768)
+[2026-09-30T04:45:13.334Z]  WARN  [fallback] custom → ollama:qwen3:4b-instruct (unreachable, reset dans 5 min) {"source":"CodeBuddyClient","fromProvider":"custom","toProvider":"ollama","toModel":"qwen3:4b-instruct","kind":"unreachable","resetsAt":1790743810329}
+{"id":"chatcmpl-ollama-1790743513332","object":"chat.completion","created":1790743513,"model":"qwen3:4b-instruct","choices":[{"index":0,"message":{"role":"assistant","content":"42"},"finish_reason":"stop"}],"usage":{"prompt_tokens":61,"completion_tokens":3,"total_tokens":64}}
+
+=== Capture failover-live.json ===
+{
+  "id": "chatcmpl-ollama-1790743513332",
+  "object": "chat.completion",
+  "created": 1790743513,
+  "model": "qwen3:4b-instruct",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "42"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 61,
+    "completion_tokens": 3,
+    "total_tokens": 64
+  }
+}

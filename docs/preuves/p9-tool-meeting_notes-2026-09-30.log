@@ -1,0 +1,115 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → meeting_notes({"input_path": "meeting.txt", "output_prefix": "meeting-report"})
+Attendu: P9_ALPHA
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture meeting_notes.json ===
+{
+  "name": "meeting_notes",
+  "input": {
+    "input_path": "meeting.txt",
+    "output_prefix": "meeting-report"
+  },
+  "expected": "P9_ALPHA",
+  "result": {
+    "success": true,
+    "output": "# meeting\n\n> Source: meeting.txt · Analyse: deterministic · 2026-09-30T05:27:12.235Z\n\n## Résumé\n\nDécision : lancer P9_ALPHA vendredi. Action : Bob prépare P9_REPORT avant vendredi.\n\n## Points clés\n\n- Décision : lancer P9_ALPHA vendredi.\n- Action : Bob prépare P9_REPORT avant vendredi.\n\n## Participants\n\n- Alice (1)\n- Bob (1)\n\n## Décisions\n\n- Décision : lancer P9_ALPHA vendredi. — responsable: Alice _(preuve: 00:00)_\n\n## Actions\n\n- [ ] Action : Bob prépare P9_REPORT avant vendredi. — responsable: Bob — échéance: vendredi _(preuve: 00:05)_\n\n## Questions ouvertes\n\n_Aucun élément détecté_\n\n## Transcription\n\n- **[00:00] Alice** — Décision : lancer P9_ALPHA vendredi.\n- **[00:05] Bob** — Action : Bob prépare P9_REPORT avant vendredi.\n\n\nReports written inside the workspace:\n- meeting-report.md\n- meeting-report.json",
+    "data": {
+      "notes": {
+        "schemaVersion": 1,
+        "generatedAt": "2026-09-30T05:27:12.235Z",
+        "language": "fr",
+        "analysisMode": "deterministic",
+        "source": {
+          "kind": "text",
+          "name": "meeting.txt"
+        },
+        "title": "meeting",
+        "summary": "Décision : lancer P9_ALPHA vendredi. Action : Bob prépare P9_REPORT avant vendredi.",
+        "keyPoints": [
+          "Décision : lancer P9_ALPHA vendredi.",
+          "Action : Bob prépare P9_REPORT avant vendredi."
+        ],
+        "participants": [
+          {
+            "name": "Alice",
+            "speakingTurns": 1
+          },
+          {
+            "name": "Bob",
+            "speakingTurns": 1
+          }
+        ],
+        "decisions": [
+          {
+            "id": "decision-1",
+            "text": "Décision : lancer P9_ALPHA vendredi.",
+            "owner": "Alice",
+            "evidence": {
+              "sequence": 1,
+              "timestamp": "00:00",
+              "quote": "Décision : lancer P9_ALPHA vendredi."
+            }
+          }
+        ],
+        "actionItems": [
+          {
+            "id": "action-1",
+            "task": "Action : Bob prépare P9_REPORT avant vendredi.",
+            "owner": "Bob",
+            "dueDate": "vendredi",
+            "status": "open",
+            "evidence": {
+              "sequence": 2,
+              "timestamp": "00:05",
+              "quote": "Action : Bob prépare P9_REPORT avant vendredi."
+            }
+          }
+        ],
+        "openQuestions": [],
+        "transcript": [
+          {
+            "sequence": 1,
+            "startSeconds": 0,
+            "endSeconds": null,
+            "speaker": "Alice",
+            "text": "Décision : lancer P9_ALPHA vendredi."
+          },
+          {
+            "sequence": 2,
+            "startSeconds": 5,
+            "endSeconds": null,
+            "speaker": "Bob",
+            "text": "Action : Bob prépare P9_REPORT avant vendredi."
+          }
+        ]
+      },
+      "markdown": "# meeting\n\n> Source: meeting.txt · Analyse: deterministic · 2026-09-30T05:27:12.235Z\n\n## Résumé\n\nDécision : lancer P9_ALPHA vendredi. Action : Bob prépare P9_REPORT avant vendredi.\n\n## Points clés\n\n- Décision : lancer P9_ALPHA vendredi.\n- Action : Bob prépare P9_REPORT avant vendredi.\n\n## Participants\n\n- Alice (1)\n- Bob (1)\n\n## Décisions\n\n- Décision : lancer P9_ALPHA vendredi. — responsable: Alice _(preuve: 00:00)_\n\n## Actions\n\n- [ ] Action : Bob prépare P9_REPORT avant vendredi. — responsable: Bob — échéance: vendredi _(preuve: 00:05)_\n\n## Questions ouvertes\n\n_Aucun élément détecté_\n\n## Transcription\n\n- **[00:00] Alice** — Décision : lancer P9_ALPHA vendredi.\n- **[00:05] Bob** — Action : Bob prépare P9_REPORT avant vendredi.\n",
+      "json": "{\n  \"schemaVersion\": 1,\n  \"generatedAt\": \"2026-09-30T05:27:12.235Z\",\n  \"language\": \"fr\",\n  \"analysisMode\": \"deterministic\",\n  \"source\": {\n    \"kind\": \"text\",\n    \"name\": \"meeting.txt\"\n  },\n  \"title\": \"meeting\",\n  \"summary\": \"Décision : lancer P9_ALPHA vendredi. Action : Bob prépare P9_REPORT avant vendredi.\",\n  \"keyPoints\": [\n    \"Décision : lancer P9_ALPHA vendredi.\",\n    \"Action : Bob prépare P9_REPORT avant vendredi.\"\n  ],\n  \"participants\": [\n    {\n      \"name\": \"Alice\",\n      \"speakingTurns\": 1\n    },\n    {\n      \"name\": \"Bob\",\n      \"speakingTurns\": 1\n    }\n  ],\n  \"decisions\": [\n    {\n      \"id\": \"decision-1\",\n      \"text\": \"Décision : lancer P9_ALPHA vendredi.\",\n      \"owner\": \"Alice\",\n      \"evidence\": {\n        \"sequence\": 1,\n        \"timestamp\": \"00:00\",\n        \"quote\": \"Décision : lancer P9_ALPHA vendredi.\"\n      }\n    }\n  ],\n  \"actionItems\": [\n    {\n      \"id\": \"action-1\",\n      \"task\": \"Action : Bob prépare P9_REPORT avant vendredi.\",\n      \"owner\": \"Bob\",\n      \"dueDate\": \"vendredi\",\n      \"status\": \"open\",\n      \"evidence\": {\n        \"sequence\": 2,\n        \"timestamp\": \"00:05\",\n        \"quote\": \"Action : Bob prépare P9_REPORT avant vendredi.\"\n      }\n    }\n  ],\n  \"openQuestions\": [],\n  \"transcript\": [\n    {\n      \"sequence\": 1,\n      \"startSeconds\": 0,\n      \"endSeconds\": null,\n      \"speaker\": \"Alice\",\n      \"text\": \"Décision : lancer P9_ALPHA vendredi.\"\n    },\n    {\n      \"sequence\": 2,\n      \"startSeconds\": 5,\n      \"endSeconds\": null,\n      \"speaker\": \"Bob\",\n      \"text\": \"Action : Bob prépare P9_REPORT avant vendredi.\"\n    }\n  ]\n}",
+      "paths": {
+        "markdown": "meeting-report.md",
+        "json": "meeting-report.json"
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    },
+    {
+      "check": "file exists and nonempty",
+      "passed": true
+    },
+    {
+      "check": "file content",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 36
+}

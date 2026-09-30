@@ -1,0 +1,56 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → execute_code({"code": "console.log(6*7)", "language": "javascript"})
+Attendu: 42
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture execute_code.json ===
+{
+  "name": "execute_code",
+  "input": {
+    "code": "console.log(6*7)",
+    "language": "javascript"
+  },
+  "expected": "42",
+  "result": {
+    "success": true,
+    "output": "{\n  \"kind\": \"execute_code_result\",\n  \"ok\": true,\n  \"runId\": \"exec-ce29846a-b281-42f4-8b6b-b1306f6889f8\",\n  \"language\": \"javascript\",\n  \"startedAt\": \"2026-09-30T04:40:09.077Z\",\n  \"completedAt\": \"2026-09-30T04:40:09.116Z\",\n  \"durationMs\": 39,\n  \"commandPreview\": \"node script.mjs\",\n  \"runDir\": \"<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8\",\n  \"scriptPath\": \"<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/script.mjs\",\n  \"stdoutPath\": \"<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stdout.log\",\n  \"stderrPath\": \"<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stderr.log\",\n  \"resultPath\": \"<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/result.json\",\n  \"exitCode\": 0,\n  \"signal\": null,\n  \"timedOut\": false,\n  \"stdout\": \"42\\n\",\n  \"stderr\": \"\",\n  \"files\": [\n    \"result.json\",\n    \"script.mjs\",\n    \"stderr.log\",\n    \"stdout.log\"\n  ]\n}",
+    "data": {
+      "kind": "execute_code_result",
+      "ok": true,
+      "runId": "exec-ce29846a-b281-42f4-8b6b-b1306f6889f8",
+      "language": "javascript",
+      "startedAt": "2026-09-30T04:40:09.077Z",
+      "completedAt": "2026-09-30T04:40:09.116Z",
+      "durationMs": 39,
+      "commandPreview": "node script.mjs",
+      "runDir": "<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8",
+      "scriptPath": "<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/script.mjs",
+      "stdoutPath": "<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stdout.log",
+      "stderrPath": "<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stderr.log",
+      "resultPath": "<QA_PROJECT>/.codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/result.json",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "stdout": "42\n",
+      "stderr": "",
+      "files": [
+        "result.json",
+        "script.mjs",
+        "stderr.log",
+        "stdout.log"
+      ]
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 41
+}

@@ -1,0 +1,32 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → memory_propose({"key": "p9-candidate", "value": "P9_CANDIDATE", "scope": "project", "confidence": 0.9})
+Attendu: candidate|P9_CANDIDATE
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture memory_propose.json ===
+{
+  "name": "memory_propose",
+  "input": {
+    "key": "p9-candidate",
+    "value": "P9_CANDIDATE",
+    "scope": "project",
+    "confidence": 0.9
+  },
+  "expected": "candidate|P9_CANDIDATE",
+  "result": {
+    "success": true,
+    "output": "Proposed memory candidate mc-munm9zs1rd1 (project/context). Approve with: /memory accept mc-munm9zs1rd1"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 6
+}

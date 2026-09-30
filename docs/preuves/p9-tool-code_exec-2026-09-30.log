@@ -1,0 +1,34 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → code_exec ; séquence agent-extra.json
+Attendu: Assertions de la séquence et résultat visible
+Observé: Séquence réelle contrôlée sur profil et projet isolés.
+Portée: Séquence réelle contrôlée sur profil et projet isolés.
+Verdict: prouvée
+
+=== Capture agent-extra.json ===
+[
+  {
+    "name": "apply_patch",
+    "input": {
+      "patch": "*** Begin Patch\n*** Add File: p9-apply.txt\n+P9_APPLIED\n*** End Patch"
+    },
+    "result": {
+      "success": true,
+      "output": "Added: p9-apply.txt"
+    },
+    "passed": true
+  },
+  {
+    "name": "code_exec",
+    "input": {
+      "code": "const r=await tools.read_file({path:'data.json'}); text(r.output);"
+    },
+    "result": {
+      "success": true,
+      "output": "Script completed in 25ms\n\nContents of <QA_PROJECT>/data.json:\n1: {\"marker\":\"P9_JSON\",\"nested\":{\"value\":42}}"
+    },
+    "passed": true
+  }
+]

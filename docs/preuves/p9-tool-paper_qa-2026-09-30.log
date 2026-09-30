@@ -1,0 +1,32 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → paper_qa({"question": "How many blue boxes does the fixture report?", "paths": ["p9.pdf"]})
+Attendu: forty two|P9_PDF
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Un passage PDF synthétique, réponse quarante-deux via Ollama et référence de page ; pas un benchmark scientifique.
+Verdict: prouvée
+
+=== Capture paper_qa.json ===
+{
+  "name": "paper_qa",
+  "input": {
+    "question": "How many blue boxes does the fixture report?",
+    "paths": [
+      "p9.pdf"
+    ]
+  },
+  "expected": "forty two|P9_PDF",
+  "result": {
+    "success": true,
+    "output": "# Paper QA : How many blue boxes does the fixture report?\n\nCorpus : 1 passage(s) indexé(s) depuis 1/1 PDF fourni(s) | récupérés : 1 | retenus (RCS) : 1\nRecherche : hybride (BM25 + sémantique)\nSynthèse : LLM | Statut : répondu (ancré) (answered)\n\n---\nThe fixture reports forty two blue boxes [1].\n\n## Références\n\n[1] p9.pdf (p.1) — « P9_PDF scientific fixture reports forty two blue boxes. »"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 3979
+}

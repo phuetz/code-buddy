@@ -1,0 +1,51 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → video_route({"request": {"id": "p9-route", "use_case": "bulk-variation", "content_tier": "safe", "quantity": 1, "requires_lip_sync": false, "premium": false}, "capacity": {"gpuNode": true, "localGpu": false, "google_flow": false, "remaining_flow_credits": 0, "max_flow_credits_per_batch": 0}})
+Attendu: p9-route
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture video_route.json ===
+{
+  "name": "video_route",
+  "input": {
+    "request": {
+      "id": "p9-route",
+      "use_case": "bulk-variation",
+      "content_tier": "safe",
+      "quantity": 1,
+      "requires_lip_sync": false,
+      "premium": false
+    },
+    "capacity": {
+      "gpuNode": true,
+      "localGpu": false,
+      "google_flow": false,
+      "remaining_flow_credits": 0,
+      "max_flow_credits_per_batch": 0
+    }
+  },
+  "expected": "p9-route",
+  "result": {
+    "success": true,
+    "output": "{\n  \"requestId\": \"p9-route\",\n  \"primary\": \"gpuNode-comfyui\",\n  \"fallbacks\": [],\n  \"executionMode\": \"automatic-local\",\n  \"estimatedFlowCredits\": 0,\n  \"reason\": \"The Flow credit ceiling or availability guardrail selected a local engine\"\n}",
+    "data": {
+      "requestId": "p9-route",
+      "primary": "gpuNode-comfyui",
+      "fallbacks": [],
+      "executionMode": "automatic-local",
+      "estimatedFlowCredits": 0,
+      "reason": "The Flow credit ceiling or availability guardrail selected a local engine"
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 0
+}

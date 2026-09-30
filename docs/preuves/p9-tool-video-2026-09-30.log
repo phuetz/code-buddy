@@ -1,0 +1,41 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → video({"operation": "info", "path": "clip.mp4"})
+Attendu: duration|320|h264
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture video.json ===
+{
+  "name": "video",
+  "input": {
+    "operation": "info",
+    "path": "clip.mp4"
+  },
+  "expected": "duration|320|h264",
+  "result": {
+    "success": true,
+    "output": "🎬 Video: clip.mp4\n   Format: MP4\n   Size: 21.78 KB\n   Duration: 0:02\n   Resolution: 320x240\n   Frame Rate: 25 fps\n   Codec: h264\n   Bitrate: 89 kbps",
+    "data": {
+      "filename": "clip.mp4",
+      "format": "MP4",
+      "size": "21.78 KB",
+      "duration": 2,
+      "width": 320,
+      "height": 240,
+      "codec": "h264",
+      "fps": 25,
+      "bitrate": 89
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 44
+}

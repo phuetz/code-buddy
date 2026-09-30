@@ -1,0 +1,55 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → lsp_references({"file": "sample.ts", "symbol": "add"})
+Attendu: Références réelles de add
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture lsp_references.json ===
+{
+  "name": "lsp_references",
+  "input": {
+    "file": "sample.ts",
+    "symbol": "add"
+  },
+  "expected": "Références réelles de add",
+  "result": {
+    "success": true,
+    "output": "References for symbol \"add\" (2):\n- <QA_PROJECT>/sample.ts:1:17-1:20\n- <QA_PROJECT>/sample.ts:3:13-3:16",
+    "data": {
+      "file": "<QA_PROJECT>/sample.ts",
+      "language": "typescript",
+      "position": {
+        "line": 1,
+        "column": 1
+      },
+      "locations": [
+        {
+          "file": "<QA_PROJECT>/sample.ts",
+          "line": 1,
+          "column": 17,
+          "endLine": 1,
+          "endColumn": 20
+        },
+        {
+          "file": "<QA_PROJECT>/sample.ts",
+          "line": 3,
+          "column": 13,
+          "endLine": 3,
+          "endColumn": 16
+        }
+      ],
+      "total": 2
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 10
+}

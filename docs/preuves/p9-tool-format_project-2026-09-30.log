@@ -1,0 +1,47 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → format_project({"root": "<QA_PROJECT>/format-fixture", "write": true})
+Attendu: Le fichier est réellement formaté puis relu
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture format_project.json ===
+{
+  "name": "format_project",
+  "input": {
+    "root": "<QA_PROJECT>/format-fixture",
+    "write": true
+  },
+  "expected": "Le fichier est réellement formaté puis relu",
+  "result": {
+    "success": true,
+    "output": "Prettier write: 1 file(s) reported",
+    "data": {
+      "root": "<QA_PROJECT>/format-fixture",
+      "missing": false,
+      "write": true,
+      "files": [
+        "messy.js 20ms"
+      ],
+      "timedOut": false
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    },
+    {
+      "check": "file exists and nonempty",
+      "passed": true
+    },
+    {
+      "check": "file content",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 106
+}

@@ -1,0 +1,41 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → generate_document({"type": "docx", "title": "P9 Document", "content": "# P9_DOC\nFixture document.", "outputPath": "p9.docx"})
+Attendu: Fichier non vide
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture generate_document.json ===
+{
+  "name": "generate_document",
+  "input": {
+    "type": "docx",
+    "title": "P9 Document",
+    "content": "# P9_DOC\nFixture document.",
+    "outputPath": "p9.docx"
+  },
+  "expected": "Fichier non vide",
+  "result": {
+    "success": true,
+    "output": "Created DOCX: p9.docx\nDOCX validation:\n- relationships: 7\n- embedded image relationships: 0\n- media files: 0",
+    "data": {
+      "outputPath": "p9.docx",
+      "embeddedImages": [],
+      "docxValidation": {
+        "relationshipCount": 7,
+        "embeddedRelationshipCount": 0,
+        "mediaFileCount": 0
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "file exists and nonempty",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 48
+}

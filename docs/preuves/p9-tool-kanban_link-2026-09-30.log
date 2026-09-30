@@ -1,0 +1,68 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → kanban_link({"id": "p9-card", "target": "note.md"})
+Attendu: note.md
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture kanban_link.json ===
+{
+  "name": "kanban_link",
+  "input": {
+    "id": "p9-card",
+    "target": "note.md"
+  },
+  "expected": "note.md",
+  "result": {
+    "success": true,
+    "output": "{\n  \"action\": \"kanban_link\",\n  \"boardPath\": \"<QA_PROJECT>/.codebuddy/colab-tasks.json\",\n  \"card\": {\n    \"id\": \"p9-card\",\n    \"title\": \"P9_CARD\",\n    \"status\": \"in_progress\",\n    \"priority\": \"medium\",\n    \"tags\": [],\n    \"links\": [\n      {\n        \"id\": \"lnk-1790743220117-1\",\n        \"target\": \"note.md\",\n        \"createdAt\": \"2026-09-30T04:40:20.117Z\"\n      }\n    ],\n    \"comments\": [\n      {\n        \"id\": \"cmt-1790743220101-1\",\n        \"text\": \"P9_COMMENT\",\n        \"createdAt\": \"2026-09-30T04:40:20.101Z\"\n      },\n      {\n        \"id\": \"cmt-1790743220108-1\",\n        \"text\": \"Blocked: P9_BLOCK\",\n        \"createdAt\": \"2026-09-30T04:40:20.108Z\"\n      },\n      {\n        \"id\": \"cmt-1790743220113-1\",\n        \"text\": \"P9_UNBLOCK\",\n        \"createdAt\": \"2026-09-30T04:40:20.113Z\"\n      }\n    ],\n    \"heartbeats\": [],\n    \"createdAt\": \"2026-09-30T04:40:20.096Z\",\n    \"updatedAt\": \"2026-09-30T04:40:20.096Z\"\n  }\n}",
+    "data": {
+      "action": "kanban_link",
+      "boardPath": "<QA_PROJECT>/.codebuddy/colab-tasks.json",
+      "card": {
+        "id": "p9-card",
+        "title": "P9_CARD",
+        "status": "in_progress",
+        "priority": "medium",
+        "tags": [],
+        "links": [
+          {
+            "id": "lnk-1790743220117-1",
+            "target": "note.md",
+            "createdAt": "2026-09-30T04:40:20.117Z"
+          }
+        ],
+        "comments": [
+          {
+            "id": "cmt-1790743220101-1",
+            "text": "P9_COMMENT",
+            "createdAt": "2026-09-30T04:40:20.101Z"
+          },
+          {
+            "id": "cmt-1790743220108-1",
+            "text": "Blocked: P9_BLOCK",
+            "createdAt": "2026-09-30T04:40:20.108Z"
+          },
+          {
+            "id": "cmt-1790743220113-1",
+            "text": "P9_UNBLOCK",
+            "createdAt": "2026-09-30T04:40:20.113Z"
+          }
+        ],
+        "heartbeats": [],
+        "createdAt": "2026-09-30T04:40:20.096Z",
+        "updatedAt": "2026-09-30T04:40:20.096Z"
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 4
+}

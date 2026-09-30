@@ -1,0 +1,47 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → text_to_speech({"text": "P9 evidence forty two", "provider": "espeak", "format": "wav", "output_path": "tts-p9.wav"})
+Attendu: wav
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture text_to_speech.json ===
+{
+  "name": "text_to_speech",
+  "input": {
+    "text": "P9 evidence forty two",
+    "provider": "espeak",
+    "format": "wav",
+    "output_path": "tts-p9.wav"
+  },
+  "expected": "wav",
+  "result": {
+    "success": true,
+    "output": "{\n  \"kind\": \"text_to_speech_result\",\n  \"ok\": true,\n  \"provider\": \"espeak\",\n  \"outputPath\": \"<QA_PROJECT>/tts-p9.wav\",\n  \"mediaPath\": \"MEDIA:<QA_PROJECT>/tts-p9.wav\",\n  \"format\": \"wav\",\n  \"textLength\": 21,\n  \"generatedAt\": \"2026-09-30T05:34:15.209Z\",\n  \"sizeBytes\": 83252\n}",
+    "data": {
+      "kind": "text_to_speech_result",
+      "ok": true,
+      "provider": "espeak",
+      "outputPath": "<QA_PROJECT>/tts-p9.wav",
+      "mediaPath": "MEDIA:<QA_PROJECT>/tts-p9.wav",
+      "format": "wav",
+      "textLength": 21,
+      "generatedAt": "2026-09-30T05:34:15.209Z",
+      "sizeBytes": 83252
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    },
+    {
+      "check": "file exists and nonempty",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 86
+}

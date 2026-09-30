@@ -1,0 +1,33 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → plan({"action": "init", "goal": "P9_PLAN"})
+Attendu: P9_PLAN|created
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture plan.json ===
+{
+  "name": "plan",
+  "input": {
+    "action": "init",
+    "goal": "P9_PLAN"
+  },
+  "expected": "P9_PLAN|created",
+  "result": {
+    "success": true,
+    "output": "Created new plan at <QA_PROJECT>/PLAN.md",
+    "data": {
+      "content": "# Execution Plan\n\n**Goal:** P9_PLAN\n\n## Steps\n"
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 1
+}

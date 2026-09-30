@@ -1,0 +1,11 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: buddy speak --engine voicebox "Preuve vocale." --out <QA_PROJECT>/voicebox.wav
+Attendu: WAV valide et non vide
+Observé: Voicebox/Kokoro produit un WAV mono 24 kHz, 39 000 trames (1,625 s).
+Portée: WAV mono 24 kHz, 39 000 trames (1,625 s), moteur Kokoro ; ni microphone ni lecture sonore.
+Verdict: prouvée
+
+=== Capture speak-retry.log ===
+Audio saved to: <QA_PROJECT>/voicebox.wav (wav)

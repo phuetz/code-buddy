@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:browser_click",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "a2ef3e997046daa2ccc095a99794f36feacb0b6fe16c4f6bda367a4b5ffc2894",
+  "artifact": "docs/preuves/p9-tool-browser_click-2026-09-30.log",
+  "summary": "Séquence réelle contrôlée sur profil et projet isolés."
+}

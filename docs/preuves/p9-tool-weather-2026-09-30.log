@@ -1,0 +1,51 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → weather({"location": "Paris", "days": 1})
+Attendu: Paris|temperature
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture weather.json ===
+{
+  "name": "weather",
+  "input": {
+    "location": "Paris",
+    "days": 1
+  },
+  "expected": "Paris|temperature",
+  "result": {
+    "success": true,
+    "output": "Météo à Paris (France) : 22°C (ressenti 21°C), nuageux ☁️, vent 11 km/h, humidité 63 %.\n2026-09-30 : 19–24°C, orageux ⛈️ (pluie 95 %)",
+    "data": {
+      "type": "weather",
+      "location": "Paris, France",
+      "current": {
+        "temperature": 21.5,
+        "feelsLike": 21.2,
+        "condition": "cloudy",
+        "humidity": 63,
+        "windSpeed": 10.8
+      },
+      "units": "metric",
+      "forecast": [
+        {
+          "date": "2026-09-30",
+          "high": 23.9,
+          "low": 19,
+          "condition": "thunderstorm",
+          "precipitation": 95
+        }
+      ]
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 171
+}

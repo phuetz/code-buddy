@@ -1,0 +1,30 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: buddy code-explorer ask "add" --json
+Attendu: Définitions réelles add dans sample.ts et sample.js
+Observé: CLI raccordée au MCP configuré ; deux processus froids terminent avec des définitions.
+Portée: Deux requêtes froides de définitions via MCP local après correction ; pas un benchmark de grands dépôts.
+Verdict: prouvée
+
+=== Capture code-explorer-cli-before.log ===
+{
+  "likelyFiles": [],
+  "dependentSymbols": [],
+  "testsToWatch": [],
+  "notes": "CodeExplorer is not configured (missing endpoint)."
+}
+
+=== Capture code-explorer-cli-after.json ===
+[
+  {
+    "exit": 0,
+    "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n",
+    "passed": true
+  },
+  {
+    "exit": 0,
+    "output": "{\n  \"likelyFiles\": [],\n  \"dependentSymbols\": [],\n  \"testsToWatch\": [],\n  \"notes\": \"{\\n  \\\"definitions\\\": [\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.js\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.js:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    },\\n    {\\n      \\\"endLine\\\": 1,\\n      \\\"filePath\\\": \\\"sample.ts\\\",\\n      \\\"label\\\": \\\"Function\\\",\\n      \\\"name\\\": \\\"add\\\",\\n      \\\"nodeId\\\": \\\"Function:sample.ts:add\\\",\\n      \\\"score\\\": 2.337935655977053,\\n      \\\"startLine\\\": 1\\n    }\\n  ],\\n  \\\"process_symbols\\\": [],\\n  \\\"processes\\\": []\\n}\"\n}\n",
+    "passed": true
+  }
+]

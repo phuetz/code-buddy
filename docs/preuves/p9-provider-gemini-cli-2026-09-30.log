@@ -1,0 +1,29 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: CodeBuddyClient.chat via provider gemini-cli, modèle gemini-2.5-flash
+Attendu: P9_GEMINI_OK
+Observé: Gemini CLI répond effectivement avec une clé préexistante.
+Portée: Une requête minimale avec clé préexistante ; confiance bornée au workspace QA, aucune session OAuth copiée.
+Verdict: prouvée
+
+=== Capture gemini-cli-retry.log ===
+{"choices":[{"message":{"role":"assistant","content":"P9_GEMINI_OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":9032,"completion_tokens":6,"total_tokens":9038}}
+
+=== Capture gemini-cli-live.json ===
+{
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "P9_GEMINI_OK"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 9032,
+    "completion_tokens": 6,
+    "total_tokens": 9038
+  }
+}

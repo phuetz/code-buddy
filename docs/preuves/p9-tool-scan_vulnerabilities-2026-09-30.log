@@ -1,0 +1,30 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → scan_vulnerabilities({"path": "<QA_PROJECT>", "package_manager": "npm"})
+Attendu: 0|No vulnerabilities|No .*lock
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture scan_vulnerabilities.json ===
+{
+  "name": "scan_vulnerabilities",
+  "input": {
+    "path": "<QA_PROJECT>",
+    "package_manager": "npm"
+  },
+  "expected": "0|No vulnerabilities|No .*lock",
+  "result": {
+    "success": true,
+    "output": "## NPM (0 vulnerabilities)\n  Critical: 0 | High: 0 | Medium: 0 | Low: 0\n  No known vulnerabilities found."
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 278
+}

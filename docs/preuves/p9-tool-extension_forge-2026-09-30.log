@@ -1,0 +1,58 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → extension_forge({"kind": "widget", "name": "p9-fixture-widget", "description": "Synthetic P9 widget", "template": "<div>P9_WIDGET {{value}}</div>", "sample": {"value": 42}})
+Attendu: P9_WIDGET|authored|registered|widget
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Création/validation puis relecture de widget.html et meta.json ; rendu graphique du widget non vérifié.
+Verdict: prouvée
+
+=== Capture extension_forge.json ===
+{
+  "name": "extension_forge",
+  "input": {
+    "kind": "widget",
+    "name": "p9-fixture-widget",
+    "description": "Synthetic P9 widget",
+    "template": "<div>P9_WIDGET {{value}}</div>",
+    "sample": {
+      "value": 42
+    }
+  },
+  "expected": "P9_WIDGET|authored|registered|widget",
+  "result": {
+    "success": true,
+    "output": "Created authored widget `p9-fixture-widget`; it now renders payloads with `type: \"p9-fixture-widget\"`.",
+    "data": {
+      "artifactKind": "widget",
+      "name": "p9-fixture-widget",
+      "createdWidgets": [
+        "p9-fixture-widget"
+      ]
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 1
+}
+
+=== Artefact auteur persisté : widget.html ===
+<div>P9_WIDGET {{value}}</div>
+
+=== Artefact auteur persisté : meta.json ===
+{
+  "kind": "p9-fixture-widget",
+  "source": "authored",
+  "createdAt": 1790747385498,
+  "brief": "Synthetic P9 widget",
+  "dataTypes": [
+    "p9-fixture-widget"
+  ],
+  "usedCount": 0,
+  "lastUsedAt": null
+}

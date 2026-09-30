@@ -1,0 +1,225 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: buddy evolve propose --fiche-input <QA_FICHE> --source research --model qwen3:4b-instruct --json
+Attendu: Proposition planifiée et archive persistée
+Observé: Fiche de recherche reliée à une publication réelle ; proposition de trois étapes archivée.
+Portée: Publication réelle ingérée puis proposition archivée ; gain hypothétique de la fiche, aucune variante exécutée ni mesure comparative.
+Verdict: prouvée
+
+=== Capture dgm-ingest.json ===
+{
+  "id": "discovery:collective:arxiv-2307-03172",
+  "type": "discovery",
+  "name": "arxiv:2307.03172",
+  "text": "Lost in the Middle: How Language Models Use Long Contexts. The paper studies question answering and key-value retrieval in long contexts. Relevant information is used less reliably in middle positions. It motivates evaluation of context assembly and compression with equal budgets and different relevant-document positions.",
+  "salience": 0.6931471158830588,
+  "mentions": 1,
+  "confidence": 0.8,
+  "corroborations": 1,
+  "agentId": "p9-research",
+  "source": "arxiv",
+  "relations": [
+    {
+      "predicate": "supersedes",
+      "target": "discovery:collective:arxiv-2307-03172@95c39e01e9915e2d",
+      "reason": "fact changed (was 95c39e01)"
+    }
+  ]
+}
+=== Capture dgm-propose.log ===
+{
+  "status": "planned",
+  "archivePath": "<QA_HOME>/.codebuddy/self-improvement/evolution/proposals/proposal-eda2b24b-0cb2-48be-aadd-be3e31550d0f.json",
+  "events": [
+    {
+      "stage": "source",
+      "status": "ok",
+      "code": "RESEARCH_SELECTED",
+      "detail": "research source selected."
+    },
+    {
+      "stage": "provider",
+      "status": "ok",
+      "code": "PROVIDER_AVAILABLE",
+      "detail": "Configured LLM provider detected."
+    },
+    {
+      "stage": "recall",
+      "status": "ok",
+      "code": "RECALL_FOUND",
+      "detail": "37 discovery matches recalled."
+    },
+    {
+      "stage": "filter",
+      "status": "ok",
+      "code": "WEAKNESS_SELECTED",
+      "detail": "Domain context-rag; article discovery:collective:arxiv-2307-03172; similarity 0.4706734096292504."
+    },
+    {
+      "stage": "goal",
+      "status": "ok",
+      "code": "GOAL_SYNTHESIZED",
+      "detail": "Optimiser la composition du contexte en priorisant les positions initiales et finales du contexte pour améliorer la fiabilité de récupération des informations pertinentes, en appliquant une compression progressive du contexte avec un équilibre de budget entre les parties centrales et périphériques."
+    },
+    {
+      "stage": "plan",
+      "status": "ok",
+      "code": "PLAN_CREATED",
+      "detail": "3 step(s)."
+    },
+    {
+      "stage": "archive",
+      "status": "ok",
+      "code": "PLAN_ARCHIVED",
+      "detail": "Plan stored in isolated proposal archive."
+    }
+  ],
+  "record": {
+    "id": "proposal-eda2b24b-0cb2-48be-aadd-be3e31550d0f",
+    "createdAt": "2026-09-30T05:01:48.129Z",
+    "source": "research",
+    "fiche": {
+      "schemaVersion": 1,
+      "lane": "research",
+      "problem": {
+        "statement": "Position sensitivity of retrieved context is not measured by this QA campaign.",
+        "evidence": {
+          "kind": "research-gap",
+          "reference": "https://arxiv.org/abs/2307.03172",
+          "observedAt": "2026-09-30T04:57:37.881708Z"
+        }
+      },
+      "research": {
+        "articleId": "arxiv:2307.03172",
+        "method": "Measure key-value retrieval with relevant context at the beginning, middle and end."
+      },
+      "feature": {
+        "id": "context-rag",
+        "files": [
+          "src/context/context-manager-v2.ts"
+        ]
+      },
+      "hypothesis": {
+        "metric": "key-value retrieval accuracy",
+        "direction": "increase",
+        "minimumImprovement": 0.05
+      },
+      "comparison": {
+        "currentMethod": "Existing context ordering",
+        "proposedMethod": "Position-balanced context ordering",
+        "equalBudget": {
+          "runsPerArm": 3,
+          "maxDurationMsPerArm": 10000,
+          "maxCostUsdPerArm": 0
+        }
+      },
+      "acceptance": {
+        "minResult": 0.8,
+        "maxDurationMs": 10000,
+        "maxCostUsd": 0
+      }
+    },
+    "weakness": {
+      "id": "research-context-rag",
+      "kind": "research",
+      "goal": "Optimiser la composition du contexte en priorisant les positions initiales et finales du contexte pour améliorer la fiabilité de récupération des informations pertinentes, en appliquant une compression progressive du contexte avec un équilibre de budget entre les parties centrales et périphériques."
+    },
+    "feature": {
+      "id": "context-rag",
+      "name": "Context & RAG",
+      "catalogIds": [
+        "environment:CODEBUDDY_AUTOCOMPACT_BUFFER_TOKENS",
+        "environment:CODEBUDDY_AUTOCOMPACT_PCT",
+        "environment:CODEBUDDY_CONTEXT_ZOOM",
+        "environment:CODEBUDDY_CONTEXT_ZOOM_MAX_MB",
+        "environment:CODEBUDDY_LM_RESIZER",
+        "environment:CODEBUDDY_LM_RESIZER_BIN",
+        "environment:CODEBUDDY_LM_RESIZER_SERVER_TOKEN",
+        "environment:CODEBUDDY_LM_RESIZER_STORE",
+        "environment:CODEBUDDY_LM_RESIZER_TOKEN",
+        "environment:CODEBUDDY_LM_RESIZER_TOKEN_FILE",
+        "environment:CODEBUDDY_LM_RESIZER_URL",
+        "environment:CODEBUDDY_MODEL",
+        "environment:CODEBUDDY_SNAPSHOT_INTERVAL_MIN",
+        "environment:CODEBUDDY_TOKEN_JUICE",
+        "environment:LM_RESIZER_SERVER_TOKEN",
+        "environment:LM_RESIZER_URL",
+        "slash:compact",
+        "slash:context"
+      ]
+    },
+    "article": {
+      "id": "discovery:collective:arxiv-2307-03172",
+      "source": "arxiv",
+      "text": "Lost in the Middle: How Language Models Use Long Contexts. The paper studies question answering and key-value retrieval in long contexts. Relevant information is used less reliably in middle positions. It motivates evaluation of context assembly and compression with equal budgets and different relevant-document positions.",
+      "similarity": 0.4706734096292504
+    },
+    "plan": {
+      "approach": "fresh",
+      "basedOn": "none",
+      "summary": "Développer une nouvelle stratégie de composition du contexte en priorisant les positions initiales et finales avec une compression progressive pour améliorer la fiabilité de récupération des informations.",
+      "steps": [
+        {
+          "title": "Identifier les positions clés",
+          "description": "Extraire les premières et dernières positions du contexte comme points de référence pour la récupération des informations.",
+          "rationale": "Ces positions sont les plus fiables pour capturer les contextes pertinents et réduisent le risque de pertes d'information."
+        },
+        {
+          "title": "Appliquer une compression progressive",
+          "description": "Réduire le contexte en supprimant les zones périphériques, en conservant les zones centrales, avec un seuil dynamique basé sur la longueur du contexte.",
+          "rationale": "Cela équilibre le budget entre les parties centrales (pertinentes) et périphériques (redondantes), améliorant l'efficacité sans perte d'information critique."
+        },
+        {
+          "title": "Évaluer la fiabilité des résultats",
+          "description": "Utiliser les tests existants pour vérifier que les informations clés sont préservées et que la récupération est plus fiable.",
+          "rationale": "Les tests permettent de valider l'impact de la nouvelle composition sans modifier les benchmarks ou les gates."
+        }
+      ]
+    },
+    "events": [
+      {
+        "stage": "source",
+        "status": "ok",
+        "code": "RESEARCH_SELECTED",
+        "detail": "research source selected."
+      },
+      {
+        "stage": "provider",
+        "status": "ok",
+        "code": "PROVIDER_AVAILABLE",
+        "detail": "Configured LLM provider detected."
+      },
+      {
+        "stage": "recall",
+        "status": "ok",
+        "code": "RECALL_FOUND",
+        "detail": "37 discovery matches recalled."
+      },
+      {
+        "stage": "filter",
+        "status": "ok",
+        "code": "WEAKNESS_SELECTED",
+        "detail": "Domain context-rag; article discovery:collective:arxiv-2307-03172; similarity 0.4706734096292504."
+      },
+      {
+        "stage": "goal",
+        "status": "ok",
+        "code": "GOAL_SYNTHESIZED",
+        "detail": "Optimiser la composition du contexte en priorisant les positions initiales et finales du contexte pour améliorer la fiabilité de récupération des informations pertinentes, en appliquant une compression progressive du contexte avec un équilibre de budget entre les parties centrales et périphériques."
+      },
+      {
+        "stage": "plan",
+        "status": "ok",
+        "code": "PLAN_CREATED",
+        "detail": "3 step(s)."
+      },
+      {
+        "stage": "archive",
+        "status": "ok",
+        "code": "PLAN_ARCHIVED",
+        "detail": "Plan stored in isolated proposal archive."
+      }
+    ]
+  }
+}

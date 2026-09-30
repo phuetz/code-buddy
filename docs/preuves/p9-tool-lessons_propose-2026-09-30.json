@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:lessons_propose",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "531f1b83ebbb4b189f42e6bb2cf70e67eb80b48ab09ed8fe0436fd2c0fad1983",
+  "artifact": "docs/preuves/p9-tool-lessons_propose-2026-09-30.log",
+  "summary": "Outil réel exécuté sur une fixture isolée ; oracle contrôlé."
+}

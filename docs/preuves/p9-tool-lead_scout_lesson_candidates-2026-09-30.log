@@ -1,0 +1,62 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → lead_scout_lesson_candidates({"goal": "Review synthetic fixture organization", "stats": {"processed": 1, "selectedLeads": 1, "needsPublicEnrichment": 1}})
+Attendu: candidate|lesson|contact|enrichment
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture lead_scout_lesson_candidates.json ===
+{
+  "name": "lead_scout_lesson_candidates",
+  "input": {
+    "goal": "Review synthetic fixture organization",
+    "stats": {
+      "processed": 1,
+      "selectedLeads": 1,
+      "needsPublicEnrichment": 1
+    }
+  },
+  "expected": "candidate|lesson|contact|enrichment",
+  "result": {
+    "success": true,
+    "output": "# Lead Scout Lesson Candidates: Review synthetic fixture organization\n\nContext: Lead Scout\nReview required: yes\nPersistence tool: lessons_add\n\n## Candidates\n1. [INSIGHT] 100% of selected leads for \"Review synthetic fixture organization\" still need public enrichment; run lead_scout_enrichment_plan before outreach review. (confidence 0.9)\n\n## Guidance\n- Review candidates before persisting them with lessons_add.\n- Persist only stable reusable patterns, not one-off data or raw page content.\n- Prefer PATTERN for repeatable extraction behavior and RULE for safety constraints.\n- Keep lessons short enough to steer future runs without replacing source evidence.\n\nStructured result:\n{\n  \"goal\": \"Review synthetic fixture organization\",\n  \"context\": \"Lead Scout\",\n  \"candidates\": [\n    {\n      \"category\": \"INSIGHT\",\n      \"content\": \"100% of selected leads for \\\"Review synthetic fixture organization\\\" still need public enrichment; run lead_scout_enrichment_plan before outreach review.\",\n      \"context\": \"Lead Scout\",\n      \"confidence\": 0.9,\n      \"reason\": \"High share of selected leads lacks email, phone, and website.\",\n      \"source\": \"self_observed\",\n      \"lessonsAddInput\": {\n        \"category\": \"INSIGHT\",\n        \"content\": \"100% of selected leads for \\\"Review synthetic fixture organization\\\" still need public enrichment; run lead_scout_enrichment_plan before outreach review.\",\n        \"context\": \"Lead Scout\",\n        \"source\": \"self_observed\"\n      }\n    }\n  ],\n  \"reviewRequired\": true,\n  \"persistenceTool\": \"lessons_add\",\n  \"guidance\": [\n    \"Review candidates before persisting them with lessons_add.\",\n    \"Persist only stable reusable patterns, not one-off data or raw page content.\",\n    \"Prefer PATTERN for repeatable extraction behavior and RULE for safety constraints.\",\n    \"Keep lessons short enough to steer future runs without replacing source evidence.\"\n  ]\n}",
+    "data": {
+      "goal": "Review synthetic fixture organization",
+      "context": "Lead Scout",
+      "candidates": [
+        {
+          "category": "INSIGHT",
+          "content": "100% of selected leads for \"Review synthetic fixture organization\" still need public enrichment; run lead_scout_enrichment_plan before outreach review.",
+          "context": "Lead Scout",
+          "confidence": 0.9,
+          "reason": "High share of selected leads lacks email, phone, and website.",
+          "source": "self_observed",
+          "lessonsAddInput": {
+            "category": "INSIGHT",
+            "content": "100% of selected leads for \"Review synthetic fixture organization\" still need public enrichment; run lead_scout_enrichment_plan before outreach review.",
+            "context": "Lead Scout",
+            "source": "self_observed"
+          }
+        }
+      ],
+      "reviewRequired": true,
+      "persistenceTool": "lessons_add",
+      "guidance": [
+        "Review candidates before persisting them with lessons_add.",
+        "Persist only stable reusable patterns, not one-off data or raw page content.",
+        "Prefer PATTERN for repeatable extraction behavior and RULE for safety constraints.",
+        "Keep lessons short enough to steer future runs without replacing source evidence."
+      ]
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 1
+}

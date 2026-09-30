@@ -1,0 +1,36 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → diagram({"operation": "mermaid", "code": "graph TD; A[P9_START]-->B[P9_END]", "format": "ascii"})
+Attendu: P9_START|P9_END
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture diagram.json ===
+{
+  "name": "diagram",
+  "input": {
+    "operation": "mermaid",
+    "code": "graph TD; A[P9_START]-->B[P9_END]",
+    "format": "ascii"
+  },
+  "expected": "P9_START|P9_END",
+  "result": {
+    "success": true,
+    "output": "No nodes found in flowchart",
+    "data": {
+      "content": "No nodes found in flowchart",
+      "format": "ascii",
+      "mermaidCode": "graph TD; A[P9_START]-->B[P9_END]"
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 2
+}

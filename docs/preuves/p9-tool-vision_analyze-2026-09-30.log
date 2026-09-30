@@ -1,0 +1,66 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → vision_analyze({"image_path": "ocr.png", "include_ocr": true})
+Attendu: 700|P9 TEXT 42
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Métadonnées 700×180 et OCR local : TEXT 42 reconnu, P9 transcrit PO ; aucune perception sémantique d’un modèle vision.
+Verdict: prouvée
+
+=== Capture vision_analyze.json ===
+{
+  "name": "vision_analyze",
+  "input": {
+    "image_path": "ocr.png",
+    "include_ocr": true
+  },
+  "expected": "700|P9 TEXT 42",
+  "result": {
+    "success": true,
+    "output": "{\n  \"kind\": \"vision_analyze_result\",\n  \"ok\": true,\n  \"source\": \"image\",\n  \"imagePath\": \"<QA_PROJECT>/ocr.png\",\n  \"reportPath\": \"<QA_PROJECT>/.codebuddy/vision-analysis/vision-b2cc3883-06f4-4736-bd69-c025cb9b078d.json\",\n  \"generatedAt\": \"2026-09-30T05:34:14.983Z\",\n  \"metadata\": {\n    \"width\": 700,\n    \"height\": 180,\n    \"format\": \"png\",\n    \"sizeBytes\": 6137,\n    \"channels\": 3,\n    \"hasAlpha\": false,\n    \"density\": 72\n  },\n  \"colors\": {\n    \"dominant\": {\n      \"r\": 248,\n      \"g\": 248,\n      \"b\": 248\n    },\n    \"isOpaque\": true\n  },\n  \"labels\": [\n    \"image\",\n    \"png\",\n    \"landscape\"\n  ],\n  \"ocr\": {\n    \"attempted\": true,\n    \"ok\": true,\n    \"language\": \"eng\",\n    \"text\": \"PO TEXT 42\"\n  }\n}",
+    "data": {
+      "kind": "vision_analyze_result",
+      "ok": true,
+      "source": "image",
+      "imagePath": "<QA_PROJECT>/ocr.png",
+      "reportPath": "<QA_PROJECT>/.codebuddy/vision-analysis/vision-b2cc3883-06f4-4736-bd69-c025cb9b078d.json",
+      "generatedAt": "2026-09-30T05:34:14.983Z",
+      "metadata": {
+        "width": 700,
+        "height": 180,
+        "format": "png",
+        "sizeBytes": 6137,
+        "channels": 3,
+        "hasAlpha": false,
+        "density": 72
+      },
+      "colors": {
+        "dominant": {
+          "r": 248,
+          "g": 248,
+          "b": 248
+        },
+        "isOpaque": true
+      },
+      "labels": [
+        "image",
+        "png",
+        "landscape"
+      ],
+      "ocr": {
+        "attempted": true,
+        "ok": true,
+        "language": "eng",
+        "text": "PO TEXT 42"
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 162
+}

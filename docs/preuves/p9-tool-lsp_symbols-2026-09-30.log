@@ -1,0 +1,59 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → lsp_symbols({"file": "sample.ts"})
+Attendu: Symboles réels du fichier TypeScript
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture lsp_symbols.json ===
+{
+  "name": "lsp_symbols",
+  "input": {
+    "file": "sample.ts"
+  },
+  "expected": "Symboles réels du fichier TypeScript",
+  "result": {
+    "success": true,
+    "output": "Document symbols for <QA_PROJECT>/sample.ts:\n- [Function] add — <QA_PROJECT>/sample.ts:1:1-1:68\n- [Constant] bad — <QA_PROJECT>/sample.ts:2:7-2:28",
+    "data": {
+      "file": "<QA_PROJECT>/sample.ts",
+      "language": "typescript",
+      "symbols": [
+        {
+          "name": "add",
+          "kind": "Function",
+          "location": {
+            "file": "<QA_PROJECT>/sample.ts",
+            "line": 1,
+            "column": 1,
+            "endLine": 1,
+            "endColumn": 68
+          },
+          "children": []
+        },
+        {
+          "name": "bad",
+          "kind": "Constant",
+          "location": {
+            "file": "<QA_PROJECT>/sample.ts",
+            "line": 2,
+            "column": 7,
+            "endLine": 2,
+            "endColumn": 28
+          },
+          "children": []
+        }
+      ]
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 444
+}

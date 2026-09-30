@@ -1,0 +1,51 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: premier tour READY puis outil verify : exécuter node --test check.test.js
+Attendu: Vrai appel bash, TAP pass 1 puis CONFIRMED
+Observé: Vérificateur indépendant exécute réellement le test et rapporte son TAP.
+Portée: Vérification d’un seul test sur une fixture ; verdict relié à l’appel d’outil et son résultat.
+Verdict: prouvée
+
+=== Capture verify-live.json ===
+{
+  "success": true,
+  "output": "[Verifier verdict: CONFIRMED]\n{\n  \"WHAT WAS VERIFIED\": \"Execution of the test file `check.test.js` using `node --test` with TAP output.\",\n  \"RESULT PER CHECK\": \"pass\",\n  \"EVIDENCE\": \"TAP version 13\\n# 5\\n# Subtest: sum\\nok 1 - sum\\n  ---\\n  duration_ms: 0.506309\\n  ...\\n1..1\\n# tests 1\\n# suites 0\\n# pass 1\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# duration_ms 120.579703\",\n  \"FINAL VERDICT\": \"CONFIRMED\"\n}"
+}
+=== Capture verify-oracles-final.json ===
+[
+  {
+    "name": "bash",
+    "args": {
+      "command": "node --test check.test.js"
+    },
+    "result": {
+      "success": true,
+      "output": "TAP version 13\n# 5\n# Subtest: sum\nok 1 - sum\n  ---\n  duration_ms: 0.506309\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 120.579703"
+    }
+  },
+  {
+    "name": "verify",
+    "args": {
+      "instruction": "Use bash to run node --test check.test.js in the current directory. Confirm ONLY if the real test passes. Include the executed command and its stdout in evidence."
+    },
+    "result": {
+      "success": true,
+      "output": "[Verifier verdict: CONFIRMED]\n{\n  \"WHAT WAS VERIFIED\": \"Execution of the test file `check.test.js` using `node --test` with TAP output.\",\n  \"RESULT PER CHECK\": \"pass\",\n  \"EVIDENCE\": \"TAP version 13\\n# 5\\n# Subtest: sum\\nok 1 - sum\\n  ---\\n  duration_ms: 0.506309\\n  ...\\n1..1\\n# tests 1\\n# suites 0\\n# pass 1\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# duration_ms 120.579703\",\n  \"FINAL VERDICT\": \"CONFIRMED\"\n}"
+    }
+  }
+]
+=== Capture verify-final.log ===
+[2026-09-30T05:40:11.618Z]  WARN  Permission mode set to bypassPermissions — ALL operations are now auto-approved with NO confirmation. Switch back to a safer mode (e.g. default) as soon as the unattended task completes.
+[2026-09-30T05:40:14.815Z]  INFO  Token usage: [tokens: 26 in / 2 out | cost: $0.0000]
+{
+  success: true,
+  output: '[Verifier verdict: CONFIRMED]\n' +
+    '{\n' +
+    '  "WHAT WAS VERIFIED": "Execution of the test file `check.test.js` using `node --test` with TAP output.",\n' +
+    '  "RESULT PER CHECK": "pass",\n' +
+    '  "EVIDENCE": "TAP version 13\\n# 5\\n# Subtest: sum\\nok 1 - sum\\n  ---\\n  duration_ms: 0.506309\\n  ...\\n1..1\\n# tests 1\\n# suites 0\\n# pass 1\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# duration_ms 120.579703",\n' +
+    '  "FINAL VERDICT": "CONFIRMED"\n' +
+    '}',
+  error: undefined
+}

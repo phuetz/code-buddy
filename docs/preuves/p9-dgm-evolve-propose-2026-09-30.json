@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "dgm-evolve-propose",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "aca9301af3254d91e4594f5608989c3c0e54fd528b34394b42ed99a4f8db0fd7",
+  "artifact": "docs/preuves/p9-dgm-evolve-propose-2026-09-30.log",
+  "summary": "Fiche de recherche reliée à une publication réelle ; proposition de trois étapes archivée."
+}

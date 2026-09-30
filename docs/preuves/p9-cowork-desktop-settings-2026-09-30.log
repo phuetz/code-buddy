@@ -1,0 +1,1736 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: Electron Linux : updateSettings(theme=dark), config.get()
+Attendu: Valeur dark persistée et relue
+Observé: Changement de thème persisté dans le profil Electron isolé puis relu.
+Portée: Changement via le pont IPC puis relecture dans le même profil ; formulaire graphique complet et persistance après redémarrage non vérifiés.
+Verdict: prouvée
+
+=== Capture cowork-flows.json ===
+{
+  "config": {
+    "success": true,
+    "provider": "ollama",
+    "model": "qwen3:4b-instruct"
+  },
+  "App Studio": "New session\n<$0.01\nqwen3:4b-instruct\n👤 Register a face\n💬\nChat\n📋\nPlan\n📊\nActivity\n📁\nFiles\n🛠️\nApp Studio\n✨\nCreations\n🎬\nVideo Studio\n🎙️\nAssistant\n📝\nMeeting\n🖼️\nLibrary\n🧰\nCapabilities\n🛰️\nMission Control\n🧪\nLabs\n⚙️\nAdvanced\n🕘\nHistory\n🌙\n⌘K\n?\nReact + Tailwind Studio\nReact + TypeScript (bare)\nExpress API\nNode CLI\nExpo / React Native\nTemplate\nGenerate with AI\nStatic web — Pure HTML/CSS/JS, with an index.html you can open directly and no build required.\nReact + Vite — React/TypeScript SPA with Vite, package.json, and an npm run dev command.\nVue + Vite — Vue 3/TypeScript SPA with Vite, package.json, and an npm run dev command.\nPWA mobile — Installable mobile web app with manifest, service worker, icons, and offline support.\nMobile (React Native / Expo) — Native mobile app via Expo/React Native with App.tsx and an Expo package.json.\nStyle: none (neutral)\nClaude (Anthropic)\nCohere\nElevenLabs\nHugging Face\nMiniMax\nMistral AI\nOllama\nOpenAI\nOpenCode\nPerplexity AI\nReplicate\nRunway\nTogether AI\nVoltAgent\nxAI\nBMW\nBMW M\nBugatti\nFerrari\nLamborghini\nRenault\nTesla\nCisco\nClickHouse\nComposio\nHashiCorp\nMongoDB\nPostHog\nSanity\nSentry\nSupabase\nBold\nBrutalism\nColorful\nDramatic\nEnergetic\nExpressive\nNeobrutalism\nVibrant\nArtistic\nCafe\nCosmic\nCreative\nDoodle\nEditorial\nFantasy\nFriendly\nLingo\nPublication\nStorytelling\nAirtable\nCanva\nClay\nFigma\nFramer\nMiro\nWebflow\nCursor\nExpo\nGitHub\nLovable\nMission Control Design System\nRaycast\nSuperhuman\nVercel\nWarp\nAirbnb\nMeta (Store)\nNike\nShopify\nStarbucks\nAtelier Zero\nUrdu Modern (Indus Script System)\nkami (紙 / 纸)\nBinance.US\nCoinbase\nKraken\nMastercard\nRevolut\nStripe\nWise\nBento\nLevels\nPerspective\nSpacious\nApple\nIBM\nNVIDIA\nPinterest\nPlayStation\nSpaceX\nSpotify\nThe Verge\nUber\nVodafone\nWIRED\nXiaohongshu\nClean\nContemporary\nFlat\nMinimal\nModern\nMono\nRefined\nShadcn\nSimple\nSleek\nClaymorphism\nGlassmorphism\nGradient\nNeon\nNeumorphism\nSkeumorphism\nArc Browser\nCal.com\nDiscord\nDuolingo\nIntercom\nLinear\nMintlify\nNotion\nResend\nSlack\nWebex\nZapier\nAnt\nApplication\nCorporate\nDashboard\nElegant\nEnterprise\nLuxury\nMaterial\nPremium\nProfessional\nDithered\nPaper\nRetro\nVintage\nWeChat Design System\nNeutral Modern\nWarm Editorial\nAgentic\nFuturistic\nHUD Design System\nLoom Design System\nPacman\nTetris\nTotality Festival\nTrading Terminal Design System\nPick a brand style: the generated app inherits its colors, typography, and geometry.\n\nMissing required variables: description\n\na React todo app\nan Express CRUD API\na landing page\nan Expo mobile app\nPlanned root: app-studio-project\nReady\n\nDuration\n\n0s\n\nNo active build.\nStop\nWhat would you like to create?\n\nPick a type below (preview of what will be created) or describe your app above — the files, code, and preview will appear here.\n\nTEMPLATES\n\nChoose what to create\n\nSchematic thumbnails to preview the shape of the deliverable.\n\nSearch\nWeb app\n\nA complete interface with navigation, panels and workspaces.\n\nLanding page\n\nA marketing page with hero, proof points and calls to action.\n\nDashboard\n\nMetrics, charts and cards to steer an activity.\n\nPresentation\n\nA structured deck with titles, bullets and narrative pacing.\n\nSpreadsheet\n\nA grid ready to organize numbers, lists and calculations.\n\nDocument\n\nClear text with titles, paragraphs and editorial structure.\n\nReport\n\nA visual, magazine-style summary, readable at a glance.\n\nGET\nPOST\nPATCH\nDEL\nAPI\n\nA technical contract with endpoints, statuses and methods.\n\nMobile\n\nA compact screen designed for touch and quick flows.\n\nImage\n\nA visual composition with frame, subject and mood.\n\nCreative portfolio\n\nA strong visual presence to showcase work, approach and contact.\n\nPersonal blog\n\nA warm space to publish essays, notes and stories over time.\n\nSaaS landing\n\nA modern conversion page to explain, reassure and trigger the trial.\n\nAnalytics dashboard\n\nA clear cockpit to track metrics, trends and operational alerts.\n\nInteractive quiz\n\nA playful experience with questions, progress and a shareable final score.\n\nE-commerce showcase\n\nA polished store to highlight products, collections and cart.\n\nDocumentation site\n\nStructured documentation with navigation, search and code examples.\n\nMemory game\n\nA mini card-flip game, perfect for a quick, visual session.\n\nESPACE COWORK\nApp Studio\nBuild an application with a generate, test, and improve loop.",
+  "Video Studio": "New session\n<$0.01\nqwen3:4b-instruct\n👤 Register a face\n💬\nChat\n📋\nPlan\n📊\nActivity\n📁\nFiles\n🛠️\nApp Studio\n✨\nCreations\n🎬\nVideo Studio\n🎙️\nAssistant\n📝\nMeeting\n🖼️\nLibrary\n🧰\nCapabilities\n🛰️\nMission Control\n🧪\nLabs\n⚙️\nAdvanced\n🕘\nHistory\n🌙\n⌘K\n?\nAtelier Flow\nProjet sans titre\nNouveau\nPreset éditorial…\nMoment compagne\nFashion Short\nTenue / OOTD\nJournal lifestyle\nBeauté éditoriale\nMicro-récit incarné\nLaboratoire ComfyUI\nImage\nVidéo\nIngrédients\nAjouter\nTous\nPersonnages\nObjets\nLieux\nStyles\n\nAjoute des images pour créer des personnages, lieux et styles cohérents.\n\nPlan 01\n16:9 · 6s\n\nCompose ton prochain plan\n\nAjoute des ingrédients, référence-les avec @, puis génère des variations cohérentes.\n\nScènes\n4 plans · 24s\nMonter\nExporter\nAjouter un plan\nÉtendre le plan\nPlan vide\n6s\nPlan 01\nPlan vide\n6s\nPlan 02\nPlan vide\n6s\nPlan 03\nPlan vide\n6s\nPlan 04\nRéglages du plan\nPrompt\nTexte\nIngrédients\nImages clés\nRatio\n1:1\n16:9\n9:16\nSorties\n1\n2\nDurée\n4s\n6s\n8s\n10s\nMouvement caméra\nCaméra fixe\nPanoramique gauche\nTravelling arrière\nOrbite cinématique\nAudio d’ambiance\nVoix cohérente (LongCat)\nGénérer 1 variante\nESPACE COWORK\nVideo Studio\nPrepare a storyboard, generate scenes, and assemble a verifiable video.",
+  "Assistant": "New session\n<$0.01\nqwen3:4b-instruct\n👤 Register a face\n💬\nChat\n📋\nPlan\n📊\nActivity\n📁\nFiles\n🛠️\nApp Studio\n✨\nCreations\n🎬\nVideo Studio\n🎙️\nAssistant\n📝\nMeeting\n🖼️\nLibrary\n🧰\nCapabilities\n🛰️\nMission Control\n🧪\nLabs\n⚙️\nAdvanced\n🕘\nHistory\n🌙\n⌘K\n?\nAssistant\nMode assistant vocal, daemon local et companion.\nBoucle vocale en temps réel\n\nÉtat brut-sûr du micro jusqu’à MetaHuman, sans conserver les phrases.\n\nEn attente du daemon\n\nLe tableau s’activera au prochain événement du daemon vocal.\n\nStudio vocal local Voicebox\n\nVoix locales prédéfinies ou clonées, aperçus, modèles GPU et 23 langues, sans abonnement vocal.\n\nActualiser\nfetch failed\nServeur\nindisponible\nGPU\nCPU\nModèles\n0/0\nDictée\nCtrl+Shift+Space\nhttp://127.0.0.1:17493\nPhrase d’aperçu\n\nAucun profil vocal. Crée le premier à droite.\n\nGérer les modèles (0/0)\nCréer une voix\n\nChoisis une voix locale disponible ou clone un échantillon autorisé.\n\nPrédéfinie\nCloner\nzh\nen\nja\nko\nde\nfr\nru\npt\nes\nit\nhe\nar\nda\nel\nfi\nhi\nms\nnl\nno\npl\nsv\nsw\ntr\n\nSiwis est la voix féminine française de Kokoro. Les voix prédéfinies ne copient aucune personne réelle.\n\nCréer le profil prédéfini\nAucun changement en attente\nAppliquer\nVoix\n\nMoteur, langue et voix utilisée par le robot.\n\nMoteur vocal\nChoisit le moteur de synthèse vocale.\nPocket TTS — recommandé\nkyutai\nVoicebox — expressif sur GPU\nPiper — secours ancien\nTwo-speed voice routing\nRoutes short/fixed openings to local Kyutai and long continuations to ElevenLabs.\nKyutai local URL\nTrusted Kyutai HTTP endpoint exposing GET /health and POST /tts raw PCM at 24 kHz.\nKyutai first-audio timeout\nMaximum milliseconds to response headers and the first Kyutai PCM byte.\nKyutai cache n_q\nPrivate Kyutai server quantizer count used in the cache identity; must match the server.\nLocal short-phrase limit\nMaximum trimmed segment length routed to Kyutai when two-speed voice is enabled.\nVoix Pocket\nSélectionne une voix Pocket ou un échantillon de clonage court.\nestelle\nalba\nanna\nazelma\nbill_boerst\ncaro_davy\ncharles\ncosette\neponine\neve\nfantine\ngeorge\ngiovanni\njane\njavert\njean\njuergen\nlola\nmarius\nmary\nmichael\npaul\npeter_yearsley\nrafael\nstuart_bell\nvera\nÉcouter\n\nTexte de test — modifie-le puis clique « Écouter ». Le 1er aperçu prend quelques secondes, les suivants sont instantanés.\n\nLangue Pocket\nLangue transmise au moteur Pocket.\nGarder Pocket en mémoire\nGarde le modèle Pocket chargé entre les phrases pour supprimer son coût de redémarrage.\nServeur Pocket local\nEndpoint local du serveur Pocket persistant.\nQuantize Pocket TTS\nUses Pocket int8 inference to reduce CPU latency and memory with unchanged WER.\nStream Pocket audio\nPlays Pocket WAV chunks as they arrive instead of waiting for the full clip.\nServeur Voicebox\nEndpoint REST Voicebox, local ou sur GPU node via le réseau Tailscale de confiance.\nProfil vocal Voicebox\nNom ou identifiant du profil vocal de Lisa dans Voicebox.\nMoteur Voicebox\nBackend de rendu choisi par Voicebox.\nqwen\nqwen_custom_voice\nluxtts\nchatterbox\nchatterbox_turbo\ntada\nkokoro\nLangue Voicebox\nCode de langue transmis au rendu Voicebox.\nfr\nen\nzh\nja\nko\nde\nru\npt\nes\nit\nhe\nar\nda\nel\nfi\nhi\nms\nnl\nno\npl\nsv\nsw\ntr\nTaille du modèle Voicebox\n1.7B privilégie la qualité sur GPU node ; 0.6B réduit la latence.\n0.6B\n1.7B\n1B\n3B\nInterprétation de la voix\nDécrit seulement le ton, le rythme et la chaleur. Voicebox ne réécrit jamais les paroles de Lisa.\nDiffuser le son Voicebox\nEnvoie le WAV à la sortie et à l’avatar dès son arrivée depuis Voicebox.\nVolume de Lisa\nVolume propre à la voix. À 100 %, Pocket et Piper sont normalisés sans saturation.\n100%\nVoix Piper de secours\nChemin du modèle Piper .onnx utilisé en secours.\nParole\n\nSortie vocale et posture utilisée pour les actions parlées.\n\nParole activée\nAutorise les réponses parlées du daemon vision.\nAnnoncer les actions\nAutorise les retours vocaux pendant les actions.\nPosture d’action\nPosture locale à chaque tour vocal. Elle ne modifie jamais le mode plan d’une session de code.\nNormal sécurisé — recommandé\nAgir sans demander\nMode autonome complet\nModèle de parole\nModèle utilisé pour formuler les réponses parlées.\nSpeech model endpoint\nOpenAI-compatible endpoint used by the low-latency speech model.\nFactual speech model\nOptional larger local model for static factual questions; ordinary conversation stays on the fast model.\nPrewarm voice model\nLoads the selected local Ollama model before the first spoken turn.\nVoice reply token cap\nBase token budget. Natural/developed styles raise it dynamically for substantive turns.\nConversation depth\nNatural adapts to the dialogue act; developed gives arguments more room; concise keeps the legacy cap.\nnatural\nconcise\ndeveloped\nVoice model temperature\nLow temperature keeps short spoken facts stable and reduces hallucinations (0–1).\nVoice routing mode\nRealtime keeps ordinary questions on the fast model; grounded sends every question to the full agent.\nrealtime\ngrounded\nInstant voice backchannel\nOptional spoken filler while a slow answer starts. Off by default because the local realtime lane reaches useful speech faster.\nStreaming segment chars\nMaximum text segment sent to streaming TTS before a soft cut (32–240); 96 preserves natural French clauses.\nVoice model keep-alive\nOllama residency requested by voice prewarming.\nVoice model refresh ms\nHow often the daemon refreshes local voice-model residency; zero disables refresh.\nPrewarm common phrases\nSynthesizes the most common assistant phrases in the background at startup.\nTTS prewarm phrase count\nMaximum common phrases warmed at startup (capped at 64).\nAnnulation d’écho acoustique\nChoisit automatiquement une source echo-cancel et garde le filtre sémantique en secours.\nAutomatique — recommandé\nDésactivé\nSource AEC PipeWire/PulseAudio\nLaisse vide pour détecter automatiquement la source virtuelle d’annulation d’écho.\nComportement\n\nNom du robot, écoute active et règles de réponse.\n\nÉcoute activée\nActive l’entrée vocale du daemon sensoriel.\nNom du robot\nNom utilisé par l’assistant pour se présenter.\nYour name\nHow the assistant addresses you (left empty falls back to a default).\nResponse policy\nContextual keeps natural follow-ups and optional judged chime-ins; addressed disables chime-ins; always is only for push-to-talk or testing.\ncontextual\naddressed\nalways\nIntervenir spontanément\nAutorise de courtes interventions opportunistes.\nFenêtre de suivi\nDurée en millisecondes pendant laquelle le suivi reste actif.\nConversation mode\nKeep a live dialogue going: extend the window on directed follow-ups (no need to re-say the name).\nConversation max ms\nHard cap on a continuous dialogue before a re-address is required.\nLangue d’écoute\nCode de langue principal pour la reconnaissance vocale.\nSpeech debounce ms\nDeduplicates repeated speech events; lower values make follow-up turns feel faster.\nCompanion\n\nPrésence, rappels, mémoire relationnelle et proactivité.\n\nSalutations\nActive les salutations du companion.\nNom du robot\nNom utilisé par l’assistant pour se présenter.\nRappels\nActive les rappels companion.\nMémoire relationnelle\nInjecte le contexte relationnel dans les réponses companion.\nInner life\nGives Lisa an interior: what she did while you were away (digital-authentic only) + a mood that drifts on its own. Surfaced via relational memory.\nInner-life cadence (heartbeats)\nHow many heartbeats between inner-life ticks (a new \"what I did\" vignette + mood drift).\nVoice/channel continuity\nShares one Lisa conversation between resident voice and the configured messaging channel.\nConversation channel\nTransport that receives voice transcripts and can continue the same conversation.\ntelegram\ndiscord\nslack\nwhatsapp\nsignal\nmatrix\nteams\nwebchat\nConversation channel ID\nChat/room ID used for the shared conversation; Telegram falls back to the sensory alert chat.\nChannel topic/thread ID\nOptional Telegram topic or channel thread; empty shares the whole configured chat.\nLisa conversation ID\nStable logical thread name used for cross-channel history.\nMirror voice turns\nPosts both the recognized speech and Lisa reply to the configured channel.\nContinuité Cowork ↔ Lisa\nAutorise uniquement les sessions Cowork marquées Lisa à reprendre le fil voix et Telegram.\nPublier les tours Cowork\nPublie sur le canal configuré les tours des sessions Cowork explicitement reliées.\nTours partagés dans Cowork\nNombre de tours récents voix, Telegram et Cowork injectés dans une session Lisa (4 à 80).\nPersist shared history\nKeeps the bounded shared thread in a private local JSONL journal across restarts.\nShared journal byte limit\nCompacts the private cross-surface journal at this byte bound (32768-67108864).\nWarm fresh context\nPreloads structured news, agenda, date and configured weather context for instant grounded replies.\nDeep-answer semantic review\nAudits developed answers and permits at most one independently re-audited revision before delivery.\nauto\ntrue\nfalse\nFresh-context interval ms\nWall-clock refresh interval for fresh context; defaults to fifteen minutes.\nAdditional market symbols\nComma-separated watchlist added to ^FCHI, ^GSPC, ^IXIC (maximum ten symbols total).\nPreferred news topics\nQuery warmed in the background. Lisa can still search a different topic on demand.\nNews locale\nLanguage and country used for fresh news sources.\nRelational cold budget ms\nMaximum first-turn wait for relational memory; later turns use stale-while-revalidate.\nRelational cache TTL ms\nFreshness window for the cached relationship, episode, guidance, and presence context.\nConversation episodes\nConsolidates the complete cross-channel thread into a private where-we-were memory.\nEpisode consolidation beats\nHeartbeat interval for deduplicated conversation episode consolidation.\nCompanion proactif\nAutorise les comportements proactifs du companion.\nAmélioration vocale\nActive la boucle d’amélioration de l’assistant vocal.\nConversation quality loop\nScores complete user/Lisa exchanges locally and learns only from recurring weaknesses.\nQuality evaluation beats\nHeartbeat interval between deterministic conversation-quality evaluations.\nRecurring issue threshold\nNumber of consecutive evaluations that must confirm a weakness before Lisa adapts.\nQuality guidance cooldown ms\nMinimum delay between automatically learned conversation guidance lines.\nPont avatar MetaHuman\nPublie les intentions de jeu, la parole et les interruptions vers Unreal/MetaHuman.\nAudio vers MetaHuman\nEn mode automatique, transmet le WAV seulement lorsqu’un renderer compatible répond au heartbeat.\nAutomatique — recommandé\nToujours transmettre\nNe jamais transmettre\nAppliquer sauvegarde la configuration puis redémarre buddy-vision-brain et lisa-telegram.\nESPACE COWORK\nAssistant\nConfigure real-time voice mode, Pocket TTS, volume, and interruptions.",
+  "studio": {
+    "write": {
+      "ok": true,
+      "data": {
+        "path": "p9-studio.txt"
+      }
+    },
+    "read": {
+      "ok": true,
+      "data": "P9_STUDIO"
+    },
+    "tree": {
+      "ok": true,
+      "data": [
+        {
+          "name": ".codebuddy",
+          "path": ".codebuddy",
+          "type": "directory",
+          "children": [
+            {
+              "name": "execute-code",
+              "path": ".codebuddy/execute-code",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "exec-ce29846a-b281-42f4-8b6b-b1306f6889f8",
+                  "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "rpc",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/rpc",
+                      "type": "directory",
+                      "children": []
+                    },
+                    {
+                      "name": "result.json",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/result.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "script.mjs",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/script.mjs",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stderr.log",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stderr.log",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stdout.log",
+                      "path": ".codebuddy/execute-code/exec-ce29846a-b281-42f4-8b6b-b1306f6889f8/stdout.log",
+                      "type": "file"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "exports",
+              "path": ".codebuddy/exports",
+              "type": "directory",
+              "children": []
+            },
+            {
+              "name": "media-generation",
+              "path": ".codebuddy/media-generation",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "films",
+                  "path": ".codebuddy/media-generation/films",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "stitched-second.mp4",
+                      "path": ".codebuddy/media-generation/films/stitched-second.mp4",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stitched-second.mp4.meta.json",
+                      "path": ".codebuddy/media-generation/films/stitched-second.mp4.meta.json",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stitched.mp4",
+                      "path": ".codebuddy/media-generation/films/stitched.mp4",
+                      "type": "file"
+                    },
+                    {
+                      "name": "stitched.mp4.meta.json",
+                      "path": ".codebuddy/media-generation/films/stitched.mp4.meta.json",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "images",
+                  "path": ".codebuddy/media-generation/images",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png",
+                      "path": ".codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png",
+                      "type": "file"
+                    },
+                    {
+                      "name": "image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png.meta.json",
+                      "path": ".codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png.meta.json",
+                      "type": "file"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "qrcodes",
+              "path": ".codebuddy/qrcodes",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "qr_1790743220213.svg",
+                  "path": ".codebuddy/qrcodes/qr_1790743220213.svg",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "specs",
+              "path": ".codebuddy/specs",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "sp-munms2bim7fjb",
+                  "path": ".codebuddy/specs/sp-munms2bim7fjb",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "epics",
+                      "path": ".codebuddy/specs/sp-munms2bim7fjb/epics",
+                      "type": "directory",
+                      "children": []
+                    },
+                    {
+                      "name": "stories",
+                      "path": ".codebuddy/specs/sp-munms2bim7fjb/stories",
+                      "type": "directory",
+                      "children": []
+                    },
+                    {
+                      "name": "project.json",
+                      "path": ".codebuddy/specs/sp-munms2bim7fjb/project.json",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "active.json",
+                  "path": ".codebuddy/specs/active.json",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "tool-results",
+              "path": ".codebuddy/tool-results",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "session-01d71189205e1a7a0845c5c14435e374a721c04281948c0241f5ffd81efe2513",
+                  "path": ".codebuddy/tool-results/session-01d71189205e1a7a0845c5c14435e374a721c04281948c0241f5ffd81efe2513",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "server_tool_1790743670678_igub2f.txt",
+                      "path": ".codebuddy/tool-results/session-01d71189205e1a7a0845c5c14435e374a721c04281948c0241f5ffd81efe2513/server_tool_1790743670678_igub2f.txt",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6",
+                  "path": ".codebuddy/tool-results/session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "server_tool_1790743827428_scbjvf.txt",
+                      "path": ".codebuddy/tool-results/session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6/server_tool_1790743827428_scbjvf.txt",
+                      "type": "file"
+                    },
+                    {
+                      "name": "server_tool_1790743830278_gi8bdv.txt",
+                      "path": ".codebuddy/tool-results/session-6ca2a1bb48d72d8fb7f93e71cbbc917b8a90f6626d036f9dcfd9a2cd9d399ca6/server_tool_1790743830278_gi8bdv.txt",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e",
+                  "path": ".codebuddy/tool-results/session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e",
+                  "type": "directory",
+                  "children": [
+                    {
+                      "name": "server_tool_1790744119475_68e2ln.txt",
+                      "path": ".codebuddy/tool-results/session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e/server_tool_1790744119475_68e2ln.txt",
+                      "type": "file"
+                    },
+                    {
+                      "name": "server_tool_1790744120655_srycr8.txt",
+                      "path": ".codebuddy/tool-results/session-d525cc367d10e35f087a110478e8e3d26032d71d172b84c137f574bfdf88072e/server_tool_1790744120655_srycr8.txt",
+                      "type": "file"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "video",
+              "path": ".codebuddy/video",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "experiments-spoken.json",
+                  "path": ".codebuddy/video/experiments-spoken.json",
+                  "type": "file"
+                },
+                {
+                  "name": "research-spoken.md",
+                  "path": ".codebuddy/video/research-spoken.md",
+                  "type": "file"
+                },
+                {
+                  "name": "transcript-spoken.txt",
+                  "path": ".codebuddy/video/transcript-spoken.txt",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "workspace",
+              "path": ".codebuddy/workspace",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "script_e60c064e.py",
+                  "path": ".codebuddy/workspace/script_e60c064e.py",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "code-graph.json",
+              "path": ".codebuddy/code-graph.json",
+              "type": "file"
+            },
+            {
+              "name": "CODEBUDDY_MEMORY.md",
+              "path": ".codebuddy/CODEBUDDY_MEMORY.md",
+              "type": "file"
+            },
+            {
+              "name": "colab-tasks.json",
+              "path": ".codebuddy/colab-tasks.json",
+              "type": "file"
+            },
+            {
+              "name": "colab-worklog.json",
+              "path": ".codebuddy/colab-worklog.json",
+              "type": "file"
+            },
+            {
+              "name": "knowledge-graph.json",
+              "path": ".codebuddy/knowledge-graph.json",
+              "type": "file"
+            },
+            {
+              "name": "lessons.md",
+              "path": ".codebuddy/lessons.md",
+              "type": "file"
+            },
+            {
+              "name": "memory-candidates.json",
+              "path": ".codebuddy/memory-candidates.json",
+              "type": "file"
+            },
+            {
+              "name": "repoProfile.json",
+              "path": ".codebuddy/repoProfile.json",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": ".codeexplorer",
+          "path": ".codeexplorer",
+          "type": "directory",
+          "children": [
+            {
+              "name": "csv",
+              "path": ".codeexplorer/csv",
+              "type": "directory",
+              "children": [
+                {
+                  "name": "CodeRelation.csv",
+                  "path": ".codeexplorer/csv/CodeRelation.csv",
+                  "type": "file"
+                },
+                {
+                  "name": "File.csv",
+                  "path": ".codeexplorer/csv/File.csv",
+                  "type": "file"
+                },
+                {
+                  "name": "Function.csv",
+                  "path": ".codeexplorer/csv/Function.csv",
+                  "type": "file"
+                },
+                {
+                  "name": "TodoMarker.csv",
+                  "path": ".codeexplorer/csv/TodoMarker.csv",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "analyze.json",
+              "path": ".codeexplorer/analyze.json",
+              "type": "file"
+            },
+            {
+              "name": "graph.bin",
+              "path": ".codeexplorer/graph.bin",
+              "type": "file"
+            },
+            {
+              "name": "local-enrichment.bin",
+              "path": ".codeexplorer/local-enrichment.bin",
+              "type": "file"
+            },
+            {
+              "name": "manifest.json",
+              "path": ".codeexplorer/manifest.json",
+              "type": "file"
+            },
+            {
+              "name": "meta.json",
+              "path": ".codeexplorer/meta.json",
+              "type": "file"
+            },
+            {
+              "name": "metrics.json",
+              "path": ".codeexplorer/metrics.json",
+              "type": "file"
+            },
+            {
+              "name": "parse-cache.bin",
+              "path": ".codeexplorer/parse-cache.bin",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "a.txt",
+          "path": "a.txt",
+          "type": "file"
+        },
+        {
+          "name": "alias.txt",
+          "path": "alias.txt",
+          "type": "file"
+        },
+        {
+          "name": "b.txt",
+          "path": "b.txt",
+          "type": "file"
+        },
+        {
+          "name": "bad.rs",
+          "path": "bad.rs",
+          "type": "file"
+        },
+        {
+          "name": "build.js",
+          "path": "build.js",
+          "type": "file"
+        },
+        {
+          "name": "bundle.zip",
+          "path": "bundle.zip",
+          "type": "file"
+        },
+        {
+          "name": "check.test.js",
+          "path": "check.test.js",
+          "type": "file"
+        },
+        {
+          "name": "clean.env",
+          "path": "clean.env",
+          "type": "file"
+        },
+        {
+          "name": "clip.mp4",
+          "path": "clip.mp4",
+          "type": "file"
+        },
+        {
+          "name": "data.csv",
+          "path": "data.csv",
+          "type": "file"
+        },
+        {
+          "name": "data.json",
+          "path": "data.json",
+          "type": "file"
+        },
+        {
+          "name": "eslint.config.js",
+          "path": "eslint.config.js",
+          "type": "file"
+        },
+        {
+          "name": "export.csv",
+          "path": "export.csv",
+          "type": "file"
+        },
+        {
+          "name": "LICENSE",
+          "path": "LICENSE",
+          "type": "file"
+        },
+        {
+          "name": "new.txt",
+          "path": "new.txt",
+          "type": "file"
+        },
+        {
+          "name": "note.md",
+          "path": "note.md",
+          "type": "file"
+        },
+        {
+          "name": "p9-studio.txt",
+          "path": "p9-studio.txt",
+          "type": "file"
+        },
+        {
+          "name": "p9.docx",
+          "path": "p9.docx",
+          "type": "file"
+        },
+        {
+          "name": "package.json",
+          "path": "package.json",
+          "type": "file"
+        },
+        {
+          "name": "PLAN.md",
+          "path": "PLAN.md",
+          "type": "file"
+        },
+        {
+          "name": "sample.js",
+          "path": "sample.js",
+          "type": "file"
+        },
+        {
+          "name": "sample.ts",
+          "path": "sample.ts",
+          "type": "file"
+        },
+        {
+          "name": "speech.wav",
+          "path": "speech.wav",
+          "type": "file"
+        },
+        {
+          "name": "spoken.mp3",
+          "path": "spoken.mp3",
+          "type": "file"
+        },
+        {
+          "name": "spoken.mp4",
+          "path": "spoken.mp4",
+          "type": "file"
+        },
+        {
+          "name": "tsconfig.json",
+          "path": "tsconfig.json",
+          "type": "file"
+        },
+        {
+          "name": "voicebox.wav",
+          "path": "voicebox.wav",
+          "type": "file"
+        }
+      ]
+    }
+  },
+  "assistant": {
+    "settings": [
+      {
+        "key": "CODEBUDDY_TTS_ENGINE",
+        "label": "TTS engine",
+        "group": "voice",
+        "type": "enum",
+        "options": [
+          "pocket",
+          "kyutai",
+          "voicebox",
+          "piper"
+        ],
+        "default": "pocket",
+        "envFile": "both",
+        "help": "Pocket is realtime; Kyutai is the opt-in private GPU stream; Voicebox is expressive; Piper is the final fallback."
+      },
+      {
+        "key": "CODEBUDDY_TTS_TWO_SPEED",
+        "label": "Two-speed voice routing",
+        "group": "voice",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Routes short/fixed openings to local Kyutai and long continuations to ElevenLabs."
+      },
+      {
+        "key": "CODEBUDDY_TTS_LOCAL_URL",
+        "label": "Kyutai local URL",
+        "group": "voice",
+        "type": "text",
+        "default": "",
+        "envFile": "vision",
+        "help": "Trusted Kyutai HTTP endpoint exposing GET /health and POST /tts raw PCM at 24 kHz."
+      },
+      {
+        "key": "CODEBUDDY_TTS_LOCAL_TIMEOUT_MS",
+        "label": "Kyutai first-audio timeout",
+        "group": "voice",
+        "type": "text",
+        "default": "1500",
+        "envFile": "vision",
+        "help": "Maximum milliseconds to response headers and the first Kyutai PCM byte."
+      },
+      {
+        "key": "CODEBUDDY_TTS_LOCAL_N_Q",
+        "label": "Kyutai cache n_q",
+        "group": "voice",
+        "type": "text",
+        "default": "12",
+        "envFile": "vision",
+        "help": "Private Kyutai server quantizer count used in the cache identity; must match the server."
+      },
+      {
+        "key": "CODEBUDDY_TTS_SHORT_MAX_CHARS",
+        "label": "Local short-phrase limit",
+        "group": "voice",
+        "type": "text",
+        "default": "80",
+        "envFile": "vision",
+        "help": "Maximum trimmed segment length routed to Kyutai when two-speed voice is enabled."
+      },
+      {
+        "key": "CODEBUDDY_POCKET_VOICE",
+        "label": "Pocket voice",
+        "group": "voice",
+        "type": "voice",
+        "default": "estelle",
+        "envFile": "both",
+        "help": "Pocket TTS preset name or path to a short clone sample."
+      },
+      {
+        "key": "CODEBUDDY_POCKET_LANG",
+        "label": "Pocket language",
+        "group": "voice",
+        "type": "text",
+        "default": "french",
+        "envFile": "both",
+        "help": "Language token used by Pocket TTS."
+      },
+      {
+        "key": "CODEBUDDY_POCKET_SERVER",
+        "label": "Persistent Pocket server",
+        "group": "voice",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "both",
+        "help": "Keeps the Pocket model resident so uncached phrases do not reload it."
+      },
+      {
+        "key": "CODEBUDDY_POCKET_URL",
+        "label": "Pocket server URL",
+        "group": "voice",
+        "type": "text",
+        "default": "http://127.0.0.1:8766",
+        "envFile": "both",
+        "help": "Loopback FastAPI endpoint used by the resident Pocket model."
+      },
+      {
+        "key": "CODEBUDDY_POCKET_QUANTIZE",
+        "label": "Quantize Pocket TTS",
+        "group": "voice",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "both",
+        "help": "Uses Pocket int8 inference to reduce CPU latency and memory with unchanged WER."
+      },
+      {
+        "key": "CODEBUDDY_POCKET_AUDIO_STREAM",
+        "label": "Stream Pocket audio",
+        "group": "voice",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "both",
+        "help": "Plays Pocket WAV chunks as they arrive instead of waiting for the full clip."
+      },
+      {
+        "key": "CODEBUDDY_VOICEBOX_URL",
+        "label": "Voicebox URL",
+        "group": "voice",
+        "type": "text",
+        "default": "http://127.0.0.1:17493",
+        "envFile": "both",
+        "help": "Voicebox REST endpoint. On GPU node, expose it only through the trusted Tailscale network."
+      },
+      {
+        "key": "CODEBUDDY_VOICEBOX_PROFILE",
+        "label": "Voicebox profile",
+        "group": "voice",
+        "type": "text",
+        "default": "",
+        "envFile": "both",
+        "help": "Voicebox voice profile name or id. Required when the Voicebox engine is selected."
+      },
+      {
+        "key": "CODEBUDDY_VOICEBOX_ENGINE",
+        "label": "Voicebox renderer",
+        "group": "voice",
+        "type": "enum",
+        "options": [
+          "qwen",
+          "qwen_custom_voice",
+          "luxtts",
+          "chatterbox",
+          "chatterbox_turbo",
+          "tada",
+          "kokoro"
+        ],
+        "default": "qwen",
+        "envFile": "both",
+        "help": "Voicebox synthesis backend. Qwen is the recommended multilingual starting point."
+      },
+      {
+        "key": "CODEBUDDY_VOICEBOX_LANGUAGE",
+        "label": "Voicebox language",
+        "group": "voice",
+        "type": "enum",
+        "options": [
+          "fr",
+          "en",
+          "zh",
+          "ja",
+          "ko",
+          "de",
+          "ru",
+          "pt",
+          "es",
+          "it",
+          "he",
+          "ar",
+          "da",
+          "el",
+          "fi",
+          "hi",
+          "ms",
+          "nl",
+          "no",
+          "pl",
+          "sv",
+          "sw",
+          "tr"
+        ],
+        "default": "fr",
+        "envFile": "both",
+        "help": "Voicebox language code used for Lisa speech."
+      },
+      {
+        "key": "CODEBUDDY_VOICEBOX_MODEL_SIZE",
+        "label": "Voicebox model size",
+        "group": "voice",
+        "type": "enum",
+        "options": [
+          "0.6B",
+          "1.7B",
+          "1B",
+          "3B"
+        ],
+        "default": "1.7B",
+        "envFile": "both",
+        "help": "Renderer size. 1.7B favors quality on GPU node; 0.6B is the lower-latency option."
+      },
+      {
+        "key": "CODEBUDDY_VOICEBOX_INSTRUCT",
+        "label": "Voicebox delivery instruction",
+        "group": "voice",
+        "type": "text",
+        "default": "Speak as Lisa: warm intimate French girlfriend energy, soft smile in the voice, natural mid tempo, slight breathiness, never rewrite or invent words — delivery only.",
+        "envFile": "both",
+        "help": "Acoustic delivery only (tone, pace, warmth), capped at 500 characters. Does not rewrite Lisa’s words (personality stays false on Voicebox)."
+      },
+      {
+        "key": "CODEBUDDY_VOICEBOX_AUDIO_STREAM",
+        "label": "Stream Voicebox audio",
+        "group": "voice",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "both",
+        "help": "Pipes Voicebox WAV output directly to speakers and the avatar as soon as it arrives."
+      },
+      {
+        "key": "CODEBUDDY_TTS_VOLUME",
+        "label": "Assistant output volume",
+        "group": "voice",
+        "type": "volume",
+        "default": "100",
+        "envFile": "both",
+        "help": "Assistant-only loudness (0–100). At 100, local speech is safely normalized to -1 dBFS."
+      },
+      {
+        "key": "CODEBUDDY_TTS_VOICE",
+        "label": "Robot voice",
+        "group": "voice",
+        "type": "text",
+        "default": "",
+        "envFile": "both",
+        "help": "Use elevenlabs:<voice_id> for ElevenLabs, or a Piper .onnx model path."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_SPEAK",
+        "label": "Speak responses",
+        "group": "speech",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Enables spoken assistant responses on the vision daemon."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_SPEAK_ACT",
+        "label": "Speak actions",
+        "group": "speech",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Allows the assistant to speak action feedback."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE",
+        "label": "Speech permission mode",
+        "group": "speech",
+        "type": "enum",
+        "options": [
+          "default",
+          "dontAsk",
+          "bypassPermissions"
+        ],
+        "default": "default",
+        "envFile": "vision",
+        "help": "Guarded per-turn posture used by spoken actions. Code planning stays scoped to its own session."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_SPEAK_MODEL",
+        "label": "Speech model",
+        "group": "speech",
+        "type": "text",
+        "default": "auto",
+        "envFile": "vision",
+        "help": "Model used for spoken assistant replies."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_SPEAK_BASE_URL",
+        "label": "Speech model endpoint",
+        "group": "speech",
+        "type": "text",
+        "default": "http://127.0.0.1:11434/v1",
+        "envFile": "vision",
+        "help": "OpenAI-compatible endpoint used by the low-latency speech model."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_SPEAK_FACT_MODEL",
+        "label": "Factual speech model",
+        "group": "speech",
+        "type": "text",
+        "default": "",
+        "envFile": "vision",
+        "help": "Optional larger local model for static factual questions; ordinary conversation stays on the fast model."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_MODEL_PREWARM",
+        "label": "Prewarm voice model",
+        "group": "speech",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "vision",
+        "help": "Loads the selected local Ollama model before the first spoken turn."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_MAX_TOKENS",
+        "label": "Voice reply token cap",
+        "group": "speech",
+        "type": "text",
+        "default": "48",
+        "envFile": "vision",
+        "help": "Base token budget. Natural/developed styles raise it dynamically for substantive turns."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_RESPONSE_STYLE",
+        "label": "Conversation depth",
+        "group": "speech",
+        "type": "enum",
+        "options": [
+          "natural",
+          "concise",
+          "developed"
+        ],
+        "default": "natural",
+        "envFile": "both",
+        "help": "Natural adapts to the dialogue act; developed gives arguments more room; concise keeps the legacy cap."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_TEMPERATURE",
+        "label": "Voice model temperature",
+        "group": "speech",
+        "type": "text",
+        "default": "0.2",
+        "envFile": "vision",
+        "help": "Low temperature keeps short spoken facts stable and reduces hallucinations (0–1)."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_ROUTING_MODE",
+        "label": "Voice routing mode",
+        "group": "speech",
+        "type": "enum",
+        "options": [
+          "realtime",
+          "grounded"
+        ],
+        "default": "realtime",
+        "envFile": "vision",
+        "help": "Realtime keeps ordinary questions on the fast model; grounded sends every question to the full agent."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_BACKCHANNEL",
+        "label": "Instant voice backchannel",
+        "group": "speech",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Optional spoken filler while a slow answer starts. Off by default because the local realtime lane reaches useful speech faster."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_SENTENCE_CAP",
+        "label": "Streaming segment chars",
+        "group": "speech",
+        "type": "text",
+        "default": "96",
+        "envFile": "vision",
+        "help": "Maximum text segment sent to streaming TTS before a soft cut (32–240); 96 preserves natural French clauses."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_MODEL_KEEP_ALIVE",
+        "label": "Voice model keep-alive",
+        "group": "speech",
+        "type": "text",
+        "default": "30m",
+        "envFile": "vision",
+        "help": "Ollama residency requested by voice prewarming."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_MODEL_REFRESH_MS",
+        "label": "Voice model refresh ms",
+        "group": "speech",
+        "type": "text",
+        "default": "900000",
+        "envFile": "vision",
+        "help": "How often the daemon refreshes local voice-model residency; zero disables refresh."
+      },
+      {
+        "key": "CODEBUDDY_TTS_PREWARM",
+        "label": "Prewarm common phrases",
+        "group": "speech",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "vision",
+        "help": "Synthesizes the most common assistant phrases in the background at startup."
+      },
+      {
+        "key": "CODEBUDDY_TTS_PREWARM_LIMIT",
+        "label": "TTS prewarm phrase count",
+        "group": "speech",
+        "type": "text",
+        "default": "16",
+        "envFile": "vision",
+        "help": "Maximum common phrases warmed at startup (capped at 64)."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_SPEECH",
+        "label": "Listen for speech",
+        "group": "behavior",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Enables speech input in the sensory daemon."
+      },
+      {
+        "key": "CODEBUDDY_ROBOT_NAME",
+        "label": "Assistant name",
+        "group": "behavior",
+        "type": "text",
+        "default": "Lisa",
+        "envFile": "both",
+        "help": "Name the voice assistant uses for itself."
+      },
+      {
+        "key": "CODEBUDDY_USER_NAME",
+        "label": "Your name",
+        "group": "behavior",
+        "type": "text",
+        "default": "",
+        "envFile": "both",
+        "help": "How the assistant addresses you (left empty falls back to a default)."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_RESPONSE_POLICY",
+        "label": "Response policy",
+        "group": "behavior",
+        "type": "enum",
+        "options": [
+          "contextual",
+          "addressed",
+          "always"
+        ],
+        "default": "contextual",
+        "envFile": "vision",
+        "help": "Contextual keeps natural follow-ups and optional judged chime-ins; addressed disables chime-ins; always is only for push-to-talk or testing."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_CHIME_IN",
+        "label": "Chime in",
+        "group": "behavior",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Allows opportunistic judged interjections when the response policy is contextual."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_ENGAGE_WINDOW_MS",
+        "label": "Engage window ms",
+        "group": "behavior",
+        "type": "text",
+        "default": "120000",
+        "envFile": "vision",
+        "help": "Sliding attention window during which directed follow-ups stay engaged without repeating Lisa’s name."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_CONVERSATION_MODE",
+        "label": "Conversation mode",
+        "group": "behavior",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "vision",
+        "help": "Keep a live dialogue going: extend the window on directed follow-ups (no need to re-say the name)."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_CONVERSATION_MAX_MS",
+        "label": "Conversation max ms",
+        "group": "behavior",
+        "type": "text",
+        "default": "600000",
+        "envFile": "vision",
+        "help": "Hard cap on a continuous dialogue before a re-address is required."
+      },
+      {
+        "key": "BUDDY_SENSE_AEC",
+        "label": "Acoustic echo cancellation",
+        "group": "speech",
+        "type": "enum",
+        "options": [
+          "auto",
+          "off"
+        ],
+        "default": "auto",
+        "envFile": "vision",
+        "help": "Automatically selects a PipeWire/PulseAudio echo-cancel source when available and safely falls back to the microphone."
+      },
+      {
+        "key": "BUDDY_SENSE_AEC_SOURCE",
+        "label": "AEC capture source",
+        "group": "speech",
+        "type": "text",
+        "default": "",
+        "envFile": "vision",
+        "help": "Optional explicit PulseAudio echo-cancel source; leave empty for automatic discovery."
+      },
+      {
+        "key": "CODEBUDDY_SPEECH_LANG",
+        "label": "Speech language",
+        "group": "behavior",
+        "type": "text",
+        "default": "fr",
+        "envFile": "vision",
+        "help": "Primary language code for speech recognition."
+      },
+      {
+        "key": "CODEBUDDY_SPEECH_DEBOUNCE_MS",
+        "label": "Speech debounce ms",
+        "group": "behavior",
+        "type": "text",
+        "default": "800",
+        "envFile": "vision",
+        "help": "Deduplicates repeated speech events; lower values make follow-up turns feel faster."
+      },
+      {
+        "key": "CODEBUDDY_SENSORY_GREET",
+        "label": "Greeting",
+        "group": "companion",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Enables assistant greetings."
+      },
+      {
+        "key": "CODEBUDDY_ROBOT_NAME",
+        "label": "Companion name",
+        "group": "companion",
+        "type": "text",
+        "default": "Lisa",
+        "envFile": "both",
+        "help": "Default identity of this companion prototype; other companions can reuse the same runtime."
+      },
+      {
+        "key": "CODEBUDDY_REMINDERS",
+        "label": "Reminders",
+        "group": "companion",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Enables companion reminders."
+      },
+      {
+        "key": "CODEBUDDY_COMPANION_RELATIONAL",
+        "label": "Relational memory",
+        "group": "companion",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "both",
+        "help": "Injects relational context into companion replies."
+      },
+      {
+        "key": "CODEBUDDY_COMPANION_INNER_LIFE",
+        "label": "Inner life",
+        "group": "companion",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Gives Lisa an interior: what she did while you were away (digital-authentic only) + a mood that drifts on its own. Surfaced via relational memory."
+      },
+      {
+        "key": "CODEBUDDY_INNER_LIFE_EVERY",
+        "label": "Inner-life cadence (heartbeats)",
+        "group": "companion",
+        "type": "text",
+        "default": "50",
+        "envFile": "vision",
+        "help": "How many heartbeats between inner-life ticks (a new \"what I did\" vignette + mood drift)."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_BRIDGE",
+        "label": "Voice/channel continuity",
+        "group": "companion",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "both",
+        "help": "Shares one Lisa conversation between resident voice and the configured messaging channel."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_CHANNEL",
+        "label": "Conversation channel",
+        "group": "companion",
+        "type": "enum",
+        "options": [
+          "telegram",
+          "discord",
+          "slack",
+          "whatsapp",
+          "signal",
+          "matrix",
+          "teams",
+          "webchat"
+        ],
+        "default": "telegram",
+        "envFile": "both",
+        "help": "Transport that receives voice transcripts and can continue the same conversation."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_CHANNEL_ID",
+        "label": "Conversation channel ID",
+        "group": "companion",
+        "type": "text",
+        "default": "",
+        "envFile": "both",
+        "help": "Chat/room ID used for the shared conversation; Telegram falls back to the sensory alert chat."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_CHANNEL_THREAD",
+        "label": "Channel topic/thread ID",
+        "group": "companion",
+        "type": "text",
+        "default": "",
+        "envFile": "both",
+        "help": "Optional Telegram topic or channel thread; empty shares the whole configured chat."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_THREAD_ID",
+        "label": "Lisa conversation ID",
+        "group": "companion",
+        "type": "text",
+        "default": "lisa",
+        "envFile": "both",
+        "help": "Stable logical thread name used for cross-channel history."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_MIRROR_VOICE",
+        "label": "Mirror voice turns",
+        "group": "companion",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "vision",
+        "help": "Posts both the recognized speech and Lisa reply to the configured channel."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_COWORK",
+        "label": "Cowork companion continuity",
+        "group": "companion",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "both",
+        "help": "Lets explicitly linked Cowork sessions continue the private Lisa thread."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_MIRROR_COWORK",
+        "label": "Mirror Cowork turns",
+        "group": "companion",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "both",
+        "help": "Posts linked Cowork user and Lisa turns to the configured conversation channel."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_COWORK_HISTORY",
+        "label": "Cowork shared history turns",
+        "group": "companion",
+        "type": "text",
+        "default": "24",
+        "envFile": "both",
+        "help": "Maximum recent cross-surface turns imported into a linked Cowork session (4-80)."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_PERSIST",
+        "label": "Persist shared history",
+        "group": "companion",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "both",
+        "help": "Keeps the bounded shared thread in a private local JSONL journal across restarts."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_MAX_HISTORY_BYTES",
+        "label": "Shared journal byte limit",
+        "group": "companion",
+        "type": "text",
+        "default": "819200",
+        "envFile": "both",
+        "help": "Compacts the private cross-surface journal at this byte bound (32768-67108864)."
+      },
+      {
+        "key": "CODEBUDDY_PREFETCH",
+        "label": "Warm fresh context",
+        "group": "companion",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "both",
+        "help": "Preloads structured news, agenda, date and configured weather context for instant grounded replies."
+      },
+      {
+        "key": "CODEBUDDY_SEMANTIC_GATE",
+        "label": "Deep-answer semantic review",
+        "group": "companion",
+        "type": "enum",
+        "options": [
+          "auto",
+          "true",
+          "false"
+        ],
+        "default": "auto",
+        "envFile": "both",
+        "help": "Audits developed answers and permits at most one independently re-audited revision before delivery."
+      },
+      {
+        "key": "CODEBUDDY_PREFETCH_INTERVAL_MS",
+        "label": "Fresh-context interval ms",
+        "group": "companion",
+        "type": "text",
+        "default": "900000",
+        "envFile": "vision",
+        "help": "Wall-clock refresh interval for fresh context; defaults to fifteen minutes."
+      },
+      {
+        "key": "CODEBUDDY_MARKET_SYMBOLS",
+        "label": "Additional market symbols",
+        "group": "companion",
+        "type": "text",
+        "default": "",
+        "envFile": "both",
+        "help": "Comma-separated watchlist added to ^FCHI, ^GSPC, ^IXIC (maximum ten symbols total)."
+      },
+      {
+        "key": "CODEBUDDY_NEWS_QUERY",
+        "label": "Preferred news topics",
+        "group": "companion",
+        "type": "text",
+        "default": "actualités France monde technologie intelligence artificielle aujourd'hui",
+        "envFile": "both",
+        "help": "Query warmed in the background. Lisa can still search a different topic on demand."
+      },
+      {
+        "key": "CODEBUDDY_NEWS_LOCALE",
+        "label": "News locale",
+        "group": "companion",
+        "type": "text",
+        "default": "fr-FR",
+        "envFile": "both",
+        "help": "Language and country used for fresh news sources."
+      },
+      {
+        "key": "CODEBUDDY_COMPANION_RELATIONAL_BUDGET_MS",
+        "label": "Relational cold budget ms",
+        "group": "companion",
+        "type": "text",
+        "default": "75",
+        "envFile": "both",
+        "help": "Maximum first-turn wait for relational memory; later turns use stale-while-revalidate."
+      },
+      {
+        "key": "CODEBUDDY_COMPANION_RELATIONAL_TTL_MS",
+        "label": "Relational cache TTL ms",
+        "group": "companion",
+        "type": "text",
+        "default": "5000",
+        "envFile": "both",
+        "help": "Freshness window for the cached relationship, episode, guidance, and presence context."
+      },
+      {
+        "key": "CODEBUDDY_EPISODE_JOURNAL",
+        "label": "Conversation episodes",
+        "group": "companion",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Consolidates the complete cross-channel thread into a private where-we-were memory."
+      },
+      {
+        "key": "CODEBUDDY_EPISODE_EVERY",
+        "label": "Episode consolidation beats",
+        "group": "companion",
+        "type": "text",
+        "default": "40",
+        "envFile": "vision",
+        "help": "Heartbeat interval for deduplicated conversation episode consolidation."
+      },
+      {
+        "key": "CODEBUDDY_COMPANION_PROACTIVE",
+        "label": "Proactive companion",
+        "group": "companion",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Allows proactive companion behaviors."
+      },
+      {
+        "key": "CODEBUDDY_VOICE_IMPROVE",
+        "label": "Voice improvement",
+        "group": "companion",
+        "type": "toggle",
+        "default": "false",
+        "envFile": "vision",
+        "help": "Enables the voice assistant improvement loop."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_EVAL",
+        "label": "Conversation quality loop",
+        "group": "companion",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "vision",
+        "help": "Scores complete user/Lisa exchanges locally and learns only from recurring weaknesses."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_EVAL_EVERY",
+        "label": "Quality evaluation beats",
+        "group": "companion",
+        "type": "text",
+        "default": "30",
+        "envFile": "vision",
+        "help": "Heartbeat interval between deterministic conversation-quality evaluations."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_EVAL_MIN_STREAK",
+        "label": "Recurring issue threshold",
+        "group": "companion",
+        "type": "text",
+        "default": "2",
+        "envFile": "vision",
+        "help": "Number of consecutive evaluations that must confirm a weakness before Lisa adapts."
+      },
+      {
+        "key": "CODEBUDDY_CONVERSATION_EVAL_COOLDOWN_MS",
+        "label": "Quality guidance cooldown ms",
+        "group": "companion",
+        "type": "text",
+        "default": "21600000",
+        "envFile": "vision",
+        "help": "Minimum delay between automatically learned conversation guidance lines."
+      },
+      {
+        "key": "CODEBUDDY_AVATAR_BRIDGE",
+        "label": "Avatar performance bridge",
+        "group": "companion",
+        "type": "toggle",
+        "default": "true",
+        "envFile": "vision",
+        "help": "Publishes scoped speech, affect, gesture and interruption events for Unreal/MetaHuman."
+      },
+      {
+        "key": "CODEBUDDY_AVATAR_STREAM_AUDIO",
+        "label": "Stream avatar audio",
+        "group": "companion",
+        "type": "enum",
+        "options": [
+          "auto",
+          "true",
+          "false"
+        ],
+        "default": "auto",
+        "envFile": "vision",
+        "help": "Auto streams bounded WAV only while a compatible authenticated renderer is alive."
+      }
+    ],
+    "values": {
+      "CODEBUDDY_TTS_ENGINE": "pocket",
+      "CODEBUDDY_TTS_TWO_SPEED": "false",
+      "CODEBUDDY_TTS_LOCAL_URL": "",
+      "CODEBUDDY_TTS_LOCAL_TIMEOUT_MS": "1500",
+      "CODEBUDDY_TTS_LOCAL_N_Q": "12",
+      "CODEBUDDY_TTS_SHORT_MAX_CHARS": "80",
+      "CODEBUDDY_POCKET_VOICE": "estelle",
+      "CODEBUDDY_POCKET_LANG": "french",
+      "CODEBUDDY_POCKET_SERVER": "true",
+      "CODEBUDDY_POCKET_URL": "http://127.0.0.1:8766",
+      "CODEBUDDY_POCKET_QUANTIZE": "false",
+      "CODEBUDDY_POCKET_AUDIO_STREAM": "true",
+      "CODEBUDDY_VOICEBOX_URL": "http://127.0.0.1:17493",
+      "CODEBUDDY_VOICEBOX_PROFILE": "",
+      "CODEBUDDY_VOICEBOX_ENGINE": "qwen",
+      "CODEBUDDY_VOICEBOX_LANGUAGE": "fr",
+      "CODEBUDDY_VOICEBOX_MODEL_SIZE": "1.7B",
+      "CODEBUDDY_VOICEBOX_INSTRUCT": "Speak as Lisa: warm intimate French girlfriend energy, soft smile in the voice, natural mid tempo, slight breathiness, never rewrite or invent words — delivery only.",
+      "CODEBUDDY_VOICEBOX_AUDIO_STREAM": "true",
+      "CODEBUDDY_TTS_VOLUME": "100",
+      "CODEBUDDY_TTS_VOICE": "",
+      "CODEBUDDY_SENSORY_SPEAK": "false",
+      "CODEBUDDY_SENSORY_SPEAK_ACT": "false",
+      "CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE": "default",
+      "CODEBUDDY_SENSORY_SPEAK_MODEL": "auto",
+      "CODEBUDDY_SENSORY_SPEAK_BASE_URL": "http://127.0.0.1:11434/v1",
+      "CODEBUDDY_SENSORY_SPEAK_FACT_MODEL": "",
+      "CODEBUDDY_VOICE_MODEL_PREWARM": "true",
+      "CODEBUDDY_VOICE_MAX_TOKENS": "48",
+      "CODEBUDDY_VOICE_RESPONSE_STYLE": "natural",
+      "CODEBUDDY_VOICE_TEMPERATURE": "0.2",
+      "CODEBUDDY_VOICE_ROUTING_MODE": "realtime",
+      "CODEBUDDY_VOICE_BACKCHANNEL": "false",
+      "CODEBUDDY_VOICE_SENTENCE_CAP": "96",
+      "CODEBUDDY_VOICE_MODEL_KEEP_ALIVE": "30m",
+      "CODEBUDDY_VOICE_MODEL_REFRESH_MS": "900000",
+      "CODEBUDDY_TTS_PREWARM": "true",
+      "CODEBUDDY_TTS_PREWARM_LIMIT": "16",
+      "CODEBUDDY_SENSORY_SPEECH": "false",
+      "CODEBUDDY_ROBOT_NAME": "Lisa",
+      "CODEBUDDY_USER_NAME": "",
+      "CODEBUDDY_SENSORY_RESPONSE_POLICY": "contextual",
+      "CODEBUDDY_SENSORY_CHIME_IN": "false",
+      "CODEBUDDY_SENSORY_ENGAGE_WINDOW_MS": "120000",
+      "CODEBUDDY_SENSORY_CONVERSATION_MODE": "true",
+      "CODEBUDDY_SENSORY_CONVERSATION_MAX_MS": "600000",
+      "BUDDY_SENSE_AEC": "auto",
+      "BUDDY_SENSE_AEC_SOURCE": "",
+      "CODEBUDDY_SPEECH_LANG": "fr",
+      "CODEBUDDY_SPEECH_DEBOUNCE_MS": "800",
+      "CODEBUDDY_SENSORY_GREET": "false",
+      "CODEBUDDY_REMINDERS": "false",
+      "CODEBUDDY_COMPANION_RELATIONAL": "false",
+      "CODEBUDDY_COMPANION_INNER_LIFE": "false",
+      "CODEBUDDY_INNER_LIFE_EVERY": "50",
+      "CODEBUDDY_CONVERSATION_BRIDGE": "true",
+      "CODEBUDDY_CONVERSATION_CHANNEL": "telegram",
+      "CODEBUDDY_CONVERSATION_CHANNEL_ID": "",
+      "CODEBUDDY_CONVERSATION_CHANNEL_THREAD": "",
+      "CODEBUDDY_CONVERSATION_THREAD_ID": "lisa",
+      "CODEBUDDY_CONVERSATION_MIRROR_VOICE": "true",
+      "CODEBUDDY_CONVERSATION_COWORK": "true",
+      "CODEBUDDY_CONVERSATION_MIRROR_COWORK": "true",
+      "CODEBUDDY_CONVERSATION_COWORK_HISTORY": "24",
+      "CODEBUDDY_CONVERSATION_PERSIST": "true",
+      "CODEBUDDY_CONVERSATION_MAX_HISTORY_BYTES": "819200",
+      "CODEBUDDY_PREFETCH": "true",
+      "CODEBUDDY_SEMANTIC_GATE": "auto",
+      "CODEBUDDY_PREFETCH_INTERVAL_MS": "900000",
+      "CODEBUDDY_MARKET_SYMBOLS": "",
+      "CODEBUDDY_NEWS_QUERY": "actualités France monde technologie intelligence artificielle aujourd'hui",
+      "CODEBUDDY_NEWS_LOCALE": "fr-FR",
+      "CODEBUDDY_COMPANION_RELATIONAL_BUDGET_MS": "75",
+      "CODEBUDDY_COMPANION_RELATIONAL_TTL_MS": "5000",
+      "CODEBUDDY_EPISODE_JOURNAL": "false",
+      "CODEBUDDY_EPISODE_EVERY": "40",
+      "CODEBUDDY_COMPANION_PROACTIVE": "false",
+      "CODEBUDDY_VOICE_IMPROVE": "false",
+      "CODEBUDDY_CONVERSATION_EVAL": "true",
+      "CODEBUDDY_CONVERSATION_EVAL_EVERY": "30",
+      "CODEBUDDY_CONVERSATION_EVAL_MIN_STREAK": "2",
+      "CODEBUDDY_CONVERSATION_EVAL_COOLDOWN_MS": "21600000",
+      "CODEBUDDY_AVATAR_BRIDGE": "true",
+      "CODEBUDDY_AVATAR_STREAM_AUDIO": "auto"
+    },
+    "voices": [
+      "alba",
+      "anna",
+      "azelma",
+      "bill_boerst",
+      "caro_davy",
+      "charles",
+      "cosette",
+      "eponine",
+      "estelle",
+      "eve",
+      "fantine",
+      "george",
+      "giovanni",
+      "jane",
+      "javert",
+      "jean",
+      "juergen",
+      "lola",
+      "marius",
+      "mary",
+      "michael",
+      "paul",
+      "peter_yearsley",
+      "rafael",
+      "stuart_bell",
+      "vera"
+    ]
+  },
+  "settings": {
+    "theme": "dark",
+    "config": {
+      "yoloMode": false,
+      "yoloMaxCostUsd": 100,
+      "yoloMaxRounds": 400,
+      "provider": "ollama",
+      "customProtocol": "openai",
+      "apiKey": "",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "model": "qwen3:4b-instruct",
+      "activeProfileKey": "ollama",
+      "profiles": {
+        "chatgpt": {
+          "apiKey": "",
+          "baseUrl": "https://chatgpt.com/backend-api/codex",
+          "model": "gpt-5.6-sol",
+          "hasKey": true,
+          "keyTail": "tgpt"
+        },
+        "openrouter": {
+          "apiKey": "",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "model": "openrouter/free",
+          "hasKey": false
+        },
+        "anthropic": {
+          "apiKey": "",
+          "baseUrl": "https://api.anthropic.com",
+          "model": "claude-sonnet-4-6",
+          "hasKey": false
+        },
+        "openai": {
+          "apiKey": "",
+          "baseUrl": "https://api.openai.com/v1",
+          "model": "gpt-5.4",
+          "hasKey": false
+        },
+        "gemini": {
+          "apiKey": "",
+          "baseUrl": "https://generativelanguage.googleapis.com",
+          "model": "gemini-2.5-flash",
+          "hasKey": false
+        },
+        "ollama": {
+          "apiKey": "",
+          "baseUrl": "http://127.0.0.1:11434/v1",
+          "model": "qwen3:4b-instruct",
+          "hasKey": true,
+          "keyTail": "lama"
+        },
+        "lmstudio": {
+          "apiKey": "",
+          "baseUrl": "http://localhost:1234/v1",
+          "model": "local-model",
+          "hasKey": false
+        },
+        "grok": {
+          "apiKey": "",
+          "baseUrl": "https://api.x.ai/v1",
+          "model": "grok-3-latest",
+          "hasKey": false
+        },
+        "groq": {
+          "apiKey": "",
+          "baseUrl": "https://api.groq.com/openai/v1",
+          "model": "qwen/qwen3.8-27b",
+          "hasKey": false
+        },
+        "together": {
+          "apiKey": "",
+          "baseUrl": "https://api.together.xyz/v1",
+          "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+          "hasKey": false
+        },
+        "fireworks": {
+          "apiKey": "",
+          "baseUrl": "https://api.fireworks.ai/inference/v1",
+          "model": "accounts/fireworks/models/llama-v3p3-70b-instruct",
+          "hasKey": false
+        },
+        "vllm": {
+          "apiKey": "",
+          "baseUrl": "http://localhost:8000/v1",
+          "model": "model",
+          "hasKey": false
+        },
+        "mistral": {
+          "apiKey": "",
+          "baseUrl": "https://api.mistral.ai/v1",
+          "model": "mistral-large-latest",
+          "hasKey": false
+        },
+        "custom:anthropic": {
+          "apiKey": "",
+          "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+          "model": "glm-5",
+          "hasKey": false
+        },
+        "custom:openai": {
+          "apiKey": "",
+          "baseUrl": "https://api.openai.com/v1",
+          "model": "gpt-5.4",
+          "hasKey": false
+        },
+        "custom:gemini": {
+          "apiKey": "",
+          "baseUrl": "https://generativelanguage.googleapis.com",
+          "model": "gemini-2.5-flash",
+          "hasKey": false
+        }
+      },
+      "activeConfigSetId": "default",
+      "configSets": [
+        {
+          "id": "default",
+          "name": "Default",
+          "isSystem": true,
+          "provider": "ollama",
+          "customProtocol": "openai",
+          "activeProfileKey": "ollama",
+          "profiles": {
+            "chatgpt": {
+              "apiKey": "",
+              "baseUrl": "https://chatgpt.com/backend-api/codex",
+              "model": "gpt-5.6-sol",
+              "hasKey": true,
+              "keyTail": "tgpt"
+            },
+            "openrouter": {
+              "apiKey": "",
+              "baseUrl": "https://openrouter.ai/api/v1",
+              "model": "openrouter/free",
+              "hasKey": false
+            },
+            "anthropic": {
+              "apiKey": "",
+              "baseUrl": "https://api.anthropic.com",
+              "model": "claude-sonnet-4-6",
+              "hasKey": false
+            },
+            "openai": {
+              "apiKey": "",
+              "baseUrl": "https://api.openai.com/v1",
+              "model": "gpt-5.4",
+              "hasKey": false
+            },
+            "gemini": {
+              "apiKey": "",
+              "baseUrl": "https://generativelanguage.googleapis.com",
+              "model": "gemini-2.5-flash",
+              "hasKey": false
+            },
+            "ollama": {
+              "apiKey": "",
+              "baseUrl": "http://127.0.0.1:11434/v1",
+              "model": "qwen3:4b-instruct",
+              "hasKey": true,
+              "keyTail": "lama"
+            },
+            "lmstudio": {
+              "apiKey": "",
+              "baseUrl": "http://localhost:1234/v1",
+              "model": "local-model",
+              "hasKey": false
+            },
+            "grok": {
+              "apiKey": "",
+              "baseUrl": "https://api.x.ai/v1",
+              "model": "grok-3-latest",
+              "hasKey": false
+            },
+            "groq": {
+              "apiKey": "",
+              "baseUrl": "https://api.groq.com/openai/v1",
+              "model": "qwen/qwen3.8-27b",
+              "hasKey": false
+            },
+            "together": {
+              "apiKey": "",
+              "baseUrl": "https://api.together.xyz/v1",
+              "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+              "hasKey": false
+            },
+            "fireworks": {
+              "apiKey": "",
+              "baseUrl": "https://api.fireworks.ai/inference/v1",
+              "model": "accounts/fireworks/models/llama-v3p3-70b-instruct",
+              "hasKey": false
+            },
+            "vllm": {
+              "apiKey": "",
+              "baseUrl": "http://localhost:8000/v1",
+              "model": "model",
+              "hasKey": false
+            },
+            "mistral": {
+              "apiKey": "",
+              "baseUrl": "https://api.mistral.ai/v1",
+              "model": "mistral-large-latest",
+              "hasKey": false
+            },
+            "custom:anthropic": {
+              "apiKey": "",
+              "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+              "model": "glm-5",
+              "hasKey": false
+            },
+            "custom:openai": {
+              "apiKey": "",
+              "baseUrl": "https://api.openai.com/v1",
+              "model": "gpt-5.4",
+              "hasKey": false
+            },
+            "custom:gemini": {
+              "apiKey": "",
+              "baseUrl": "https://generativelanguage.googleapis.com",
+              "model": "gemini-2.5-flash",
+              "hasKey": false
+            }
+          },
+          "enableThinking": false,
+          "updatedAt": "2026-09-30T04:59:16.365Z"
+        }
+      ],
+      "claudeCodePath": "",
+      "defaultWorkdir": "<QA_PROJECT>",
+      "globalSkillsPath": "",
+      "enableDevLogs": false,
+      "theme": "dark",
+      "memoryStrategy": "auto",
+      "contextOptimizationMode": "auto",
+      "sandboxEnabled": false,
+      "enableThinking": false,
+      "thinkingLevel": "off",
+      "isConfigured": true,
+      "onboardingCompleted": true,
+      "memoryProvider": "local",
+      "hasKey": true,
+      "keyTail": "lama"
+    }
+  },
+  "inputs": 1,
+  "chat": "P9_CHAT_OK 回复\n👤 Register a face\n💬\nChat\n📋\nPlan\n📊\nActivity\n📁\nFiles\n🛠️\nApp Studio\n✨\nCreations\n🎬\nVideo Studio\n🎙️\nAssistant\n📝\nMeeting\n🖼️\nLibrary\n🧰\nCapabilities\n🛰️\nMission Control\n🧪\nLabs\n⚙️\nAdvanced\n🕘\nHistory\n🌙\n⌘K\n?\nChat\nCODE BUDDY STUDIO\nP9_CHAT_OK 回复\n4.0K\n<$0.01\nDefault\noff\nminimal\nlow\nmedium\nhigh\nxhigh\nFAST\n10.8 s\nlocal\nqwen3:4b-instruct\nLisa\nYOLO\nDefault\nChat\nmain\nTTS\n\nReply exactly P9_CHAT_OK without tools.\n\nP9_CHAT_OK [tokens: 3,960 in / 3 out | cost: $0.0000]\n\nExecution time: 11.1s\n\nCode Buddy Studio is AI-powered and may make mistakes. Please double-check responses.\n\nContext\nCONTEXT\nqwen3:4b-instruct\n2\n0\nARTIFACTS\nNo artifacts yet\n\nWORKING DIRECTORY\n\n<QA_HOME>/.config/@phuetz/codebuddy-cowork/default_working_dir\n\nCHECKPOINTS\n\nUndo\nRedo\n1 checkpoint(s)\nTurn: Reply exactly P9_CHAT_OK without tools.\nTurn 1 · 06:59:27 AM\nFiles\nGit\nMemory\nKnowledge\nAgents\nMCP\nNo files found"
+}

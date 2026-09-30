@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cowork-studio",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "3d9a7171d9c16d212079f776811d75787c403c460ce6774b68b274cf5bf02eeb",
+  "artifact": "docs/preuves/p9-cowork-studio-2026-09-30.log",
+  "summary": "App Studio affiché ; fichier écrit puis relu par le pont de fichiers Electron."
+}

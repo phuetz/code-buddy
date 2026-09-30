@@ -1,0 +1,31 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: xvfb-run -a → clipboard(write_text=P9_CLIPBOARD)
+Attendu: Retour de write_text puis texte relu
+Observé: write_text ne revient pas avant la limite de 60 secondes sous X11/Xvfb.
+Portée: Presse-papiers du DISPLAY QA uniquement ; groupe de processus arrêté après le délai.
+Verdict: échec
+
+=== Capture clipboard-timeout.json ===
+{
+  "name": "clipboard",
+  "input": {
+    "operation": "write_text",
+    "text": "P9_CLIPBOARD"
+  },
+  "timeoutSeconds": 60,
+  "expected": "Retour de write_text puis valeur relue",
+  "observed": "TimeoutExpired: xvfb-run -a node tools-live.mjs x11-cases.json timed out after 60 seconds",
+  "passed": false
+}
+=== Capture x11-live.log ===
+[2026-09-30T06:12:46.503Z]  WARN  Permission mode set to bypassPermissions — ALL operations are now auto-approved with NO confirmation. Switch back to a safer mode (e.g. default) as soon as the unattended task completes.
+1/6 docker PASS {"success":true,"output":"ID           | Name                 | Image               | Stat
+
+
+=== Reproduction indépendante, délai 35 secondes ===
+P9_CLIP_START
+
+Command '['xvfb-run', '-a', 'node', '--input-type=module', '-e', "import {createInteractiveToolAdapters} from './dist/tools/registry/interactive-adapters.js';console.log('P9_CLIP_START');const t=createInteractiveToolAdapters().find(t=>t.name==='clipboard');console.log(await t.execute({operation:'write_text',text:'P9_CLIPBOARD'}));"]' timed out after 35 seconds
+Elapsed: 35.0 seconds

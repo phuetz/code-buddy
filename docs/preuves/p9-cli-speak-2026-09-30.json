@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-speak",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "3f62a6225224324394dedfc24011348113a38f5a92676ab538d2978647af38be",
+  "artifact": "docs/preuves/p9-cli-speak-2026-09-30.log",
+  "summary": "Voicebox/Kokoro produit un WAV mono 24 kHz, 39 000 trames (1,625 s)."
+}
