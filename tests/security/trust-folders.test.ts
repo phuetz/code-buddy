@@ -40,6 +40,47 @@ describe('TrustFolderManager', () => {
     expect(manager.isTrusted('/some/random/dir')).toBe(false);
   });
 
+  it('releases nested session grants independently without changing saved trust', () => {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'session-trust-'));
+    try {
+      const saved = manager.getTrustedFolders();
+      const first = manager.trustFolderForSession(workspace);
+      const second = manager.trustFolderForSession(workspace);
+      expect(manager.isTrusted(path.join(workspace, 'new-file.txt'))).toBe(true);
+      expect(manager.isTrusted(`${workspace}-sibling`)).toBe(false);
+      expect(manager.isTrusted(os.tmpdir())).toBe(false);
+      expect(manager.getTrustedFolders()).toEqual(saved);
+      first();
+      first();
+      expect(manager.isTrusted(workspace)).toBe(true);
+      second();
+      expect(manager.isTrusted(workspace)).toBe(false);
+      manager.trustFolder(workspace);
+      manager.trustFolderForSession(workspace)();
+      expect(manager.isTrusted(workspace)).toBe(true);
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('does not persist a session grant with production trust enforcement', () => {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'session-trust-disk-'));
+    const trustFile = path.join(isolatedHome, '.codebuddy', 'trusted-folders.json');
+    const before = fs.existsSync(trustFile) ? fs.readFileSync(trustFile, 'utf8') : undefined;
+    vi.stubEnv('NODE_ENV', 'production');
+    try {
+      const productionManager = new TrustFolderManager();
+      const release = productionManager.trustFolderForSession(workspace);
+      expect(productionManager.isTrusted(workspace)).toBe(true);
+      release();
+      expect(productionManager.isTrusted(workspace)).toBe(false);
+      expect(fs.existsSync(trustFile) ? fs.readFileSync(trustFile, 'utf8') : undefined).toBe(before);
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
   it('should trust explicitly added folders', () => {
     const testDir = '/tmp/test-trusted';
     expect(manager.trustFolder(testDir)).toBe(true);

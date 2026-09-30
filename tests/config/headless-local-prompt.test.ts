@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyHeadlessCompactRequest,
   capCompactToolList,
+  HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE,
   HEADLESS_LOCAL_COMPACT_MAX_TOOLS,
   HEADLESS_LOCAL_COMPACT_MAX_TOKENS,
   isHeadlessLocalPromptCompact,
@@ -16,6 +17,18 @@ afterEach(() => {
 });
 
 describe('headless local compact prompt', () => {
+  it('keeps creation, editing and available patch schemas callable after RAG overflow', () => {
+    const required = ['view_file', 'create_file', 'str_replace_editor', 'apply_patch',
+      'bash', 'search', 'tool_search', 'restore_context'];
+    const selected = ['test_runner', 'env_doctor', 'self_describe', ...required]
+      .map(name => ({ function: { name } }));
+    const sent = capCompactToolList(selected).map(tool => tool.function.name);
+    expect(sent).toEqual(expect.arrayContaining(required));
+    expect(sent).toHaveLength(8);
+    expect(HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE).toEqual(expect.arrayContaining([
+      'create_file', 'str_replace_editor', 'apply_patch',
+    ]));
+  });
   it('detects Ollama / LM Studio / vLLM and ignores cloud providers', () => {
     expect(isLocalLlmProvider({ CODEBUDDY_PROVIDER: 'ollama' })).toBe(true);
     expect(isLocalLlmProvider({ CODEBUDDY_PROVIDER: 'lmstudio' })).toBe(true);
