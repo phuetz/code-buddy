@@ -1,0 +1,626 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → lead_scout_plan({"goal": "Plan a synthetic company dataset review", "target": "custom", "customTarget": "Synthetic fixtures", "sources": ["local_dataset"], "localDatasetPaths": ["data.csv"], "maxProspects": 1})
+Attendu: local_dataset|data.csv
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture lead_scout_plan.json ===
+{
+  "name": "lead_scout_plan",
+  "input": {
+    "goal": "Plan a synthetic company dataset review",
+    "target": "custom",
+    "customTarget": "Synthetic fixtures",
+    "sources": [
+      "local_dataset"
+    ],
+    "localDatasetPaths": [
+      "data.csv"
+    ],
+    "maxProspects": 1
+  },
+  "expected": "local_dataset|data.csv",
+  "result": {
+    "success": true,
+    "output": "# Lead Scout Plan: Plan a synthetic company dataset review\nTarget: Synthetic fixtures\nZone: zone non precisee\nOffer: offre B2B a qualifier\nProspect budget: 1\nHuman approval before contact: required\n## Sources\n1. local_dataset - Start from existing curated Synthetic fixtures files when available.\n## Local Datasets\n- data.csv\n## Pipeline\n1. Import local datasets first [required] - Read existing CSV/JSON files, map known columns, and keep source file provenance.\n2. Discover public source candidates [required] - Use official directories, public registries, and web_search queries tied to the target and zone.\n3. Normalize lead records [required] - Normalize names, addresses, city labels, websites, emails, phones, and category labels.\n4. Enrich missing public contact data [optional] - Use internet_scout_plan/run only on public pages, with low page budgets and blocker-aware stops.\n5. Deduplicate candidates [required] - Merge records by normalized name plus city, website, email, or public registry identifier.\n6. Score and prioritize [required] - Apply scoring rules, cap weak evidence, and keep rejected candidates with a reason.\n7. Draft outreach only [optional] - Generate short B2B outreach drafts referencing the offer and public context without sending.\n8. Export review queue [required] - Write CSV/JSON/Markdown outputs with status fields and source evidence.\n9. Require human approval before contact [required] - Move a record to approved only after a human reviews source evidence and outreach copy.\n## Scoring\n- public-contact (25): Add points when a public professional email, phone, website, or contact form is proven.\n- local-fit (20): Add points when the lead is in or near \"zone non precisee\".\n- target-fit (20): Add points when the page, registry, or dataset clearly matches the requested target type.\n- offer-fit (20): Add points when public evidence suggests relevance to \"offre B2B a qualifier\".\n- evidence-quality (15): Add points for official sources, recent pages, stable URLs, and clear excerpts; cap weak or duplicate evidence.\n## Safety Rules\n- Use public or user-provided B2B data only; do not collect private personal data for consumer targeting.\n- Prefer official registries, professional directories, company websites, and existing local datasets.\n- Do not bypass captcha, login walls, paywalls, anti-bot checks, robots/rate-limit signals, or access controls.\n- Keep source_url and evidence for every exported lead so a human can audit the result.\n- Respect unsubscribe, opt-out, do-not-contact, and stale-contact status fields.\n- Do not send mass email or automated outreach from this planning tool.\n- Require human validation before any contact attempt or email send.\n## Agent Tools\n- lead_scout_plan\n- lead_scout_lesson_candidates\n- internet_scout_plan\n- internet_scout_run\n- web_search\n- web_fetch\n- relationship_context\n- remember\n- lessons_add\n## Script Recipe\n- input: load-leads -> Raw lead records.\n- normalize: normalize-leads -> Canonical lead schema.\n- enrich: enrich-public-contact -> Rows with additional source_url and evidence.\n- dedupe: dedupe-leads -> Unique records with merged evidence.\n- score: score-leads -> Ranked review queue.\n- export: export-leads -> csv, json\n## Public-Data Workflow Template\n# Public-data lead discovery for Synthetic fixtures\n\nGoal: Plan a synthetic company dataset review\nZone: zone non precisee\nOffer: offre B2B a qualifier\nPublic data only: yes\nHuman approval before contact: required\n\n## Inputs\n- publicSearchQuery: Public query combining target role, region, and offer context.\n- region: City, postal code, department, region, or radius text.\n- targetRole: B2B role or organization category to find.\n- allowedSources: Public source families allowed for the run.\n- fieldsToExtract: Public professional fields such as website, email, phone, address, and evidence.\n- contactPolicy: Review-only contact policy that blocks automatic outreach.\n- localDatasetPaths: User-provided JSON/CSV files to import before web discovery.\n\n## Stages\n1. Search public candidates - Run bounded public search queries and collect candidate source URLs.\n2. Discover official sites - Follow directory/profile pages to official company websites when available.\n3. Extract public page evidence - Read home, contact, about, agency, and legal pages with a bounded page budget.\n4. Extract public contact fields - Extract public professional email, phone, website, address, and contact URL fields.\n5. Deduplicate leads - Merge candidates by normalized name plus city, website, email, phone, or registry identifier.\n6. Score evidence and prepare review - Score leads, keep proof trails, and mark every row as review by default.\n7. Export review artifacts - Write review files and draft-only outreach notes; require human approval before any contact.\n\n## Expected Artifacts\n- lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/script/manifest.json: Generated research-script job manifest with sandbox policy and assertions.\n- lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/normalized-leads.json: Normalized public lead rows before scoring.\n- lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/evidence.json: Source URLs, snippets, observed timestamps, and extraction reasons.\n- lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/review-queue.json: Human-review queue with scores and status fields.\n- lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/summary.md: Operator summary with counts, blockers, and next recommended action.\n- lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/review-queue.csv: CSV export for spreadsheet review.\n\n## Script Job\n- Manifest: research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/manifest.json\n- Script: research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/discover-public-leads.py\n- Output: research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/output.json\n\nStructured result:\n{\n  \"goal\": \"Plan a synthetic company dataset review\",\n  \"target\": \"custom\",\n  \"targetLabel\": \"Synthetic fixtures\",\n  \"zone\": \"zone non precisee\",\n  \"offer\": \"offre B2B a qualifier\",\n  \"maxProspects\": 1,\n  \"requireHumanApprovalBeforeContact\": true,\n  \"sources\": [\n    {\n      \"source\": \"local_dataset\",\n      \"priority\": 1,\n      \"reason\": \"Start from existing curated Synthetic fixtures files when available.\"\n    }\n  ],\n  \"localDatasetPaths\": [\n    \"data.csv\"\n  ],\n  \"exportFormats\": [\n    \"csv\",\n    \"json\"\n  ],\n  \"leadSchema\": [\n    {\n      \"name\": \"nom\",\n      \"description\": \"Business or organization name\",\n      \"required\": true\n    },\n    {\n      \"name\": \"type\",\n      \"description\": \"Target category such as architecte, syndic, agence\",\n      \"required\": true\n    },\n    {\n      \"name\": \"email\",\n      \"description\": \"Public professional email when available\",\n      \"required\": false\n    },\n    {\n      \"name\": \"telephone\",\n      \"description\": \"Public professional phone number when available\",\n      \"required\": false\n    },\n    {\n      \"name\": \"site_web\",\n      \"description\": \"Official website or public profile URL\",\n      \"required\": false\n    },\n    {\n      \"name\": \"adresse\",\n      \"description\": \"Public business address\",\n      \"required\": false\n    },\n    {\n      \"name\": \"ville\",\n      \"description\": \"City\",\n      \"required\": false\n    },\n    {\n      \"name\": \"departement\",\n      \"description\": \"Department or local administrative area\",\n      \"required\": false\n    },\n    {\n      \"name\": \"region\",\n      \"description\": \"Region\",\n      \"required\": false\n    },\n    {\n      \"name\": \"source_url\",\n      \"description\": \"URL proving the lead record or enrichment\",\n      \"required\": true\n    },\n    {\n      \"name\": \"evidence\",\n      \"description\": \"Short source excerpt or reason for inclusion\",\n      \"required\": true\n    },\n    {\n      \"name\": \"score\",\n      \"description\": \"Priority score from 0 to 100\",\n      \"required\": true\n    },\n    {\n      \"name\": \"status\",\n      \"description\": \"review, approved, contacted, do_not_contact, stale\",\n      \"required\": true\n    }\n  ],\n  \"pipelineSteps\": [\n    {\n      \"id\": \"import-local-datasets\",\n      \"title\": \"Import local datasets first\",\n      \"action\": \"Read existing CSV/JSON files, map known columns, and keep source file provenance.\",\n      \"required\": true,\n      \"output\": \"Raw candidate leads with source_file metadata.\"\n    },\n    {\n      \"id\": \"discover-public-sources\",\n      \"title\": \"Discover public source candidates\",\n      \"action\": \"Use official directories, public registries, and web_search queries tied to the target and zone.\",\n      \"required\": true,\n      \"output\": \"Candidate source URLs with query and observed-at timestamp.\"\n    },\n    {\n      \"id\": \"normalize-records\",\n      \"title\": \"Normalize lead records\",\n      \"action\": \"Normalize names, addresses, city labels, websites, emails, phones, and category labels.\",\n      \"required\": true,\n      \"output\": \"Records matching the lead schema.\"\n    },\n    {\n      \"id\": \"enrich-missing-public-contact\",\n      \"title\": \"Enrich missing public contact data\",\n      \"action\": \"Use internet_scout_plan/run only on public pages, with low page budgets and blocker-aware stops.\",\n      \"required\": false,\n      \"output\": \"Additional public business contact fields with source_url and evidence.\"\n    },\n    {\n      \"id\": \"dedupe\",\n      \"title\": \"Deduplicate candidates\",\n      \"action\": \"Merge records by normalized name plus city, website, email, or public registry identifier.\",\n      \"required\": true,\n      \"output\": \"Unique lead list with merged evidence.\"\n    },\n    {\n      \"id\": \"score\",\n      \"title\": \"Score and prioritize\",\n      \"action\": \"Apply scoring rules, cap weak evidence, and keep rejected candidates with a reason.\",\n      \"required\": true,\n      \"output\": \"Ranked review queue.\"\n    },\n    {\n      \"id\": \"draft-outreach\",\n      \"title\": \"Draft outreach only\",\n      \"action\": \"Generate short B2B outreach drafts referencing the offer and public context without sending.\",\n      \"required\": false,\n      \"output\": \"Draft email snippets attached to approved records.\"\n    },\n    {\n      \"id\": \"export-review-queue\",\n      \"title\": \"Export review queue\",\n      \"action\": \"Write CSV/JSON/Markdown outputs with status fields and source evidence.\",\n      \"required\": true,\n      \"output\": \"Human-reviewable lead files.\"\n    },\n    {\n      \"id\": \"human-approval-gate\",\n      \"title\": \"Require human approval before contact\",\n      \"action\": \"Move a record to approved only after a human reviews source evidence and outreach copy.\",\n      \"required\": true,\n      \"output\": \"Approved contact queue; no automatic sends.\"\n    }\n  ],\n  \"scoringRules\": [\n    {\n      \"id\": \"public-contact\",\n      \"weight\": 25,\n      \"rule\": \"Add points when a public professional email, phone, website, or contact form is proven.\"\n    },\n    {\n      \"id\": \"local-fit\",\n      \"weight\": 20,\n      \"rule\": \"Add points when the lead is in or near \\\"zone non precisee\\\".\"\n    },\n    {\n      \"id\": \"target-fit\",\n      \"weight\": 20,\n      \"rule\": \"Add points when the page, registry, or dataset clearly matches the requested target type.\"\n    },\n    {\n      \"id\": \"offer-fit\",\n      \"weight\": 20,\n      \"rule\": \"Add points when public evidence suggests relevance to \\\"offre B2B a qualifier\\\".\"\n    },\n    {\n      \"id\": \"evidence-quality\",\n      \"weight\": 15,\n      \"rule\": \"Add points for official sources, recent pages, stable URLs, and clear excerpts; cap weak or duplicate evidence.\"\n    }\n  ],\n  \"safetyRules\": [\n    \"Use public or user-provided B2B data only; do not collect private personal data for consumer targeting.\",\n    \"Prefer official registries, professional directories, company websites, and existing local datasets.\",\n    \"Do not bypass captcha, login walls, paywalls, anti-bot checks, robots/rate-limit signals, or access controls.\",\n    \"Keep source_url and evidence for every exported lead so a human can audit the result.\",\n    \"Respect unsubscribe, opt-out, do-not-contact, and stale-contact status fields.\",\n    \"Do not send mass email or automated outreach from this planning tool.\",\n    \"Require human validation before any contact attempt or email send.\"\n  ],\n  \"agentTools\": [\n    \"lead_scout_plan\",\n    \"lead_scout_lesson_candidates\",\n    \"internet_scout_plan\",\n    \"internet_scout_run\",\n    \"web_search\",\n    \"web_fetch\",\n    \"relationship_context\",\n    \"remember\",\n    \"lessons_add\"\n  ],\n  \"scriptRecipe\": [\n    {\n      \"id\": \"input\",\n      \"module\": \"load-leads\",\n      \"input\": \"CSV/JSON datasets, public registry exports, or source URL candidates.\",\n      \"output\": \"Raw lead records.\",\n      \"notes\": [\n        \"Keep original source path or URL on every row.\",\n        \"Fail closed on unreadable files instead of guessing columns.\"\n      ]\n    },\n    {\n      \"id\": \"normalize\",\n      \"module\": \"normalize-leads\",\n      \"input\": \"Raw lead records.\",\n      \"output\": \"Canonical lead schema.\",\n      \"notes\": [\n        \"Trim whitespace and normalize casing.\",\n        \"Preserve original fields under metadata when useful.\"\n      ]\n    },\n    {\n      \"id\": \"enrich\",\n      \"module\": \"enrich-public-contact\",\n      \"input\": \"Rows missing public contact fields.\",\n      \"output\": \"Rows with additional source_url and evidence.\",\n      \"notes\": [\n        \"Use Internet Scout with small budgets.\",\n        \"Stop on captcha, 403, 429, login, paywall, or private data.\"\n      ]\n    },\n    {\n      \"id\": \"dedupe\",\n      \"module\": \"dedupe-leads\",\n      \"input\": \"Canonical lead records.\",\n      \"output\": \"Unique records with merged evidence.\",\n      \"notes\": [\n        \"Match on normalized name plus city, website, email, or registry id.\",\n        \"Never drop evidence silently.\"\n      ]\n    },\n    {\n      \"id\": \"score\",\n      \"module\": \"score-leads\",\n      \"input\": \"Unique records.\",\n      \"output\": \"Ranked review queue.\",\n      \"notes\": [\n        \"Store score reasons.\",\n        \"Default status should be review, not contacted.\"\n      ]\n    },\n    {\n      \"id\": \"export\",\n      \"module\": \"export-leads\",\n      \"input\": \"Ranked review queue.\",\n      \"output\": \"csv, json\",\n      \"notes\": [\n        \"Include status and source evidence in every format.\",\n        \"Block send-ready exports until approval is recorded.\"\n      ]\n    }\n  ],\n  \"workflowTemplate\": {\n    \"schemaVersion\": 1,\n    \"id\": \"lead-discovery-public-synthetic-fixtures-0enkwj5\",\n    \"title\": \"Public-data lead discovery for Synthetic fixtures\",\n    \"goal\": \"Plan a synthetic company dataset review\",\n    \"targetLabel\": \"Synthetic fixtures\",\n    \"zone\": \"zone non precisee\",\n    \"offer\": \"offre B2B a qualifier\",\n    \"maxProspects\": 1,\n    \"publicDataOnly\": true,\n    \"allowedSources\": [\n      \"local_dataset\"\n    ],\n    \"contactPolicy\": {\n      \"mode\": \"review_queue_only\",\n      \"requiresHumanApproval\": true,\n      \"automaticContactAllowed\": false,\n      \"allowedActions\": [\n        \"write_review_queue\",\n        \"write_draft_outreach_copy\",\n        \"export_public_source_evidence\"\n      ],\n      \"blockedActions\": [\n        \"send_email\",\n        \"submit_contact_form\",\n        \"call_phone_number\",\n        \"bypass_access_control\",\n        \"enrich_private_personal_profiles\"\n      ]\n    },\n    \"inputs\": [\n      {\n        \"name\": \"publicSearchQuery\",\n        \"description\": \"Public query combining target role, region, and offer context.\",\n        \"required\": true,\n        \"source\": \"operator\"\n      },\n      {\n        \"name\": \"region\",\n        \"description\": \"City, postal code, department, region, or radius text.\",\n        \"required\": true,\n        \"source\": \"operator\"\n      },\n      {\n        \"name\": \"targetRole\",\n        \"description\": \"B2B role or organization category to find.\",\n        \"required\": true,\n        \"source\": \"operator\"\n      },\n      {\n        \"name\": \"allowedSources\",\n        \"description\": \"Public source families allowed for the run.\",\n        \"required\": true,\n        \"source\": \"operator\"\n      },\n      {\n        \"name\": \"fieldsToExtract\",\n        \"description\": \"Public professional fields such as website, email, phone, address, and evidence.\",\n        \"required\": true,\n        \"source\": \"operator\"\n      },\n      {\n        \"name\": \"contactPolicy\",\n        \"description\": \"Review-only contact policy that blocks automatic outreach.\",\n        \"required\": true,\n        \"source\": \"operator\"\n      },\n      {\n        \"name\": \"localDatasetPaths\",\n        \"description\": \"User-provided JSON/CSV files to import before web discovery.\",\n        \"required\": false,\n        \"source\": \"user_dataset\"\n      }\n    ],\n    \"stages\": [\n      {\n        \"id\": \"search\",\n        \"title\": \"Search public candidates\",\n        \"action\": \"Run bounded public search queries and collect candidate source URLs.\",\n        \"inputs\": [\n          \"publicSearchQuery\",\n          \"region\",\n          \"targetRole\",\n          \"allowedSources\"\n        ],\n        \"outputs\": [\n          \"candidateSourceUrls\"\n        ],\n        \"guardrails\": [\n          \"Use public pages only.\",\n          \"Stop on captcha, login walls, paywalls, 403, or 429.\"\n        ]\n      },\n      {\n        \"id\": \"site-discovery\",\n        \"title\": \"Discover official sites\",\n        \"action\": \"Follow directory/profile pages to official company websites when available.\",\n        \"inputs\": [\n          \"candidateSourceUrls\"\n        ],\n        \"outputs\": [\n          \"officialWebsiteCandidates\"\n        ],\n        \"guardrails\": [\n          \"Reject generic portals and social-only profiles as official sites.\"\n        ]\n      },\n      {\n        \"id\": \"page-extraction\",\n        \"title\": \"Extract public page evidence\",\n        \"action\": \"Read home, contact, about, agency, and legal pages with a bounded page budget.\",\n        \"inputs\": [\n          \"officialWebsiteCandidates\"\n        ],\n        \"outputs\": [\n          \"pageEvidence\"\n        ],\n        \"guardrails\": [\n          \"Store snippets, not full raw pages.\",\n          \"Stay on same-domain pages unless explicitly allowed.\"\n        ]\n      },\n      {\n        \"id\": \"contact-field-extraction\",\n        \"title\": \"Extract public contact fields\",\n        \"action\": \"Extract public professional email, phone, website, address, and contact URL fields.\",\n        \"inputs\": [\n          \"pageEvidence\"\n        ],\n        \"outputs\": [\n          \"normalizedLeadRows\"\n        ],\n        \"guardrails\": [\n          \"Keep source_url and snippet for every field.\",\n          \"Do not collect unrelated private personal data.\"\n        ]\n      },\n      {\n        \"id\": \"dedupe\",\n        \"title\": \"Deduplicate leads\",\n        \"action\": \"Merge candidates by normalized name plus city, website, email, phone, or registry identifier.\",\n        \"inputs\": [\n          \"normalizedLeadRows\"\n        ],\n        \"outputs\": [\n          \"uniqueLeadRows\"\n        ],\n        \"guardrails\": [\n          \"Never drop evidence silently.\",\n          \"Preserve rejected duplicate reasons.\"\n        ]\n      },\n      {\n        \"id\": \"evidence\",\n        \"title\": \"Score evidence and prepare review\",\n        \"action\": \"Score leads, keep proof trails, and mark every row as review by default.\",\n        \"inputs\": [\n          \"uniqueLeadRows\"\n        ],\n        \"outputs\": [\n          \"reviewQueue\"\n        ],\n        \"guardrails\": [\n          \"Cap weak evidence.\",\n          \"Keep source timestamps and score reasons.\"\n        ]\n      },\n      {\n        \"id\": \"export\",\n        \"title\": \"Export review artifacts\",\n        \"action\": \"Write review files and draft-only outreach notes; require human approval before any contact.\",\n        \"inputs\": [\n          \"reviewQueue\"\n        ],\n        \"outputs\": [\n          \"jsonExport\",\n          \"csvExport\",\n          \"markdownSummary\"\n        ],\n        \"guardrails\": [\n          \"Do not send emails.\",\n          \"Do not submit forms.\",\n          \"Do not mutate CRM/contact status automatically.\"\n        ]\n      }\n    ],\n    \"guardrails\": [\n      \"Use public B2B sources or user-provided datasets only.\",\n      \"Do not bypass captcha, login walls, paywalls, anti-bot checks, robots/rate-limit signals, or access controls.\",\n      \"Keep source_url, observed_at, page title, and evidence snippet for every exported value.\",\n      \"Store snippets and structured facts, not raw full-page dumps.\",\n      \"Never contact leads automatically from the workflow.\",\n      \"Require human approval before any send, call, CRM mutation, or contact-status change.\"\n    ],\n    \"expectedArtifacts\": [\n      {\n        \"kind\": \"script\",\n        \"path\": \"lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/script/manifest.json\",\n        \"description\": \"Generated research-script job manifest with sandbox policy and assertions.\"\n      },\n      {\n        \"kind\": \"dataset\",\n        \"path\": \"lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/normalized-leads.json\",\n        \"description\": \"Normalized public lead rows before scoring.\"\n      },\n      {\n        \"kind\": \"evidence\",\n        \"path\": \"lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/evidence.json\",\n        \"description\": \"Source URLs, snippets, observed timestamps, and extraction reasons.\"\n      },\n      {\n        \"kind\": \"review_queue\",\n        \"path\": \"lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/review-queue.json\",\n        \"description\": \"Human-review queue with scores and status fields.\"\n      },\n      {\n        \"kind\": \"summary\",\n        \"path\": \"lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/summary.md\",\n        \"description\": \"Operator summary with counts, blockers, and next recommended action.\"\n      },\n      {\n        \"kind\": \"export\",\n        \"path\": \"lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/review-queue.csv\",\n        \"description\": \"CSV export for spreadsheet review.\"\n      }\n    ],\n    \"recommendedTools\": [\n      \"lead_scout_plan\",\n      \"lead_scout_enrichment_plan\",\n      \"lead_scout_run\",\n      \"internet_scout_plan\",\n      \"internet_scout_run\",\n      \"web_search\",\n      \"web_fetch\",\n      \"lessons_add\"\n    ],\n    \"scriptJobArtifact\": {\n      \"schemaVersion\": 1,\n      \"id\": \"lead-discovery-public-synthetic-fixtures-0enkwj5-script\",\n      \"artifactRoot\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script\",\n      \"command\": {\n        \"executable\": \"python\",\n        \"args\": [\n          \"discover-public-leads.py\"\n        ],\n        \"cwd\": \".\",\n        \"env\": {\n          \"SEARCH_QUERY\": \"Synthetic fixtures zone non precisee\",\n          \"OUTPUT_JSON\": \"output.json\",\n          \"LIMIT\": \"1\"\n        }\n      },\n      \"createdAt\": \"2026-09-30T05:27:12.314Z\",\n      \"files\": {\n        \"manifest\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/manifest.json\",\n        \"readme\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/README.md\",\n        \"script\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/discover-public-leads.py\",\n        \"input\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/input.json\",\n        \"output\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/output.json\",\n        \"stdout\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/stdout.log\",\n        \"stderr\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/stderr.log\",\n        \"summary\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/summary.md\"\n      },\n      \"goal\": \"Plan a synthetic company dataset review\",\n      \"inputContract\": {\n        \"SEARCH_QUERY\": \"Public search query for the target, region, and offer.\",\n        \"SEED_URLS_JSON\": \"Optional public seed/profile URLs selected by the operator or previous step.\",\n        \"LOCAL_DATASETS_JSON\": \"Optional local dataset manifest with user-provided source files.\",\n        \"OUTPUT_JSON\": \"Path where the script writes normalized leads and evidence.\"\n      },\n      \"language\": \"python\",\n      \"outputContract\": {\n        \"leads\": \"Normalized public B2B lead rows with source_url, evidence, score, and review status.\",\n        \"evidence\": \"Source URL, observed time, page title, snippet, and extraction reason for each field.\",\n        \"reviewQueue\": \"Human-review queue; no automatic outreach or send action.\"\n      },\n      \"sandboxPolicy\": {\n        \"provider\": \"local\",\n        \"network\": \"https_only_public_web\",\n        \"writes\": \"artifact_dir_only\",\n        \"timeoutMs\": 180000,\n        \"pageBudget\": 40,\n        \"delayMs\": 1500,\n        \"allowedDomains\": [],\n        \"ignoredDomains\": [],\n        \"stopOn\": [\n          \"captcha\",\n          \"login\",\n          \"paywall\",\n          \"403\",\n          \"429\",\n          \"private_data\",\n          \"non_public_source\"\n        ],\n        \"cleanup\": \"keep_all_artifacts\"\n      },\n      \"assertions\": [\n        {\n          \"id\": \"public-source-only\",\n          \"kind\": \"evidence\",\n          \"description\": \"Every exported lead is backed by a public source URL and short evidence snippet.\",\n          \"required\": true\n        },\n        {\n          \"id\": \"review-queue-only\",\n          \"kind\": \"no_contact_action\",\n          \"description\": \"The workflow creates review and draft artifacts only; it does not contact leads.\",\n          \"required\": true\n        },\n        {\n          \"id\": \"review-export-written\",\n          \"kind\": \"file_exists\",\n          \"description\": \"The run writes a review queue artifact under the script job folder.\",\n          \"required\": true\n        }\n      ],\n      \"title\": \"Synthetic fixtures public lead discovery script\",\n      \"agentRunArtifact\": {\n        \"kind\": \"script\",\n        \"path\": \"research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/manifest.json\",\n        \"title\": \"Synthetic fixtures public lead discovery script\"\n      }\n    }\n  }\n}",
+    "data": {
+      "goal": "Plan a synthetic company dataset review",
+      "target": "custom",
+      "targetLabel": "Synthetic fixtures",
+      "zone": "zone non precisee",
+      "offer": "offre B2B a qualifier",
+      "maxProspects": 1,
+      "requireHumanApprovalBeforeContact": true,
+      "sources": [
+        {
+          "source": "local_dataset",
+          "priority": 1,
+          "reason": "Start from existing curated Synthetic fixtures files when available."
+        }
+      ],
+      "localDatasetPaths": [
+        "data.csv"
+      ],
+      "exportFormats": [
+        "csv",
+        "json"
+      ],
+      "leadSchema": [
+        {
+          "name": "nom",
+          "description": "Business or organization name",
+          "required": true
+        },
+        {
+          "name": "type",
+          "description": "Target category such as architecte, syndic, agence",
+          "required": true
+        },
+        {
+          "name": "email",
+          "description": "Public professional email when available",
+          "required": false
+        },
+        {
+          "name": "telephone",
+          "description": "Public professional phone number when available",
+          "required": false
+        },
+        {
+          "name": "site_web",
+          "description": "Official website or public profile URL",
+          "required": false
+        },
+        {
+          "name": "adresse",
+          "description": "Public business address",
+          "required": false
+        },
+        {
+          "name": "ville",
+          "description": "City",
+          "required": false
+        },
+        {
+          "name": "departement",
+          "description": "Department or local administrative area",
+          "required": false
+        },
+        {
+          "name": "region",
+          "description": "Region",
+          "required": false
+        },
+        {
+          "name": "source_url",
+          "description": "URL proving the lead record or enrichment",
+          "required": true
+        },
+        {
+          "name": "evidence",
+          "description": "Short source excerpt or reason for inclusion",
+          "required": true
+        },
+        {
+          "name": "score",
+          "description": "Priority score from 0 to 100",
+          "required": true
+        },
+        {
+          "name": "status",
+          "description": "review, approved, contacted, do_not_contact, stale",
+          "required": true
+        }
+      ],
+      "pipelineSteps": [
+        {
+          "id": "import-local-datasets",
+          "title": "Import local datasets first",
+          "action": "Read existing CSV/JSON files, map known columns, and keep source file provenance.",
+          "required": true,
+          "output": "Raw candidate leads with source_file metadata."
+        },
+        {
+          "id": "discover-public-sources",
+          "title": "Discover public source candidates",
+          "action": "Use official directories, public registries, and web_search queries tied to the target and zone.",
+          "required": true,
+          "output": "Candidate source URLs with query and observed-at timestamp."
+        },
+        {
+          "id": "normalize-records",
+          "title": "Normalize lead records",
+          "action": "Normalize names, addresses, city labels, websites, emails, phones, and category labels.",
+          "required": true,
+          "output": "Records matching the lead schema."
+        },
+        {
+          "id": "enrich-missing-public-contact",
+          "title": "Enrich missing public contact data",
+          "action": "Use internet_scout_plan/run only on public pages, with low page budgets and blocker-aware stops.",
+          "required": false,
+          "output": "Additional public business contact fields with source_url and evidence."
+        },
+        {
+          "id": "dedupe",
+          "title": "Deduplicate candidates",
+          "action": "Merge records by normalized name plus city, website, email, or public registry identifier.",
+          "required": true,
+          "output": "Unique lead list with merged evidence."
+        },
+        {
+          "id": "score",
+          "title": "Score and prioritize",
+          "action": "Apply scoring rules, cap weak evidence, and keep rejected candidates with a reason.",
+          "required": true,
+          "output": "Ranked review queue."
+        },
+        {
+          "id": "draft-outreach",
+          "title": "Draft outreach only",
+          "action": "Generate short B2B outreach drafts referencing the offer and public context without sending.",
+          "required": false,
+          "output": "Draft email snippets attached to approved records."
+        },
+        {
+          "id": "export-review-queue",
+          "title": "Export review queue",
+          "action": "Write CSV/JSON/Markdown outputs with status fields and source evidence.",
+          "required": true,
+          "output": "Human-reviewable lead files."
+        },
+        {
+          "id": "human-approval-gate",
+          "title": "Require human approval before contact",
+          "action": "Move a record to approved only after a human reviews source evidence and outreach copy.",
+          "required": true,
+          "output": "Approved contact queue; no automatic sends."
+        }
+      ],
+      "scoringRules": [
+        {
+          "id": "public-contact",
+          "weight": 25,
+          "rule": "Add points when a public professional email, phone, website, or contact form is proven."
+        },
+        {
+          "id": "local-fit",
+          "weight": 20,
+          "rule": "Add points when the lead is in or near \"zone non precisee\"."
+        },
+        {
+          "id": "target-fit",
+          "weight": 20,
+          "rule": "Add points when the page, registry, or dataset clearly matches the requested target type."
+        },
+        {
+          "id": "offer-fit",
+          "weight": 20,
+          "rule": "Add points when public evidence suggests relevance to \"offre B2B a qualifier\"."
+        },
+        {
+          "id": "evidence-quality",
+          "weight": 15,
+          "rule": "Add points for official sources, recent pages, stable URLs, and clear excerpts; cap weak or duplicate evidence."
+        }
+      ],
+      "safetyRules": [
+        "Use public or user-provided B2B data only; do not collect private personal data for consumer targeting.",
+        "Prefer official registries, professional directories, company websites, and existing local datasets.",
+        "Do not bypass captcha, login walls, paywalls, anti-bot checks, robots/rate-limit signals, or access controls.",
+        "Keep source_url and evidence for every exported lead so a human can audit the result.",
+        "Respect unsubscribe, opt-out, do-not-contact, and stale-contact status fields.",
+        "Do not send mass email or automated outreach from this planning tool.",
+        "Require human validation before any contact attempt or email send."
+      ],
+      "agentTools": [
+        "lead_scout_plan",
+        "lead_scout_lesson_candidates",
+        "internet_scout_plan",
+        "internet_scout_run",
+        "web_search",
+        "web_fetch",
+        "relationship_context",
+        "remember",
+        "lessons_add"
+      ],
+      "scriptRecipe": [
+        {
+          "id": "input",
+          "module": "load-leads",
+          "input": "CSV/JSON datasets, public registry exports, or source URL candidates.",
+          "output": "Raw lead records.",
+          "notes": [
+            "Keep original source path or URL on every row.",
+            "Fail closed on unreadable files instead of guessing columns."
+          ]
+        },
+        {
+          "id": "normalize",
+          "module": "normalize-leads",
+          "input": "Raw lead records.",
+          "output": "Canonical lead schema.",
+          "notes": [
+            "Trim whitespace and normalize casing.",
+            "Preserve original fields under metadata when useful."
+          ]
+        },
+        {
+          "id": "enrich",
+          "module": "enrich-public-contact",
+          "input": "Rows missing public contact fields.",
+          "output": "Rows with additional source_url and evidence.",
+          "notes": [
+            "Use Internet Scout with small budgets.",
+            "Stop on captcha, 403, 429, login, paywall, or private data."
+          ]
+        },
+        {
+          "id": "dedupe",
+          "module": "dedupe-leads",
+          "input": "Canonical lead records.",
+          "output": "Unique records with merged evidence.",
+          "notes": [
+            "Match on normalized name plus city, website, email, or registry id.",
+            "Never drop evidence silently."
+          ]
+        },
+        {
+          "id": "score",
+          "module": "score-leads",
+          "input": "Unique records.",
+          "output": "Ranked review queue.",
+          "notes": [
+            "Store score reasons.",
+            "Default status should be review, not contacted."
+          ]
+        },
+        {
+          "id": "export",
+          "module": "export-leads",
+          "input": "Ranked review queue.",
+          "output": "csv, json",
+          "notes": [
+            "Include status and source evidence in every format.",
+            "Block send-ready exports until approval is recorded."
+          ]
+        }
+      ],
+      "workflowTemplate": {
+        "schemaVersion": 1,
+        "id": "lead-discovery-public-synthetic-fixtures-0enkwj5",
+        "title": "Public-data lead discovery for Synthetic fixtures",
+        "goal": "Plan a synthetic company dataset review",
+        "targetLabel": "Synthetic fixtures",
+        "zone": "zone non precisee",
+        "offer": "offre B2B a qualifier",
+        "maxProspects": 1,
+        "publicDataOnly": true,
+        "allowedSources": [
+          "local_dataset"
+        ],
+        "contactPolicy": {
+          "mode": "review_queue_only",
+          "requiresHumanApproval": true,
+          "automaticContactAllowed": false,
+          "allowedActions": [
+            "write_review_queue",
+            "write_draft_outreach_copy",
+            "export_public_source_evidence"
+          ],
+          "blockedActions": [
+            "send_email",
+            "submit_contact_form",
+            "call_phone_number",
+            "bypass_access_control",
+            "enrich_private_personal_profiles"
+          ]
+        },
+        "inputs": [
+          {
+            "name": "publicSearchQuery",
+            "description": "Public query combining target role, region, and offer context.",
+            "required": true,
+            "source": "operator"
+          },
+          {
+            "name": "region",
+            "description": "City, postal code, department, region, or radius text.",
+            "required": true,
+            "source": "operator"
+          },
+          {
+            "name": "targetRole",
+            "description": "B2B role or organization category to find.",
+            "required": true,
+            "source": "operator"
+          },
+          {
+            "name": "allowedSources",
+            "description": "Public source families allowed for the run.",
+            "required": true,
+            "source": "operator"
+          },
+          {
+            "name": "fieldsToExtract",
+            "description": "Public professional fields such as website, email, phone, address, and evidence.",
+            "required": true,
+            "source": "operator"
+          },
+          {
+            "name": "contactPolicy",
+            "description": "Review-only contact policy that blocks automatic outreach.",
+            "required": true,
+            "source": "operator"
+          },
+          {
+            "name": "localDatasetPaths",
+            "description": "User-provided JSON/CSV files to import before web discovery.",
+            "required": false,
+            "source": "user_dataset"
+          }
+        ],
+        "stages": [
+          {
+            "id": "search",
+            "title": "Search public candidates",
+            "action": "Run bounded public search queries and collect candidate source URLs.",
+            "inputs": [
+              "publicSearchQuery",
+              "region",
+              "targetRole",
+              "allowedSources"
+            ],
+            "outputs": [
+              "candidateSourceUrls"
+            ],
+            "guardrails": [
+              "Use public pages only.",
+              "Stop on captcha, login walls, paywalls, 403, or 429."
+            ]
+          },
+          {
+            "id": "site-discovery",
+            "title": "Discover official sites",
+            "action": "Follow directory/profile pages to official company websites when available.",
+            "inputs": [
+              "candidateSourceUrls"
+            ],
+            "outputs": [
+              "officialWebsiteCandidates"
+            ],
+            "guardrails": [
+              "Reject generic portals and social-only profiles as official sites."
+            ]
+          },
+          {
+            "id": "page-extraction",
+            "title": "Extract public page evidence",
+            "action": "Read home, contact, about, agency, and legal pages with a bounded page budget.",
+            "inputs": [
+              "officialWebsiteCandidates"
+            ],
+            "outputs": [
+              "pageEvidence"
+            ],
+            "guardrails": [
+              "Store snippets, not full raw pages.",
+              "Stay on same-domain pages unless explicitly allowed."
+            ]
+          },
+          {
+            "id": "contact-field-extraction",
+            "title": "Extract public contact fields",
+            "action": "Extract public professional email, phone, website, address, and contact URL fields.",
+            "inputs": [
+              "pageEvidence"
+            ],
+            "outputs": [
+              "normalizedLeadRows"
+            ],
+            "guardrails": [
+              "Keep source_url and snippet for every field.",
+              "Do not collect unrelated private personal data."
+            ]
+          },
+          {
+            "id": "dedupe",
+            "title": "Deduplicate leads",
+            "action": "Merge candidates by normalized name plus city, website, email, phone, or registry identifier.",
+            "inputs": [
+              "normalizedLeadRows"
+            ],
+            "outputs": [
+              "uniqueLeadRows"
+            ],
+            "guardrails": [
+              "Never drop evidence silently.",
+              "Preserve rejected duplicate reasons."
+            ]
+          },
+          {
+            "id": "evidence",
+            "title": "Score evidence and prepare review",
+            "action": "Score leads, keep proof trails, and mark every row as review by default.",
+            "inputs": [
+              "uniqueLeadRows"
+            ],
+            "outputs": [
+              "reviewQueue"
+            ],
+            "guardrails": [
+              "Cap weak evidence.",
+              "Keep source timestamps and score reasons."
+            ]
+          },
+          {
+            "id": "export",
+            "title": "Export review artifacts",
+            "action": "Write review files and draft-only outreach notes; require human approval before any contact.",
+            "inputs": [
+              "reviewQueue"
+            ],
+            "outputs": [
+              "jsonExport",
+              "csvExport",
+              "markdownSummary"
+            ],
+            "guardrails": [
+              "Do not send emails.",
+              "Do not submit forms.",
+              "Do not mutate CRM/contact status automatically."
+            ]
+          }
+        ],
+        "guardrails": [
+          "Use public B2B sources or user-provided datasets only.",
+          "Do not bypass captcha, login walls, paywalls, anti-bot checks, robots/rate-limit signals, or access controls.",
+          "Keep source_url, observed_at, page title, and evidence snippet for every exported value.",
+          "Store snippets and structured facts, not raw full-page dumps.",
+          "Never contact leads automatically from the workflow.",
+          "Require human approval before any send, call, CRM mutation, or contact-status change."
+        ],
+        "expectedArtifacts": [
+          {
+            "kind": "script",
+            "path": "lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/script/manifest.json",
+            "description": "Generated research-script job manifest with sandbox policy and assertions."
+          },
+          {
+            "kind": "dataset",
+            "path": "lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/normalized-leads.json",
+            "description": "Normalized public lead rows before scoring."
+          },
+          {
+            "kind": "evidence",
+            "path": "lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/evidence.json",
+            "description": "Source URLs, snippets, observed timestamps, and extraction reasons."
+          },
+          {
+            "kind": "review_queue",
+            "path": "lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/review-queue.json",
+            "description": "Human-review queue with scores and status fields."
+          },
+          {
+            "kind": "summary",
+            "path": "lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/summary.md",
+            "description": "Operator summary with counts, blockers, and next recommended action."
+          },
+          {
+            "kind": "export",
+            "path": "lead-discovery/lead-discovery-public-synthetic-fixtures-0enkwj5/review-queue.csv",
+            "description": "CSV export for spreadsheet review."
+          }
+        ],
+        "recommendedTools": [
+          "lead_scout_plan",
+          "lead_scout_enrichment_plan",
+          "lead_scout_run",
+          "internet_scout_plan",
+          "internet_scout_run",
+          "web_search",
+          "web_fetch",
+          "lessons_add"
+        ],
+        "scriptJobArtifact": {
+          "schemaVersion": 1,
+          "id": "lead-discovery-public-synthetic-fixtures-0enkwj5-script",
+          "artifactRoot": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script",
+          "command": {
+            "executable": "python",
+            "args": [
+              "discover-public-leads.py"
+            ],
+            "cwd": ".",
+            "env": {
+              "SEARCH_QUERY": "Synthetic fixtures zone non precisee",
+              "OUTPUT_JSON": "output.json",
+              "LIMIT": "1"
+            }
+          },
+          "createdAt": "2026-09-30T05:27:12.314Z",
+          "files": {
+            "manifest": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/manifest.json",
+            "readme": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/README.md",
+            "script": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/discover-public-leads.py",
+            "input": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/input.json",
+            "output": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/output.json",
+            "stdout": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/stdout.log",
+            "stderr": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/stderr.log",
+            "summary": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/summary.md"
+          },
+          "goal": "Plan a synthetic company dataset review",
+          "inputContract": {
+            "SEARCH_QUERY": "Public search query for the target, region, and offer.",
+            "SEED_URLS_JSON": "Optional public seed/profile URLs selected by the operator or previous step.",
+            "LOCAL_DATASETS_JSON": "Optional local dataset manifest with user-provided source files.",
+            "OUTPUT_JSON": "Path where the script writes normalized leads and evidence."
+          },
+          "language": "python",
+          "outputContract": {
+            "leads": "Normalized public B2B lead rows with source_url, evidence, score, and review status.",
+            "evidence": "Source URL, observed time, page title, snippet, and extraction reason for each field.",
+            "reviewQueue": "Human-review queue; no automatic outreach or send action."
+          },
+          "sandboxPolicy": {
+            "provider": "local",
+            "network": "https_only_public_web",
+            "writes": "artifact_dir_only",
+            "timeoutMs": 180000,
+            "pageBudget": 40,
+            "delayMs": 1500,
+            "allowedDomains": [],
+            "ignoredDomains": [],
+            "stopOn": [
+              "captcha",
+              "login",
+              "paywall",
+              "403",
+              "429",
+              "private_data",
+              "non_public_source"
+            ],
+            "cleanup": "keep_all_artifacts"
+          },
+          "assertions": [
+            {
+              "id": "public-source-only",
+              "kind": "evidence",
+              "description": "Every exported lead is backed by a public source URL and short evidence snippet.",
+              "required": true
+            },
+            {
+              "id": "review-queue-only",
+              "kind": "no_contact_action",
+              "description": "The workflow creates review and draft artifacts only; it does not contact leads.",
+              "required": true
+            },
+            {
+              "id": "review-export-written",
+              "kind": "file_exists",
+              "description": "The run writes a review queue artifact under the script job folder.",
+              "required": true
+            }
+          ],
+          "title": "Synthetic fixtures public lead discovery script",
+          "agentRunArtifact": {
+            "kind": "script",
+            "path": "research-scripts/lead-discovery-public-synthetic-fixtures-0enkwj5-script/manifest.json",
+            "title": "Synthetic fixtures public lead discovery script"
+          }
+        }
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 2
+}

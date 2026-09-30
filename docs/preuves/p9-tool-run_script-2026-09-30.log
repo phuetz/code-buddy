@@ -1,0 +1,34 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → run_script({"script": "print(6*7)", "language": "python"})
+Attendu: 42
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture run_script.json ===
+{
+  "name": "run_script",
+  "input": {
+    "script": "print(6*7)",
+    "language": "python"
+  },
+  "expected": "42",
+  "result": {
+    "success": true,
+    "output": "42\n",
+    "data": {
+      "exitCode": 0,
+      "file": "script_e60c064e.py"
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 888
+}

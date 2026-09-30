@@ -1,0 +1,40 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → screenshot({"outputPath": "p9-screen.png", "fullscreen": true, "format": "png"})
+Attendu: PNG du DISPLAY QA non vide
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Capture du DISPLAY Xvfb de test ; aucun bureau personnel ou session Windows capturé.
+Verdict: prouvée
+
+=== Capture screenshot.json ===
+{
+  "name": "screenshot",
+  "input": {
+    "outputPath": "p9-screen.png",
+    "fullscreen": true,
+    "format": "png"
+  },
+  "expected": "PNG du DISPLAY QA non vide",
+  "result": {
+    "success": true,
+    "output": "📸 Screenshot captured\n   Path: p9-screen.png\n   Size: 295 B\n   Time: 2026-09-30T06:16:41.297Z",
+    "data": {
+      "path": "p9-screen.png",
+      "size": "295 B",
+      "timestamp": "2026-09-30T06:16:41.297Z"
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    },
+    {
+      "check": "file exists and nonempty",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 89
+}

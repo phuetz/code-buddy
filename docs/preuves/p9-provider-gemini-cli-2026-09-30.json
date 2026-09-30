@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "provider-gemini-cli",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "ae6da6fb458280cfbfc1cbea9a9e752b8c9ee62ec558f4020d32b39b0b050a82",
+  "artifact": "docs/preuves/p9-provider-gemini-cli-2026-09-30.log",
+  "summary": "Gemini CLI répond effectivement avec une clé préexistante."
+}

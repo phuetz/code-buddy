@@ -1,0 +1,30 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → js_repl({"action": "execute", "code": "6 * 7"})
+Attendu: 42
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture js_repl.json ===
+{
+  "name": "js_repl",
+  "input": {
+    "action": "execute",
+    "code": "6 * 7"
+  },
+  "expected": "42",
+  "result": {
+    "success": true,
+    "output": "42"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 7
+}

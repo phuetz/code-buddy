@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:markdown_convert",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "8e0b8418e944c07686b54dac5bb04d3d1f5de052a700cd29a163ef12b8a35cff",
+  "artifact": "docs/preuves/p9-tool-markdown_convert-2026-09-30.log",
+  "summary": "Outil réel exécuté sur une fixture isolée ; oracle contrôlé."
+}

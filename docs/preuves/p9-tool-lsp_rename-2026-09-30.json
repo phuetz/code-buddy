@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:lsp_rename",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "f70a50eb957f5853c8b52b93fc18c0beb93503b669b1db5a83caa38f72a884b5",
+  "artifact": "docs/preuves/p9-tool-lsp_rename-2026-09-30.log",
+  "summary": "Outil réel exécuté sur une fixture isolée ; oracle contrôlé."
+}

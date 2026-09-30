@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:user_model_observe",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "88cc7c2d4c1f54b73e1ade6cfabd4e6cd80868ecc070ad5c8b6f043f6b27c3e8",
+  "artifact": "docs/preuves/p9-tool-user_model_observe-2026-09-30.log",
+  "summary": "Outil réel exécuté sur une fixture isolée ; oracle contrôlé."
+}

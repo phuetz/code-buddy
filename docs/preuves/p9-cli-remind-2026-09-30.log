@@ -1,0 +1,170 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: buddy remind add P9_REMINDER --at 23:59 ; buddy remind list
+Attendu: Résultats de la commande conformes à son sous-parcours
+Observé: Sous-parcours CLI exécuté avec HOME isolé.
+Portée: Ajout, relecture inter-processus et suppression ; aucune notification à heure réelle.
+Verdict: prouvée
+
+=== Capture cli-extra.json ===
+[
+  {
+    "name": "autonomy",
+    "args": [
+      "status"
+    ],
+    "expected": "queue|presence|task|fleet",
+    "exit": 0,
+    "output": "\nFleet store: <QA_PROJECT>/.codebuddy\nTasks: 1 (completed=1)\nNext auto-claimable: none (or all critical)\nBlocked by deps: 0\nAgents: none\n\n",
+    "passed": true
+  },
+  {
+    "name": "channels",
+    "args": [
+      "list"
+    ],
+    "expected": "Channel|channel|configured",
+    "exit": 0,
+    "output": "No channels registered.\n\nTo configure channels, create .codebuddy/channels.json with:\n{\n  \"channels\": [\n    {\n      \"type\": \"telegram\",\n      \"enabled\": true,\n      \"token\": \"BOT_TOKEN\"\n    }\n  ]\n}\n",
+    "passed": true
+  },
+  {
+    "name": "cloud",
+    "args": [
+      "list"
+    ],
+    "expected": "task|No |cloud",
+    "exit": 0,
+    "output": "No cloud tasks found.\nSubmit one with: cloud submit \"<goal>\"\n",
+    "passed": true
+  },
+  {
+    "name": "council",
+    "args": [
+      "--scoreboard"
+    ],
+    "expected": "score|No |ranking|council",
+    "exit": 0,
+    "output": "No council history yet. Run `buddy council \"<task>\"` a few times.\n",
+    "passed": true
+  },
+  {
+    "name": "llm",
+    "args": [
+      "list"
+    ],
+    "expected": "ollama|qwen",
+    "exit": 0,
+    "output": "[2026-09-30T04:54:19.768Z]  INFO  Auto-detected provider: ollama (model: qwen3:4b-instruct)\nActive LLMs (logged in + reachable):\n  \u2022 agy-cli    [cloud] gemini-3.8-flash-high     Gemini 3.8 Flash (High)  ($3/Mtok)\n  \u2022 ollama     [local] qwen3:4b-instruct  ($0)  \u2190 primary\n  \u2022 lemonade   [local] Llama-3.2-1B-Instruct-GGUF-Q4_K_M  ($0)\n\nFailover order: ollama \u2192 agy-cli \u2192 lemonade\nAuto-failover: OFF  (enable with CODEBUDDY_PROVIDER_FALLBACK=true; CODEBUDDY_LLM_FAILOVER is a deprecated alias)\n",
+    "passed": true
+  },
+  {
+    "name": "remind",
+    "args": [
+      "add",
+      "P9_REMINDER",
+      "--at",
+      "23:59"
+    ],
+    "expected": "remind|P9_REMINDER|Added",
+    "exit": 0,
+    "output": "\u2705 Added r-munms20y-lv: \"P9_REMINDER\" at 23:59 daily\n",
+    "passed": true
+  },
+  {
+    "name": "remind",
+    "args": [
+      "list"
+    ],
+    "expected": "P9_REMINDER",
+    "exit": 0,
+    "output": "\u2022 r-munms20y-lv  23:59  daily  P9_REMINDER\n",
+    "passed": true
+  },
+  {
+    "name": "rules",
+    "args": [
+      "templates"
+    ],
+    "expected": "rule|template",
+    "exit": 0,
+    "output": "Available rule templates (install with: buddy rules add --template <name>):\n\u2022 process-runaway-alert  \u2014 Alerte quand un processus enfant reste coll\u00e9 au CPU (le correctif de l\u2019incident du 05/09).\n\u2022 process-runaway-kill  \u2014 Rem\u00e9diation born\u00e9e d\u2019un processus emball\u00e9 (dry-run par d\u00e9faut ; SIGTERM seulement, pas de groupe). Un kill r\u00e9el exige dryRun:false dans la r\u00e8gle ET CODEBUDDY_RUNAWAY_KILL=true.\n\u2022 disk-low-alert  \u2014 Alerte quand le disque est plein \u00e0 90 % ou plus (seuil num\u00e9rique sur diskPct).\n\u2022 fleet-saturated-alert  \u2014 Alerte quand la flotte atteint sa capacit\u00e9 configur\u00e9e (utilization \u2265 1).\n\u2022 agent-loop-alert  \u2014 Alerte quand l\u2019agent d\u00e9tecte une boucle (via le pont d\u2019\u00e9v\u00e9nements de domaine, kind:loop_detected).\n\u2022 codex-quota-probe  \u2014 Chaque jour vers 04:20, lance un agent qui sonde le quota Codex et rapporte (surveillance horaire, sans boucle).\n",
+    "passed": true
+  },
+  {
+    "name": "self",
+    "args": [
+      "evolution",
+      "--limit",
+      "2"
+    ],
+    "expected": "evolution|No |release|changelog",
+    "exit": 0,
+    "output": "Aucune note d\u2019\u00e9volution trouv\u00e9e dans CHANGELOG.md.\n",
+    "passed": true
+  },
+  {
+    "name": "spec",
+    "args": [
+      "init",
+      "P9_SPEC"
+    ],
+    "expected": "P9_SPEC|created",
+    "exit": 0,
+    "output": "Created spec project [sp-munms2bim7fjb]: P9_SPEC\nAdd stories with: buddy spec story add \"<title>\"\n",
+    "passed": true
+  },
+  {
+    "name": "spec",
+    "args": [
+      "list"
+    ],
+    "expected": "P9_SPEC",
+    "exit": 0,
+    "output": "* [sp-munms2bim7fjb] P9_SPEC  (phase: sharding)\n",
+    "passed": true
+  },
+  {
+    "name": "whoami",
+    "args": [],
+    "expected": "ollama|Ollama|auth|API|Login",
+    "exit": 0,
+    "output": "ChatGPT: not connected (run `buddy login` to authenticate)\nProvider health:\n  custom: unreachable (disponible)\n  last failover: custom \u2192 ollama:qwen3:4b-instruct (unreachable)\n",
+    "passed": true
+  }
+]
+
+=== Relecture puis suppression des rappels QA ===
+[
+  {
+    "args": [
+      "list"
+    ],
+    "exit": 0,
+    "output": "• r-munms20y-lv  23:59  daily  P9_REMINDER\n• r-munor9vj-ew  23:58  2026-10-01 (once)  P9_TOOL_REMINDER\n"
+  },
+  {
+    "args": [
+      "rm",
+      "r-munms20y-lv"
+    ],
+    "exit": 0,
+    "output": "🗑️  Removed r-munms20y-lv\n"
+  },
+  {
+    "args": [
+      "rm",
+      "r-munor9vj-ew"
+    ],
+    "exit": 0,
+    "output": "🗑️  Removed r-munor9vj-ew\n"
+  },
+  {
+    "args": [
+      "list"
+    ],
+    "exit": 0,
+    "output": "No reminders yet. Add one: buddy remind add \"médicaments\" --at 09:00\n"
+  }
+]

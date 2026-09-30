@@ -1,0 +1,55 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → env_doctor({"root": "<QA_PROJECT>"})
+Attendu: p9|sample|typescript|files|dependencies|MIT|passed|No |success
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture env_doctor.json ===
+{
+  "name": "env_doctor",
+  "input": {
+    "root": "<QA_PROJECT>"
+  },
+  "expected": "p9|sample|typescript|files|dependencies|MIT|passed|No |success",
+  "result": {
+    "success": true,
+    "output": "Node v24.14.1; 3 npm scripts; node_modules missing\nLM Resizer (host): <PRIVATE_PATH>; tool-output=false; enabled=false. This binary lacks the tool-output protocol. Buddy keeps raw observations; install a compatible release to enable observation compression.\nHost binaries may not be available in the Bash sandbox; use configured MCP integrations or the host observation optimizer.",
+    "data": {
+      "root": "<QA_PROJECT>",
+      "nodeVersion": "v24.14.1",
+      "nodeModulesPresent": false,
+      "npmScripts": [
+        "build",
+        "lint",
+        "test"
+      ],
+      "tools": {
+        "git": true,
+        "docker": true
+      },
+      "configFiles": [
+        "tsconfig.json",
+        "package.json"
+      ],
+      "lmResizer": {
+        "binary": "<PRIVATE_PATH>",
+        "enabled": false,
+        "available": true,
+        "toolOutputSupported": false,
+        "version": "unknown",
+        "warning": "This binary lacks the tool-output protocol. Buddy keeps raw observations; install a compatible release to enable observation compression."
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 20
+}

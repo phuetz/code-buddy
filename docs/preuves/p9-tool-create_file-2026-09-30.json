@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:create_file",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "e105cebdb63e07e6787f1da9a9797569da00687011dfb2b3316a8ddd1490acf4",
+  "artifact": "docs/preuves/p9-tool-create_file-2026-09-30.log",
+  "summary": "Outil réel exécuté sur une fixture isolée ; oracle contrôlé."
+}

@@ -1,0 +1,56 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → video_stitch({"clips": ["clip.mp4", "clip.mp4"], "transition": "cut", "output": "stitched-second.mp4"})
+Attendu: Fichier non vide
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture video_stitch.json ===
+{
+  "name": "video_stitch",
+  "input": {
+    "clips": [
+      "clip.mp4",
+      "clip.mp4"
+    ],
+    "transition": "cut",
+    "output": "stitched-second.mp4"
+  },
+  "expected": "Fichier non vide",
+  "result": {
+    "success": true,
+    "output": "{\n  \"kind\": \"film_assemble_result\",\n  \"success\": true,\n  \"outputPath\": \"<QA_PROJECT>/.codebuddy/media-generation/films/stitched-second.mp4\",\n  \"mediaPath\": \"MEDIA:<QA_PROJECT>/.codebuddy/media-generation/films/stitched-second.mp4\",\n  \"engine\": \"xfade\",\n  \"clipCount\": 2,\n  \"transitionCount\": 1,\n  \"targetWidth\": 320,\n  \"targetHeight\": 240,\n  \"fps\": 25,\n  \"estimatedDuration\": 4,\n  \"probedDuration\": 4,\n  \"hasAudio\": true,\n  \"transitions\": [\n    {\n      \"type\": \"cut\",\n      \"duration\": 0\n    }\n  ],\n  \"warnings\": []\n}",
+    "data": {
+      "kind": "film_assemble_result",
+      "success": true,
+      "outputPath": "<QA_PROJECT>/.codebuddy/media-generation/films/stitched-second.mp4",
+      "mediaPath": "MEDIA:<QA_PROJECT>/.codebuddy/media-generation/films/stitched-second.mp4",
+      "engine": "xfade",
+      "clipCount": 2,
+      "transitionCount": 1,
+      "targetWidth": 320,
+      "targetHeight": 240,
+      "fps": 25,
+      "estimatedDuration": 4,
+      "probedDuration": 4,
+      "hasAudio": true,
+      "transitions": [
+        {
+          "type": "cut",
+          "duration": 0
+        }
+      ],
+      "warnings": []
+    }
+  },
+  "checks": [
+    {
+      "check": "file exists and nonempty",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 334
+}

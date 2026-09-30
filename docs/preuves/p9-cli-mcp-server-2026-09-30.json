@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:mcp-server",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "cf628bf64ee64442a9b0339fdd3c6758146f9a12940c6b9d90fa6b086f2c64f1",
+  "artifact": "docs/preuves/p9-cli-mcp-server-2026-09-30.log",
+  "summary": "Alias MCP stdio réellement lancé, lecture effectuée et session fermée."
+}

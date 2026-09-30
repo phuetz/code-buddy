@@ -1,0 +1,28 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: image_generate : ComfyUI, sd_turbo, seed 42, 512×512, sans LoRA
+Attendu: PNG 512×512 non vide et non uniforme
+Observé: Génération GPU courte, PNG récupéré et vérifié.
+Portée: Workflow sd_turbo seulement ; aucun changement des services ou modèles installés.
+Verdict: prouvée
+
+=== Capture image-live.json ===
+{
+  "success": true,
+  "output": "{\n  \"kind\": \"image_generate_result\",\n  \"success\": true,\n  \"image\": \"<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png\",\n  \"outputPath\": \"<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png\",\n  \"mediaPath\": \"MEDIA:<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png\",\n  \"provider\": \"comfyui\",\n  \"model\": \"sd_turbo.safetensors\",\n  \"prompt\": \"A blue cube on a plain white background, geometric illustration\",\n  \"aspect_ratio\": \"square\",\n  \"generatedAt\": \"2026-09-30T04:44:15.308Z\"\n}",
+  "data": {
+    "kind": "image_generate_result",
+    "success": true,
+    "image": "<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png",
+    "outputPath": "<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png",
+    "mediaPath": "MEDIA:<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png",
+    "provider": "comfyui",
+    "model": "sd_turbo.safetensors",
+    "prompt": "A blue cube on a plain white background, geometric illustration",
+    "aspect_ratio": "square",
+    "generatedAt": "2026-09-30T04:44:15.308Z"
+  }
+}
+=== Capture image-live.log ===
+{"success":true,"output":"{\n  \"kind\": \"image_generate_result\",\n  \"success\": true,\n  \"image\": \"<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png\",\n  \"outputPath\": \"<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png\",\n  \"mediaPath\": \"MEDIA:<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png\",\n  \"provider\": \"comfyui\",\n  \"model\": \"sd_turbo.safetensors\",\n  \"prompt\": \"A blue cube on a plain white background, geometric illustration\",\n  \"aspect_ratio\": \"square\",\n  \"generatedAt\": \"2026-09-30T04:44:15.308Z\"\n}","data":{"kind":"image_generate_result","success":true,"image":"<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png","outputPath":"<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png","mediaPath":"MEDIA:<QA_PROJECT>/.codebuddy/media-generation/images/image-1790743464906-a6168726-c361-434d-b59e-f5c9039cb934.png","provider":"comfyui","model":"sd_turbo.safetensors","prompt":"A blue cube on a plain white background, geometric illustration","aspect_ratio":"square","generatedAt":"2026-09-30T04:44:15.308Z"}}

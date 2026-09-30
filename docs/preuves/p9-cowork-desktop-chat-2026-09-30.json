@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cowork-desktop-chat",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "179a08b9e530ebb00551ca89b0a9ba45f962393ca0f437e6a15de71944431a27",
+  "artifact": "docs/preuves/p9-cowork-desktop-chat-2026-09-30.log",
+  "summary": "Tour de chat Electron réel via Ollama, réponse observée dans la fenêtre."
+}

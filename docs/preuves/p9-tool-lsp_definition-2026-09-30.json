@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:lsp_definition",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "3ed2d6202af44043e5d6c7a5b48be1c0052f75c5e92c4a057dbf1dbb656b3d83",
+  "artifact": "docs/preuves/p9-tool-lsp_definition-2026-09-30.log",
+  "summary": "Outil réel exécuté sur une fixture isolée ; oracle contrôlé."
+}

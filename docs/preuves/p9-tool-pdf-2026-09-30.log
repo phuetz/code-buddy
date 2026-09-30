@@ -1,0 +1,42 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → pdf({"operation": "extract", "path": "p9.pdf"})
+Attendu: P9_PDF
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture pdf.json ===
+{
+  "name": "pdf",
+  "input": {
+    "operation": "extract",
+    "path": "p9.pdf"
+  },
+  "expected": "P9_PDF",
+  "result": {
+    "success": true,
+    "output": "📄 PDF: p9.pdf\n   Pages: 1\n   Words: 26\n\n--- Content ---\nP9_PDF scientific fixture reports forty two blue boxes. F1 14 Tf 50 750 Td (P9 PDF scientific fixture reports forty two blue boxes.) Tj ET endstream",
+    "data": {
+      "text": "P9_PDF scientific fixture reports forty two blue boxes. F1 14 Tf 50 750 Td (P9 PDF scientific fixture reports forty two blue boxes.) Tj ET endstream",
+      "pageCount": 1,
+      "metadata": {},
+      "pages": [
+        {
+          "pageNumber": 1,
+          "text": "P9_PDF scientific fixture reports forty two blue boxes. F1 14 Tf 50 750 Td (P9 PDF scientific fixture reports forty two blue boxes.) Tj ET endstream",
+          "wordCount": 26
+        }
+      ]
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 6
+}

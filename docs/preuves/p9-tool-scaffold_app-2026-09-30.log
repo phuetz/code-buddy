@@ -1,0 +1,53 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → scaffold_app({"template": "node-cli", "targetDir": "<QA_PROJECT>/new-cli", "vars": {"binName": "p9-cli", "description": "P9_CLI"}})
+Attendu: created|scaffold|generated
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture scaffold_app.json ===
+{
+  "name": "scaffold_app",
+  "input": {
+    "template": "node-cli",
+    "targetDir": "<QA_PROJECT>/new-cli",
+    "vars": {
+      "binName": "p9-cli",
+      "description": "P9_CLI"
+    }
+  },
+  "expected": "created|scaffold|generated",
+  "result": {
+    "success": true,
+    "output": "Created 5 files in <QA_PROJECT>/new-cli",
+    "data": {
+      "template": "node-cli",
+      "targetDir": "<QA_PROJECT>/new-cli",
+      "filesCreated": [
+        ".gitignore",
+        "README.md",
+        "package.json",
+        "src/index.ts",
+        "tsconfig.json"
+      ]
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    },
+    {
+      "check": "file exists and nonempty",
+      "passed": true
+    },
+    {
+      "check": "file content",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 2
+}

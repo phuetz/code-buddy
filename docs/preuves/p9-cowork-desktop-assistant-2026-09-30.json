@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cowork-desktop-assistant",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "b29ba428603080f979448c6e1609ebee965281961fd19c9e2f9877d519cdc7b3",
+  "artifact": "docs/preuves/p9-cowork-desktop-assistant-2026-09-30.log",
+  "summary": "Vue Assistant et lecture réelle de ses 85 réglages par IPC."
+}

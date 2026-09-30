@@ -1,0 +1,69 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: buddy server --port 18840 ; HTTP GET /api/health ; arrêt
+Attendu: Route health 200 sur le processus démarré
+Observé: Serveur HTTP réel lancé puis arrêté dans le profil isolé.
+Portée: Démarrage isolé, HTTP GET health et arrêt ; aucune installation de service.
+Verdict: prouvée
+
+=== Capture server-live.log ===
+[2026-09-30T05:58:53.678Z]  INFO  Metrics collector initialized
+[2026-09-30T05:58:53.692Z]  INFO  WebSocket server enabled at /ws
+[2026-09-30T05:58:53.692Z]  INFO  Cognitive bus enabled at /ws (bounded, scoped, resumable)
+[2026-09-30T05:58:53.692Z]  INFO  Desktop WebSocket endpoint enabled at /desktop
+[2026-09-30T05:58:53.692Z]  WARN  [autonomous-tick] no CODEBUDDY_FLEET_REPO_PATH configured — daemon inactive (set the env var to enable autonomous fleet collaboration)
+[2026-09-30T05:58:53.696Z]  WARN  [peer-tool-bridge] CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT is not set — peer.tool.invoke is registered but will fail closed (PEER_WORKSPACE_NOT_CONFIGURED) on every call. Set it to enable remote read-only tool access.
+[2026-09-30T05:58:53.702Z]  INFO  API Server started on http://127.0.0.1:18840
+[2026-09-30T05:58:53.702Z]  INFO  Health: http://127.0.0.1:18840/api/health
+[2026-09-30T05:58:53.702Z]  INFO  Metrics: http://127.0.0.1:18840/api/metrics
+[2026-09-30T05:58:53.702Z]  INFO  Dashboard: http://127.0.0.1:18840/__codebuddy__/dashboard/
+[2026-09-30T05:58:53.702Z]  INFO  Metrics Dashboard: http://127.0.0.1:18840/api/metrics/dashboard
+[2026-09-30T05:58:53.702Z]  INFO  Docs: http://127.0.0.1:18840/api/docs
+[2026-09-30T05:58:53.702Z]  INFO  WebSocket: Enabled (/ws)
+[2026-09-30T05:58:53.703Z]  INFO  Cooking timers: runner started (tick 2s)
+[2026-09-30T05:58:53.703Z]  INFO  Cooking timers: Enabled — persistent named alerts, explicit acknowledgement
+[2026-09-30T05:58:53.703Z]  INFO  Auth: Enabled
+[2026-09-30T05:58:53.704Z]  WARN  Server is bound to 0.0.0.0 (non-loopback) and is reachable from the network. Auth is ENABLED; CORS origins: http://localhost:*, http://127.0.0.1:*. Bind to localhost with HOST=127.0.0.1 if remote access is not intended.
+[2026-09-30T05:58:53.704Z]  INFO  Rate Limit: 100 req/60s
+[2026-09-30T05:58:53.704Z]  INFO  Security Headers: Enabled (CSP, X-Frame-Options, HSTS, etc.)
+[2026-09-30T05:58:53.723Z]  INFO  Peer Routing: 0 routes (0 active)
+[2026-09-30T05:58:53.731Z]  INFO  [channel-a2a-bridge] no .codebuddy/channels.json found, skipping channel boot
+[2026-09-30T05:58:53.731Z]  INFO  [channel-a2a-bridge] active {"hubBaseUrl":"http://127.0.0.1:18840","defaultSkill":"ollama-qwen3-4b","defaultModel":"qwen3:4b"}
+[2026-09-30T05:58:53.734Z]  INFO  [fleet] peer.chat wired: ollama (qwen3:4b-instruct, local)
+[2026-09-30T05:58:53.862Z]  INFO  [2026-09-30T05:58:53.861Z] [6ded335c9bf333e8] GET     / 200 124ms
+[2026-09-30T05:58:53.864Z]  INFO  [2026-09-30T05:58:53.864Z] [57d5e8601c3ce40e] GET     /api/sessions 401 1ms error:Unauthorized
+[2026-09-30T05:58:53.865Z]  INFO  [2026-09-30T05:58:53.865Z] [4ea95f4c8d0cfe32] GET     /api/memory 401 0ms error:Unauthorized
+[2026-09-30T05:58:53.866Z]  INFO  [2026-09-30T05:58:53.866Z] [d916a2e0895cdadb] GET     /api/a2a/.well-known/agent-card.json 401 0ms error:Unauthorized
+[2026-09-30T05:58:53.867Z]  INFO  Received SIGTERM, initiating graceful shutdown...
+[2026-09-30T05:58:53.867Z]  INFO  Received SIGTERM. Shutting down gracefully...
+[2026-09-30T05:58:53.867Z]  INFO  Starting graceful shutdown sequence... {"handlerCount":5,"pendingOperations":0,"timeoutMs":30000}
+  [shutdown] session-save... done
+  [shutdown] terminal-restore... done
+  [shutdown] mcp-cleanup... done
+  [shutdown] database-cleanup... done
+  [shutdown] log-flush... done
+  [shutdown] disposing resources... done
+[2026-09-30T05:58:53.878Z]  INFO  Graceful shutdown completed in 11ms
+[2026-09-30T05:58:53.878Z]  INFO  Shutdown completed in 11ms.
+
+=== Capture server-live.json ===
+[
+  {
+    "url": "/api/health",
+    "status": 200,
+    "body": "{\"status\":\"ok\",\"version\":\"2.3.0\",\"runtime\":{\"execution\":{\"installationPath\":\"<CHECKOUT>\",\"codePath\":\"<CHECKOUT>/dist/runtime/runtime-status.js\",\"kind\":\"compiled\",\"version\":\"2.3.0\",\"revision\":\"98c5f0fb066fd3897904d02fc5bfd6a62a9824af\",\"revisionOrigin\":\"build-manifest:git\",\"sourceDirtyAtBuild\":true,\"verified\":true},\"repository\":{\"path\":\"<CHECKOUT>\",\"revision\":\"b72202254006beb44b7f70d3daa44da2aeb3f99d\",\"dirty\":true,\"mainRef\":\"origin/main\",\"mainAheadBy\":36},\"lastEffectiveCall\":null,\"services\":[{\"name\":\"server (this process)\",\"state\":\"active\",\"version\":\"2.3.0\",\"revision\":\"98c5f0fb066fd3897904d02fc5bfd6a62a9824af\"}],\"servicesObservation\":\"unavailable\",\"environmentEnabled\":[],\"alerts\":[\"execution-differs-from-repository\",\"repository-dirty\",\"source-dirty-at-build\"]},\"uptime\":0,\"uptimeFormatted\":\"0s\",\"timestamp\":\"2026-09-30T05:58:53.859Z\",\"checks\":{\"database\":\"ok\",\"api\":\"ok\",\"memory\":\"ok\"},\"memory\":{\"heapUsedMB\":63,\"heapTotalMB\":109,\"rssMB\":173,\"externalMB\":11,\"percentUsed\":58},\"connections\":{\"websocket\":{\"total\":0,\"authenticated\":0,\"streaming\":0,\"totalBroadcastsDropped\":0}},\"apiHeartbeat\":{\"lastCheck\":\"2026-09-30T05:58:53.736Z\",\"latencyMs\":43,\"status\":\"ok\"}}"
+  },
+  {
+    "url": "/api/sessions",
+    "error": "HTTP Error 401: Unauthorized"
+  },
+  {
+    "url": "/api/memory",
+    "error": "HTTP Error 401: Unauthorized"
+  },
+  {
+    "url": "/api/a2a/.well-known/agent-card.json",
+    "error": "HTTP Error 401: Unauthorized"
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-video-generate",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "ba3289773e78aae412cf870d8bd2fc9997568eb42a6caed8f53c4e564f63fa54",
+  "artifact": "docs/preuves/p9-tool-video-generate-2026-09-30.log",
+  "summary": "HTTP 400 missing_node_type : Node MiniMaxH3SigmaShift not found."
+}

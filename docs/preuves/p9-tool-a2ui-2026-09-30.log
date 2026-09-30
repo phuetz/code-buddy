@@ -1,0 +1,127 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → a2ui ; séquence visual-live.json
+Attendu: Assertions de la séquence et résultat visible
+Observé: Séquence réelle contrôlée sur profil et projet isolés.
+Portée: Séquence réelle contrôlée sur profil et projet isolés.
+Verdict: prouvée
+
+=== Capture visual-live.json ===
+[
+  {
+    "name": "canvas",
+    "input": {
+      "action": "create"
+    },
+    "result": {
+      "success": true,
+      "output": "Canvas created: 74d4a0ef-2c92-4d4d-8071-b5ad39f45db8"
+    },
+    "passed": true
+  },
+  {
+    "name": "canvas",
+    "input": {
+      "action": "add_element",
+      "canvasId": "74d4a0ef-2c92-4d4d-8071-b5ad39f45db8",
+      "element": {
+        "type": "text",
+        "content": "P9_CANVAS",
+        "position": {
+          "x": 12,
+          "y": 34
+        },
+        "size": {
+          "width": 100,
+          "height": 50
+        }
+      }
+    },
+    "result": {
+      "success": true,
+      "output": "Element added: 6c15f4c9-41d4-4573-bbf6-2a98c9077cbb (text)"
+    },
+    "passed": true
+  },
+  {
+    "name": "canvas",
+    "input": {
+      "action": "export",
+      "canvasId": "74d4a0ef-2c92-4d4d-8071-b5ad39f45db8"
+    },
+    "result": {
+      "success": true,
+      "output": "{\n  \"id\": \"74d4a0ef-2c92-4d4d-8071-b5ad39f45db8\",\n  \"config\": {\n    \"name\": \"Untitled Workspace\",\n    \"width\": 1920,\n    \"height\": 1080,\n    \"backgroundColor\": \"#ffffff\",\n    \"gridSize\": 20,\n    \"showGrid\": true,\n    \"snapToGrid\": true,\n    \"zoom\": 1,\n    \"panOffset\": {\n      \"x\": 0,\n      \"y\": 0\n    },\n    \"maxHistory\": 50\n  },\n  \"elements\": [\n    {\n      \"id\": \"6c15f4c9-41d4-4573-bbf6-2a98c9077cbb\",\n      \"type\": \"text\",\n      \"content\": \"P9_CANVAS\",\n      \"position\": {\n        \"x\": 20,\n        \"y\": 40\n      },\n      \"size\": {\n        \"width\": 100,\n        \"height\": 60\n      },\n      \"zIndex\": 0,\n      \"locked\": false,\n      \"visible\": true,\n      \"createdAt\": \"2026-09-30T05:33:04.762Z\",\n      \"updatedAt\": \"2026-09-30T05:33:04.762Z\"\n    }\n  ],\n  \"selectedIds\": [],\n  \"createdAt\": \"2026-09-30T05:33:04.762Z\",\n  \"updatedAt\": \"2026-09-30T05:33:04.762Z\",\n  \"version\": 2\n}"
+    },
+    "passed": true
+  },
+  {
+    "name": "a2ui",
+    "input": {
+      "action": "create_surface",
+      "surfaceId": "p9-surface"
+    },
+    "result": {
+      "success": true,
+      "output": "Surface 'p9-surface' created"
+    },
+    "passed": true
+  },
+  {
+    "name": "a2ui",
+    "input": {
+      "action": "add_component",
+      "surfaceId": "p9-surface",
+      "component": {
+        "id": "p9-text",
+        "type": "text",
+        "props": {
+          "value": "P9_A2UI"
+        }
+      }
+    },
+    "result": {
+      "success": true,
+      "output": "Component 'p9-text' (text) added to surface 'p9-surface'"
+    },
+    "passed": true
+  },
+  {
+    "name": "a2ui",
+    "input": {
+      "action": "begin_rendering",
+      "surfaceId": "p9-surface",
+      "root": "p9-text"
+    },
+    "result": {
+      "success": true,
+      "output": "Surface 'p9-surface' is now rendering from root 'p9-text'"
+    },
+    "passed": true
+  },
+  {
+    "name": "a2ui",
+    "input": {
+      "action": "get_surface",
+      "surfaceId": "p9-surface"
+    },
+    "result": {
+      "success": true,
+      "output": "Surface 'p9-surface': 1 components, visible=true"
+    },
+    "passed": true
+  },
+  {
+    "name": "a2ui",
+    "input": {
+      "action": "render_terminal",
+      "surfaceId": "p9-surface"
+    },
+    "result": {
+      "success": true,
+      "output": "╔══════════════════════════════════════════════════════════════╗\n║ Surface: p9-surface                                           ║\n╠══════════════════════════════════════════════════════════════╣\n║ P9_A2UI                                                       ║\n╚══════════════════════════════════════════════════════════════╝"
+    },
+    "passed": true
+  }
+]

@@ -1,0 +1,39 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → relationship_context({"subject": "P9 Organization", "subjectType": "organization", "publicFacts": ["P9_PUBLIC"], "sensitiveFacts": ["P9_SECRET"], "permissions": {"usePublicKnowledge": true}})
+Attendu: P9_PUBLIC
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture relationship_context.json ===
+{
+  "name": "relationship_context",
+  "input": {
+    "subject": "P9 Organization",
+    "subjectType": "organization",
+    "publicFacts": [
+      "P9_PUBLIC"
+    ],
+    "sensitiveFacts": [
+      "P9_SECRET"
+    ],
+    "permissions": {
+      "usePublicKnowledge": true
+    }
+  },
+  "expected": "P9_PUBLIC",
+  "result": {
+    "success": true,
+    "output": "# Relationship Context: P9 Organization\n\nSubject type: organization\nMode: general\nConfidence: 0.50 (low)\nContext level: public_context\n\nAllowed uses:\n- visible conversation context\n- public knowledge\n\nPublic context:\n- P9_PUBLIC\n\nWithheld:\n- 1 sensitive fact(s) withheld\n\nSafety warnings:\n- Public context has no attached evidence; treat it as unverified until sourced.\n\nRecommended next action: Use the assembled context conservatively and cite evidence when making factual claims.\n\nStructured result:\n{\n  \"subject\": \"P9 Organization\",\n  \"subjectType\": \"organization\",\n  \"mode\": \"general\",\n  \"confidence\": 0.5,\n  \"confidenceBand\": \"low\",\n  \"contextLevel\": \"public_context\",\n  \"needsConfirmation\": false,\n  \"publicContext\": [\n    \"P9_PUBLIC\"\n  ],\n  \"relationshipContext\": [],\n  \"visibleContext\": [],\n  \"withheld\": [\n    \"1 sensitive fact(s) withheld\"\n  ],\n  \"safetyWarnings\": [\n    \"Public context has no attached evidence; treat it as unverified until sourced.\"\n  ],\n  \"evidence\": [],\n  \"allowedUses\": [\n    \"visible conversation context\",\n    \"public knowledge\"\n  ],\n  \"recommendedNextAction\": \"Use the assembled context conservatively and cite evidence when making factual claims.\",\n  \"promptCard\": \"# Relationship Context: P9 Organization\\n\\nSubject type: organization\\nMode: general\\nConfidence: 0.50 (low)\\nContext level: public_context\\n\\nAllowed uses:\\n- visible conversation context\\n- public knowledge\\n\\nPublic context:\\n- P9_PUBLIC\\n\\nWithheld:\\n- 1 sensitive fact(s) withheld\\n\\nSafety warnings:\\n- Public context has no attached evidence; treat it as unverified until sourced.\\n\\nRecommended next action: Use the assembled context conservatively and cite evidence when making factual claims.\"\n}"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 0
+}

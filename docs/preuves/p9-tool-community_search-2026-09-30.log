@@ -1,0 +1,57 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → community_search({"query": "Lost in the Middle", "sources": ["arxiv"], "limit": 2, "days": 365})
+Attendu: arxiv|Middle
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture community_search.json ===
+{
+  "name": "community_search",
+  "input": {
+    "query": "Lost in the Middle",
+    "sources": [
+      "arxiv"
+    ],
+    "limit": 2,
+    "days": 365
+  },
+  "expected": "arxiv|Middle",
+  "result": {
+    "success": true,
+    "output": "2 discussion(s) sur « Lost in the Middle », 365 derniers jours.\n\n[arxiv] A Spectral Theory of Distortion in LLM Graph Reconstruction: Sharp Bounds and Empirical Characterization\n  aucun score public · 2026-09-29 · http://arxiv.org/abs/2609.38161v1\n\n[arxiv] Compactness and Essential Norms of Weighted Bilinear Hardy Operators on General Intervals\n  aucun score public · 2026-09-29 · http://arxiv.org/abs/2609.37998v1\n\nLes scores mesurent l’engagement, pas la véracité : un fil très voté dit ce que des gens pensent, pas ce qui est vrai.",
+    "data": {
+      "query": "Lost in the Middle",
+      "days": 365,
+      "hits": [
+        {
+          "source": "arxiv",
+          "title": "A Spectral Theory of Distortion in LLM Graph Reconstruction: Sharp Bounds and Empirical Characterization",
+          "url": "http://arxiv.org/abs/2609.38161v1",
+          "engagement": 0,
+          "engagementUnit": "aucun score public",
+          "publishedAt": "2026-09-29T17:59:16Z"
+        },
+        {
+          "source": "arxiv",
+          "title": "Compactness and Essential Norms of Weighted Bilinear Hardy Operators on General Intervals",
+          "url": "http://arxiv.org/abs/2609.37998v1",
+          "engagement": 0,
+          "engagementUnit": "aucun score public",
+          "publishedAt": "2026-09-29T16:53:41Z"
+        }
+      ],
+      "unavailable": []
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 446
+}

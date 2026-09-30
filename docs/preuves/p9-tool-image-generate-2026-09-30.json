@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-image-generate",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "295cd77f7c96285fe8ae804f60e573e52fed3343175fb8dd5c30e195ee665d25",
+  "artifact": "docs/preuves/p9-tool-image-generate-2026-09-30.log",
+  "summary": "Génération GPU courte, PNG récupéré et vérifié."
+}

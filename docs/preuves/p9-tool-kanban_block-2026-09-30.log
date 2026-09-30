@@ -1,0 +1,58 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → kanban_block({"id": "p9-card", "reason": "P9_BLOCK"})
+Attendu: P9_BLOCK|blocked
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture kanban_block.json ===
+{
+  "name": "kanban_block",
+  "input": {
+    "id": "p9-card",
+    "reason": "P9_BLOCK"
+  },
+  "expected": "P9_BLOCK|blocked",
+  "result": {
+    "success": true,
+    "output": "{\n  \"action\": \"kanban_block\",\n  \"boardPath\": \"<QA_PROJECT>/.codebuddy/colab-tasks.json\",\n  \"card\": {\n    \"id\": \"p9-card\",\n    \"title\": \"P9_CARD\",\n    \"status\": \"blocked\",\n    \"priority\": \"medium\",\n    \"tags\": [],\n    \"links\": [],\n    \"comments\": [\n      {\n        \"id\": \"cmt-1790743220101-1\",\n        \"text\": \"P9_COMMENT\",\n        \"createdAt\": \"2026-09-30T04:40:20.101Z\"\n      },\n      {\n        \"id\": \"cmt-1790743220108-1\",\n        \"text\": \"Blocked: P9_BLOCK\",\n        \"createdAt\": \"2026-09-30T04:40:20.108Z\"\n      }\n    ],\n    \"heartbeats\": [],\n    \"createdAt\": \"2026-09-30T04:40:20.096Z\",\n    \"updatedAt\": \"2026-09-30T04:40:20.096Z\",\n    \"blockedReason\": \"P9_BLOCK\"\n  }\n}",
+    "data": {
+      "action": "kanban_block",
+      "boardPath": "<QA_PROJECT>/.codebuddy/colab-tasks.json",
+      "card": {
+        "id": "p9-card",
+        "title": "P9_CARD",
+        "status": "blocked",
+        "priority": "medium",
+        "tags": [],
+        "links": [],
+        "comments": [
+          {
+            "id": "cmt-1790743220101-1",
+            "text": "P9_COMMENT",
+            "createdAt": "2026-09-30T04:40:20.101Z"
+          },
+          {
+            "id": "cmt-1790743220108-1",
+            "text": "Blocked: P9_BLOCK",
+            "createdAt": "2026-09-30T04:40:20.108Z"
+          }
+        ],
+        "heartbeats": [],
+        "createdAt": "2026-09-30T04:40:20.096Z",
+        "updatedAt": "2026-09-30T04:40:20.096Z",
+        "blockedReason": "P9_BLOCK"
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 8
+}

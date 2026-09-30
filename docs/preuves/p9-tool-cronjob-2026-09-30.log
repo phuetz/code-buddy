@@ -1,0 +1,238 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → cronjob ; séquence managed-live.json
+Attendu: Assertions de la séquence et résultat visible
+Observé: Séquence réelle contrôlée sur profil et projet isolés.
+Portée: Séquence réelle contrôlée sur profil et projet isolés.
+Verdict: prouvée
+
+=== Capture managed-live.json ===
+[
+  {
+    "name": "process",
+    "input": {
+      "action": "poll",
+      "args": {
+        "pid": 12
+      }
+    },
+    "result": {
+      "success": true,
+      "output": "Process 12 is running (managed: \"P9_CHILD\")"
+    },
+    "passed": true
+  },
+  {
+    "name": "process",
+    "input": {
+      "action": "log",
+      "args": {
+        "pid": 12
+      }
+    },
+    "result": {
+      "success": true,
+      "output": "P9_READY"
+    },
+    "passed": true
+  },
+  {
+    "name": "process",
+    "input": {
+      "action": "write",
+      "args": {
+        "pid": 12,
+        "input": "P9_INPUT"
+      }
+    },
+    "result": {
+      "success": true,
+      "output": "Wrote 9 bytes to process 12 stdin"
+    },
+    "passed": true
+  },
+  {
+    "name": "process",
+    "input": {
+      "action": "log",
+      "args": {
+        "pid": 12
+      }
+    },
+    "result": {
+      "success": true,
+      "output": "P9_READY\nP9_ECHO:P9_INPUT"
+    },
+    "passed": true
+  },
+  {
+    "name": "process",
+    "input": {
+      "action": "kill",
+      "args": {
+        "pid": 12
+      }
+    },
+    "result": {
+      "success": true,
+      "output": "Sent SIGTERM to process 12"
+    },
+    "passed": true
+  },
+  {
+    "name": "process",
+    "input": {
+      "action": "poll",
+      "args": {
+        "pid": 12
+      }
+    },
+    "result": {
+      "success": true,
+      "output": "Process 12 is not running"
+    },
+    "passed": true
+  },
+  {
+    "name": "cronjob",
+    "input": {
+      "action": "create",
+      "name": "P9_CRON",
+      "at": "2099-01-01T00:00:00Z",
+      "command": {
+        "executable": "node",
+        "args": [
+          "-e",
+          "console.log(42)"
+        ]
+      }
+    },
+    "result": {
+      "success": true,
+      "output": "{\n  \"action\": \"create\",\n  \"job\": {\n    \"id\": \"daa00c2e-6efe-45ae-b82a-b9c97562ac5d\",\n    \"name\": \"P9_CRON\",\n    \"type\": \"at\",\n    \"schedule\": {\n      \"at\": \"2099-01-01T00:00:00.000Z\"\n    },\n    \"task\": {\n      \"type\": \"script\",\n      \"command\": {\n        \"executable\": \"node\",\n        \"args\": [\n          \"-e\",\n          \"console.log(42)\"\n        ]\n      }\n    },\n    \"status\": \"active\",\n    \"createdAt\": \"2026-09-30T05:57:03.826Z\",\n    \"runCount\": 0,\n    \"errorCount\": 0,\n    \"enabled\": true,\n    \"nextRunAt\": \"2099-01-01T00:00:00.000Z\"\n  }\n}",
+      "data": {
+        "action": "create",
+        "job": {
+          "id": "daa00c2e-6efe-45ae-b82a-b9c97562ac5d",
+          "name": "P9_CRON",
+          "type": "at",
+          "schedule": {
+            "at": "2099-01-01T00:00:00.000Z"
+          },
+          "task": {
+            "type": "script",
+            "command": {
+              "executable": "node",
+              "args": [
+                "-e",
+                "console.log(42)"
+              ]
+            }
+          },
+          "status": "active",
+          "createdAt": "2026-09-30T05:57:03.826Z",
+          "runCount": 0,
+          "errorCount": 0,
+          "enabled": true,
+          "nextRunAt": "2099-01-01T00:00:00.000Z"
+        }
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "cronjob",
+    "input": {
+      "action": "show",
+      "id": "daa00c2e-6efe-45ae-b82a-b9c97562ac5d"
+    },
+    "result": {
+      "success": true,
+      "output": "{\n  \"action\": \"show\",\n  \"job\": {\n    \"id\": \"daa00c2e-6efe-45ae-b82a-b9c97562ac5d\",\n    \"name\": \"P9_CRON\",\n    \"type\": \"at\",\n    \"schedule\": {\n      \"at\": \"2099-01-01T00:00:00.000Z\"\n    },\n    \"task\": {\n      \"type\": \"script\",\n      \"command\": {\n        \"executable\": \"node\",\n        \"args\": [\n          \"-e\",\n          \"console.log(42)\"\n        ]\n      }\n    },\n    \"status\": \"active\",\n    \"createdAt\": \"2026-09-30T05:57:03.826Z\",\n    \"runCount\": 0,\n    \"errorCount\": 0,\n    \"enabled\": true,\n    \"nextRunAt\": \"2099-01-01T00:00:00.000Z\"\n  }\n}",
+      "data": {
+        "action": "show",
+        "job": {
+          "id": "daa00c2e-6efe-45ae-b82a-b9c97562ac5d",
+          "name": "P9_CRON",
+          "type": "at",
+          "schedule": {
+            "at": "2099-01-01T00:00:00.000Z"
+          },
+          "task": {
+            "type": "script",
+            "command": {
+              "executable": "node",
+              "args": [
+                "-e",
+                "console.log(42)"
+              ]
+            }
+          },
+          "status": "active",
+          "createdAt": "2026-09-30T05:57:03.826Z",
+          "runCount": 0,
+          "errorCount": 0,
+          "enabled": true,
+          "nextRunAt": "2099-01-01T00:00:00.000Z"
+        }
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "cronjob",
+    "input": {
+      "action": "remove",
+      "id": "daa00c2e-6efe-45ae-b82a-b9c97562ac5d"
+    },
+    "result": {
+      "success": true,
+      "output": "{\n  \"action\": \"remove\",\n  \"job\": {\n    \"id\": \"daa00c2e-6efe-45ae-b82a-b9c97562ac5d\",\n    \"name\": \"P9_CRON\",\n    \"type\": \"at\",\n    \"schedule\": {\n      \"at\": \"2099-01-01T00:00:00.000Z\"\n    },\n    \"task\": {\n      \"type\": \"script\",\n      \"command\": {\n        \"executable\": \"node\",\n        \"args\": [\n          \"-e\",\n          \"console.log(42)\"\n        ]\n      }\n    },\n    \"status\": \"active\",\n    \"createdAt\": \"2026-09-30T05:57:03.826Z\",\n    \"runCount\": 0,\n    \"errorCount\": 0,\n    \"enabled\": true,\n    \"nextRunAt\": \"2099-01-01T00:00:00.000Z\"\n  }\n}",
+      "data": {
+        "action": "remove",
+        "job": {
+          "id": "daa00c2e-6efe-45ae-b82a-b9c97562ac5d",
+          "name": "P9_CRON",
+          "type": "at",
+          "schedule": {
+            "at": "2099-01-01T00:00:00.000Z"
+          },
+          "task": {
+            "type": "script",
+            "command": {
+              "executable": "node",
+              "args": [
+                "-e",
+                "console.log(42)"
+              ]
+            }
+          },
+          "status": "active",
+          "createdAt": "2026-09-30T05:57:03.826Z",
+          "runCount": 0,
+          "errorCount": 0,
+          "enabled": true,
+          "nextRunAt": "2099-01-01T00:00:00.000Z"
+        }
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "cronjob",
+    "input": {
+      "action": "list"
+    },
+    "result": {
+      "success": true,
+      "output": "{\n  \"action\": \"list\",\n  \"count\": 0,\n  \"jobs\": []\n}",
+      "data": {
+        "action": "list",
+        "count": 0,
+        "jobs": []
+      }
+    },
+    "passed": true
+  }
+]

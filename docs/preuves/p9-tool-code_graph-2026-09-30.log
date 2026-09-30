@@ -1,0 +1,55 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: indexer les sources réelles puis code_graph(file_map, src/math)
+Attendu: answer appelle add ; aucune auto-référence issue des déclarations
+Observé: Auto-références add → add et answer → answer fabriquées par le scan des déclarations.
+Portée: Auto-références add → add et answer → answer fabriquées par le scan des déclarations.
+Verdict: échec
+
+=== Capture code_graph.json ===
+{
+  "name": "code_graph",
+  "input": {
+    "operation": "file_map",
+    "query": "src/math"
+  },
+  "precondition": {
+    "added": 11
+  },
+  "result": {
+    "success": true,
+    "output": "mod:src/math — 2 functions/methods:\n\nfn:add:1 (function) (a: number, b: number): number\n  → calls: fn:add\n  ← called by: fn:add, fn:answer\nfn:answer:4 (function) (): number\n  → calls: fn:answer, fn:add\n  ← called by: fn:answer"
+  },
+  "passed": false,
+  "expected": "Sur add et answer : uniquement answer appelle add ; aucune auto-référence de déclaration",
+  "checks": [
+    {
+      "check": "La déclaration de fonction ne doit pas fabriquer add → add et answer → answer",
+      "passed": false
+    }
+  ]
+}
+=== Capture graph-indexed.log ===
+11 {
+  success: true,
+  output: 'mod:src/math — 2 functions/methods:\n' +
+    '\n' +
+    'fn:add:1 (function) (a: number, b: number): number\n' +
+    '  → calls: fn:add\n' +
+    '  ← called by: fn:add, fn:answer\n' +
+    'fn:answer:4 (function) (): number\n' +
+    '  → calls: fn:answer, fn:add\n' +
+    '  ← called by: fn:answer'
+} true
+
+
+=== Oracle : source réelle de la fixture src/math.ts ===
+export function add(a: number, b: number): number {
+  return a + b;
+}
+export function answer(): number {
+  return add(20, 22);
+}
+
+Attendu : add ne fait aucun appel ; answer appelle uniquement add.

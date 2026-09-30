@@ -1,0 +1,31 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → device_manage({"action": "run", "deviceId": "p9-local", "command": "node -e \"process.stdout.write(String(6*7))\""})
+Attendu: 42
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Transport local sur appareil QA enregistré ; commande 6*7 → 42, aucun SSH/ADB ni périphérique physique.
+Verdict: prouvée
+
+=== Capture device_manage.json ===
+{
+  "name": "device_manage",
+  "input": {
+    "action": "run",
+    "deviceId": "p9-local",
+    "command": "node -e \"process.stdout.write(String(6*7))\""
+  },
+  "expected": "42",
+  "result": {
+    "success": true,
+    "output": "42"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 17
+}

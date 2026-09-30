@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:code_explorer_ask",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "ae1d30b624af6b31511c5477106d5f5b91f6c4cd5d73cd804174f0b3f4178de6",
+  "artifact": "docs/preuves/p9-tool-code_explorer_ask-2026-09-30.log",
+  "summary": "Interrogation réelle du graphe local via MCP."
+}

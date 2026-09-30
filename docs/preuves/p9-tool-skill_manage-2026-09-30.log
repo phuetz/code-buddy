@@ -1,0 +1,42 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → skill_manage({"action": "view", "name": "authored-p9-fixture"})
+Attendu: Le skill réellement créé est relu
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture skill_manage.json ===
+{
+  "name": "skill_manage",
+  "input": {
+    "action": "view",
+    "name": "authored-p9-fixture"
+  },
+  "expected": "Le skill réellement créé est relu",
+  "result": {
+    "success": true,
+    "output": "{\n  \"action\": \"skill_view\",\n  \"skill\": {\n    \"name\": \"authored-p9-fixture\",\n    \"description\": \"Procédure synthétique de preuve P9\",\n    \"source\": \"workspace\",\n    \"path\": \"<QA_PROJECT>/.codebuddy/skills/authored-p9-fixture/SKILL.md\",\n    \"requires\": [],\n    \"available\": true\n  },\n  \"content\": \"---\\nname: authored-p9-fixture\\ndescription: Procédure synthétique de preuve P9\\ntags:\\n  - p9\\nenv: {}\\nrequires: []\\nnativeEngine:\\n  triggers:\\n    - fixture\\n    - proc\\n    - dure\\n    - synth\\n    - tique\\n    - preuve\\n    - only\\n    - node\\n    - test\\n    - check\\n---\\n\\n# P9_SKILL\\nUse for P9 fixture only. Run node --test check.test.js.\\n\"\n}",
+    "data": {
+      "action": "skill_view",
+      "skill": {
+        "name": "authored-p9-fixture",
+        "description": "Procédure synthétique de preuve P9",
+        "source": "workspace",
+        "path": "<QA_PROJECT>/.codebuddy/skills/authored-p9-fixture/SKILL.md",
+        "requires": [],
+        "available": true
+      },
+      "content": "---\nname: authored-p9-fixture\ndescription: Procédure synthétique de preuve P9\ntags:\n  - p9\nenv: {}\nrequires: []\nnativeEngine:\n  triggers:\n    - fixture\n    - proc\n    - dure\n    - synth\n    - tique\n    - preuve\n    - only\n    - node\n    - test\n    - check\n---\n\n# P9_SKILL\nUse for P9 fixture only. Run node --test check.test.js.\n"
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 51
+}

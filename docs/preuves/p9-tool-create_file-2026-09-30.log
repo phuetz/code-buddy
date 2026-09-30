@@ -1,0 +1,34 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → create_file({"path": "new.txt", "content": "P9_NEW"})
+Attendu: Fichier non vide
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture create_file.json ===
+{
+  "name": "create_file",
+  "input": {
+    "path": "new.txt",
+    "content": "P9_NEW"
+  },
+  "expected": "Fichier non vide",
+  "result": {
+    "success": true,
+    "output": "Updated new.txt with 1 addition\n--- a/new.txt\n+++ b/new.txt\n@@ -1,0 +1,1 @@\n+P9_NEW"
+  },
+  "checks": [
+    {
+      "check": "file exists and nonempty",
+      "passed": true
+    },
+    {
+      "check": "file content",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 6
+}

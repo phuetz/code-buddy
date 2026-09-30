@@ -1,0 +1,32 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → knowledge_graph({"action": "add", "subject": "p9-a", "predicate": "calls", "object": "p9-b"})
+Attendu: p9-a|added
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture knowledge_graph.json ===
+{
+  "name": "knowledge_graph",
+  "input": {
+    "action": "add",
+    "subject": "p9-a",
+    "predicate": "calls",
+    "object": "p9-b"
+  },
+  "expected": "p9-a|added",
+  "result": {
+    "success": true,
+    "output": "Added: p9-a --calls--> p9-b"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 4
+}

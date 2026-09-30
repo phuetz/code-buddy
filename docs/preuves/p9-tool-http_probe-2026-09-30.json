@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:http_probe",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "e1490cf5169aed8a9e8ae280a5f86155bff74e4827d6ebe8fc48d2c71be26b92",
+  "artifact": "docs/preuves/p9-tool-http_probe-2026-09-30.log",
+  "summary": "Séquence réelle contrôlée sur profil et projet isolés."
+}

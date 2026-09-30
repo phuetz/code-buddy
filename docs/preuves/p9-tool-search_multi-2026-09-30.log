@@ -1,0 +1,33 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → search_multi({"patterns": ["P9_MARKER", "P9_ALPHA"], "operator": "OR"})
+Attendu: P9_MARKER
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture search_multi.json ===
+{
+  "name": "search_multi",
+  "input": {
+    "patterns": [
+      "P9_MARKER",
+      "P9_ALPHA"
+    ],
+    "operator": "OR"
+  },
+  "expected": "P9_MARKER",
+  "result": {
+    "success": true,
+    "output": "Search results (OR):\n\nPattern: \"P9_MARKER\" (1 matches)\n  sample.js (1 matches)\n\nPattern: \"P9_ALPHA\" (1 matches)\n  a.txt (1 matches)"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 10
+}

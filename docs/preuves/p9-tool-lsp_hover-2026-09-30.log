@@ -1,0 +1,49 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → lsp_hover({"file": "sample.ts", "line": 1, "column": 17})
+Attendu: Signature typée réelle après initialisation du projet
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture lsp_hover.json ===
+{
+  "name": "lsp_hover",
+  "input": {
+    "file": "sample.ts",
+    "line": 1,
+    "column": 17
+  },
+  "expected": "Signature typée réelle après initialisation du projet",
+  "result": {
+    "success": true,
+    "output": "Hover for <QA_PROJECT>/sample.ts:1:17:\n\n\n```typescript\nfunction add(a: number, b: number): number\n```\n\n\nRange: <QA_PROJECT>/sample.ts:1:17-1:20",
+    "data": {
+      "file": "<QA_PROJECT>/sample.ts",
+      "language": "typescript",
+      "position": {
+        "line": 1,
+        "column": 17
+      },
+      "hover": {
+        "content": "\n```typescript\nfunction add(a: number, b: number): number\n```\n",
+        "range": {
+          "file": "<QA_PROJECT>/sample.ts",
+          "line": 1,
+          "column": 17,
+          "endLine": 1,
+          "endColumn": 20
+        }
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 15
+}

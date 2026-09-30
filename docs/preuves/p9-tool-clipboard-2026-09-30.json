@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:clipboard",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "3ae0a8f72134334c2e6b10c821d0ec3341f9131e270a1e1eb97cf4781dfc5c73",
+  "artifact": "docs/preuves/p9-tool-clipboard-2026-09-30.log",
+  "summary": "write_text ne revient pas avant la limite de 60 secondes sous X11/Xvfb."
+}

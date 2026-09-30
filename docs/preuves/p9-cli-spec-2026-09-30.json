@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:spec",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "be8e90ea9aace65193e70bd7875dd7a859f352044d44652e84a07ef423bfe99c",
+  "artifact": "docs/preuves/p9-cli-spec-2026-09-30.log",
+  "summary": "Sous-parcours CLI exécuté avec HOME isolé."
+}

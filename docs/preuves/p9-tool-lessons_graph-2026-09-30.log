@@ -1,0 +1,30 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → lessons_graph({"query": "P9_LESSON", "format": "json"})
+Attendu: P9_LESSON
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture lessons_graph.json ===
+{
+  "name": "lessons_graph",
+  "input": {
+    "query": "P9_LESSON",
+    "format": "json"
+  },
+  "expected": "P9_LESSON",
+  "result": {
+    "success": true,
+    "output": "{\n  \"schemaVersion\": 1,\n  \"generatedAt\": 1790746032327,\n  \"filters\": {\n    \"query\": \"P9_LESSON\",\n    \"includeKeywords\": true,\n    \"limit\": 50\n  },\n  \"lessons\": [\n    {\n      \"id\": \"munm9zspqmd\",\n      \"content\": \"P9_LESSON\",\n      \"category\": \"RULE\",\n      \"createdAt\": 1790726400000,\n      \"source\": \"manual\"\n    }\n  ],\n  \"concepts\": [\n    {\n      \"id\": \"p9-lesson\",\n      \"label\": \"p9 lesson\",\n      \"lessonIds\": [\n        \"munm9zspqmd\"\n      ],\n      \"sources\": [\n        \"keyword\"\n      ],\n      \"weight\": 1\n    }\n  ],\n  \"lessonConcepts\": {\n    \"munm9zspqmd\": [\n      {\n        \"slug\": \"p9-lesson\",\n        \"label\": \"p9 lesson\",\n        \"sources\": [\n          \"keyword\"\n        ]\n      }\n    ]\n  },\n  \"backlinks\": {\n    \"p9-lesson\": [\n      \"munm9zspqmd\"\n    ]\n  },\n  \"relatedLessons\": []\n}"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 1
+}

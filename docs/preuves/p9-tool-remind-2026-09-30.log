@@ -1,0 +1,72 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → remind({"label": "P9_TOOL_REMINDER", "time": "23:58", "date": "2026-10-01"})
+Attendu: P9_TOOL_REMINDER|r-
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Persistance d’un rappel puis relecture et suppression via CLI ; aucune notification à l’échéance.
+Verdict: prouvée
+
+=== Capture remind.json ===
+{
+  "name": "remind",
+  "input": {
+    "label": "P9_TOOL_REMINDER",
+    "time": "23:58",
+    "date": "2026-10-01"
+  },
+  "expected": "P9_TOOL_REMINDER|r-",
+  "result": {
+    "success": true,
+    "output": "Reminder set: \"P9_TOOL_REMINDER\" at 23:58 demain (id r-munor9vj-ew).",
+    "data": {
+      "id": "r-munor9vj-ew",
+      "label": "P9_TOOL_REMINDER",
+      "time": "23:58",
+      "date": "2026-10-01",
+      "oneShot": true
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 6
+}
+
+=== Relecture puis suppression des rappels QA ===
+[
+  {
+    "args": [
+      "list"
+    ],
+    "exit": 0,
+    "output": "• r-munms20y-lv  23:59  daily  P9_REMINDER\n• r-munor9vj-ew  23:58  2026-10-01 (once)  P9_TOOL_REMINDER\n"
+  },
+  {
+    "args": [
+      "rm",
+      "r-munms20y-lv"
+    ],
+    "exit": 0,
+    "output": "🗑️  Removed r-munms20y-lv\n"
+  },
+  {
+    "args": [
+      "rm",
+      "r-munor9vj-ew"
+    ],
+    "exit": 0,
+    "output": "🗑️  Removed r-munor9vj-ew\n"
+  },
+  {
+    "args": [
+      "list"
+    ],
+    "exit": 0,
+    "output": "No reminders yet. Add one: buddy remind add \"médicaments\" --at 09:00\n"
+  }
+]

@@ -1,0 +1,67 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → video_trailer_plan({"operation": "validate", "plan": {}})
+Attendu: INCOMPLETE|blocker
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture video_trailer_plan.json ===
+{
+  "name": "video_trailer_plan",
+  "input": {
+    "operation": "validate",
+    "plan": {}
+  },
+  "expected": "INCOMPLETE|blocker",
+  "result": {
+    "success": true,
+    "output": "{\n  \"status\": \"INCOMPLETE\",\n  \"claimedStatus\": \"INCOMPLETE\",\n  \"qualifiedStatus\": \"INCOMPLETE\",\n  \"blockers\": [\n    \"invalid-status\",\n    \"malformed-plan:book\",\n    \"malformed-plan:sound\",\n    \"malformed-plan:retention\",\n    \"malformed-plan:cost\",\n    \"malformed-plan:approvals\",\n    \"malformed-plan:publication\",\n    \"malformed-plan:characters\",\n    \"malformed-plan:shots\",\n    \"malformed-plan:overlays\",\n    \"unsupported-schema\",\n    \"missing-book-metadata\",\n    \"missing-staging-sentence\",\n    \"missing-spoiler-limit\",\n    \"missing-commercial-action\",\n    \"non-safe-trailer-tier:\",\n    \"master-duration-out-of-range\",\n    \"missing-function:hook\",\n    \"missing-function:world\",\n    \"missing-function:protagonist\",\n    \"missing-function:escalation\",\n    \"missing-function:price\",\n    \"missing-function:withheld\",\n    \"missing-function:brand\",\n    \"missing-function:cta\",\n    \"incomplete-sound-layers\",\n    \"missing-sound-master\",\n    \"incomplete-retention-hypotheses\",\n    \"unsafe-publication-gate\"\n  ],\n  \"warnings\": []\n}",
+    "data": {
+      "status": "INCOMPLETE",
+      "claimedStatus": "INCOMPLETE",
+      "qualifiedStatus": "INCOMPLETE",
+      "blockers": [
+        "invalid-status",
+        "malformed-plan:book",
+        "malformed-plan:sound",
+        "malformed-plan:retention",
+        "malformed-plan:cost",
+        "malformed-plan:approvals",
+        "malformed-plan:publication",
+        "malformed-plan:characters",
+        "malformed-plan:shots",
+        "malformed-plan:overlays",
+        "unsupported-schema",
+        "missing-book-metadata",
+        "missing-staging-sentence",
+        "missing-spoiler-limit",
+        "missing-commercial-action",
+        "non-safe-trailer-tier:",
+        "master-duration-out-of-range",
+        "missing-function:hook",
+        "missing-function:world",
+        "missing-function:protagonist",
+        "missing-function:escalation",
+        "missing-function:price",
+        "missing-function:withheld",
+        "missing-function:brand",
+        "missing-function:cta",
+        "incomplete-sound-layers",
+        "missing-sound-master",
+        "incomplete-retention-hypotheses",
+        "unsafe-publication-gate"
+      ],
+      "warnings": []
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 0
+}

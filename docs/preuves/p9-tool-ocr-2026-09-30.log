@@ -1,0 +1,38 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → ocr({"operation": "extract", "path": "ocr.png", "language": "eng"})
+Attendu: TEXT 42 reconnu dans une image synthétique ; P9 est mal transcrit PO
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: OCR local sur texte synthétique : TEXT 42 reconnu, P9 transcrit PO ; exactitude parfaite non établie.
+Verdict: prouvée
+
+=== Capture ocr.json ===
+{
+  "name": "ocr",
+  "input": {
+    "operation": "extract",
+    "path": "ocr.png",
+    "language": "eng"
+  },
+  "expected": "TEXT 42 reconnu dans une image synthétique ; P9 est mal transcrit PO",
+  "result": {
+    "success": true,
+    "output": "🔍 OCR: ocr.png\n   Confidence: 92%\n   Language: eng\n   Processing time: 301ms\n\n--- Extracted Text ---\nPO TEXT 42\n",
+    "data": {
+      "text": "PO TEXT 42\n",
+      "confidence": 92,
+      "language": "eng",
+      "blocks": [],
+      "processingTime": 301
+    }
+  },
+  "checks": [
+    {
+      "check": "oracle texte connu TEXT 42",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 308
+}
