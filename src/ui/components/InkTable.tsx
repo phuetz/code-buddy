@@ -151,8 +151,22 @@ function padString(str: string, width: number, align: 'left' | 'center' | 'right
 function truncateString(str: string, maxWidth: number): string {
   const strWidth = getStringWidth(str);
   if (strWidth <= maxWidth) return str;
-  if (maxWidth <= 3) return str.slice(0, maxWidth);
-  return str.slice(0, maxWidth - 1) + '…';
+  if (maxWidth <= 0) return '';
+
+  const contentWidth = maxWidth <= 3 ? maxWidth : maxWidth - 1;
+  let currentWidth = 0;
+  let result = '';
+
+  for (const { segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(str)) {
+    const segmentWidth = getStringWidth(segment);
+    if (currentWidth + segmentWidth > contentWidth) {
+      break;
+    }
+    result += segment;
+    currentWidth += segmentWidth;
+  }
+
+  return maxWidth <= 3 ? result : result + '…';
 }
 
 /**
