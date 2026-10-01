@@ -106,21 +106,27 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
    * payload must be read off the wire, not off the SDK stub. The assertion
    * itself is unchanged: exactly one `system` message, in position 0.
    */
-  function stubOllamaWire(): { seen: () => Array<Record<string, unknown>>; urls: () => string[] } {
+  function stubOllamaWire(effectiveContext = 32768, promptTokens = 100): { seen: () => Array<Record<string, unknown>>; urls: () => string[] } {
     const bodies: Array<Record<string, unknown>> = [];
     const urls: string[] = [];
+    let loadedModel = '';
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { body?: string }) => {
       urls.push(String(url));
-      if (init?.body) bodies.push(JSON.parse(init.body) as Record<string, unknown>);
+      if (String(url).endsWith('/api/ps')) return { ok: true, status: 200, json: async () => ({ models: [{ name: loadedModel, context_length: effectiveContext }] }) };
+      if (init?.body) {
+        const parsed = JSON.parse(init.body) as Record<string, unknown>;
+        loadedModel = String(parsed.model);
+        if ((parsed.options as { num_predict?: number })?.num_predict !== 1) bodies.push(parsed);
+      }
       return {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: async () => ({ message: { role: 'assistant', content: 'ok' }, done: true }),
+        json: async () => ({ model: loadedModel, message: { role: 'assistant', content: 'ok' }, done: true, prompt_eval_count: promptTokens, eval_count: 1 }),
         body: new ReadableStream<Uint8Array>({
           start(controller) {
             controller.enqueue(new TextEncoder().encode(
-              '{"message":{"role":"assistant","content":"ok"},"done":true,"done_reason":"stop"}\n',
+              JSON.stringify({ message: { role: 'assistant', content: 'ok' }, done: true, done_reason: 'stop', prompt_eval_count: promptTokens, eval_count: 1 }) + '\n',
             ));
             controller.close();
           },
@@ -187,6 +193,24 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
 
     expect(urls().some((url) => url.endsWith('/api/chat'))).toBe(true);
     expect(urls().some((url) => url.includes('/v1/chat/completions'))).toBe(false);
+  });
+
+  it('HEADLESS: withholds all response chunks until effective context and real usage pass', async () => {
+    process.env.CODEBUDDY_PROVIDER = 'ollama';
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true');
+    const provider = makeProvider('http://127.0.0.1:11434/v1', 'fixture-model');
+    const { seen } = stubOllamaWire(512, 700);
+    const emitted: unknown[] = [];
+    try {
+      await expect((async () => {
+        for await (const chunk of provider.chatStream(structuredClone(scattered))) emitted.push(chunk);
+      })()).rejects.toThrow(/effective.*512.*700/);
+      expect(emitted).toEqual([]);
+      expect(seen()).toHaveLength(1);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('LOCAL (Ollama multimodal): stays on /v1 SDK path when payload has parts', async () => {

@@ -1,3 +1,4 @@
+import { assertOllamaRequestBound, checkOllamaRequest } from './ollama-request-preflight.js';
 /**
  * OpenAI-compatible provider — Vague 2 Phase C2.
  *
@@ -761,6 +762,7 @@ export class OpenAICompatProvider implements Provider {
   ): Promise<unknown> {
     const numCtx = resolveOllamaNumCtx(payload.model);
     const body = toOllamaNativeRequest(payload, numCtx);
+    assertOllamaRequestBound(body);
     logger.debug('Ollama native chat', {
       source: 'OpenAICompatProvider',
       model: payload.model,
@@ -783,11 +785,29 @@ export class OpenAICompatProvider implements Provider {
       throw error;
     }
 
-    if (payload.stream === true) return streamOllamaNative(response.body, payload.model);
-    return fromOllamaNativeResponse(
-      await response.json() as Parameters<typeof fromOllamaNativeResponse>[0],
-      payload.model,
-    );
+    const origin = ollamaNativeChatUrl(this.baseURL).replace(/\/api\/chat$/, '');
+    if (payload.stream === true) return this.checkedOllamaStream(response.body, payload.model, origin, body, signal);
+    const data = await response.json() as Parameters<typeof fromOllamaNativeResponse>[0];
+    logger.debug('Ollama real assembled request admission', await checkOllamaRequest(origin, body, data.prompt_eval_count, fetch, signal));
+    return fromOllamaNativeResponse(data, payload.model);
+  }
+
+  private async *checkedOllamaStream(
+    responseBody: ReadableStream<Uint8Array> | null, model: string, origin: string,
+    request: ReturnType<typeof toOllamaNativeRequest>, signal?: AbortSignal,
+  ): AsyncGenerator<ChatCompletionChunk> {
+    const headless = process.env.CODEBUDDY_HEADLESS === 'true';
+    const chunks: ChatCompletionChunk[] = [];
+    let promptTokens: number | undefined;
+    for await (const chunk of streamOllamaNative(responseBody, model)) {
+      if (chunk.usage) promptTokens = chunk.usage.prompt_tokens;
+      if (headless) chunks.push(chunk);
+      else yield chunk;
+    }
+    // Tools execute after the stream completes. Headless also withholds prose
+    // until the real context check passes; no output is accepted prematurely.
+    logger.debug('Ollama real assembled request admission', await checkOllamaRequest(origin, request, promptTokens, fetch, signal));
+    if (headless) yield* chunks;
   }
 
   private getOllamaReasoningEffort(_model: string): string | undefined {

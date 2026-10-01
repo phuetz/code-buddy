@@ -302,11 +302,19 @@ export function shouldDisableOllamaThink(
   return !hasTools || headless;
 }
 
+export interface OllamaNativeRequest extends Record<string, unknown> {
+  model: string;
+  messages: Array<Record<string, unknown>>;
+  tools?: unknown[];
+  options?: Record<string, unknown>;
+  stream?: boolean;
+}
+
 /** OpenAI-compat payload → native `/api/chat` body, carrying `num_ctx`. */
 export function toOllamaNativeRequest(
   payload: OpenAiChatPayload,
   numCtx: number | undefined,
-): Record<string, unknown> {
+): OllamaNativeRequest {
   const options: Record<string, unknown> = {};
   if (numCtx !== undefined) options.num_ctx = numCtx;
   if (typeof payload.max_tokens === 'number') options.num_predict = payload.max_tokens;
