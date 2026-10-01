@@ -1900,6 +1900,20 @@ program
         }
       }
     }
+    // Load environment before changing cwd so root .env values (API keys) remain available
+    // even when --directory points to a workspace without its own .env file.
+    await ensureEnvLoaded();
+
+    if (options.directory) {
+      try {
+        process.chdir(options.directory);
+      } catch (error: unknown) {
+        const detail = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`error: cannot change directory to ${options.directory}: ${detail}\n`);
+        process.exit(1);
+      }
+    }
+
     // Handle --setup flag (interactive setup wizard)
     if (options.setup) {
       const { runSetup } = await import("./utils/interactive-setup.js");
@@ -2059,19 +2073,6 @@ program
       cli.info(`${formatSessionRecap(buildSessionRecap(session)).join("\n")}\n`);
     }
 
-    // Load environment before changing cwd so root .env values (API keys) remain available
-    // even when --directory points to a workspace without its own .env file.
-    await ensureEnvLoaded();
-
-    if (options.directory) {
-      try {
-        process.chdir(options.directory);
-      } catch (error: unknown) {
-        const detail = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`error: cannot change directory to ${options.directory}: ${detail}\n`);
-        process.exit(1);
-      }
-    }
 
     // Initialize workspace isolation
     const { initializeWorkspaceIsolation } = await import("./workspace/workspace-isolation.js");
