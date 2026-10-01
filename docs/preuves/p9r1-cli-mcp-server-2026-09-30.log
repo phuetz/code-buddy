@@ -1,0 +1,148 @@
+Date de consolidation: 2026-09-30T19:33:56.015718Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: mcp-server({"path": "data.json"})
+Attendu: Contenu réel de data.json dans tools/call après initialize et tools/list.
+Observé: Contenu réel de data.json dans tools/call après initialize et tools/list.
+Verdict: prouvée
+
+{
+  "id": "cli:mcp-server",
+  "name": "mcp-server",
+  "input": {
+    "path": "data.json"
+  },
+  "result": {
+    "success": true,
+    "output": "Contents of <QA_PROJECT>/data.json:\n1: {\"marker\":\"P9_JSON\",\"nested\":{\"value\":42}}"
+  },
+  "protocol": {
+    "tool": {
+      "name": "read_file",
+      "description": "Read file contents with optional 1-indexed line range. Hermes-compatible alias for view_file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path to file or directory to view"
+          },
+          "file_path": {
+            "type": "string",
+            "description": "Alias for path"
+          },
+          "target_file": {
+            "type": "string",
+            "description": "Alias for path"
+          },
+          "start_line": {
+            "type": "number",
+            "description": "Starting line number for partial file view (optional)"
+          },
+          "end_line": {
+            "type": "number",
+            "description": "Ending line number for partial file view (optional)"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": true,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    "args": {
+      "path": "data.json"
+    },
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Contents of <QA_PROJECT>/data.json:\n1: {\"marker\":\"P9_JSON\",\"nested\":{\"value\":42}}"
+        }
+      ]
+    },
+    "passed": true,
+    "listed": [
+      "bundle_analyze",
+      "code_explorer_ask",
+      "code_graph",
+      "code_stats",
+      "codebase_map",
+      "community_search",
+      "csv_preview",
+      "dep_inspect",
+      "design_system",
+      "diff_files",
+      "docs_search",
+      "env_doctor",
+      "file_search",
+      "find_bugs",
+      "find_definition",
+      "find_references",
+      "find_symbols",
+      "get_todo_list",
+      "git_summary",
+      "http_probe",
+      "internet_scout_plan",
+      "json_query",
+      "knowledge_graph",
+      "knowledge_search",
+      "lead_scout_enrichment_plan",
+      "lead_scout_lesson_candidates",
+      "lead_scout_plan",
+      "lessons_graph",
+      "lessons_list",
+      "lessons_search",
+      "license_check",
+      "list_directory",
+      "lsp_definition",
+      "lsp_diagnostics",
+      "lsp_hover",
+      "lsp_references",
+      "lsp_symbols",
+      "port_check",
+      "project_map",
+      "read_file",
+      "reason",
+      "recall",
+      "relationship_context",
+      "sbom_generate",
+      "screen_memory",
+      "search",
+      "search_files",
+      "search_multi",
+      "self_describe",
+      "session_search",
+      "sessions_history",
+      "sessions_list",
+      "skill_view",
+      "skills_list",
+      "stock_quote",
+      "todo_scan",
+      "tool_search",
+      "user_model_recall",
+      "view_file",
+      "weather",
+      "web_extract",
+      "web_fetch",
+      "web_scrape",
+      "web_search",
+      "workspace_read",
+      "workspace_search"
+    ]
+  },
+  "passed": true,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "expected": "Contenu réel de data.json dans tools/call après initialize et tools/list.",
+  "summary": "Contenu réel de data.json dans tools/call après initialize et tools/list."
+}

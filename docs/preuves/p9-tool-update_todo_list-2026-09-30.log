@@ -1,0 +1,34 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → update_todo_list({"updates": [{"id": "p9-todo", "status": "completed"}]})
+Attendu: completed|updated
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture update_todo_list.json ===
+{
+  "name": "update_todo_list",
+  "input": {
+    "updates": [
+      {
+        "id": "p9-todo",
+        "status": "completed"
+      }
+    ]
+  },
+  "expected": "completed|updated",
+  "result": {
+    "success": true,
+    "output": "\u001b[2m✅ Completed\u001b[0m\n  \u001b[2mP9_TODO\u001b[0m\n\n📊 1/1 completed | 🔴 1 high priority"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 0
+}

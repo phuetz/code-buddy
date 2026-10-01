@@ -1,0 +1,85 @@
+Date de consolidation: 2026-09-30T19:33:55.684256Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: dep_inspect({"root": "<QA>/reprise-1/project"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "dep_inspect",
+  "input": {
+    "root": "<QA>/reprise-1/project"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.totalDependencies",
+        "op": "eq",
+        "value": 1
+      },
+      {
+        "field": "data.dependencies",
+        "op": "eq",
+        "value": {
+          "p9-fixture-lib": "1.0.0"
+        }
+      },
+      {
+        "field": "data.scripts.test",
+        "op": "eq",
+        "value": "node --test check.test.js"
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Found 1 dependencies and 3 scripts",
+    "data": {
+      "root": "<QA>/reprise-1/project",
+      "dependencies": {
+        "p9-fixture-lib": "1.0.0"
+      },
+      "devDependencies": {},
+      "scripts": {
+        "test": "node --test check.test.js",
+        "build": "node build.js",
+        "lint": "node --check sample.js"
+      },
+      "engines": {},
+      "totalDependencies": 1
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.totalDependencies eq",
+      "passed": true
+    },
+    {
+      "check": "data.dependencies eq",
+      "passed": true
+    },
+    {
+      "check": "data.scripts.test eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 1,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:dep_inspect",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

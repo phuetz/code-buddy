@@ -1,0 +1,86 @@
+Date de consolidation: 2026-09-30T19:33:55.699849Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: env_doctor({"root": "<QA>/reprise-1/project"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "env_doctor",
+  "input": {
+    "root": "<QA>/reprise-1/project"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.nodeVersion",
+        "op": "eq",
+        "value": "v24.14.1"
+      },
+      {
+        "field": "data.npmScripts",
+        "op": "some",
+        "value": "test"
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Node v24.14.1; 3 npm scripts; node_modules present\nLM Resizer (host): <PRIVATE_PATH> tool-output=false; enabled=false. This binary lacks the tool-output protocol. Buddy keeps raw observations; install a compatible release to enable observation compression.\nHost binaries may not be available in the Bash sandbox; use configured MCP integrations or the host observation optimizer.",
+    "data": {
+      "root": "<QA>/reprise-1/project",
+      "nodeVersion": "v24.14.1",
+      "nodeModulesPresent": true,
+      "npmScripts": [
+        "build",
+        "lint",
+        "test"
+      ],
+      "tools": {
+        "git": true,
+        "docker": true
+      },
+      "configFiles": [
+        "tsconfig.json",
+        "package.json"
+      ],
+      "lmResizer": {
+        "binary": "<PRIVATE_PATH>",
+        "enabled": false,
+        "available": true,
+        "toolOutputSupported": false,
+        "version": "unknown",
+        "warning": "This binary lacks the tool-output protocol. Buddy keeps raw observations; install a compatible release to enable observation compression."
+      }
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.nodeVersion eq",
+      "passed": true
+    },
+    {
+      "check": "data.npmScripts some",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 33,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:env_doctor",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

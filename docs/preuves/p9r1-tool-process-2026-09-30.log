@@ -1,0 +1,61 @@
+Date de consolidation: 2026-09-30T19:33:55.973252Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: process({"sequence": ["poll", "log", "write", "log", "kill", "poll"]})
+Attendu: Toutes les clauses spécifiques de l’oracle sont nécessaires.
+Observé: Toutes les clauses de l’oracle spécifique sont satisfaites.
+Verdict: prouvée
+
+{
+  "name": "process",
+  "input": {
+    "sequence": [
+      "poll",
+      "log",
+      "write",
+      "log",
+      "kill",
+      "poll"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "Process 12 is not running"
+  },
+  "results": [
+    {
+      "success": true,
+      "output": "Process 12 is running (managed: \"P9_CHILD\")"
+    },
+    {
+      "success": true,
+      "output": "P9_READY"
+    },
+    {
+      "success": true,
+      "output": "Wrote 9 bytes to process 12 stdin"
+    },
+    {
+      "success": true,
+      "output": "P9_READY\nP9_ECHO:P9_INPUT"
+    },
+    {
+      "success": true,
+      "output": "Sent SIGTERM to process 12"
+    },
+    {
+      "success": true,
+      "output": "Process 12 is not running"
+    }
+  ],
+  "observations": {
+    "liveOutput": true,
+    "echoThroughChildStdin": true,
+    "actualExit": true,
+    "trackedExit": true
+  },
+  "passed": true,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:process",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

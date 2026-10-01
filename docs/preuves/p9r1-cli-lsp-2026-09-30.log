@@ -1,0 +1,64 @@
+Date de consolidation: 2026-09-30T19:33:56.002782Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: lsp({"args": ["diagnostics", "sample.ts", "--json"]})
+Attendu: Même erreur sémantique connue cinq fois et une fermeture par processus froid
+Observé: Même erreur sémantique connue cinq fois et une fermeture par processus froid
+Verdict: prouvée
+
+{
+  "id": "cli-lsp",
+  "name": "lsp",
+  "input": {
+    "args": [
+      "diagnostics",
+      "sample.ts",
+      "--json"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "[2026-09-30T18:57:25.253Z]  INFO  Starting LSP server {\"language\":\"typescript\",\"command\":\"typescript-language-server\"}\n[2026-09-30T18:57:25.371Z]  INFO  LSP server initialized {\"language\":\"typescript\"}\n[2026-09-30T18:57:26.730Z]  INFO  Stopping LSP server {\"language\":\"typescript\"}\n[2026-09-30T18:57:26.732Z]  INFO  All LSP servers stopped\n{\n  \"file\": \"sample.ts\",\n  \"language\": \"typescript\",\n  \"diagnostics\": [\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"error\",\n      \"message\": \"Type 'string' is not assignable to type 'number'.\",\n      \"source\": \"typescript\"\n    },\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"hint\",\n      \"message\": \"'bad' is declared but its value is never read.\",\n      \"source\": \"typescript\"\n    }\n  ]\n}\n"
+  },
+  "attempts": [
+    {
+      "result": {
+        "success": true,
+        "output": "[2026-09-30T18:57:17.637Z]  INFO  Starting LSP server {\"language\":\"typescript\",\"command\":\"typescript-language-server\"}\n[2026-09-30T18:57:17.748Z]  INFO  LSP server initialized {\"language\":\"typescript\"}\n[2026-09-30T18:57:19.557Z]  INFO  Stopping LSP server {\"language\":\"typescript\"}\n[2026-09-30T18:57:19.558Z]  INFO  All LSP servers stopped\n{\n  \"file\": \"sample.ts\",\n  \"language\": \"typescript\",\n  \"diagnostics\": [\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"error\",\n      \"message\": \"Type 'string' is not assignable to type 'number'.\",\n      \"source\": \"typescript\"\n    },\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"hint\",\n      \"message\": \"'bad' is declared but its value is never read.\",\n      \"source\": \"typescript\"\n    }\n  ]\n}\n"
+      },
+      "passed": true
+    },
+    {
+      "result": {
+        "success": true,
+        "output": "[2026-09-30T18:57:19.704Z]  INFO  Starting LSP server {\"language\":\"typescript\",\"command\":\"typescript-language-server\"}\n[2026-09-30T18:57:19.821Z]  INFO  LSP server initialized {\"language\":\"typescript\"}\n[2026-09-30T18:57:21.677Z]  INFO  Stopping LSP server {\"language\":\"typescript\"}\n[2026-09-30T18:57:21.678Z]  INFO  All LSP servers stopped\n{\n  \"file\": \"sample.ts\",\n  \"language\": \"typescript\",\n  \"diagnostics\": [\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"error\",\n      \"message\": \"Type 'string' is not assignable to type 'number'.\",\n      \"source\": \"typescript\"\n    },\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"hint\",\n      \"message\": \"'bad' is declared but its value is never read.\",\n      \"source\": \"typescript\"\n    }\n  ]\n}\n"
+      },
+      "passed": true
+    },
+    {
+      "result": {
+        "success": true,
+        "output": "[2026-09-30T18:57:21.822Z]  INFO  Starting LSP server {\"language\":\"typescript\",\"command\":\"typescript-language-server\"}\n[2026-09-30T18:57:21.934Z]  INFO  LSP server initialized {\"language\":\"typescript\"}\n[2026-09-30T18:57:23.692Z]  INFO  Stopping LSP server {\"language\":\"typescript\"}\n[2026-09-30T18:57:23.694Z]  INFO  All LSP servers stopped\n{\n  \"file\": \"sample.ts\",\n  \"language\": \"typescript\",\n  \"diagnostics\": [\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"error\",\n      \"message\": \"Type 'string' is not assignable to type 'number'.\",\n      \"source\": \"typescript\"\n    },\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"hint\",\n      \"message\": \"'bad' is declared but its value is never read.\",\n      \"source\": \"typescript\"\n    }\n  ]\n}\n"
+      },
+      "passed": true
+    },
+    {
+      "result": {
+        "success": true,
+        "output": "[2026-09-30T18:57:23.801Z]  INFO  Starting LSP server {\"language\":\"typescript\",\"command\":\"typescript-language-server\"}\n[2026-09-30T18:57:23.884Z]  INFO  LSP server initialized {\"language\":\"typescript\"}\n[2026-09-30T18:57:25.142Z]  INFO  Stopping LSP server {\"language\":\"typescript\"}\n[2026-09-30T18:57:25.143Z]  INFO  All LSP servers stopped\n{\n  \"file\": \"sample.ts\",\n  \"language\": \"typescript\",\n  \"diagnostics\": [\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"error\",\n      \"message\": \"Type 'string' is not assignable to type 'number'.\",\n      \"source\": \"typescript\"\n    },\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"hint\",\n      \"message\": \"'bad' is declared but its value is never read.\",\n      \"source\": \"typescript\"\n    }\n  ]\n}\n"
+      },
+      "passed": true
+    },
+    {
+      "result": {
+        "success": true,
+        "output": "[2026-09-30T18:57:25.253Z]  INFO  Starting LSP server {\"language\":\"typescript\",\"command\":\"typescript-language-server\"}\n[2026-09-30T18:57:25.371Z]  INFO  LSP server initialized {\"language\":\"typescript\"}\n[2026-09-30T18:57:26.730Z]  INFO  Stopping LSP server {\"language\":\"typescript\"}\n[2026-09-30T18:57:26.732Z]  INFO  All LSP servers stopped\n{\n  \"file\": \"sample.ts\",\n  \"language\": \"typescript\",\n  \"diagnostics\": [\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"error\",\n      \"message\": \"Type 'string' is not assignable to type 'number'.\",\n      \"source\": \"typescript\"\n    },\n    {\n      \"file\": \"<QA>/reprise-1/project/sample.ts\",\n      \"line\": 2,\n      \"column\": 7,\n      \"severity\": \"hint\",\n      \"message\": \"'bad' is declared but its value is never read.\",\n      \"source\": \"typescript\"\n    }\n  ]\n}\n"
+      },
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "expected": "Même erreur sémantique connue cinq fois et une fermeture par processus froid",
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "summary": "Même erreur sémantique connue cinq fois et une fermeture par processus froid"
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:mcp-server",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:56.015718Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "78fdc62bc59915f66e0eafe4fd4c35b3a7884bd2e884ef4b179bc702b68118b7",
+  "artifact": "docs/preuves/p9r1-cli-mcp-server-2026-09-30.log",
+  "summary": "Contenu réel de data.json dans tools/call après initialize et tools/list."
+}

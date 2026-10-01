@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:diagram",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T19:33:55.690187Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "32ed684ef5c0e6a14b67fdadfb9a079a845be6c9f7c06d6869055740fbc4ae2e",
+  "artifact": "docs/preuves/p9r1-tool-diagram-2026-09-30.log",
+  "summary": "Mermaid à séparateurs point-virgule : No nodes found in flowchart ; aucun rendu ASCII."
+}

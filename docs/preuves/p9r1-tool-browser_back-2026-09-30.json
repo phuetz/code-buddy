@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:browser_back",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.966413Z",
+  "revision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "sourceDigest": "e054b9682021691f16c6e805714d6eee44874ca3045e3210831f8ce8eb56653d",
+  "artifact": "docs/preuves/p9r1-tool-browser_back-2026-09-30.log",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:browser_vision",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.946978Z",
+  "revision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "sourceDigest": "a29ca3eac5a1c4bcfe1111f5ea4039a7c83eb2490e9e5422d1c2db201c0406f6",
+  "artifact": "docs/preuves/p9r1-tool-browser_vision-2026-09-30.log",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

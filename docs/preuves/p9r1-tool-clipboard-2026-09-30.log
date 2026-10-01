@@ -1,0 +1,29 @@
+Date de consolidation: 2026-09-30T19:33:56.011544Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: clipboard({"operation": "write_text", "text": "P9R1_CLIP"})
+Attendu: Écriture puis lecture réelle du texte identique, sans blocage
+Observé: write_text ne revient pas avant la limite QA de 12 secondes sous X11/Xvfb ; processus arrêtés.
+Verdict: échec
+
+{
+  "name": "clipboard",
+  "input": {
+    "operation": "write_text",
+    "text": "P9R1_CLIP"
+  },
+  "result": {
+    "success": false,
+    "output": "START write_text P9R1_CLIP\n",
+    "error": "write_text ne revient pas avant la limite QA de 12 secondes"
+  },
+  "passed": false,
+  "observations": {
+    "timedOut": true,
+    "durationSeconds": 12.045
+  },
+  "expected": "Écriture puis lecture réelle du texte identique, sans blocage",
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:clipboard",
+  "summary": "write_text ne revient pas avant la limite QA de 12 secondes sous X11/Xvfb ; processus arrêtés."
+}

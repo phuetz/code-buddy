@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:vision_analyze",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T19:33:55.922454Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "7c2e238bbcacf8ab75310b50a7b9e15a9a20db3124e0af69fb0c6d337c2a8329",
+  "artifact": "docs/preuves/p9r1-tool-vision_analyze-2026-09-30.log",
+  "summary": "OCR exact : attendu P9 TEXT 42, observé PO TEXT 42 ; largeur 700 exclue de l’oracle."
+}

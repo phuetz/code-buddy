@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:lead_scout_lesson_candidates",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "fa8cf299ce7a707eda27b3b1ca351d3ce5f5df742c9c8c46dd09355f98db85fa",
+  "artifact": "docs/preuves/p9-tool-lead_scout_lesson_candidates-2026-09-30.log",
+  "summary": "Outil réel exécuté sur une fixture isolée ; oracle contrôlé."
+}

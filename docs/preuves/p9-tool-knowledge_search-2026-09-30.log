@@ -1,0 +1,29 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → knowledge_search({"query": "P9_KNOWLEDGE"})
+Attendu: P9_KNOWLEDGE
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture knowledge_search.json ===
+{
+  "name": "knowledge_search",
+  "input": {
+    "query": "P9_KNOWLEDGE"
+  },
+  "expected": "P9_KNOWLEDGE",
+  "result": {
+    "success": true,
+    "output": "Found 1 knowledge entries for \"P9_KNOWLEDGE\":\n\n### P9 Knowledge (score: 1.00, source: global)\nTags: p9\n\nP9_KNOWLEDGE\n"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 1
+}

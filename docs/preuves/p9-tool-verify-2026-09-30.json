@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-verify",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "8cb062e054183acbd530eeb4114d4c4e7a2892c6be99930764464d50db979ff3",
+  "artifact": "docs/preuves/p9-tool-verify-2026-09-30.log",
+  "summary": "Vérificateur indépendant exécute réellement le test et rapporte son TAP."
+}

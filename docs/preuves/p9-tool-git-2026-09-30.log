@@ -1,0 +1,55 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → git({"operation": "status"})
+Attendu: Untracked|untracked|branch
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture git.json ===
+{
+  "name": "git",
+  "input": {
+    "operation": "status"
+  },
+  "expected": "Untracked|untracked|branch",
+  "result": {
+    "success": true,
+    "output": "Branch: master\n\nUntracked:\n  ? LICENSE\n  ? a.txt\n  ? b.txt\n  ? bad.rs\n  ? build.js\n  ? check.test.js\n  ? clean.env\n  ? clip.mp4\n  ? data.csv\n  ? data.json\n  ? dist/\n  ? note.md\n  ? package.json\n  ? sample.js\n  ? sample.ts\n  ? speech.wav\n  ? tsconfig.json\n",
+    "data": {
+      "staged": [],
+      "unstaged": [],
+      "untracked": [
+        "LICENSE",
+        "a.txt",
+        "b.txt",
+        "bad.rs",
+        "build.js",
+        "check.test.js",
+        "clean.env",
+        "clip.mp4",
+        "data.csv",
+        "data.json",
+        "dist/",
+        "note.md",
+        "package.json",
+        "sample.js",
+        "sample.ts",
+        "speech.wav",
+        "tsconfig.json"
+      ],
+      "branch": "master",
+      "ahead": 0,
+      "behind": 0
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 5
+}

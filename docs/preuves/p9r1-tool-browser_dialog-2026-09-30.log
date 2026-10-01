@@ -1,0 +1,37 @@
+Date de consolidation: 2026-09-30T19:33:55.964514Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: browser_dialog({"action": "dismiss"})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "browser_dialog",
+  "input": {
+    "action": "dismiss"
+  },
+  "result": {
+    "success": true,
+    "output": "Dismissed alert dialog: P9_DIALOG",
+    "data": {
+      "dialog": {
+        "id": "dialog-2",
+        "pageId": "page-1790796089981",
+        "type": "alert",
+        "message": "P9_DIALOG",
+        "defaultValue": "",
+        "createdAt": "2026-09-30T19:21:31.473Z"
+      }
+    }
+  },
+  "observations": {
+    "actualDialog": true,
+    "dismissed": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:browser_dialog",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

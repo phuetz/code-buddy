@@ -1,0 +1,31 @@
+Date de consolidation: 2026-09-30T19:33:55.977598Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: apply_patch({"patch": "*** Begin Patch\n*** Add File: p9-apply-r1.txt\n+P9_APPLIED_R1\n*** End Patch"})
+Attendu: Toutes les clauses spécifiques de l’oracle sont nécessaires.
+Observé: Toutes les clauses de l’oracle spécifique sont satisfaites.
+Verdict: prouvée
+
+{
+  "name": "apply_patch",
+  "input": {
+    "patch": "*** Begin Patch\n*** Add File: p9-apply-r1.txt\n+P9_APPLIED_R1\n*** End Patch"
+  },
+  "result": {
+    "success": true,
+    "output": "Added: p9-apply-r1.txt"
+  },
+  "results": [
+    {
+      "success": true,
+      "output": "Added: p9-apply-r1.txt"
+    }
+  ],
+  "observations": {
+    "actualWrite": true
+  },
+  "passed": true,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:apply_patch",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

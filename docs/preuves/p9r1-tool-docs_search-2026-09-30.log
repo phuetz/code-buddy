@@ -1,0 +1,54 @@
+Date de consolidation: 2026-09-30T19:33:55.696186Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: docs_search({"query": "P9_FIXTURE"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "docs_search",
+  "input": {
+    "query": "P9_FIXTURE"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "# P9_FIXTURE architecture",
+          "P9_FIXTURE describes isolated evidence collection."
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "### P9_FIXTURE architecture\n# P9_FIXTURE architecture\nP9_FIXTURE describes isolated evidence collection."
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 4,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:docs_search",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

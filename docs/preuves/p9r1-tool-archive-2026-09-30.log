@@ -1,0 +1,89 @@
+Date de consolidation: 2026-09-30T19:33:55.651233Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: archive({"operation": "create", "sources": ["a.txt", "b.txt"], "output_path": "bundle.zip", "format": "zip"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "archive",
+  "input": {
+    "operation": "create",
+    "sources": [
+      "a.txt",
+      "b.txt"
+    ],
+    "output_path": "bundle.zip",
+    "format": "zip"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.archiveEntries",
+        "op": "eq",
+        "value": [
+          "a.txt",
+          "b.txt"
+        ]
+      },
+      {
+        "field": "observations.archiveA",
+        "op": "eq",
+        "value": "P9_ALPHA\n"
+      },
+      {
+        "field": "observations.archiveB",
+        "op": "eq",
+        "value": "P9_BETA\n"
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "📦 Created archive: bundle.zip (215 B)",
+    "data": {
+      "path": "bundle.zip",
+      "size": 215
+    }
+  },
+  "observations": {
+    "archiveEntries": [
+      "a.txt",
+      "b.txt"
+    ],
+    "archiveA": "P9_ALPHA\n",
+    "archiveB": "P9_BETA\n"
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.archiveEntries eq",
+      "passed": true
+    },
+    {
+      "check": "observations.archiveA eq",
+      "passed": true
+    },
+    {
+      "check": "observations.archiveB eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 42,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:archive",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

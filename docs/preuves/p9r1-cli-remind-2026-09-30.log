@@ -1,0 +1,50 @@
+Date de consolidation: 2026-09-30T19:33:56.000589Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy remind add P9_REMINDER_R1 --at 23:59({"args": ["add", "P9_REMINDER_R1", "--at", "23:59"]})
+Attendu: ['Added', 'P9_REMINDER_R1']
+Observé: ['Added', 'P9_REMINDER_R1']
+Verdict: prouvée
+
+{
+  "id": "cli:remind",
+  "name": "remind",
+  "input": {
+    "args": [
+      "add",
+      "P9_REMINDER_R1",
+      "--at",
+      "23:59"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "✅ Added r-muoga5tk-ah: \"P9_REMINDER_R1\" at 23:59 daily\n"
+  },
+  "expected": "['Added', 'P9_REMINDER_R1']",
+  "passed": true,
+  "command": "buddy remind add P9_REMINDER_R1 --at 23:59",
+  "observations": {
+    "persisted": true,
+    "removed": true
+  },
+  "verificationCall": {
+    "id": "cli:remind",
+    "name": "remind",
+    "input": {
+      "args": [
+        "remove",
+        "r-muoga5tk-ah"
+      ]
+    },
+    "result": {
+      "success": true,
+      "output": "🗑️  Removed r-muoga5tk-ah\n"
+    },
+    "expected": "['Removed']",
+    "passed": true,
+    "command": "buddy remind remove r-muoga5tk-ah"
+  },
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['Added', 'P9_REMINDER_R1']"
+}

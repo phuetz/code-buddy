@@ -1,0 +1,89 @@
+Date de consolidation: 2026-09-30T19:33:55.911667Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: video_long_form_plan({"operation": "assess", "plan": {"schemaVersion": 1, "episodeId": "p9-episode", "title": "P9_TITLE", "locale": "fr", "description": "P9_DESCRIPTION", "chapters": [], "publication": {"visibility": "private", "autoPublish": false, "humanReviewRequired": true}}})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "video_long_form_plan",
+  "input": {
+    "operation": "assess",
+    "plan": {
+      "schemaVersion": 1,
+      "episodeId": "p9-episode",
+      "title": "P9_TITLE",
+      "locale": "fr",
+      "description": "P9_DESCRIPTION",
+      "chapters": [],
+      "publication": {
+        "visibility": "private",
+        "autoPublish": false,
+        "humanReviewRequired": true
+      }
+    }
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.ready",
+        "op": "eq",
+        "value": false
+      },
+      {
+        "field": "data.failures.length",
+        "op": "min",
+        "value": 1
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "{\n  \"ready\": false,\n  \"durationSeconds\": 0,\n  \"narrationWords\": 0,\n  \"uniqueVisualRatio\": 0,\n  \"midRollEligible\": false,\n  \"suggestedAdBreakSeconds\": [],\n  \"failures\": [\n    \"insufficient-chapters\",\n    \"shorter-than-eight-minutes\",\n    \"insufficient-visual-scenes\",\n    \"insufficient-original-narration\",\n    \"repetitive-visual-plan\",\n    \"unsafe-publication-gate\"\n  ]\n}",
+    "data": {
+      "ready": false,
+      "durationSeconds": 0,
+      "narrationWords": 0,
+      "uniqueVisualRatio": 0,
+      "midRollEligible": false,
+      "suggestedAdBreakSeconds": [],
+      "failures": [
+        "insufficient-chapters",
+        "shorter-than-eight-minutes",
+        "insufficient-visual-scenes",
+        "insufficient-original-narration",
+        "repetitive-visual-plan",
+        "unsafe-publication-gate"
+      ]
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.ready eq",
+      "passed": true
+    },
+    {
+      "check": "data.failures.length min",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 1,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:video_long_form_plan",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

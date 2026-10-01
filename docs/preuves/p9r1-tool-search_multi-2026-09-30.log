@@ -1,0 +1,83 @@
+Date de consolidation: 2026-09-30T19:33:55.867358Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: search_multi({"patterns": ["P9_MARKER", "P9_BETA"], "operator": "OR"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "search_multi",
+  "input": {
+    "patterns": [
+      "P9_MARKER",
+      "P9_BETA"
+    ],
+    "operator": "OR"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "sample.js",
+          "b.txt"
+        ]
+      },
+      {
+        "field": "observations.searchNegativeEmpty",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Search results (OR):\n\nPattern: \"P9_MARKER\" (1 matches)\n  sample.js (1 matches)\n\nPattern: \"P9_BETA\" (1 matches)\n  b.txt (1 matches)"
+  },
+  "observations": {
+    "searchNegativeEmpty": true
+  },
+  "verificationCalls": [
+    {
+      "name": "search_multi",
+      "input": {
+        "patterns": [
+          "P9R1_ABSENT_ORACLE"
+        ],
+        "operator": "OR"
+      },
+      "result": {
+        "success": true,
+        "output": "Search results (OR):\n\nPattern: \"P9R1_ABSENT_ORACLE\" (0 matches)"
+      }
+    }
+  ],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "observations.searchNegativeEmpty eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 29,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:search_multi",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

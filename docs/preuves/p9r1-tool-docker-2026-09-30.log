@@ -1,0 +1,56 @@
+Date de consolidation: 2026-09-30T19:33:55.693767Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: docker({"operation": "list_containers", "args": {"all": true}})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "docker",
+  "input": {
+    "operation": "list_containers",
+    "args": {
+      "all": true
+    }
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "WinBoat"
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "ID           | Name                 | Image               | Status              | Ports                | Created\n────────────────────────────────────────────────────────────────────────────────────────────────────\ncf356cf77bac | wf-pile-sol61-redis-20260929 | redis:7-alpine | Exited (0) 21 hours ago | none | 2026-09-29 21:41:45 +0200 CEST\nc2eac10f06c1 | wf-pile-sol61-postgres-20260929 | postgres:16-alpine | Exited (0) 21 hours ago | none | 2026-09-29 21:41:44 +0200 CEST\n58180df109d9 | WinBoat | ghcr.io/dockur/windows:6.05 | Up 4 hours | 127.0.0.1:47300->3389/tcp, 127.0.0.1:47310->3389/udp, 127.0.0.1:47280->7148/tcp, 127.0.0.1:47290->7149/tcp, 127.0.0.1:47270->8006/tcp | 2026-09-29 19:25:50 +0200 CEST\n71f4e14b10bd | nostalgic_franklin | alpine | Exited (1) 2 days ago | none | 2026-09-28 17:13:19 +0200 CEST\n135690a8bf24 | goofy_liskov | d0e9356e199f | Exited (1) 4 days ago | none | 2026-09-26 10:30:39 +0200 CEST\n1903dcf165e6 | workflow-lisa-db-20260913 | postgres:15-alpine | Up 4 hours | 127.0.0.1:32768->5432/tcp | 2026-09-13 14:27:36 +0200 CEST\n3338b9745039 | workflow-local-69608b9108-postgres-1 | postgres:15-alpine | Exited (0) 3 weeks ago | none | 2026-09-09 19:09:55 +0200 CEST\n1172f7908aa8 | workflow-local-69608b9108-redis-1 | redis:7-alpine | Exited (0) 3 weeks ago | none | 2026-09-09 19:09:55 +0200 CEST\n4e755968f61f | workflow-local-7f86fde09b-postgres-1 | postgres:15-alpine | Up 4 hours (healthy) | 0.0.0.0:39067->5432/tcp, [::]:39067->5432/tcp | 2026-09-09 09:09:52 +0200 CEST\na46e1431bb85 | workflow-local-7f86fde09b-redis-1 | redis:7-alpine | Up 4 hours (healthy) | 0.0.0.0:33239->6379/tcp, [::]:33239->6379/tcp | 2026-09-09 09:09:52 +0200 CEST\n6322c319cc64 | workflow-worker | ghcr.io/workflow-platform/workflow:latest | Up 4 hours | 8082/tcp | 2026-09-03 10:16:05 +0200 CEST\n4ed412e84fbd | workflow-app | ghcr.io/workflow-platform/workflow:latest | Up 4 hours (healthy) | 0.0.0.0:18080->8082/tcp, 0.0.0.0:18082->8082/tcp, [::]:18080->8082/tcp, [::]:18082->8082/tcp | 2026-09-03 10:16:05 +0200 CEST\nd6d198f15691 | workflow-postgres | postgres:15-alpine | Up 4 hours (healthy) | 5432/tcp | 2026-09-03 10:16:04 +0200 CEST\nba7e334e6ad1 | workflow-redis | redis:7-alpine | Up 4 hours (healthy) | 6379/tcp | 2026-09-03 10:16:04 +0200 CEST\n47a399e6ba78 | isi3-inconnu-mongo-1 | mongo:7 | Exited (255) 3 weeks ago | 0.0.0.0:32117->27017/tcp, [::]:32117->27017/tcp | 2026-09-02 19:18:35 +0200 CEST\n8a99823a525b | isidore-writer-redis-1 | redis:7-alpine | Up 4 hours (healthy) | 0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp | 2026-08-04 16:58:21 +0200 CEST\n9a7a6d351b49 | isidore-writer-mongo-1 | mongo:7 | Up 4 hours (healthy) | 0.0.0.0:27017->27017/tcp, [::]:27017->27017/tcp | 2026-08-04 16:58:21 +0200 CEST\n17c79c1de202 | monartisan-redis | redis:7-alpine | Exited (0) 2 months ago | none | 2026-07-30 07:03:54 +0200 CEST\nb369ff684d42 | <PRIVATE_SERVICE>-redis-1 | redis:7-alpine | Exited (255) 2 months ago | 0.0.0.0:6381->6379/tcp, [::]:6381->6379/tcp | 2026-07-11 14:37:06 +0200 CEST\n4f2b3f43e34b | <PRIVATE_SERVICE>-postgres-1 | pgvector/pgvector:pg15 | Exited (255) 2 months ago | 0.0.0.0:5438->5432/tcp, [::]:5438->5432/tcp | 2026-07-11 14:36:47 +0200 CEST\n5b00c0cecc3e | open-webui | ghcr.io/open-webui/open-webui:main | Up 4 hours (healthy) | none | 2026-06-13 14:16:51 +0200 CEST\n098f97125c65 | litellm | ghcr.io/berriai/litellm:main-stable | Up 3 hours (healthy) | none | 2026-06-10 10:06:57 +0200 CEST\n12523ab7e77c | ai-redis | redis:7-alpine | Up 4 hours (healthy) | none | 2026-06-10 10:06:56 +0200 CEST\n8d7c6eea6c43 | qdrant | qdrant/qdrant:latest | Up 4 hours (healthy) | 0.0.0.0:6333-6334->6333-6334/tcp, [::]:6333-6334->6333-6334/tcp | 2026-06-10 10:06:56 +0200 CEST\nbc4084a17682 | searxng | searxng/searxng:latest | Up 4 hours (healthy) | 0.0.0.0:8888->8080/tcp, [::]:8888->8080/tcp | 2026-06-10 10:06:56 +0200 CEST\n9c1887a0240a | mem0-dev-mem0-1 | mem0-dev-mem0 | Exited (255) 3 months ago | 0.0.0.0:18888->8000/tcp, [::]:18888->8000/tcp | 2026-06-04 21:53:59 +0200 CEST\n758bbfbb06a6 | mem0-dev-postgres-1 | ankane/pgvector:v0.5.1 | Exited (0) 3 months ago | none | 2026-06-04 14:48:06 +0200 CEST\n2532a518623c | honcho-deriver-1 | honcho-deriver | Up 4 hours | 8000/tcp | 2026-06-04 14:25:45 +0200 CEST\ncaf34ab2b576 | honcho-api-1 | honcho-api | Up 4 hours (healthy) | 127.0.0.1:8000->8000/tcp | 2026-06-04 14:25:45 +0200 CEST\n5056a1778f98 | honcho-redis-1 | redis:8.2 | Up 4 hours (healthy) | 6379/tcp | 2026-06-04 14:25:45 +0200 CEST\n79e026789ba9 | honcho-database-1 | pgvector/pgvector:pg15 | Up 4 hours (healthy) | 127.0.0.1:5432->5432/tcp | 2026-06-04 14:25:45 +0200 CEST\n38307ba469c3 | anythingllm | mintplexlabs/anythingllm | Up 4 hours (healthy) | 0.0.0.0:3005->3001/tcp, [::]:3005->3001/tcp | 2026-05-24 00:03:50 +0200 CEST\n8635672172f1 | monartisan-db | postgres:16-alpine | Up 4 hours (healthy) | 0.0.0.0:5434->5432/tcp, [::]:5434->5432/tcp | 2026-04-29 15:27:42 +0200 CEST\nc062d8ba3563 | open-webui-backup-2026-04-30 | c2e4723fdbca | Exited (0) 8 days ago | none | 2026-04-27 13:18:49 +0200 CEST"
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 104,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:docker",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

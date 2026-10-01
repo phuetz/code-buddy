@@ -1,0 +1,26 @@
+Date de consolidation: 2026-09-30T19:33:55.983887Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy channels list({"args": ["list"]})
+Attendu: ['No channels registered.']
+Observé: ['No channels registered.']
+Verdict: prouvée
+
+{
+  "id": "cli:channels",
+  "name": "channels",
+  "input": {
+    "args": [
+      "list"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "No channels registered.\n\nTo configure channels, create .codebuddy/channels.json with:\n{\n  \"channels\": [\n    {\n      \"type\": \"telegram\",\n      \"enabled\": true,\n      \"token\": \"BOT_TOKEN\"\n    }\n  ]\n}\n"
+  },
+  "expected": "['No channels registered.']",
+  "passed": true,
+  "command": "buddy channels list",
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['No channels registered.']"
+}

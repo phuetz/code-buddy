@@ -1,0 +1,180 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → skills_list({})
+Attendu: skill|bundled
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture skills_list.json ===
+{
+  "name": "skills_list",
+  "input": {},
+  "expected": "skill|bundled",
+  "result": {
+    "success": true,
+    "output": "{\n  \"action\": \"skills_list\",\n  \"availableSkills\": [\n    {\n      \"name\": \"typescript-expert\",\n      \"description\": \"Expert TypeScript developer for complex type issues\",\n      \"source\": \"bundled\",\n      \"path\": \"<CHECKOUT>/dist/skills/bundled/typescript-expert.skill.md\",\n      \"version\": \"1.0.0\",\n      \"requires\": {\n        \"tools\": [\n          \"view_file\",\n          \"search\",\n          \"str_replace_editor\"\n        ]\n      },\n      \"available\": true\n    },\n    {\n      \"name\": \"react-specialist\",\n      \"description\": \"React and frontend development specialist\",\n      \"source\": \"builtin\",\n      \"available\": true\n    },\n    {\n      \"name\": \"api-designer\",\n      \"description\": \"REST and GraphQL API design specialist\",\n      \"source\": \"builtin\",\n      \"available\": true\n    },\n    {\n      \"name\": \"database-expert\",\n      \"description\": \"Database design and query optimization\",\n      \"source\": \"builtin\",\n      \"available\": true\n    },\n    {\n      \"name\": \"security-auditor\",\n      \"description\": \"Security vulnerability detection and prevention\",\n      \"source\": \"builtin\",\n      \"available\": true\n    },\n    {\n      \"name\": \"performance-optimizer\",\n      \"description\": \"Performance analysis and optimization\",\n      \"source\": \"builtin\",\n      \"available\": true\n    },\n    {\n      \"name\": \"testing-expert\",\n      \"description\": \"Testing strategy and implementation\",\n      \"source\": \"builtin\",\n      \"available\": true\n    },\n    {\n      \"name\": \"devops-engineer\",\n      \"description\": \"DevOps, CI/CD, and infrastructure\",\n      \"source\": \"builtin\",\n      \"available\": true\n    },\n    {\n      \"name\": \"code-explorer\",\n      \"description\": \"Use the Code Explorer (gitnexus) code-graph MCP tools to understand a codebase through precise relationships — callers, callees, blast radius — instead of reading many files\",\n      \"source\": \"bundled\",\n      \"path\": \"<CHECKOUT>/dist/skills/bundled/code-explorer.skill.md\",\n      \"version\": \"1.0.0\",\n      \"available\": true\n    },\n    {\n      \"name\": \"file-edit\",\n      \"description\": \"Edit files with precise changes\",\n      \"source\": \"bundled\",\n      \"path\": \"<CHECKOUT>/dist/skills/bundled/file-edit.skill.md\",\n      \"version\": \"1.0.0\",\n      \"requires\": {\n        \"tools\": [\n          \"read_file\",\n          \"edit_file\"\n        ]\n      },\n      \"available\": true\n    },\n    {\n      \"name\": \"git-commit\",\n      \"description\": \"Create a git commit with a well-formatted message\",\n      \"source\": \"bundled\",\n      \"path\": \"<CHECKOUT>/dist/skills/bundled/git-commit.skill.md\",\n      \"version\": \"1.0.0\",\n      \"requires\": {\n        \"tools\": [\n          \"bash\"\n        ]\n      },\n      \"available\": true\n    },\n    {\n      \"name\": \"<PRIVATE_SERVICE>-control\",\n      \"description\": \"Pilot <PRIVATE_SERVICE> editorial and social campaigns through its MCP tools. Use for listing, drafting, revising, submitting, scheduling, or publishing posts while preserving human approval and dry-run safety.\",\n      \"source\": \"bundled\",\n      \"path\": \"<CHECKOUT>/dist/skills/bundled/<PRIVATE_SERVICE>-control/SKILL.md\",\n      \"available\": true\n    },\n    {\n      \"name\": \"weather\",\n      \"description\": \"Get current weather and forecasts using the weather tool (Open-Meteo, no API key)\",\n      \"source\": \"bundled\",\n      \"path\": \"<CHECKOUT>/dist/skills/bundled/weather.skill.md\",\n      \"version\": \"1.0.0\",\n      \"requires\": {\n        \"tools\": [\n          \"weather\"\n        ]\n      },\n      \"available\": true\n    },\n    {\n      \"name\": \"web-app-testing\",\n      \"description\": \"Test a web app you built or changed — launch its dev server, browse it, verify with evidence (web_test), fix, re-run\",\n      \"source\": \"bundled\",\n      \"path\": \"<CHECKOUT>/dist/skills/bundled/web-app-testing.skill.md\",\n      \"version\": \"1.0.0\",\n      \"requires\": {\n        \"tools\": [\n          \"app_server\",\n          \"web_test\",\n          \"browser\"\n        ]\n      },\n      \"available\": true\n    },\n    {\n      \"name\": \"web-search\",\n      \"description\": \"Search the web for information and return relevant results\",\n      \"source\": \"bundled\",\n      \"path\": \"<CHECKOUT>/dist/skills/bundled/web-search.skill.md\",\n      \"version\": \"1.0.0\",\n      \"requires\": {\n        \"tools\": [\n          \"web_search\"\n        ]\n      },\n      \"available\": true\n    }\n  ],\n  \"availableCount\": 15,\n  \"unavailableSkills\": [],\n  \"discoveryErrors\": [],\n  \"guidance\": \"Use availableSkills to answer which skills can be used. Requirements may need tools or external configuration. The skills/count/total fields below describe only hub records, not the complete local catalogue. Missing files are not configuration errors.\",\n  \"count\": 0,\n  \"total\": 0,\n  \"includeDisabled\": false,\n  \"skills\": []\n}",
+    "data": {
+      "action": "skills_list",
+      "availableSkills": [
+        {
+          "name": "typescript-expert",
+          "description": "Expert TypeScript developer for complex type issues",
+          "source": "bundled",
+          "path": "<CHECKOUT>/dist/skills/bundled/typescript-expert.skill.md",
+          "version": "1.0.0",
+          "requires": {
+            "tools": [
+              "view_file",
+              "search",
+              "str_replace_editor"
+            ]
+          },
+          "available": true
+        },
+        {
+          "name": "react-specialist",
+          "description": "React and frontend development specialist",
+          "source": "builtin",
+          "available": true
+        },
+        {
+          "name": "api-designer",
+          "description": "REST and GraphQL API design specialist",
+          "source": "builtin",
+          "available": true
+        },
+        {
+          "name": "database-expert",
+          "description": "Database design and query optimization",
+          "source": "builtin",
+          "available": true
+        },
+        {
+          "name": "security-auditor",
+          "description": "Security vulnerability detection and prevention",
+          "source": "builtin",
+          "available": true
+        },
+        {
+          "name": "performance-optimizer",
+          "description": "Performance analysis and optimization",
+          "source": "builtin",
+          "available": true
+        },
+        {
+          "name": "testing-expert",
+          "description": "Testing strategy and implementation",
+          "source": "builtin",
+          "available": true
+        },
+        {
+          "name": "devops-engineer",
+          "description": "DevOps, CI/CD, and infrastructure",
+          "source": "builtin",
+          "available": true
+        },
+        {
+          "name": "code-explorer",
+          "description": "Use the Code Explorer (gitnexus) code-graph MCP tools to understand a codebase through precise relationships — callers, callees, blast radius — instead of reading many files",
+          "source": "bundled",
+          "path": "<CHECKOUT>/dist/skills/bundled/code-explorer.skill.md",
+          "version": "1.0.0",
+          "available": true
+        },
+        {
+          "name": "file-edit",
+          "description": "Edit files with precise changes",
+          "source": "bundled",
+          "path": "<CHECKOUT>/dist/skills/bundled/file-edit.skill.md",
+          "version": "1.0.0",
+          "requires": {
+            "tools": [
+              "read_file",
+              "edit_file"
+            ]
+          },
+          "available": true
+        },
+        {
+          "name": "git-commit",
+          "description": "Create a git commit with a well-formatted message",
+          "source": "bundled",
+          "path": "<CHECKOUT>/dist/skills/bundled/git-commit.skill.md",
+          "version": "1.0.0",
+          "requires": {
+            "tools": [
+              "bash"
+            ]
+          },
+          "available": true
+        },
+        {
+          "name": "<PRIVATE_SERVICE>-control",
+          "description": "Pilot <PRIVATE_SERVICE> editorial and social campaigns through its MCP tools. Use for listing, drafting, revising, submitting, scheduling, or publishing posts while preserving human approval and dry-run safety.",
+          "source": "bundled",
+          "path": "<CHECKOUT>/dist/skills/bundled/<PRIVATE_SERVICE>-control/SKILL.md",
+          "available": true
+        },
+        {
+          "name": "weather",
+          "description": "Get current weather and forecasts using the weather tool (Open-Meteo, no API key)",
+          "source": "bundled",
+          "path": "<CHECKOUT>/dist/skills/bundled/weather.skill.md",
+          "version": "1.0.0",
+          "requires": {
+            "tools": [
+              "weather"
+            ]
+          },
+          "available": true
+        },
+        {
+          "name": "web-app-testing",
+          "description": "Test a web app you built or changed — launch its dev server, browse it, verify with evidence (web_test), fix, re-run",
+          "source": "bundled",
+          "path": "<CHECKOUT>/dist/skills/bundled/web-app-testing.skill.md",
+          "version": "1.0.0",
+          "requires": {
+            "tools": [
+              "app_server",
+              "web_test",
+              "browser"
+            ]
+          },
+          "available": true
+        },
+        {
+          "name": "web-search",
+          "description": "Search the web for information and return relevant results",
+          "source": "bundled",
+          "path": "<CHECKOUT>/dist/skills/bundled/web-search.skill.md",
+          "version": "1.0.0",
+          "requires": {
+            "tools": [
+              "web_search"
+            ]
+          },
+          "available": true
+        }
+      ],
+      "availableCount": 15,
+      "unavailableSkills": [],
+      "discoveryErrors": [],
+      "guidance": "Use availableSkills to answer which skills can be used. Requirements may need tools or external configuration. The skills/count/total fields below describe only hub records, not the complete local catalogue. Missing files are not configuration errors.",
+      "count": 0,
+      "total": 0,
+      "includeDisabled": false,
+      "skills": []
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 58
+}

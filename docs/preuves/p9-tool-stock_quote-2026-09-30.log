@@ -1,0 +1,51 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → stock_quote({"symbol": "AAPL"})
+Attendu: AAPL|Apple
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture stock_quote.json ===
+{
+  "name": "stock_quote",
+  "input": {
+    "symbol": "AAPL"
+  },
+  "expected": "AAPL|Apple",
+  "result": {
+    "success": true,
+    "output": "Yahoo Finance indisponible. Repli Nasdaq : Apple Inc. (AAPL) : 329,40 USD, en baisse -9,00 USD (-2,66 %), Sep 29, 2026.",
+    "data": {
+      "type": "stock",
+      "symbol": "AAPL",
+      "name": "Apple Inc.",
+      "price": 329.4,
+      "change": -9,
+      "changePercent": -2.66,
+      "currency": "USD",
+      "previousClose": 338.4,
+      "volume": 38478318,
+      "market": "NASDAQ-GS",
+      "time": "Sep 29, 2026"
+    },
+    "metadata": {
+      "provider": "Nasdaq",
+      "sourceUrl": "https://api.nasdaq.com/api/quote/AAPL/info?assetclass=stocks",
+      "fetchedAt": 1790743221059,
+      "quoteTime": "Sep 29, 2026",
+      "fallbackFrom": [
+        "Yahoo Finance"
+      ]
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 99
+}

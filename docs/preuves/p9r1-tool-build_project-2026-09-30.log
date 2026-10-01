@@ -1,0 +1,73 @@
+Date de consolidation: 2026-09-30T19:33:55.657611Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: build_project({"root": "<QA>/reprise-1/project"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "build_project",
+  "input": {
+    "root": "<QA>/reprise-1/project"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.exitCode",
+        "op": "eq",
+        "value": 0
+      },
+      {
+        "file": "dist/app.js",
+        "op": "eq",
+        "value": "P9_BUILD",
+        "changed": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Build passed in 214ms",
+    "data": {
+      "root": "<QA>/reprise-1/project",
+      "durationMs": 214,
+      "exitCode": 0,
+      "timedOut": false,
+      "stdoutTail": "\n> p9-fixture@1.0.0 build\n> node build.js\n\n",
+      "stderrTail": ""
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.exitCode eq",
+      "passed": true
+    },
+    {
+      "check": "écriture effective de dist/app.js",
+      "passed": true
+    },
+    {
+      "check": "dist/app.js eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 217,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:build_project",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

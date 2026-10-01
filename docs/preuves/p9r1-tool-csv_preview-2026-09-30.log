@@ -1,0 +1,103 @@
+Date de consolidation: 2026-09-30T19:33:55.682326Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: csv_preview({"file": "<QA>/reprise-1/project/data.csv"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "csv_preview",
+  "input": {
+    "file": "<QA>/reprise-1/project/data.csv"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.columns",
+        "op": "eq",
+        "value": [
+          "name",
+          "value"
+        ]
+      },
+      {
+        "field": "data.rowCount",
+        "op": "eq",
+        "value": 2
+      },
+      {
+        "field": "data.preview",
+        "op": "eq",
+        "value": [
+          {
+            "name": "alpha",
+            "value": "12"
+          },
+          {
+            "name": "beta",
+            "value": "30"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "CSV has 2 columns and 2 rows",
+    "data": {
+      "file": "<QA>/reprise-1/project/data.csv",
+      "columns": [
+        "name",
+        "value"
+      ],
+      "rowCount": 2,
+      "preview": [
+        {
+          "name": "alpha",
+          "value": "12"
+        },
+        {
+          "name": "beta",
+          "value": "30"
+        }
+      ],
+      "inferredTypes": {
+        "name": "text",
+        "value": "number"
+      }
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.columns eq",
+      "passed": true
+    },
+    {
+      "check": "data.rowCount eq",
+      "passed": true
+    },
+    {
+      "check": "data.preview eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 2,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:csv_preview",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

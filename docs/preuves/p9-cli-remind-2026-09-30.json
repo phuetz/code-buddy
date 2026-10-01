@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:remind",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "1a12e0fecaa6d373d63cdaa80bfec7bf32547ba4a8f37a4d82451e21c5d476d9",
+  "artifact": "docs/preuves/p9-cli-remind-2026-09-30.log",
+  "summary": "Sous-parcours CLI exécuté avec HOME isolé."
+}

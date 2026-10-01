@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool-understand-video",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "2f6a5e9f90c61a983e49426231da4a9b2b6cac776d4f74a61af91a7cbd18f8d9",
+  "artifact": "docs/preuves/p9-tool-understand-video-2026-09-30.log",
+  "summary": "Transcription réelle avec moteur STT installé dans un venv QA ; fichiers de recherche persistés."
+}

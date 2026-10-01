@@ -1,0 +1,67 @@
+Date de consolidation: 2026-09-30T19:33:55.894545Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: text_to_speech({"text": "P9 evidence forty two", "provider": "espeak", "format": "wav", "output_path": "tts-p9.wav"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "text_to_speech",
+  "input": {
+    "text": "P9 evidence forty two",
+    "provider": "espeak",
+    "format": "wav",
+    "output_path": "tts-p9.wav"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.wavValid",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "{\n  \"kind\": \"text_to_speech_result\",\n  \"ok\": true,\n  \"provider\": \"espeak\",\n  \"outputPath\": \"<QA>/reprise-1/project/tts-p9.wav\",\n  \"mediaPath\": \"MEDIA:<QA>/reprise-1/project/tts-p9.wav\",\n  \"format\": \"wav\",\n  \"textLength\": 21,\n  \"generatedAt\": \"2026-09-30T18:53:29.399Z\",\n  \"sizeBytes\": 83252\n}",
+    "data": {
+      "kind": "text_to_speech_result",
+      "ok": true,
+      "provider": "espeak",
+      "outputPath": "<QA>/reprise-1/project/tts-p9.wav",
+      "mediaPath": "MEDIA:<QA>/reprise-1/project/tts-p9.wav",
+      "format": "wav",
+      "textLength": 21,
+      "generatedAt": "2026-09-30T18:53:29.399Z",
+      "sizeBytes": 83252
+    }
+  },
+  "observations": {
+    "wavValid": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.wavValid eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 71,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:text_to_speech",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

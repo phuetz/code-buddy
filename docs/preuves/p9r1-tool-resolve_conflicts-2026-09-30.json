@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:resolve_conflicts",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.848646Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "9f170ce96fb7089b05676d9a938a557cecab5b3117aeae0691a36d35a1395f86",
+  "artifact": "docs/preuves/p9r1-tool-resolve_conflicts-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

@@ -1,0 +1,38 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → resolve_conflicts({"file_path": "conflict.txt", "strategy": "ours"})
+Attendu: resolved|P9_OURS
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture resolve_conflicts.json ===
+{
+  "name": "resolve_conflicts",
+  "input": {
+    "file_path": "conflict.txt",
+    "strategy": "ours"
+  },
+  "expected": "resolved|P9_OURS",
+  "result": {
+    "success": true,
+    "output": "Resolved 1 conflict(s) in conflict.txt using strategy \"ours\"."
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    },
+    {
+      "check": "file exists and nonempty",
+      "passed": true
+    },
+    {
+      "check": "file content",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 1
+}

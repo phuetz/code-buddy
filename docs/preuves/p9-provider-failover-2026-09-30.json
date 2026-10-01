@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "provider-failover",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "ed6460f97c7c55beb8315d64d9d13343ff055aec709944da2ca585e1414c60df",
+  "artifact": "docs/preuves/p9-provider-failover-2026-09-30.log",
+  "summary": "Bascule effective du primaire inaccessible vers Ollama local."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:recall",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.837824Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "edeed1303941217347715f5e28d50d4490b4311fe64cd8ab2bfe2f7ca4799b94",
+  "artifact": "docs/preuves/p9r1-tool-recall-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

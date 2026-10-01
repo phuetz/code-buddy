@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:code_explorer_ask",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:56.017335Z",
+  "revision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "sourceDigest": "ae1d30b624af6b31511c5477106d5f5b91f6c4cd5d73cd804174f0b3f4178de6",
+  "artifact": "docs/preuves/p9r1-tool-code_explorer_ask-2026-09-30.log",
+  "summary": "Définitions add issues de sample.js et sample.ts, ligne 1, par l’adaptateur réel."
+}

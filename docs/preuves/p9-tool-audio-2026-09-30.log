@@ -1,0 +1,39 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → audio({"operation": "info", "path": "speech.wav"})
+Attendu: duration|sample|Hz
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture audio.json ===
+{
+  "name": "audio",
+  "input": {
+    "operation": "info",
+    "path": "speech.wav"
+  },
+  "expected": "duration|sample|Hz",
+  "result": {
+    "success": true,
+    "output": "🎵 Audio: speech.wav\n   Format: WAV\n   Size: 145.75 KB\n   Duration: 0:03\n   Sample Rate: 22050 Hz\n   Channels: 1 (Mono)\n   Bitrate: 353 kbps",
+    "data": {
+      "filename": "speech.wav",
+      "format": "WAV",
+      "size": "145.75 KB",
+      "sampleRate": 22050,
+      "channels": 1,
+      "bitrate": 353,
+      "duration": 3.38
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 1
+}

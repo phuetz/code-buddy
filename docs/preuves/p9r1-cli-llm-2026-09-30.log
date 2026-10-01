@@ -1,0 +1,26 @@
+Date de consolidation: 2026-09-30T19:33:55.990138Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy llm list({"args": ["list"]})
+Attendu: ['Active LLMs', 'ollama', '[local] qwen3:4b-instruct']
+Observé: ['Active LLMs', 'ollama', '[local] qwen3:4b-instruct']
+Verdict: prouvée
+
+{
+  "id": "cli:llm",
+  "name": "llm",
+  "input": {
+    "args": [
+      "list"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "[2026-09-30T18:40:08.869Z]  INFO  Auto-detected provider: ollama (model: qwen3:4b-instruct)\nActive LLMs (logged in + reachable):\n  • ollama     [local] qwen3:4b-instruct  ($0)  ← primary\n  • lemonade   [local] Llama-3.2-1B-Instruct-GGUF-Q4_K_M  ($0)\n  • grok       [cloud] qwen3:4b-instruct  ($3/Mtok)\n\nFailover order: ollama → grok → lemonade\nAuto-failover: OFF  (enable with CODEBUDDY_PROVIDER_FALLBACK=true; CODEBUDDY_LLM_FAILOVER is a deprecated alias)\n"
+  },
+  "expected": "['Active LLMs', 'ollama', '[local] qwen3:4b-instruct']",
+  "passed": true,
+  "command": "buddy llm list",
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['Active LLMs', 'ollama', '[local] qwen3:4b-instruct']"
+}

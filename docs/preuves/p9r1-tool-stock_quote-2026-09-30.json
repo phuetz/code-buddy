@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:stock_quote",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.883691Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "1119b57035c6152bc84dc85c1ae0cf08eed92396376719bbd5ad5f1eb7c690ac",
+  "artifact": "docs/preuves/p9r1-tool-stock_quote-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

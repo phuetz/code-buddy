@@ -1,0 +1,154 @@
+Date de consolidation: 2026-09-30T19:33:55.661291Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: code_stats({"root": "<QA>/reprise-1/project"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "code_stats",
+  "input": {
+    "root": "<QA>/reprise-1/project"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.fileCount",
+        "op": "min",
+        "value": 10
+      },
+      {
+        "field": "data.totalLines",
+        "op": "min",
+        "value": 20
+      },
+      {
+        "field": "data.byLanguage.TypeScript.files",
+        "op": "min",
+        "value": 1
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Counted 2550 lines across 92 files",
+    "data": {
+      "root": "<QA>/reprise-1/project",
+      "fileCount": 92,
+      "totalLines": 2550,
+      "byLanguage": {
+        "Markdown": {
+          "files": 14,
+          "lines": 232,
+          "commentLines": 0
+        },
+        "JSON": {
+          "files": 35,
+          "lines": 1559,
+          "commentLines": 0
+        },
+        "Other": {
+          "files": 30,
+          "lines": 692,
+          "commentLines": 0
+        },
+        "Python": {
+          "files": 2,
+          "lines": 2,
+          "commentLines": 0
+        },
+        "HTML": {
+          "files": 1,
+          "lines": 1,
+          "commentLines": 0
+        },
+        "JavaScript": {
+          "files": 6,
+          "lines": 14,
+          "commentLines": 1
+        },
+        "TypeScript": {
+          "files": 4,
+          "lines": 50,
+          "commentLines": 0
+        }
+      },
+      "largestFiles": [
+        {
+          "file": ".codebuddy/colab-tasks.json",
+          "lines": 301
+        },
+        {
+          "file": ".codebuddy/index/workspace.bin.mappings.json",
+          "lines": 288
+        },
+        {
+          "file": ".codebuddy/index/workspace.bin.meta.json",
+          "lines": 258
+        },
+        {
+          "file": ".codebuddy/qrcodes/qr_1790791052317.svg",
+          "lines": 183
+        },
+        {
+          "file": ".codebuddy/qrcodes/qr_1790792403131.svg",
+          "lines": 183
+        },
+        {
+          "file": ".codebuddy/qrcodes/qr_1790793120717.svg",
+          "lines": 183
+        },
+        {
+          "file": ".codebuddy/repoProfile.json",
+          "lines": 70
+        },
+        {
+          "file": "meeting-report-1790792603296.json",
+          "lines": 70
+        },
+        {
+          "file": "meeting-report.json",
+          "lines": 70
+        },
+        {
+          "file": ".codebuddy/vision-analysis/vision-1879a6a3-e1e3-4382-9ff4-1228372ef318.json",
+          "lines": 37
+        }
+      ],
+      "commentRatio": 0.000392156862745098
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.fileCount min",
+      "passed": true
+    },
+    {
+      "check": "data.totalLines min",
+      "passed": true
+    },
+    {
+      "check": "data.byLanguage.TypeScript.files min",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 100,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:code_stats",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

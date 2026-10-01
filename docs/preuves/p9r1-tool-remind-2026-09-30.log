@@ -1,0 +1,72 @@
+Date de consolidation: 2026-09-30T19:33:55.844611Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: remind({"label": "P9_TOOL_REMINDER", "time": "23:58", "date": "2026-10-01"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "remind",
+  "input": {
+    "label": "P9_TOOL_REMINDER",
+    "time": "23:58",
+    "date": "2026-10-01"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.reminderPersisted",
+        "op": "eq",
+        "value": true
+      },
+      {
+        "field": "observations.reminderRemoved",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Reminder set: \"P9_TOOL_REMINDER\" at 23:58 demain (id r-muogr35r-28).",
+    "data": {
+      "id": "r-muogr35r-28",
+      "label": "P9_TOOL_REMINDER",
+      "time": "23:58",
+      "date": "2026-10-01",
+      "oneShot": true
+    }
+  },
+  "observations": {
+    "reminderPersisted": true,
+    "reminderRemoved": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.reminderPersisted eq",
+      "passed": true
+    },
+    {
+      "check": "observations.reminderRemoved eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 14,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:remind",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

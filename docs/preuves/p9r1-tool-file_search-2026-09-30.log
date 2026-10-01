@@ -1,0 +1,72 @@
+Date de consolidation: 2026-09-30T19:33:55.707195Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: file_search({"root": "<QA>/reprise-1/project", "pattern": "P9_MARKER"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "file_search",
+  "input": {
+    "root": "<QA>/reprise-1/project",
+    "pattern": "P9_MARKER"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.matches",
+        "op": "some",
+        "value": {
+          "file": "sample.js",
+          "line": 2,
+          "excerpt": "// TODO P9_MARKER"
+        }
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Found 2 match(es)",
+    "data": {
+      "root": "<QA>/reprise-1/project",
+      "pattern": "P9_MARKER",
+      "matches": [
+        {
+          "file": ".codebuddy/index/workspace.bin.meta.json",
+          "line": 144,
+          "excerpt": "        \"text\": \"export function add(a, b) { return a + b; }\\n// TODO P9_MARKER\\nconsole.log(add(1, 2));\\n\""
+        },
+        {
+          "file": "sample.js",
+          "line": 2,
+          "excerpt": "// TODO P9_MARKER"
+        }
+      ]
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.matches some",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 108,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:file_search",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

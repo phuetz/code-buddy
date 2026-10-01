@@ -1,0 +1,60 @@
+Date de consolidation: 2026-09-30T19:33:55.861452Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: screenshot({"outputPath": "p9-screen.png", "fullscreen": true, "format": "png"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "screenshot",
+  "input": {
+    "outputPath": "p9-screen.png",
+    "fullscreen": true,
+    "format": "png"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.pngValid",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "📸 Screenshot captured\n   Path: p9-screen.png\n   Size: 295 B\n   Time: 2026-09-30T18:53:28.484Z",
+    "data": {
+      "path": "p9-screen.png",
+      "size": "295 B",
+      "timestamp": "2026-09-30T18:53:28.484Z"
+    }
+  },
+  "observations": {
+    "pngValid": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.pngValid eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 103,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:screenshot",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

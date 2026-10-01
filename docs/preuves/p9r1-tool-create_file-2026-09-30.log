@@ -1,0 +1,57 @@
+Date de consolidation: 2026-09-30T19:33:55.673824Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: create_file({"path": "new.txt", "content": "P9_NEW"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "create_file",
+  "input": {
+    "path": "new.txt",
+    "content": "P9_NEW"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "file": "new.txt",
+        "op": "eq",
+        "value": "P9_NEW",
+        "changed": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Updated new.txt with 1 addition\n--- a/new.txt\n+++ b/new.txt\n@@ -1,0 +1,1 @@\n+P9_NEW"
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "écriture effective de new.txt",
+      "passed": true
+    },
+    {
+      "check": "new.txt eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 8,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:create_file",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

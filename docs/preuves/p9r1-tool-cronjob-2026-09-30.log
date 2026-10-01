@@ -1,0 +1,140 @@
+Date de consolidation: 2026-09-30T19:33:55.975273Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: cronjob({"sequence": ["create", "show", "remove", "list"]})
+Attendu: Toutes les clauses spécifiques de l’oracle sont nécessaires.
+Observé: Toutes les clauses de l’oracle spécifique sont satisfaites.
+Verdict: prouvée
+
+{
+  "name": "cronjob",
+  "input": {
+    "sequence": [
+      "create",
+      "show",
+      "remove",
+      "list"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "{\n  \"action\": \"list\",\n  \"count\": 0,\n  \"jobs\": []\n}",
+    "data": {
+      "action": "list",
+      "count": 0,
+      "jobs": []
+    }
+  },
+  "results": [
+    {
+      "success": true,
+      "output": "{\n  \"action\": \"create\",\n  \"job\": {\n    \"id\": \"af18e13e-2925-45b5-a2c0-4f08b5be0a0a\",\n    \"name\": \"P9_CRON_R1\",\n    \"type\": \"at\",\n    \"schedule\": {\n      \"at\": \"2099-01-01T00:00:00.000Z\"\n    },\n    \"task\": {\n      \"type\": \"script\",\n      \"command\": {\n        \"executable\": \"node\",\n        \"args\": [\n          \"-e\",\n          \"console.log(42)\"\n        ]\n      }\n    },\n    \"status\": \"active\",\n    \"createdAt\": \"2026-09-30T19:09:40.494Z\",\n    \"runCount\": 0,\n    \"errorCount\": 0,\n    \"enabled\": true,\n    \"nextRunAt\": \"2099-01-01T00:00:00.000Z\"\n  }\n}",
+      "data": {
+        "action": "create",
+        "job": {
+          "id": "af18e13e-2925-45b5-a2c0-4f08b5be0a0a",
+          "name": "P9_CRON_R1",
+          "type": "at",
+          "schedule": {
+            "at": "2099-01-01T00:00:00.000Z"
+          },
+          "task": {
+            "type": "script",
+            "command": {
+              "executable": "node",
+              "args": [
+                "-e",
+                "console.log(42)"
+              ]
+            }
+          },
+          "status": "active",
+          "createdAt": "2026-09-30T19:09:40.494Z",
+          "runCount": 0,
+          "errorCount": 0,
+          "enabled": true,
+          "nextRunAt": "2099-01-01T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "success": true,
+      "output": "{\n  \"action\": \"show\",\n  \"job\": {\n    \"id\": \"af18e13e-2925-45b5-a2c0-4f08b5be0a0a\",\n    \"name\": \"P9_CRON_R1\",\n    \"type\": \"at\",\n    \"schedule\": {\n      \"at\": \"2099-01-01T00:00:00.000Z\"\n    },\n    \"task\": {\n      \"type\": \"script\",\n      \"command\": {\n        \"executable\": \"node\",\n        \"args\": [\n          \"-e\",\n          \"console.log(42)\"\n        ]\n      }\n    },\n    \"status\": \"active\",\n    \"createdAt\": \"2026-09-30T19:09:40.494Z\",\n    \"runCount\": 0,\n    \"errorCount\": 0,\n    \"enabled\": true,\n    \"nextRunAt\": \"2099-01-01T00:00:00.000Z\"\n  }\n}",
+      "data": {
+        "action": "show",
+        "job": {
+          "id": "af18e13e-2925-45b5-a2c0-4f08b5be0a0a",
+          "name": "P9_CRON_R1",
+          "type": "at",
+          "schedule": {
+            "at": "2099-01-01T00:00:00.000Z"
+          },
+          "task": {
+            "type": "script",
+            "command": {
+              "executable": "node",
+              "args": [
+                "-e",
+                "console.log(42)"
+              ]
+            }
+          },
+          "status": "active",
+          "createdAt": "2026-09-30T19:09:40.494Z",
+          "runCount": 0,
+          "errorCount": 0,
+          "enabled": true,
+          "nextRunAt": "2099-01-01T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "success": true,
+      "output": "{\n  \"action\": \"remove\",\n  \"job\": {\n    \"id\": \"af18e13e-2925-45b5-a2c0-4f08b5be0a0a\",\n    \"name\": \"P9_CRON_R1\",\n    \"type\": \"at\",\n    \"schedule\": {\n      \"at\": \"2099-01-01T00:00:00.000Z\"\n    },\n    \"task\": {\n      \"type\": \"script\",\n      \"command\": {\n        \"executable\": \"node\",\n        \"args\": [\n          \"-e\",\n          \"console.log(42)\"\n        ]\n      }\n    },\n    \"status\": \"active\",\n    \"createdAt\": \"2026-09-30T19:09:40.494Z\",\n    \"runCount\": 0,\n    \"errorCount\": 0,\n    \"enabled\": true,\n    \"nextRunAt\": \"2099-01-01T00:00:00.000Z\"\n  }\n}",
+      "data": {
+        "action": "remove",
+        "job": {
+          "id": "af18e13e-2925-45b5-a2c0-4f08b5be0a0a",
+          "name": "P9_CRON_R1",
+          "type": "at",
+          "schedule": {
+            "at": "2099-01-01T00:00:00.000Z"
+          },
+          "task": {
+            "type": "script",
+            "command": {
+              "executable": "node",
+              "args": [
+                "-e",
+                "console.log(42)"
+              ]
+            }
+          },
+          "status": "active",
+          "createdAt": "2026-09-30T19:09:40.494Z",
+          "runCount": 0,
+          "errorCount": 0,
+          "enabled": true,
+          "nextRunAt": "2099-01-01T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "success": true,
+      "output": "{\n  \"action\": \"list\",\n  \"count\": 0,\n  \"jobs\": []\n}",
+      "data": {
+        "action": "list",
+        "count": 0,
+        "jobs": []
+      }
+    }
+  ],
+  "observations": {
+    "persistedJob": true,
+    "removed": true
+  },
+  "passed": true,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:cronjob",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

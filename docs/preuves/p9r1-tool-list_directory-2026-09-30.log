@@ -1,0 +1,55 @@
+Date de consolidation: 2026-09-30T19:33:55.793759Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: list_directory({"path": "."})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "list_directory",
+  "input": {
+    "path": "."
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "data.csv",
+          "sample.ts",
+          "package.json"
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Directory: <QA>/reprise-1/project\n38 entries\n\nType       Size  Modified          Name\n---------------------------------------\ndir/          -  2026-09-30 19:51  audit-fixture/\ndir/          -  2026-09-30 19:57  docs/\ndir/          -  2026-09-30 19:57  format-fixture/\ndir/          -  2026-09-30 19:51  lint-fixture/\ndir/          -  2026-09-30 20:20  new-cli/\ndir/          -  2026-09-30 19:57  new-cli-first-run/\nfile      460 B  2026-09-30 20:29  browser-page-r1.html\nfile      388 B  2026-09-30 20:29  browser-server-r1.mjs\nfile       19 B  2026-09-30 19:51  bug-fixture.js\nfile      124 B  2026-09-30 19:51  build.js\nfile      215 B  2026-09-30 20:50  bundle.zip\nfile       74 B  2026-09-30 20:20  CHANGELOG.md\nfile      150 B  2026-09-30 19:51  check.test.js\nfile      22 KB  2026-09-30 19:51  clip.mp4\nfile       28 B  2026-09-30 19:51  data.csv\nfile       42 B  2026-09-30 19:51  data.json\nfile       25 B  2026-09-30 20:50  export.csv\nfile      134 B  2026-09-30 19:51  leads.json\nfile       39 B  2026-09-30 19:51  LICENSE\nfile     1.5 KB  2026-09-30 20:23  meeting-report-1790792603296.json\nfile      766 B  2026-09-30 20:23  meeting-report-1790792603296.md\nfile     1.5 KB  2026-09-30 19:57  meeting-report.json\nfile      766 B  2026-09-30 19:57  meeting-report.md\nfile       26 B  2026-09-30 19:51  note.md\nfile     6.0 KB  2026-09-30 19:51  ocr.png\nfile      295 B  2026-09-30 20:32  p9-screen.png\nfile     8.4 KB  2026-09-30 20:51  p9.docx\nfile      630 B  2026-09-30 19:51  p9.pdf\nfile      233 B  2026-09-30 19:51  package.json\nfile       46 B  2026-09-30 20:23  PLAN.md\nfile      123 B  2026-09-30 20:19  rename-space test.ts\nfile      928 B  2026-09-30 20:51  review-leads.json\nfile       86 B  2026-09-30 19:51  sample.js\nfile      119 B  2026-09-30 19:51  sample.ts\nfile     146 KB  2026-09-30 19:51  speech.wav\nfile      194 B  2026-09-30 20:20  todo.md\nfile       73 B  2026-09-30 19:51  tsconfig.json\nfile      81 KB  2026-09-30 20:32  tts-p9.wav"
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 26,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:list_directory",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

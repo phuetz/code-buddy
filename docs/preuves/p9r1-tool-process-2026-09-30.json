@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:process",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.973252Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "f978487fb9fde6aa64b15f38f05c16b924bd2bd759fe1466e1882a5e9cd7c7ec",
+  "artifact": "docs/preuves/p9r1-tool-process-2026-09-30.log",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

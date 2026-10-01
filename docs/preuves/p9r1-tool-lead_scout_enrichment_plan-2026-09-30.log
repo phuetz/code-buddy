@@ -1,0 +1,330 @@
+Date de consolidation: 2026-09-30T19:33:55.762907Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: lead_scout_enrichment_plan({"goal": "Plan official website evidence", "maxHops": 1, "pageBudget": 1})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "lead_scout_enrichment_plan",
+  "input": {
+    "goal": "Plan official website evidence",
+    "maxHops": 1,
+    "pageBudget": 1
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.pageBudget",
+        "op": "eq",
+        "value": 1
+      },
+      {
+        "field": "data.hops.length",
+        "op": "min",
+        "value": 1
+      },
+      {
+        "field": "data.extractionRules.length",
+        "op": "min",
+        "value": 1
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "# Lead Scout Enrichment Plan: Plan official website evidence\nTarget: custom\nMissing fields: email, telephone, site_web\nPage budget: 1\nDelay: 1500ms\n## Principles\n- Model the task as a graph of evidence, not a single-page extraction.\n- Use each discovered field as a hypothesis that must be confirmed by a public source.\n- Keep the script deterministic and reproducible so a human can inspect what happened.\n- Separate understanding from execution: the LLM designs the strategy, the sandbox runs bounded code.\n- Prefer small, resumable batches over one large crawl.\n- Every enriched phone, email, or website must carry the URL and snippet that justified it.\n## Multi-hop Chain\n1. Read the source profile page [required] - Fetch the known directory/profile URL, extract official website links, and ignore generic portals.\n2. Open the official website [required] - Fetch the official website homepage and collect mailto/tel links plus visible contact text.\n3. Explore contact-like pages [optional] - Try bounded contact paths (/, /contact, /contact/, /nous-contacter, /agence, /a-propos, /about, /mentions-legales) and same-domain contact/about links found on the homepage.\n4. Verify and merge extracted fields [required] - Prefer same-domain emails, French phone-like numbers, and fields backed by explicit source URLs.\n## Extraction Rules\n- Treat the lead page, official website, and contact page as a linked evidence chain.\n- Reject generic directory, social, map, marketplace, and unrelated domains as official websites.\n- Stay on the same official domain after the website hop unless the user provided an allowed domain.\n- Keep every extracted value with source_url, page_title, snippet, and observed_at.\n- Extract email from mailto links first, then visible text, then HTML attributes; prefer same-domain contact/info/agence emails.\n- Extract phone from tel links first, then visible French phone patterns; reject fax-only or malformed numbers when detectable.\n- Extract official website from profile labels or outbound links, then normalize malformed http/https prefixes.\n## Protected Script\n- Language: python\n- Dependencies: requests, beautifulsoup4\n- Network: https_only_public_web\n- Writes: output_path_only\n- Stop on: captcha, login, paywall, 403, 429, private_data, non_public_domain\n## Safety Rules\n- Use public professional B2B pages only.\n- Do not bypass captcha, login walls, paywalls, anti-bot checks, robots/rate-limit signals, or access controls.\n- Use bounded page budgets, delays between requests, and one retry maximum for transient network failures.\n- Do not send emails or submit forms; generate review data only.\n- Store evidence snippets, not raw page dumps.\n- Stop on HTTP 403, 429, captcha-like pages, credential prompts, or private personal data unrelated to the B2B goal.\n\nStructured result:\n{\n  \"goal\": \"Plan official website evidence\",\n  \"target\": \"custom\",\n  \"missingFields\": [\n    \"email\",\n    \"telephone\",\n    \"site_web\"\n  ],\n  \"sourceUrlField\": \"source_url\",\n  \"websiteField\": \"site_web\",\n  \"nameField\": \"nom\",\n  \"maxHops\": 1,\n  \"pageBudget\": 1,\n  \"delayMs\": 1500,\n  \"allowedDomains\": [],\n  \"ignoredDomains\": [\n    \"architectes.org\",\n    \"annuaire.architectes.org\",\n    \"architectes-pour-tous.fr\",\n    \"pagesjaunes.fr\",\n    \"societe.com\",\n    \"facebook.com\",\n    \"instagram.com\",\n    \"linkedin.com\",\n    \"google.com\",\n    \"maps.google.\"\n  ],\n  \"principles\": [\n    \"Model the task as a graph of evidence, not a single-page extraction.\",\n    \"Use each discovered field as a hypothesis that must be confirmed by a public source.\",\n    \"Keep the script deterministic and reproducible so a human can inspect what happened.\",\n    \"Separate understanding from execution: the LLM designs the strategy, the sandbox runs bounded code.\",\n    \"Prefer small, resumable batches over one large crawl.\",\n    \"Every enriched phone, email, or website must carry the URL and snippet that justified it.\"\n  ],\n  \"hops\": [\n    {\n      \"id\": \"seed-profile\",\n      \"title\": \"Read the source profile page\",\n      \"inputFields\": [\n        \"nom\",\n        \"source_url\"\n      ],\n      \"outputFields\": [\n        \"site_web\",\n        \"evidence\"\n      ],\n      \"action\": \"Fetch the known directory/profile URL, extract official website links, and ignore generic portals.\",\n      \"evidence\": \"Profile URL, page title, extracted website URL, and short snippet.\",\n      \"required\": true\n    },\n    {\n      \"id\": \"official-site\",\n      \"title\": \"Open the official website\",\n      \"inputFields\": [\n        \"site_web\"\n      ],\n      \"outputFields\": [\n        \"homepage_evidence\",\n        \"email\",\n        \"telephone\",\n        \"site_web\"\n      ],\n      \"action\": \"Fetch the official website homepage and collect mailto/tel links plus visible contact text.\",\n      \"evidence\": \"Official domain URL, HTTP status, and extracted contact snippet.\",\n      \"required\": true\n    },\n    {\n      \"id\": \"contact-pages\",\n      \"title\": \"Explore contact-like pages\",\n      \"inputFields\": [\n        \"site_web\"\n      ],\n      \"outputFields\": [\n        \"site_web\",\n        \"email\",\n        \"telephone\"\n      ],\n      \"action\": \"Try bounded contact paths (/, /contact, /contact/, /nous-contacter, /agence, /a-propos, /about, /mentions-legales) and same-domain contact/about links found on the homepage.\",\n      \"evidence\": \"Each contact candidate URL, extracted fields, and first matching snippet.\",\n      \"required\": false\n    },\n    {\n      \"id\": \"verify-and-merge\",\n      \"title\": \"Verify and merge extracted fields\",\n      \"inputFields\": [\n        \"nom\",\n        \"site_web\",\n        \"email\",\n        \"telephone\",\n        \"site_web\"\n      ],\n      \"outputFields\": [\n        \"enrichment\",\n        \"confidence\",\n        \"status\"\n      ],\n      \"action\": \"Prefer same-domain emails, French phone-like numbers, and fields backed by explicit source URLs.\",\n      \"evidence\": \"Evidence chain from profile URL to website URL to contact page URL.\",\n      \"required\": true\n    }\n  ],\n  \"extractionRules\": [\n    \"Treat the lead page, official website, and contact page as a linked evidence chain.\",\n    \"Reject generic directory, social, map, marketplace, and unrelated domains as official websites.\",\n    \"Stay on the same official domain after the website hop unless the user provided an allowed domain.\",\n    \"Keep every extracted value with source_url, page_title, snippet, and observed_at.\",\n    \"Extract email from mailto links first, then visible text, then HTML attributes; prefer same-domain contact/info/agence emails.\",\n    \"Extract phone from tel links first, then visible French phone patterns; reject fax-only or malformed numbers when detectable.\",\n    \"Extract official website from profile labels or outbound links, then normalize malformed http/https prefixes.\"\n  ],\n  \"safetyRules\": [\n    \"Use public professional B2B pages only.\",\n    \"Do not bypass captcha, login walls, paywalls, anti-bot checks, robots/rate-limit signals, or access controls.\",\n    \"Use bounded page budgets, delays between requests, and one retry maximum for transient network failures.\",\n    \"Do not send emails or submit forms; generate review data only.\",\n    \"Store evidence snippets, not raw page dumps.\",\n    \"Stop on HTTP 403, 429, captcha-like pages, credential prompts, or private personal data unrelated to the B2B goal.\"\n  ],\n  \"agentTools\": [\n    \"lead_scout_enrichment_plan\",\n    \"lead_scout_run\",\n    \"lead_scout_lesson_candidates\",\n    \"internet_scout_plan\",\n    \"run_script\",\n    \"lessons_add\"\n  ],\n  \"protectedScript\": {\n    \"language\": \"python\",\n    \"dependencies\": [\n      \"requests\",\n      \"beautifulsoup4\"\n    ],\n    \"inputContract\": {\n      \"LEADS_JSON\": \"Path to an input JSON array of lead records.\",\n      \"OUTPUT_JSON\": \"Path where the script writes the enriched JSON array.\",\n      \"LIMIT\": \"Optional maximum number of leads to process.\"\n    },\n    \"outputContract\": {\n      \"enriched\": \"Array of original lead records plus enrichment fields and evidence_chain.\",\n      \"skipped\": \"Rows skipped with reason.\",\n      \"stats\": \"Processed, enriched, skipped, and blocked counts.\"\n    },\n    \"jobArtifact\": {\n      \"schemaVersion\": 1,\n      \"id\": \"research-script-04z1bf7\",\n      \"artifactRoot\": \"research-scripts/research-script-04z1bf7\",\n      \"command\": {\n        \"executable\": \"python\",\n        \"args\": [\n          \"enrich-leads.py\"\n        ],\n        \"cwd\": \".\",\n        \"env\": {\n          \"LEADS_JSON\": \"input.json\",\n          \"OUTPUT_JSON\": \"output.json\",\n          \"LIMIT\": \"optional integer limit\"\n        }\n      },\n      \"createdAt\": \"2026-09-30T18:51:06.966Z\",\n      \"files\": {\n        \"manifest\": \"research-scripts/research-script-04z1bf7/manifest.json\",\n        \"readme\": \"research-scripts/research-script-04z1bf7/README.md\",\n        \"script\": \"research-scripts/research-script-04z1bf7/enrich-leads.py\",\n        \"input\": \"research-scripts/research-script-04z1bf7/input.json\",\n        \"output\": \"research-scripts/research-script-04z1bf7/output.json\",\n        \"stdout\": \"research-scripts/research-script-04z1bf7/stdout.log\",\n        \"stderr\": \"research-scripts/research-script-04z1bf7/stderr.log\",\n        \"summary\": \"research-scripts/research-script-04z1bf7/summary.md\"\n      },\n      \"goal\": \"Plan official website evidence\",\n      \"inputContract\": {\n        \"LEADS_JSON\": \"Path to an input JSON array of lead records.\",\n        \"OUTPUT_JSON\": \"Path where the script writes the enriched JSON array.\",\n        \"LIMIT\": \"Optional maximum number of leads to process.\"\n      },\n      \"language\": \"python\",\n      \"outputContract\": {\n        \"enriched\": \"Array of original lead records plus enrichment fields and evidence_chain.\",\n        \"skipped\": \"Rows skipped with reason.\",\n        \"stats\": \"Processed, enriched, skipped, and blocked counts.\"\n      },\n      \"sandboxPolicy\": {\n        \"provider\": \"local\",\n        \"network\": \"https_only_public_web\",\n        \"writes\": \"output_path_only\",\n        \"timeoutMs\": 120000,\n        \"pageBudget\": 1,\n        \"delayMs\": 1500,\n        \"allowedDomains\": [],\n        \"ignoredDomains\": [\n          \"architectes.org\",\n          \"annuaire.architectes.org\",\n          \"architectes-pour-tous.fr\",\n          \"pagesjaunes.fr\",\n          \"societe.com\",\n          \"facebook.com\",\n          \"instagram.com\",\n          \"linkedin.com\",\n          \"google.com\",\n          \"maps.google.\"\n        ],\n        \"stopOn\": [\n          \"captcha\",\n          \"login\",\n          \"paywall\",\n          \"403\",\n          \"429\",\n          \"private_data\",\n          \"non_public_domain\"\n        ],\n        \"cleanup\": \"keep_all_artifacts\"\n      },\n      \"assertions\": [\n        {\n          \"id\": \"output-json-written\",\n          \"kind\": \"file_exists\",\n          \"description\": \"The enrichment script writes output.json in the job artifact folder.\",\n          \"required\": true\n        },\n        {\n          \"id\": \"evidence-chain-preserved\",\n          \"kind\": \"evidence\",\n          \"description\": \"Every enriched phone, email, website, or contact URL carries evidence_chain entries.\",\n          \"required\": true\n        },\n        {\n          \"id\": \"no-contact-action\",\n          \"kind\": \"no_contact_action\",\n          \"description\": \"The script does not send emails, submit forms, or contact leads.\",\n          \"required\": true\n        }\n      ],\n      \"title\": \"Lead Scout custom public enrichment script\",\n      \"agentRunArtifact\": {\n        \"kind\": \"script\",\n        \"path\": \"research-scripts/research-script-04z1bf7/manifest.json\",\n        \"title\": \"Lead Scout custom public enrichment script\"\n      }\n    },\n    \"sandboxPolicy\": {\n      \"network\": \"https_only_public_web\",\n      \"writes\": \"output_path_only\",\n      \"timeoutMs\": 120000,\n      \"pageBudget\": 1,\n      \"delayMs\": 1500,\n      \"stopOn\": [\n        \"captcha\",\n        \"login\",\n        \"paywall\",\n        \"403\",\n        \"429\",\n        \"private_data\",\n        \"non_public_domain\"\n      ]\n    },\n    \"script\": \"#!<SYSTEM_PATH> python3\\nimport json\\nimport os\\nimport re\\nimport time\\nfrom datetime import datetime, timezone\\nfrom urllib.parse import urljoin, urlparse\\n\\nimport requests\\nfrom bs4 import BeautifulSoup\\n\\nSOURCE_URL_FIELD = \\\"source_url\\\"\\nWEBSITE_FIELD = \\\"site_web\\\"\\nNAME_FIELD = \\\"nom\\\"\\nMISSING_FIELDS = [\\\"email\\\",\\\"telephone\\\",\\\"site_web\\\"]\\nIGNORED_DOMAINS = [\\\"architectes.org\\\",\\\"annuaire.architectes.org\\\",\\\"architectes-pour-tous.fr\\\",\\\"pagesjaunes.fr\\\",\\\"societe.com\\\",\\\"facebook.com\\\",\\\"instagram.com\\\",\\\"linkedin.com\\\",\\\"google.com\\\",\\\"maps.google.\\\"]\\nALLOWED_DOMAINS = []\\nCONTACT_PATHS = [\\\"/\\\",\\\"/contact\\\",\\\"/contact/\\\",\\\"/nous-contacter\\\",\\\"/agence\\\",\\\"/a-propos\\\",\\\"/about\\\",\\\"/mentions-legales\\\"]\\nPAGE_BUDGET = 1\\nDELAY_SECONDS = 1.5\\nHEADERS = {\\n    \\\"User-Agent\\\": \\\"CodeBuddy-LeadScout/1.0 (+public B2B enrichment; no form submit)\\\",\\n    \\\"Accept\\\": \\\"text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5\\\",\\n}\\n\\n\\ndef normalize_url(url):\\n    if not url:\\n        return \\\"\\\"\\n    value = str(url).strip()\\n    value = re.sub(r\\\"^https?://(https?://)\\\", r\\\"\\\\1\\\", value, flags=re.I)\\n    if value.startswith(\\\"www.\\\"):\\n        value = \\\"https://\\\" + value\\n    return value\\n\\n\\ndef domain_of(url):\\n    return urlparse(normalize_url(url)).netloc.lower().replace(\\\"www.\\\", \\\"\\\")\\n\\n\\ndef ignored(url):\\n    domain = domain_of(url)\\n    if not domain:\\n        return True\\n    if ALLOWED_DOMAINS and not any(allowed in domain for allowed in ALLOWED_DOMAINS):\\n        return True\\n    return any(blocked in domain for blocked in IGNORED_DOMAINS)\\n\\n\\ndef safe_get(session, url):\\n    url = normalize_url(url)\\n    if not url.startswith((\\\"http://\\\", \\\"https://\\\")) or ignored(url):\\n        return None, \\\"blocked_domain\\\"\\n    try:\\n        response = session.get(url, headers=HEADERS, timeout=12, allow_redirects=True)\\n    except requests.RequestException as exc:\\n        return None, str(exc)\\n    if response.status_code in (403, 429):\\n        return None, f\\\"HTTP {response.status_code}\\\"\\n    text = response.text[:200000]\\n    lowered = text.lower()\\n    if \\\"captcha\\\" in lowered or \\\"connexion\\\" in lowered and \\\"mot de passe\\\" in lowered:\\n        return None, \\\"access_wall\\\"\\n    return response, None\\n\\n\\ndef extract_contacts(html, page_url):\\n    soup = BeautifulSoup(html, \\\"html.parser\\\")\\n    text = soup.get_text(\\\" \\\", strip=True)\\n    emails = set()\\n    phones = set()\\n    contact_links = set()\\n    websites = set()\\n    for link in soup.find_all(\\\"a\\\", href=True):\\n        href = link[\\\"href\\\"].strip()\\n        label = link.get_text(\\\" \\\", strip=True).lower()\\n        if href.startswith(\\\"mailto:\\\"):\\n            emails.add(href.replace(\\\"mailto:\\\", \\\"\\\").split(\\\"?\\\")[0].strip().lower())\\n        elif href.startswith(\\\"tel:\\\"):\\n            phones.add(href.replace(\\\"tel:\\\", \\\"\\\").strip())\\n        else:\\n            absolute = urljoin(page_url, href)\\n            if any(word in (href + \\\" \\\" + label).lower() for word in [\\\"contact\\\", \\\"agence\\\", \\\"about\\\", \\\"a-propos\\\", \\\"mentions\\\"]):\\n                if domain_of(absolute) == domain_of(page_url):\\n                    contact_links.add(absolute)\\n            if absolute.startswith((\\\"http://\\\", \\\"https://\\\")) and not ignored(absolute):\\n                websites.add(absolute)\\n    for email in re.findall(r\\\"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}\\\", html):\\n        emails.add(email.lower())\\n    for phone in re.findall(r\\\"(?:\\\\+33|0)[\\\\s.\\\\-]*(?:[1-9])(?:[\\\\s.\\\\-]*\\\\d{2}){4}\\\", text):\\n        phones.add(phone)\\n    return {\\n        \\\"emails\\\": sorted(emails),\\n        \\\"phones\\\": sorted(phones),\\n        \\\"websites\\\": sorted(websites),\\n        \\\"contact_links\\\": sorted(contact_links),\\n        \\\"snippet\\\": text[:500],\\n    }\\n\\n\\ndef best_email(emails, website):\\n    website_domain = domain_of(website)\\n    def score(email):\\n        domain = email.split(\\\"@\\\")[-1]\\n        if website_domain and website_domain in domain:\\n            return 0\\n        if email.startswith((\\\"contact@\\\", \\\"info@\\\", \\\"agence@\\\")):\\n            return 1\\n        return 2\\n    return sorted(emails, key=score)[0] if emails else \\\"\\\"\\n\\n\\ndef enrich_one(session, lead):\\n    evidence_chain = []\\n    pages_seen = 0\\n    website = normalize_url(lead.get(WEBSITE_FIELD) or \\\"\\\")\\n    source_url = normalize_url(lead.get(SOURCE_URL_FIELD) or \\\"\\\")\\n    candidates = []\\n    if source_url:\\n        candidates.append((\\\"profile\\\", source_url))\\n    if website:\\n        candidates.append((\\\"website\\\", website))\\n    enrichment = {}\\n\\n    for kind, url in list(candidates):\\n        if pages_seen >= PAGE_BUDGET:\\n            break\\n        time.sleep(DELAY_SECONDS)\\n        response, error = safe_get(session, url)\\n        pages_seen += 1\\n        if error:\\n            evidence_chain.append({\\\"url\\\": url, \\\"kind\\\": kind, \\\"blocked\\\": error})\\n            continue\\n        contacts = extract_contacts(response.text, response.url)\\n        evidence_chain.append({\\\"url\\\": response.url, \\\"kind\\\": kind, \\\"snippet\\\": contacts[\\\"snippet\\\"]})\\n        if not website and contacts[\\\"websites\\\"]:\\n            website = contacts[\\\"websites\\\"][0]\\n            enrichment[WEBSITE_FIELD] = website\\n            candidates.append((\\\"website\\\", website))\\n        if \\\"email\\\" in MISSING_FIELDS and not enrichment.get(\\\"email\\\"):\\n            email = best_email(contacts[\\\"emails\\\"], website)\\n            if email:\\n                enrichment[\\\"email\\\"] = email\\n        if \\\"telephone\\\" in MISSING_FIELDS and not enrichment.get(\\\"telephone\\\") and contacts[\\\"phones\\\"]:\\n            enrichment[\\\"telephone\\\"] = contacts[\\\"phones\\\"][0]\\n        if \\\"contact_url\\\" in MISSING_FIELDS and not enrichment.get(\\\"contact_url\\\") and contacts[\\\"contact_links\\\"]:\\n            enrichment[\\\"contact_url\\\"] = contacts[\\\"contact_links\\\"][0]\\n        for contact_url in contacts[\\\"contact_links\\\"][:3] + [urljoin(response.url, path) for path in CONTACT_PATHS]:\\n            if pages_seen >= PAGE_BUDGET:\\n                break\\n            if contact_url not in [candidate[1] for candidate in candidates]:\\n                candidates.append((\\\"contact\\\", contact_url))\\n\\n    enriched = dict(lead)\\n    enriched.update({key: value for key, value in enrichment.items() if value})\\n    enriched[\\\"evidence_chain\\\"] = evidence_chain[:PAGE_BUDGET]\\n    enriched[\\\"enrichment_status\\\"] = \\\"enriched\\\" if enrichment else \\\"needs_review\\\"\\n    enriched[\\\"observed_at\\\"] = datetime.now(timezone.utc).isoformat()\\n    return enriched\\n\\n\\ndef main():\\n    input_path = os.environ[\\\"LEADS_JSON\\\"]\\n    output_path = os.environ[\\\"OUTPUT_JSON\\\"]\\n    limit = int(os.environ.get(\\\"LIMIT\\\", \\\"50\\\"))\\n    with open(input_path, \\\"r\\\", encoding=\\\"utf-8\\\") as handle:\\n        leads = json.load(handle)\\n    session = requests.Session()\\n    enriched = [enrich_one(session, lead) for lead in leads[:limit]]\\n    with open(output_path, \\\"w\\\", encoding=\\\"utf-8\\\") as handle:\\n        json.dump({\\\"enriched\\\": enriched, \\\"stats\\\": {\\\"processed\\\": len(enriched)}}, handle, ensure_ascii=False, indent=2)\\n    print(json.dumps({\\\"processed\\\": len(enriched), \\\"output\\\": output_path}))\\n\\n\\nif __name__ == \\\"__main__\\\":\\n    main()\\n\"\n  }\n}",
+    "data": {
+      "goal": "Plan official website evidence",
+      "target": "custom",
+      "missingFields": [
+        "email",
+        "telephone",
+        "site_web"
+      ],
+      "sourceUrlField": "source_url",
+      "websiteField": "site_web",
+      "nameField": "nom",
+      "maxHops": 1,
+      "pageBudget": 1,
+      "delayMs": 1500,
+      "allowedDomains": [],
+      "ignoredDomains": [
+        "architectes.org",
+        "annuaire.architectes.org",
+        "architectes-pour-tous.fr",
+        "pagesjaunes.fr",
+        "societe.com",
+        "facebook.com",
+        "instagram.com",
+        "linkedin.com",
+        "google.com",
+        "maps.google."
+      ],
+      "principles": [
+        "Model the task as a graph of evidence, not a single-page extraction.",
+        "Use each discovered field as a hypothesis that must be confirmed by a public source.",
+        "Keep the script deterministic and reproducible so a human can inspect what happened.",
+        "Separate understanding from execution: the LLM designs the strategy, the sandbox runs bounded code.",
+        "Prefer small, resumable batches over one large crawl.",
+        "Every enriched phone, email, or website must carry the URL and snippet that justified it."
+      ],
+      "hops": [
+        {
+          "id": "seed-profile",
+          "title": "Read the source profile page",
+          "inputFields": [
+            "nom",
+            "source_url"
+          ],
+          "outputFields": [
+            "site_web",
+            "evidence"
+          ],
+          "action": "Fetch the known directory/profile URL, extract official website links, and ignore generic portals.",
+          "evidence": "Profile URL, page title, extracted website URL, and short snippet.",
+          "required": true
+        },
+        {
+          "id": "official-site",
+          "title": "Open the official website",
+          "inputFields": [
+            "site_web"
+          ],
+          "outputFields": [
+            "homepage_evidence",
+            "email",
+            "telephone",
+            "site_web"
+          ],
+          "action": "Fetch the official website homepage and collect mailto/tel links plus visible contact text.",
+          "evidence": "Official domain URL, HTTP status, and extracted contact snippet.",
+          "required": true
+        },
+        {
+          "id": "contact-pages",
+          "title": "Explore contact-like pages",
+          "inputFields": [
+            "site_web"
+          ],
+          "outputFields": [
+            "site_web",
+            "email",
+            "telephone"
+          ],
+          "action": "Try bounded contact paths (/, /contact, /contact/, /nous-contacter, /agence, /a-propos, /about, /mentions-legales) and same-domain contact/about links found on the homepage.",
+          "evidence": "Each contact candidate URL, extracted fields, and first matching snippet.",
+          "required": false
+        },
+        {
+          "id": "verify-and-merge",
+          "title": "Verify and merge extracted fields",
+          "inputFields": [
+            "nom",
+            "site_web",
+            "email",
+            "telephone",
+            "site_web"
+          ],
+          "outputFields": [
+            "enrichment",
+            "confidence",
+            "status"
+          ],
+          "action": "Prefer same-domain emails, French phone-like numbers, and fields backed by explicit source URLs.",
+          "evidence": "Evidence chain from profile URL to website URL to contact page URL.",
+          "required": true
+        }
+      ],
+      "extractionRules": [
+        "Treat the lead page, official website, and contact page as a linked evidence chain.",
+        "Reject generic directory, social, map, marketplace, and unrelated domains as official websites.",
+        "Stay on the same official domain after the website hop unless the user provided an allowed domain.",
+        "Keep every extracted value with source_url, page_title, snippet, and observed_at.",
+        "Extract email from mailto links first, then visible text, then HTML attributes; prefer same-domain contact/info/agence emails.",
+        "Extract phone from tel links first, then visible French phone patterns; reject fax-only or malformed numbers when detectable.",
+        "Extract official website from profile labels or outbound links, then normalize malformed http/https prefixes."
+      ],
+      "safetyRules": [
+        "Use public professional B2B pages only.",
+        "Do not bypass captcha, login walls, paywalls, anti-bot checks, robots/rate-limit signals, or access controls.",
+        "Use bounded page budgets, delays between requests, and one retry maximum for transient network failures.",
+        "Do not send emails or submit forms; generate review data only.",
+        "Store evidence snippets, not raw page dumps.",
+        "Stop on HTTP 403, 429, captcha-like pages, credential prompts, or private personal data unrelated to the B2B goal."
+      ],
+      "agentTools": [
+        "lead_scout_enrichment_plan",
+        "lead_scout_run",
+        "lead_scout_lesson_candidates",
+        "internet_scout_plan",
+        "run_script",
+        "lessons_add"
+      ],
+      "protectedScript": {
+        "language": "python",
+        "dependencies": [
+          "requests",
+          "beautifulsoup4"
+        ],
+        "inputContract": {
+          "LEADS_JSON": "Path to an input JSON array of lead records.",
+          "OUTPUT_JSON": "Path where the script writes the enriched JSON array.",
+          "LIMIT": "Optional maximum number of leads to process."
+        },
+        "outputContract": {
+          "enriched": "Array of original lead records plus enrichment fields and evidence_chain.",
+          "skipped": "Rows skipped with reason.",
+          "stats": "Processed, enriched, skipped, and blocked counts."
+        },
+        "jobArtifact": {
+          "schemaVersion": 1,
+          "id": "research-script-04z1bf7",
+          "artifactRoot": "research-scripts/research-script-04z1bf7",
+          "command": {
+            "executable": "python",
+            "args": [
+              "enrich-leads.py"
+            ],
+            "cwd": ".",
+            "env": {
+              "LEADS_JSON": "input.json",
+              "OUTPUT_JSON": "output.json",
+              "LIMIT": "optional integer limit"
+            }
+          },
+          "createdAt": "2026-09-30T18:51:06.966Z",
+          "files": {
+            "manifest": "research-scripts/research-script-04z1bf7/manifest.json",
+            "readme": "research-scripts/research-script-04z1bf7/README.md",
+            "script": "research-scripts/research-script-04z1bf7/enrich-leads.py",
+            "input": "research-scripts/research-script-04z1bf7/input.json",
+            "output": "research-scripts/research-script-04z1bf7/output.json",
+            "stdout": "research-scripts/research-script-04z1bf7/stdout.log",
+            "stderr": "research-scripts/research-script-04z1bf7/stderr.log",
+            "summary": "research-scripts/research-script-04z1bf7/summary.md"
+          },
+          "goal": "Plan official website evidence",
+          "inputContract": {
+            "LEADS_JSON": "Path to an input JSON array of lead records.",
+            "OUTPUT_JSON": "Path where the script writes the enriched JSON array.",
+            "LIMIT": "Optional maximum number of leads to process."
+          },
+          "language": "python",
+          "outputContract": {
+            "enriched": "Array of original lead records plus enrichment fields and evidence_chain.",
+            "skipped": "Rows skipped with reason.",
+            "stats": "Processed, enriched, skipped, and blocked counts."
+          },
+          "sandboxPolicy": {
+            "provider": "local",
+            "network": "https_only_public_web",
+            "writes": "output_path_only",
+            "timeoutMs": 120000,
+            "pageBudget": 1,
+            "delayMs": 1500,
+            "allowedDomains": [],
+            "ignoredDomains": [
+              "architectes.org",
+              "annuaire.architectes.org",
+              "architectes-pour-tous.fr",
+              "pagesjaunes.fr",
+              "societe.com",
+              "facebook.com",
+              "instagram.com",
+              "linkedin.com",
+              "google.com",
+              "maps.google."
+            ],
+            "stopOn": [
+              "captcha",
+              "login",
+              "paywall",
+              "403",
+              "429",
+              "private_data",
+              "non_public_domain"
+            ],
+            "cleanup": "keep_all_artifacts"
+          },
+          "assertions": [
+            {
+              "id": "output-json-written",
+              "kind": "file_exists",
+              "description": "The enrichment script writes output.json in the job artifact folder.",
+              "required": true
+            },
+            {
+              "id": "evidence-chain-preserved",
+              "kind": "evidence",
+              "description": "Every enriched phone, email, website, or contact URL carries evidence_chain entries.",
+              "required": true
+            },
+            {
+              "id": "no-contact-action",
+              "kind": "no_contact_action",
+              "description": "The script does not send emails, submit forms, or contact leads.",
+              "required": true
+            }
+          ],
+          "title": "Lead Scout custom public enrichment script",
+          "agentRunArtifact": {
+            "kind": "script",
+            "path": "research-scripts/research-script-04z1bf7/manifest.json",
+            "title": "Lead Scout custom public enrichment script"
+          }
+        },
+        "sandboxPolicy": {
+          "network": "https_only_public_web",
+          "writes": "output_path_only",
+          "timeoutMs": 120000,
+          "pageBudget": 1,
+          "delayMs": 1500,
+          "stopOn": [
+            "captcha",
+            "login",
+            "paywall",
+            "403",
+            "429",
+            "private_data",
+            "non_public_domain"
+          ]
+        },
+        "script": "#!<SYSTEM_PATH> python3\nimport json\nimport os\nimport re\nimport time\nfrom datetime import datetime, timezone\nfrom urllib.parse import urljoin, urlparse\n\nimport requests\nfrom bs4 import BeautifulSoup\n\nSOURCE_URL_FIELD = \"source_url\"\nWEBSITE_FIELD = \"site_web\"\nNAME_FIELD = \"nom\"\nMISSING_FIELDS = [\"email\",\"telephone\",\"site_web\"]\nIGNORED_DOMAINS = [\"architectes.org\",\"annuaire.architectes.org\",\"architectes-pour-tous.fr\",\"pagesjaunes.fr\",\"societe.com\",\"facebook.com\",\"instagram.com\",\"linkedin.com\",\"google.com\",\"maps.google.\"]\nALLOWED_DOMAINS = []\nCONTACT_PATHS = [\"/\",\"/contact\",\"/contact/\",\"/nous-contacter\",\"/agence\",\"/a-propos\",\"/about\",\"/mentions-legales\"]\nPAGE_BUDGET = 1\nDELAY_SECONDS = 1.5\nHEADERS = {\n    \"User-Agent\": \"CodeBuddy-LeadScout/1.0 (+public B2B enrichment; no form submit)\",\n    \"Accept\": \"text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5\",\n}\n\n\ndef normalize_url(url):\n    if not url:\n        return \"\"\n    value = str(url).strip()\n    value = re.sub(r\"^https?://(https?://)\", r\"\\1\", value, flags=re.I)\n    if value.startswith(\"www.\"):\n        value = \"https://\" + value\n    return value\n\n\ndef domain_of(url):\n    return urlparse(normalize_url(url)).netloc.lower().replace(\"www.\", \"\")\n\n\ndef ignored(url):\n    domain = domain_of(url)\n    if not domain:\n        return True\n    if ALLOWED_DOMAINS and not any(allowed in domain for allowed in ALLOWED_DOMAINS):\n        return True\n    return any(blocked in domain for blocked in IGNORED_DOMAINS)\n\n\ndef safe_get(session, url):\n    url = normalize_url(url)\n    if not url.startswith((\"http://\", \"https://\")) or ignored(url):\n        return None, \"blocked_domain\"\n    try:\n        response = session.get(url, headers=HEADERS, timeout=12, allow_redirects=True)\n    except requests.RequestException as exc:\n        return None, str(exc)\n    if response.status_code in (403, 429):\n        return None, f\"HTTP {response.status_code}\"\n    text = response.text[:200000]\n    lowered = text.lower()\n    if \"captcha\" in lowered or \"connexion\" in lowered and \"mot de passe\" in lowered:\n        return None, \"access_wall\"\n    return response, None\n\n\ndef extract_contacts(html, page_url):\n    soup = BeautifulSoup(html, \"html.parser\")\n    text = soup.get_text(\" \", strip=True)\n    emails = set()\n    phones = set()\n    contact_links = set()\n    websites = set()\n    for link in soup.find_all(\"a\", href=True):\n        href = link[\"href\"].strip()\n        label = link.get_text(\" \", strip=True).lower()\n        if href.startswith(\"mailto:\"):\n            emails.add(href.replace(\"mailto:\", \"\").split(\"?\")[0].strip().lower())\n        elif href.startswith(\"tel:\"):\n            phones.add(href.replace(\"tel:\", \"\").strip())\n        else:\n            absolute = urljoin(page_url, href)\n            if any(word in (href + \" \" + label).lower() for word in [\"contact\", \"agence\", \"about\", \"a-propos\", \"mentions\"]):\n                if domain_of(absolute) == domain_of(page_url):\n                    contact_links.add(absolute)\n            if absolute.startswith((\"http://\", \"https://\")) and not ignored(absolute):\n                websites.add(absolute)\n    for email in re.findall(r\"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}\", html):\n        emails.add(email.lower())\n    for phone in re.findall(r\"(?:\\+33|0)[\\s.\\-]*(?:[1-9])(?:[\\s.\\-]*\\d{2}){4}\", text):\n        phones.add(phone)\n    return {\n        \"emails\": sorted(emails),\n        \"phones\": sorted(phones),\n        \"websites\": sorted(websites),\n        \"contact_links\": sorted(contact_links),\n        \"snippet\": text[:500],\n    }\n\n\ndef best_email(emails, website):\n    website_domain = domain_of(website)\n    def score(email):\n        domain = email.split(\"@\")[-1]\n        if website_domain and website_domain in domain:\n            return 0\n        if email.startswith((\"contact@\", \"info@\", \"agence@\")):\n            return 1\n        return 2\n    return sorted(emails, key=score)[0] if emails else \"\"\n\n\ndef enrich_one(session, lead):\n    evidence_chain = []\n    pages_seen = 0\n    website = normalize_url(lead.get(WEBSITE_FIELD) or \"\")\n    source_url = normalize_url(lead.get(SOURCE_URL_FIELD) or \"\")\n    candidates = []\n    if source_url:\n        candidates.append((\"profile\", source_url))\n    if website:\n        candidates.append((\"website\", website))\n    enrichment = {}\n\n    for kind, url in list(candidates):\n        if pages_seen >= PAGE_BUDGET:\n            break\n        time.sleep(DELAY_SECONDS)\n        response, error = safe_get(session, url)\n        pages_seen += 1\n        if error:\n            evidence_chain.append({\"url\": url, \"kind\": kind, \"blocked\": error})\n            continue\n        contacts = extract_contacts(response.text, response.url)\n        evidence_chain.append({\"url\": response.url, \"kind\": kind, \"snippet\": contacts[\"snippet\"]})\n        if not website and contacts[\"websites\"]:\n            website = contacts[\"websites\"][0]\n            enrichment[WEBSITE_FIELD] = website\n            candidates.append((\"website\", website))\n        if \"email\" in MISSING_FIELDS and not enrichment.get(\"email\"):\n            email = best_email(contacts[\"emails\"], website)\n            if email:\n                enrichment[\"email\"] = email\n        if \"telephone\" in MISSING_FIELDS and not enrichment.get(\"telephone\") and contacts[\"phones\"]:\n            enrichment[\"telephone\"] = contacts[\"phones\"][0]\n        if \"contact_url\" in MISSING_FIELDS and not enrichment.get(\"contact_url\") and contacts[\"contact_links\"]:\n            enrichment[\"contact_url\"] = contacts[\"contact_links\"][0]\n        for contact_url in contacts[\"contact_links\"][:3] + [urljoin(response.url, path) for path in CONTACT_PATHS]:\n            if pages_seen >= PAGE_BUDGET:\n                break\n            if contact_url not in [candidate[1] for candidate in candidates]:\n                candidates.append((\"contact\", contact_url))\n\n    enriched = dict(lead)\n    enriched.update({key: value for key, value in enrichment.items() if value})\n    enriched[\"evidence_chain\"] = evidence_chain[:PAGE_BUDGET]\n    enriched[\"enrichment_status\"] = \"enriched\" if enrichment else \"needs_review\"\n    enriched[\"observed_at\"] = datetime.now(timezone.utc).isoformat()\n    return enriched\n\n\ndef main():\n    input_path = os.environ[\"LEADS_JSON\"]\n    output_path = os.environ[\"OUTPUT_JSON\"]\n    limit = int(os.environ.get(\"LIMIT\", \"50\"))\n    with open(input_path, \"r\", encoding=\"utf-8\") as handle:\n        leads = json.load(handle)\n    session = requests.Session()\n    enriched = [enrich_one(session, lead) for lead in leads[:limit]]\n    with open(output_path, \"w\", encoding=\"utf-8\") as handle:\n        json.dump({\"enriched\": enriched, \"stats\": {\"processed\": len(enriched)}}, handle, ensure_ascii=False, indent=2)\n    print(json.dumps({\"processed\": len(enriched), \"output\": output_path}))\n\n\nif __name__ == \"__main__\":\n    main()\n"
+      }
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.pageBudget eq",
+      "passed": true
+    },
+    {
+      "check": "data.hops.length min",
+      "passed": true
+    },
+    {
+      "check": "data.extractionRules.length min",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 3,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:lead_scout_enrichment_plan",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

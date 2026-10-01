@@ -1,0 +1,253 @@
+Date de consolidation: 2026-09-30T19:33:55.671464Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: computer_control({"action": "cursor_position"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "computer_control",
+  "input": {
+    "action": "cursor_position"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.x",
+        "op": "eq",
+        "value": 42
+      },
+      {
+        "field": "data.y",
+        "op": "eq",
+        "value": 84
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [
+    {
+      "name": "computer_control",
+      "input": {
+        "action": "move_mouse",
+        "x": 42,
+        "y": 84
+      },
+      "result": {
+        "success": true,
+        "output": "Moved mouse to (42, 84)",
+        "data": {
+          "audit": {
+            "id": "audit-1790794254010-be6wj9",
+            "action": "move_mouse",
+            "success": true,
+            "durationMs": 141,
+            "safetyProfile": "balanced",
+            "dangerous": false,
+            "simulated": false
+          },
+          "harness": {
+            "run": {
+              "kind": "run",
+              "schemaVersion": 1,
+              "id": "computer_audit-1790794254010-be6wj9",
+              "actor": {
+                "type": "agent",
+                "id": "code-buddy-computer-control"
+              },
+              "objective": "Computer control action: move_mouse",
+              "status": "completed",
+              "startedAt": 1790794253869,
+              "endedAt": 1790794254010,
+              "metrics": {
+                "durationMs": 141,
+                "toolCallCount": 1
+              },
+              "metadata": {
+                "channel": "computer-control",
+                "organ": "code-buddy",
+                "tags": [
+                  "computer-use",
+                  "move_mouse",
+                  "live"
+                ]
+              }
+            },
+            "proof": {
+              "kind": "proof",
+              "schemaVersion": 1,
+              "id": "proof_audit-1790794254010-be6wj9",
+              "runId": "computer_audit-1790794254010-be6wj9",
+              "type": "log",
+              "createdAt": 1790794254010,
+              "producedBy": {
+                "type": "agent",
+                "id": "code-buddy-computer-control"
+              },
+              "summary": "move_mouse completed in 141ms: Moved mouse to (42, 84)"
+            },
+            "sensitiveAction": {
+              "kind": "sensitive-action",
+              "schemaVersion": 1,
+              "id": "codebuddy.computer_control.move_mouse",
+              "name": "Computer control: move_mouse",
+              "riskLevel": "medium",
+              "scope": [],
+              "defaultDryRun": true,
+              "requires": "dry-run-required"
+            },
+            "capabilities": [
+              {
+                "kind": "capability",
+                "schemaVersion": 1,
+                "id": "codebuddy.computer_control.inspect",
+                "name": "Inspect desktop state",
+                "level": "read",
+                "policy": "autonomous",
+                "fleetPolicy": "read-only-help",
+                "description": "Read windows, snapshots, cursor, system info and permission state."
+              },
+              {
+                "kind": "capability",
+                "schemaVersion": 1,
+                "id": "codebuddy.computer_control.dry_run",
+                "name": "Simulate desktop actions",
+                "level": "reversible-write",
+                "policy": "dry-run-required",
+                "fleetPolicy": "none",
+                "description": "Prepare mutating desktop actions without applying them."
+              },
+              {
+                "kind": "capability",
+                "schemaVersion": 1,
+                "id": "codebuddy.computer_control.live_control",
+                "name": "Control the desktop",
+                "level": "sensitive",
+                "policy": "approval-required",
+                "fleetPolicy": "none",
+                "description": "Click, type, move windows, record the screen or change system state."
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "result": {
+    "success": true,
+    "output": "Cursor at (42, 84)",
+    "data": {
+      "x": 42,
+      "y": 84,
+      "audit": {
+        "id": "audit-1790794254013-5oxc6y",
+        "action": "cursor_position",
+        "success": true,
+        "durationMs": 0,
+        "safetyProfile": "balanced",
+        "dangerous": false,
+        "simulated": false
+      },
+      "harness": {
+        "run": {
+          "kind": "run",
+          "schemaVersion": 1,
+          "id": "computer_audit-1790794254013-5oxc6y",
+          "actor": {
+            "type": "agent",
+            "id": "code-buddy-computer-control"
+          },
+          "objective": "Computer control action: cursor_position",
+          "status": "completed",
+          "startedAt": 1790794254013,
+          "endedAt": 1790794254013,
+          "metrics": {
+            "durationMs": 0,
+            "toolCallCount": 1
+          },
+          "metadata": {
+            "channel": "computer-control",
+            "organ": "code-buddy",
+            "tags": [
+              "computer-use",
+              "cursor_position",
+              "live"
+            ]
+          }
+        },
+        "proof": {
+          "kind": "proof",
+          "schemaVersion": 1,
+          "id": "proof_audit-1790794254013-5oxc6y",
+          "runId": "computer_audit-1790794254013-5oxc6y",
+          "type": "log",
+          "createdAt": 1790794254013,
+          "producedBy": {
+            "type": "agent",
+            "id": "code-buddy-computer-control"
+          },
+          "summary": "cursor_position completed in 0ms: Cursor at (42, 84)"
+        },
+        "capabilities": [
+          {
+            "kind": "capability",
+            "schemaVersion": 1,
+            "id": "codebuddy.computer_control.inspect",
+            "name": "Inspect desktop state",
+            "level": "read",
+            "policy": "autonomous",
+            "fleetPolicy": "read-only-help",
+            "description": "Read windows, snapshots, cursor, system info and permission state."
+          },
+          {
+            "kind": "capability",
+            "schemaVersion": 1,
+            "id": "codebuddy.computer_control.dry_run",
+            "name": "Simulate desktop actions",
+            "level": "reversible-write",
+            "policy": "dry-run-required",
+            "fleetPolicy": "none",
+            "description": "Prepare mutating desktop actions without applying them."
+          },
+          {
+            "kind": "capability",
+            "schemaVersion": 1,
+            "id": "codebuddy.computer_control.live_control",
+            "name": "Control the desktop",
+            "level": "sensitive",
+            "policy": "approval-required",
+            "fleetPolicy": "none",
+            "description": "Click, type, move windows, record the screen or change system state."
+          }
+        ]
+      }
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.x eq",
+      "passed": true
+    },
+    {
+      "check": "data.y eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 168,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:computer_control",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

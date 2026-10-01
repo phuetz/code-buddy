@@ -1,0 +1,65 @@
+Date de consolidation: 2026-09-30T19:33:55.710712Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: find_definition({"symbol_name": "add"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "find_definition",
+  "input": {
+    "symbol_name": "add"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "Definition of \"add\":",
+          "function add"
+        ]
+      },
+      {
+        "field": "observations.definitionMatchesFixture",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Definition of \"add\":\n  function add\n  File: sample.js:1\n  [exported]\n  Signature: export function add(a, b) { return a + b; }"
+  },
+  "observations": {
+    "definitionMatchesFixture": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "observations.definitionMatchesFixture eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 57,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:find_definition",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

@@ -1,0 +1,33 @@
+Date de consolidation: 2026-09-30T19:33:56.009472Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: http-health({"args": ["--port", 18885, "--host", "127.0.0.1"]})
+Attendu: Vraie route health JSON de cette version et port fermé après arrêt
+Observé: Vraie route health JSON de cette version et port fermé après arrêt
+Verdict: prouvée
+
+{
+  "name": "http-health",
+  "id": "http-health",
+  "input": {
+    "args": [
+      "--port",
+      18885,
+      "--host",
+      "127.0.0.1"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "{\"status\": \"degraded\", \"version\": \"2.3.0\", \"runtime\": {\"execution\": {\"installationPath\": \"<CHECKOUT>\", \"codePath\": \"<CHECKOUT>/dist/runtime/runtime-status.js\", \"kind\": \"compiled\", \"version\": \"2.3.0\", \"revision\": \"dad1aafd17115a190699289671f17f73afccab9f\", \"revisionOrigin\": \"build-manifest:git\", \"sourceDirtyAtBuild\": true, \"verified\": true}, \"repository\": {\"path\": \"<CHECKOUT>\", \"revision\": \"99dbcdf27b61fa6a98bc73779b44c0e7efcd3049\", \"dirty\": true, \"mainRef\": \"origin/main\", \"mainAheadBy\": 0}, \"lastEffectiveCall\": null, \"services\": [{\"name\": \"server (this process)\", \"state\": \"active\", \"version\": \"2.3.0\", \"revision\": \"dad1aafd17115a190699289671f17f73afccab9f\"}], \"servicesObservation\": \"unavailable\", \"environmentEnabled\": [], \"alerts\": [\"execution-differs-from-repository\", \"repository-dirty\", \"source-dirty-at-build\"]}, \"uptime\": 0, \"uptimeFormatted\": \"0s\", \"timestamp\": \"2026-09-30T19:08:28.155Z\", \"checks\": {\"database\": \"ok\", \"api\": \"unknown\", \"memory\": \"ok\"}, \"memory\": {\"heapUsedMB\": 63, \"heapTotalMB\": 109, \"rssMB\": 173, \"externalMB\": 11, \"percentUsed\": 58}, \"connections\": {\"websocket\": {\"total\": 0, \"authenticated\": 0, \"streaming\": 0, \"totalBroadcastsDropped\": 0}}, \"apiHeartbeat\": {\"lastCheck\": null, \"latencyMs\": null, \"status\": \"unknown\"}}"
+  },
+  "observations": {
+    "http200": true,
+    "portInitiallyFree": true,
+    "portClosed": true
+  },
+  "passed": true,
+  "expected": "Vraie route health JSON de cette version et port fermé après arrêt",
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "summary": "Vraie route health JSON de cette version et port fermé après arrêt"
+}

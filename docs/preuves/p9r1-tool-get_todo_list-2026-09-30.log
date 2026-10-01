@@ -1,0 +1,85 @@
+Date de consolidation: 2026-09-30T19:33:55.721930Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: get_todo_list({})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "get_todo_list",
+  "input": {},
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "P9_TODO",
+          "0/1 completed"
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [
+    {
+      "name": "create_todo_list",
+      "input": {
+        "todos": [
+          {
+            "id": "p9-todo",
+            "content": "P9_TODO",
+            "status": "pending",
+            "priority": "high"
+          }
+        ]
+      },
+      "result": {
+        "success": true,
+        "output": "\u001b[1m⬜ Pending\u001b[0m\n  🔴 P9_TODO\n\n\n📊 0/1 completed | 🔴 1 high priority",
+        "data": {
+          "message": "Created 1 todos",
+          "count": 1,
+          "stats": {
+            "total": 1,
+            "pending": 1,
+            "inProgress": 0,
+            "completed": 0,
+            "byPriority": {
+              "high": 1,
+              "medium": 0,
+              "low": 0
+            }
+          }
+        }
+      }
+    }
+  ],
+  "result": {
+    "success": true,
+    "output": "\u001b[1m⬜ Pending\u001b[0m\n  🔴 P9_TODO\n\n\n📊 0/1 completed | 🔴 1 high priority"
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 1,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:get_todo_list",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-code-explorer",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "b0a986ac9950518cda496c97bbdf265e4733f15d0de06599a5e4b2a99f8957fd",
+  "artifact": "docs/preuves/p9-cli-code-explorer-2026-09-30.log",
+  "summary": "CLI raccordée au MCP configuré ; deux processus froids terminent avec des définitions."
+}

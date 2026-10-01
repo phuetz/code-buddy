@@ -1,0 +1,142 @@
+Date de consolidation: 2026-09-30T19:33:55.669325Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: community_search({"query": "Lost in the Middle", "sources": ["arxiv"], "limit": 2, "days": 365})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "community_search",
+  "input": {
+    "query": "Lost in the Middle",
+    "sources": [
+      "arxiv"
+    ],
+    "limit": 2,
+    "days": 365
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.communityQueriesRespected",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "2 discussion(s) sur « Lost in the Middle », 365 derniers jours.\n\n[arxiv] A Spectral Theory of Distortion in LLM Graph Reconstruction: Sharp Bounds and Empirical Characterization\n  aucun score public · 2026-09-29 · http://arxiv.org/abs/2609.38161v1\n\n[arxiv] Compactness and Essential Norms of Weighted Bilinear Hardy Operators on General Intervals\n  aucun score public · 2026-09-29 · http://arxiv.org/abs/2609.37998v1\n\nLes scores mesurent l’engagement, pas la véracité : un fil très voté dit ce que des gens pensent, pas ce qui est vrai.",
+    "data": {
+      "query": "Lost in the Middle",
+      "days": 365,
+      "hits": [
+        {
+          "source": "arxiv",
+          "title": "A Spectral Theory of Distortion in LLM Graph Reconstruction: Sharp Bounds and Empirical Characterization",
+          "url": "http://arxiv.org/abs/2609.38161v1",
+          "engagement": 0,
+          "engagementUnit": "aucun score public",
+          "publishedAt": "2026-09-29T17:59:16Z"
+        },
+        {
+          "source": "arxiv",
+          "title": "Compactness and Essential Norms of Weighted Bilinear Hardy Operators on General Intervals",
+          "url": "http://arxiv.org/abs/2609.37998v1",
+          "engagement": 0,
+          "engagementUnit": "aucun score public",
+          "publishedAt": "2026-09-29T16:53:41Z"
+        }
+      ],
+      "unavailable": []
+    }
+  },
+  "observations": {
+    "communityQueriesRespected": true
+  },
+  "verificationCalls": [
+    {
+      "name": "community_search",
+      "input": {
+        "query": "\"A Spectral Theory of Distortion\"",
+        "sources": [
+          "arxiv"
+        ],
+        "limit": 2,
+        "days": 365
+      },
+      "result": {
+        "success": true,
+        "output": "1 discussion(s) sur « \"A Spectral Theory of Distortion\" », 365 derniers jours.\n\n[arxiv] A Spectral Theory of Distortion in LLM Graph Reconstruction: Sharp Bounds and Empirical Characterization\n  aucun score public · 2026-09-29 · http://arxiv.org/abs/2609.38161v1\n\nLes scores mesurent l’engagement, pas la véracité : un fil très voté dit ce que des gens pensent, pas ce qui est vrai.",
+        "data": {
+          "query": "\"A Spectral Theory of Distortion\"",
+          "days": 365,
+          "hits": [
+            {
+              "source": "arxiv",
+              "title": "A Spectral Theory of Distortion in LLM Graph Reconstruction: Sharp Bounds and Empirical Characterization",
+              "url": "http://arxiv.org/abs/2609.38161v1",
+              "engagement": 0,
+              "engagementUnit": "aucun score public",
+              "publishedAt": "2026-09-29T17:59:16Z"
+            }
+          ],
+          "unavailable": []
+        }
+      }
+    },
+    {
+      "name": "community_search",
+      "input": {
+        "query": "\"Weighted Bilinear Hardy Operators\"",
+        "sources": [
+          "arxiv"
+        ],
+        "limit": 2,
+        "days": 365
+      },
+      "result": {
+        "success": true,
+        "output": "1 discussion(s) sur « \"Weighted Bilinear Hardy Operators\" », 365 derniers jours.\n\n[arxiv] Compactness and Essential Norms of Weighted Bilinear Hardy Operators on General Intervals\n  aucun score public · 2026-09-29 · http://arxiv.org/abs/2609.37998v1\n\nLes scores mesurent l’engagement, pas la véracité : un fil très voté dit ce que des gens pensent, pas ce qui est vrai.",
+        "data": {
+          "query": "\"Weighted Bilinear Hardy Operators\"",
+          "days": 365,
+          "hits": [
+            {
+              "source": "arxiv",
+              "title": "Compactness and Essential Norms of Weighted Bilinear Hardy Operators on General Intervals",
+              "url": "http://arxiv.org/abs/2609.37998v1",
+              "engagement": 0,
+              "engagementUnit": "aucun score public",
+              "publishedAt": "2026-09-29T16:53:41Z"
+            }
+          ],
+          "unavailable": []
+        }
+      }
+    }
+  ],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.communityQueriesRespected eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 137,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:community_search",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

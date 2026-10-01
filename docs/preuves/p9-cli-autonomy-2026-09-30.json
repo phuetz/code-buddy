@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:autonomy",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "6eca482853eb41af4f984b96ae7da3cd4cbeb8cc20b311430fa4bc78cf2f7602",
+  "artifact": "docs/preuves/p9-cli-autonomy-2026-09-30.log",
+  "summary": "Sous-parcours CLI exécuté avec HOME isolé."
+}

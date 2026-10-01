@@ -1,0 +1,3145 @@
+[
+  {
+    "name": "archive",
+    "input": {
+      "operation": "create",
+      "sources": [
+        "a.txt",
+        "b.txt"
+      ],
+      "output_path": "bundle.zip",
+      "format": "zip"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.archiveEntries",
+          "op": "eq",
+          "value": [
+            "a.txt",
+            "b.txt"
+          ]
+        },
+        {
+          "field": "observations.archiveA",
+          "op": "eq",
+          "value": "P9_ALPHA\n"
+        },
+        {
+          "field": "observations.archiveB",
+          "op": "eq",
+          "value": "P9_BETA\n"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "audio",
+    "input": {
+      "operation": "info",
+      "path": "speech.wav"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.sampleRate",
+          "op": "eq",
+          "value": 22050
+        },
+        {
+          "field": "data.channels",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.duration",
+          "op": "min",
+          "value": 3
+        },
+        {
+          "field": "data.duration",
+          "op": "max",
+          "value": 4
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "bash",
+    "input": {
+      "command": "node -e \"console.log(6*7)\""
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "eq",
+          "normalize": true,
+          "value": "42"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "build_project",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.exitCode",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "file": "dist/app.js",
+          "op": "eq",
+          "value": "P9_BUILD",
+          "changed": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "bundle_analyze",
+    "input": {
+      "root": "<QA_PROJECT>",
+      "distDir": "dist"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.files",
+          "op": "some",
+          "value": {
+            "file": "app.js",
+            "size": 8
+          }
+        },
+        {
+          "field": "data.totalSize",
+          "op": "eq",
+          "value": 8
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "code_stats",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.fileCount",
+          "op": "min",
+          "value": 10
+        },
+        {
+          "field": "data.totalLines",
+          "op": "min",
+          "value": 20
+        },
+        {
+          "field": "data.byLanguage.TypeScript.files",
+          "op": "min",
+          "value": 1
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "codebase_map",
+    "input": {
+      "root": "<QA_PROJECT>",
+      "deep": true,
+      "operation": "build"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "Codebase map built:"
+          ]
+        },
+        {
+          "field": "observations.mapHasSample",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "codebase_replace",
+    "input": {
+      "search_pattern": "P9_MARKER",
+      "replacement": "P9_CHANGED",
+      "glob": "*.js",
+      "dry_run": true
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "1 replacements in 1 files",
+            "// TODO P9_MARKER",
+            "// TODO P9_CHANGED"
+          ]
+        },
+        {
+          "field": "observations.sourceUnchanged",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "comfy_recipe",
+    "input": {
+      "action": "list",
+      "commercial_use": false
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.recipes",
+          "op": "eq",
+          "value": []
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "community_search",
+    "input": {
+      "query": "Lost in the Middle",
+      "sources": [
+        "arxiv"
+      ],
+      "limit": 2,
+      "days": 365
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.communityQueriesRespected",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "computer_control",
+    "input": {
+      "action": "cursor_position"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.x",
+          "op": "eq",
+          "value": 42
+        },
+        {
+          "field": "data.y",
+          "op": "eq",
+          "value": 84
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "create_file",
+    "input": {
+      "path": "new.txt",
+      "content": "P9_NEW"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "new.txt",
+          "op": "eq",
+          "value": "P9_NEW",
+          "changed": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "create_skill",
+    "input": {
+      "name": "P9 Fixture",
+      "description": "Procédure synthétique de preuve P9",
+      "body": "# P9_SKILL\nUse for P9 fixture only. Run node --test check.test.js.",
+      "tags": [
+        "p9"
+      ]
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": ".codebuddy/skills/authored-p9-fixture/SKILL.md",
+          "op": "includes",
+          "values": [
+            "P9_SKILL",
+            "Run node --test check.test.js."
+          ],
+          "changed": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "create_todo_list",
+    "input": {
+      "todos": [
+        {
+          "id": "p9-todo",
+          "content": "P9_TODO",
+          "status": "pending",
+          "priority": "high"
+        }
+      ]
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.todoContent",
+          "op": "eq",
+          "value": "P9_TODO"
+        },
+        {
+          "field": "observations.todoStatus",
+          "op": "eq",
+          "value": "pending"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "csv_analyze",
+    "input": {
+      "path": "data.csv"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "| value | number | 2 | 0 | 12 | 30 | 21 | 21 |",
+            "| alpha | 12 |",
+            "| beta | 30 |"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "csv_preview",
+    "input": {
+      "file": "<QA_PROJECT>/data.csv"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.columns",
+          "op": "eq",
+          "value": [
+            "name",
+            "value"
+          ]
+        },
+        {
+          "field": "data.rowCount",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "field": "data.preview",
+          "op": "eq",
+          "value": [
+            {
+              "name": "alpha",
+              "value": "12"
+            },
+            {
+              "name": "beta",
+              "value": "30"
+            }
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "dep_inspect",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.totalDependencies",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.dependencies",
+          "op": "eq",
+          "value": {
+            "p9-fixture-lib": "1.0.0"
+          }
+        },
+        {
+          "field": "data.scripts.test",
+          "op": "eq",
+          "value": "node --test check.test.js"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "design_system",
+    "input": {
+      "action": "get",
+      "id": "apple"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "# Apple (apple)",
+            "SF Pro",
+            "# Design System Inspired by Apple"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "device_manage",
+    "input": {
+      "action": "run",
+      "deviceId": "p9-local",
+      "command": "node -e \"process.stdout.write(String(6*7))\""
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "eq",
+          "value": "42"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "diagram",
+    "input": {
+      "operation": "mermaid",
+      "code": "graph TD; A[P9_START]-->B[P9_END]",
+      "format": "ascii"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "P9_START",
+            "P9_END",
+            "┌",
+            "┐",
+            "│",
+            "└",
+            "┘"
+          ]
+        },
+        {
+          "field": "output",
+          "op": "excludes",
+          "values": [
+            "No nodes found",
+            "Mermaid code:"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "diff_files",
+    "input": {
+      "root": "<QA_PROJECT>",
+      "left": "a.txt",
+      "right": "b.txt"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "+P9_BETA",
+            "-P9_ALPHA"
+          ]
+        },
+        {
+          "field": "data.changed",
+          "op": "eq",
+          "value": 2
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "docker",
+    "input": {
+      "operation": "list_containers",
+      "args": {
+        "all": true
+      }
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "WinBoat"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "docs_search",
+    "input": {
+      "query": "P9_FIXTURE"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "# P9_FIXTURE architecture",
+            "P9_FIXTURE describes isolated evidence collection."
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "document",
+    "input": {
+      "operation": "read",
+      "path": "p9.docx"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "P9_DOC",
+            "Fixture document."
+          ]
+        },
+        {
+          "field": "data.text",
+          "op": "includes",
+          "values": [
+            "P9_DOC",
+            "Fixture document."
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "env_doctor",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.nodeVersion",
+          "op": "eq",
+          "value": "<NODE_VERSION>"
+        },
+        {
+          "field": "data.npmScripts",
+          "op": "some",
+          "value": "test"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "execute_code",
+    "input": {
+      "code": "console.log(6*7)",
+      "language": "javascript"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.exitCode",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "data.ok",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "data.stdout",
+          "op": "eq",
+          "normalize": true,
+          "value": "42"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "export",
+    "input": {
+      "operation": "csv",
+      "data": [
+        {
+          "marker": "P9_EXPORT",
+          "value": 42
+        }
+      ],
+      "output_path": "export.csv"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "export.csv",
+          "op": "includes",
+          "values": [
+            "marker,value",
+            "P9_EXPORT,42"
+          ],
+          "changed": true
+        },
+        {
+          "field": "data.rows",
+          "op": "eq",
+          "value": 1
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "extension_forge",
+    "input": {
+      "kind": "widget",
+      "name": "p9-fixture-widget",
+      "description": "Synthetic P9 widget",
+      "template": "<div>P9_WIDGET {{value}}</div>",
+      "sample": {
+        "value": 42
+      }
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.widgetTemplate",
+          "op": "eq",
+          "value": "<div>P9_WIDGET {{value}}</div>"
+        },
+        {
+          "field": "observations.widgetName",
+          "op": "eq",
+          "value": "p9-fixture-widget"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "file_search",
+    "input": {
+      "root": "<QA_PROJECT>",
+      "pattern": "P9_MARKER"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.matches",
+          "op": "some",
+          "value": {
+            "file": "sample.js",
+            "line": 2,
+            "excerpt": "// TODO P9_MARKER"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "find_bugs",
+    "input": {
+      "path": "bug-fixture.js"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "bug-fixture.js:1",
+            "Variable declared without initialization"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "find_definition",
+    "input": {
+      "symbol_name": "add"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "Definition of \"add\":",
+            "function add"
+          ]
+        },
+        {
+          "field": "observations.definitionMatchesFixture",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "find_references",
+    "input": {
+      "symbol_name": "add"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "sample.ts:",
+            "L3: console.log(add(1, 2));"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "find_symbols",
+    "input": {
+      "name": "add"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "Functions:",
+            "add - sample.ts:1"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "forget",
+    "input": {
+      "key": "p9-marker",
+      "scope": "project"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.memoryAbsent",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "format_project",
+    "input": {
+      "root": "<QA_PROJECT>/format-fixture",
+      "write": true
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "format-fixture/unformatted.js",
+          "op": "eq",
+          "value": "const p9 = 42;\n",
+          "changed": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "generate_document",
+    "input": {
+      "type": "docx",
+      "title": "P9 Document",
+      "content": "# P9_DOC\nFixture document.",
+      "outputPath": "p9.docx"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.docxText",
+          "op": "eq",
+          "value": "P9 Document P9_DOC Fixture document."
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "get_todo_list",
+    "input": {},
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "P9_TODO",
+            "0/1 completed"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "git",
+    "input": {
+      "operation": "status"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.untracked",
+          "op": "some",
+          "value": "a.txt"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "git_summary",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.isRepo",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "observations.gitSummaryMatches",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "internet_scout_plan",
+    "input": {
+      "goal": "Verify Example Domain title",
+      "sourceUrl": "https://example.com",
+      "expectedText": "Example Domain",
+      "maxPages": 1
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "## Steps",
+            "Observe visible state",
+            "Page budget: 1"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "internet_scout_run",
+    "input": {
+      "goal": "Verify the title Example Domain",
+      "sourceUrl": "https://example.com",
+      "useBrowser": false,
+      "maxPages": 1
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.success",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "data.evidence.length",
+          "op": "min",
+          "value": 1
+        },
+        {
+          "field": "observations.scoutFetchedBody",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "js_repl",
+    "input": {
+      "action": "execute",
+      "code": "6 * 7"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "eq",
+          "normalize": true,
+          "value": "42"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "json_query",
+    "input": {
+      "file": "<QA_PROJECT>/data.json",
+      "path": "nested.value"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.value",
+          "op": "eq",
+          "value": 42
+        },
+        {
+          "field": "output",
+          "op": "eq",
+          "normalize": true,
+          "value": "42"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "kanban_block",
+    "input": {
+      "id": "p9-card",
+      "reason": "P9_BLOCK"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.card.title",
+          "op": "eq",
+          "value": "P9_CARD"
+        },
+        {
+          "field": "data.card.status",
+          "op": "eq",
+          "value": "blocked"
+        },
+        {
+          "field": "observations.persistedCard.status",
+          "op": "eq",
+          "value": "blocked"
+        },
+        {
+          "field": "data.card.blockedReason",
+          "op": "eq",
+          "value": "P9_BLOCK"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "kanban_comment",
+    "input": {
+      "id": "p9-card",
+      "text": "P9_COMMENT"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.card.title",
+          "op": "eq",
+          "value": "P9_CARD"
+        },
+        {
+          "field": "data.card.status",
+          "op": "eq",
+          "value": "todo"
+        },
+        {
+          "field": "observations.persistedCard.status",
+          "op": "eq",
+          "value": "open"
+        },
+        {
+          "field": "data.card.comments",
+          "op": "some",
+          "value": {
+            "text": "P9_COMMENT"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "kanban_complete",
+    "input": {
+      "id": "p9-card",
+      "comment": "P9_DONE"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.card.title",
+          "op": "eq",
+          "value": "P9_CARD"
+        },
+        {
+          "field": "data.card.status",
+          "op": "eq",
+          "value": "done"
+        },
+        {
+          "field": "observations.persistedCard.status",
+          "op": "eq",
+          "value": "completed"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "kanban_create",
+    "input": {
+      "id": "p9-card",
+      "title": "P9_CARD"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.card.title",
+          "op": "eq",
+          "value": "P9_CARD"
+        },
+        {
+          "field": "data.card.status",
+          "op": "eq",
+          "value": "todo"
+        },
+        {
+          "field": "observations.persistedCard.status",
+          "op": "eq",
+          "value": "open"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "kanban_heartbeat",
+    "input": {
+      "id": "p9-card",
+      "message": "P9_HEARTBEAT"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.card.title",
+          "op": "eq",
+          "value": "P9_CARD"
+        },
+        {
+          "field": "data.card.status",
+          "op": "eq",
+          "value": "in_progress"
+        },
+        {
+          "field": "observations.persistedCard.status",
+          "op": "eq",
+          "value": "in_progress"
+        },
+        {
+          "field": "data.card.heartbeats",
+          "op": "some",
+          "value": {
+            "message": "P9_HEARTBEAT"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "kanban_link",
+    "input": {
+      "id": "p9-card",
+      "target": "note.md"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.card.title",
+          "op": "eq",
+          "value": "P9_CARD"
+        },
+        {
+          "field": "data.card.status",
+          "op": "eq",
+          "value": "todo"
+        },
+        {
+          "field": "observations.persistedCard.status",
+          "op": "eq",
+          "value": "open"
+        },
+        {
+          "field": "data.card.links",
+          "op": "some",
+          "value": {
+            "target": "note.md"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "kanban_list",
+    "input": {},
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.cards",
+          "op": "some",
+          "value": {
+            "title": "P9_CARD",
+            "status": "todo"
+          }
+        },
+        {
+          "field": "observations.persistedCard.status",
+          "op": "eq",
+          "value": "open"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "kanban_show",
+    "input": {
+      "id": "p9-card"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.card.title",
+          "op": "eq",
+          "value": "P9_CARD"
+        },
+        {
+          "field": "data.card.status",
+          "op": "eq",
+          "value": "todo"
+        },
+        {
+          "field": "observations.persistedCard.status",
+          "op": "eq",
+          "value": "open"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "kanban_unblock",
+    "input": {
+      "id": "p9-card",
+      "comment": "P9_UNBLOCK"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.card.title",
+          "op": "eq",
+          "value": "P9_CARD"
+        },
+        {
+          "field": "data.card.status",
+          "op": "eq",
+          "value": "in_progress"
+        },
+        {
+          "field": "observations.persistedCard.status",
+          "op": "eq",
+          "value": "in_progress"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "knowledge_add",
+    "input": {
+      "title": "P9 Knowledge",
+      "content": "P9_KNOWLEDGE",
+      "tags": [
+        "p9"
+      ]
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.knowledgePersisted",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "knowledge_graph",
+    "input": {
+      "action": "add",
+      "subject": "p9-a",
+      "predicate": "calls",
+      "object": "p9-b"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.graphHasEdge",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "knowledge_search",
+    "input": {
+      "query": "P9_KNOWLEDGE"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "### P9 Knowledge",
+            "P9_KNOWLEDGE"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lead_scout_enrichment_plan",
+    "input": {
+      "goal": "Plan official website evidence",
+      "maxHops": 1,
+      "pageBudget": 1
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.pageBudget",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.hops.length",
+          "op": "min",
+          "value": 1
+        },
+        {
+          "field": "data.extractionRules.length",
+          "op": "min",
+          "value": 1
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lead_scout_lesson_candidates",
+    "input": {
+      "goal": "Review synthetic fixture organization",
+      "stats": {
+        "processed": 1,
+        "selectedLeads": 1,
+        "needsPublicEnrichment": 1
+      }
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.reviewRequired",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "data.candidates.length",
+          "op": "min",
+          "value": 1
+        },
+        {
+          "field": "data.candidates.0.content",
+          "op": "includes",
+          "values": [
+            "100%",
+            "need public enrichment"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lead_scout_plan",
+    "input": {
+      "goal": "Plan a synthetic company dataset review",
+      "target": "custom",
+      "customTarget": "Synthetic fixtures",
+      "sources": [
+        "local_dataset"
+      ],
+      "localDatasetPaths": [
+        "data.csv"
+      ],
+      "maxProspects": 1
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.requireHumanApprovalBeforeContact",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "data.sources",
+          "op": "some",
+          "value": {
+            "source": "local_dataset"
+          }
+        },
+        {
+          "field": "data.pipelineSteps.length",
+          "op": "min",
+          "value": 1
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lead_scout_run",
+    "input": {
+      "goal": "Review synthetic fixture organization",
+      "localDatasetPaths": [
+        "leads.json"
+      ],
+      "target": "custom",
+      "customTarget": "Fixtures",
+      "maxProspects": 1,
+      "path": "review-leads.json"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.reviewQueue",
+          "op": "some",
+          "value": {
+            "nom": "P9_COMPANY"
+          }
+        },
+        {
+          "file": "review-leads.json",
+          "op": "includes",
+          "values": [
+            "P9_COMPANY"
+          ],
+          "changed": true
+        },
+        {
+          "field": "data.stats.rawRecords",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.stats.selectedLeads",
+          "op": "eq",
+          "value": 1
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lessons_add",
+    "input": {
+      "category": "RULE",
+      "content": "P9_LESSON",
+      "source": "manual"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.lessonPersisted",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lessons_graph",
+    "input": {
+      "query": "P9_LESSON",
+      "format": "json"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "outputJson.lessons",
+          "op": "some",
+          "value": {
+            "content": "P9_LESSON"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lessons_list",
+    "input": {},
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "**RULE** P9_LESSON"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lessons_propose",
+    "input": {
+      "category": "RULE",
+      "content": "P9_RULE: require independent file oracle"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.lessonCandidatePersisted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "observations.lessonNotAccepted",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lessons_search",
+    "input": {
+      "query": "P9_LESSON"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "**RULE** P9_LESSON"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "license_check",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.packages",
+          "op": "some",
+          "value": {
+            "name": "p9-fixture-lib",
+            "version": "1.0.0",
+            "license": "MIT"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lint_project",
+    "input": {
+      "root": "<QA_PROJECT>/lint-fixture"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.errorCount",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.files",
+          "op": "some",
+          "value": {
+            "filePath": "bad.js",
+            "errors": 1,
+            "messages": {
+              "0": {
+                "ruleId": "no-undef",
+                "line": 1
+              }
+            }
+          }
+        }
+      ],
+      "success": false
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "list_directory",
+    "input": {
+      "path": "."
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "data.csv",
+            "sample.ts",
+            "package.json"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lsp_definition",
+    "input": {
+      "file": "sample.ts",
+      "symbol": "add"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.total",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.locations.0.file",
+          "op": "includes",
+          "values": [
+            "sample.ts"
+          ]
+        },
+        {
+          "field": "data.locations.0.line",
+          "op": "eq",
+          "value": 1
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lsp_diagnostics",
+    "input": {
+      "file": "sample.ts"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.diagnostics",
+          "op": "some",
+          "value": {
+            "line": 2,
+            "severity": "error",
+            "message": "Type 'string' is not assignable to type 'number'."
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lsp_hover",
+    "input": {
+      "file": "sample.ts",
+      "line": 1,
+      "column": 17
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "function add(a: number, b: number): number"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lsp_references",
+    "input": {
+      "file": "sample.ts",
+      "symbol": "add"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.total",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "field": "data.locations.1.file",
+          "op": "includes",
+          "values": [
+            "sample.ts"
+          ]
+        },
+        {
+          "field": "data.locations.1.line",
+          "op": "eq",
+          "value": 3
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lsp_rename",
+    "input": {
+      "file_path": "rename-space test.ts",
+      "line": 1,
+      "character": 18,
+      "new_name": "p9Add"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.filesChanged",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.totalEdits",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "file": "rename-space test.ts",
+          "op": "includes",
+          "values": [
+            "function p9Add",
+            "console.log(p9Add(1, 2));"
+          ],
+          "changed": true
+        },
+        {
+          "file": "rename-space test.ts",
+          "op": "excludes",
+          "values": [
+            "function add",
+            "console.log(add("
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "lsp_symbols",
+    "input": {
+      "file": "sample.ts"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.symbols",
+          "op": "some",
+          "value": {
+            "name": "add",
+            "kind": "Function"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "markdown_convert",
+    "input": {
+      "source": "p9.docx"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "P9\\_DOC",
+            "Fixture document."
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "meeting_notes",
+    "input": {
+      "input_path": "meeting.txt",
+      "output_prefix": "meeting-report"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.meetingArtifacts",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "memory_propose",
+    "input": {
+      "key": "p9-candidate",
+      "value": "P9_CANDIDATE",
+      "scope": "project",
+      "confidence": 0.9
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.memoryCandidatePersisted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "observations.memoryNotAccepted",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "multi_edit",
+    "input": {
+      "file_path": "new.txt",
+      "edits": [
+        {
+          "old_string": "P9_EDIT",
+          "new_string": "P9_MULTI"
+        }
+      ]
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "new.txt",
+          "op": "eq",
+          "value": "P9_MULTI",
+          "changed": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "ocr",
+    "input": {
+      "operation": "extract",
+      "path": "ocr.png",
+      "language": "eng"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.text",
+          "op": "eq",
+          "normalize": true,
+          "value": "P9 TEXT 42"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "paper_qa",
+    "input": {
+      "question": "How many blue boxes does the fixture report?",
+      "paths": [
+        "p9.pdf"
+      ]
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "Statut : répondu (ancré) (answered)",
+            "The fixture reports forty two blue boxes [1].",
+            "[1] p9.pdf (p.1)"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "patch",
+    "input": {
+      "path": "patch-nine.txt",
+      "old_str": "P9_BEFORE",
+      "new_str": "P9_AFTER"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "patch-nine.txt",
+          "op": "eq",
+          "value": "P9_AFTER",
+          "changed": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "pdf",
+    "input": {
+      "operation": "extract",
+      "path": "p9.pdf"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.pageCount",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.text",
+          "op": "includes",
+          "values": [
+            "P9_PDF scientific fixture reports forty two blue boxes."
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "plan",
+    "input": {
+      "action": "init",
+      "goal": "P9_PLAN"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "PLAN.md",
+          "op": "includes",
+          "values": [
+            "**Goal:** P9_PLAN"
+          ],
+          "changed": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "project_map",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.fileCount",
+          "op": "min",
+          "value": 10
+        },
+        {
+          "field": "data.tree",
+          "op": "some",
+          "value": "📄 sample.ts"
+        },
+        {
+          "field": "data.tree",
+          "op": "some",
+          "value": "📄 data.csv"
+        },
+        {
+          "field": "data.languages.TypeScript",
+          "op": "min",
+          "value": 1
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "qr",
+    "input": {
+      "operation": "generate",
+      "data": "P9_QR",
+      "format": "svg"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.qrDecoded",
+          "op": "eq",
+          "value": "P9_QR"
+        },
+        {
+          "field": "observations.qrDecoderControl",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "read_file",
+    "input": {
+      "path": "data.json"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "\"marker\":\"P9_JSON\"",
+            "\"value\":42"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "reason",
+    "input": {
+      "problem": "Compute 6 times (5 plus 2). Show the calculation.",
+      "mode": "shallow"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.solution42",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "recall",
+    "input": {
+      "key": "p9-marker",
+      "scope": "project"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "P9_MEMORY"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "relationship_context",
+    "input": {
+      "subject": "P9 Organization",
+      "subjectType": "organization",
+      "publicFacts": [
+        "P9_PUBLIC"
+      ],
+      "sensitiveFacts": [
+        "P9_SECRET"
+      ],
+      "permissions": {
+        "usePublicKnowledge": true
+      }
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "P9_PUBLIC"
+          ]
+        },
+        {
+          "field": "output",
+          "op": "excludes",
+          "values": [
+            "P9_SECRET"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "remember",
+    "input": {
+      "key": "p9-marker",
+      "value": "P9_MEMORY",
+      "scope": "project"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.memoryValue",
+          "op": "eq",
+          "value": "P9_MEMORY"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "remind",
+    "input": {
+      "label": "P9_TOOL_REMINDER",
+      "time": "23:58",
+      "date": "2026-10-01"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.reminderPersisted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "observations.reminderRemoved",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "replace_memory",
+    "input": {
+      "key": "p9-marker",
+      "value": "P9_REPLACED",
+      "scope": "project"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.memoryValue",
+          "op": "eq",
+          "value": "P9_REPLACED"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "resolve_conflicts",
+    "input": {
+      "file_path": "conflict.txt",
+      "strategy": "ours"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "conflict.txt",
+          "op": "eq",
+          "value": "P9_OURS\n",
+          "changed": true
+        },
+        {
+          "file": "conflict.txt",
+          "op": "excludes",
+          "values": [
+            "<<<<<<<",
+            "=======",
+            ">>>>>>>",
+            "P9_THEIRS"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "run_script",
+    "input": {
+      "script": "print(6*7)",
+      "language": "python"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.exitCode",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "output",
+          "op": "eq",
+          "normalize": true,
+          "value": "42"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "sbom_generate",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.packages",
+          "op": "some",
+          "value": {
+            "name": "p9-fixture-lib",
+            "version": "1.0.0",
+            "license": "MIT"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "scaffold_app",
+    "input": {
+      "template": "node-cli",
+      "targetDir": "<QA_PROJECT>/new-cli-reprise",
+      "vars": {
+        "binName": "p9-cli",
+        "description": "P9_CLI"
+      }
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "new-cli-reprise/package.json",
+          "op": "includes",
+          "values": [
+            "p9-cli"
+          ],
+          "changed": true
+        },
+        {
+          "field": "observations.scaffoldRun",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "scan_secrets",
+    "input": {
+      "path": "secret-fixture.txt"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "potential secret(s):",
+            "secret-fixture.txt:1:",
+            "[password_in_code]"
+          ]
+        },
+        {
+          "field": "output",
+          "op": "excludes",
+          "values": [
+            "MangoCloud47!"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "scan_vulnerabilities",
+    "input": {
+      "path": "<QA_PROJECT>/audit-fixture",
+      "package_manager": "npm"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "[HIGH] lodash@",
+            "NPM ("
+          ]
+        },
+        {
+          "field": "output",
+          "op": "excludes",
+          "values": [
+            "NPM (0 vulnerabilities)",
+            "No known vulnerabilities found."
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "screenshot",
+    "input": {
+      "outputPath": "p9-screen.png",
+      "fullscreen": true,
+      "format": "png"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.pngValid",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "search",
+    "input": {
+      "query": "P9_MARKER",
+      "search_type": "text"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "sample.js (1 matches)"
+          ]
+        },
+        {
+          "field": "observations.searchNegativeEmpty",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "search_files",
+    "input": {
+      "query": "P9_MARKER",
+      "search_type": "text"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "sample.js (1 matches)"
+          ]
+        },
+        {
+          "field": "observations.searchNegativeEmpty",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "search_multi",
+    "input": {
+      "patterns": [
+        "P9_MARKER",
+        "P9_BETA"
+      ],
+      "operator": "OR"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "sample.js",
+            "b.txt"
+          ]
+        },
+        {
+          "field": "observations.searchNegativeEmpty",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "self_describe",
+    "input": {
+      "depth": "summary"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.description.name",
+          "op": "eq",
+          "value": "@phuetz/code-buddy"
+        },
+        {
+          "field": "data.description.version",
+          "op": "eq",
+          "value": "2.3.0"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "self_evolution",
+    "input": {
+      "limit": 2
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.notes",
+          "op": "some",
+          "value": {
+            "facts": [
+              "P9_SYNTHETIC_RELEASE fixture only."
+            ]
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "skill_manage",
+    "input": {
+      "action": "view",
+      "name": "authored-p9-fixture"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.content",
+          "op": "includes",
+          "values": [
+            "# P9_SKILL",
+            "Run node --test check.test.js."
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "skill_view",
+    "input": {
+      "name": "code-explorer"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.content",
+          "op": "includes",
+          "values": [
+            "name: code-explorer"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "skills_list",
+    "input": {},
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.availableSkills",
+          "op": "some",
+          "value": {
+            "name": "code-explorer"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "stock_quote",
+    "input": {
+      "symbol": "AAPL"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.symbol",
+          "op": "eq",
+          "value": "AAPL"
+        },
+        {
+          "field": "data.currency",
+          "op": "eq",
+          "value": "USD"
+        },
+        {
+          "field": "data.price",
+          "op": "min",
+          "value": 1
+        },
+        {
+          "field": "data.price",
+          "op": "max",
+          "value": 10000
+        },
+        {
+          "field": "data.time",
+          "op": "nonempty"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "str_replace_editor",
+    "input": {
+      "path": "new.txt",
+      "old_str": "P9_NEW",
+      "new_str": "P9_EDIT"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "new.txt",
+          "op": "eq",
+          "value": "P9_EDIT",
+          "changed": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "task_verify",
+    "input": {
+      "checks": [
+        "tests"
+      ],
+      "workDir": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "PASS"
+          ]
+        },
+        {
+          "field": "observations.tapActual",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "terminal",
+    "input": {
+      "command": "node -e \"console.log(6*7)\""
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "eq",
+          "normalize": true,
+          "value": "42"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "test_runner",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.exitCode",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "data.passed",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "field": "data.failed",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "field": "data.stdoutTail",
+          "op": "includes",
+          "values": [
+            "ℹ pass 1",
+            "ℹ fail 0"
+          ]
+        },
+        {
+          "field": "data.runner",
+          "op": "eq",
+          "value": "node"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "text_to_speech",
+    "input": {
+      "text": "P9 evidence forty two",
+      "provider": "espeak",
+      "format": "wav",
+      "output_path": "tts-p9.wav"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.wavValid",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "todo_scan",
+    "input": {
+      "root": "<QA_PROJECT>"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.total",
+          "op": "min",
+          "value": 1
+        },
+        {
+          "field": "data.byType.TODO",
+          "op": "some",
+          "value": {
+            "file": "sample.js",
+            "line": 2,
+            "text": "P9_MARKER"
+          }
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "todo_update",
+    "input": {
+      "action": "add",
+      "text": "P9_ATTENTION"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.attentionPersisted",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "tool_search",
+    "input": {
+      "query": "read_file",
+      "max_results": 5
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "read_file",
+            "path"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "update_todo_list",
+    "input": {
+      "updates": [
+        {
+          "id": "p9-todo",
+          "status": "completed"
+        }
+      ]
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.todoStatus",
+          "op": "eq",
+          "value": "completed"
+        },
+        {
+          "field": "observations.todoContent",
+          "op": "eq",
+          "value": "P9_TODO"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "user_model_observe",
+    "input": {
+      "kind": "preference",
+      "content": "P9_SYNTHETIC prefers concise output",
+      "confidence": 1
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.userProposalPersisted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "observations.userNotAccepted",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "video",
+    "input": {
+      "operation": "info",
+      "path": "clip.mp4"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.width",
+          "op": "eq",
+          "value": 320
+        },
+        {
+          "field": "data.height",
+          "op": "eq",
+          "value": 240
+        },
+        {
+          "field": "data.codec",
+          "op": "eq",
+          "value": "h264"
+        },
+        {
+          "field": "data.duration",
+          "op": "min",
+          "value": 2
+        },
+        {
+          "field": "data.duration",
+          "op": "max",
+          "value": 2.2
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "video_long_form_plan",
+    "input": {
+      "operation": "assess",
+      "plan": {
+        "schemaVersion": 1,
+        "episodeId": "p9-episode",
+        "title": "P9_TITLE",
+        "locale": "fr",
+        "description": "P9_DESCRIPTION",
+        "chapters": [],
+        "publication": {
+          "visibility": "private",
+          "autoPublish": false,
+          "humanReviewRequired": true
+        }
+      }
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.ready",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "field": "data.failures.length",
+          "op": "min",
+          "value": 1
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "video_route",
+    "input": {
+      "request": {
+        "id": "p9-route",
+        "use_case": "bulk-variation",
+        "content_tier": "safe",
+        "quantity": 1,
+        "requires_lip_sync": false,
+        "premium": false
+      },
+      "capacity": {
+        "gpuNode": true,
+        "localGpu": false,
+        "google_flow": false,
+        "remaining_flow_credits": 0,
+        "max_flow_credits_per_batch": 0
+      }
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.requestId",
+          "op": "eq",
+          "value": "p9-route"
+        },
+        {
+          "field": "data.primary",
+          "op": "eq",
+          "value": "gpuNode-comfyui"
+        },
+        {
+          "field": "data.estimatedFlowCredits",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "video_stitch",
+    "input": {
+      "clips": [
+        "clip.mp4",
+        "clip.mp4"
+      ],
+      "transition": "cut",
+      "output": "stitched-second.mp4"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "observations.stitchedDuration",
+          "op": "eq",
+          "value": 4
+        },
+        {
+          "field": "observations.stitchedWidth",
+          "op": "eq",
+          "value": 320
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "video_trailer_plan",
+    "input": {
+      "operation": "validate",
+      "plan": {}
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.status",
+          "op": "eq",
+          "value": "INCOMPLETE"
+        },
+        {
+          "field": "data.blockers.length",
+          "op": "min",
+          "value": 1
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "view_file",
+    "input": {
+      "path": "a.txt"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "1: P9_ALPHA"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "vision_analyze",
+    "input": {
+      "image_path": "ocr.png",
+      "include_ocr": true
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.ocr.attempted",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "data.ocr.ok",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "field": "data.ocr.text",
+          "op": "eq",
+          "normalize": true,
+          "value": "P9 TEXT 42"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "weather",
+    "input": {
+      "location": "Paris",
+      "days": 1
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data.type",
+          "op": "eq",
+          "value": "weather"
+        },
+        {
+          "field": "data.current.temperature",
+          "op": "min",
+          "value": -100
+        },
+        {
+          "field": "data.current.temperature",
+          "op": "max",
+          "value": 60
+        },
+        {
+          "field": "data.forecast.0.date",
+          "op": "eq",
+          "value": "2026-09-30"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "web_extract",
+    "input": {
+      "url": "https://example.com"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "This domain is for use in documentation examples"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "web_fetch",
+    "input": {
+      "url": "https://example.com"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "This domain is for use in documentation examples"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "web_scrape",
+    "input": {
+      "url": "https://example.com"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "This domain is for use in documentation examples"
+          ]
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "workspace_read",
+    "input": {
+      "repo": "p9-project",
+      "path": "data.json"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "output",
+          "op": "includes",
+          "values": [
+            "\"marker\":\"P9_JSON\"",
+            "\"value\":42"
+          ]
+        },
+        {
+          "field": "data.repo",
+          "op": "eq",
+          "value": "p9-project"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "workspace_search",
+    "input": {
+      "query": "P9_MARKER",
+      "repos": [
+        "p9-project"
+      ]
+    },
+    "oracle": {
+      "rules": [
+        {
+          "field": "data",
+          "op": "some",
+          "value": "p9-project:sample.js:2: // TODO P9_MARKER"
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  },
+  {
+    "name": "write_file",
+    "input": {
+      "path": "alias.txt",
+      "content": "P9_ALIAS"
+    },
+    "oracle": {
+      "rules": [
+        {
+          "file": "alias.txt",
+          "op": "eq",
+          "value": "P9_ALIAS",
+          "changed": true
+        }
+      ]
+    },
+    "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+  }
+]

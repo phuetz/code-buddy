@@ -1,0 +1,34 @@
+Date de consolidation: 2026-09-30T19:33:55.941611Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: port_check({"port": 18870, "host": "127.0.0.1"})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "port_check",
+  "input": {
+    "port": 18870,
+    "host": "127.0.0.1"
+  },
+  "result": {
+    "success": true,
+    "output": "127.0.0.1:18870 is listening",
+    "data": {
+      "host": "127.0.0.1",
+      "port": 18870,
+      "listening": true,
+      "available": false
+    }
+  },
+  "observations": {
+    "listening": true,
+    "occupied": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:port_check",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

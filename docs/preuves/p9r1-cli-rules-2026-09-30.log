@@ -1,0 +1,26 @@
+Date de consolidation: 2026-09-30T19:33:55.992068Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy rules templates({"args": ["templates"]})
+Attendu: ['process-runaway-alert', 'disk-low-alert', 'agent-loop-alert']
+Observé: ['process-runaway-alert', 'disk-low-alert', 'agent-loop-alert']
+Verdict: prouvée
+
+{
+  "id": "cli:rules",
+  "name": "rules",
+  "input": {
+    "args": [
+      "templates"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "Available rule templates (install with: buddy rules add --template <name>):\n• process-runaway-alert  — Alerte quand un processus enfant reste collé au CPU (le correctif de l’incident du 05/09).\n• process-runaway-kill  — Remédiation bornée d’un processus emballé (dry-run par défaut ; SIGTERM seulement, pas de groupe). Un kill réel exige dryRun:false dans la règle ET CODEBUDDY_RUNAWAY_KILL=true.\n• disk-low-alert  — Alerte quand le disque est plein à 90 % ou plus (seuil numérique sur diskPct).\n• fleet-saturated-alert  — Alerte quand la flotte atteint sa capacité configurée (utilization ≥ 1).\n• agent-loop-alert  — Alerte quand l’agent détecte une boucle (via le pont d’événements de domaine, kind:loop_detected).\n• codex-quota-probe  — Chaque jour vers 04:20, lance un agent qui sonde le quota Codex et rapporte (surveillance horaire, sans boucle).\n"
+  },
+  "expected": "['process-runaway-alert', 'disk-low-alert', 'agent-loop-alert']",
+  "passed": true,
+  "command": "buddy rules templates",
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['process-runaway-alert', 'disk-low-alert', 'agent-loop-alert']"
+}

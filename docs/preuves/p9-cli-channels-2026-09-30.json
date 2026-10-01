@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:channels",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "bb9db71b82c50e18ce4eae9f1559e8e053ff386fbc3f538d5a45236764f293d2",
+  "artifact": "docs/preuves/p9-cli-channels-2026-09-30.log",
+  "summary": "Sous-parcours CLI exécuté avec HOME isolé."
+}

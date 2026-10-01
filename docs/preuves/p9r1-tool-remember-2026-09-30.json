@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:remember",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.842224Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "da893ddbf4f17f763f7df826da1b30d92bdc35b825ac2871e2df93b4123b7028",
+  "artifact": "docs/preuves/p9r1-tool-remember-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

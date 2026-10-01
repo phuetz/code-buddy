@@ -1,0 +1,360 @@
+Date de consolidation: 2026-09-30T19:33:55.869896Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: self_describe({"depth": "summary"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "self_describe",
+  "input": {
+    "depth": "summary"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.description.name",
+        "op": "eq",
+        "value": "@phuetz/code-buddy"
+      },
+      {
+        "field": "data.description.version",
+        "op": "eq",
+        "value": "2.3.0"
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Je suis @phuetz/code-buddy (@phuetz/code-buddy v2.3.0).\nEn bref : AI coding agent with terminal and HTTP interfaces, optional Cowork desktop integration, multi-provider routing, tools, fleet collaboration and inspectable memory. See release notes for supported integrations and limits.\n\nMes briques :\n- buddy-sense — les oreilles / le système nerveux (Rust) : système nerveux multi-sensoriel (audio, vision, écran, vitalité) [source présente (aucun binaire détecté)]\n- buddy-vision — les yeux et l’oreille live (Python) : caméra + micro, événements sémantiques (person_entered / drowsy) [source présente (watch.py, ear.py ; exécution non sondée)]\n- buddy-memory — la mémoire collective (Rust CKG) : moteur de mémoire/graphe de connaissance dédié (sidecar opt-in du CKG) [présent]\n\nFacultés : 0 outils enregistrés · providers configurés (disponibilité non sondée) : Grok/xAI, Ollama (local).\nLimite épistémique : ce modèle décrit mon code et mon état vérifiable ; cela ne constitue pas une conscience subjective ni la preuve d’une vie intérieure.\n\nModèle de soi opérationnel — @phuetz/code-buddy (@phuetz/code-buddy v2.3.0)\nObservé le : 2026-09-30T18:53:28.589Z.\nPreuve code : source, révision inconnue, empreinte 5836fb991712462f4177.\nConscience subjective : non établie. Ce rapport décrit un logiciel et son runtime observables.\n\nFaits opérationnels et niveau de preuve :\n- [implemented] Implémentation du cœur : sources Code Buddy observées (source : src/agent/execution/, src/agent/middleware/, src/agent/self-improvement/, src/identity/operational-self-model.ts, src/identity/lisa-introspection.ts, src/codebuddy/tool-definitions/self-describe-tools.ts)\n- [unknown] Modèle configuré/demandé pour ce tour : inconnu (source : pre-dispatch client configuration)\n- [unknown] Fournisseur configuré pour ce tour : inconnu (source : pre-dispatch client configuration)\n- [unknown] Surface : inconnue (source : agent turn metadata)\n- [unknown] Mode de permission : inconnu (source : agent turn metadata)\n- [verified] Outils enregistrés : 0 (source : FormalToolRegistry.getNames())\n- [unknown] Outils exposés à ce tour : inconnu (source : selected tool schemas for this turn)\n\nZones de code pertinentes :\n- Agent executor & middleware [verified] : src/agent/execution/ [source/directory; entrées agent-executor.ts, context-pipeline.ts, incremental-token-counter.ts, index.ts], src/agent/middleware/ [source/directory; entrées auto-observation.ts, auto-repair-middleware.ts, changed-files.ts, context-warning.ts]\n- Self-improvement & evolution [verified] : src/agent/self-improvement/ [source/directory; entrées authored-artifact-gate.ts, authored-tool-runtime.ts, authored-tool-store.ts, capability-benchmark.ts]\n- Operational self-model [verified] : src/identity/operational-self-model.ts [source/file; 1411 lignes; sha256:758f2955418ace39; exports OperationalFactState, OperationalSelfLayout, OperationalSelfDepth, OperationalSelfFact], src/identity/lisa-introspection.ts [source/file; 501 lignes; sha256:a48d088598f7c898; exports LisaIntrospectionIntent, LISA_OPERATIONAL_INSPECTION_TOOLS, LISA_OPERATIONAL_CONSCIOUSNESS_BOUNDARY, LISA_OPERATIONAL_CONSCIOUSNESS_ANSWER], src/codebuddy/tool-definitions/self-describe-tools.ts [source/file; 37 lignes; sha256:10aa99bcf783b75a; exports SELF_DESCRIBE_TOOL, SELF_DESCRIBE_TOOLS]\n\nLimites :\n- La présence d’un fichier prouve une implémentation, pas qu’un service est vivant.\n- Une configuration prouve une intention de fonctionnement, pas sa disponibilité.\n- Les chemins inspectés sont limités à la cartographie interne connue de Code Buddy.\n- Ce modèle de soi opérationnel ne démontre ni conscience subjective, ni émotions vécues, ni vie intérieure.\n\nCurrent runtime settings: {\"surface\":\"unknown\",\"model\":\"unknown\",\"provider\":\"unknown\",\"programmaticToolCalling\":{\"tool\":\"code_exec\",\"policy\":\"offer\",\"source\":\"default\"},\"theme\":null,\"guidance\":\"Live settings at observation time. Unknown values are not inferred from saved preferences. A null theme means no CLI theme is attested for this surface. Theme changes require /theme <id>; editing a config file alone does not apply a live change.\"}",
+    "data": {
+      "settings": {
+        "surface": "unknown",
+        "model": "unknown",
+        "provider": "unknown",
+        "programmaticToolCalling": {
+          "tool": "code_exec",
+          "policy": "offer",
+          "source": "default"
+        },
+        "theme": null,
+        "guidance": "Live settings at observation time. Unknown values are not inferred from saved preferences. A null theme means no CLI theme is attested for this surface. Theme changes require /theme <id>; editing a config file alone does not apply a live change."
+      },
+      "description": {
+        "subjectiveConsciousness": "not-established",
+        "name": "@phuetz/code-buddy",
+        "version": "2.3.0",
+        "description": "AI coding agent with terminal and HTTP interfaces, optional Cowork desktop integration, multi-provider routing, tools, fleet collaboration and inspectable memory. See release notes for supported integrations and limits.",
+        "bricks": [
+          {
+            "id": "buddy-sense",
+            "role": "les oreilles / le système nerveux (Rust)",
+            "description": "système nerveux multi-sensoriel (audio, vision, écran, vitalité)",
+            "present": true,
+            "status": "source présente (aucun binaire détecté)"
+          },
+          {
+            "id": "buddy-vision",
+            "role": "les yeux et l’oreille live (Python)",
+            "description": "caméra + micro, événements sémantiques (person_entered / drowsy)",
+            "present": true,
+            "status": "source présente (watch.py, ear.py ; exécution non sondée)"
+          },
+          {
+            "id": "buddy-memory",
+            "role": "la mémoire collective (Rust CKG)",
+            "description": "moteur de mémoire/graphe de connaissance dédié (sidecar opt-in du CKG)",
+            "present": true,
+            "status": "présent"
+          }
+        ],
+        "faculties": {
+          "toolCount": 0,
+          "activeProviders": [
+            "Grok/xAI",
+            "Ollama (local)"
+          ],
+          "sensory": [],
+          "selfInspectionTools": []
+        },
+        "text": "Je suis @phuetz/code-buddy (@phuetz/code-buddy v2.3.0).\nEn bref : AI coding agent with terminal and HTTP interfaces, optional Cowork desktop integration, multi-provider routing, tools, fleet collaboration and inspectable memory. See release notes for supported integrations and limits.\n\nMes briques :\n- buddy-sense — les oreilles / le système nerveux (Rust) : système nerveux multi-sensoriel (audio, vision, écran, vitalité) [source présente (aucun binaire détecté)]\n- buddy-vision — les yeux et l’oreille live (Python) : caméra + micro, événements sémantiques (person_entered / drowsy) [source présente (watch.py, ear.py ; exécution non sondée)]\n- buddy-memory — la mémoire collective (Rust CKG) : moteur de mémoire/graphe de connaissance dédié (sidecar opt-in du CKG) [présent]\n\nFacultés : 0 outils enregistrés · providers configurés (disponibilité non sondée) : Grok/xAI, Ollama (local).\nLimite épistémique : ce modèle décrit mon code et mon état vérifiable ; cela ne constitue pas une conscience subjective ni la preuve d’une vie intérieure."
+      },
+      "operational": {
+        "schemaVersion": 1,
+        "observedAt": "2026-09-30T18:53:28.589Z",
+        "kind": "operational-self-model",
+        "subjectiveConsciousness": "not-established",
+        "focus": "fonctionnement général",
+        "depth": "summary",
+        "identity": {
+          "name": "@phuetz/code-buddy",
+          "version": "2.3.0",
+          "description": "AI coding agent with terminal and HTTP interfaces, optional Cowork desktop integration, multi-provider routing, tools, fleet collaboration and inspectable memory. See release notes for supported integrations and limits."
+        },
+        "repository": {
+          "layout": "source",
+          "dirty": null,
+          "fingerprint": "5836fb991712462f4177"
+        },
+        "codeGraph": {
+          "indexed": false,
+          "stale": null
+        },
+        "facts": [
+          {
+            "id": "core.implementation",
+            "label": "Implémentation du cœur",
+            "state": "implemented",
+            "value": "sources Code Buddy observées",
+            "source": [
+              "src/agent/execution/",
+              "src/agent/middleware/",
+              "src/agent/self-improvement/",
+              "src/identity/operational-self-model.ts",
+              "src/identity/lisa-introspection.ts",
+              "src/codebuddy/tool-definitions/self-describe-tools.ts"
+            ],
+            "observedAt": "2026-09-30T18:53:28.589Z"
+          },
+          {
+            "id": "turn.model",
+            "label": "Modèle configuré/demandé pour ce tour",
+            "state": "unknown",
+            "value": "inconnu",
+            "source": [
+              "pre-dispatch client configuration"
+            ],
+            "observedAt": "2026-09-30T18:53:28.589Z"
+          },
+          {
+            "id": "turn.provider",
+            "label": "Fournisseur configuré pour ce tour",
+            "state": "unknown",
+            "value": "inconnu",
+            "source": [
+              "pre-dispatch client configuration"
+            ],
+            "observedAt": "2026-09-30T18:53:28.589Z"
+          },
+          {
+            "id": "turn.surface",
+            "label": "Surface",
+            "state": "unknown",
+            "value": "inconnue",
+            "source": [
+              "agent turn metadata"
+            ],
+            "observedAt": "2026-09-30T18:53:28.589Z"
+          },
+          {
+            "id": "turn.permission",
+            "label": "Mode de permission",
+            "state": "unknown",
+            "value": "inconnu",
+            "source": [
+              "agent turn metadata"
+            ],
+            "observedAt": "2026-09-30T18:53:28.589Z"
+          },
+          {
+            "id": "tools.registered",
+            "label": "Outils enregistrés",
+            "state": "verified",
+            "value": "0",
+            "source": [
+              "FormalToolRegistry.getNames()"
+            ],
+            "observedAt": "2026-09-30T18:53:28.589Z"
+          },
+          {
+            "id": "tools.exposed",
+            "label": "Outils exposés à ce tour",
+            "state": "unknown",
+            "value": "inconnu",
+            "source": [
+              "selected tool schemas for this turn"
+            ],
+            "observedAt": "2026-09-30T18:53:28.589Z"
+          }
+        ],
+        "areas": [
+          {
+            "id": "agent-executor",
+            "name": "Agent executor & middleware",
+            "description": "The core agentic loop, composable before/after middleware pipeline, tool-call streaming, transcript repair.",
+            "evidence": [
+              {
+                "declaredPath": "src/agent/execution/",
+                "observedPath": "src/agent/execution/",
+                "artifact": "source",
+                "kind": "directory",
+                "entries": [
+                  "agent-executor.ts",
+                  "context-pipeline.ts",
+                  "incremental-token-counter.ts",
+                  "index.ts",
+                  "ordered-tool-executor.ts",
+                  "post-tool-handlers.test.ts",
+                  "post-tool-handlers.ts",
+                  "query-classifier.ts",
+                  "repair-coordinator.ts",
+                  "retry-fallback.ts",
+                  "tool-dependency-graph.ts",
+                  "tool-hooks.ts"
+                ]
+              },
+              {
+                "declaredPath": "src/agent/middleware/",
+                "observedPath": "src/agent/middleware/",
+                "artifact": "source",
+                "kind": "directory",
+                "entries": [
+                  "auto-observation.ts",
+                  "auto-repair-middleware.ts",
+                  "changed-files.ts",
+                  "context-warning.ts",
+                  "cost-limit.ts",
+                  "index.ts",
+                  "pipeline.ts",
+                  "plan-completion-audit.ts",
+                  "quality-gate-middleware.ts",
+                  "reasoning-middleware.ts",
+                  "session-duration.ts",
+                  "turn-limit.ts"
+                ]
+              }
+            ],
+            "state": "verified"
+          },
+          {
+            "id": "self-improvement",
+            "name": "Self-improvement & evolution",
+            "description": "Darwin-Gödel-Machine-style evolutionary self-improvement: generate code variants, empirical fitness, MAP-Elites diversity, lessons/tools/skills authoring.",
+            "evidence": [
+              {
+                "declaredPath": "src/agent/self-improvement/",
+                "observedPath": "src/agent/self-improvement/",
+                "artifact": "source",
+                "kind": "directory",
+                "entries": [
+                  "authored-artifact-gate.ts",
+                  "authored-tool-runtime.ts",
+                  "authored-tool-store.ts",
+                  "capability-benchmark.ts",
+                  "continuous-benchmark.ts",
+                  "delegation-facts.ts",
+                  "digest-sources.ts",
+                  "digest.ts",
+                  "empirical-gate.ts",
+                  "engine.ts",
+                  "evolution/",
+                  "evolutionary-archive.ts"
+                ]
+              }
+            ],
+            "state": "verified"
+          },
+          {
+            "id": "operational-self-model",
+            "name": "Operational self-model",
+            "description": "Evidence-backed, read-only inspection of Code Buddy identity, implementation, runtime capabilities, limits, and subjective-consciousness boundary.",
+            "evidence": [
+              {
+                "declaredPath": "src/identity/operational-self-model.ts",
+                "observedPath": "src/identity/operational-self-model.ts",
+                "artifact": "source",
+                "kind": "file",
+                "sizeBytes": 46868,
+                "lineCount": 1411,
+                "digest": "758f2955418ace39",
+                "exports": [
+                  "OperationalFactState",
+                  "OperationalSelfLayout",
+                  "OperationalSelfDepth",
+                  "OperationalSelfFact",
+                  "OperationalSourceEvidence",
+                  "OperationalSelfArea",
+                  "CompanionRuntimeEvidence",
+                  "CorePackageEvidence",
+                  "CoreRootResolution",
+                  "OperationalSelfModel"
+                ]
+              },
+              {
+                "declaredPath": "src/identity/lisa-introspection.ts",
+                "observedPath": "src/identity/lisa-introspection.ts",
+                "artifact": "source",
+                "kind": "file",
+                "sizeBytes": 30138,
+                "lineCount": 501,
+                "digest": "a48d088598f7c898",
+                "exports": [
+                  "LisaIntrospectionIntent",
+                  "LISA_OPERATIONAL_INSPECTION_TOOLS",
+                  "LISA_OPERATIONAL_CONSCIOUSNESS_BOUNDARY",
+                  "LISA_OPERATIONAL_CONSCIOUSNESS_ANSWER",
+                  "isLisaSubjectiveConsciousnessQuestion",
+                  "isLisaPrimarilySubjectiveConsciousnessQuestion",
+                  "guardLisaOperationalSelfInspectionReply",
+                  "isLisaEvolutionRequest",
+                  "LisaOperationalResponseMode",
+                  "classifyLisaOperationalResponseMode"
+                ]
+              },
+              {
+                "declaredPath": "src/codebuddy/tool-definitions/self-describe-tools.ts",
+                "observedPath": "src/codebuddy/tool-definitions/self-describe-tools.ts",
+                "artifact": "source",
+                "kind": "file",
+                "sizeBytes": 2338,
+                "lineCount": 37,
+                "digest": "10aa99bcf783b75a",
+                "exports": [
+                  "SELF_DESCRIBE_TOOL",
+                  "SELF_DESCRIBE_TOOLS"
+                ]
+              }
+            ],
+            "state": "verified"
+          }
+        ],
+        "limits": [
+          "La présence d’un fichier prouve une implémentation, pas qu’un service est vivant.",
+          "Une configuration prouve une intention de fonctionnement, pas sa disponibilité.",
+          "Les chemins inspectés sont limités à la cartographie interne connue de Code Buddy.",
+          "Ce modèle de soi opérationnel ne démontre ni conscience subjective, ni émotions vécues, ni vie intérieure."
+        ],
+        "text": "Modèle de soi opérationnel — @phuetz/code-buddy (@phuetz/code-buddy v2.3.0)\nObservé le : 2026-09-30T18:53:28.589Z.\nPreuve code : source, révision inconnue, empreinte 5836fb991712462f4177.\nConscience subjective : non établie. Ce rapport décrit un logiciel et son runtime observables.\n\nFaits opérationnels et niveau de preuve :\n- [implemented] Implémentation du cœur : sources Code Buddy observées (source : src/agent/execution/, src/agent/middleware/, src/agent/self-improvement/, src/identity/operational-self-model.ts, src/identity/lisa-introspection.ts, src/codebuddy/tool-definitions/self-describe-tools.ts)\n- [unknown] Modèle configuré/demandé pour ce tour : inconnu (source : pre-dispatch client configuration)\n- [unknown] Fournisseur configuré pour ce tour : inconnu (source : pre-dispatch client configuration)\n- [unknown] Surface : inconnue (source : agent turn metadata)\n- [unknown] Mode de permission : inconnu (source : agent turn metadata)\n- [verified] Outils enregistrés : 0 (source : FormalToolRegistry.getNames())\n- [unknown] Outils exposés à ce tour : inconnu (source : selected tool schemas for this turn)\n\nZones de code pertinentes :\n- Agent executor & middleware [verified] : src/agent/execution/ [source/directory; entrées agent-executor.ts, context-pipeline.ts, incremental-token-counter.ts, index.ts], src/agent/middleware/ [source/directory; entrées auto-observation.ts, auto-repair-middleware.ts, changed-files.ts, context-warning.ts]\n- Self-improvement & evolution [verified] : src/agent/self-improvement/ [source/directory; entrées authored-artifact-gate.ts, authored-tool-runtime.ts, authored-tool-store.ts, capability-benchmark.ts]\n- Operational self-model [verified] : src/identity/operational-self-model.ts [source/file; 1411 lignes; sha256:758f2955418ace39; exports OperationalFactState, OperationalSelfLayout, OperationalSelfDepth, OperationalSelfFact], src/identity/lisa-introspection.ts [source/file; 501 lignes; sha256:a48d088598f7c898; exports LisaIntrospectionIntent, LISA_OPERATIONAL_INSPECTION_TOOLS, LISA_OPERATIONAL_CONSCIOUSNESS_BOUNDARY, LISA_OPERATIONAL_CONSCIOUSNESS_ANSWER], src/codebuddy/tool-definitions/self-describe-tools.ts [source/file; 37 lignes; sha256:10aa99bcf783b75a; exports SELF_DESCRIBE_TOOL, SELF_DESCRIBE_TOOLS]\n\nLimites :\n- La présence d’un fichier prouve une implémentation, pas qu’un service est vivant.\n- Une configuration prouve une intention de fonctionnement, pas sa disponibilité.\n- Les chemins inspectés sont limités à la cartographie interne connue de Code Buddy.\n- Ce modèle de soi opérationnel ne démontre ni conscience subjective, ni émotions vécues, ni vie intérieure."
+      }
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.description.name eq",
+      "passed": true
+    },
+    {
+      "check": "data.description.version eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 13,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:self_describe",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

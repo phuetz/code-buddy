@@ -1,0 +1,19 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: video_generate : ComfyUI, MiniMaxH3, 256 px, 4 étapes, 1 s
+Attendu: Vidéo réelle produite
+Observé: HTTP 400 missing_node_type : Node MiniMaxH3SigmaShift not found.
+Portée: Validation du workflow rejetée avant mise en file ; aucune installation lourde ni modification du serveur.
+Verdict: échec
+
+=== Capture video-live.json ===
+{
+  "success": false,
+  "error": "http://<PRIVATE_IP>:8188/prompt returned 400: {\"error\": {\"type\": \"missing_node_type\", \"message\": \"Node 'MiniMaxH3SigmaShift' not found. The custom node may not be installed.\", \"details\": \"Node ID '#2'\", \"extra_info\": {\"node_id\": \"2\", \"class_type\": \"MiniMaxH3SigmaShift\", \"node_title\": \"MiniMaxH3SigmaShift\"}}, \"node_errors\": {}}"
+}
+=== Capture video-live.log ===
+{"success":false,"error":"http://<PRIVATE_IP>:8188/prompt returned 400: {\"error\": {\"type\": \"missing_node_type\", \"message\": \"Node 'MiniMaxH3SigmaShift' not found. The custom node may not be installed.\", \"details\": \"Node ID '#2'\", \"extra_info\": {\"node_id\": \"2\", \"class_type\": \"MiniMaxH3SigmaShift\", \"node_title\": \"MiniMaxH3SigmaShift\"}}, \"node_errors\": {}}"}
+
+=== Capture comfy-queue-after.json ===
+{"queue_running": [], "queue_pending": []}

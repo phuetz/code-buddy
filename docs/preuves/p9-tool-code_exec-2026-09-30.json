@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:code_exec",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "3bc5baabfb1905b724ae457cc29fd79a042cde2c00fd956edcd5040dc336ac56",
+  "artifact": "docs/preuves/p9-tool-code_exec-2026-09-30.log",
+  "summary": "Séquence réelle contrôlée sur profil et projet isolés."
+}

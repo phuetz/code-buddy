@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:channels",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.983887Z",
+  "revision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "sourceDigest": "d044c32900ec355e662cd1d8c97cd2e8a307e36978ba2be8c2e1a82006eea3e4",
+  "artifact": "docs/preuves/p9r1-cli-channels-2026-09-30.log",
+  "summary": "['No channels registered.']"
+}

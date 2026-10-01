@@ -1,0 +1,76 @@
+Date de consolidation: 2026-09-30T19:33:55.705389Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: extension_forge({"kind": "widget", "name": "p9-fixture-widget", "description": "Synthetic P9 widget", "template": "<div>P9_WIDGET {{value}}</div>", "sample": {"value": 42}})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "extension_forge",
+  "input": {
+    "kind": "widget",
+    "name": "p9-fixture-widget",
+    "description": "Synthetic P9 widget",
+    "template": "<div>P9_WIDGET {{value}}</div>",
+    "sample": {
+      "value": 42
+    }
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.widgetTemplate",
+        "op": "eq",
+        "value": "<div>P9_WIDGET {{value}}</div>"
+      },
+      {
+        "field": "observations.widgetName",
+        "op": "eq",
+        "value": "p9-fixture-widget"
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Created authored widget `p9-fixture-widget`; it now renders payloads with `type: \"p9-fixture-widget\"`.",
+    "data": {
+      "artifactKind": "widget",
+      "name": "p9-fixture-widget",
+      "createdWidgets": [
+        "p9-fixture-widget"
+      ]
+    }
+  },
+  "observations": {
+    "widgetTemplate": "<div>P9_WIDGET {{value}}</div>",
+    "widgetName": "p9-fixture-widget"
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.widgetTemplate eq",
+      "passed": true
+    },
+    {
+      "check": "observations.widgetName eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 3,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:extension_forge",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

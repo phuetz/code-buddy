@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:codebase_replace",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "63d58f19e8102d964f0ba2fbec4d9c55ed689d0e63ed186187dd4cf47a8c3aec",
+  "artifact": "docs/preuves/p9-tool-codebase_replace-2026-09-30.log",
+  "summary": "Outil réel exécuté sur une fixture isolée ; oracle contrôlé."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:user_model_observe",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.906793Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "88cc7c2d4c1f54b73e1ade6cfabd4e6cd80868ecc070ad5c8b6f043f6b27c3e8",
+  "artifact": "docs/preuves/p9r1-tool-user_model_observe-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

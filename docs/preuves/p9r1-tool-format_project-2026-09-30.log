@@ -1,0 +1,67 @@
+Date de consolidation: 2026-09-30T19:33:55.718092Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: format_project({"root": "<QA>/reprise-1/project/format-fixture", "write": true})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "format_project",
+  "input": {
+    "root": "<QA>/reprise-1/project/format-fixture",
+    "write": true
+  },
+  "oracle": {
+    "rules": [
+      {
+        "file": "format-fixture/unformatted.js",
+        "op": "eq",
+        "value": "const p9 = 42;\n",
+        "changed": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Prettier write: 2 file(s) reported",
+    "data": {
+      "root": "<QA>/reprise-1/project/format-fixture",
+      "missing": false,
+      "write": true,
+      "files": [
+        ".prettierrc.json 35ms (unchanged)",
+        "unformatted.js 7ms"
+      ],
+      "timedOut": false
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "écriture effective de format-fixture/unformatted.js",
+      "passed": true
+    },
+    {
+      "check": "format-fixture/unformatted.js eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 179,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:format_project",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

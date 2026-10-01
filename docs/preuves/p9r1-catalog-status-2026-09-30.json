@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "catalog-status",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:35:26.014461Z",
+  "revision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "sourceDigest": "a8db221ae6f0bcc1017625c461a857d68e143dbd51030ff7bc311ea5f7b19f06",
+  "artifact": "docs/preuves/p9r1-catalog-status-2026-09-30.log",
+  "summary": "Oracle strict satisfait : catalog-status"
+}

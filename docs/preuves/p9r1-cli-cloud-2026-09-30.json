@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:cloud",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.986092Z",
+  "revision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "sourceDigest": "637ff1876bcebd5a1a3ceadd31df616df69e5856d3b883fc70bc3a69d3e3cf77",
+  "artifact": "docs/preuves/p9r1-cli-cloud-2026-09-30.log",
+  "summary": "['No cloud tasks found.']"
+}

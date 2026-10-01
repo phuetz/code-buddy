@@ -1,0 +1,64 @@
+Date de consolidation: 2026-09-30T19:33:55.784613Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: lessons_propose({"category": "RULE", "content": "P9_RULE: require independent file oracle 1790794267045"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "lessons_propose",
+  "input": {
+    "category": "RULE",
+    "content": "P9_RULE: require independent file oracle 1790794267045"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "observations.lessonCandidatePersisted",
+        "op": "eq",
+        "value": true
+      },
+      {
+        "field": "observations.lessonNotAccepted",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Proposed lesson candidate [lc-muogo3vrr67] (RULE): P9_RULE: require independent file oracle 1790794267045\nIt is awaiting human review and was NOT written to lessons.md. Approve with: buddy lessons candidate approve lc-muogo3vrr67 --by <name>"
+  },
+  "observations": {
+    "lessonCandidatePersisted": true,
+    "lessonNotAccepted": true
+  },
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "observations.lessonCandidatePersisted eq",
+      "passed": true
+    },
+    {
+      "check": "observations.lessonNotAccepted eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 6,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:lessons_propose",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

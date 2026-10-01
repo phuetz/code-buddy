@@ -1,0 +1,55 @@
+Date de consolidation: 2026-09-30T19:33:55.971072Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: a2ui({"surfaceId": "p9-r1-1790795380161", "sequence": ["create_surface", "add_component", "begin_rendering", "get_surface", "render_terminal"]})
+Attendu: Toutes les clauses spécifiques de l’oracle sont nécessaires.
+Observé: Toutes les clauses de l’oracle spécifique sont satisfaites.
+Verdict: prouvée
+
+{
+  "name": "a2ui",
+  "input": {
+    "surfaceId": "p9-r1-1790795380161",
+    "sequence": [
+      "create_surface",
+      "add_component",
+      "begin_rendering",
+      "get_surface",
+      "render_terminal"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "╔══════════════════════════════════════════════════════════════╗\n║ Surface: p9-r1-1790795380161                                  ║\n╠══════════════════════════════════════════════════════════════╣\n║ P9_A2UI                                                       ║\n╚══════════════════════════════════════════════════════════════╝"
+  },
+  "results": [
+    {
+      "success": true,
+      "output": "Surface 'p9-r1-1790795380161' created"
+    },
+    {
+      "success": true,
+      "output": "Component 'p9-text' (text) added to surface 'p9-r1-1790795380161'"
+    },
+    {
+      "success": true,
+      "output": "Surface 'p9-r1-1790795380161' is now rendering from root 'p9-text'"
+    },
+    {
+      "success": true,
+      "output": "Surface 'p9-r1-1790795380161': 1 components, visible=true"
+    },
+    {
+      "success": true,
+      "output": "╔══════════════════════════════════════════════════════════════╗\n║ Surface: p9-r1-1790795380161                                  ║\n╠══════════════════════════════════════════════════════════════╣\n║ P9_A2UI                                                       ║\n╚══════════════════════════════════════════════════════════════╝"
+    }
+  ],
+  "observations": {
+    "surfaceVisible": true,
+    "terminalFrame": true
+  },
+  "passed": true,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:a2ui",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

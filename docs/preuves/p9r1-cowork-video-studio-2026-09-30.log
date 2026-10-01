@@ -1,0 +1,26 @@
+Date de consolidation: 2026-09-30T19:33:56.025391Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: cowork-video-studio({"marker": "P9R1_CHAT_1790795786187"})
+Attendu: Storyboard et durée visibles ; aucune génération de film.
+Observé: Storyboard et durée visibles ; aucune génération de film.
+Verdict: prouvée
+
+{
+  "id": "cowork-video-studio",
+  "name": "cowork-video-studio",
+  "input": {
+    "marker": "P9R1_CHAT_1790795786187"
+  },
+  "result": {
+    "success": true,
+    "output": "{\"visibleText\": \"New session\\n<$0.01\\nqwen3:4b-instruct\\n👤 Register a face\\n💬\\nChat\\n📋\\nPlan\\n📊\\nActivity\\n📁\\nFiles\\n🛠️\\nApp Studio\\n✨\\nCreations\\n🎬\\nVideo Studio\\n🎙️\\nAssistant\\n📝\\nMeeting\\n🖼️\\nLibrary\\n🧰\\nCapabilities\\n🛰️\\nMission Control\\n🧪\\nLabs\\n⚙️\\nAdvanced\\n🕘\\nHistory\\n🌙\\n⌘K\\n?\\nAtelier Flow\\nProjet sans titre\\nNouveau\\nPreset éditorial…\\nMoment compagne\\nFashion Short\\nTenue / OOTD\\nJournal lifestyle\\nBeauté éditoriale\\nMicro-récit incarné\\nLaboratoire ComfyUI\\nImage\\nVidéo\\nIngrédients\\nAjouter\\nTous\\nPersonnages\\nObjets\\nLieux\\nStyles\\n\\nAjoute des images pour créer des personnages, lieux et styles cohérents.\\n\\nPlan 01\\n16:9 · 6s\\n\\nCompose ton prochain plan\\n\\nAjoute des ingrédients, référence-les avec @, puis génère des variations cohérentes.\\n\\nScènes\\n4 plans · 24s\\nMonter\\nExporter\\nAjouter un plan\\nÉtendre le plan\\nPlan vide\\n6s\\nPlan 01\\nPlan vide\\n6s\\nPlan 02\\nPlan vide\\n6s\\nPlan 03\\nPlan vide\\n6s\\nPlan 04\\nRéglages du plan\\nPrompt\\nTexte\\nIngrédients\\nImages clés\\nRatio\\n1:1\\n16:9\\n9:16\\nSorties\\n1\\n2\\nDurée\\n4s\\n6s\\n8s\\n10s\\nMouvement caméra\\nCaméra fixe\\nPanoramique gauche\\nTravelling arrière\\nOrbite cinématique\\nAudio d’ambiance\\nVoix cohérente (LongCat)\\nGénérer 1 variante\\nESPACE COWORK\\nVideo Studio\\nPrepare a storyboard, generate scenes, and assemble a verifiable video.\"}"
+  },
+  "observations": {
+    "visibleText": "New session\n<$0.01\nqwen3:4b-instruct\n👤 Register a face\n💬\nChat\n📋\nPlan\n📊\nActivity\n📁\nFiles\n🛠️\nApp Studio\n✨\nCreations\n🎬\nVideo Studio\n🎙️\nAssistant\n📝\nMeeting\n🖼️\nLibrary\n🧰\nCapabilities\n🛰️\nMission Control\n🧪\nLabs\n⚙️\nAdvanced\n🕘\nHistory\n🌙\n⌘K\n?\nAtelier Flow\nProjet sans titre\nNouveau\nPreset éditorial…\nMoment compagne\nFashion Short\nTenue / OOTD\nJournal lifestyle\nBeauté éditoriale\nMicro-récit incarné\nLaboratoire ComfyUI\nImage\nVidéo\nIngrédients\nAjouter\nTous\nPersonnages\nObjets\nLieux\nStyles\n\nAjoute des images pour créer des personnages, lieux et styles cohérents.\n\nPlan 01\n16:9 · 6s\n\nCompose ton prochain plan\n\nAjoute des ingrédients, référence-les avec @, puis génère des variations cohérentes.\n\nScènes\n4 plans · 24s\nMonter\nExporter\nAjouter un plan\nÉtendre le plan\nPlan vide\n6s\nPlan 01\nPlan vide\n6s\nPlan 02\nPlan vide\n6s\nPlan 03\nPlan vide\n6s\nPlan 04\nRéglages du plan\nPrompt\nTexte\nIngrédients\nImages clés\nRatio\n1:1\n16:9\n9:16\nSorties\n1\n2\nDurée\n4s\n6s\n8s\n10s\nMouvement caméra\nCaméra fixe\nPanoramique gauche\nTravelling arrière\nOrbite cinématique\nAudio d’ambiance\nVoix cohérente (LongCat)\nGénérer 1 variante\nESPACE COWORK\nVideo Studio\nPrepare a storyboard, generate scenes, and assemble a verifiable video."
+  },
+  "passed": true,
+  "expected": "Storyboard et durée visibles ; aucune génération de film.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "summary": "Storyboard et durée visibles ; aucune génération de film."
+}

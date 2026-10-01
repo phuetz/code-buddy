@@ -1,0 +1,29 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → csv_analyze({"path": "data.csv"})
+Attendu: Statistiques numériques et lignes CSV réelles
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture csv_analyze.json ===
+{
+  "name": "csv_analyze",
+  "input": {
+    "path": "data.csv"
+  },
+  "expected": "Statistiques numériques et lignes CSV réelles",
+  "result": {
+    "success": true,
+    "output": "# CSV analysis: data.csv\n\n- Rows: 2\n- Columns: 2\n\n## Columns\n| Column | Type | Non-null | Nulls | Min | Max | Mean | Median |\n| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n| name | string | 2 | 0 | — | — | — | — |\n| value | number | 2 | 0 | 12 | 30 | 21 | 21 |\n\n## Preview (2 of 2 rows)\n| name | value |\n| --- | --- |\n| alpha | 12 |\n| beta | 30 |"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 2
+}

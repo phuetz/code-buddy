@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cowork-video-studio",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "bac5dcca16e0aa0fbb9e6b81c7638e257d645ae26f7114731e693591a2840597",
+  "artifact": "docs/preuves/p9-cowork-video-studio-2026-09-30.log",
+  "summary": "Video Studio affiché avec storyboard et contrôles de production."
+}

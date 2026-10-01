@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:run_script",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.850676Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "0cc996520fc7e06883d11b0b7f694d2f9a1063b95236b89b14b582b6979476c8",
+  "artifact": "docs/preuves/p9r1-tool-run_script-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

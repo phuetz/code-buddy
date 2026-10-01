@@ -1,0 +1,219 @@
+Date de consolidation: 2026-09-30T19:33:55.829512Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: project_map({"root": "<QA>/reprise-1/project"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "project_map",
+  "input": {
+    "root": "<QA>/reprise-1/project"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "data.fileCount",
+        "op": "min",
+        "value": 10
+      },
+      {
+        "field": "data.tree",
+        "op": "some",
+        "value": "📄 sample.ts"
+      },
+      {
+        "field": "data.tree",
+        "op": "some",
+        "value": "📄 data.csv"
+      },
+      {
+        "field": "data.languages.TypeScript",
+        "op": "min",
+        "value": 1
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Mapped 89 files and 34 directories",
+    "data": {
+      "root": "<QA>/reprise-1/project",
+      "tree": [
+        ".",
+        "📁 .codebuddy",
+        "  📁 .codebuddy/browser-vision",
+        "    📄 .codebuddy/browser-vision/browser-vision-1790792986077.png",
+        "  📄 .codebuddy/code-graph.json",
+        "  📄 .codebuddy/CODEBUDDY_MEMORY.archive.md",
+        "  📄 .codebuddy/CODEBUDDY_MEMORY.md",
+        "  📄 .codebuddy/colab-tasks.json",
+        "  📄 .codebuddy/colab-worklog.json",
+        "  📁 .codebuddy/companion",
+        "    📄 .codebuddy/companion/percepts.jsonl",
+        "  📁 .codebuddy/docs",
+        "    📄 .codebuddy/docs/p9-fixture.md",
+        "  📁 .codebuddy/execute-code",
+        "    📁 .codebuddy/execute-code/exec-02caf3c5-fee6-4c83-b727-89ed0b48fa85",
+        "    📁 .codebuddy/execute-code/exec-16f63e20-a951-42cf-acd5-79ef89d90918",
+        "    📁 .codebuddy/execute-code/exec-f614b8fc-b942-4bc5-a3c1-be25531df7f9",
+        "  📁 .codebuddy/exports",
+        "  📁 .codebuddy/index",
+        "    📄 .codebuddy/index/mtimes.json",
+        "    📄 .codebuddy/index/workspace.bin",
+        "    📄 .codebuddy/index/workspace.bin.mappings.json",
+        "    📄 .codebuddy/index/workspace.bin.meta.json",
+        "  📄 .codebuddy/lesson-candidates.json",
+        "  📄 .codebuddy/lessons.md",
+        "  📁 .codebuddy/media-generation",
+        "    📁 .codebuddy/media-generation/films",
+        "  📄 .codebuddy/memory-candidates.json",
+        "  📁 .codebuddy/paper-qa",
+        "    📁 .codebuddy/paper-qa/index",
+        "  📁 .codebuddy/qrcodes",
+        "    📄 .codebuddy/qrcodes/qr_1790791052317.svg",
+        "    📄 .codebuddy/qrcodes/qr_1790792403131.svg",
+        "    📄 .codebuddy/qrcodes/qr_1790793120717.svg",
+        "  📄 .codebuddy/repoProfile.json",
+        "  📁 .codebuddy/self-model",
+        "    📄 .codebuddy/self-model/evolution.json",
+        "  📁 .codebuddy/skills",
+        "    📁 .codebuddy/skills/authored-p9-fixture",
+        "  📁 .codebuddy/specs",
+        "    📄 .codebuddy/specs/active.json",
+        "    📁 .codebuddy/specs/sp-muoga5iyugxil",
+        "  📁 .codebuddy/tool-results",
+        "    📁 .codebuddy/tool-results/session-93762adaf47b339e5d41add78d1ab5d6d4a5d58b96ce21a7802165d9c0c69368",
+        "  📄 .codebuddy/user-model.json",
+        "  📁 .codebuddy/vision-analysis",
+        "    📄 .codebuddy/vision-analysis/browser-vision-72a55b2f-bf8b-44b0-8258-efc66d5cd39c.json",
+        "    📄 .codebuddy/vision-analysis/vision-1879a6a3-e1e3-4382-9ff4-1228372ef318.json",
+        "    📄 .codebuddy/vision-analysis/vision-dc8cdcfd-fa91-42a5-88f9-39a65c82fd58.json",
+        "  📁 .codebuddy/workspace",
+        "    📄 .codebuddy/workspace/script_2dd81224.py",
+        "    📄 .codebuddy/workspace/script_a9ac5291.py",
+        "  📄 .codebuddy/workspace.json",
+        "📄 a.txt",
+        "📄 alias.txt",
+        "📁 audit-fixture",
+        "  📄 audit-fixture/package-lock.json",
+        "  📄 audit-fixture/package.json",
+        "📄 b.txt",
+        "📄 browser-page-r1.html",
+        "📄 browser-server-r1.mjs",
+        "📄 bug-fixture.js",
+        "📄 build.js",
+        "📄 bundle.zip",
+        "📄 CHANGELOG.md",
+        "📄 check.test.js",
+        "📄 clip.mp4",
+        "📄 conflict.txt",
+        "📄 data.csv",
+        "📄 data.json",
+        "📁 docs",
+        "  📄 docs/p9-fixture.md",
+        "📄 eng.traineddata",
+        "📄 export.csv",
+        "📁 format-fixture",
+        "  📄 format-fixture/.prettierrc.json",
+        "  📄 format-fixture/unformatted.js",
+        "📄 leads.json",
+        "📄 LICENSE",
+        "📁 lint-fixture",
+        "  📄 lint-fixture/bad.js",
+        "  📄 lint-fixture/eslint.config.mjs",
+        "📄 meeting-report-1790792603296.json",
+        "📄 meeting-report-1790792603296.md",
+        "📄 meeting-report-1790794270884.json",
+        "📄 meeting-report-1790794270884.md",
+        "📄 meeting-report.json",
+        "📄 meeting-report.md",
+        "📄 meeting.txt",
+        "📁 new-cli",
+        "  📄 new-cli/.gitignore",
+        "  📄 new-cli/package.json",
+        "  📄 new-cli/README.md",
+        "  📁 new-cli/src",
+        "    📄 new-cli/src/index.ts",
+        "  📁 new-cli/tests",
+        "  📄 new-cli/tsconfig.json",
+        "📁 new-cli-first-run",
+        "  📄 new-cli-first-run/.gitignore",
+        "  📄 new-cli-first-run/package.json",
+        "  📄 new-cli-first-run/README.md",
+        "  📁 new-cli-first-run/src",
+        "    📄 new-cli-first-run/src/index.ts",
+        "  📁 new-cli-first-run/tests",
+        "  📄 new-cli-first-run/tsconfig.json",
+        "📄 new.txt",
+        "📄 note.md",
+        "📄 ocr.png",
+        "📄 p9-apply-r1.txt",
+        "📄 p9-screen.png",
+        "📄 p9.docx",
+        "📄 p9.pdf",
+        "📄 package.json",
+        "📄 patch-nine.txt",
+        "📄 PLAN.md",
+        "📄 rename-space test.ts",
+        "📄 review-leads.json",
+        "📄 sample.js",
+        "📄 sample.ts",
+        "📄 secret-fixture.txt",
+        "📄 speech.wav",
+        "📄 todo.md",
+        "📄 tsconfig.json",
+        "📄 tts-p9.wav"
+      ],
+      "languages": {
+        "Other": 31,
+        "JSON": 31,
+        "Markdown": 14,
+        "Python": 2,
+        "HTML": 1,
+        "JavaScript": 6,
+        "TypeScript": 4
+      },
+      "entrypoints": [],
+      "fileCount": 89,
+      "directoryCount": 34
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "data.fileCount min",
+      "passed": true
+    },
+    {
+      "check": "data.tree some",
+      "passed": true
+    },
+    {
+      "check": "data.tree some",
+      "passed": true
+    },
+    {
+      "check": "data.languages.TypeScript min",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 4,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:project_map",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

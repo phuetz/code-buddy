@@ -1,0 +1,26 @@
+Date de consolidation: 2026-09-30T19:33:55.988106Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy council --scoreboard({"args": ["--scoreboard"]})
+Attendu: ['No council history yet.']
+Observé: ['No council history yet.']
+Verdict: prouvée
+
+{
+  "id": "cli:council",
+  "name": "council",
+  "input": {
+    "args": [
+      "--scoreboard"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "No council history yet. Run `buddy council \"<task>\"` a few times.\n"
+  },
+  "expected": "['No council history yet.']",
+  "passed": true,
+  "command": "buddy council --scoreboard",
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['No council history yet.']"
+}

@@ -1,0 +1,31 @@
+Date de consolidation: 2026-09-30T19:33:55.939773Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: app_server({"command": "node browser-server-r1.mjs", "url": "http://127.0.0.1:18870"})
+Attendu: Toutes les clauses spécifiques de l’oracle sont nécessaires.
+Observé: Toutes les clauses de l’oracle spécifique sont satisfaites.
+Verdict: prouvée
+
+{
+  "name": "app_server",
+  "input": {
+    "command": "node browser-server-r1.mjs",
+    "url": "http://127.0.0.1:18870"
+  },
+  "result": {
+    "success": true,
+    "output": "Dev server ready (pid 54).\nCommand: node browser-server-r1.mjs\nBrowsable origin: http://127.0.0.1:18870 (registered for this session; unregistered when the server stops)\nNext: use the browser tool to navigate to http://127.0.0.1:18870, snapshot, interact, and check browser_console for errors.",
+    "data": {
+      "pid": 54,
+      "origin": "http://127.0.0.1:18870",
+      "url": "http://127.0.0.1:18870"
+    }
+  },
+  "passed": true,
+  "observations": {
+    "exactHttpBody": true
+  },
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:app_server",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

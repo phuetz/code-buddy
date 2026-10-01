@@ -1,0 +1,28 @@
+Date de consolidation: 2026-09-30T19:33:55.994326Z
+Révision exécutée: 0522a1f6ad1e57f2c28cd53412e4c4226fb86586
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: buddy self evolution --limit 2({"args": ["evolution", "--limit", "2"]})
+Attendu: ['P9_SYNTHETIC_RELEASE']
+Observé: ['P9_SYNTHETIC_RELEASE']
+Verdict: prouvée
+
+{
+  "id": "cli:self",
+  "name": "self",
+  "input": {
+    "args": [
+      "evolution",
+      "--limit",
+      "2"
+    ]
+  },
+  "result": {
+    "success": true,
+    "output": "# Évolutions documentées de Code Buddy\n\n## 2026-09-30 — Added\n\n- P9_SYNTHETIC_RELEASE fixture only.\n- Variables : `P9_SYNTHETIC_RELEASE`\n"
+  },
+  "expected": "['P9_SYNTHETIC_RELEASE']",
+  "passed": true,
+  "command": "buddy self evolution --limit 2",
+  "executionRevision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "summary": "['P9_SYNTHETIC_RELEASE']"
+}

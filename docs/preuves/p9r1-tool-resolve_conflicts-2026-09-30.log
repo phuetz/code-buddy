@@ -1,0 +1,71 @@
+Date de consolidation: 2026-09-30T19:33:55.848646Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: resolve_conflicts({"file_path": "conflict.txt", "strategy": "ours"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "resolve_conflicts",
+  "input": {
+    "file_path": "conflict.txt",
+    "strategy": "ours"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "file": "conflict.txt",
+        "op": "eq",
+        "value": "P9_OURS\n",
+        "changed": true
+      },
+      {
+        "file": "conflict.txt",
+        "op": "excludes",
+        "values": [
+          "<<<<<<<",
+          "=======",
+          ">>>>>>>",
+          "P9_THEIRS"
+        ]
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Resolved 1 conflict(s) in conflict.txt using strategy \"ours\"."
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "écriture effective de conflict.txt",
+      "passed": true
+    },
+    {
+      "check": "conflict.txt eq",
+      "passed": true
+    },
+    {
+      "check": "conflict.txt excludes",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 3,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:resolve_conflicts",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

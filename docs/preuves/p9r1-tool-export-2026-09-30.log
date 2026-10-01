@@ -1,0 +1,79 @@
+Date de consolidation: 2026-09-30T19:33:55.703746Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: export({"operation": "csv", "data": [{"marker": "P9_EXPORT", "value": 42}], "output_path": "export.csv"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "export",
+  "input": {
+    "operation": "csv",
+    "data": [
+      {
+        "marker": "P9_EXPORT",
+        "value": 42
+      }
+    ],
+    "output_path": "export.csv"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "file": "export.csv",
+        "op": "includes",
+        "values": [
+          "marker,value",
+          "P9_EXPORT,42"
+        ],
+        "changed": true
+      },
+      {
+        "field": "data.rows",
+        "op": "eq",
+        "value": 1
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "📤 Exported 1 rows to CSV: export.csv",
+    "data": {
+      "path": "export.csv",
+      "rows": 1
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "écriture effective de export.csv",
+      "passed": true
+    },
+    {
+      "check": "export.csv includes",
+      "passed": true
+    },
+    {
+      "check": "data.rows eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 3,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:export",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

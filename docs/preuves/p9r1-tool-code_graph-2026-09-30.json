@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:code_graph",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T19:33:56.013715Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "c88cab7f2310ea94aed98d82624e287917fefb0cdf68a702f55339bb85b66071",
+  "artifact": "docs/preuves/p9r1-tool-code_graph-2026-09-30.log",
+  "summary": "Auto-appels fn:add → fn:add et fn:answer → fn:answer issus des déclarations ; absents des sources."
+}

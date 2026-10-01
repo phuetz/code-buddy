@@ -1,0 +1,115 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → computer_control({"action": "cursor_position"})
+Attendu: Position X11 effectivement relue 42,84
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Déplacement puis relecture du curseur dans Xvfb ; aucun bureau personnel ni contrôle RDP.
+Verdict: prouvée
+
+=== Capture computer_control.json ===
+{
+  "name": "computer_control",
+  "input": {
+    "action": "cursor_position"
+  },
+  "expected": "Position X11 effectivement relue 42,84",
+  "result": {
+    "success": true,
+    "output": "Cursor at (42, 84)",
+    "data": {
+      "x": 42,
+      "y": 84,
+      "audit": {
+        "id": "audit-1790749001210-xrrh9p",
+        "action": "cursor_position",
+        "success": true,
+        "durationMs": 1,
+        "safetyProfile": "balanced",
+        "dangerous": false,
+        "simulated": false
+      },
+      "harness": {
+        "run": {
+          "kind": "run",
+          "schemaVersion": 1,
+          "id": "computer_audit-1790749001210-xrrh9p",
+          "actor": {
+            "type": "agent",
+            "id": "code-buddy-computer-control"
+          },
+          "objective": "Computer control action: cursor_position",
+          "status": "completed",
+          "startedAt": 1790749001209,
+          "endedAt": 1790749001210,
+          "metrics": {
+            "durationMs": 1,
+            "toolCallCount": 1
+          },
+          "metadata": {
+            "channel": "computer-control",
+            "organ": "code-buddy",
+            "tags": [
+              "computer-use",
+              "cursor_position",
+              "live"
+            ]
+          }
+        },
+        "proof": {
+          "kind": "proof",
+          "schemaVersion": 1,
+          "id": "proof_audit-1790749001210-xrrh9p",
+          "runId": "computer_audit-1790749001210-xrrh9p",
+          "type": "log",
+          "createdAt": 1790749001210,
+          "producedBy": {
+            "type": "agent",
+            "id": "code-buddy-computer-control"
+          },
+          "summary": "cursor_position completed in 1ms: Cursor at (42, 84)"
+        },
+        "capabilities": [
+          {
+            "kind": "capability",
+            "schemaVersion": 1,
+            "id": "codebuddy.computer_control.inspect",
+            "name": "Inspect desktop state",
+            "level": "read",
+            "policy": "autonomous",
+            "fleetPolicy": "read-only-help",
+            "description": "Read windows, snapshots, cursor, system info and permission state."
+          },
+          {
+            "kind": "capability",
+            "schemaVersion": 1,
+            "id": "codebuddy.computer_control.dry_run",
+            "name": "Simulate desktop actions",
+            "level": "reversible-write",
+            "policy": "dry-run-required",
+            "fleetPolicy": "none",
+            "description": "Prepare mutating desktop actions without applying them."
+          },
+          {
+            "kind": "capability",
+            "schemaVersion": 1,
+            "id": "codebuddy.computer_control.live_control",
+            "name": "Control the desktop",
+            "level": "sensitive",
+            "policy": "approval-required",
+            "fleetPolicy": "none",
+            "description": "Click, type, move windows, record the screen or change system state."
+          }
+        ]
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 1
+}

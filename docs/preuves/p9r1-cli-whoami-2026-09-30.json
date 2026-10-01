@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:whoami",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.996355Z",
+  "revision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "sourceDigest": "ee833a5b6c1d780b9f08deec1eaa500573f3d601c7558b6167724778482234a3",
+  "artifact": "docs/preuves/p9r1-cli-whoami-2026-09-30.log",
+  "summary": "['ChatGPT: not connected']"
+}

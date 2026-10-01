@@ -1,0 +1,77 @@
+Date de consolidation: 2026-09-30T19:33:55.863364Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: search({"query": "P9_MARKER", "search_type": "text"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "search",
+  "input": {
+    "query": "P9_MARKER",
+    "search_type": "text"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "sample.js (1 matches)"
+        ]
+      },
+      {
+        "field": "observations.searchNegativeEmpty",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Search results for \"P9_MARKER\":\n  <QA>/reprise-1/project/sample.js (1 matches)"
+  },
+  "observations": {
+    "searchNegativeEmpty": true
+  },
+  "verificationCalls": [
+    {
+      "name": "search",
+      "input": {
+        "query": "P9R1_ABSENT_ORACLE",
+        "search_type": "text"
+      },
+      "result": {
+        "success": true,
+        "output": "No results found for \"P9R1_ABSENT_ORACLE\""
+      }
+    }
+  ],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "observations.searchNegativeEmpty eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 33,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:search",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

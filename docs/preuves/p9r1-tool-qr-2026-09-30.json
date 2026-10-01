@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:qr",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-30T19:33:55.831938Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "6d49d0986c9dd0e74007e13c1e9054adec82f067f7ae6592d95143771f62c03d",
+  "artifact": "docs/preuves/p9r1-tool-qr-2026-09-30.log",
+  "summary": "SVG non décodable : jsQR renvoie null ; le même décodeur réussit le QR témoin P9_QR_CONTROL."
+}

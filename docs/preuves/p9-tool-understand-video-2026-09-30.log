@@ -1,0 +1,43 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: understand_video(source=spoken.mp4), FFmpeg + faster-whisper tiny local
+Attendu: Segment horodaté non vide contenant 42 ; trois artefacts persistés
+Observé: Transcription réelle avec moteur STT installé dans un venv QA ; fichiers de recherche persistés.
+Portée: Une courte phrase synthétique anglaise ; reconnaissance approximative : Fixed Chuck et brew boxes restent erronés.
+Verdict: prouvée
+
+=== Capture stt-before.log ===
+[2026-09-30T04:49:06.283Z]  WARN  [speech] auto STT fallback activated: effective=faster-whisper reason=sherpa-rs-binary-missing
+[2026-09-30T04:49:06.440Z]  WARN  [speech] STT failed (python='python3', exit=1): Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+ModuleNotFoundError: No module named 'faster_whisper'
+[2026-09-30T04:49:06.440Z]  WARN  [video] transcription failed for chunk_0000.wav: faster-whisper STT failed: Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+ModuleNotFoundError: No module named 'faster_whisper'
+{"success":false,"error":"transcription failed: faster-whisper STT failed: Traceback (most recent call last):\n  File \"<string>\", line 2, in <module>\nModuleNotFoundError: No module named 'faster_whisper'"}
+
+=== Capture stt-english.log ===
+[2026-09-30T05:29:27.911Z]  WARN  [speech] auto STT fallback activated: effective=faster-whisper reason=sherpa-rs-binary-missing
+[2026-09-30T05:29:28.885Z]  INFO  [video] long transcript: 1 spoken segment(s) across 1 chunk(s)
+{"success":true,"output":"Transcript horodaté (1 segments, méthode: local-file) — sauvegardé dans <QA_PROJECT>/.codebuddy/video/transcript-spoken.txt:\n\n[0:00 - 0:03] The Code Buddy Fixed Chuck contains 42 brew boxes.\n\nFiche de recherche pré-structurée complète : <QA_PROJECT>/.codebuddy/video/research-spoken.md. Pour une demande de veille approfondie, lis cette fiche puis vérifie les noms et affirmations dans des sources primaires avant de conclure.\n\nBacklog d’expériences JSON : <QA_PROJECT>/.codebuddy/video/experiments-spoken.json (0 piste(s) non vérifiée(s)).","data":{"segments":[{"t_start":0,"t_end":3.39,"said":"The Code Buddy Fixed Chuck contains 42 brew boxes."}],"transcriptPath":"<QA_PROJECT>/.codebuddy/video/transcript-spoken.txt","researchCardPath":"<QA_PROJECT>/.codebuddy/video/research-spoken.md","experimentBacklogPath":"<QA_PROJECT>/.codebuddy/video/experiments-spoken.json","source":"spoken.mp4","method":"local-file"}}
+
+=== Capture understand-video.json ===
+{
+  "success": true,
+  "output": "Transcript horodaté (1 segments, méthode: local-file) — sauvegardé dans <QA_PROJECT>/.codebuddy/video/transcript-spoken.txt:\n\n[0:00 - 0:03] The Code Buddy Fixed Chuck contains 42 brew boxes.\n\nFiche de recherche pré-structurée complète : <QA_PROJECT>/.codebuddy/video/research-spoken.md. Pour une demande de veille approfondie, lis cette fiche puis vérifie les noms et affirmations dans des sources primaires avant de conclure.\n\nBacklog d’expériences JSON : <QA_PROJECT>/.codebuddy/video/experiments-spoken.json (0 piste(s) non vérifiée(s)).",
+  "data": {
+    "segments": [
+      {
+        "t_start": 0,
+        "t_end": 3.39,
+        "said": "The Code Buddy Fixed Chuck contains 42 brew boxes."
+      }
+    ],
+    "transcriptPath": "<QA_PROJECT>/.codebuddy/video/transcript-spoken.txt",
+    "researchCardPath": "<QA_PROJECT>/.codebuddy/video/research-spoken.md",
+    "experimentBacklogPath": "<QA_PROJECT>/.codebuddy/video/experiments-spoken.json",
+    "source": "spoken.mp4",
+    "method": "local-file"
+  }
+}

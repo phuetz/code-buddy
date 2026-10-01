@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "catalog-status",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T21:32:31.847829Z",
+  "revision": "3b033211733b2eea9c3c3e9418757c1e9c4e0cec",
+  "sourceDigest": "a8db221ae6f0bcc1017625c461a857d68e143dbd51030ff7bc311ea5f7b19f06",
+  "artifact": "docs/preuves/p9r2-catalog-status-2026-09-30.log",
+  "summary": "Sortie brute du CLI conservée intégralement ; agrégats clairement séparés."
+}

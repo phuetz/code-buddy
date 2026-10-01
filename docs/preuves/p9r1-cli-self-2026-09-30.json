@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:self",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.994326Z",
+  "revision": "0522a1f6ad1e57f2c28cd53412e4c4226fb86586",
+  "sourceDigest": "d289dcae9d6728e07ee46fbd93f1f99e7f40aab02d5ee0a86190f23c147767cf",
+  "artifact": "docs/preuves/p9r1-cli-self-2026-09-30.log",
+  "summary": "['P9_SYNTHETIC_RELEASE']"
+}

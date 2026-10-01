@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:web_extract",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.927234Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "a5722be6eccbfb79f2d409ff035d11588e8741053429a0a7fbe65c7ef4b5b199",
+  "artifact": "docs/preuves/p9r1-tool-web_extract-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

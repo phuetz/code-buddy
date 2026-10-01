@@ -1,0 +1,68 @@
+Date de consolidation: 2026-09-30T19:33:55.946978Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: browser_vision({"url": "http://127.0.0.1:18870", "include_snapshot": true})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "browser_vision",
+  "input": {
+    "url": "http://127.0.0.1:18870",
+    "include_snapshot": true
+  },
+  "result": {
+    "success": true,
+    "output": "{\n  \"kind\": \"browser_vision_result\",\n  \"ok\": true,\n  \"url\": \"http://127.0.0.1:18870\",\n  \"screenshotPath\": \"<QA>/reprise-1/project/.codebuddy/browser-vision/browser-vision-1790796090413.png\",\n  \"analysis\": {\n    \"kind\": \"vision_analyze_result\",\n    \"ok\": true,\n    \"source\": \"browser_screenshot\",\n    \"imagePath\": \"<QA>/reprise-1/project/.codebuddy/browser-vision/browser-vision-1790796090413.png\",\n    \"reportPath\": \"<QA>/reprise-1/project/.codebuddy/vision-analysis/browser-vision-e4ae5d3e-b6b8-4013-8831-9f84094e13fd.json\",\n    \"sourceUrl\": \"http://127.0.0.1:18870\",\n    \"generatedAt\": \"2026-09-30T19:21:30.511Z\",\n    \"metadata\": {\n      \"width\": 1280,\n      \"height\": 720,\n      \"format\": \"png\",\n      \"sizeBytes\": 8129,\n      \"channels\": 3,\n      \"hasAlpha\": false,\n      \"density\": 72\n    },\n    \"colors\": {\n      \"dominant\": {\n        \"r\": 248,\n        \"g\": 248,\n        \"b\": 248\n      },\n      \"isOpaque\": true\n    },\n    \"labels\": [\n      \"image\",\n      \"png\",\n      \"landscape\",\n      \"large\"\n    ]\n  },\n  \"snapshot\": \"# Web Snapshot\\nURL: http://127.0.0.1:18870/\\nTitle: P9_BROWSER\\nElements: 5\\n\\n## Interactive Elements\\n\\n### textbox\\n  [5] Name\\n\\n### button\\n  [6] Save\\n  [7] Dialog\\n\"\n}",
+    "data": {
+      "kind": "browser_vision_result",
+      "ok": true,
+      "url": "http://127.0.0.1:18870",
+      "screenshotPath": "<QA>/reprise-1/project/.codebuddy/browser-vision/browser-vision-1790796090413.png",
+      "analysis": {
+        "kind": "vision_analyze_result",
+        "ok": true,
+        "source": "browser_screenshot",
+        "imagePath": "<QA>/reprise-1/project/.codebuddy/browser-vision/browser-vision-1790796090413.png",
+        "reportPath": "<QA>/reprise-1/project/.codebuddy/vision-analysis/browser-vision-e4ae5d3e-b6b8-4013-8831-9f84094e13fd.json",
+        "sourceUrl": "http://127.0.0.1:18870",
+        "generatedAt": "2026-09-30T19:21:30.511Z",
+        "metadata": {
+          "width": 1280,
+          "height": 720,
+          "format": "png",
+          "sizeBytes": 8129,
+          "channels": 3,
+          "hasAlpha": false,
+          "density": 72
+        },
+        "colors": {
+          "dominant": {
+            "r": 248,
+            "g": 248,
+            "b": 248
+          },
+          "isOpaque": true
+        },
+        "labels": [
+          "image",
+          "png",
+          "landscape",
+          "large"
+        ]
+      },
+      "snapshot": "# Web Snapshot\nURL: http://127.0.0.1:18870/\nTitle: P9_BROWSER\nElements: 5\n\n## Interactive Elements\n\n### textbox\n  [5] Name\n\n### button\n  [6] Save\n  [7] Dialog\n"
+    }
+  },
+  "observations": {
+    "screenshot1280x720": true,
+    "pageSnapshot": true,
+    "metadataFromCapture": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:browser_vision",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli:server",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "2dc4bfc926e61a04534614d0229d84267438c36c88c31170dc33029ab1fc740e",
+  "artifact": "docs/preuves/p9-cli-server-2026-09-30.log",
+  "summary": "Serveur HTTP réel lancé puis arrêté dans le profil isolé."
+}

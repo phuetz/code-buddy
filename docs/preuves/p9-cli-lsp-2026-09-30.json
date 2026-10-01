@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-lsp",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T06:18:56Z",
+  "revision": "b72202254006beb44b7f70d3daa44da2aeb3f99d",
+  "sourceDigest": "15f960ee147928d53c859041601bdbffee3f228f2548517bf798489974702a4c",
+  "artifact": "docs/preuves/p9-cli-lsp-2026-09-30.log",
+  "summary": "Diagnostic TypeScript réel détecté et serveur LSP fermé, trois rejouages."
+}

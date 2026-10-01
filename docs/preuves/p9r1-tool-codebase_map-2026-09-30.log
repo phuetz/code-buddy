@@ -1,0 +1,78 @@
+Date de consolidation: 2026-09-30T19:33:55.663311Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: codebase_map({"root": "<QA>/reprise-1/project", "deep": true, "operation": "build"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "codebase_map",
+  "input": {
+    "root": "<QA>/reprise-1/project",
+    "deep": true,
+    "operation": "build"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "Codebase map built:"
+        ]
+      },
+      {
+        "field": "observations.mapHasSample",
+        "op": "eq",
+        "value": true
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "Codebase map built: 56 files, 2186 lines, root <QA>/reprise-1/project"
+  },
+  "observations": {
+    "mapHasSample": true
+  },
+  "verificationCalls": [
+    {
+      "name": "codebase_map",
+      "input": {
+        "root": "<QA>/reprise-1/project",
+        "operation": "symbols"
+      },
+      "result": {
+        "success": true,
+        "output": "Found 3 exported symbols:\nfunction add (sample.js:1)\nfunction add (sample.ts:1)\nfunction p9Add (rename-space test.ts:1)"
+      }
+    }
+  ],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "observations.mapHasSample eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 66,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:codebase_map",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

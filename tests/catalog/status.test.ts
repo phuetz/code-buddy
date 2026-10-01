@@ -59,10 +59,11 @@ describe('catalog states and evidence', () => {
   it('checks all curated user-facing domains without promoting static wiring to a live run', () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
     const inventory = JSON.parse(readFileSync(path.join(root, 'docs/catalog/inventory.json'), 'utf8')) as {
-      features: Array<{ id: string; domain: string; benefit: { en: string; fr: string }; verificationLimit?: string }>;
+      features: Array<{ id: string; domain: string; benefit: { en: string; fr: string }; verificationLimit?: string; codePaths?: string[]; entrypoint?: { checks: unknown[] } }>;
     };
-    expect(inventory.features).toHaveLength(91);
-    expect(new Set(inventory.features.map((feature) => feature.id)).size).toBe(91);
+    expect(inventory.features).toHaveLength(338);
+    expect(inventory.features.filter((feature) => !feature.id.includes(':'))).toHaveLength(91);
+    expect(new Set(inventory.features.map((feature) => feature.id)).size).toBe(338);
     expect(new Set(inventory.features.map((feature) => feature.domain))).toEqual(new Set([
       'agent-tools', 'providers', 'context-memory', 'fleet', 'server-api', 'cowork',
       'dgm', 'sensory', 'media', 'security', 'cli',
@@ -75,8 +76,8 @@ describe('catalog states and evidence', () => {
       expect(feature?.benefit, definition.id).toEqual(definition.benefit);
       expect(definition.benefit.en.trim().length, definition.id).toBeGreaterThan(12);
       expect(definition.benefit.fr.trim().length, definition.id).toBeGreaterThan(12);
-      expect(feature?.states.coded, definition.id).toBe('vrai');
-      expect(feature?.states.wired, definition.id).toBe('vrai');
+      expect(feature?.states.coded, definition.id).toBe(definition.codePaths?.length ? 'vrai' : 'inconnu');
+      expect(feature?.states.wired, definition.id).toBe(definition.entrypoint?.checks.length ? 'vrai' : 'inconnu');
       expect(feature?.states.deployed, definition.id).toBe('inconnu');
       if (feature?.states.testedInSituation !== 'vrai') {
         // A merge can age a genuine execution trace without changing the inventory's

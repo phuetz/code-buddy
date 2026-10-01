@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:lsp_rename",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.804800Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "c98272c63d503370d82b500796b870746ea6922d2a2dad05b2a2bc35da1e353c",
+  "artifact": "docs/preuves/p9r1-tool-lsp_rename-2026-09-30.log",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

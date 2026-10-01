@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-nodes",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "44a6bcc8557a54bb1ec9ca69503b1f7ec11acad46d16116f96ddbbdb747ac3e3",
+  "artifact": "docs/preuves/p8-cli-nodes.log",
+  "summary": "Pending Pairings (1), approbation et retrait réussis."
+}

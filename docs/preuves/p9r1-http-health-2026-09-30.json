@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-health",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:56.009472Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "f417251b3b290600b03e30ccf81658046a86edb4e3fb7c7a7c061552af6b5f03",
+  "artifact": "docs/preuves/p9r1-http-health-2026-09-30.log",
+  "summary": "Vraie route health JSON de cette version et port fermé après arrêt"
+}

@@ -1,0 +1,72 @@
+Date de consolidation: 2026-09-30T19:33:55.692179Z
+Révision exécutée: 99dbcdf27b61fa6a98bc73779b44c0e7efcd3049
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: diff_files({"root": "<QA>/reprise-1/project", "left": "a.txt", "right": "b.txt"})
+Attendu: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Observé: Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.
+Verdict: prouvée
+
+{
+  "name": "diff_files",
+  "input": {
+    "root": "<QA>/reprise-1/project",
+    "left": "a.txt",
+    "right": "b.txt"
+  },
+  "oracle": {
+    "rules": [
+      {
+        "field": "output",
+        "op": "includes",
+        "values": [
+          "+P9_BETA",
+          "-P9_ALPHA"
+        ]
+      },
+      {
+        "field": "data.changed",
+        "op": "eq",
+        "value": 2
+      }
+    ]
+  },
+  "expected": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés.",
+  "preparationCalls": [],
+  "result": {
+    "success": true,
+    "output": "--- a.txt\n+++ b.txt\n+P9_BETA\n-P9_ALPHA\n ",
+    "data": {
+      "root": "<QA>/reprise-1/project",
+      "left": "a.txt",
+      "right": "b.txt",
+      "diff": "--- a.txt\n+++ b.txt\n+P9_BETA\n-P9_ALPHA\n ",
+      "changed": 2
+    }
+  },
+  "observations": {},
+  "verificationCalls": [],
+  "passed": true,
+  "checks": [
+    {
+      "check": "statut attendu",
+      "passed": true
+    },
+    {
+      "check": "output includes",
+      "passed": true
+    },
+    {
+      "check": "data.changed eq",
+      "passed": true
+    },
+    {
+      "check": "oracle spécifique déclaré",
+      "passed": true
+    }
+  ],
+  "echoRejected": true,
+  "ms": 3,
+  "executionRevision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "id": "tool:diff_files",
+  "summary": "Toutes les clauses spécifiques sont nécessaires ; seuls espaces/retours peuvent être normalisés."
+}

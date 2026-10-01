@@ -1,0 +1,442 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → browser_get_images ; séquence browser-live.json
+Attendu: Assertions de la séquence et résultat visible
+Observé: Séquence réelle contrôlée sur profil et projet isolés.
+Portée: Séquence réelle contrôlée sur profil et projet isolés.
+Verdict: prouvée
+
+=== Capture browser-live.json ===
+[
+  {
+    "name": "port_check",
+    "input": {
+      "port": 18830,
+      "host": "127.0.0.1"
+    },
+    "result": {
+      "success": true,
+      "output": "127.0.0.1:18830 is listening",
+      "data": {
+        "host": "127.0.0.1",
+        "port": 18830,
+        "listening": true,
+        "available": false
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "http_probe",
+    "input": {
+      "url": "http://127.0.0.1:18830"
+    },
+    "result": {
+      "success": true,
+      "output": "HTTP 200, 446 byte(s)",
+      "data": {
+        "url": "http://127.0.0.1:18830/",
+        "status": 200,
+        "headers": {
+          "content-type": "text/html",
+          "date": "Wed, 30 Sep 2026 05:55:31 GMT",
+          "connection": "keep-alive",
+          "keep-alive": "timeout=5",
+          "content-length": "446"
+        },
+        "size": 446
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "web_test",
+    "input": {
+      "url": "http://127.0.0.1:18830",
+      "steps": [
+        {
+          "action": "type",
+          "selector": "#name",
+          "value": "P9_WEBTEST"
+        },
+        {
+          "action": "click",
+          "selector": "button"
+        }
+      ],
+      "assertions": [
+        {
+          "type": "text",
+          "value": "P9_CLICK:P9_WEBTEST"
+        }
+      ],
+      "screenshot": true
+    },
+    "result": {
+      "success": true,
+      "output": "Web test PASSED — http://127.0.0.1:18830\n✓ navigation: loaded http://127.0.0.1:18830\n✓ step 1 type \"P9_WEBTEST\" into \"#name\": ok\n✓ step 2 click \"button\": ok\n✓ console: no console/page errors\n✓ network: no failed requests\n✓ assert text \"P9_CLICK:P9_WEBTEST\": found\n✓ screenshot: <QA_HOME>/.codebuddy/browser-screenshots/screenshot-1790747731910.png\nScreenshot: <QA_HOME>/.codebuddy/browser-screenshots/screenshot-1790747731910.png\n\nInteractive elements:\n# Web Snapshot\nURL: http://127.0.0.1:18830/\nTitle: P9_BROWSER\nElements: 3\n\n## Interactive Elements\n\n### textbox\n  [1] Name = \"P9_WEBTEST\"\n\n### button\n  [2] Save\n  [3] Dialog\n",
+      "data": {
+        "passed": true,
+        "url": "http://127.0.0.1:18830",
+        "checks": [
+          {
+            "name": "navigation",
+            "passed": true,
+            "detail": "loaded http://127.0.0.1:18830"
+          },
+          {
+            "name": "step 1 type \"P9_WEBTEST\" into \"#name\"",
+            "passed": true,
+            "detail": "ok"
+          },
+          {
+            "name": "step 2 click \"button\"",
+            "passed": true,
+            "detail": "ok"
+          },
+          {
+            "name": "console",
+            "passed": true,
+            "detail": "no console/page errors"
+          },
+          {
+            "name": "network",
+            "passed": true,
+            "detail": "no failed requests"
+          },
+          {
+            "name": "assert text \"P9_CLICK:P9_WEBTEST\"",
+            "passed": true,
+            "detail": "found"
+          },
+          {
+            "name": "screenshot",
+            "passed": true,
+            "detail": "<QA_HOME>/.codebuddy/browser-screenshots/screenshot-1790747731910.png"
+          }
+        ],
+        "consoleErrorCount": 0,
+        "networkFailureCount": 0,
+        "networkFailures": [],
+        "screenshotPath": "<QA_HOME>/.codebuddy/browser-screenshots/screenshot-1790747731910.png"
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_vision",
+    "input": {
+      "url": "http://127.0.0.1:18830",
+      "include_snapshot": true
+    },
+    "result": {
+      "success": true,
+      "output": "{\n  \"kind\": \"browser_vision_result\",\n  \"ok\": true,\n  \"url\": \"http://127.0.0.1:18830\",\n  \"screenshotPath\": \"<QA_PROJECT>/.codebuddy/browser-vision/browser-vision-1790747731928.png\",\n  \"analysis\": {\n    \"kind\": \"vision_analyze_result\",\n    \"ok\": true,\n    \"source\": \"browser_screenshot\",\n    \"imagePath\": \"<QA_PROJECT>/.codebuddy/browser-vision/browser-vision-1790747731928.png\",\n    \"reportPath\": \"<QA_PROJECT>/.codebuddy/vision-analysis/browser-vision-b4be4d99-7415-4df4-a885-1e7d3115cef2.json\",\n    \"sourceUrl\": \"http://127.0.0.1:18830\",\n    \"generatedAt\": \"2026-09-30T05:55:32.052Z\",\n    \"metadata\": {\n      \"width\": 1280,\n      \"height\": 720,\n      \"format\": \"png\",\n      \"sizeBytes\": 8129,\n      \"channels\": 3,\n      \"hasAlpha\": false,\n      \"density\": 72\n    },\n    \"colors\": {\n      \"dominant\": {\n        \"r\": 248,\n        \"g\": 248,\n        \"b\": 248\n      },\n      \"isOpaque\": true\n    },\n    \"labels\": [\n      \"image\",\n      \"png\",\n      \"landscape\",\n      \"large\"\n    ]\n  },\n  \"snapshot\": \"# Web Snapshot\\nURL: http://127.0.0.1:18830/\\nTitle: P9_BROWSER\\nElements: 5\\n\\n## Interactive Elements\\n\\n### textbox\\n  [5] Name\\n\\n### button\\n  [6] Save\\n  [7] Dialog\\n\"\n}",
+      "data": {
+        "kind": "browser_vision_result",
+        "ok": true,
+        "url": "http://127.0.0.1:18830",
+        "screenshotPath": "<QA_PROJECT>/.codebuddy/browser-vision/browser-vision-1790747731928.png",
+        "analysis": {
+          "kind": "vision_analyze_result",
+          "ok": true,
+          "source": "browser_screenshot",
+          "imagePath": "<QA_PROJECT>/.codebuddy/browser-vision/browser-vision-1790747731928.png",
+          "reportPath": "<QA_PROJECT>/.codebuddy/vision-analysis/browser-vision-b4be4d99-7415-4df4-a885-1e7d3115cef2.json",
+          "sourceUrl": "http://127.0.0.1:18830",
+          "generatedAt": "2026-09-30T05:55:32.052Z",
+          "metadata": {
+            "width": 1280,
+            "height": 720,
+            "format": "png",
+            "sizeBytes": 8129,
+            "channels": 3,
+            "hasAlpha": false,
+            "density": 72
+          },
+          "colors": {
+            "dominant": {
+              "r": 248,
+              "g": 248,
+              "b": 248
+            },
+            "isOpaque": true
+          },
+          "labels": [
+            "image",
+            "png",
+            "landscape",
+            "large"
+          ]
+        },
+        "snapshot": "# Web Snapshot\nURL: http://127.0.0.1:18830/\nTitle: P9_BROWSER\nElements: 5\n\n## Interactive Elements\n\n### textbox\n  [5] Name\n\n### button\n  [6] Save\n  [7] Dialog\n"
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_navigate",
+    "input": {
+      "url": "http://127.0.0.1:18830"
+    },
+    "result": {
+      "success": true,
+      "output": "Navigated to: http://127.0.0.1:18830\nTitle: P9_BROWSER"
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_snapshot",
+    "input": {},
+    "result": {
+      "success": true,
+      "output": "# Web Snapshot\nURL: http://127.0.0.1:18830/\nTitle: P9_BROWSER\nElements: 3\n\n## Interactive Elements\n\n### textbox\n  [10] Name\n\n### button\n  [11] Save\n  [12] Dialog\n",
+      "data": {
+        "snapshotId": "websnap-1790747732083",
+        "url": "http://127.0.0.1:18830/",
+        "title": "P9_BROWSER",
+        "elementCount": 3
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_type",
+    "input": {
+      "ref": 10,
+      "text": "P9_VALUE",
+      "clear": true
+    },
+    "result": {
+      "success": true,
+      "output": "Typed \"P9_VALUE\" into [10]"
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_click",
+    "input": {
+      "ref": 11
+    },
+    "result": {
+      "success": true,
+      "output": "Clicked [11] Save"
+    },
+    "passed": true
+  },
+  {
+    "name": "browser",
+    "input": {
+      "action": "assert_text",
+      "expectedText": "P9_CLICK:P9_VALUE"
+    },
+    "result": {
+      "success": true,
+      "output": "Assertion passed: page contains \"P9_CLICK:P9_VALUE\"\nName SaveDialog P9_CLICK:P9_VALUE P9_END",
+      "data": {
+        "expectedText": "P9_CLICK:P9_VALUE",
+        "passed": true,
+        "title": "P9_BROWSER",
+        "url": "http://127.0.0.1:18830/",
+        "snippet": "Name SaveDialog P9_CLICK:P9_VALUE P9_END"
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_console",
+    "input": {},
+    "result": {
+      "success": true,
+      "output": "[2026-09-30T05:55:31.563Z] log http://127.0.0.1:18830/: P9_CONSOLE\n[2026-09-30T05:55:31.563Z] log http://127.0.0.1:18830/: P9_CONSOLE\n[2026-09-30T05:55:32.694Z] log http://127.0.0.1:18830/: P9_CONSOLE\n[2026-09-30T05:55:32.694Z] log http://127.0.0.1:18830/: P9_CONSOLE",
+      "data": {
+        "entries": [
+          {
+            "type": "log",
+            "text": "P9_CONSOLE",
+            "timestamp": "2026-09-30T05:55:31.563Z",
+            "pageId": "page-1790747731525",
+            "url": "http://127.0.0.1:18830/"
+          },
+          {
+            "type": "log",
+            "text": "P9_CONSOLE",
+            "timestamp": "2026-09-30T05:55:31.563Z",
+            "pageId": "page-1790747731526",
+            "url": "http://127.0.0.1:18830/"
+          },
+          {
+            "type": "log",
+            "text": "P9_CONSOLE",
+            "timestamp": "2026-09-30T05:55:32.694Z",
+            "pageId": "page-1790747731525",
+            "url": "http://127.0.0.1:18830/"
+          },
+          {
+            "type": "log",
+            "text": "P9_CONSOLE",
+            "timestamp": "2026-09-30T05:55:32.694Z",
+            "pageId": "page-1790747731526",
+            "url": "http://127.0.0.1:18830/"
+          }
+        ]
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_get_images",
+    "input": {},
+    "result": {
+      "success": true,
+      "output": "[0] P9_IMAGE 30x30 -> http://127.0.0.1:18830/image.svg",
+      "data": {
+        "images": [
+          {
+            "index": 0,
+            "src": "http://127.0.0.1:18830/image.svg",
+            "currentSrc": "http://127.0.0.1:18830/image.svg",
+            "alt": "P9_IMAGE",
+            "title": "",
+            "width": 30,
+            "height": 30,
+            "naturalWidth": 30,
+            "naturalHeight": 30,
+            "visible": true,
+            "loading": "auto"
+          }
+        ]
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_press",
+    "input": {
+      "key": "Tab"
+    },
+    "result": {
+      "success": true,
+      "output": "Pressed Tab"
+    },
+    "passed": true
+  },
+  {
+    "name": "browser",
+    "input": {
+      "action": "evaluate",
+      "expression": "document.activeElement.textContent"
+    },
+    "result": {
+      "success": true,
+      "output": "Result: \"Dialog\"",
+      "data": {
+        "result": "Dialog"
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_scroll",
+    "input": {
+      "direction": "down",
+      "amount": 800
+    },
+    "result": {
+      "success": true,
+      "output": "Scrolled down 800px"
+    },
+    "passed": true
+  },
+  {
+    "name": "browser",
+    "input": {
+      "action": "evaluate",
+      "expression": "window.scrollY"
+    },
+    "result": {
+      "success": true,
+      "output": "Result: 800",
+      "data": {
+        "result": 800
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_click",
+    "input": {
+      "ref": 12
+    },
+    "result": {
+      "success": true,
+      "output": "Clicked [12] Dialog"
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_dialog",
+    "input": {
+      "action": "list"
+    },
+    "result": {
+      "success": true,
+      "output": "[dialog-2] alert: P9_DIALOG",
+      "data": {
+        "dialogs": [
+          {
+            "id": "dialog-2",
+            "pageId": "page-1790747731526",
+            "type": "alert",
+            "message": "P9_DIALOG",
+            "defaultValue": "",
+            "createdAt": "2026-09-30T05:55:32.929Z"
+          }
+        ]
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_dialog",
+    "input": {
+      "action": "dismiss"
+    },
+    "result": {
+      "success": true,
+      "output": "Dismissed alert dialog: P9_DIALOG",
+      "data": {
+        "dialog": {
+          "id": "dialog-2",
+          "pageId": "page-1790747731526",
+          "type": "alert",
+          "message": "P9_DIALOG",
+          "defaultValue": "",
+          "createdAt": "2026-09-30T05:55:32.929Z"
+        }
+      }
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_navigate",
+    "input": {
+      "url": "http://127.0.0.1:18830/next"
+    },
+    "result": {
+      "success": true,
+      "output": "Navigated to: http://127.0.0.1:18830/next\nTitle: P9_BROWSER"
+    },
+    "passed": true
+  },
+  {
+    "name": "browser_back",
+    "input": {},
+    "result": {
+      "success": true,
+      "output": "Navigated back"
+    },
+    "passed": true
+  }
+]

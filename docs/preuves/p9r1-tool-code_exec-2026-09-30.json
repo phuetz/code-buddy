@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "tool:code_exec",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T19:33:55.979659Z",
+  "revision": "99dbcdf27b61fa6a98bc73779b44c0e7efcd3049",
+  "sourceDigest": "3bc5baabfb1905b724ae457cc29fd79a042cde2c00fd956edcd5040dc336ac56",
+  "artifact": "docs/preuves/p9r1-tool-code_exec-2026-09-30.log",
+  "summary": "Toutes les clauses de l’oracle spécifique sont satisfaites."
+}

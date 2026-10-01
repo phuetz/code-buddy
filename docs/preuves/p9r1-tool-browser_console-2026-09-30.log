@@ -1,0 +1,56 @@
+Date de consolidation: 2026-09-30T19:33:55.956554Z
+Révision exécutée: be7f81998adadf19b7448a5080435f290eb28a76
+Exécution réelle de production, sans mocks ; HOME et projet QA isolés.
+Commande/scénario: browser_console({})
+Attendu: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Observé: Tous les contrôles de contenu ou de changement d’état sont nécessaires.
+Verdict: prouvée
+
+{
+  "name": "browser_console",
+  "input": {},
+  "result": {
+    "success": true,
+    "output": "[2026-09-30T19:21:30.038Z] log http://127.0.0.1:18870/: P9_CONSOLE_1790796089466\n[2026-09-30T19:21:30.038Z] log http://127.0.0.1:18870/: P9_CONSOLE_1790796089466\n[2026-09-30T19:21:31.242Z] log http://127.0.0.1:18870/: P9_CONSOLE_1790796089466\n[2026-09-30T19:21:31.242Z] log http://127.0.0.1:18870/: P9_CONSOLE_1790796089466",
+    "data": {
+      "entries": [
+        {
+          "type": "log",
+          "text": "P9_CONSOLE_1790796089466",
+          "timestamp": "2026-09-30T19:21:30.038Z",
+          "pageId": "page-1790796089980",
+          "url": "http://127.0.0.1:18870/"
+        },
+        {
+          "type": "log",
+          "text": "P9_CONSOLE_1790796089466",
+          "timestamp": "2026-09-30T19:21:30.038Z",
+          "pageId": "page-1790796089981",
+          "url": "http://127.0.0.1:18870/"
+        },
+        {
+          "type": "log",
+          "text": "P9_CONSOLE_1790796089466",
+          "timestamp": "2026-09-30T19:21:31.242Z",
+          "pageId": "page-1790796089980",
+          "url": "http://127.0.0.1:18870/"
+        },
+        {
+          "type": "log",
+          "text": "P9_CONSOLE_1790796089466",
+          "timestamp": "2026-09-30T19:21:31.242Z",
+          "pageId": "page-1790796089981",
+          "url": "http://127.0.0.1:18870/"
+        }
+      ]
+    }
+  },
+  "observations": {
+    "freshConsoleEntry": true
+  },
+  "passed": true,
+  "expected": "Tous les contrôles de contenu ou de changement d’état sont nécessaires.",
+  "executionRevision": "be7f81998adadf19b7448a5080435f290eb28a76",
+  "id": "tool:browser_console",
+  "summary": "Tous les contrôles de contenu ou de changement d’état sont nécessaires."
+}

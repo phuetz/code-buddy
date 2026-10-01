@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-code-explorer",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-30T21:32:31.823063Z",
+  "revision": "3b033211733b2eea9c3c3e9418757c1e9c4e0cec",
+  "sourceDigest": "b74186b7b532b703262a4e6539fbbcc543da9218679031d96b831bc1102a9263",
+  "artifact": "docs/preuves/p9r2-cli-code-explorer-2026-09-30.log",
+  "summary": "Deux index reconstruits sur deux projets neufs ; quatre réponses à froid conformes par interface, contrôles négatifs rejetés."
+}

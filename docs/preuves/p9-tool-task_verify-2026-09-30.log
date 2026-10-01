@@ -1,0 +1,32 @@
+Date de consolidation: 2026-09-30T06:18:56Z
+Révision du code exécuté: b72202254006beb44b7f70d3daa44da2aeb3f99d
+Exécution réelle, sans mocks de runtime ; HOME et projet isolés.
+Commande/scénario: registre de production → task_verify({"checks": ["tests"], "workDir": "<QA_PROJECT>"})
+Attendu: Le test de somme passe réellement
+Observé: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Portée: Outil réel exécuté sur une fixture isolée ; oracle contrôlé.
+Verdict: prouvée
+
+=== Capture task_verify.json ===
+{
+  "name": "task_verify",
+  "input": {
+    "checks": [
+      "tests"
+    ],
+    "workDir": "<QA_PROJECT>"
+  },
+  "expected": "Le test de somme passe réellement",
+  "result": {
+    "success": true,
+    "output": "✅ **tests**: PASS\n> p9-fixture@1.0.0 test\n> node --test check.test.js\n\n5\n✔ sum (0.339948ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 39.296809\n"
+  },
+  "checks": [
+    {
+      "check": "output pattern",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "ms": 155
+}
