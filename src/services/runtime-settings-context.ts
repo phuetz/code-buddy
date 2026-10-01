@@ -62,7 +62,14 @@ export function getRuntimeSettingsSnapshot(evidence: RuntimeSettingsEvidence = {
   };
 }
 
-export function formatRuntimeSettingsContext(evidence: RuntimeSettingsEvidence): string {
+export function formatRuntimeSettingsContext(evidence: RuntimeSettingsEvidence, compact = false): string {
+  if (compact) {
+    const snapshot = getRuntimeSettingsSnapshot(evidence);
+    return '<runtime_settings ephemeral="true">\n' + JSON.stringify({
+      permissionMode: snapshot.permissionMode,
+      maxToolRounds: snapshot.maxToolRounds, ...(snapshot.programmaticToolCalling.policy !== 'offer' ? { programmaticToolCalling: snapshot.programmaticToolCalling } : {}),
+    }) + '\n</runtime_settings>';
+  }
   return '<runtime_settings ephemeral="true">\n' +
     JSON.stringify(getRuntimeSettingsSnapshot(evidence)) + '\n</runtime_settings>';
 }

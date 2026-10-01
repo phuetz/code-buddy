@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import { compactTurnObservations, compactObservation } from '../../context/compact-turn-observations.js';
+import { completedCheckRepairAnswer, projectCheckToRun } from '../../cli/headless-check-repair.js';
+import { groundedEntryAnswer, exactProjectAnswer, isEntryExplanation } from '../../cli/headless-source-answer.js';
 import { unsupportedActionClaims } from '../../cli/headless-task-outcome.js';
 import { bootstrapRepositoryReads } from './repository-read-bootstrap.js';
 import { isToolNameAllowed } from '../../utils/tool-filter.js';
@@ -1689,10 +1693,10 @@ export class AgentExecutor {
             'Research your actual implementation using self_describe: operation=list/read/search, relative src/ paths (source checkout) or dist/ paths (installed package). Search literal symbols, read relevant code, and cite paths and line numbers. Only this confined read-only tool is exposed for this turn. Do not mistake the user project for your implementation. Do not claim a code graph is available without evidence.' });
         }
         if (surface === 'cli') {
-          const { formatRuntimeSettingsContext } = await import('../../services/runtime-settings-context.js');
+          const { formatRuntimeSettingsContext, runtimeInspectionTools } = await import('../../services/runtime-settings-context.js');
           preparedMessages.push({ role: 'system', content: formatRuntimeSettingsContext({
             surface, model: activeModelName, provider: providerName, maxToolRounds,
-          }) });
+          }, isHeadlessLocalPromptCompact() && runtimeInspectionTools(turnQueryText).length === 0) });
         } else {
           // P5: other surfaces have no runtime_settings block; only a non-default
           // code_exec policy needs its short guidance.
@@ -1716,6 +1720,12 @@ export class AgentExecutor {
             role: 'system',
             content: `<companion_current_turn_context ephemeral="true">\n${currentTurnContext}\n</companion_current_turn_context>`,
           });
+        }
+
+        if (surface === 'cli' && isHeadlessLocalPromptCompact()) {
+          const cwd = this.deps.toolHandler.getWorkingDirectory?.() ?? process.cwd();
+          const session = this.deps.toolHandler.getRecoverySessionId?.();
+          preparedMessages = compactTurnObservations(preparedMessages, id => getRestorableCompressor().restore(id, cwd, session).found, cwd);
         }
 
         // Include schemas in the pressure estimate; Ollama's preflight uses
@@ -1754,6 +1764,24 @@ export class AgentExecutor {
           }
         }
 
+        if (surface === 'cli' && isHeadlessLocalPromptCompact()) {
+          const system = typeof messages[0]?.content === 'string' ? messages[0].content : '';
+          const evidence = history.slice(evidenceStart);
+          const completed = completedCheckRepairAnswer(turnQueryText, evidence, process.cwd());
+          const exact = toolRounds === 0 ? exactProjectAnswer(turnQueryText, system) : undefined;
+          const grounded = completed ?? exact ?? (toolRounds === 0 ? await groundedEntryAnswer(turnQueryText, evidence) : undefined);
+          if (grounded !== undefined) {
+            const accepted = sanitizeAssistantOutput(grounded);
+            history.push({ type: 'assistant', content: accepted, timestamp: new Date() });
+            messages.push({ role: 'assistant', content: accepted });
+            this.commitAssistantSideEffects(message, messages, accepted, toolRounds);
+            yield { type: 'content', content: accepted };
+            yield { type: 'done' };
+            return;
+          }
+        }
+        const hostProjectCheck = surface === 'cli' && isHeadlessLocalPromptCompact() && isToolNameAllowed('bash')
+          ? projectCheckToRun(turnQueryText, history.slice(evidenceStart)) : undefined;
         this.deps.streamingHandler.reset();
         let steeringRequestedDuringText = false;
         let streamObservedToolCalls = false;
@@ -1764,7 +1792,7 @@ export class AgentExecutor {
         // hangs FOREVER (turns stuck for hours in Cowork and headless waves).
         // Fail fast with a clear error instead; the caller/user retries.
         const progress = startHeadlessPromptProgress();
-        const streamFactory = () => withStallGuard(this.deps.client.chatStream(
+        const streamFactory = () => hostProjectCheck ? (async function* () { /* Host check uses the ordinary execution path below. */ })() : withStallGuard(this.deps.client.chatStream(
           preparedMessages,
           tools,
           {
@@ -1883,7 +1911,10 @@ export class AgentExecutor {
           }
         }
 
-        const accumulatedMessage = this.deps.streamingHandler.getAccumulatedMessage();
+        const accumulatedMessage = hostProjectCheck ? { content: '', tool_calls: [{
+          id: `project_check_${randomUUID()}`, type: 'function' as const,
+          function: { name: 'bash', arguments: JSON.stringify({ command: hostProjectCheck }) },
+        }], finishReason: undefined } : this.deps.streamingHandler.getAccumulatedMessage();
         // Sanitize streamed assistant content: strip model control tokens and invisible chars
         let toolCalls = accumulatedMessage.tool_calls;
         if (Array.isArray(toolCalls) && toolCalls.length > 0) {
@@ -1943,6 +1974,18 @@ export class AgentExecutor {
           });
         }
 
+        let sourceAnswerUnverified = false;
+        if (!hasToolCalls && streamFinishReason !== 'length' && surface === 'cli' && isHeadlessLocalPromptCompact()) {
+          const system = typeof messages[0]?.content === 'string' ? messages[0].content : '';
+          const exact = exactProjectAnswer(turnQueryText, system);
+          if (exact !== undefined) content = exact;
+          else if (isEntryExplanation(turnQueryText)) {
+            const grounded = await groundedEntryAnswer(turnQueryText, history.slice(evidenceStart));
+            sourceAnswerUnverified = grounded === undefined;
+            content = grounded ?? 'Entry point not established by successful source reads. No inferred explanation was accepted.';
+          }
+        }
+
         // D1: empty provider response (no tools, no length truncation).
         // Retry is bounded and opt-in via CODEBUDDY_MAX_EMPTY_RETRIES, including
         // the first turn. Exhaustion throws so the caller and transcript get an
@@ -1984,6 +2027,7 @@ export class AgentExecutor {
           content: persistedAssistantContent ?? '',
           timestamp: new Date(),
           toolCalls: toolCalls,
+          ...(sourceAnswerUnverified ? { terminationReason: 'unverified_source_answer' } : {}),
         };
         history.push(assistantEntry);
         messages.push({
@@ -1997,7 +2041,7 @@ export class AgentExecutor {
 
         // Sum the provider's own counters across rounds: one HTTP completion can
         // cost several provider calls, exactly like the cost accounting above.
-        const roundProviderUsage = this.deps.streamingHandler.getProviderUsage?.();
+        const roundProviderUsage = hostProjectCheck ? undefined : this.deps.streamingHandler.getProviderUsage?.();
         if (roundProviderUsage) {
           providerUsageSeen = true;
           providerPromptTokens += roundProviderUsage.promptTokens ?? 0;
@@ -2390,6 +2434,12 @@ export class AgentExecutor {
             });
 
             let modelStreamContent = optimization.content;
+            if (surface === 'cli' && isHeadlessLocalPromptCompact() && toolCall.function.name !== 'restore_context'
+              && toolCall.id && recoveryStore.restore(toolCall.id, toolWorkspace, recoverySessionId).found) {
+              const bounded = compactObservation(modelStreamContent, toolCall.id);
+              if (bounded !== modelStreamContent) observationShortened = true;
+              modelStreamContent = bounded;
+            }
             if (optimization.optimized) observationShortened = true;
             // lm-resizer owns the semantic budget when available. Its absence or
             // an intentionally raw failure still receives a model-aware hard cap;

@@ -19,6 +19,10 @@ describe('headless loop editing without permission recipes', () => {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(Buffer.from(chunk));
       res.setHeader('content-type', 'application/json');
+      if (req.url === '/api/ps') {
+        res.end(JSON.stringify({ models: [{ name: 'fixture-model', context_length: 32768 }] }));
+        return;
+      }
       if (req.url === '/api/tags') {
         res.end(JSON.stringify({ models: [{ name: 'fixture-model' }] }));
         return;

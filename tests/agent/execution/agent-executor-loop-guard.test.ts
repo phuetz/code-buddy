@@ -365,3 +365,57 @@ describe('end-of-turn recovery evidence', () => {
     expect(evaluateHeadlessTaskOutcome('Run echo', entries).reasons).toContain('execution_stopped');
   });
 });
+
+
+describe('compact acceptance publishes grounded answers', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it('enforces a relevant exact project rule on the real final-message path', async () => {
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true'); vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
+    const deps = createDeps();
+    scriptProvider(deps, () => []);
+    const history: import('../../../src/agent/types.js').ChatEntry[] = [];
+    const messages: CodeBuddyMessage[] = [{ role: 'system', content: '<project_rules>\nPour toute question sur le nom de code, réponds exactement PROJECT_CHECK_55, sans autre texte.\n</project_rules>' }];
+    await new AgentExecutor(deps, createConfig(5)).processUserMessage('Quel est le nom de code ?', history, messages, Date.now(), undefined, false, 'cli');
+    expect(history.filter(entry => entry.type === 'assistant').at(-1)?.content).toBe('PROJECT_CHECK_55');
+  });
+  it('ends an ordinary repair after a real project check, without another provider call', async () => {
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true'); vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
+    const deps = createDeps();
+    (deps.toolHandler.executeTool as ReturnType<typeof vi.fn>).mockImplementation(async (call: Call) => call.function.name === 'bash'
+      ? { success: true, output: '# tests 3\n# fail 0', metadata: { shellExecution: { command: 'npm test', cwd: process.cwd(), testScript: 'node --test' } } }
+      : { success: true, output: 'Updated impl.js' });
+    deps.toolHandler.executeToolStreaming = vi.fn().mockImplementation(async function* (call: Call) { return await deps.toolHandler.executeTool(call); });
+    const provider = scriptProvider(deps, round => round === 1
+      ? [toolCall('str_replace_editor', { path: 'impl.js', old_str: 'a+b', new_str: 'a*b' }, round)]
+      : round === 2 ? [toolCall('bash', { command: 'npm test' }, round)] : []);
+    const history: import('../../../src/agent/types.js').ChatEntry[] = [];
+    await new AgentExecutor(deps, createConfig(5)).processUserMessage('run tests and fix failures', history, [], Date.now(), undefined, false, 'cli');
+    expect(provider.rounds()).toBe(2);
+    expect(history.filter(entry => entry.type === 'assistant').at(-1)?.content).toContain('impl.js');
+    expect(evaluateHeadlessTaskOutcome('run tests and fix failures', history).exitCode).toBe(0);
+  });
+
+  it('runs a host-authored observed project check through the regular execution pipeline', async () => {
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true'); vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
+    const deps = createDeps();
+    (deps.toolHandler.executeTool as ReturnType<typeof vi.fn>).mockImplementation(async (call: Call) => call.function.name === 'view_file'
+      ? { success: true, output: '1: {"scripts":{"test":"node --test"}}' }
+      : { success: true, output: 'Updated impl.js' });
+    let checks = 0;
+    deps.toolHandler.executeToolStreaming = vi.fn().mockImplementation(async function* () {
+      if (++checks === 1) return { success: false, output: '# tests 3\n# fail 1', metadata: { shellExecution: { command: 'npm test', cwd: process.cwd(), testScript: 'node --test' } } };
+      return { success: true, output: '# tests 3\n# fail 0', metadata: { shellExecution: { command: 'npm test', cwd: process.cwd(), testScript: 'node --test' } } };
+    });
+    const provider = scriptProvider(deps, round => round === 1
+      ? [toolCall('view_file', { path: 'package.json' }, round)]
+      : round === 2 ? [toolCall('str_replace_editor', { path: 'impl.js', old_str: 'a+b', new_str: 'a*b' }, round)] : []);
+    const history: import('../../../src/agent/types.js').ChatEntry[] = [];
+    await new AgentExecutor(deps, createConfig(5)).processUserMessage('run tests and fix failures', history, [], Date.now(), undefined, false, 'cli');
+    expect(provider.rounds()).toBe(2);
+    expect(deps.toolHandler.executeToolStreaming).toHaveBeenCalledTimes(2);
+    const check = history.find(entry => entry.toolCall?.function.name === 'bash');
+    expect(check?.toolCall?.id).toMatch(/^project_check_/);
+    expect(evaluateHeadlessTaskOutcome('run tests and fix failures', history).exitCode).toBe(0);
+  });
+
+});

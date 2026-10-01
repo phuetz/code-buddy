@@ -1,3 +1,5 @@
+import { matchesCompactSkill } from '../prompts/compact-skill-trigger.js';
+import { isHeadlessPromptCompact } from '../config/headless-local-prompt.js';
 import { getProviderDefaultModel } from '../config/model-defaults.js';
 import { CodeBuddyClient, CodeBuddyToolCall } from "../codebuddy/client.js";
 import type { CodeBuddyMessage, CodeBuddyTool } from "../codebuddy/client.js";
@@ -1291,7 +1293,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
       if (match) {
         const unifiedSkill = skillMdToUnified(match.skill);
-        let isDisabled = false;
+        let isDisabled = isHeadlessPromptCompact() && !matchesCompactSkill(message, unifiedSkill);
         try {
           const disabledSkills = new Set(
             getSkillsHub()

@@ -1,4 +1,6 @@
-import { assertOllamaRequestBound, checkOllamaRequest } from './ollama-request-preflight.js';
+import { compactOllamaRequest } from './compact-request-budget.js';
+import { isHeadlessPromptCompact } from '../../config/headless-local-prompt.js';
+import { assertOllamaRequestBound, checkOllamaRequest, probeOllamaContext } from './ollama-request-preflight.js';
 /**
  * OpenAI-compatible provider — Vague 2 Phase C2.
  *
@@ -761,7 +763,8 @@ export class OpenAICompatProvider implements Provider {
     signal?: AbortSignal,
   ): Promise<unknown> {
     const numCtx = resolveOllamaNumCtx(payload.model);
-    const body = toOllamaNativeRequest(payload, numCtx);
+    const native = toOllamaNativeRequest(payload, numCtx);
+    const body = isHeadlessPromptCompact() ? compactOllamaRequest(native) : native;
     assertOllamaRequestBound(body);
     logger.debug('Ollama native chat', {
       source: 'OpenAICompatProvider',
@@ -788,7 +791,7 @@ export class OpenAICompatProvider implements Provider {
     const origin = ollamaNativeChatUrl(this.baseURL).replace(/\/api\/chat$/, '');
     if (payload.stream === true) return this.checkedOllamaStream(response.body, payload.model, origin, body, signal);
     const data = await response.json() as Parameters<typeof fromOllamaNativeResponse>[0];
-    logger.debug('Ollama real assembled request admission', await checkOllamaRequest(origin, body, data.prompt_eval_count, fetch, signal));
+    logger.debug('Ollama real assembled request admission', await checkOllamaRequest(origin, body, data.prompt_eval_count, fetch, signal, process.env.CODEBUDDY_HEADLESS !== 'true'));
     return fromOllamaNativeResponse(data, payload.model);
   }
 
@@ -798,15 +801,16 @@ export class OpenAICompatProvider implements Provider {
   ): AsyncGenerator<ChatCompletionChunk> {
     const headless = process.env.CODEBUDDY_HEADLESS === 'true';
     const chunks: ChatCompletionChunk[] = [];
+    if (!headless) await probeOllamaContext(origin, request, fetch, signal, true, true);
     let promptTokens: number | undefined;
     for await (const chunk of streamOllamaNative(responseBody, model)) {
       if (chunk.usage) promptTokens = chunk.usage.prompt_tokens;
       if (headless) chunks.push(chunk);
       else yield chunk;
     }
-    // Tools execute after the stream completes. Headless also withholds prose
-    // until the real context check passes; no output is accepted prematurely.
-    logger.debug('Ollama real assembled request admission', await checkOllamaRequest(origin, request, promptTokens, fetch, signal));
+    // Headless withholds prose/tools until real usage and the window pass.
+    // Interactive streaming already checked the bound before its first chunk.
+    logger.debug('Ollama real assembled request admission', await checkOllamaRequest(origin, request, promptTokens, fetch, signal, !headless));
     if (headless) yield* chunks;
   }
 

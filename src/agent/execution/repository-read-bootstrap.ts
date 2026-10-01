@@ -2,11 +2,23 @@ import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { CodeBuddyToolCall } from '../../codebuddy/client.js';
+import { requestsRepositoryAction } from '../../cli/headless-task-outcome.js';
 import type { ToolResult } from '../../types/index.js';
+
+/** Literal user-named existing files, never guessed edit context. */
+function requestedFiles(query: string): string[] {
+  if (!requestsRepositoryAction(query)) return [];
+  const files = [...query.matchAll(/(?:^|[\s\x60'":,(])((?:[\w.-]+\/)*[\w.-]+\.(?:[cm]?[jt]sx?|py|rs|go|json|md|txt|ya?ml|toml))(?=$|[\s\x60'"),:;!?])/g)].map(match => match[1]!);
+  return [...new Set(files)].filter(file => file.length < 256).slice(0, 4);
+}
+
+function needsProjectCheck(query: string): boolean {
+  return /\b(?:run|lance|relance|execute|lancer)\b.*\b(?:tests?|lint|checks?)\b|\bnpm\s+test\b/i.test(query);
+}
 
 /** Narrow first-contact requests: don't pre-read files for general conversation. */
 export function needsRepositoryRead(query: string): boolean {
-  return /\breadme\b|\bentry\s*points?\b|\bpoint\s+d[’']?\s*entr[ée]e\b|\b(?:explain|analyse|analyze)\s+(?:this\s+code|(?:the\s+)?codebase(?:\s+structure)?)\b/i.test(query);
+  return requestedFiles(query).length > 0 || needsProjectCheck(query) || /\breadme\b|\bentry\s*points?\b|\bpoint\s+d[’']?\s*entr[ée]e\b|\b(?:explain|analyse|analyze)\s+(?:this\s+code|(?:the\s+)?codebase(?:\s+structure)?)\b/i.test(query);
 }
 
 /**
@@ -21,7 +33,9 @@ export async function* bootstrapRepositoryReads(
 ): AsyncGenerator<{ toolCall: CodeBuddyToolCall; toolResult: ToolResult }> {
   if (!needsRepositoryRead(query)) return;
   const readmeOnly = /\breadme\b/i.test(query) && !/entry|entr[ée]e/i.test(query);
-  const paths = readmeOnly ? ['README.md'] : ['package.json', 'README.md'];
+  const checkOnly = needsProjectCheck(query) && !/entry|entr[ée]e|readme/i.test(query);
+  const named = requestedFiles(query);
+  const paths = checkOnly ? ['package.json', ...named] : named.length ? named : readmeOnly ? ['README.md'] : ['package.json', 'README.md'];
   const used = new Set<string>();
   const root = await realpath(cwd);
   for (const file of paths) {
@@ -39,7 +53,7 @@ export async function* bootstrapRepositoryReads(
     };
     const toolResult = await execute(toolCall);
     yield { toolCall, toolResult };
-    if (file === 'package.json' && toolResult.success) {
+    if (file === 'package.json' && toolResult.success && !checkOnly) {
       try {
         const text = (toolResult.output ?? '').split('\n').filter(line => /^\d+: /.test(line))
           .map(line => line.replace(/^\d+: /, '')).join('\n');

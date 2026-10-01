@@ -24,6 +24,10 @@ it.each([
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
     res.setHeader('content-type', 'application/json');
+    if (req.url === '/api/ps') {
+      res.end(JSON.stringify({ models: [{ name: 'fixture-model', context_length: 32768 }] }));
+      return;
+    }
     if (req.url === '/api/tags') {
       res.end('{"models":[{"name":"fixture-model"}]}');
       return;
@@ -57,6 +61,13 @@ it.each([
       child.once('close', code => { clearTimeout(timer); accept({ code, stdout, stderr }); });
     });
     expect(result.code, result.stderr).toBe(0);
+    if (args[1]?.includes('point d’entrée')) {
+      const output = JSON.parse(result.stdout);
+      expect(output.result).toContain('package.json déclare `launch.js`');
+      expect(output.result).toContain('Appel observé (launch.js:1) : `console.log("ORACLE_TANGERINE")`');
+      expect(output.messages.filter((m: { role: string }) => m.role === 'tool').map((m: { content: string }) => m.content).join('\n')).toContain('ORACLE_TANGERINE');
+      expect(requests.some(r => r.messages.some(m => m.role === 'user' && m.content === args[1]))).toBe(false);
+    } else {
     expect(result.stdout).toContain('launch.js prints ORACLE_TANGERINE');
     const first = requests.find(r => r.messages?.some(m => m.role === 'user'));
     expect(first?.messages.filter(m => m.role === (args.includes('dev') ? 'user' : 'tool')).map(m => m.content).join('\n'))
@@ -66,6 +77,7 @@ it.each([
       .every(m => m.content === '')).toBe(true);
     if (!args.includes('dev')) expect(result.stdout).toContain('Repository context read requested by Code Buddy');
     if (args.includes('dev')) expect(first?.model).toBe('fixture-model');
+    }
   } finally {
     await new Promise<void>(accept => server.close(() => accept()));
     await rm(root, { recursive: true, force: true });

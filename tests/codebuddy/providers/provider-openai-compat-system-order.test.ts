@@ -213,6 +213,22 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
     }
   });
 
+  it.each([false, true])('INTERACTIVE: optional /api/ps context_length can be absent (stream=%s)', async streaming => {
+    process.env.CODEBUDDY_PROVIDER = 'ollama';
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'false');
+    const provider = makeProvider('http://127.0.0.1:11434/v1', 'fixture-model');
+    stubOllamaWire(null as unknown as number, 100);
+    try {
+      if (streaming) {
+        const chunks: unknown[] = [];
+        for await (const chunk of provider.chatStream(structuredClone(scattered))) chunks.push(chunk);
+        expect(chunks.length).toBeGreaterThan(0);
+      } else {
+        expect((await provider.chat(structuredClone(scattered))).choices[0]?.message.content).toBe('ok');
+      }
+    } finally { vi.unstubAllEnvs(); vi.unstubAllGlobals(); }
+  });
+
   it('LOCAL (Ollama multimodal): stays on /v1 SDK path when payload has parts', async () => {
     process.env.CODEBUDDY_PROVIDER = 'ollama';
     const { urls } = stubOllamaWire();

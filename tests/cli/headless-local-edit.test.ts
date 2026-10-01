@@ -21,15 +21,19 @@ describe('headless local editing without permission recipes', () => {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(Buffer.from(chunk));
       res.setHeader('content-type', 'application/json');
+      if (req.url === '/api/ps') {
+        res.end(JSON.stringify({ models: [{ name: 'fixture-model', context_length: 32768 }] }));
+        return;
+      }
       if (req.url === '/api/tags') {
         res.end(JSON.stringify({ models: [{ name: 'fixture-model' }] }));
         return;
       }
       const body = JSON.parse(Buffer.concat(chunks).toString() || '{}') as {
-        messages?: Array<{ role: string; content?: string }>;
+        messages?: Array<{ role: string; content?: string; name?: string; tool_name?: string }>;
         stream?: boolean;
       };
-      const results = body.messages?.filter(message => message.role === 'tool') ?? [];
+      const results = body.messages?.filter(message => message.role === 'tool' && (message.name ?? message.tool_name) === 'str_replace_editor') ?? [];
       toolResults.push(...results.map(message => message.content ?? ''));
       const completion = {
         id: 'fixture-completion', object: 'chat.completion', model: 'fixture-model',
@@ -86,7 +90,8 @@ describe('headless local editing without permission recipes', () => {
         child.once('close', code => { clearTimeout(timer); accept({ code, stdout, stderr }); });
       });
       expect(result.code, result.stderr).toBe(mode ? 1 : 0);
-      expect(JSON.parse(result.stdout)).toMatchObject({ success: !mode, status: emptyAfterDenial ? 'failed' : mode ? 'unverified' : 'success', exitCode: mode ? 1 : 0 });
+      expect(JSON.parse(result.stdout)).toMatchObject({ success: !mode, status: mode ? 'failed' : 'success', exitCode: mode ? 1 : 0 });
+      if (mode) expect(JSON.parse(result.stdout).reasons).toContain('requested_edit_not_executed');
       if (emptyAfterDenial) expect(result.stderr).toMatch(/empty|vide/i);
       expect(await readFile(file, 'utf8')).toBe(`export const value = ${mode ? 0 : 1};\n`);
       if (!mode) expect(toolResults.join('\n')).not.toMatch(/User cancelled|Permission denied/);

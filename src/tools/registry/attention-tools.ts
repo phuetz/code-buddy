@@ -10,6 +10,7 @@
  * by identifier when it needs to revisit earlier information.
  */
 
+import { isHeadlessPromptCompact } from '../../config/headless-local-prompt.js';
 import type { ToolResult } from '../../types/index.js';
 import type {
   ITool,
@@ -198,6 +199,12 @@ export class RestoreContextTool implements ITool {
     const identifier = input.identifier as string;
     if (!identifier) return { success: false, error: 'identifier is required' };
 
+    const start = input.start_char === undefined ? 0 : input.start_char;
+    const requested = input.max_chars === undefined ? (isHeadlessPromptCompact() ? 320 : undefined) : input.max_chars;
+    if (!Number.isSafeInteger(start) || Number(start) < 0 || requested !== undefined && (!Number.isSafeInteger(requested) || Number(requested) < 1 || Number(requested) > 65536)) {
+      return { success: false, error: 'start_char must be a nonnegative integer and max_chars an integer from 1 to 65536.' };
+    }
+    const limit = isHeadlessPromptCompact() ? Math.min(Number(requested), 320) : requested;
     const compressor = getRestorableCompressor();
     const recoverySessionId =
       typeof context?.extra?.recoverySessionId === 'string' &&
@@ -211,6 +218,13 @@ export class RestoreContextTool implements ITool {
     );
 
     if (result.found) {
+      // Exact pages, not summaries: large restores must fit the same assembled
+      // compact budget. The original cache and workspace/session scope remain intact.
+      if (limit !== undefined || Number(start) > 0) {
+        if (Number(start) > result.content.length) return { success: false, error: 'start_char exceeds stored content length.' };
+        const end = Math.min(result.content.length, Number(start) + Number(limit ?? 65536));
+        return { success: true, output: `Exact chars ${start}:${end}/${result.content.length}${end < result.content.length ? `; more: start_char=${end}` : '; complete'} for ${identifier}:\n${result.content.slice(Number(start), end)}` };
+      }
       return {
         success: true,
         output: `Restored content for "${identifier}":\n\n${result.content}`,
@@ -234,6 +248,8 @@ export class RestoreContextTool implements ITool {
             type: 'string',
             description: 'Exact tool call ID (preferred), or an identifier whose content was already captured in the active workspace and session',
           },
+          start_char: { type: 'number', description: 'Nonnegative integer start offset in stored UTF-16 characters; default 0.' },
+          max_chars: { type: 'number', description: 'Integer exact page size from 1 to 65536; compact mode clamps to 320.' },
         },
         required: ['identifier'],
       },

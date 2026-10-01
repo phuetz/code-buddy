@@ -74,6 +74,8 @@ export const RESTORE_CONTEXT_TOOL: CodeBuddyTool = {
           type: 'string',
           description: 'Exact tool call ID (preferred), or an identifier whose content was already captured in the active workspace and session',
         },
+        start_char: { type: 'number', description: 'Nonnegative integer start offset in stored UTF-16 characters; default 0.' },
+        max_chars: { type: 'number', description: 'Integer exact page size from 1 to 65536; compact mode clamps to 320.' },
       },
       required: ['identifier'],
     },
