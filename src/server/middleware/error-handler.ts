@@ -131,9 +131,33 @@ export const errorHandler: ErrorRequestHandler = (
   res: Response,
   _next: NextFunction
 ) => {
-  // Log error
   const requestId = (req.headers['x-request-id'] as string) || generateRequestId();
-  logger.error(`[${requestId}] API Error`, err instanceof Error ? err : new Error(String(err)), { requestId });
+
+  // Detect body-parser errors
+  const parserError = err as Error & {
+    type?: unknown;
+    status?: unknown;
+    statusCode?: unknown;
+    expose?: unknown;
+  };
+  const parserStatus = typeof parserError.status === 'number'
+    ? parserError.status : parserError.statusCode;
+  const isClientParserError = err instanceof Error &&
+    typeof parserError.type === 'string' && parserError.expose === true &&
+    typeof parserStatus === 'number' && Number.isInteger(parserStatus) &&
+    parserStatus >= 400 && parserStatus < 500;
+
+  // Log error
+  if (isClientParserError) {
+    const warnContext = {
+      requestId,
+      errorName: err.name,
+      errorMessage: err.message,
+    };
+    logger.warn(`[${requestId}] Client Error (body-parser)`, warnContext);
+  } else {
+    logger.error(`[${requestId}] API Error`, err instanceof Error ? err : new Error(String(err)), { requestId });
+  }
 
   const hideStack = isAuthActive(req);
 
@@ -174,6 +198,27 @@ export const errorHandler: ErrorRequestHandler = (
       requestId,
     };
     return res.status(400).json(response);
+  }
+
+  // Handle body-parser client errors
+  if (isClientParserError) {
+    let code = 'VALIDATION_ERROR';
+    let message = err.message;
+
+    if (parserStatus === 413) {
+      code = 'PAYLOAD_TOO_LARGE';
+      message = 'Request body too large';
+    } else if (parserStatus === 415) {
+      code = 'UNSUPPORTED_MEDIA_TYPE';
+    }
+
+    const response: ApiError = {
+      code,
+      message,
+      status: parserStatus,
+      requestId,
+    };
+    return res.status(parserStatus).json(response);
   }
 
   // Handle unknown errors
