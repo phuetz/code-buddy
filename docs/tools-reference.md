@@ -113,7 +113,14 @@ For the preferred post-execution path, enable Patrice's recoverable
 `CODEBUDDY_LM_RESIZER_BIN` and `CODEBUDDY_LM_RESIZER_STORE` overrides select
 the binary and CCR store. The client first tries the low-latency local sidecar
 at `CODEBUDDY_LM_RESIZER_URL` (default `http://127.0.0.1:8787`) and falls back
-to the stdin-only CLI. For an authenticated sidecar, prefer a private
+to `lm-resizer mcp --store …`, calling the published 0.2.4
+`lm_resizer_tool_output` tool over stdin. The sidecar is used only when
+`/health` advertises `tool-output-v1`; the 0.2.4 HTTP server does not.
+Code Buddy executes commands normally, then sends eligible large observations
+for compression; it does not wrap commands with `lm-resizer exec`.
+The 0.2.4 MCP tool has no dynamic token-budget parameter. Code Buddy enforces
+minimum savings and rejects any result that grows after the recovery note.
+For an authenticated sidecar, prefer a private
 `CODEBUDDY_LM_RESIZER_TOKEN_FILE` over a token stored directly in the
 environment. Because compression happens after the host has executed the
 logical command, it does not replace the executable evaluated by Code Buddy's

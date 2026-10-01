@@ -257,7 +257,7 @@ for the commit you intend to use before treating the full suite as green.
   <a href="docs/assets/infographic-ai-engineering-stack.webp"><img src="docs/assets/infographic-ai-engineering-stack.webp" width="900" alt="The AI engineering stack: Code Explorer understands the repository, lm-resizer protects the context budget, Code Buddy 2 acts with AI agents"/></a>
 </p>
 
-Code Buddy is the agent. Two sibling tools carry the context work around it: [lm-resizer](https://github.com/phuetz/lm-resizer) filters noisy command output before it reaches the model (Rust, Apache-2.0, `npm i @phuetz/lm-resizer`), and Code Explorer pre-indexes a repository into a queryable knowledge graph served over MCP (available as a service on private codebases — [agile-up.com](https://agile-up.com)). Understand, compress, act.
+Code Buddy is the agent. Two sibling tools carry the context work around it: [lm-resizer](https://github.com/phuetz/lm-resizer) can reduce large command observations after Code Buddy executes them, when `CODEBUDDY_LM_RESIZER=true` (0.2.4: native MCP `lm_resizer_tool_output`; commands are not wrapped; Rust, Apache-2.0, `npm i @phuetz/lm-resizer`), and Code Explorer pre-indexes a repository into a queryable knowledge graph served over MCP (available as a service on private codebases — [agile-up.com](https://agile-up.com)). Understand, compress, act.
 
 ## License
 

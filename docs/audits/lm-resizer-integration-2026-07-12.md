@@ -1,6 +1,17 @@
 # Audit et intégration de lm-resizer — 12 juillet 2026
 
-## Résultat
+> Rectification du 01/10/2026 : cet audit décrit un candidat local non publié.
+> Ses mesures et les ajouts Rust ci-dessous ne prouvent pas le comportement de
+> la release 0.2.4. Le banc Colab a trouvé 36/36 appels natifs en échec :
+> `tool-output --request-json` n'y existe pas. Le client corrigé utilise
+> `lm-resizer mcp --store …` et son outil publié `lm_resizer_tool_output`.
+> Il transmet une observation déjà exécutée, sans envelopper les commandes.
+> La 0.2.4 n'annonce pas `tool-output-v1` en HTTP et n'expose pas de budget
+> dynamique dans cet outil MCP. Les seuils de gain et la garde contre la
+> croissance restent appliqués par Code Buddy. Les chiffres historiques ne
+> sont pas des mesures de cette release ni des économies de session.
+
+## Résultat historique (candidat local)
 
 `lm-resizer` est maintenant le moteur privilégié de réduction des observations
 d'outils de Code Buddy. La commande réelle reste autorisée, validée et exécutée
@@ -21,7 +32,7 @@ résultat natif
   -> restore_context(toolCallId) à la demande
 ```
 
-## Écarts corrigés dans lm-resizer
+## Écarts du candidat local (non livrés par cet audit)
 
 - nouvelle opération `tool-output`, qui ne lance jamais la commande fournie ;
 - requête JSON via stdin, HTTP ou MCP, sans commande ni requête utilisateur dans argv ;
@@ -51,7 +62,7 @@ ignorés volontairement, aucun échec.
   réserve de réponse ;
 - client sidecar HTTP persistant avec découverte de capacité, timeout, abort,
   circuit breaker et réponse bornée ;
-- fallback CLI `tool-output --request-json` avec environnement minimal et cwd du workspace ;
+- fallback du candidat local `tool-output --request-json`, incompatible avec la release 0.2.4 ; remplacé le 01/10 par le MCP publié avec environnement minimal et cwd du workspace ;
 - original capturé dans `ToolHandler` avant les sanitizers provider ; stdout et
   erreur partielle sont tous deux conservés ;
 - `restore_context` toujours exposé, y compris dans les profils de modèles légers ;

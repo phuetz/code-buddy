@@ -2,6 +2,8 @@
 
 ### Corrigé
 
+- L'intégration native LM Resizer utilise l'outil MCP `lm_resizer_tool_output` de la release 0.2.4 au lieu du CLI non publié `tool-output --request-json`. Les commandes restent exécutées par Code Buddy ; seules leurs grandes observations sont traitées après exécution. La dernière clé CCR de la 0.2.4 adresse l'original exact ; les seuils de gain restent contrôlés côté Code Buddy. `doctor` vérifie le catalogue MCP réel.
+
 - Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.
 - Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré.
 
