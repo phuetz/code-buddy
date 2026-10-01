@@ -41,6 +41,8 @@ export const DEFAULT_ALLOWED_PREFIXES: readonly string[] = [
   // (top-level *.json and *.log only), so raw campaign dumps never ship.
   'docs/catalog/inventory.json',
   'docs/catalog/README.md',
+  // Configuration read by doctor/try in the installed runtime.
+  'docs/doctor-local-models.json',
   'docs/preuves',
 ];
 

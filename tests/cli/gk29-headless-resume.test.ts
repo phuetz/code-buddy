@@ -106,7 +106,7 @@ describe('GK29 headless resume keeps one timeline session', () => {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('Expected TCP server address');
 
-      const first = await runHeadless(address.port, { homeDir, workspaceDir, prompt: 'first turn' });
+      const first = await runHeadless(address.port, { homeDir, workspaceDir, prompt: 'reply first turn' });
       expect(first.exitCode, first.stderr).toBe(0);
 
       const sessionsDir = path.join(homeDir, '.codebuddy', 'sessions');
@@ -114,7 +114,7 @@ describe('GK29 headless resume keeps one timeline session', () => {
       expect(sessionFiles).toHaveLength(1);
       const sessionId = sessionFiles[0]!.replace(/\.json$/u, '');
 
-      for (const prompt of ['second turn', 'third turn']) {
+      for (const prompt of ['reply second turn', 'reply third turn']) {
         const result = await runHeadless(address.port, { homeDir, workspaceDir, prompt, resume: sessionId });
         expect(result.exitCode, result.stderr).toBe(0);
       }
@@ -125,9 +125,9 @@ describe('GK29 headless resume keeps one timeline session', () => {
         messages: Array<{ type: string; content: string }>;
       };
       expect(session.messages.filter((message) => message.type === 'user').map((message) => message.content)).toEqual([
-        'first turn',
-        'second turn',
-        'third turn',
+        'reply first turn',
+        'reply second turn',
+        'reply third turn',
       ]);
 
       const timelinesDir = path.join(homeDir, '.codebuddy', 'timelines');
