@@ -16,6 +16,7 @@ import { TIMEOUT_CONFIG, LIMIT_CONFIG } from '../../config/constants.js';
 interface RateLimitEntry {
   count: number;
   resetAt: number;
+  expiresAt: number;
   requests: number[];
 }
 
@@ -67,7 +68,7 @@ const rateLimitCleanupTimer = setInterval(() => {
   const now = Date.now();
   const expiredKeys: string[] = [];
   for (const [key, entry] of rateLimitStore) {
-    if (entry.resetAt < now) {
+    if (entry.expiresAt < now) {
       expiredKeys.push(key);
     }
   }
@@ -165,6 +166,7 @@ function applyRateLimit(
     entry = {
       count: 0,
       resetAt: now + options.windowMs,
+      expiresAt: now + options.windowMs,
       requests: [],
     };
     store.set(key, entry);
@@ -174,10 +176,16 @@ function applyRateLimit(
   entry.requests = entry.requests.filter((t) => t > windowStart);
   entry.count = entry.requests.length;
 
-  // Update reset time if window has passed
-  if (entry.resetAt < now) {
+  // Update reset time to when the oldest request exits the window
+  const oldestRequest = entry.requests[0];
+  if (oldestRequest !== undefined) {
+    entry.resetAt = oldestRequest + options.windowMs;
+  } else {
     entry.resetAt = now + options.windowMs;
   }
+
+  // Entire entry expires when the most recent request leaves the window (or now + windowMs)
+  entry.expiresAt = now + options.windowMs;
 
   const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
 
