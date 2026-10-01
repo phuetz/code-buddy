@@ -5,7 +5,7 @@ moteur** que le CLI — pas un fork — donc tous les providers, outils, MCP, sk
 middlewares en héritent. Cette documentation couvre l'architecture, les panneaux,
 les workflows visuels, le build, les réglages et le dépannage.
 
-> Honnêteté : chaque page signale ce qui est **solide** et ce qui est **expérimental**.
+> **Statut dans la vitrine : non prouvée ici.** Les [entrées Cowork du catalogue](../FONCTIONNALITES-PROUVEES.md#domain-cowork) ne disposent pas de trace exécutée. Les termes « solide » et « expérimental » des pages techniques décrivent des appréciations d'architecture historiques ; ils ne sont pas des statuts de preuve du candidat.
 
 > 📘 **Vous cherchez le mode d'emploi ?** Cette doc est orientée **dev/architecture**. Pour un
 > **manuel utilisateur** pas-à-pas (installation, interface, permissions, multi-agent, réglages,

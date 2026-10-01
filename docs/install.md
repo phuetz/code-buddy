@@ -221,9 +221,12 @@ Whichever path you took, the fastest way in is one command after a free
 provider is available:
 
 ```sh
-buddy try            # coding demo — uses Ollama or signed-in ChatGPT and
-                     # proves the configured provider works.
+buddy try            # coding demo — uses Ollama or signed-in ChatGPT
+                     # inspect its generated result and run the project checks.
 ```
+
+A successful process exit alone does not establish a correct coding result.
+The [fresh-installation criterion](../README.md) remains unproven here.
 
 Without a ChatGPT login or reachable Ollama, `buddy try` exits quickly with
 the exact setup commands; it does not require an API key or make up an offline

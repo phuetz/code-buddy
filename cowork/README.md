@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue" alt="Platform" />
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="License" />
+  <a href="../LICENSE"><img src="https://img.shields.io/badge/License-BUSL--1.1-blue" alt="License BUSL-1.1" /></a>
   <img src="https://img.shields.io/badge/Node.js-22+-brightgreen" alt="Node.js" />
   <img src="https://img.shields.io/badge/Electron-React%20%2B%20Vite-9cf" alt="Electron" />
 </p>
@@ -28,7 +28,9 @@
 
 ## 📖 Introduction
 
-**Cowork** is the desktop GUI for **[Code Buddy](https://github.com/phuetz/code-buddy)** — a multi-provider AI coding agent, multi-AI **fleet** hub, and personal companion. It is **not a separate product**: it runs the **same embedded Code Buddy core engine** as the CLI, so it inherits the full agentic loop (15 providers, ~110 tools, RAG tool selection, MCP routing, middlewares, memory, skills, model hot-swap) and adds a cockpit on top — chat + live traces, the Fleet, the Buddy Companion, autonomy, memory/reasoning, and settings.
+**Current showcase status: not proven here.** The [Cowork catalogue](../docs/PROVEN-FEATURES.md#domain-cowork) has no execution trace for its desktop entries. This page describes architecture and intended UI behavior, without a fixed provider or tool count. Demos, screenshots and roadmap checkboxes below are historical or implementation descriptions outside the current evidence catalogue; they have not been revalidated here. They do not establish voice, vision, fleet or fresh-installation results.
+
+**Cowork** is the desktop GUI for **[Code Buddy](https://github.com/phuetz/code-buddy)** — a multi-provider AI coding agent, multi-AI **fleet** hub, and personal companion. It is **not a separate product**: it runs the **same embedded Code Buddy core engine** as the CLI, so it inherits the full agentic loop (provider routing, repository tools, RAG tool selection, MCP routing, middlewares, memory, skills, model hot-swap) and adds a cockpit on top — chat + live traces, the Fleet, the Buddy Companion, autonomy, memory/reasoning, and settings.
 
 Once Code Buddy is installed, launch it with `buddy gui` (alias `buddy desktop`).
 
@@ -42,7 +44,7 @@ Once Code Buddy is installed, launch it with `buddy gui` (alias `buddy desktop`)
 <a id="features"></a>
 ## ✨ Key Features
 
-- **Same engine as the CLI** — the embedded Code Buddy core: 15 providers (Grok, Claude, GPT, Gemini, **local Ollama**, LM Studio, Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral), ~110 tools, MCP, skills, reasoning, memory.
+- **Same engine as the CLI** — the embedded Code Buddy core: provider routing (including **local Ollama**), repository tools, MCP, skills, reasoning, memory.
 - **Multi-AI Fleet** — Fleet Command Center, peer events, Agent Team, and an **Autonomy** panel that shows the autonomous fleet's live task queue (status / priority / claim / DAG deps / worklog).
 - **Buddy Companion** — voice (STT/TTS), opt-in camera vision (MediaPipe face/hand/pose), presence, missions, routines, proactive check-ins.
 - **Memory & Reasoning** — browse cross-session persistent memory and inspect Tree-of-Thought / MCTS reasoning traces.
@@ -59,27 +61,27 @@ The left nav is grouped to mirror Code Buddy's areas: **Work · Agents & Fleet �
 <p align="center">
   <a href="../docs/qa/code-buddy-studio/cowork-demo-hero.mp4"><img src="../docs/qa/code-buddy-studio/cowork-demo-hero.gif" alt="Code Buddy Cowork — 20-second overview" width="760" /></a>
   <br/>
-  <sub>▶ a 20-second overview · <a href="../docs/qa/code-buddy-studio/cowork-demo-hero.mp4">MP4</a> · recorded from this build</sub>
+  <sub>▶ a 20-second overview · <a href="../docs/qa/code-buddy-studio/cowork-demo-hero.mp4">MP4</a> · historical recording, not revalidated for this candidate</sub>
 </p>
 
-### ▶ Real local AI — on your machine, ~$0, reasoning shown
+### ▶ Historical local-model recordings — outside the current evidence catalogue
 
-Cowork runs the embedded Code Buddy engine on **local Ollama** models. These are real, unedited captures on `qwen3.6:35b-a3b` — the **reasoning zone is open** as the agent thinks, and it actually uses tools:
+Cowork runs the embedded Code Buddy engine on **local Ollama** models. The historical captions describe captures on `qwen3.6:35b-a3b` with the reasoning zone open. They are illustrations, not evidence for the current candidate:
 
 <table>
   <tr>
     <td width="50%" align="center">
       <a href="../docs/qa/code-buddy-studio/cowork-demo-chat.mp4"><img src="../docs/qa/code-buddy-studio/cowork-demo-chat.gif" alt="Local reasoning chat" width="440" /></a><br/>
-      <sub><b>Reasoning chat</b> — the model thinks through a haiku step by step (counts syllables, drafts), then answers · local · <code>~$0.0001</code></sub>
+      <sub><b>Reasoning chat</b> — the model thinks through a haiku step by step (counts syllables, drafts), then answers · local</sub>
     </td>
     <td width="50%" align="center">
       <a href="../docs/qa/code-buddy-studio/cowork-demo-task.mp4"><img src="../docs/qa/code-buddy-studio/cowork-demo-task.gif" alt="Agent creates a file" width="440" /></a><br/>
-      <sub><b>Real task</b> — “create <code>robot-haiku.md</code>” → the agent reasons, <b>uses the file tool</b>, and confirms the artifact · local · <code>~$0.0001</code></sub>
+      <sub><b>Real task</b> — “create <code>robot-haiku.md</code>” → the agent reasons, <b>uses the file tool</b>, and confirms the artifact · local</sub>
     </td>
   </tr>
 </table>
 
-Short tours of Cowork **by use case** — recorded from **this** build (click any for the sharper MP4):
+Short tours of Cowork **by use case** — historical recordings, not revalidated for this candidate (click any for the sharper MP4):
 
 <table>
   <tr>
@@ -164,7 +166,7 @@ Short tours of Cowork **by use case** — recorded from **this** build (click an
 Cowork ships **inside the Code Buddy monorepo** — there is no separate download or app store listing. Install Code Buddy, then launch the GUI.
 
 ```bash
-# 1. Get Code Buddy (Cowork needs Node.js >= 22; the root CLI supports >= 18)
+# 1. Get Code Buddy (Cowork needs Node.js >= 22; the root CLI declares >= 20)
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy && npm install && npm run build && npm link   # exposes `buddy`
 

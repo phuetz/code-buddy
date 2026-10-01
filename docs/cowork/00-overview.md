@@ -1,17 +1,19 @@
 # Cowork — Vue d'ensemble
 
+**Statut dans la vitrine : non prouvée ici.** Les [entrées Cowork du catalogue](../FONCTIONNALITES-PROUVEES.md#domain-cowork) ne disposent pas de trace exécutée. Cette page décrit l'architecture ; le partage du moteur ne prouve pas la parité des résultats CLI/GUI. Aucun compte fixe de fournisseurs ou d'outils n'est revendiqué.
+
 Cowork est l'application desktop de Code Buddy. Ce n'est **pas un fork** du CLI : c'est une enveloppe Electron qui **embarque le même moteur Code Buddy** que le terminal. Le cockpit graphique (chat, traces, workflows, Fleet, Companion…) se branche dessus ; tout le raisonnement, l'exécution d'outils et le routage de modèles restent fournis par le cœur partagé.
 
 ## Le point clé : un seul moteur, deux interfaces
 
 Le moteur de l'agent vit dans `code-buddy/src/` (la racine du monorepo). Cowork ne le réimplémente pas : il le charge via un adaptateur dédié, `src/desktop/codebuddy-engine-adapter.ts` (compilé en `dist/desktop/codebuddy-engine-adapter.js`), qui enveloppe directement la classe `CodeBuddyAgent`. Côté Cowork, `cowork/src/main/engine/codebuddy-engine-runner.ts` consomme cet adaptateur et traduit le flux d'événements du moteur en événements d'interface.
 
-Conséquence directe : **Cowork hérite gratuitement de tout ce que le CLI sait faire.**
+L'adaptateur donne à Cowork accès aux composants du cœur listés ci-dessous. Leur intégration n'établit pas une validation utilisateur de chaque fonctionnalité.
 
 | Capacité du cœur | Source | Partagée avec Cowork |
 | --- | --- | --- |
 | Providers LLM (Grok, Claude, GPT, Gemini, Ollama local, LM Studio, Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral) | `src/codebuddy/providers/` | Oui |
-| Outils (~110) + sélection RAG | `src/codebuddy/tools.ts` | Oui |
+| Outils + sélection RAG | `src/codebuddy/tools.ts` | Oui |
 | Serveurs MCP | `MCPManager` (cœur) | Oui (poussés via l'adaptateur) |
 | Skills (SKILL.md) | registre du cœur | Oui (rechargés via l'adaptateur) |
 | Middlewares (limite de tours, coût, raisonnement, auto-repair, quality gate…) | `src/agent/middleware/` | Oui |
@@ -29,7 +31,7 @@ La synchronisation d'état Cowork → moteur passe par des méthodes optionnelle
 | Build & bundling | Vite |
 | Interface | React (renderer `cowork/src/renderer/`) |
 | Stockage local | better-sqlite3 (module natif, recompilé contre les en-têtes Electron) |
-| Node requis | **≥ 22** pour Cowork (le CLI racine reste compatible **≥ 18**) |
+| Node requis | **≥ 22** pour Cowork (le CLI racine déclare **≥ 20**) |
 
 `better-sqlite3` étant natif, il est reconstruit pour Electron via `npm run rebuild` (déclenché au `postinstall`). C'est attendu, pas un bug : si Electron refuse de démarrer après un changement de version de Node, relancer la reconstruction.
 
@@ -38,7 +40,7 @@ La synchronisation d'état Cowork → moteur passe par des méthodes optionnelle
 Cowork **ne se télécharge pas séparément** : il vit dans le monorepo Code Buddy. On installe Code Buddy, puis on construit et lance la GUI.
 
 ```bash
-# 1. Récupérer Code Buddy (Cowork exige Node.js >= 22 ; le CLI racine >= 18)
+# 1. Récupérer Code Buddy (Cowork exige Node.js >= 22 ; le CLI racine >= 20)
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy && npm install && npm run build && npm link   # expose la commande `buddy`
 

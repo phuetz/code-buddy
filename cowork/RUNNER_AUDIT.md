@@ -4,6 +4,8 @@
 > change so the deprecation path of `ClaudeAgentRunner` (pi-coding-agent)
 > is traceable.
 
+**Historical implementation account — outside the current evidence catalogue, not revalidated here.** The matrix describes the cited runner work; its OK/DIFF labels are not proof statuses for this candidate. See the [current Cowork status](../docs/PROVEN-FEATURES.md#domain-cowork).
+
 ## TL;DR
 
 - The **embedded Code Buddy core engine** is the **default runner** since
@@ -62,7 +64,7 @@ better), **N/A** (pi-specific quirk that doesn't apply to engine).
 | `steer` | n/a | not handled (log-only acceptable) | GAP | nice-to-have |
 | `run_event` | n/a | not handled (log-only acceptable) | GAP | nice-to-have |
 | **Tool integration** |  |  |  |  |
-| Built-in tools (read/write/edit/bash/...) | from pi SDK | from core `getToolRegistry()` (~110 tools) | DIFF (more tools) | — |
+| Built-in tools (read/write/edit/bash/...) | from pi SDK | from core `getToolRegistry()` (no fixed count claimed) | DIFF (registry) | — |
 | MCP server config sync at runtime | `invalidateMcpServersCache()` rebuilds tools per query | `EngineAdapter.setMcpServers(configs)` (Phase 2). Diff-based sync from `SessionManager.invalidateMcpServersCache` + `initializeMCP` + `reloadMCP`. | OK (Phase 2) | — |
 | MCP tool routing | `mcp__<server>__<name>` via `buildMcpCustomTools` | `mcp__<server>__<name>` via core's `MCPManager` singleton, kept in sync with Cowork's via the new setter | OK (Phase 2) | — |
 | Bash sudo password injection | `wrapBashToolForSudo` IPCs `requestSudoPassword` | not ported | GAP | low (rare in GUI) |

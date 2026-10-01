@@ -62,7 +62,9 @@ Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` fi
 
 ## Architecture
 
-Terminal multi-provider AI coding agent. **15 providers** via OpenAI-compatible routing (Grok, Claude, GPT, Gemini, Ollama, LM Studio, AWS Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral) + a separate Gemini native path. Core is an agentic loop where the LLM autonomously calls tools.
+These are implementation notes, not evidence statuses. Use the [current catalogue](docs/PROVEN-FEATURES.md) for statuses, scenario limits and traces. No fixed provider or tool count is claimed here.
+
+Terminal multi-provider AI coding agent. Provider integrations via OpenAI-compatible routing (Grok, Claude, GPT, Gemini, Ollama, LM Studio, AWS Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral) + a separate Gemini native path. Core is an agentic loop where the LLM autonomously calls tools.
 
 ```
 User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
@@ -88,7 +90,7 @@ User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
 - `src/agent/execution/agent-executor.ts` — middleware pipeline, reasoning, tool streaming. **Single source of truth via `runTurnLoop` async generator (task #5 fusion done 2026-04-26).** `processUserMessageStream` is a thin `yield*` wrapper; `processUserMessage` is a thin sequential collector that consumes events and returns the new entries pushed to history. Per-turn injections, transcript repair, output sanitization, and the `__SESSIONS_YIELD__` signal all live in `runTurnLoop` — touch them in one place. Streaming-only events (`ask_user`, `tool_stream`, `token_count`, `reasoning`, `steer`) are silently dropped in the sequential collector (décision #3).
 - `src/codebuddy/client.ts` — thin dispatcher that picks **exactly one** `Provider` strategy in the constructor: `GeminiNativeProvider` (baseURL is `generativelanguage.googleapis.com`), `ChatGptResponsesProvider` (ChatGPT OAuth / Codex Responses backend), `GeminiCliProvider` (wraps the local `gemini` binary as a subprocess; path from `GEMINI_CLI_PATH`), else `OpenAICompatProvider`. Strategies live under `src/codebuddy/providers/` (`provider-interface.ts` + one file each). Adding a new provider = one new strategy file + an `isXProvider` branch in the constructor. `defaultMaxTokens` comes from `getModelToolConfig(model).maxOutputTokens`. Anthropic-specific message hooks (`injectAnthropicCacheBreakpoints`, `injectJsonSystemPromptForAnthropic`) live in `provider-openai-compat-hooks.ts` and are called by both `chat()` and `chatStream()` on the OpenAI-compat strategy.
 - `src/services/prompt-builder.ts` — **real** system prompt builder (not the deleted `src/agent/system-prompt-builder.ts`). Applies model-aware token-budget truncation.
-- `src/codebuddy/tools.ts` — ~110 tool definitions + RAG selection
+- `src/codebuddy/tools.ts` — tool assembly + RAG selection (no fixed count)
 - `src/ui/components/ChatInterface.tsx` — React/Ink terminal UI
 
 ### Non-obvious Architecture Decisions
