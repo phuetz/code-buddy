@@ -120,6 +120,36 @@ describe('doctor --fix', () => {
     expect(mockSaveUserSettings).toHaveBeenCalledWith({ provider: 'ollama', model: 'qwen3:4b-instruct', defaultModel: 'qwen3:4b-instruct', baseURL: 'http://127.0.0.1:11434/v1' });
   });
 
+  it.each([1, 2, 3, 4, 5])('adopts a newly installed recommendation instead of retaining a fallback, simulation %i', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen3:4b-instruct', 'qwen3.5:4b'], modelDetails: [{ name: 'qwen3:4b-instruct', sizeBytes: 2497293819 }, { name: 'qwen3.5:4b', sizeBytes: 3400000000 }] }], ready: true });
+    mockReadUserSettingsIfPresent.mockReturnValue({ provider: 'ollama', model: 'qwen3:4b-instruct', defaultModel: 'qwen3:4b-instruct', baseURL: 'http://127.0.0.1:11434/v1' });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready')!;
+    expect(check.fixable).toBe(true);
+    await runFixes([check]);
+    expect(mockSaveUserSettings).toHaveBeenCalledWith(expect.objectContaining({ provider: 'ollama', model: 'qwen3.5:4b', defaultModel: 'qwen3.5:4b' }));
+  });
+
+  it('repairs an already-selected chat-only model when a tool model is installed', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen2.5:3b-instruct', 'qwen3:4b-instruct'], modelDetails: [{ name: 'qwen3:4b-instruct', sizeBytes: 2497293819 }] }], ready: true });
+    mockReadUserSettingsIfPresent.mockReturnValue({ provider: 'ollama', model: 'qwen2.5:3b-instruct', defaultModel: 'qwen2.5:3b-instruct' });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready')!;
+    expect(check.fixable).toBe(true);
+    await runFixes([check]);
+    expect(mockSaveUserSettings).toHaveBeenCalledWith(expect.objectContaining({ model: 'qwen3:4b-instruct' }));
+  });
+
+  it('keeps the reduced-quality warning visible on an already-configured fallback without failing readiness', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen3:4b-instruct'], modelDetails: [{ name: 'qwen3:4b-instruct', sizeBytes: 2497293819 }] }], ready: true });
+    mockReadUserSettingsIfPresent.mockReturnValue({ provider: 'ollama', model: 'qwen3:4b-instruct', defaultModel: 'qwen3:4b-instruct' });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready')!;
+    expect(check.status).toBe('ok');
+    expect(check.message).toContain('modèle de repli, qualité réduite');
+    expect(check.message).toContain('installez qwen3.5:4b');
+  });
+
   it('repairs an already-selected preferred local model whose context cap is missing', async () => {
     mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen3.5:4b'] }], ready: true });
     mockReadUserSettingsIfPresent.mockReturnValue({ provider: 'ollama', model: 'qwen3.5:4b', defaultModel: 'qwen3.5:4b' });

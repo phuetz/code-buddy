@@ -815,6 +815,30 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
   if (p === 'ollama' && ollama?.available && ollama.baseURL && isOllamaSelectionCurrent(ollama.models ?? [], userSettings)) {
     const policy = loadDoctorLocalModelPolicy();
     const model = advertisedModel(ollama.models ?? [], userSettings?.model)!;
+    const supportsTools = selectOllamaModel([{ name: model }], freemem(), {
+      ...policy, allowUnbenchmarkedFallback: true,
+    }).model === model;
+    const replacement = liveOllamaSelection;
+    if (replacement?.model && replacement.model !== model
+      && (policy.preferredModels.includes(replacement.model) || !supportsTools)) {
+      return {
+        name: 'AI provider ready', status: 'warn', fixable: true,
+        message: `Selected model ${model} should be replaced by installed agent model ${replacement.model} — --fix (${replacement.reason})`,
+        fix: () => fixSelectRunningOllama(ollama.baseURL!, replacement.model!, replacement.reason, replacement.maxContext),
+      };
+    }
+    if (!supportsTools) {
+      return {
+        name: 'AI provider ready', status: 'warn',
+        message: `Selected model ${model} cannot call coding tools and no suitable installed replacement is available — ${localModelInstallGuidance(policy)}`,
+      };
+    }
+    if (!policy.preferredModels.includes(model)) {
+      return {
+        name: 'AI provider ready', status: 'ok',
+        message: `Ollama local ${model} — AVERTISSEMENT : modèle de repli, qualité réduite ; ${localModelInstallGuidance(policy)}`,
+      };
+    }
     if (policy.preferredModels.includes(model)) {
       const { readDoctorLocalContextCap } = await import('./local-context-cap.js');
       const cap = readDoctorLocalContextCap(model);
