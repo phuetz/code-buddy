@@ -237,6 +237,7 @@ export class WebhookTriggerManager extends EventEmitter {
     source: string,
     headers: Record<string, string>,
     body: unknown,
+    rawBody?: Buffer | string,
   ): Promise<TriggerResult> {
     const webhookSource = normalizeSource(source);
 
@@ -267,7 +268,7 @@ export class WebhookTriggerManager extends EventEmitter {
 
     // Verify signature if trigger has a secret
     if (trigger.secret) {
-      const valid = verifyWebhookSignature(webhookSource, headers, body, trigger.secret);
+      const valid = verifyWebhookSignature(webhookSource, headers, body, trigger.secret, rawBody);
       if (!valid) {
         logger.warn(`Webhook signature verification failed for trigger ${trigger.id}`);
         return { fired: false, error: 'Signature verification failed', triggerId: trigger.id };
@@ -343,8 +344,9 @@ export function verifyWebhookSignature(
   headers: Record<string, string>,
   body: unknown,
   secret: string,
+  rawBody?: Buffer | string,
 ): boolean {
-  const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+  const bodyStr = rawBody !== undefined ? rawBody : (typeof body === 'string' ? body : JSON.stringify(body));
 
   switch (source) {
     case 'github': {
@@ -374,7 +376,7 @@ export function verifyWebhookSignature(
       const now = Math.floor(Date.now() / 1000);
       if (Math.abs(now - parseInt(timestamp, 10)) > 300) return false;
 
-      const sigBasestring = `v0:${timestamp}:${bodyStr}`;
+      const sigBasestring = Buffer.concat([Buffer.from(`v0:${timestamp}:`), Buffer.isBuffer(bodyStr) ? bodyStr : Buffer.from(bodyStr)]);
       const hmac = crypto.createHmac('sha256', secret);
       hmac.update(sigBasestring);
       const expected = 'v0=' + hmac.digest('hex');
