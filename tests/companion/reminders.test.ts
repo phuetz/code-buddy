@@ -248,5 +248,6 @@ describe('reminders — parseVoiceReminder', () => {
   it('returns null for non-creation speech or no time', () => {
     expect(parseVoiceReminder('il fait beau')).toBeNull();
     expect(parseVoiceReminder('rappelle-moi mes médicaments')).toBeNull(); // no time
+    expect(parseVoiceReminder('rappelle-moi mes médicaments à 9')).toBeNull(); // no time marker
   });
 });
