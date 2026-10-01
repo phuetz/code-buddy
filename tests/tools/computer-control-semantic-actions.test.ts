@@ -1,6 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
-import { afterEach } from 'vitest';
 import type { Snapshot, UIElement } from '../../src/desktop-automation/smart-snapshot.js';
 
 const {
@@ -60,7 +59,7 @@ const {
 
   const makeSnapshot = (elements: TestElement[], id = 'snap-1'): TestSnapshot => ({
     id,
-    timestamp: new Date('2026-05-27T00:00:00.000Z'),
+    timestamp: new Date(),
     source: 'test-window',
     elements,
     elementMap: new Map(elements.map((element) => [element.ref, element])),
@@ -291,6 +290,7 @@ describe('ComputerControlTool semantic actions', () => {
   });
 
   it('uses role-specific semantic actions for buttons, radios, tabs, and list items', async () => {
+    ConfirmationService.getInstance().setInteractiveBridge(vi.fn().mockResolvedValue({ confirmed: true }));
     const button = makeElement({ ref: 6, role: 'button', name: 'Apply' }) as UIElement;
     const radio = makeElement({ ref: 7, role: 'radio', name: 'Expert mode' }) as UIElement;
     const tab = makeElement({ ref: 8, role: 'tab', name: 'Advanced' }) as UIElement;
@@ -458,6 +458,136 @@ describe('ComputerControlTool semantic actions', () => {
       expect(mockAutomation.click).not.toHaveBeenCalled();
     });
 
+  it.each([
+    { action: 'click_button', name: 'Delete' },
+    { action: 'click_element_by_name', name: 'Delete' },
+    { action: 'click_link', name: 'Delete' },
+    { action: 'select_list_item', name: 'Delete' },
+    { action: 'click', ref: 81 },
+    { action: 'click', x: 150, y: 112 },
+    { action: 'left_click', x: 150, y: 112 },
+    { action: 'double_click', x: 150, y: 112 },
+    { action: 'right_click', x: 150, y: 112 },
+    { action: 'middle_click', x: 150, y: 112 },
+    { action: 'open_menu_item', name: 'Delete' },
+    { action: 'hotkey', key: 'enter' },
+    { action: 'key_down', key: 'space' },
+    { action: 'key', key: 'enter' },
+  ] as import('../../src/tools/computer-control-tool.js').ComputerControlInput[])(
+    'B1: every activation route requires a human for observed Delete: %j', async (input) => {
+      const role = input.action === 'click_link' ? 'link' : input.action === 'select_list_item' ? 'list-item' : input.action === 'open_menu_item' ? 'menu-item' : 'button';
+      const button = makeElement({ ref: 81, role, name: 'Delete', focused: true,
+        bounds: { x: 100, y: 100, width: 100, height: 24 } }) as UIElement;
+      setCurrentSnapshot(makeSnapshot([button]) as Snapshot);
+      const human = vi.fn().mockResolvedValue({ confirmed: false });
+      ConfirmationService.getInstance().setInteractiveBridge(human);
+      const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+      const result = await new ComputerControlTool().execute({
+        ...input, confirmDangerous: true, policyOverrides: { [input.action]: 'allow' },
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/human confirmation/i);
+      expect(human).toHaveBeenCalledTimes(1);
+      expect(human.mock.calls[0]?.[0].operation).toContain('Delete');
+      expect(mockAutomation.click).not.toHaveBeenCalled();
+      expect(mockAutomation.doubleClick).not.toHaveBeenCalled();
+      expect(mockAutomation.rightClick).not.toHaveBeenCalled();
+      expect(mockAutomation.keyPress).not.toHaveBeenCalled();
+      expect(mockAutomation.hotkey).not.toHaveBeenCalled();
+      expect(mockAutomation.keyDown).not.toHaveBeenCalled();
+    });
+
+  it.each([
+    { name: 'Continue now', role: 'button' },
+    { name: 'OK', role: 'list-item' },
+  ])('B1: affirmative controls cannot look like safe cancellation: %j', async ({ name, role }) => {
+    setCurrentSnapshot(makeSnapshot([makeElement({ ref: 81, role, name })]));
+    const human = vi.fn().mockResolvedValue({ confirmed: false });
+    ConfirmationService.getInstance().setInteractiveBridge(human);
+    const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+    expect((await new ComputerControlTool().execute({ action: 'click_element_by_name', ref: 81 })).success).toBe(false);
+    expect(human).toHaveBeenCalledTimes(1);
+    expect(mockAutomation.click).not.toHaveBeenCalled();
+  });
+
+  it.each(['missing', 'expired', 'invalid'] as const)('B1: %s target evidence requires a human', async (state) => {
+    if (state !== 'missing') {
+      const snapshot = makeSnapshot([makeElement({ ref: 81, role: 'text-field', name: 'Search',
+        bounds: { x: 100, y: 100, width: 100, height: 24 } })]);
+      if (state === 'expired') snapshot.timestamp = new Date(0);
+      else snapshot.valid = false;
+      setCurrentSnapshot(snapshot);
+    }
+    const human = vi.fn().mockResolvedValue({ confirmed: false });
+    ConfirmationService.getInstance().setInteractiveBridge(human);
+    const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+    expect((await new ComputerControlTool().execute({ action: 'click', x: 150, y: 112 })).success).toBe(false);
+    expect(human).toHaveBeenCalledTimes(1);
+    expect(mockAutomation.click).not.toHaveBeenCalled();
+  });
+
+  it('B1: a benign ref cannot hide an overlapping destructive target', async () => {
+    const bounds = { x: 100, y: 100, width: 100, height: 24 };
+    setCurrentSnapshot(makeSnapshot([
+      makeElement({ ref: 81, role: 'text-field', name: 'Search', bounds }),
+      makeElement({ ref: 82, role: 'button', name: 'Delete', bounds }),
+    ]));
+    const human = vi.fn().mockResolvedValue({ confirmed: false });
+    ConfirmationService.getInstance().setInteractiveBridge(human);
+    const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+    expect((await new ComputerControlTool().execute({ action: 'click', ref: 81 })).success).toBe(false);
+    expect(human.mock.calls[0]?.[0].operation).toContain('Delete');
+    expect(mockAutomation.click).not.toHaveBeenCalled();
+  });
+
+  it('B1: safe cancellation and observed text fields remain autonomous', async () => {
+    const human = vi.fn().mockResolvedValue({ confirmed: false });
+    ConfirmationService.getInstance().setInteractiveBridge(human);
+    const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+    const tool = new ComputerControlTool();
+    for (const element of [makeElement({ ref: 81, role: 'button', name: 'Cancel' }),
+      makeElement({ ref: 82, role: 'text-field', name: 'Search' })]) {
+      setCurrentSnapshot(makeSnapshot([element]));
+      expect((await tool.execute({ action: 'click', ref: element.ref })).success).toBe(true);
+    }
+    expect(human).not.toHaveBeenCalled();
+    expect(mockAutomation.click).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['click_button', 'select_dropdown_option', 'set_slider_value', 'expand_tree_item'] as const)(
+    'B1: direct Windows %s cannot execute its combined UIA script after refusal', async (action) => {
+      const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      try {
+        const human = vi.fn().mockResolvedValue({ confirmed: false });
+        ConfirmationService.getInstance().setInteractiveBridge(human);
+        mockAutomation.getWindows.mockResolvedValue([{ id: 'window', title: 'Fixture', processName: 'fixture', pid: 1, focused: true }]);
+        const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+        const tool = new ComputerControlTool();
+        const native = vi.spyOn(tool as unknown as { runPowerShellEncoded: () => Promise<string> }, 'runPowerShellEncoded')
+          .mockResolvedValue('{"success":true}');
+        const result = await tool.execute({ action, name: 'Delete', processName: action === 'click_button' ? 'fixture' : undefined, option: 'Delete', value: 1 });
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/human confirmation/i);
+        expect(human).toHaveBeenCalledTimes(1);
+        expect(native).not.toHaveBeenCalled();
+        expect(mockAutomation.click).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(process, 'platform', platform);
+      }
+    });
+
+  it('B1: OCR activation requires a human instead of bypassing dialog evidence', async () => {
+    const human = vi.fn().mockResolvedValue({ confirmed: false });
+    ConfirmationService.getInstance().setInteractiveBridge(human);
+    const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+    const result = await new ComputerControlTool().execute({ action: 'click_text', text: 'Save' });
+    expect(result.success).toBe(false);
+    expect(human).toHaveBeenCalledTimes(1);
+    expect(mockAutomation.click).not.toHaveBeenCalled();
+    expect(mockAutomation.moveMouse).not.toHaveBeenCalled();
+  });
+
   it('lists app profiles and exposes Excel as a known application profile', async () => {
     const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
     const tool = new ComputerControlTool();
@@ -606,6 +736,7 @@ describe('ComputerControlTool semantic actions', () => {
   });
 
   it('clicks a single word on the screen using OCR text matching', async () => {
+    ConfirmationService.getInstance().setInteractiveBridge(vi.fn().mockResolvedValue({ confirmed: true }));
     const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
     const tool = new ComputerControlTool();
 
@@ -620,6 +751,7 @@ describe('ComputerControlTool semantic actions', () => {
   });
 
   it('clicks a multi-word phrase on the screen using sequential horizontal OCR blocks matching', async () => {
+    ConfirmationService.getInstance().setInteractiveBridge(vi.fn().mockResolvedValue({ confirmed: true }));
     const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
     const tool = new ComputerControlTool();
 
@@ -638,6 +770,7 @@ describe('ComputerControlTool semantic actions', () => {
   });
 
   it('triggers visual grounding fallback when UIA fails to match the element name', async () => {
+    ConfirmationService.getInstance().setInteractiveBridge(vi.fn().mockResolvedValue({ confirmed: true }));
     const { ComputerControlTool, setVisionGroundingProvider } = await import('../../src/tools/computer-control-tool.js');
     const tool = new ComputerControlTool();
 
@@ -679,6 +812,7 @@ describe('ComputerControlTool semantic actions', () => {
   });
 
   it('triggers visual grounding coordinate fallback when UIA is empty', async () => {
+    ConfirmationService.getInstance().setInteractiveBridge(vi.fn().mockResolvedValue({ confirmed: true }));
     const { ComputerControlTool, setVisionGroundingProvider } = await import('../../src/tools/computer-control-tool.js');
     const tool = new ComputerControlTool();
 

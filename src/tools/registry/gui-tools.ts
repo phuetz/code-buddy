@@ -146,6 +146,7 @@ export class GuiControlTool implements ITool {
       ],
       priority: 7,
       modifiesFiles: false,
+      requiresConfirmation: true,
     };
   }
 

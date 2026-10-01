@@ -1,22 +1,26 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import { parseKeyCombination, captureScreenshotNative, executeGuiAction, guiControl } from '../../src/tools/gui-tool.js';
 
 // ============================================================================
 // Mocks
 // ============================================================================
 
-vi.mock('child_process', () => ({
+vi.mock('child_process', async (importOriginal) => ({
+  ...await importOriginal<typeof import('child_process')>(),
   execSync: vi.fn(),
   execFileSync: vi.fn(),
 }));
 
-vi.mock('fs', () => ({
+vi.mock('fs', async (importOriginal) => ({
+  ...await importOriginal<typeof import('fs')>(),
   readFileSync: vi.fn(() => Buffer.from('fakepng')),
   unlinkSync: vi.fn(),
   existsSync: vi.fn(() => true),
 }));
 
-vi.mock('os', () => ({
+vi.mock('os', async (importOriginal) => ({
+  ...await importOriginal<typeof import('os')>(),
   tmpdir: vi.fn(() => '/tmp'),
 }));
 
@@ -29,6 +33,10 @@ vi.mock('@nut-tree-fork/nut-js', () => {
 
 import { execSync, execFileSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
+
+// Existing native-argv tests exercise an explicitly accepted human action.
+beforeEach(() => ConfirmationService.getInstance().setInteractiveBridge(async () => ({ confirmed: true })));
+afterEach(() => ConfirmationService.getInstance().setInteractiveBridge(null));
 
 // ============================================================================
 // parseKeyCombination
@@ -324,7 +332,7 @@ describe('gui_control gating (S4)', () => {
     expect(execFileSync).not.toHaveBeenCalled();
   });
 
-  it('allows a mutating action in default mode', async () => {
+  it('allows a human-approved mutating action in default mode', async () => {
     getPermissionModeManager().setMode('default');
     const result = await executeGuiAction({ action: 'type', text: 'hello' });
     expect(result.success).toBe(true);

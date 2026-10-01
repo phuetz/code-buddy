@@ -163,6 +163,10 @@ export const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   recall: [],
   forget: ['group:dangerous'],
 
+  // Both desktop entry points must obey the same system policy rules.
+  computer_control: ['group:system', 'group:system:modify'],
+  gui_control: ['group:system', 'group:system:modify'],
+
   // Browser
   browser: ['group:web'],
   browser_action: ['group:web'],

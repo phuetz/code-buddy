@@ -94,7 +94,7 @@ describe('computer_control host safety policy', () => {
     });
 
   it('takes action overrides only from host settings', async () => {
-    vi.spyOn(getSettingsManager(), 'getProjectSetting').mockReturnValue({ policyOverrides: { close_window: 'allow' } });
+    vi.spyOn(getSettingsManager(), 'getUserSetting').mockReturnValue({ policyOverrides: { close_window: 'allow' } });
     expect(await gate(tool, { action: 'close_window', policyOverrides: { close_window: 'block' } })).toBeNull();
     expect(human).not.toHaveBeenCalled();
   });
@@ -138,6 +138,12 @@ describe('computer_control host safety policy', () => {
   it('names the application profile and its critical risk', async () => {
     await tool.execute({ action: 'open_app', appName: 'terminal', confirmDangerous: true });
     expect(human.mock.calls[0]?.[0]).toMatchObject({ filename: 'Terminal', riskLevel: 'critical' });
+  });
+
+  it('an untrusted project allow is not user authorization', async () => {
+    vi.spyOn(getSettingsManager(), 'getProjectSetting').mockReturnValue({ policyOverrides: { close_window: 'allow' } });
+    expect(await gate(tool, { action: 'close_window', confirmDangerous: true })).toMatch(/human confirmation/i);
+    expect(human).toHaveBeenCalledTimes(1);
   });
 
   it('exposes neither permission flag in the model schema or instructions', () => {

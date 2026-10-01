@@ -15,6 +15,8 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import { getPermissionModeManager } from '../security/permission-modes.js';
+import { ConfirmationService } from '../utils/confirmation-service.js';
+import { getDesktopAutomation } from '../desktop-automation/index.js';
 import type { ToolResult } from '../types/index.js';
 
 // ============================================================================
@@ -363,6 +365,45 @@ export async function executeGuiAction(input: GuiToolInput): Promise<GuiToolResu
     if (MUTATING_GUI_ACTIONS.has(input.action)) {
       const permErr = guiPermissionError(input.action);
       if (permErr) return { success: false, error: permErr };
+    }
+
+    // Validate before asking, and keep system-key denials ahead of any approval.
+    if (input.action === 'click' || input.action === 'scroll') {
+      if (input.x === undefined || input.y === undefined) return { success: false, error: `${input.action} requires x and y coordinates` };
+      assertScreenInteger(input.x, 'x');
+      assertScreenInteger(input.y, 'y');
+    }
+    if (input.action === 'type' && !input.text) return { success: false, error: 'type requires text' };
+    if (input.action === 'key') {
+      if (!input.keys) return { success: false, error: 'key requires keys' };
+      const { modifiers, key } = parseKeyCombination(input.keys);
+      if (isSystemKeyCombo(modifiers, key) && process.env.CODEBUDDY_GUI_ALLOW_SYSTEM_KEYS !== 'true') {
+        return { success: false, error: `gui_control blocked: system key combo "${input.keys}" can switch VT / kill the display` };
+      }
+    }
+    if (MUTATING_GUI_ACTIONS.has(input.action)) {
+      // This coarse tool has no grounded target evidence: every OS input needs
+      // a fresh human decision, even if the outer generic tool gate auto-allows.
+      let application = 'Unknown application (foreground could not be verified)';
+      try {
+        const window = await getDesktopAutomation().getActiveWindow();
+        if (window) application = `${window.processName} — ${window.title}`;
+      } catch { /* Do not initialize native control just to ask permission. */ }
+      const actionDetails = {
+        action: input.action, x: input.x, y: input.y, button: input.button,
+        doubleClick: input.doubleClick, text: input.text, keys: input.keys,
+        direction: input.direction, amount: input.amount,
+      };
+      const decision = await ConfirmationService.getInstance().requestConfirmation({
+        operation: `GUI control: ${input.action} — risk: high`,
+        filename: application,
+        toolName: 'gui_control',
+        toolArgs: actionDetails,
+        content: `Application: ${application}\nAction: ${input.action}\nRisk level: high\nInput: ${JSON.stringify(actionDetails)}\nThe effect of this coarse desktop input cannot be verified.`,
+        riskLevel: 'high',
+        forcePrompt: true,
+      }, 'tool');
+      if (!decision.confirmed) return { success: false, error: `gui_control requires explicit human confirmation. ${decision.feedback ?? 'Human approval was not granted.'}` };
     }
 
     switch (input.action) {

@@ -909,7 +909,7 @@ export class ComputerControlTool {
           ? 'Toggled checkbox'
           : `Set checkbox to ${input.checked ? 'checked' : 'unchecked'}`
       );
-      if (direct.success) return direct;
+      if (direct.success || (direct.data as { approvalDenied?: boolean } | undefined)?.approvalDenied) return direct;
       return {
         success: false,
         error: `${match.error} UIAutomation fallback: ${direct.error ?? direct.output ?? 'unavailable'}`,
@@ -934,7 +934,7 @@ export class ComputerControlTool {
   ): Promise<ToolResult> {
     if (this.hasWindowMatcher(input)) {
       const direct = await this.tryWindowsActivateNamedRole(input, roles, successVerb);
-      if (direct.success) return direct;
+      if (direct.success || (direct.data as { approvalDenied?: boolean } | undefined)?.approvalDenied) return direct;
     }
 
     const match = await this.resolveElementForIntent(input, {
@@ -1079,7 +1079,7 @@ export class ComputerControlTool {
     }
 
     const direct = await this.tryWindowsSelectDropdownOption(input, option);
-    if (direct.success) return direct;
+    if (direct.success || (direct.data as { approvalDenied?: boolean } | undefined)?.approvalDenied) return direct;
 
     if (input.ref !== undefined || input.name) {
       const dropdown = await this.resolveElementForIntent(input, {
@@ -1120,6 +1120,8 @@ export class ComputerControlTool {
       };
     }
 
+    const denied = await this.authorizeUnverifiedActivation(input);
+    if (denied) return denied;
     try {
       const firstKey = option.trim().charAt(0);
       if (firstKey) {
@@ -1166,7 +1168,7 @@ export class ComputerControlTool {
           ? 'Toggled checkbox'
           : `Set checkbox to ${input.checked ? 'checked' : 'unchecked'}`
       );
-      if (direct.success) return direct;
+      if (direct.success || (direct.data as { approvalDenied?: boolean } | undefined)?.approvalDenied) return direct;
       return {
         success: false,
         error: `${match.error} UIAutomation fallback: ${direct.error ?? direct.output ?? 'unavailable'}`,
@@ -1206,7 +1208,7 @@ export class ComputerControlTool {
     }
 
     const direct = await this.tryWindowsSetRangeValue(input, value);
-    if (direct.success) return direct;
+    if (direct.success || (direct.data as { approvalDenied?: boolean } | undefined)?.approvalDenied) return direct;
 
     const match = await this.resolveElementForIntent(input, {
       roles: ['slider'],
@@ -1225,6 +1227,8 @@ export class ComputerControlTool {
     const x = Math.round(match.element.bounds.x + Math.max(1, match.element.bounds.width) * ratio);
     const y = Math.round(match.element.center.y);
 
+    const denied = await this.authorizePointerActivation(input, { x, y });
+    if (denied) return denied;
     await this.automation.click(x, y, { button: 'left' });
 
     return {
@@ -1243,7 +1247,7 @@ export class ComputerControlTool {
 
   private async setTreeItemExpansion(input: ComputerControlInput, expanded: boolean): Promise<ToolResult> {
     const direct = await this.tryWindowsSetTreeItemExpansion(input, expanded);
-    if (direct.success) return direct;
+    if (direct.success || (direct.data as { approvalDenied?: boolean } | undefined)?.approvalDenied) return direct;
 
     const match = await this.resolveElementForIntent(input, {
       roles: ['tree-item'],
@@ -1265,6 +1269,8 @@ export class ComputerControlTool {
 
     const x = Math.round(match.element.bounds.x + Math.min(14, Math.max(4, match.element.bounds.width / 4)));
     const y = Math.round(match.element.center.y);
+    const denied = await this.authorizePointerActivation(input, { x, y });
+    if (denied) return denied;
     await this.automation.click(x, y, { button: 'left' });
 
     return {
@@ -1407,7 +1413,7 @@ export class ComputerControlTool {
         };
       }
     } else if (selection.button.ref !== undefined) {
-      const clicked = await this.click({ ...input, ref: selection.button.ref });
+      const clicked = await this.click({ ...input, ref: selection.button.ref }, selection.button);
       if (!clicked.success) return clicked;
       clickedInspection = {
         ...inspection,
@@ -1908,7 +1914,7 @@ if ($clickButtonName) {
       'fermer',
       'ignorer',
     ];
-    if (safe.some((token) => normalized === token || normalized.includes(token))) return 'safe';
+    if (safe.some((token) => normalized === token)) return 'safe';
 
     return 'caution';
   }
@@ -2299,7 +2305,70 @@ if ($clickButtonName) {
   // Mouse Actions
   // ============================================================================
 
-  private async click(input: ComputerControlInput): Promise<ToolResult> {
+  /** Gate the observed target at the actuator boundary, regardless of the action alias. */
+  private async authorizePointerActivation(
+    input: ComputerControlInput,
+    point: { x: number; y: number },
+    approvedButton?: DialogButtonEvidence,
+  ): Promise<ToolResult | null> {
+    const snapshot = this.snapshotManager.getCurrentSnapshot();
+    const fresh = snapshot?.valid && Date.now() - snapshot.timestamp.getTime() <= snapshot.ttl;
+    const hits = fresh ? snapshot.elements.filter(element => element.visible && element.enabled
+      && point.x >= element.bounds.x && point.x <= element.bounds.x + element.bounds.width
+      && point.y >= element.bounds.y && point.y <= element.bounds.y + element.bounds.height
+      && element.role !== 'window' && element.role !== 'container') : [];
+    const affirmativeNames = ['ok', 'yes', 'oui', 'save', 'save as', 'enregistrer', 'accept', 'continue', 'continuer', 'proceed', 'apply'];
+    const risky = hits.find(element => this.classifyDialogButtonRisk(element.name) === 'destructive'
+      || affirmativeNames.includes(this.normalizeDialogText(element.name)))
+      ?? hits.find(element => ['button', 'link', 'menu-item', 'unknown'].includes(element.role)
+        && this.classifyDialogButtonRisk(element.name) !== 'safe');
+    if (risky) {
+      const button: DialogButtonEvidence = {
+        name: risky.name, role: risky.role, enabled: risky.enabled,
+        risk: this.classifyDialogButtonRisk(risky.name), ref: risky.ref, bounds: risky.bounds,
+      };
+      // Only the explicit dialog path may pass this private, observed-target grant.
+      if (approvedButton && approvedButton.ref === button.ref && approvedButton.name === button.name) return null;
+      return this.authorizeUnverifiedActivation(input, button);
+    }
+    if (!hits.length) return this.authorizeUnverifiedActivation(input);
+    // Unknown/text/image coordinates do not establish a harmless interactive control.
+    if (!hits.some(element => element.interactive && (
+      ['text-field', 'checkbox', 'radio', 'dropdown', 'tab', 'list-item', 'slider', 'tree-item'].includes(element.role)
+      || this.classifyDialogButtonRisk(element.name) === 'safe'
+    ))) return this.authorizeUnverifiedActivation(input);
+    return null;
+  }
+
+  private async authorizeKeyboardActivation(input: ComputerControlInput): Promise<ToolResult | null> {
+    if (!['enter', 'return', 'space', 'spacebar', ' '].includes(String(input.key).toLowerCase())) return null;
+    const snapshot = this.snapshotManager.getCurrentSnapshot();
+    const focused = snapshot?.valid && Date.now() - snapshot.timestamp.getTime() <= snapshot.ttl
+      ? snapshot.elements.find(element => element.focused && element.visible && element.enabled) : undefined;
+    if (!focused) return this.authorizeUnverifiedActivation(input);
+    // Space in an observed text field/checkbox is ordinary input; Enter may submit a form.
+    if (!['enter', 'return'].includes(String(input.key).toLowerCase())
+      && ['text-field', 'checkbox', 'radio'].includes(focused.role)
+      && this.classifyDialogButtonRisk(focused.name) !== 'destructive') return null;
+    if (this.classifyDialogButtonRisk(focused.name) === 'safe') return null;
+    return this.authorizeUnverifiedActivation(input, {
+      name: focused.name, role: focused.role, enabled: focused.enabled,
+      risk: this.classifyDialogButtonRisk(focused.name), ref: focused.ref, bounds: focused.bounds,
+    });
+  }
+
+  private async authorizeUnverifiedActivation(
+    input: ComputerControlInput,
+    button?: DialogButtonEvidence,
+  ): Promise<ToolResult | null> {
+    const policy = this.resolveConfiguredPolicy(input.action);
+    if (policy === 'block') return { success: false, error: `Action "${input.action}" is blocked by safety policy.`, data: { approvalDenied: true } };
+    if (policy === 'allow') return null;
+    const error = await this.requestHumanConfirmation(input, undefined, button);
+    return error ? { success: false, error, data: { approvalDenied: true, selectedButton: button } } : null;
+  }
+
+  private async click(input: ComputerControlInput, approvedButton?: DialogButtonEvidence): Promise<ToolResult> {
     const point = await this.resolvePoint(input);
     if (!point) {
       return { success: false, error: 'Position required (x,y or element ref)' };
@@ -2307,6 +2376,9 @@ if ($clickButtonName) {
     if (point.browserError) {
       return { success: false, error: point.browserError };
     }
+
+    const denied = await this.authorizePointerActivation(input, point, approvedButton);
+    if (denied) return denied;
 
     let bufferBefore: Buffer | null = null;
     if (input.visualContext) {
@@ -2340,6 +2412,9 @@ if ($clickButtonName) {
       return { success: false, error: point.browserError };
     }
 
+    const denied = await this.authorizePointerActivation(input, point);
+    if (denied) return denied;
+
     let bufferBefore: Buffer | null = null;
     if (input.visualContext) {
       bufferBefore = await this.captureScreenBuffer();
@@ -2371,6 +2446,9 @@ if ($clickButtonName) {
     if (point.browserError) {
       return { success: false, error: point.browserError };
     }
+
+    const denied = await this.authorizePointerActivation(input, point);
+    if (denied) return denied;
 
     let bufferBefore: Buffer | null = null;
     if (input.visualContext) {
@@ -2504,6 +2582,9 @@ if ($clickButtonName) {
       if (focusError) return focusError;
     }
 
+    const denied = await this.authorizeKeyboardActivation(input);
+    if (denied) return denied;
+
     await this.automation.keyPress(input.key, {
       modifiers: input.modifiers as ModifierKey[] | undefined,
     });
@@ -2525,6 +2606,9 @@ if ($clickButtonName) {
       if (focusError) return focusError;
     }
 
+    const denied = await this.authorizeKeyboardActivation(input);
+    if (denied) return denied;
+
     // Build keys array: modifiers first, then the main key
     const keys: KeyCode[] = [...(input.modifiers || []), input.key];
     await this.automation.hotkey(...keys);
@@ -2545,6 +2629,9 @@ if ($clickButtonName) {
       const focusError = await this.focusAndVerifyTarget(input);
       if (focusError) return focusError;
     }
+
+    const denied = await this.authorizeKeyboardActivation(input);
+    if (denied) return denied;
 
     await this.automation.keyDown(input.key);
     return {
@@ -3721,6 +3808,9 @@ switch ($operation) {
       return { success: false, error: 'Windows UIAutomation direct path unavailable' };
     }
 
+    const denied = await this.authorizeUnverifiedActivation(input);
+    if (denied) return denied;
+
     const payload = Buffer.from(JSON.stringify({
       label: input.name,
       option,
@@ -3939,6 +4029,9 @@ if ($first.Length -gt 0) {
     if (controlTypes.length === 0) {
       return { success: false, error: 'No Windows UIAutomation role mapping for this action.' };
     }
+
+    const denied = await this.authorizeUnverifiedActivation(input);
+    if (denied) return denied;
 
     const payload = Buffer.from(JSON.stringify({
       targetName,
@@ -4292,6 +4385,9 @@ try {
       return { success: false, error: 'Windows UIAutomation direct path unavailable' };
     }
 
+    const denied = await this.authorizeUnverifiedActivation(input);
+    if (denied) return denied;
+
     const payload = Buffer.from(JSON.stringify({
       targetName,
       value,
@@ -4447,6 +4543,9 @@ $range.SetValue($value)
     if (process.platform !== 'win32' || !targetName) {
       return { success: false, error: 'Windows UIAutomation direct path unavailable' };
     }
+
+    const denied = await this.authorizeUnverifiedActivation(input);
+    if (denied) return denied;
 
     const payload = Buffer.from(JSON.stringify({
       targetName,
@@ -5734,6 +5833,17 @@ $value.SetValue($targetText)
 
     const resolved = await this.resolvePoint({ action: 'click_text', x: centerX, y: centerY });
     if (resolved) {
+      const observedText = ocrData.blocks.filter(block => block.boundingBox
+        && block.boundingBox.x < matchBox!.x + matchBox!.width
+        && block.boundingBox.x + block.boundingBox.width > matchBox!.x
+        && block.boundingBox.y < matchBox!.y + matchBox!.height
+        && block.boundingBox.y + block.boundingBox.height > matchBox!.y)
+        .map(block => block.text).join(' ');
+      const denied = await this.authorizeUnverifiedActivation(input, {
+        name: observedText, role: 'ocr-text', enabled: true,
+        risk: this.classifyDialogButtonRisk(observedText), bounds: matchBox,
+      });
+      if (denied) return denied;
       await this.automation.moveMouse(resolved.x, resolved.y);
       await this.automation.click(undefined, undefined, { button: 'left' });
       return { 
@@ -6349,8 +6459,11 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     const settings = getSettingsManager();
     const project = settings.getProjectSetting('computerControl')?.policyOverrides;
     const user = settings.getUserSetting('computerControl')?.policyOverrides;
-    const value = project && Object.prototype.hasOwnProperty.call(project, action)
-      ? project[action] : user?.[action];
+    const projectValue = project && Object.prototype.hasOwnProperty.call(project, action) ? project[action] : undefined;
+    if (projectValue === 'allow') {
+      logger.warn('Ignoring project computer control allow policy; only user configuration may authorize actions', { action });
+    }
+    const value = projectValue === 'allow' || projectValue === undefined ? user?.[action] : projectValue;
     if (value === undefined) return undefined;
     if (value === 'allow' || value === 'block' || value === 'confirm') return value;
     logger.warn('Invalid host computer control policy; requiring human confirmation', { action });
@@ -6540,7 +6653,7 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
       'move_window', 'resize_window', 'set_window', 'act_on_best_window',
       'set_volume', 'set_brightness', 'notify', 'lock', 'sleep',
       'start_recording', 'stop_recording',
-      'clear_audit_log',
+      'clear_audit_log', 'export_audit_log', 'save_macro', 'delete_macro', 'play_macro',
     ]);
 
     if (action === 'act_on_best_window' && input.bestWindowAction) {
