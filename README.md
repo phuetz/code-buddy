@@ -115,7 +115,7 @@ to Apache 2.0 on 2030-08-31. Bundled Python skills stay MIT (see their `SKILL.md
 - [Feature status, reasons and traces](docs/PROVEN-FEATURES.md) · [French](docs/FONCTIONNALITES-PROUVEES.md)
 - [Getting started](docs/getting-started.md) · [Commands](docs/commands.md)
 - [Source areas and limits](docs/features.md)
-- [Changelog](CHANGELOG.md) · [2.3.0 preview](docs/whats-new-2.3.md)
+- [Changelog](CHANGELOG.md) · [2.3.0 release notes](docs/RELEASE-NOTES-2.3.0.md) · [2.3.0 preview](docs/whats-new-2.3.md)
 - [2.2.0 release notes](docs/RELEASE-NOTES-2.2.0.md)
 
 [Report a bug](https://github.com/phuetz/code-buddy/issues)

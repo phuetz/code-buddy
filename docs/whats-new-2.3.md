@@ -13,11 +13,11 @@ unproven on this branch; no success on that path is claimed by these notes.
 | One-click web publish | CLI & Engine | [one-click-deploy.md](one-click-deploy.md) |
 | Database & Auth overlay | CLI & Templates | [provision-db-auth.md](provision-db-auth.md) |
 | Unified recents (CLI / Cowork / mobile) | CLI & Persistence | [unified-history.md](unified-history.md) |
-| Figma import to React screens | CLI & Tool | [CLI commands](commands.md) |
+| Figma import to React screens | CLI & Tool | [section 4](#4-figma-rest-export-import-buddy-figma-import) |
 | Expo / React Native starter | App Studio & Scaffolding | [expo-mobile-template.md](expo-mobile-template.md) |
 | Cowork folder instructions | Cowork UI & Context | [cowork.md](cowork.md#folder-instructions) |
 | Authored skills discovery | Proposal mechanisms | [self-improvement-engine.md](self-improvement-engine.md#authored-skill-discovery) |
-| Kernel watcher limit resilience | Skills registry & inotify | [CLI commands](commands.md) |
+| Kernel watcher limit resilience | Skills registry & inotify | [section 8](#8-kernel-inotify-watcher-resilience) |
 | Thin CLI bootstrap | CLI boot | [getting-started.md](getting-started.md#installation) |
 
 ---
