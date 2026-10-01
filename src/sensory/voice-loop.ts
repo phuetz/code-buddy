@@ -1,4 +1,5 @@
 import { getProviderDefaultModel } from '../config/model-defaults.js';
+import { lisaPolicyEnabled, lisaTrigger, runLisaAction } from '../companion/lisa-policy.js';
 /**
  * Voice loop — closes the perception→cognition→action loop into speech. Given a
  * transcript of what the robot HEARD (the `onHeard` hook of `speech-reaction.ts`),
@@ -3287,6 +3288,23 @@ export async function sayNow(
     phoneDelivery?: 'env' | 'never';
   } = {}
 ): Promise<boolean> {
+  if (!lisaPolicyEnabled()) return sayNowImpl(text, options);
+  const trigger = lisaTrigger('voice');
+  return runLisaAction({ action: trigger === 'reminder' ? 'rappel' : 'parole', trigger, operation: 'parole' },
+    () => sayNowImpl(text, options), false);
+}
+
+async function sayNowImpl(
+  text: string,
+  options: VoiceStepOptions & {
+    voice?: string;
+    rootDir?: string;
+    synth?: SynthFn;
+    play?: PlayFn;
+    /** `never` prevents a caller with its own bridge/notification from double-sending. */
+    phoneDelivery?: 'env' | 'never';
+  } = {}
+): Promise<boolean> {
   // Sanity gate before the speakers AND the phone push: strip leaked control tokens + foreign-script
   // contamination (a local model drifting into CJK the voice can't pronounce), stay silent if nothing
   // meaningful remains. Clean once so speech, Telegram voice, and logs all use the same text.
@@ -3489,6 +3507,14 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
   let pendingInterruption: VoiceInterruptionContext | undefined;
 
   const handler = async (heard: string, context?: VoiceTurnContext): Promise<void> => {
+    if (!lisaPolicyEnabled()) return handlerImpl(heard, context);
+    await runLisaAction({ action: 'parole', trigger: lisaTrigger('voice'), operation: 'parole' }, async () => {
+      await handlerImpl(heard, context);
+      const mode = (handler as VoiceReplyHandler).lastTiming?.mode;
+      return mode === 'blocking' || mode === 'streamed';
+    }, false);
+  };
+  const handlerImpl = async (heard: string, context?: VoiceTurnContext): Promise<void> => {
     const controller = new AbortController();
     const voiceTurnId = context?.turnId ?? createAvatarTurnId();
     const interruption = pendingInterruption;
@@ -3502,14 +3528,18 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     const playerPromise = options.play
       ? Promise.resolve<VoiceAudioPlayer | null>(null)
       : resolveVoiceAudioPlayer();
-    const play: PlayFn = options.play ?? (
+    const rawPlay: PlayFn = options.play ?? (
       (wav, opts) => defaultPlay(wav, opts, playerPromise)
     );
+    const play: PlayFn = lisaPolicyEnabled() ? ((wav, opts) => runLisaAction(
+      { action: 'parole', trigger: lisaTrigger('voice'), operation: 'parole' },
+      async () => (await rawPlay(wav, opts)) !== false, false,
+    )) : rawPlay;
     // An explicit progressive path wins even when synth/play are also injected:
     // diagnostics can consume the real HTTP stream into a null sink while
     // retaining deterministic fallbacks. Otherwise preserve the production-only
     // native stream rule so older injected synth/player tests keep their contract.
-    const nativeStreamSpeak = options.streamSpeak ?? (
+    const nativeStreamSpeak = lisaPolicyEnabled() ? undefined : options.streamSpeak ?? (
       !options.synth && !options.play
         ? makeRoutedStreamSpeak(playerPromise, turnTtsEngine, env)
         : undefined

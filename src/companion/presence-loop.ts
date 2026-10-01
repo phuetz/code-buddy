@@ -1,3 +1,4 @@
+import { runLisaAction } from './lisa-policy.js';
 /**
  * Presence loop — the companion's "conductor".
  *
@@ -348,45 +349,47 @@ export async function runPresenceTick(deps: PresenceDeps = {}): Promise<string |
       if (nowMs - last < moment.cooldownMs) continue;
       const line = moment.generate(ctx);
       if (!line) continue;
-      let reservation: DailyInteractionReservation | null = null;
-      if (homeDecision && deps.claimDailyBudget) {
-        reservation = await deps.claimDailyBudget(homeDecision.spontaneousDailyLimit, now);
-        if (!reservation.granted) {
-          logger.info('[presence] shared household invitation budget exhausted');
+      return await runLisaAction({ action: 'parole', trigger: 'presence', operation: 'initiative' }, async () => {
+        let reservation: DailyInteractionReservation | null = null;
+        if (homeDecision && deps.claimDailyBudget) {
+          reservation = await deps.claimDailyBudget(homeDecision.spontaneousDailyLimit, now);
+          if (!reservation.granted) {
+            logger.info('[presence] shared household invitation budget exhausted');
+            return null;
+          }
+        }
+        // Yield to the conductor only after a budget slot is reserved. A denied
+        // floor releases that slot, so neither shared guard is consumed falsely.
+        const conductor = deps.conductor ?? getCompanionConductor();
+        if (!conductor.claim('presence')) {
+          await reservation?.release();
+          logger.info('[presence] yielded to the conductor (another voice has the floor)');
           return null;
         }
-      }
-      // Yield to the conductor only after a budget slot is reserved. A denied
-      // floor releases that slot, so neither shared guard is consumed falsely.
-      const conductor = deps.conductor ?? getCompanionConductor();
-      if (!conductor.claim('presence')) {
-        await reservation?.release();
-        logger.info('[presence] yielded to the conductor (another voice has the floor)');
-        return null;
-      }
-      try {
-        await (deps.say ?? defaultSay)(line);
-      } catch (error) {
-        await reservation?.release();
-        throw error;
-      }
-      lastFiredByMoment.set(moment.id, nowMs);
-      firedTimestamps.push(nowMs);
-      if (moment.engage) deps.onEngage?.();
-      // Record a celebrated tenure milestone (all marks up to today) so it never repeats.
-      if (moment.id === 'milestone') {
-        relState.celebratedMilestones = markMilestonesUpTo(
-          relState.celebratedMilestones,
-          daysTogether
-        );
-        saveRelationshipState(relState, deps.relationshipStatePath);
-      }
-      // Mark a fired follow-up done so it's asked exactly once.
-      if (moment.id === 'followup' && due) {
-        markFired(due.id, nowMs, deps.eventFollowUpsPath);
-      }
-      logger.info(`[presence] ${moment.id} → ${line}`);
-      return line;
+        try {
+          await (deps.say ?? defaultSay)(line);
+        } catch (error) {
+          await reservation?.release();
+          throw error;
+        }
+        lastFiredByMoment.set(moment.id, nowMs);
+        firedTimestamps.push(nowMs);
+        if (moment.engage) deps.onEngage?.();
+        // Record a celebrated tenure milestone (all marks up to today) so it never repeats.
+        if (moment.id === 'milestone') {
+          relState.celebratedMilestones = markMilestonesUpTo(
+            relState.celebratedMilestones,
+            daysTogether
+          );
+          saveRelationshipState(relState, deps.relationshipStatePath);
+        }
+        // Mark a fired follow-up done so it's asked exactly once.
+        if (moment.id === 'followup' && due) {
+          markFired(due.id, nowMs, deps.eventFollowUpsPath);
+        }
+        logger.info(`[presence] ${moment.id} → ${line}`);
+        return line;
+      }, null);
     }
     return null; // nothing fit → silent present
   } catch (err) {

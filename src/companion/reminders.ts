@@ -1,3 +1,4 @@
+import { lisaPolicyEnabled, lisaTrigger, runLisaAction, LISA_REFUSAL } from './lisa-policy.js';
 /**
  * Reminders — the robot reminds the user to do things (meds…), and the user flags them done.
  *
@@ -94,6 +95,12 @@ export async function loadReminders(): Promise<Reminder[]> {
 }
 
 export async function saveReminders(list: Reminder[]): Promise<void> {
+  if (lisaPolicyEnabled()) {
+    const saved = await runLisaAction({ action: 'rappel', trigger: lisaTrigger('reminder'), operation: 'rappel' },
+      async () => { await writeJsonAtomic(remindersFile(), list, { mode: 0o600 }); return true; }, false);
+    if (!saved) throw new Error(LISA_REFUSAL);
+    return;
+  }
   const file = remindersFile();
   await writeJsonAtomic(file, list, { mode: 0o600 });
 }

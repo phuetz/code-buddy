@@ -1,3 +1,4 @@
+import { lisaPolicyEnabled, lisaTelegramAction, lisaTrigger, runLisaAction, LISA_REFUSAL } from '../../companion/lisa-policy.js';
 /**
  * Telegram Channel Client
  *
@@ -362,6 +363,12 @@ export class TelegramChannel extends BaseChannel {
    * Send a message
    */
   async send(message: OutboundMessage): Promise<DeliveryResult> {
+    if (!lisaPolicyEnabled()) return this.sendImpl(message);
+    return runLisaAction({ action: lisaTelegramAction(message.channelId, this.telegramConfig.allowedUsers), trigger: lisaTrigger('telegram'), operation: 'telegram' },
+      () => this.sendImpl(message), { success: false, error: LISA_REFUSAL, timestamp: new Date() });
+  }
+
+  private async sendImpl(message: OutboundMessage): Promise<DeliveryResult> {
     try {
       const params: Record<string, unknown> = {
         chat_id: message.channelId,
@@ -1369,6 +1376,12 @@ export class TelegramChannel extends BaseChannel {
    * Throws on failure so the caller keeps the text reply as the fallback.
    */
   async sendVoiceReply(channelId: string, text: string): Promise<void> {
+    if (!lisaPolicyEnabled()) return this.sendVoiceReplyImpl(channelId, text);
+    await runLisaAction({ action: lisaTelegramAction(channelId, this.telegramConfig.allowedUsers), trigger: lisaTrigger('telegram'), operation: 'telegram' },
+      () => this.sendVoiceReplyImpl(channelId, text), undefined);
+  }
+
+  private async sendVoiceReplyImpl(channelId: string, text: string): Promise<void> {
     const { localTtsAvailable, synthesizeToOgg } = await import('../../voice/local-tts.js');
     if (!localTtsAvailable()) throw new Error('local TTS (Piper) unavailable');
     // Cap spoken length — a short reply is fine, avoid minutes of audio.
@@ -1393,6 +1406,12 @@ export class TelegramChannel extends BaseChannel {
    * photo, via multipart sendPhoto. Lets the bot deliver visual artifacts.
    */
   async sendImageFile(channelId: string, imagePath: string, caption?: string): Promise<void> {
+    if (!lisaPolicyEnabled()) return this.sendImageFileImpl(channelId, imagePath, caption);
+    await runLisaAction({ action: lisaTelegramAction(channelId, this.telegramConfig.allowedUsers), trigger: lisaTrigger('telegram'), operation: 'telegram' },
+      () => this.sendImageFileImpl(channelId, imagePath, caption), undefined);
+  }
+
+  private async sendImageFileImpl(channelId: string, imagePath: string, caption?: string): Promise<void> {
     const fs = await import('node:fs/promises');
     const path = await import('node:path');
     const bytes = await fs.readFile(imagePath);
@@ -1468,6 +1487,12 @@ export class TelegramChannel extends BaseChannel {
    * Send typing indicator
    */
   async sendTyping(chatId: string): Promise<void> {
+    if (!lisaPolicyEnabled()) return this.sendTypingImpl(chatId);
+    await runLisaAction({ action: lisaTelegramAction(chatId, this.telegramConfig.allowedUsers), trigger: lisaTrigger('telegram'), operation: 'telegram' },
+      () => this.sendTypingImpl(chatId), undefined);
+  }
+
+  private async sendTypingImpl(chatId: string): Promise<void> {
     await this.apiRequest('sendChatAction', {
       chat_id: chatId,
       action: 'typing',
