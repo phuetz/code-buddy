@@ -20,6 +20,7 @@ import type { FleetTask } from '../../../src/agent/autonomous/fleet-task-types.j
 
 const ENV_KEYS = [
   'OLLAMA_HOST',
+  'OLLAMA_MODEL',
   'GROK_API_KEY',
   'GROK_BASE_URL',
   'GROK_MODEL',
@@ -161,10 +162,11 @@ describe('resolveTickProvider — priority cascade', () => {
     expect(r.model).toBe('qwen2.5-coder:32b');
   });
 
-  it('default model used when CODEBUDDY_PEER_MODEL not set', () => {
+  it('configured local default used when CODEBUDDY_PEER_MODEL not set', () => {
+    process.env.OLLAMA_MODEL = 'fixture-local-default';
     process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
     const r = resolveTickProvider(taskBase(), 'ollama');
-    expect(r.model).toBe('qwen2.5-coder:7b');
+    expect(r.model).toBe('fixture-local-default');
   });
 
   it('Ollama URL normalisation: bare host → http://host:port/v1', () => {

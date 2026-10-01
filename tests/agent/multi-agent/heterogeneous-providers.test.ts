@@ -113,10 +113,13 @@ describe("Per-agent provider override (Fleet P1)", () => {
   });
 
   it("ORCHESTRATOR_CONFIG default model wins when both override.model and overrides.model absent", () => {
-    new OrchestratorAgent("k");
-    // ORCHESTRATOR_CONFIG.model is unset → BaseAgent falls back to
-    // 'grok-3-latest' (the legacy default).
-    expect(constructorCalls[0].model).toBe("grok-3-latest");
+    vi.stubEnv("GROK_MODEL", "fixture-system-default");
+    try {
+      new OrchestratorAgent("k");
+      expect(constructorCalls[0].model).toBe("fixture-system-default");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it(
