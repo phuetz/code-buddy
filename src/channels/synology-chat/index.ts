@@ -6,6 +6,7 @@
  */
 
 import { logger } from '../../utils/logger.js';
+import { secretsEqual } from '../../security/secret-compare.js';
 import { BaseChannel, ChannelConfig, DeliveryResult, OutboundMessage } from '../core.js';
 
 export interface SynologyChatConfig {
@@ -87,7 +88,7 @@ export class SynologyChatAdapter {
     if (!this.config.outgoingWebhookToken) {
       return true;
     }
-    return token === this.config.outgoingWebhookToken;
+    return secretsEqual(this.config.outgoingWebhookToken, token);
   }
 
   getBotName(): string {

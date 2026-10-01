@@ -388,6 +388,17 @@ describe('TelegramChannel', () => {
       expect(handled).toBe(false);
     });
 
+it('doit utiliser secretsEqual', async () => {
+      channel = new TelegramChannel({
+        ...mockConfig,
+        webhookSecret: 'my-secret',
+      });
+      const update = { update_id: 1, message: { message_id: 1, date: Math.floor(Date.now() / 1000), chat: { id: 1, type: 'private' as const }, text: 'Test' } };
+      const spy = jest.spyOn(await import('../../src/security/secret-compare.js'), 'secretsEqual');
+      await channel.handleWebhook(update, 'wrong-secret');
+      expect(spy).toHaveBeenCalledWith('my-secret', 'wrong-secret');
+      spy.mockRestore();
+    });
     it('should parse commands', async () => {
       const commandSpy = jest.fn();
       channel.on('command', commandSpy);

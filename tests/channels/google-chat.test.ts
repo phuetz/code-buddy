@@ -668,6 +668,21 @@ describe('GoogleChatChannel', () => {
         await verifiedChannel.disconnect();
       });
 
+it('doit utiliser secretsEqual', async () => {
+        const verifiedChannel = new GoogleChatChannel({
+          ...mockConfig,
+          verificationToken: 'correct-token',
+        });
+        mockTokenExchange();
+        mockApiResponse({ spaces: [] });
+        await verifiedChannel.connect();
+        const spy = jest.spyOn(await import('../../src/security/secret-compare.js'), 'secretsEqual');
+        const event = { type: 'MESSAGE', eventTime: new Date().toISOString(), token: 'wrong-token', message: { text: 'Hello', sender: { name: 'users/u1', displayName: 'User', type: 'HUMAN' } }, space: { name: 'spaces/AAAA', type: 'ROOM' }, user: { name: 'users/u1', displayName: 'User', type: 'HUMAN' } };
+        await verifiedChannel.handleWebhook(event);
+        expect(spy).toHaveBeenCalledWith('correct-token', 'wrong-token');
+        spy.mockRestore();
+        await verifiedChannel.disconnect();
+      });
       it('should skip verification when no verificationToken is configured', async () => {
         const messageSpy = jest.fn();
         channel.on('message', messageSpy);
