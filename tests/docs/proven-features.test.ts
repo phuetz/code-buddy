@@ -401,3 +401,79 @@ describe('public metadata and decoded reference text', () => {
     expect(legacy).toContain(`Node ≥ ${cowork.engines.node.match(/\d+/)[0]}`);
   });
 });
+
+describe('final perimeter: visible UI and CLI captions', () => {
+  it.each([
+    'cowork/src/renderer/components/settings/SettingsCodeBuddy.tsx',
+    'cowork/src/main/NewWindow.tsx',
+    'cowork/src/renderer/components/command-palette-capabilities.ts',
+    'src/ui/components/NewWelcome.tsx', 'src/cli/first-run.ts',
+    'src/commands/cli/new-help.ts', 'src/index.ts', 'src/utils/ascii-banner.ts',
+  ])('includes caption-bearing source %s', (file) => {
+    expect(inDocumentationScope(file)).toBe(true);
+  });
+
+  it.each([
+    '52+ [tools](./5-tools.md)', '15 [LLM providers](./providers.md)',
+    '52+ [**tools**](./5-tools.md)', '52+ [tools][registry]\n\n[registry]: ./5-tools.md',
+  ])('preserves the count next to a Markdown link: %s', (claim) => {
+    expect(inspectDocument('.codebuddy/docs/1-overview.md', claim).some((row) => row.violation)).toBe(true);
+  });
+
+  it('checks a newly added rendered component through the whole audit', () => {
+    const directory = fixture();
+    execFileSync('git', ['init', '--quiet', directory]);
+    put(directory, '.github/workflows/pages.yml', 'cp index.html .pages-artifact/');
+    put(directory, 'index.html', '<h1>Local agent</h1>');
+    const file = 'cowork/src/renderer/components/NewSettings.tsx';
+    put(directory, file, 'export const Settings = () => <p>Connect for 110+ tools</p>;');
+    const audit = auditShowcase(directory);
+    expect(audit.files).toContain(file);
+    expect(audit.violations).toContainEqual(expect.objectContaining({ file, line: 1, kind: 'count' }));
+  });
+
+  it('excludes comments, identifiers and translation IDs while checking the displayed fallback', () => {
+    const file = 'cowork/src/renderer/components/NewSettings.tsx';
+    const internal = [
+      '// 110+ tools, 15 providers', '/** 52+ tools */',
+      'const tools110 = 110;',
+      "const translationId = '110ToolsFileOpsSearch';",
+      "const otherId = '15LLMProvidersGeminiCl';",
+      "if (input === '4') setActiveTab('tools');",
+      'const Counter = () => <div className="w-4">Tools</div>;',
+      "const copy = t('settings.110ToolsFileOpsSearch', 'Repository tools');",
+      "const other = t('settings.15LLMProvidersGeminiCl', 'Configured model routing');",
+      "const labels = { '110ToolsFileOpsSearch': 'Repository tools' };",
+      'const View = () => <p>{/* 110+ tools */}Repository tools</p>;',
+    ].join('\n');
+    expect(inspectDocument(file, internal).filter((row) => row.violation)).toEqual([]);
+    const display = "const copy = t('settings.110ToolsFileOpsSearch', '110+ tools');";
+    expect(inspectDocument(file, display).some((row) => row.violation)).toBe(true);
+  });
+
+  it.each([
+    'export const View = () => <p>110+ <b>tools</b></p>;',
+    'export const View = () => <input placeholder="15 providers" />;',
+    "const copy = t('settings.backend', `110+ tools`);",
+    "console.log('110+ tools');",
+    "console.log('\\u0031\\u0031\\u0030+ tools');",
+  ])('checks displayed JSX, attributes, fallback and CLI strings: %s', (content) => {
+    expect(inspectDocument('src/ui/components/NewWelcome.tsx', content).some((row) => row.violation)).toBe(true);
+  });
+
+  it.each([
+    'cowork/src/renderer/components/Example.test.tsx',
+    'src/ui/__tests__/Welcome.tsx', 'src/ui/fixtures/Welcome.tsx',
+    'tests/fixtures/Welcome.tsx', 'CHANGELOG.md', 'cowork/CHANGELOG.md',
+  ])('excludes the explicitly out-of-scope path %s', (file) => {
+    expect(inDocumentationScope(file)).toBe(false);
+  });
+});
+
+
+it('distinguishes generated domain feature totals from a new registry argument', () => {
+  const file = 'docs/PROVEN-FEATURES.md';
+  const row = '| [Models and providers](#domain-providers) | 0/6 | 6 | 0 |';
+  expect(inspectDocument(file, row)).toContainEqual(expect.objectContaining({ classification: 'generated-feature-summary', violation: false }));
+  expect(inspectDocument(file, row + '\n15 providers available')).toContainEqual(expect.objectContaining({ classification: 'unmeasured-inventory-count', violation: true }));
+});

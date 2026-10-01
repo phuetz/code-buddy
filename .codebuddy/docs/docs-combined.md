@@ -72,7 +72,7 @@
 
 </details>
 
-> Open-source multi-provider AI coding [agent](./12-agent.md) for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ [tools](./5-tools.md), multi-channel messaging, skills system, and OpenClaw-inspired [architecture](./2-architecture.md).
+> Source-available multi-provider AI coding [agent](./12-agent.md) for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with [repository tools](./5-tools.md), multi-channel messaging, skills system, and OpenClaw-inspired [architecture](./2-architecture.md).
 
 | Metric | Value |
 |--------|-------|

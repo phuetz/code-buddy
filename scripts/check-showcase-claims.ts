@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodeHTML } from 'entities';
+import ts from 'typescript';
 
 export interface ClaimOccurrence {
   file: string;
@@ -30,7 +31,7 @@ const recordFiles = new Set([
   'BANC-ORNITH-RAW-2026-08-26-v2.json',
 ]);
 function isPresentation(file: string): boolean {
-  return /\.(?:html?|svg)$/i.test(file)
+  return isCaptionSource(file) || /\.(?:html?|svg)$/i.test(file)
     || /(?:^|\/)package\.json$|(?:^|\/)manifest\.(?:json|webmanifest)$|\.webmanifest$/i.test(file)
     || file.startsWith('site/') || file.startsWith('assets/site/')
     || file.startsWith('cowork/src/renderer/i18n/locales/')
@@ -65,7 +66,7 @@ const quantity = '(?:\\d[\\d,.]*(?:\\s*[-–]\\s*\\d[\\d,.]*)?\\s*\\+?|two|three
 const qualifier = '(?:(?:LLM[- ]callable|LLM|agent|direct|semantic|navigation|MCP|JSON[- ]defined|first[- ]class|speciali[sz]ed|dedicated|local|cloud|AI|premium|hosted|OpenAI[- ]compatible|gratuits?|locaux|compatibles?|spécialisés?|built[- ]?in|native|registered|available|internal|custom|distinct|total|coding|core|standard|network|new|additional|integration|read[- ]only|external|public|intégrés?|natifs?|disponibles?|enregistrés?|externes?|publics?|autorisés?)\\s+){0,4}';
 const noun = '(?:tools?|outils?|providers?|fournisseurs?)';
 const counts = new RegExp(`(?<![\\w/])${quantity}\\s*(?:-\\s*)?${qualifier}${noun}\\b|(?<![\\w/])\\d[\\d,.]*\\s*\\+\\s*${qualifier}${noun}\\b|\\b${noun}(?:[ _-]?counts?|\\s+(?:definitions?|catalog(?:ue)?|total|available|disponibles))?\\s*(?:\\(|:|=|\\||\\s[-–—]\\s)\\s*${quantity}\\b`, 'gi');
-const countPilot = /~ *1[01][0-9] *(\+ *)?(outils|tools)|1[01][0-9]\+? *(outils|tools|built-?in)|\b15 *(llm *)?(providers|fournisseurs)/i;
+const countPilot = /~ *1[01][0-9] *(\+ *)?(outils|tools)\b|1[01][0-9]\+? *(outils|tools|built-?in)\b|\b15 *(llm *)?(providers|fournisseurs)\b/i;
 // Chinese locale captions are displayed too; ASCII word boundaries do not apply.
 const localizedCount = /\d[\d,.]*\s*\+?\s*(?:个|种|款)?\s*(?:工具|(?:LLM\s*)?供应商|提供商)/i;
 const displayCount = /\b(?:compteur|counter)\s*\d+\s*\+?.{0,100}\b(?:outils|tools|providers|fournisseurs)\b|\b\d+\s+pastilles\b/i;
@@ -76,8 +77,22 @@ const evidence = /\bproven\b|\bvalidated\s+(?:end[- ]to[- ]end|E2E)\b|\bproved\b
 // but prevent reintroduction in current presentations or publication inputs.
 const unsupportedMedia = /infographic-(?:code-buddy-2|ai-engineering-stack)\.webp/i;
 
+/** Final pilot perimeter: UI source and CLI welcome/help strings, not all core source. */
+export function isCaptionSource(file: string): boolean {
+  return /\.(?:[cm]?[jt]sx?)$/i.test(file) && (
+    /^cowork\/src\/.*\.tsx$/i.test(file)
+    || file.startsWith('cowork/src/renderer/')
+    || file.startsWith('src/ui/') || file.startsWith('src/cli/')
+    || file.startsWith('src/commands/')
+    || file === 'src/index.ts' || file === 'src/utils/ascii-banner.ts'
+  );
+}
+
 export function inDocumentationScope(file: string): boolean {
-  if (/(?:^|\/)(?:tests?|__tests__|node_modules)\//.test(file)) return false;
+  if (/(?:^|\/)(?:tests?|__tests__|fixtures?|node_modules)\//.test(file)
+    || /\.(?:test|spec)\.[cm]?[jt]sx?$/i.test(file)
+    || /(?:^|\/)CHANGELOG(?:\.[^/]*)?$/i.test(file)) return false;
+  if (isCaptionSource(file)) return true;
   // Rendered assets remain public surfaces even when kept under source folders.
   if (/\.(?:html?|svg|webmanifest)$/i.test(file)
     || /(?:^|\/)(?:package|[^/]*manifest)\.json$/i.test(file)
@@ -132,8 +147,51 @@ function normalize(line: string, file: string): string {
       } catch { /* Multiline JSON fragments are handled by the value rule above. */ }
     }
   }
-  return decodeHTML(displayed.replace(/\]\([^)]*\)/g, ']').replace(/[*`]/g, '')
+  return decodeHTML(displayed.replace(/!?\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/!?\[([^\]]+)\]\[[^\]]*\]/g, '$1').replace(/[*`]/g, '')
     .replace(/<[^>]*>/g, (tag) => /\b(?:content|title|alt|aria-label)=/i.test(tag) ? tag : ' ')).replace(/\u00a0/g, ' ');
+}
+
+/** Parse captions without executing application code. Preserve original line numbers.
+ * Inspect JSX text/attributes and string/template values, including t() fallbacks.
+ * Comments, property names, imports and translation lookup IDs are not captions.
+ */
+function captionLines(file: string, content: string): string[] {
+  const source = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true,
+    /\.[jt]sx$/i.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const lines = content.split(/\r?\n/).map(() => '');
+  const internalName = /^(?:className|id|key|testId|data-testid|href|src|name|type|role)$/;
+  const append = (node: ts.Node, text: string): void => {
+    const start = source.getLineAndCharacterOfPosition(ts.isJsxText(node) ? node.pos : node.getStart(source)).line;
+    // JSX text retains physical lines; escapes in string values belong to their
+    // literal's source line, even when they decode to multiple displayed lines.
+    const pieces = ts.isJsxText(node) ? text.split(/\r?\n/) : [text];
+    for (const [offset, piece] of pieces.entries()) {
+      const index = start + offset;
+      // Independent literals are separate captions: '4' followed by 'tools'
+      // in a keyboard handler is not a displayed inventory. JSX text can join.
+      if (index < lines.length) lines[index] += ts.isJsxText(node) ? ` ${piece}` : `\0${piece}\0`;
+    }
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxText(node)) append(node, node.text);
+    else if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node)
+      || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
+      const parent = node.parent;
+      const propertyName = (ts.isPropertyAssignment(parent) || ts.isPropertySignature(parent)
+        || ts.isMethodDeclaration(parent)) && parent.name === node;
+      const internalValue = (ts.isJsxAttribute(parent) || ts.isPropertyAssignment(parent))
+        && internalName.test(parent.name.getText(source).replace(/^['"]|['"]$/g, ''));
+      const lookup = ts.isCallExpression(parent) && parent.arguments[0] === node
+        && (ts.isIdentifier(parent.expression) && parent.expression.text === 't'
+          || ts.isPropertyAccessExpression(parent.expression) && parent.expression.name.text === 't');
+      if (!propertyName && !internalValue && !lookup && !ts.isImportDeclaration(parent)
+        && !ts.isExportDeclaration(parent) && !ts.isElementAccessExpression(parent)) append(node, node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return lines;
 }
 
 export function inspectDocument(file: string, content: string): ClaimOccurrence[] {
@@ -144,13 +202,15 @@ export function inspectDocument(file: string, content: string): ClaimOccurrence[
   let historicalSection = false;
   let readmeGeneratedBlock = false;
   let symbolMetricTable = false;
-  const lines = content.split(/\r?\n/);
+  const originalLines = content.split(/\r?\n/);
+  const sourceCaptions = isCaptionSource(file);
+  const lines = sourceCaptions ? captionLines(file, content) : originalLines;
   for (const [index, line] of lines.entries()) {
     if (line.includes('<!-- showcase:historical:start -->') && historicalSections.has(file) && !isPresentation(file) && /20\d{2}-\d{2}-\d{2}/.test(content)) historicalSection = true;
     if (line.includes('<!-- showcase:historical:end -->')) historicalSection = false;
     if (line.includes('<!-- proven-features:start -->')) readmeGeneratedBlock = true;
     if (unsupportedMedia.test(line) && !record && !historicalSection) {
-      results.push({ file, line: index + 1, kind: 'count', text: line,
+      results.push({ file, line: index + 1, kind: 'count', text: originalLines[index]!,
         classification: 'unsupported-promotional-media', violation: true });
     }
     const normalized = normalize(line, file);
@@ -158,7 +218,7 @@ export function inspectDocument(file: string, content: string): ClaimOccurrence[
     if (/^\|\s*(?:Module\s*\|\s*Functions\s*\|\s*Classes\s*\|\s*Imported By|Type\s*\|\s*Files)\s*\|/i.test(normalized)) symbolMetricTable = true;
     const previous = normalize(lines[index - 1] ?? '', file);
     // Formatting an inline HTML caption across adjacent lines must not hide it.
-    const searchable = /\.html?$/i.test(file)
+    const searchable = sourceCaptions || /\.html?$/i.test(file)
       ? `${normalized} ${normalize(lines[index + 1] ?? '', file)}` : normalized;
     const startsHere = (pattern: RegExp): boolean => {
       const match = pattern.exec(searchable);
@@ -185,13 +245,16 @@ export function inspectDocument(file: string, content: string): ClaimOccurrence[
     });
     if (matches.length || pilotHit || displayHit || indirectHit) {
       const classification = record || historicalSection ? 'historical-record'
+        : generated && /^\|\s*\[[^\]]+\]\(#domain-[^)]+\)\s*\|\s*\d+\/\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|$/.test(line) ? 'generated-feature-summary'
         : generated && (file.endsWith('.json') || /^(?:Recorded result|Résultat enregistré)\s*:/i.test(normalized)) ? 'catalogue-record'
         : inventoryMatches.length || pilotHit || displayHit || indirectHit ? 'unmeasured-inventory-count'
         : 'example-or-execution-limit';
-      results.push({ file, line: index + 1, kind: 'count', text: line, classification,
+      results.push({ file, line: index + 1, kind: 'count', text: originalLines[index]!, classification,
         violation: classification === 'unmeasured-inventory-count' });
     }
-    if (startsHere(evidence)) {
+    // The final source perimeter checks inventory arguments. Runtime outcome
+    // labels in code are not statuses from the documentary evidence catalogue.
+    if (!sourceCaptions && startsHere(evidence)) {
       const negative = /\b(?:not|un|non)[ -]?(?:proven|prouv)|ne\s+prouve|aucun.{0,100}prouv|sans\s+preuve|does not|do not|rather than|no.{0,100}proven|outside the current evidence catalogue|not revalidated|not evidence|not (?:a )?(?:reproducible )?proof|pas (?:une |de )?preuve|n.est pas|ne sont pas|pas des résultats prouv/i.test(normalized)
         || /^\s*prouv[ée]/iu.test(normalized) && /n.est pas\s*$/i.test(previous);
       const reference = /(?:PROVEN-FEATURES|FONCTIONNALITES-PROUVEES|proven-features|check-showcase-claims|\.jsonl|proven-outcome|Proven Outcome Memory|must be proven with browser\.assert_text|once.{0,60}proven|until.{0,60}proven|require.{0,60}proven|only.{0,60}proven|when.{0,60}proven|scope proved|état.{0,30}prouv|statuts.{0,30}prouv|deux statuts|signature prouve|que si.{0,100}prouve|can be proven|proven outcomes? require|proven outcomes? and|from proven outcomes|Proven Design Patterns)/i.test(normalized);
@@ -200,7 +263,7 @@ export function inspectDocument(file: string, content: string): ClaimOccurrence[
         : negative ? 'negative-or-limited-evidence'
         : reference ? 'status-reference-or-condition'
         : 'unsupported-evidence-claim';
-      results.push({ file, line: index + 1, kind: 'evidence', text: line, classification,
+      results.push({ file, line: index + 1, kind: 'evidence', text: originalLines[index]!, classification,
         violation: classification === 'unsupported-evidence-claim' });
     }
     if (line.includes('<!-- proven-features:end -->')) readmeGeneratedBlock = false;

@@ -65,7 +65,7 @@ export function EvolutionPanel({ onClose }: { onClose: () => void }) {
             <div className="text-sm text-muted-foreground">
               Aucune version évaluée pour ce workspace.
               <br />
-              Lance l’auto-amélioration : <code className="text-xs">CODEBUDDY_EVOLVE=true buddy evolve run --goal &quot;&lt;faiblesse&gt;&quot;</code>
+              Évaluer une variante de code : <code className="text-xs">CODEBUDDY_EVOLVE=true buddy evolve run --goal &quot;&lt;faiblesse&gt;&quot;</code>
             </div>
           ) : (
             <div className="space-y-5">

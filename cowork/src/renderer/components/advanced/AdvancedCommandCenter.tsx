@@ -257,7 +257,7 @@ const FEATURES: readonly FeatureDefinition[] = [
   {
     id: 'evolution',
     label: 'Évolution',
-    description: 'Versions produites par les cycles d’auto-amélioration.',
+    description: 'Variantes de code et évaluations enregistrées.',
     command: 'Interface Cowork',
     group: 'Orchestration',
     icon: RefreshCcw,
