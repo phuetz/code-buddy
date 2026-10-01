@@ -7,6 +7,8 @@ import { shellCheckScope } from './shell-execution-evidence.js';
 export interface TaskEvidenceEntry {
   type: string;
   content: string;
+  terminationReason?: string;
+  truncated?: boolean;
   toolCall?: { id: string; function: { name: string; arguments: string } };
   toolResult?: { success: boolean; output?: string; error?: string; metadata?: Record<string, unknown> };
 }
@@ -130,6 +132,41 @@ function inspection(command: string): boolean {
     && (part.connector === null || part.connector === '&&'));
 }
 
+/** Hermes agent/verification_stop.py inspired this independently written evidence check. */
+export function unsupportedActionClaims(response: string, entries: readonly TaskEvidenceEntry[]): string[] {
+  const observed = { edit: false, create: false, run: false, tests: false, testRun: false };
+  for (const entry of entries) {
+    if (entry.type !== 'tool_result' || !entry.toolCall || !entry.toolResult?.success) continue;
+    const name = TOOL_ALIASES[entry.toolCall.function.name] ?? entry.toolCall.function.name;
+    const args = argumentsOf(entry);
+    const command = runtimeShell(entry)?.command ?? String(args.command ?? args.cmd ?? '');
+    const write = TOOL_METADATA.find(tool => tool.name === name)?.category === 'file_write'
+      && !(name === 'str_replace_editor' && /^(?:view|read)$/.test(command));
+    observed.edit ||= write || !!runtimeShell(entry)?.changedFiles?.length;
+    observed.create ||= name === 'create_file' || name === 'scaffold_app'
+      || name === 'str_replace_editor' && command === 'create'
+      || name === 'apply_patch' && /\*\*\* Add File:/.test(String(args.patch ?? args.input ?? ''))
+      || !!runtimeShell(entry)?.changedFiles?.length;
+    observed.run ||= ['bash', 'test_runner', 'lint_project'].includes(name);
+    observed.testRun ||= (name === 'test_runner' || name === 'bash' && /\b(?:test|tests|vitest|jest|pytest)\b/.test(command)) && !hasRedVerification(entry, name, command);
+    observed.tests ||= (name === 'test_runner' || name === 'bash' && /\b(?:test|tests|vitest|jest|pytest)\b/.test(command))
+      && !hasRedVerification(entry, name, command) && completedGreen(entry);
+  }
+  // Quoted examples, fenced code, explicit negation and future advice are not
+  // completion claims. This recognizer is deliberately bounded, not a semantic oracle.
+  const text = response.replace(/```[\s\S]*?```/g, '').replace(/"[^"\n]*"/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const claims = new Set<string>();
+  for (const sentence of text.split(/[.!?\n]/)) {
+    if (/\b(?:not|never|cannot|can't|didn't|haven't|will|would|should|could|if|ne|pas|jamais|vais|devrais|pourrais|si)\b/.test(sentence)) continue;
+    if (/\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+(?:successfully\s+)?(?:edited|modified|changed|updated|fixed|modifie|corrige|remplace|mis a jour)\b/.test(sentence) && !observed.edit) claims.add('edit');
+    if (/\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+(?:successfully\s+)?(?:created|written|cree|ecrit)\b/.test(sentence) && !observed.create) claims.add('create');
+    if (/\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+(?:successfully\s+)?(?:ran|executed|launched|run|lance|execute)\b/.test(sentence) && (!observed.run || /\b(?:test|tests|vitest|jest|pytest)\b/.test(sentence) && !observed.testRun)) claims.add('run');
+    if (/\b(?:tests? (?:all )?(?:pass(?:ed)?|passent|reussis|verts)|(?:all|les|tous les) tests? (?:have )?(?:pass(?:ed)?|passent|reussi)|test suite (?:passed|is green))\b/.test(sentence) && !observed.tests) claims.add('tests');
+  }
+  return [...claims];
+}
+
 export function evaluateHeadlessTaskOutcome(
   prompt: string,
   entries: readonly TaskEvidenceEntry[],
@@ -176,13 +213,16 @@ export function evaluateHeadlessTaskOutcome(
     }
   }
   const reasons: string[] = [];
+  if (entries.some(entry => entry.terminationReason || entry.truncated)) reasons.push('execution_stopped');
   if (responseExitCode !== 0) reasons.push('response_failed');
-  if (/Stopped by the loop guard|maximum (?:number of )?tool|read budget exhausted/i.test(entries.at(-1)?.content ?? '')) reasons.push('execution_stopped');
+  if (entries.some(entry => entry.type === 'assistant' && /Stopped by the loop guard|maximum (?:number of )?tool|read budget exhausted|Session cost limit reached|Operation cancelled by user|execution stopped|context compaction refused/i.test(entry.content))) reasons.push('execution_stopped');
+  const final = [...entries].reverse().find(entry => entry.type === 'assistant')?.content ?? '';
+  if (unsupportedActionClaims(final, entries).length) reasons.push('unsupported_action_claim');
   if ([...checks.values()].some(check => !check.success && !(check.optionalRead && lastWrite > check.sequence))) reasons.push('verification_failed');
   if (requestsRepositoryAction(prompt) && actionTools.length === 0) reasons.push('no_action_executed');
   const status = reasons.some(reason => reason !== 'no_action_executed') ? 'failed'
     : reasons.length ? 'unverified' : 'success';
-  return { status, success: status === 'success', exitCode: responseExitCode || (status === 'success' ? 0 : 1), reasons, actionTools,
+  return { status, success: status === 'success', exitCode: responseExitCode || (reasons.includes('unsupported_action_claim') ? 4 : status === 'success' ? 0 : 1), reasons, actionTools,
     checks: [...checks.values()].map(({ tool, command, success, optionalRead, sequence }) => ({ tool, ...(command ? { command } : {}), success,
       ...(optionalRead && lastWrite > sequence ? { required: false } : {}) })) };
 }

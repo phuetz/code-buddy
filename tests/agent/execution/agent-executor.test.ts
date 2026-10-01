@@ -2933,8 +2933,9 @@ describe('AgentExecutor', () => {
 
       await executor.processUserMessage('start', [], messages);
 
-      // Round 1 sees one message; round 2 sees assistant call + result too.
-      expect(config.recordSessionCost).toHaveBeenCalledWith(1 + 3, 100);
+      // Round 1 sees one message; round 2 sees assistant call + result.
+      // Each fully assembled request also includes one ephemeral context block too.
+      expect(config.recordSessionCost).toHaveBeenCalledWith((1 + 1) + (3 + 1), 100);
     });
 
     it('should record session cost after processing', async () => {

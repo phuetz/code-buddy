@@ -35,6 +35,9 @@ export interface ChatEntry {
 
   /** True when the provider stopped at the output length cap and continuations are exhausted. */
   truncated?: boolean;
+
+  /** Host-authored failure; never inferred from a model completion. */
+  terminationReason?: string;
 }
 
 /**

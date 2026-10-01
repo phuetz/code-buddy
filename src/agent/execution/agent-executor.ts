@@ -1,3 +1,4 @@
+import { unsupportedActionClaims } from '../../cli/headless-task-outcome.js';
 import { bootstrapRepositoryReads } from './repository-read-bootstrap.js';
 import { isToolNameAllowed } from '../../utils/tool-filter.js';
 import { bindFactsMemorySession } from '../../memory/facts-memory.js';
@@ -1158,6 +1159,12 @@ export class AgentExecutor {
     surface?: string,
     introspectionText?: string,
   ): AsyncGenerator<ExecutorEvent, void, unknown> {
+    const recordStop = (reason: string, content: string): void => {
+      history.push({ type: 'assistant', content, timestamp: new Date(), terminationReason: reason });
+      messages.push({ role: 'assistant', content });
+    };
+    const evidenceStart = history.length;
+    let claimRetry = false;
     const timelineEnabled =
       process.env.CODEBUDDY_TIMELINE === 'true' && this.deps.recordTimelineTurn !== undefined;
     const timelineHistoryStart = timelineEnabled ? history.length : 0;
@@ -1440,6 +1447,7 @@ export class AgentExecutor {
       let terminateDetectedStreaming = false;
       while (toolRounds < maxToolRounds) {
         if (abortController?.signal.aborted) {
+          recordStop('cancelled', '[Operation cancelled by user]');
           yield { type: "content", content: "\n\n[Operation cancelled by user]" };
           yield { type: "done" };
           return;
@@ -1452,6 +1460,7 @@ export class AgentExecutor {
           );
           const mwResult = await pipeline.runBeforeTurn(ctx);
           if (mwResult.action === 'stop') {
+            recordStop('middleware_stop', mwResult.message ?? 'Execution stopped by middleware.');
             if (mwResult.message) yield { type: "content", content: `\n\n${mwResult.message}` };
             yield { type: "done" };
             return;
@@ -1709,7 +1718,10 @@ export class AgentExecutor {
           });
         }
 
-        inputTokens = incrementalTokenCounter.count(messages);
+        // Include schemas in the pressure estimate; Ollama's preflight uses
+        // the real count of the fully assembled native request as its floor.
+        inputTokens = this.deps.tokenCounter.countMessageTokens(preparedMessages.map(turn => ({ ...turn, content: turn.content ?? null })))
+          + (tools.length ? this.deps.tokenCounter.countTokens(JSON.stringify(tools)) : 0);
         totalInputTokensForCost += inputTokens;
 
         // Context warning — always check regardless of pipeline state
@@ -1803,6 +1815,7 @@ export class AgentExecutor {
           const chunk = streamEvent.value;
           progress.onFirstToken();
           if (abortController?.signal.aborted) {
+            recordStop('cancelled', '[Operation cancelled by user]');
             yield { type: "content", content: "\n\n[Operation cancelled by user]" };
             yield { type: "done" };
             return;
@@ -2033,6 +2046,7 @@ export class AgentExecutor {
               } as CodeBuddyMessage);
               yield { type: 'tool_result', toolCall, toolResult };
             }
+            recordStop('cost_limit', 'Session cost limit reached before tool execution.');
             yield { type: "content", content: `\n\nSession cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Stopping before tool execution.` };
             yield { type: "done" };
             return;
@@ -2538,6 +2552,7 @@ export class AgentExecutor {
           if (terminateDetectedStreaming) break;
 
           if (abortController?.signal.aborted) {
+            recordStop('cancelled', '[Operation cancelled by user]');
             yield { type: "content", content: "\n\n[Operation cancelled by user]" };
             yield { type: "done" };
             return;
@@ -2632,12 +2647,15 @@ export class AgentExecutor {
             );
             const mwResult = await pipeline.runAfterTurn(ctx);
             if (mwResult.action === 'stop') {
+              recordStop('middleware_stop', mwResult.message ?? 'Execution stopped by middleware.');
               if (mwResult.message) yield { type: "content", content: `\n\n${mwResult.message}` };
               yield { type: "done" };
               return;
             }
             if (mwResult.action === 'warn' && mwResult.message) {
               yield { type: "content", content: `\n${mwResult.message}\n` };
+              messages.push({ role: 'system', content: `<context type="middleware-hint">\n${mwResult.message}\n</context>` });
+              incrementalTokenCounter.invalidate();
             }
           }
           // Note: cost is recorded once at end-of-loop, not here (avoids double-counting)
@@ -2702,6 +2720,15 @@ export class AgentExecutor {
             // empty assistant message is never written to the transcript.
           }
 
+          if (process.env.CODEBUDDY_HEADLESS === 'true' && surface === 'cli') {
+            const missing = unsupportedActionClaims(assistantEntry.content, history.slice(evidenceStart));
+            if (missing.length && !claimRetry) {
+              claimRetry = true;
+              messages.push({ role: 'user', content: 'Your answer claims completed actions without successful tool evidence (' + missing.join(', ') + '). Perform and verify the requested actions using tools, or correct your answer to report the blocker honestly. Do not invent a result.' });
+              continue;
+            }
+          }
+
           // Companion hosts own the canonical commit boundary: voice,
           // channel and Cowork persist only relationship-safe, semantically
           // accepted text in their surface continuity/session stores. Generic
@@ -2751,6 +2778,7 @@ export class AgentExecutor {
       if (this.config.isSessionCostLimitReached()) {
         const sessionCost = this.config.getSessionCost();
         const sessionCostLimit = this.config.getSessionCostLimit();
+        recordStop('cost_limit', 'Session cost limit reached.');
         yield {
           type: "content",
           content: `\n\n💸 Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).`,
@@ -2782,6 +2810,7 @@ export class AgentExecutor {
       yield { type: "done" };
     } catch (error) {
       if (abortController?.signal.aborted) {
+        recordStop('cancelled', '[Operation cancelled by user]');
         yield { type: "content", content: "\n\n[Operation cancelled by user]" };
         yield { type: "done" };
         return;

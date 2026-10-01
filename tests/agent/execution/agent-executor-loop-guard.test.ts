@@ -12,6 +12,8 @@ import { getGlobalEventBus } from '../../../src/events/event-bus.js';
 import { wireDomainEventBridge } from '../../../src/sensory/domain-event-bridge.js';
 import { getRuleTemplate } from '../../../src/sensory/rule-templates.js';
 import { ruleMatches, wireSensoryRules } from '../../../src/sensory/sensory-rules-engine.js';
+import { MiddlewarePipeline } from '../../../src/agent/middleware/pipeline.js';
+import { evaluateHeadlessTaskOutcome } from '../../../src/cli/headless-task-outcome.js';
 import { LoopDetectionService } from '../../../src/agent/loop-detection-service.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -82,18 +84,20 @@ function createConfig(maxToolRounds = 50): ExecutorConfig {
 }
 
 /** Fixture provider: `plan(round)` returns the tool calls for that round (empty = final answer). */
-function scriptProvider(deps: ExecutorDependencies, plan: (round: number) => Call[]): { rounds: () => number } {
+function scriptProvider(deps: ExecutorDependencies, plan: (round: number) => Call[]): { rounds: () => number; requests: CodeBuddyMessage[][] } {
   let round = 0;
   const stream = deps.client.chatStream as unknown as ReturnType<typeof vi.fn>;
   const acc = deps.streamingHandler.getAccumulatedMessage as unknown as ReturnType<typeof vi.fn>;
   let current: Call[] = [];
-  stream.mockImplementation(async function* () {
+  const requests: CodeBuddyMessage[][] = [];
+  stream.mockImplementation(async function* (request: CodeBuddyMessage[]) {
+    requests.push(structuredClone(request));
     round += 1;
     current = plan(round);
     yield { choices: [{ delta: { content: current.length ? '' : 'final answer' } }] };
   });
   acc.mockImplementation(() => ({ content: current.length ? '' : 'final answer', tool_calls: current.length ? current : undefined }));
-  return { rounds: () => round };
+  return { rounds: () => round, requests };
 }
 
 async function runStream(executor: AgentExecutor, messages: CodeBuddyMessage[]): Promise<StreamingChunk[]> {
@@ -321,5 +325,43 @@ describe('first-use restore_context tip (P4)', () => {
     scriptProvider(deps, (round) => (round === 1 ? [toolCall('view_file', { path: 'src/a.ts' }, round)] : []));
     await runStream(executor, [{ role: 'user', content: 'read' }]);
     expect(fs.readdirSync(hintsDir)).toEqual([]);
+  });
+});
+
+describe('end-of-turn recovery evidence', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it('reinjects a tool-round warning into the next provider request', async () => {
+    const deps = createDeps();
+    const pipeline = new MiddlewarePipeline();
+    let first = true;
+    pipeline.use({ name: 'fixture-warning', priority: 20, afterTurn: () => {
+      if (first) { first = false; return { action: 'warn', message: 'VERIFY_REQUIRED_SENTINEL' }; }
+      return { action: 'continue' };
+    } });
+    deps.middlewarePipeline = pipeline;
+    const provider = scriptProvider(deps, round => round === 1 ? [toolCall('view_file', { path: 'a' }, round)] : []);
+    const messages: CodeBuddyMessage[] = [];
+    await new AgentExecutor(deps, createConfig()).processUserMessage('Inspect a', [], messages);
+    expect(provider.requests).toHaveLength(2);
+    expect(provider.requests[0]?.some(m => String(m.content).includes('VERIFY_REQUIRED_SENTINEL'))).toBe(false);
+    expect(provider.requests[1]?.some(m => m.role === 'system' && String(m.content).includes('VERIFY_REQUIRED_SENTINEL'))).toBe(true);
+  });
+  it('retries an unsupported claim once within the same task, then fails', async () => {
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true');
+    const deps = createDeps();
+    const provider = scriptProvider(deps, () => []);
+    (deps.streamingHandler.getAccumulatedMessage as ReturnType<typeof vi.fn>).mockReturnValue({ content: 'I created the file.' });
+    const entries = await new AgentExecutor(deps, createConfig()).processUserMessage('Explain a', [], [], Date.now(), undefined, false, 'cli');
+    expect(provider.rounds()).toBe(2);
+    expect(evaluateHeadlessTaskOutcome('Explain a', entries).exitCode).toBe(4);
+  });
+  it('records a middleware stop even after a successful action', async () => {
+    const deps = createDeps();
+    const pipeline = new MiddlewarePipeline();
+    pipeline.use({ name: 'stop', priority: 20, afterTurn: () => ({ action: 'stop', message: 'A custom stop reason' }) });
+    deps.middlewarePipeline = pipeline;
+    scriptProvider(deps, round => round === 1 ? [toolCall('bash', { command: 'echo ok' }, round)] : []);
+    const entries = await new AgentExecutor(deps, createConfig()).processUserMessage('Run echo', [], []);
+    expect(evaluateHeadlessTaskOutcome('Run echo', entries).reasons).toContain('execution_stopped');
   });
 });
