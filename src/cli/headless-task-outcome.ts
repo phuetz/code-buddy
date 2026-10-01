@@ -79,12 +79,13 @@ function completedGreen(entry: TaskEvidenceEntry): boolean {
     || /^\s*ℹ tests [1-9]\d*\b/m.test(output) && /^\s*ℹ fail 0\b/m.test(output);
 }
 
-function runtimeShell(entry: TaskEvidenceEntry): { command: string; cwd: string; testScript?: string } | undefined {
+function runtimeShell(entry: TaskEvidenceEntry): { command: string; cwd: string; testScript?: string; changedFiles?: string[] } | undefined {
   const value = entry.toolResult?.metadata?.shellExecution;
   if (!value || typeof value !== 'object') return undefined;
   const fields = value as Record<string, unknown>;
   return typeof fields.command === 'string' && typeof fields.cwd === 'string'
-    ? { command: fields.command, cwd: fields.cwd, ...(typeof fields.testScript === 'string' ? { testScript: fields.testScript } : {}) } : undefined;
+    ? { command: fields.command, cwd: fields.cwd, ...(typeof fields.testScript === 'string' ? { testScript: fields.testScript } : {}),
+      ...(Array.isArray(fields.changedFiles) && fields.changedFiles.every(file => typeof file === 'string') ? { changedFiles: fields.changedFiles as string[] } : {}) } : undefined;
 }
 
 function checkIdentity(entry: TaskEvidenceEntry, command: string | undefined, success: boolean): { command?: string; directory?: string; alternatives?: string[] } {
@@ -129,13 +130,6 @@ function inspection(command: string): boolean {
     && (part.connector === null || part.connector === '&&'));
 }
 
-function shellWrites(command: string): boolean {
-  if (/[$`\n]/.test(command)) return false;
-  const parsed = parseBashCommand(shellCheckScope(command).body);
-  return !parsed.warnings.length && parsed.commands.some(part => !part.isSubshell && part.command === 'sed'
-    && part.args.some(arg => arg === '-i' || arg.startsWith('--in-place')));
-}
-
 export function evaluateHeadlessTaskOutcome(
   prompt: string,
   entries: readonly TaskEvidenceEntry[],
@@ -158,7 +152,7 @@ export function evaluateHeadlessTaskOutcome(
     if (entry.toolResult.success && (write || execution || name === 'scaffold_app')) actionTools.push(name);
     const hostShell = name === 'bash' ? runtimeShell(entry) : undefined;
     const rawCommand = hostShell?.command ?? (typeof (args.command ?? args.cmd) === 'string' ? String(args.command ?? args.cmd).trim() : undefined);
-    if (entry.toolResult.success && (write || name === 'bash' && rawCommand && shellWrites(rawCommand))) lastWrite = sequence;
+    if (entry.toolResult.success && (write || name === 'bash' && !!hostShell?.changedFiles?.length)) lastWrite = sequence;
     if (execution) {
       const command = rawCommand;
       // A shell can retain a directory change across calls. Without an

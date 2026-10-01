@@ -6,7 +6,7 @@ const red = '# tests 1\n# pass 0\n# fail 1';
 function shell(command: string, success: boolean, output: string, cwd?: string): TaskEvidenceEntry {
   return { type: 'tool_result', content: output,
     toolCall: { id: 'call', function: { name: 'bash', arguments: JSON.stringify({ command }) } },
-    toolResult: { success, output, ...(cwd ? { metadata: { shellExecution: { command, cwd } } } : {}) },
+    toolResult: { success, output, ...(cwd ? { metadata: { shellExecution: { command, cwd, ...(command.includes("sed -i") ? { changedFiles: ["/workspace/greet.js"] } : {}) } } } : {}) },
   };
 }
 const edit: TaskEvidenceEntry = { type: 'tool_result', content: 'Changed greet.js',
@@ -21,6 +21,11 @@ describe('headless recovery with execution evidence', () => {
       shell('cat greet.js && echo "---" && cat .codebuddy/state.json', false, 'Bonjour\nNo such file', '/workspace'),
       shell("cd /workspace && sed -i 's/Bonjour/Salut/' greet.js && cat greet.js", true, 'Salut', '/workspace'),
     ], 'Replace Bonjour by Salut in greet.js')).toBe(0);
+  });
+  it('keeps the optional read failed when sed succeeded without changing bytes', () => {
+    const noChange = shell("sed -i 's/ABSENT/Salut/' greet.js", true, '', '/workspace');
+    noChange.toolResult!.metadata = { shellExecution: { command: "sed -i 's/ABSENT/Salut/' greet.js", cwd: '/workspace', changedFiles: [] } };
+    expect(exit([shell('cat greet.js && cat .codebuddy/state.json', false, 'No such file', '/workspace'), noChange], 'Replace Bonjour by Salut in greet.js')).toBe(1);
   });
   it('matches cd-scoped and unscoped tests only with the runtime cwd (C fix-2)', () => {
     expect(exit([shell('cd /workspace && npm test 2>&1', false, red, '/workspace'), edit,

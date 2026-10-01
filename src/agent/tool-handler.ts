@@ -25,7 +25,7 @@ import {
   BashTool,
 } from "../tools/index.js";
 import { isBareChangeDirectory } from "../tools/bash/bash-tool.js";
-import { captureShellExecution } from '../cli/shell-execution-evidence.js';
+import { captureShellExecution, completeShellExecution } from '../cli/shell-execution-evidence.js';
 import { getFormalToolRegistry } from "../tools/registry/index.js";
 import type { FormalToolRegistry, IToolExecutionContext } from "../tools/registry/index.js";
 // The adapter list (base tools + aliases, with the audit-history rationale for
@@ -1591,7 +1591,7 @@ export class ToolHandler {
       logger.warn("Post-bash hook failed", { error: getErrorMessage(hookError) });
     }
 
-    return { ...bashResult, metadata: { ...bashResult.metadata, shellExecution } };
+    return { ...bashResult, metadata: { ...bashResult.metadata, shellExecution: completeShellExecution(shellExecution) } };
   }
 
   /**
@@ -1801,7 +1801,7 @@ export class ToolHandler {
         output: finalHookResult.output,
         error: finalHookResult.error,
         ...(bashResult.data !== undefined ? { data: bashResult.data } : {}),
-        ...(shellExecution ? { metadata: { ...bashResult.metadata, shellExecution } } : {}),
+        ...(shellExecution ? { metadata: { ...bashResult.metadata, shellExecution: completeShellExecution(shellExecution) } } : {}),
       };
     } catch (error) {
       return { success: false, error: `Streaming execution error: ${getErrorMessage(error)}` };
