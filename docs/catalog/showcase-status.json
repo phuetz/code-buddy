@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "counts": {
     "total": 338,
-    "passed": 0,
+    "passed": 45,
     "failed": 9,
-    "unavailable": 338
+    "unavailable": 293
   },
   "features": [
     {
@@ -912,7 +912,7 @@
     {
       "id": "tool:a2ui",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-a2ui-2026-09-30.log"
@@ -928,7 +928,7 @@
     {
       "id": "tool:app_server",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-app_server-2026-09-30.log"
@@ -975,16 +975,19 @@
     },
     {
       "id": "tool:bash",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : stdout 42 après node -e. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant bash dans le scénario capturé : stdout 42 après node -e. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct bash component call in the captured scenario: stdout 42 after node -e. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-bash-2026-09-30.log"
     },
     {
       "id": "tool:browser_back",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-browser_back-2026-09-30.log"
@@ -992,7 +995,7 @@
     {
       "id": "tool:browser_click",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-browser_click-2026-09-30.log"
@@ -1024,7 +1027,7 @@
     {
       "id": "tool:browser_navigate",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-browser_navigate-2026-09-30.log"
@@ -1040,7 +1043,7 @@
     {
       "id": "tool:browser_press",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-browser_press-2026-09-30.log"
@@ -1048,7 +1051,7 @@
     {
       "id": "tool:browser_scroll",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-browser_scroll-2026-09-30.log"
@@ -1064,7 +1067,7 @@
     {
       "id": "tool:browser_type",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-browser_type-2026-09-30.log"
@@ -1072,7 +1075,7 @@
     {
       "id": "tool:browser_vision",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-browser_vision-2026-09-30.log"
@@ -1080,16 +1083,19 @@
     {
       "id": "tool:build_project",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Oracle de fichier enregistré comme contrôles booléens ; verser le fichier résultant et sa fixture pour qualifier cette écriture. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-build_project-2026-09-30.log"
     },
     {
       "id": "tool:bundle_analyze",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : app.js de 8 octets, total 8. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant bundle_analyze dans le scénario capturé : app.js de 8 octets, total 8. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct bundle_analyze component call in the captured scenario: an 8-byte app.js, total 8. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-bundle_analyze-2026-09-30.log"
     },
@@ -1112,7 +1118,7 @@
     {
       "id": "tool:canvas",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-canvas-2026-09-30.log"
@@ -1128,7 +1134,7 @@
     {
       "id": "tool:code_exec",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-code_exec-2026-09-30.log"
@@ -1151,9 +1157,12 @@
     },
     {
       "id": "tool:code_stats",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : comptage de fichiers et de lignes, présence de TypeScript. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant code_stats dans le scénario capturé : comptage de fichiers et de lignes, présence de TypeScript. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct code_stats component call in the captured scenario: file and line counts, TypeScript present. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-code_stats-2026-09-30.log"
     },
@@ -1168,7 +1177,7 @@
     {
       "id": "tool:codebase_replace",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-codebase_replace-2026-09-30.log"
@@ -1184,7 +1193,7 @@
     {
       "id": "tool:community_search",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-community_search-2026-09-30.log"
@@ -1216,7 +1225,7 @@
     {
       "id": "tool:create_skill",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Oracle de fichier enregistré comme contrôles booléens ; verser le fichier résultant et sa fixture pour qualifier cette écriture. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-create_skill-2026-09-30.log"
@@ -1224,7 +1233,7 @@
     {
       "id": "tool:create_todo_list",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-create_todo_list-2026-09-30.log"
@@ -1232,7 +1241,7 @@
     {
       "id": "tool:cronjob",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-cronjob-2026-09-30.log"
@@ -1247,9 +1256,12 @@
     },
     {
       "id": "tool:csv_preview",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : colonnes name/value et deux lignes alpha/12, beta/30. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant csv_preview dans le scénario capturé : colonnes name/value et deux lignes alpha/12, beta/30. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct csv_preview component call in the captured scenario: name/value columns and two rows alpha/12, beta/30. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-csv_preview-2026-09-30.log"
     },
@@ -1263,9 +1275,12 @@
     },
     {
       "id": "tool:dep_inspect",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : dépendance p9-fixture-lib 1.0.0 et script de test. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant dep_inspect dans le scénario capturé : dépendance p9-fixture-lib 1.0.0 et script de test. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct dep_inspect component call in the captured scenario: p9-fixture-lib 1.0.0 dependency and test script. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-dep_inspect-2026-09-30.log"
     },
@@ -1279,9 +1294,12 @@
     },
     {
       "id": "tool:design_system",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : retour du descriptif Apple/SF Pro. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant design_system dans le scénario capturé : retour du descriptif Apple/SF Pro. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct design_system component call in the captured scenario: the Apple/SF Pro description returned. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-design_system-2026-09-30.log"
     },
@@ -1303,9 +1321,12 @@
     },
     {
       "id": "tool:diff_files",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : diff +P9_BETA/-P9_ALPHA et deux lignes changées. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant diff_files dans le scénario capturé : diff +P9_BETA/-P9_ALPHA et deux lignes changées. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct diff_files component call in the captured scenario: the +P9_BETA/-P9_ALPHA diff and two changed lines. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-diff_files-2026-09-30.log"
     },
@@ -1327,9 +1348,12 @@
     },
     {
       "id": "tool:docker",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : liste de conteneurs capturée avec WinBoat. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant docker dans le scénario capturé : liste de conteneurs capturée avec WinBoat. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct docker component call in the captured scenario: the captured container list includes WinBoat. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-docker-2026-09-30.log"
     },
@@ -1367,9 +1391,12 @@
     },
     {
       "id": "tool:execute_code",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : processus JavaScript terminé code0, stdout42. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant execute_code dans le scénario capturé : processus JavaScript terminé code0, stdout42. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct execute_code component call in the captured scenario: JavaScript process exited0 with stdout42. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-execute_code-2026-09-30.log"
     },
@@ -1447,41 +1474,53 @@
     },
     {
       "id": "tool:file_search",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : occurrence sample.js ligne2 et extrait P9_MARKER. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant file_search dans le scénario capturé : occurrence sample.js ligne2 et extrait P9_MARKER. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct file_search component call in the captured scenario: sample.js line2 occurrence and P9_MARKER excerpt. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-file_search-2026-09-30.log"
     },
     {
       "id": "tool:find_bugs",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : diagnostic de variable non initialisée, fichier et ligne. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant find_bugs dans le scénario capturé : diagnostic de variable non initialisée, fichier et ligne. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct find_bugs component call in the captured scenario: uninitialized-variable diagnostic, file and line. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-find_bugs-2026-09-30.log"
     },
     {
       "id": "tool:find_definition",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-find_definition-2026-09-30.log"
     },
     {
       "id": "tool:find_references",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : usage add à sample.ts ligne3. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant find_references dans le scénario capturé : usage add à sample.ts ligne3. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct find_references component call in the captured scenario: add usage at sample.ts line3. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-find_references-2026-09-30.log"
     },
     {
       "id": "tool:find_symbols",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : symbole add à sample.ts ligne1. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant find_symbols dans le scénario capturé : symbole add à sample.ts ligne1. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct find_symbols component call in the captured scenario: add symbol at sample.ts line1. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-find_symbols-2026-09-30.log"
     },
@@ -1512,7 +1551,7 @@
     {
       "id": "tool:forget",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-forget-2026-09-30.log"
@@ -1520,7 +1559,7 @@
     {
       "id": "tool:format_project",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Oracle de fichier enregistré comme contrôles booléens ; verser le fichier résultant et sa fixture pour qualifier cette écriture. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-format_project-2026-09-30.log"
@@ -1528,31 +1567,37 @@
     {
       "id": "tool:generate_document",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-generate_document-2026-09-30.log"
     },
     {
       "id": "tool:get_todo_list",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : tâche P9_TODO en attente, aucune terminée. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant get_todo_list dans le scénario capturé : tâche P9_TODO en attente, aucune terminée. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct get_todo_list component call in the captured scenario: pending P9_TODO task, none complete. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-get_todo_list-2026-09-30.log"
     },
     {
       "id": "tool:git",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : fichier a.txt dans la liste non suivie. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant git dans le scénario capturé : fichier a.txt dans la liste non suivie. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct git component call in the captured scenario: a.txt in the untracked list. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-git-2026-09-30.log"
     },
     {
       "id": "tool:git_summary",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-git_summary-2026-09-30.log"
@@ -1600,7 +1645,7 @@
     {
       "id": "tool:http_probe",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-http_probe-2026-09-30.log"
@@ -1647,16 +1692,19 @@
     },
     {
       "id": "tool:json_query",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : nested.value lu à42 dans la réponse et data.value. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant json_query dans le scénario capturé : nested.value lu à42 dans la réponse et data.value. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct json_query component call in the captured scenario: nested.value read as42 in the response and data.value. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-json_query-2026-09-30.log"
     },
     {
       "id": "tool:kanban_block",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-kanban_block-2026-09-30.log"
@@ -1664,7 +1712,7 @@
     {
       "id": "tool:kanban_comment",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-kanban_comment-2026-09-30.log"
@@ -1672,7 +1720,7 @@
     {
       "id": "tool:kanban_complete",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-kanban_complete-2026-09-30.log"
@@ -1680,7 +1728,7 @@
     {
       "id": "tool:kanban_create",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-kanban_create-2026-09-30.log"
@@ -1688,7 +1736,7 @@
     {
       "id": "tool:kanban_heartbeat",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-kanban_heartbeat-2026-09-30.log"
@@ -1696,7 +1744,7 @@
     {
       "id": "tool:kanban_link",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-kanban_link-2026-09-30.log"
@@ -1704,7 +1752,7 @@
     {
       "id": "tool:kanban_list",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-kanban_list-2026-09-30.log"
@@ -1712,7 +1760,7 @@
     {
       "id": "tool:kanban_show",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-kanban_show-2026-09-30.log"
@@ -1720,7 +1768,7 @@
     {
       "id": "tool:kanban_unblock",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-kanban_unblock-2026-09-30.log"
@@ -1728,7 +1776,7 @@
     {
       "id": "tool:knowledge_add",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-knowledge_add-2026-09-30.log"
@@ -1743,9 +1791,12 @@
     },
     {
       "id": "tool:knowledge_search",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : résultat P9 Knowledge contenant P9_KNOWLEDGE. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant knowledge_search dans le scénario capturé : résultat P9 Knowledge contenant P9_KNOWLEDGE. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct knowledge_search component call in the captured scenario: P9 Knowledge result containing P9_KNOWLEDGE. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-knowledge_search-2026-09-30.log"
     },
@@ -1759,32 +1810,41 @@
     },
     {
       "id": "tool:lead_scout_enrichment_plan",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : plan avec budget1, étapes et règles d’extraction. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant lead_scout_enrichment_plan dans le scénario capturé : plan avec budget1, étapes et règles d’extraction. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct lead_scout_enrichment_plan component call in the captured scenario: plan with budget1, hops and extraction rules. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lead_scout_enrichment_plan-2026-09-30.log"
     },
     {
       "id": "tool:lead_scout_lesson_candidates",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : proposition soumise à revue avec besoin d’enrichissement. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant lead_scout_lesson_candidates dans le scénario capturé : proposition soumise à revue avec besoin d’enrichissement. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct lead_scout_lesson_candidates component call in the captured scenario: review-required proposal mentioning enrichment needs. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lead_scout_lesson_candidates-2026-09-30.log"
     },
     {
       "id": "tool:lead_scout_plan",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : plan sur dataset local avec accord humain avant contact. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant lead_scout_plan dans le scénario capturé : plan sur dataset local avec accord humain avant contact. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct lead_scout_plan component call in the captured scenario: local-dataset plan requiring human approval before contact. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lead_scout_plan-2026-09-30.log"
     },
     {
       "id": "tool:lead_scout_run",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Oracle de fichier enregistré comme contrôles booléens ; verser le fichier résultant et sa fixture pour qualifier cette écriture. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lead_scout_run-2026-09-30.log"
@@ -1831,9 +1891,12 @@
     },
     {
       "id": "tool:license_check",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : licence déclarée MIT de p9-fixture-lib 1.0.0. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant license_check dans le scénario capturé : licence déclarée MIT de p9-fixture-lib 1.0.0. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct license_check component call in the captured scenario: declared MIT license for p9-fixture-lib 1.0.0. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-license_check-2026-09-30.log"
     },
@@ -1855,9 +1918,12 @@
     },
     {
       "id": "tool:list_directory",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : listing contenant data.csv, sample.ts et package.json. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant list_directory dans le scénario capturé : listing contenant data.csv, sample.ts et package.json. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct list_directory component call in the captured scenario: listing contains data.csv, sample.ts and package.json. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-list_directory-2026-09-30.log"
     },
@@ -1879,49 +1945,64 @@
     },
     {
       "id": "tool:lsp_definition",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : définition TypeScript unique, sample.ts ligne1. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant lsp_definition dans le scénario capturé : définition TypeScript unique, sample.ts ligne1. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct lsp_definition component call in the captured scenario: one TypeScript definition at sample.ts line1. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lsp_definition-2026-09-30.log"
     },
     {
       "id": "tool:lsp_diagnostics",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : diagnostic string-vers-number à la ligne2. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant lsp_diagnostics dans le scénario capturé : diagnostic string-vers-number à la ligne2. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct lsp_diagnostics component call in the captured scenario: string-to-number diagnostic at line2. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lsp_diagnostics-2026-09-30.log"
     },
     {
       "id": "tool:lsp_hover",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : signature add(a:number,b:number):number. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant lsp_hover dans le scénario capturé : signature add(a:number,b:number):number. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct lsp_hover component call in the captured scenario: add(a:number,b:number):number signature. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lsp_hover-2026-09-30.log"
     },
     {
       "id": "tool:lsp_references",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : deux références, dont sample.ts ligne3. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant lsp_references dans le scénario capturé : deux références, dont sample.ts ligne3. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct lsp_references component call in the captured scenario: two references, including sample.ts line3. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lsp_references-2026-09-30.log"
     },
     {
       "id": "tool:lsp_rename",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Oracle de fichier enregistré comme contrôles booléens ; verser le fichier résultant et sa fixture pour qualifier cette écriture. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lsp_rename-2026-09-30.log"
     },
     {
       "id": "tool:lsp_symbols",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : symbole add de type Function. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant lsp_symbols dans le scénario capturé : symbole add de type Function. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct lsp_symbols component call in the captured scenario: add symbol of kind Function. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-lsp_symbols-2026-09-30.log"
     },
@@ -1936,7 +2017,7 @@
     {
       "id": "tool:meeting_notes",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-meeting_notes-2026-09-30.log"
@@ -1944,7 +2025,7 @@
     {
       "id": "tool:memory_propose",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-memory_propose-2026-09-30.log"
@@ -2040,7 +2121,7 @@
     {
       "id": "tool:plan",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Oracle de fichier enregistré comme contrôles booléens ; verser le fichier résultant et sa fixture pour qualifier cette écriture. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-plan-2026-09-30.log"
@@ -2048,7 +2129,7 @@
     {
       "id": "tool:port_check",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-port_check-2026-09-30.log"
@@ -2056,16 +2137,19 @@
     {
       "id": "tool:process",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-process-2026-09-30.log"
     },
     {
       "id": "tool:project_map",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : arbre de fichiers incluant sample.ts, data.csv et TypeScript. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant project_map dans le scénario capturé : arbre de fichiers incluant sample.ts, data.csv et TypeScript. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct project_map component call in the captured scenario: file tree includes sample.ts, data.csv and TypeScript. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-project_map-2026-09-30.log"
     },
@@ -2103,24 +2187,30 @@
     },
     {
       "id": "tool:recall",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : rappel de la valeur P9_MEMORY. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant recall dans le scénario capturé : rappel de la valeur P9_MEMORY. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct recall component call in the captured scenario: P9_MEMORY value recalled. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-recall-2026-09-30.log"
     },
     {
       "id": "tool:relationship_context",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : fait public P9_PUBLIC inclus, P9_SECRET exclu. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant relationship_context dans le scénario capturé : fait public P9_PUBLIC inclus, P9_SECRET exclu. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct relationship_context component call in the captured scenario: P9_PUBLIC included, P9_SECRET excluded. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-relationship_context-2026-09-30.log"
     },
     {
       "id": "tool:remember",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-remember-2026-09-30.log"
@@ -2136,7 +2226,7 @@
     {
       "id": "tool:replace_memory",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-replace_memory-2026-09-30.log"
@@ -2144,7 +2234,7 @@
     {
       "id": "tool:resolve_conflicts",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Oracle de fichier enregistré comme contrôles booléens ; verser le fichier résultant et sa fixture pour qualifier cette écriture. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-resolve_conflicts-2026-09-30.log"
@@ -2167,17 +2257,23 @@
     },
     {
       "id": "tool:run_script",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : Python terminé code0 et sortie42. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant run_script dans le scénario capturé : Python terminé code0 et sortie42. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct run_script component call in the captured scenario: Python exited0 and returned42. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-run_script-2026-09-30.log"
     },
     {
       "id": "tool:sbom_generate",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : entrée p9-fixture-lib 1.0.0, licence MIT. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant sbom_generate dans le scénario capturé : entrée p9-fixture-lib 1.0.0, licence MIT. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct sbom_generate component call in the captured scenario: p9-fixture-lib 1.0.0 entry, MIT license. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-sbom_generate-2026-09-30.log"
     },
@@ -2191,17 +2287,23 @@
     },
     {
       "id": "tool:scan_secrets",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : mot de passe de fixture détecté, valeur masquée. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant scan_secrets dans le scénario capturé : mot de passe de fixture détecté, valeur masquée. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct scan_secrets component call in the captured scenario: fixture password detected and value masked. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-scan_secrets-2026-09-30.log"
     },
     {
       "id": "tool:scan_vulnerabilities",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : alerte HIGH lodash dans la fixture npm. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant scan_vulnerabilities dans le scénario capturé : alerte HIGH lodash dans la fixture npm. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct scan_vulnerabilities component call in the captured scenario: HIGH lodash finding in the npm fixture. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-scan_vulnerabilities-2026-09-30.log"
     },
@@ -2224,7 +2326,7 @@
     {
       "id": "tool:search",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-search-2026-09-30.log"
@@ -2232,7 +2334,7 @@
     {
       "id": "tool:search_files",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-search_files-2026-09-30.log"
@@ -2240,24 +2342,30 @@
     {
       "id": "tool:search_multi",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-search_multi-2026-09-30.log"
     },
     {
       "id": "tool:self_describe",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : identité @phuetz/code-buddy et version2.3.0. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant self_describe dans le scénario capturé : identité @phuetz/code-buddy et version2.3.0. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct self_describe component call in the captured scenario: @phuetz/code-buddy identity and version2.3.0. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-self_describe-2026-09-30.log"
     },
     {
       "id": "tool:self_evolution",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : note synthétique de CHANGELOG retrouvée. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant self_evolution dans le scénario capturé : note synthétique de CHANGELOG retrouvée. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct self_evolution component call in the captured scenario: synthetic CHANGELOG note retrieved. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-self_evolution-2026-09-30.log"
     },
@@ -2416,7 +2524,7 @@
     {
       "id": "tool:stock_quote",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Réponse externe datée : exactitude des valeurs et corps fournisseur non qualifiés par ce journal seul. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-stock_quote-2026-09-30.log"
@@ -2447,9 +2555,12 @@
     },
     {
       "id": "tool:terminal",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : stdout42 après node -e. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant terminal dans le scénario capturé : stdout42 après node -e. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct terminal component call in the captured scenario: stdout42 after node -e. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-terminal-2026-09-30.log"
     },
@@ -2463,9 +2574,12 @@
     },
     {
       "id": "tool:test_runner",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : runner node, un test vert, zéro rouge et sortie correspondante. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant test_runner dans le scénario capturé : runner node, un test vert, zéro rouge et sortie correspondante. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct test_runner component call in the captured scenario: node runner, one passed test, zero failures and matching output. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-test_runner-2026-09-30.log"
     },
@@ -2479,16 +2593,19 @@
     },
     {
       "id": "tool:todo_scan",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : TODO P9_MARKER dans sample.js ligne2. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant todo_scan dans le scénario capturé : TODO P9_MARKER dans sample.js ligne2. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct todo_scan component call in the captured scenario: TODO P9_MARKER at sample.js line2. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-todo_scan-2026-09-30.log"
     },
     {
       "id": "tool:todo_update",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-todo_update-2026-09-30.log"
@@ -2504,7 +2621,7 @@
     {
       "id": "tool:update_todo_list",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-update_todo_list-2026-09-30.log"
@@ -2551,9 +2668,12 @@
     },
     {
       "id": "tool:video_long_form_plan",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : plan incomplet refusé avec raisons. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant video_long_form_plan dans le scénario capturé : plan incomplet refusé avec raisons. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct video_long_form_plan component call in the captured scenario: incomplete plan rejected with reasons. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-video_long_form_plan-2026-09-30.log"
     },
@@ -2567,9 +2687,12 @@
     },
     {
       "id": "tool:video_route",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : routage simulé selon capacités fournies, zéro crédit prévu. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant video_route dans le scénario capturé : routage simulé selon capacités fournies, zéro crédit prévu. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct video_route component call in the captured scenario: routing from supplied capacities, zero planned credits. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-video_route-2026-09-30.log"
     },
@@ -2583,9 +2706,12 @@
     },
     {
       "id": "tool:video_trailer_plan",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : plan vide déclaré INCOMPLETE avec bloquants. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant video_trailer_plan dans le scénario capturé : plan vide déclaré INCOMPLETE avec bloquants. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct video_trailer_plan component call in the captured scenario: empty plan declared INCOMPLETE with blockers. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-video_trailer_plan-2026-09-30.log"
     },
@@ -2608,39 +2734,48 @@
     {
       "id": "tool:weather",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Réponse externe datée : exactitude des valeurs et corps fournisseur non qualifiés par ce journal seul. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-weather-2026-09-30.log"
     },
     {
       "id": "tool:web_extract",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : texte Example Domain extrait de la réponse capturée. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant web_extract dans le scénario capturé : texte Example Domain extrait de la réponse capturée. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct web_extract component call in the captured scenario: Example Domain text extracted from the captured response. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-web_extract-2026-09-30.log"
     },
     {
       "id": "tool:web_fetch",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : texte Example Domain dans la réponse capturée. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant web_fetch dans le scénario capturé : texte Example Domain dans la réponse capturée. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct web_fetch component call in the captured scenario: Example Domain text in the captured response. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-web_fetch-2026-09-30.log"
     },
     {
       "id": "tool:web_scrape",
-      "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
-      "scope": null,
+      "status": "proven",
+      "reason": "Qualification documentaire de la trace P9 conservée : texte Example Domain par repli web_fetch explicite. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "scope": {
+        "fr": "Appel direct du composant web_scrape dans le scénario capturé : texte Example Domain par repli web_fetch explicite. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
+        "en": "Direct web_scrape component call in the captured scenario: Example Domain text through the explicit web_fetch fallback. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
+      },
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-web_scrape-2026-09-30.log"
     },
     {
       "id": "tool:web_test",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Journal de scénario complexe : captures DOM, rendu, sous-processus ou état complet à qualifier séparément. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-web_test-2026-09-30.log"

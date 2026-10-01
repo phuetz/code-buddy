@@ -41,6 +41,16 @@ node --import tsx scripts/generate-proven-features.ts --check
 ```
 
 Les résultats P9 sont intégrés comme traces historiques ; leur contenu ne reçoit pas automatiquement une qualification éditoriale positive.
+La qualification documentaire rattache aussi les traces P9 dont les champs retournés
+capturés suffisent pour un scénario de composant limité et dont l’empreinte source
+correspond encore. Leurs dates et révisions d’exécution restent celles des journaux
+d’origine ; une relecture ne constitue pas une nouvelle exécution. Un journal qui
+ne contient que des booléens d’observation, ou dont le fichier résultant n’est pas
+versé, peut demander une fixture ou une capture supplémentaire avant acceptation.
+« Ici » signifie que la trace et sa qualification sont dans ce dépôt ; le compteur
+ne dépend ni de la machine qui régénère les pages ni d’une durée de validité en jours.
+Une modification des fichiers couverts par l’empreinte rend la preuve historique
+non qualificative pour le code courant, sans transformer son succès en échec.
 Le critère de sortie reste une installation neuve avec un petit modèle local et une
 première tâche vérifiée ; aucune trace de ce catalogue ne prouve ce parcours complet.
 
