@@ -66,7 +66,7 @@ describe('useAppStudio ensureInstalled', () => {
       out = await result.current.actions.startDev({ cwd: '/proj' });
     });
     expect(runToEnd).toHaveBeenCalledTimes(1);
-    expect(runToEnd.mock.calls[0]![0]).toMatchObject({ cwd: '/proj', command: 'npm install' });
+    expect(runToEnd.mock.calls[0]![0]).toMatchObject({ cwd: '/proj', command: 'npm install --include=dev' });
     expect(out).toEqual({ ok: true, url: 'http://127.0.0.1:5173/' });
   });
 });

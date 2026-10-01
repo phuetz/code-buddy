@@ -12,6 +12,7 @@
  * Dependencies: session-manager, config-store, mcp-manager, sandbox-adapter,
  *               skills-manager, scheduled-task-manager, nav-server, remote-manager
  */
+import { version as sourceVersion } from '../../package.json';
 import {
   app,
   BrowserWindow,
@@ -44,6 +45,7 @@ import {
 import { wireFleetAggregator } from './fleet/aggregator-wiring';
 import { registerOsIpcHandlers } from './ipc/os-ipc';
 import { setMainWindow, setTray, getMainWindow } from './window-management';
+import { requestSingleInstanceLock } from './utils/single-instance-lock.js';
 import {
   activeSessionIdFromMainWindow,
   registerQuickAskAppshot,
@@ -793,7 +795,7 @@ if (isDev) {
   );
 }
 
-const hasSingleInstanceLock = isDev || isE2E || app.requestSingleInstanceLock();
+const hasSingleInstanceLock = isDev || isE2E || requestSingleInstanceLock(app);
 if (!hasSingleInstanceLock) {
   logWarn('[App] Another instance is already running, quitting this instance');
   app.quit();
@@ -2700,7 +2702,7 @@ ipcMain.handle('client-invoke', async (_event, data: ClientEvent) => {
 
 ipcMain.handle('get-version', () => {
   try {
-    return app.getVersion();
+    return app.isPackaged ? app.getVersion() : sourceVersion;
   } catch (error) {
     logError('[IPC] Error getting version:', error);
     return 'unknown';
@@ -2845,7 +2847,12 @@ registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.we
     return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
   }
 });
-registerScaffoldIpc(ipcMain, new ScaffoldService());
+// A template created from the user's Studio form is a selected workspace.
+// Trust its canonical directory, without granting access to its parent/siblings.
+const studioCreatedRoots = new Set<string>();
+registerScaffoldIpc(ipcMain, new ScaffoldService(), async (projectDir) => {
+  studioCreatedRoots.add(await fs.promises.realpath(projectDir));
+});
 // Preview health probe: a vite build pass + a hidden, sandboxed window on the
 // loopback preview, so the auto-fix loop sees errors the dev server hides.
 registerPreviewProbeIpc(
@@ -2891,7 +2898,7 @@ const avatarBibleService = new AvatarBibleService({
 });
 registerAvatarBibleIpc(ipcMain, avatarBibleService);
 const creativeWorkspaceRoots = () => {
-  const roots = new Set<string>([join(app.getPath('userData'), 'default_working_dir')]);
+  const roots = new Set<string>([join(app.getPath('userData'), 'default_working_dir'), ...studioCreatedRoots]);
   if (currentWorkingDir) roots.add(currentWorkingDir);
   const activeWorkspace = projectManager?.getActive()?.workspacePath;
   if (activeWorkspace) roots.add(activeWorkspace);

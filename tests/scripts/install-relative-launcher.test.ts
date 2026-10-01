@@ -19,16 +19,21 @@ afterEach(() => {
 // install.sh refuses MINGW/MSYS by design (Windows users install via WSL2 or npm), so even with
 // Git Bash present the installer cannot be exercised on a Windows runner.
 describe.skipIf(process.platform === 'win32')('one-command installer launcher', () => {
-  it.each([false, true])('creates a package-relative launcher over a stale wrapper (Windows Node paths=%s)', (windowsNodePaths) => {
+  it.each([
+    { windowsNodePaths: false, entry: 'index.js' },
+    { windowsNodePaths: true, entry: 'index.js' },
+    { windowsNodePaths: false, entry: 'cli-boot.js' },
+    { windowsNodePaths: true, entry: 'cli-boot.js' },
+  ])('creates a package-relative launcher ($entry, Windows Node paths=$windowsNodePaths)', ({ windowsNodePaths, entry }) => {
     const scratchRoot = fs.mkdtempSync(
       path.join(process.env.TMPDIR || os.tmpdir(), 'e17-installer-')
     );
     scratchRoots.push(scratchRoot);
     const fakeBin = path.join(scratchRoot, 'fake-bin');
     const home = path.join(scratchRoot, 'home');
-    const prefix = path.join(scratchRoot, 'npm-prefix');
+    let prefix = path.join(scratchRoot, 'npm-prefix');
     const packageRoot = path.join(prefix, 'lib', 'node_modules', '@phuetz', 'code-buddy');
-    const packageEntry = path.join(packageRoot, 'dist', 'index.js');
+    const packageEntry = path.join(packageRoot, 'dist', entry);
     const npmLauncher = path.join(prefix, 'bin', 'buddy');
 
     fs.mkdirSync(fakeBin, { recursive: true });
@@ -40,7 +45,7 @@ describe.skipIf(process.platform === 'win32')('one-command installer launcher', 
       "#!/usr/bin/env node\nprocess.stdout.write('2.0.0-test\\n');\n",
       { mode: 0o755 }
     );
-    fs.symlinkSync('../lib/node_modules/@phuetz/code-buddy/dist/index.js', npmLauncher);
+    fs.symlinkSync(`../lib/node_modules/@phuetz/code-buddy/dist/${entry}`, npmLauncher);
     fs.writeFileSync(
       path.join(home, '.local', 'bin', 'buddy'),
       '#!/bin/sh\nCODEBUDDY_ROOT=/old/checkout\nexit 99\n',
@@ -116,7 +121,7 @@ if (process._eval?.includes('fs.realpathSync')) {
     expect(path.isAbsolute(fs.readlinkSync(packageLink))).toBe(false);
 
     const launcherSource = fs.readFileSync(managedLauncher, 'utf8');
-    expect(launcherSource).toContain('$BUDDY_BIN_DIR/.code-buddy-package/dist/index.js');
+    expect(launcherSource).toContain(`$BUDDY_BIN_DIR/.code-buddy-package/dist/${entry}`);
     expect(launcherSource).not.toContain(scratchRoot);
     expect(launcherSource).not.toContain('CODEBUDDY_ROOT');
 
@@ -132,5 +137,20 @@ if (process._eval?.includes('fs.realpathSync')) {
     const secondRun = runInstaller();
     expect(secondRun.status, secondRun.stderr).toBe(0);
     expect(fs.readFileSync(path.join(home, '.profile'), 'utf8').split(profileEntry)).toHaveLength(2);
+    // An existing package link is a symlink to a directory. Reinstalling to a
+    // different prefix must replace that link, rather than move a file inside it.
+    const previousPrefix = prefix;
+    prefix = path.join(scratchRoot, 'next-prefix');
+    fs.cpSync(previousPrefix, prefix, { recursive: true, verbatimSymlinks: true });
+    const moved = runInstaller();
+    expect(moved.status, moved.stderr).toBe(0);
+    expect(fs.realpathSync(packageLink)).toBe(path.join(prefix, 'lib', 'node_modules', '@phuetz', 'code-buddy'));
+    fs.rmSync(previousPrefix, { recursive: true, force: true });
+    const relocatedVersion = spawnBashScript(managedLauncher, ['--version'], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH ?? ''].join(path.delimiter) },
+    });
+    expect(relocatedVersion.status, relocatedVersion.stderr).toBe(0);
+    expect(relocatedVersion.stdout).toBe('2.0.0-test\n');
   });
 });

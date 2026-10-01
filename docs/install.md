@@ -177,7 +177,7 @@ nvm install 24 && nvm alias default 24
 git clone --depth 1 https://github.com/phuetz/code-buddy.git ~/code-buddy && cd ~/code-buddy
 npm install --no-audit --no-fund
 npm run build && npm link            # exposes the `buddy` command
-buddy --version && buddy doctor      # expect 0 errors (warnings without a provider are normal)
+buddy --version && buddy doctor      # exits nonzero until a working provider/model is configured
 buddy login                          # or: export NVIDIA_API_KEY=… + a [profiles.nvidia] entry, or a local Ollama
 buddy try                            # coding demonstration; duration depends on the model
 ```
@@ -207,9 +207,8 @@ successful native-module installation on every platform.
 Desktop GUI (Cowork) in the dev flavour — the one that works over xrdp/VNC:
 
 ```bash
-buddy install-gui                    # Electron + compile; ignore "Build aborted … electron-builder" (that's only the installer packaging)
-cd cowork && npx vite build && npm run rebuild
-NODE_ENV=production ./node_modules/electron/dist/electron --no-sandbox --disable-gpu ./dist-electron/main/index.js
+node dist/index.js install-gui        # depuis le checkout compilé ; échec visible si incomplet
+xvfb-run -a node dist/index.js gui     # Linux sans écran ; sur bureau, omettre xvfb-run
 ```
 
 `--no-sandbox --disable-gpu` are required in remote-desktop sessions (see `cowork/DEV-LINUX.md`). Update later with

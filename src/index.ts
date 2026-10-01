@@ -4573,16 +4573,4 @@ if (process.exitCode !== 1) {
   1. buddy try
      Writes FizzBuzz and its test, then runs it in a sandbox.
   2. /loop "Fix the failing tests"                    (inside a buddy session)
-  3. buddy research "Compare TypeScript test runners"
-  4. buddy dev pr "Add a small feature"
-  5. /think deep "Propose the safest refactoring"     (requires GROK_API_KEY)
-  6. /share create demo                               (inside a buddy session)
-
-`);
-  removeCommands(program, getHiddenCliCommands());
-  if (isRootHelpRequest(process.argv)) {
-    program.outputHelp();
-  } else {
-    program.parse();
-  }
-}
+  3. buddy research "Compare SQLite and PostgreSQL"

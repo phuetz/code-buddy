@@ -12,12 +12,18 @@ export const SCAFFOLD_CHANNELS = {
   generate: 'studio.scaffold.generate',
 } as const;
 
-export function registerScaffoldIpc(ipcMain: Pick<IpcMain, 'handle'>, service: ScaffoldService): void {
+export function registerScaffoldIpc(
+  ipcMain: Pick<IpcMain, 'handle'>,
+  service: ScaffoldService,
+  onCreated?: (projectDir: string) => Promise<void>,
+): void {
   ipcMain.handle(SCAFFOLD_CHANNELS.list, async () => {
     return service.listTemplates();
   });
 
   ipcMain.handle(SCAFFOLD_CHANNELS.generate, async (_event, input: ScaffoldProjectInput) => {
-    return service.scaffoldProject(input);
+    const result = await service.scaffoldProject(input);
+    if (result.ok) await onCreated?.(result.data.projectDir);
+    return result;
   });
 }

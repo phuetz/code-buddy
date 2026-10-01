@@ -193,11 +193,17 @@ export class ContextLoader {
     let totalSize = 0;
 
     try {
+      // Filtering matches afterwards still traverses large ignored profiles,
+      // caches and build trees. Prune ignored root directories before globbing.
+      // Check directory rules with the ignore parser so negations stay valid.
+      const ignoredDirectories = (await fsPromises.readdir(this.workingDirectory, { withFileTypes: true }))
+        .filter((entry) => entry.isDirectory() && this.shouldIgnore(`${entry.name}/`))
+        .map((entry) => `${fg.escapePath(entry.name)}/**`);
       const matches = await glob(searchPatterns, {
         cwd: this.workingDirectory,
         dot: this.options.includeHidden,
         onlyFiles: true,
-        ignore: ALWAYS_EXCLUDE,
+        ignore: [...ALWAYS_EXCLUDE, ...ignoredDirectories],
         absolute: false,
       });
 

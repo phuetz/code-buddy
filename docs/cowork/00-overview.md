@@ -29,22 +29,22 @@ La synchronisation d'état Cowork → moteur passe par des méthodes optionnelle
 | Build & bundling | Vite |
 | Interface | React (renderer `cowork/src/renderer/`) |
 | Stockage local | better-sqlite3 (module natif, recompilé contre les en-têtes Electron) |
-| Node requis | **≥ 22** pour Cowork (le CLI racine reste compatible **≥ 18**) |
+| Node requis | **≥ 22** pour Cowork (le CLI racine exige **≥ 20**) |
 
 `better-sqlite3` étant natif, il est reconstruit pour Electron via `npm run rebuild` (déclenché au `postinstall`). C'est attendu, pas un bug : si Electron refuse de démarrer après un changement de version de Node, relancer la reconstruction.
 
 ## Installation et lancement
 
-Cowork **ne se télécharge pas séparément** : il vit dans le monorepo Code Buddy. On installe Code Buddy, puis on construit et lance la GUI.
+Cowork se construit depuis un **checkout source** du monorepo Code Buddy. Le paquet npm du CLI ne contient pas les sources de la GUI. La release v2.2.0 ne publie aucun installateur Cowork ; utilisez le parcours source ci-dessous.
 
 ```bash
-# 1. Récupérer Code Buddy (Cowork exige Node.js >= 22 ; le CLI racine >= 18)
+# 1. Récupérer les sources (Cowork exige Node.js >= 22 ; le CLI racine >= 20)
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy && npm install && npm run build && npm link   # expose la commande `buddy`
 
 # 2. Construire puis lancer l'application desktop
-buddy install-gui        # installe Electron + construit le bundle Cowork
-buddy gui                # lance la GUI (alias : buddy desktop)
+node dist/index.js install-gui  # depuis ce checkout : dépendances et bundle Cowork
+node dist/index.js gui          # lance la GUI source (alias : desktop)
 ```
 
 Les commandes `gui`, `desktop` et `install-gui` sont enregistrées dans `src/index.ts` (le CLI Commander). `buddy desktop` est un alias strict de `buddy gui`.
@@ -57,7 +57,7 @@ Depuis le dossier `cowork/`, en rechargement à chaud :
 cd cowork && npm run dev          # Vite + Electron depuis les sources
 ```
 
-> **Note Linux** (cible de dev principale) : le `npm run dev` complet est lourd et parfois fragile (téléchargement de Node, préparation du runtime Python embarqué). Pour itérer vite, construire seulement le renderer avec `npx vite build` (~30 s) et booter Electron avec `--no-sandbox --disable-gpu`. Détails dans `cowork/DEV-LINUX.md`.
+> **Note Linux** : pour une recette sans écran réel, lancez `xvfb-run -a node dist/index.js gui` depuis le checkout construit. Le lanceur ajoute les options Electron nécessaires sous Linux. Détails dans [DEV-LINUX](../../cowork/DEV-LINUX.md).
 
 ## Pour aller plus loin
 

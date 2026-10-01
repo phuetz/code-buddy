@@ -206,7 +206,7 @@ describe('BashTool', () => {
         // The sandbox only exposes the selected workspace. Supplying the temp
         // directory as cwd grants this test file without exposing host /tmp.
         const result = await bashTool.execute(`cat ${tmpFile}`, 30000, tmpDir);
-        expect(result.success).toBe(true);
+        expect(result.success, JSON.stringify(result)).toBe(true);
         expect(result.output).toContain('test content');
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

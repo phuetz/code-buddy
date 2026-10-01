@@ -45,10 +45,12 @@ Explorer, l'agent agit sur un projet qu'il comprend déjà.
 
 ## Prérequis (en bref)
 
-- **App précompilée** : Windows (.exe), macOS (.app), Linux (AppImage). Téléchargez-la depuis la
-  page Releases du dépôt.
-- **Depuis les sources** : Node.js **≥ 22**, puis `buddy install-gui` puis `buddy gui` (ou, en dev,
-  `npm install` + `npm run dev`). Voir [Démarrage](01-getting-started.md).
+- **Distribution disponible** : la release v2.2.0 contient le paquet npm du CLI ; elle ne
+  publie aucun installateur Cowork `.exe`, `.app` ou `AppImage`.
+- **Depuis les sources** : Node.js **≥ 22**, un checkout Code Buddy, puis `npm install` et
+  `npm run build` à la racine. Dans ce checkout, exécutez `node dist/index.js install-gui`
+  puis `node dist/index.js gui`. Le paquet npm CLI seul ne contient pas Cowork.
+  Voir [Démarrage](01-getting-started.md) pour les commandes et les détails Linux.
 - Un **provider IA** — une clé API, une connexion ChatGPT, ou un modèle local (Ollama / LM Studio).
 
 ## Notes & limites
@@ -57,5 +59,5 @@ Explorer, l'agent agit sur un projet qu'il comprend déjà.
   la version ; certains panneaux (companion vision, fleet) sont optionnels et masqués tant qu'ils ne
   sont pas activés.
 - Les captures sont notées `> _[capture : …]_` — à ajouter en photographiant l'app lancée.
-- Les URLs d'installation exactes dépendent de l'endroit où les releases sont publiées ; ce manuel
-  renvoie à la page **Releases** du dépôt plutôt que de coder un lien en dur.
+- Consultez les assets d'une release avant de choisir un téléchargement : ce manuel ne
+  suppose pas qu'un installateur Cowork y soit disponible.

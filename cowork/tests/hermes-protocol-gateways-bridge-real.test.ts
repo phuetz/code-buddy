@@ -52,10 +52,10 @@ describe.skipIf(!hasBuiltProtocolCore)(
         schemaVersion: 1,
         smokeCommand: 'buddy hermes protocols-smoke local --json',
         summary: {
-          availableCount: 5,
+          availableCount: 6,
           missingCount: 0,
           partialCount: 1,
-          total: 6,
+          total: 7,
         },
       });
       expect(summary?.capabilities.map((capability) => capability.id)).toEqual(
@@ -66,6 +66,7 @@ describe.skipIf(!hasBuiltProtocolCore)(
           'acp-http',
           'channel-a2a-bridge',
           'acp-editor-integration',
+          'a2a-jsonrpc-v1',
         ])
       );
       expect(smoke).toMatchObject({

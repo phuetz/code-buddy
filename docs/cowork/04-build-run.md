@@ -12,7 +12,7 @@ Linux est celle réellement utilisée au quotidien sur la machine de dev.
 > Linux — certaines étapes (Python standalone, agents WSL/Lima,
 > `electron-builder`) sont pensées pour le ship macOS/Windows et soit
 > échouent, soit sont inutiles en dev Linux (voir
-> [`cowork/DEV-LINUX.md`](../DEV-LINUX.md)).
+> [`cowork/DEV-LINUX.md`](../../cowork/DEV-LINUX.md)).
 
 ## Build de production
 
@@ -49,7 +49,7 @@ lenteur. La boucle manuelle ci-dessous saute ces préalables.
 
 ## Boucle de dev Linux (recommandée)
 
-Référence complète : [`cowork/DEV-LINUX.md`](../DEV-LINUX.md). Résumé :
+Référence complète : [`cowork/DEV-LINUX.md`](../../cowork/DEV-LINUX.md). Résumé :
 
 ### 1. Préparation (une fois)
 
@@ -80,7 +80,7 @@ tout `npm install` qui touche les modules natifs.
 cd cowork
 npx vite build            # ~30 s : produit dist-electron/main, dist-electron/preload, dist/
 
-DISPLAY=:0 NODE_ENV=production \
+xvfb-run -a env NODE_ENV=production \
   ./node_modules/electron/dist/electron \
   --no-sandbox --disable-gpu \
   ./dist-electron/main/index.js
@@ -92,22 +92,17 @@ Les flags ne sont pas cosmétiques :
 |------|--------|
 | `--no-sandbox` | évite le setup suid de `chrome-sandbox` (aborterait sinon sur un `node_modules/electron/` frais) |
 | `--disable-gpu` | évite le probing GL en session xrdp / VNC (sinon Electron gèle au boot) |
-| `DISPLAY=:0` | serveur X local (les sessions xrdp tournent souvent sur `:10.0`) |
+| `xvfb-run -a` | écran virtuel privé pour les essais sans bureau |
 
-### 3. Smoke test headless (CDP)
+### 3. Smoke test headless
 
 ```bash
-DISPLAY=:0 NODE_ENV=production \
-  ./node_modules/electron/dist/electron \
-  --no-sandbox --disable-gpu \
-  --remote-debugging-port=9222 \
-  ./dist-electron/main/index.js &
-
-curl -s http://localhost:9222/json | jq -r '.[] | select(.type=="page") | .webSocketDebuggerUrl'
+cd cowork
+xvfb-run -a npx playwright test e2e/cowork-smoke.spec.ts --workers=1
 ```
 
-On obtient une URL `ws://localhost:9222/devtools/page/<id>` ; un petit
-client `ws` permet ensuite de faire des `Runtime.evaluate` dans le renderer.
+Le fixture Electron lance et ferme son propre processus. N’utilisez pas un
+écran appartenant à une autre session et n’arrêtez pas les services existants.
 
 ## Tests
 
@@ -145,9 +140,10 @@ couverture (logique testée côté main/IPC).
 
 ## Aller plus loin
 
-- Lancement « one-liner » côté CLI : `buddy install-gui` puis `buddy gui`
-  (alias `buddy desktop`) — installe Electron et build le bundle desktop.
+- Depuis un checkout Code Buddy installé et construit : `node dist/index.js install-gui`
+  puis `node dist/index.js gui` (alias `desktop`). Le paquet npm CLI seul ne contient
+  pas les sources Cowork ; voir [Installation](README.md).
 - Détails Linux, résolution du moteur embarqué (4 couches), vérification du
-  serveur embarqué : [`cowork/DEV-LINUX.md`](../DEV-LINUX.md).
+  serveur embarqué : [`cowork/DEV-LINUX.md`](../../cowork/DEV-LINUX.md).
 - Gotchas (dual-`mainWindow`, ABI sqlite, GPU) :
   [06 — Dépannage](06-troubleshooting.md).

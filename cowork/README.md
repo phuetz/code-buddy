@@ -30,7 +30,9 @@
 
 **Cowork** is the desktop GUI for **[Code Buddy](https://github.com/phuetz/code-buddy)** — a multi-provider AI coding agent, multi-AI **fleet** hub, and personal companion. It is **not a separate product**: it runs the **same embedded Code Buddy core engine** as the CLI, so it inherits the full agentic loop (15 providers, ~110 tools, RAG tool selection, MCP routing, middlewares, memory, skills, model hot-swap) and adds a cockpit on top — chat + live traces, the Fleet, the Buddy Companion, autonomy, memory/reasoning, and settings.
 
-Once Code Buddy is installed, launch it with `buddy gui` (alias `buddy desktop`).
+Cowork requires a built source checkout; the npm CLI package does not include it.
+Release 2.2.0 has no desktop installer. Follow the source steps below, then launch
+with `node dist/index.js gui` (or `buddy gui` after linking that checkout).
 
 > Integrated desktop overview & screenshot-privacy policy: [`docs/cowork.md`](../docs/cowork.md) · Architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md) · Linux dev loop: [`DEV-LINUX.md`](./DEV-LINUX.md) · Engine vs. legacy runner: [`RUNNER_AUDIT.md`](./RUNNER_AUDIT.md).
 
@@ -164,16 +166,16 @@ Short tours of Cowork **by use case** — recorded from **this** build (click an
 Cowork ships **inside the Code Buddy monorepo** — there is no separate download or app store listing. Install Code Buddy, then launch the GUI.
 
 ```bash
-# 1. Get Code Buddy (Cowork needs Node.js >= 22; the root CLI supports >= 18)
+# 1. Get Code Buddy (Cowork needs Node.js >= 22; the root CLI supports >= 20)
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy && npm install && npm run build && npm link   # exposes `buddy`
 
 # 2. Build + launch the desktop app
-buddy install-gui        # installs Electron + builds the Cowork bundle
-buddy gui                # launch (alias: buddy desktop)
+node dist/index.js install-gui  # source checkout; builds the desktop bundle
+node dist/index.js gui                # launch (alias: buddy desktop)
 
 # Dev loop with live reload
-npm run dev:gui          # Vite + Electron from source
+cd cowork && npx vite build  # see DEV-LINUX.md for the Linux loop
 ```
 
 - **Linux** (the primary dev target): see [`DEV-LINUX.md`](./DEV-LINUX.md) — build the renderer with `npx vite build` (~30 s). Skip `npm run build` / `npm run build:gui` (that is the macOS/Windows packager). `buddy gui` passes `--no-sandbox --disable-gpu` on Linux; headless: `xvfb-run -a buddy gui`.

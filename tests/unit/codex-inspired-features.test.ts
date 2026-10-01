@@ -265,7 +265,7 @@ describe('Ghost Snapshot Manager', () => {
     const git = vi.fn(async (args: string[]) => {
       const command = args.join(' ');
       if (command === 'rev-parse --git-dir') return '.git\n';
-      if (command === 'status --porcelain') return '';
+      if (command === 'status --porcelain -- .') return '';
       if (command === 'rev-parse HEAD') return 'abc123\n';
       throw new Error(`Unexpected git command: ${command}`);
     });
