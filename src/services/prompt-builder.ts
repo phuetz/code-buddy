@@ -1116,8 +1116,14 @@ Output formatting discipline:
 
       return systemPrompt;
     } catch (error) {
+      // Re-throw if it's an explicit "Unknown system prompt" error from PromptManager
+      const errorMessage = getErrorMessage(error);
+      if (errorMessage.includes('Unknown system prompt')) {
+        throw error;
+      }
+
       // Fallback to legacy prompt on error
-      logger.warn("Failed to load custom prompt, using default", { error: getErrorMessage(error) });
+      logger.warn("Failed to load custom prompt, using default", { error: errorMessage });
       const promptMode = this.config.yoloMode ? "yolo" : "default";
       return getSystemPromptForMode(
         promptMode,

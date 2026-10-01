@@ -183,8 +183,47 @@ export class PromptManager {
       return content;
     }
 
-    // Fall back to inline default
-    return this.getInlinePrompt(promptId);
+    // Fall back to inline default if it is actually an inline prompt
+    if (['default', 'minimal', 'secure'].includes(promptId)) {
+      return this.getInlinePrompt(promptId);
+    }
+
+    // Throw an error for unknown system prompts
+    const availablePrompts = await this.listPrompts();
+    const availableIds = [...new Set(['default', 'minimal', 'secure', 'architect', 'code-reviewer', ...availablePrompts.map(p => p.id)])].sort();
+
+    // Suggest closest match
+    let closestMatch = '';
+    let minDistance = Infinity;
+    for (const id of availableIds) {
+      const distance = this.levenshtein(promptId, id);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestMatch = id;
+      }
+    }
+
+    const suggestion = minDistance <= 3 ? ` Did you mean "${closestMatch}"?` : '';
+    throw new Error(`Unknown system prompt "${promptId}".${suggestion} Available: ${availableIds.join(', ')}`);
+  }
+
+  /**
+   * Calculate Levenshtein distance between two strings
+   */
+  private levenshtein(a: string, b: string): number {
+    let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= a.length; i++) {
+      const current = [i];
+      for (let j = 1; j <= b.length; j++) {
+        current.push(Math.min(
+          (previous[j] ?? Infinity) + 1,
+          (current[j - 1] ?? Infinity) + 1,
+          (previous[j - 1] ?? Infinity) + (a[i - 1] === b[j - 1] ? 0 : 1),
+        ));
+      }
+      previous = current;
+    }
+    return previous[b.length] ?? 0;
   }
 
   /**
