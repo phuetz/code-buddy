@@ -226,7 +226,7 @@ export function generateProvenFeatures(root: string, revision?: string | null): 
     if (!proof) return { feature, commands: [], scope: [], review, proven: false, reason: reasons.join(' ') };
     inputs.add(proof.artifact);
     const trace = readFileSync(path.join(root, proof.artifact), 'utf8');
-    const commands = [...trace.matchAll(/^(?:Commande(?: serveur| client)?|Command)\s*:\s*(.+)$/gm)].map((match) => match[1]!.trim());
+    const commands = [...trace.matchAll(/^(?:Commande(?: serveur| client|\/scénario)?|Command)\s*:\s*(.+)$/gm)].map((match) => match[1]!.trim());
     if (!commands.length) throw new Error(`Missing recorded command: ${feature.id}`);
     const scope = [...trace.matchAll(/^(?:Limite|Portée|Scope)\s*:\s*(.+)$/gm)].map((match) => match[1]!.trim());
     const reviewedTrace = review.artifact === proof.artifact

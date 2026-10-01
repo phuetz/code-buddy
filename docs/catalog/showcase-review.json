@@ -647,6 +647,1735 @@
       "artifact": "docs/preuves/p7-dgm-capability-benchmark.log",
       "artifactSha256": "8b9a18d67ac8075300118566f2ed49dfec8cb46ad696c80e09192b0dad2794e0",
       "reason": "Résumé d’un scénario avec score=0 ; aucun gain de capacité démontré."
+    },
+    {
+      "id": "cli:autonomy",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:channels",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:cloud",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:cloud-run-task",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:council",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:desktop",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:git",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:gui",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:install-gui",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:llm",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:login",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:logout",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:mcp-server",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:remind",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:rules",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:self",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:server",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:spec",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:voice",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "cli:whoami",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:a2a_call",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:a2ui",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:advisor",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:app_server",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:apply_patch",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:archive",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:ask_human",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:ask_user_question",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:audio",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:bash",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_back",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_click",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_console",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_dialog",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_get_images",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_navigate",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_operator",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_press",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_scroll",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_snapshot",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_type",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:browser_vision",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:build_project",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:bundle_analyze",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:camera_analyze",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:camera_snapshot",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:canvas",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:clipboard",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:code_exec",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:code_explorer_ask",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:code_graph",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:code_stats",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:codebase_map",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:codebase_replace",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:comfy_recipe",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:community_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:computer_control",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:context_expand",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:create_file",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:create_skill",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:create_todo_list",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:cronjob",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:csv_analyze",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:csv_preview",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:delegate_agent",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:dep_inspect",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:deploy",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:design_system",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:device_manage",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:diagram",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:diff_files",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:discord",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:discord_admin",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:docker",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:docs_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:document",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:edit_file",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:env_doctor",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:execute_code",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:exit_plan_mode",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:export",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:extension_forge",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:feishu_doc_read",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:feishu_drive_add_comment",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:feishu_drive_list_comment_replies",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:feishu_drive_list_comments",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:feishu_drive_reply_comment",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:figma_import",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:file_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:find_bugs",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:find_definition",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:find_references",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:find_symbols",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:firecrawl_scrape",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:firecrawl_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:fleet_room",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:forget",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:format_project",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:generate_document",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:get_todo_list",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:git",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:git_summary",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:gpu_media_job",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:ha_call_service",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:ha_get_state",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:ha_list_entities",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:ha_list_services",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:http_probe",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:image_edit",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:interactive_shell",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:internet_scout_plan",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:internet_scout_run",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:js_repl",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:json_query",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kanban_block",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kanban_comment",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kanban_complete",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kanban_create",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kanban_heartbeat",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kanban_link",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kanban_list",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kanban_show",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kanban_unblock",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:knowledge_add",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:knowledge_graph",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:knowledge_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:kubernetes",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lead_scout_enrichment_plan",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lead_scout_lesson_candidates",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lead_scout_plan",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lead_scout_run",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lessons_add",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lessons_graph",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lessons_list",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lessons_propose",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lessons_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:license_check",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lint_project",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lisa_selfie",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:list_directory",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:list_peers",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lsp_code_action",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lsp_definition",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lsp_diagnostics",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lsp_hover",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lsp_references",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lsp_rename",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:lsp_symbols",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:markdown_convert",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:meeting_notes",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:memory_propose",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:mixture_of_agents",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:multi_edit",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:object_detect",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:ocr",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:office_macro_execute",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:paper_qa",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:patch",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:pdf",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:peer_chain",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:peer_delegate",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:peer_tool_invoke",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:plan",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:port_check",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:process",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:project_map",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:qr",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:ragchat_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:read_file",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:reason",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:recall",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:relationship_context",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:remember",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:remind",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:replace_memory",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:resolve_conflicts",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:restore_context",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:route_peer",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:run_script",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:sbom_generate",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:scaffold_app",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:scan_secrets",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:scan_vulnerabilities",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:screen_memory",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:screenshot",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:search_files",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:search_multi",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:self_describe",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:self_evolution",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:send_message",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:session_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:sessions_history",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:sessions_list",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:sessions_send",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:sessions_spawn",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:skill_discover",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:skill_manage",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:skill_view",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:skills_list",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:spawn_parallel_agents",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:spawn_subagent",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:spotify_albums",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:spotify_devices",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:spotify_library",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:spotify_playback",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:spotify_playlists",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:spotify_queue",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:spotify_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:stock_quote",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:str_replace_editor",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:submit_plan",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:task_verify",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:terminal",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:terminate",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:test_runner",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:text_to_speech",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:todo_scan",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:todo_update",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:tool_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:update_todo_list",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:user_model_observe",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:user_model_recall",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:video",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:video_analyze",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:video_flow_handoff",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:video_long_form_plan",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:video_quality_gate",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:video_route",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:video_stitch",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:video_trailer_plan",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:view_file",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:vision_analyze",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:weather",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:web_extract",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:web_fetch",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:web_scrape",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:web_test",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:workspace_read",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:workspace_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:write_file",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:x_search",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:yb_query_group_info",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:yb_query_group_members",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:yb_search_sticker",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:yb_send_dm",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
+    },
+    {
+      "id": "tool:yb_send_sticker",
+      "decision": "insufficient",
+      "artifact": null,
+      "artifactSha256": null,
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas."
     }
   ]
 }

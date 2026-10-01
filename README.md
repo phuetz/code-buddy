@@ -15,8 +15,8 @@ developer's machine, a component test or a GIF does not establish it.
 <!-- proven-features:start -->
 ## Feature status
 
-[`PROVEN 2/91 | NOT PROVEN HERE 89 | INCLUDING LATEST FAILED RUNS 2`](docs/PROVEN-FEATURES.md)
-**2/91 features proven**; 89 not proven here, with reasons (including 2 latest failed runs, historical when the source digest is stale).
+[`PROVEN 1/338 | NOT PROVEN HERE 337 | INCLUDING LATEST FAILED RUNS 9`](docs/PROVEN-FEATURES.md)
+**1/338 features proven**; 337 not proven here, with reasons (including 9 latest failed runs, historical when the source digest is stale).
 Each “proven” state covers the captured component scenario, with its scenario limit when recorded. This total does not validate a fresh installation.
 [Statuses, reasons and traces by domain](docs/PROVEN-FEATURES.md) · [Français : état des fonctionnalités](docs/FONCTIONNALITES-PROUVEES.md)
 <!-- proven-features:end -->

@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "counts": {
-    "total": 91,
-    "passed": 2,
-    "failed": 2,
-    "unavailable": 89
+    "total": 338,
+    "passed": 1,
+    "failed": 9,
+    "unavailable": 337
   },
   "features": [
     {
       "id": "agent-loop",
       "status": "not-proven-here",
-      "reason": "Résumé sans transcript brut modèle → outil → modèle ; fixture package.json absente du dépôt. Ne prouve pas une installation neuve.",
+      "reason": "Résumé sans transcript brut modèle → outil → modèle ; fixture package.json absente du dépôt. Ne prouve pas une installation neuve. Preuve ancienne ou révision courante inconnue.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p5-agent-loop-2026-09-29.log"
@@ -18,10 +18,10 @@
     {
       "id": "catalog-status",
       "status": "not-proven-here",
-      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue.",
+      "reason": "Trace historique à empreinte périmée : elle ne valide pas le code courant. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": "docs/preuves/p5-catalog-status-2026-09-29.log"
+      "trace": "docs/preuves/p9r2-catalog-status-2026-09-30.log"
     },
     {
       "id": "cli-acp",
@@ -74,10 +74,10 @@
     {
       "id": "cli-code-explorer",
       "status": "not-proven-here",
-      "reason": "Aucune trace sur cet arbre ; la reconstruction de l’index et les rejeux indépendants P9 appartiennent à une autre branche.",
+      "reason": "Aucune trace sur cet arbre ; la reconstruction de l’index et les rejeux indépendants P9 appartiennent à une autre branche. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9r2-cli-code-explorer-2026-09-30.log"
     },
     {
       "id": "cli-companion",
@@ -234,10 +234,10 @@
     {
       "id": "cli-lsp",
       "status": "not-proven-here",
-      "reason": "Dernier essai en échec : server_start_failed, rust-analyzer absent. Les correctifs et rejeux P9 sont sur une autre branche. Preuve ancienne ou révision courante inconnue. Dernier essai en échec (38708b7e4edc651287c6f30623eae01c2ebb67e6) : server_start_failed, code 1 ; composant rust-analyzer absent sous HOME isolé.",
+      "reason": "Dernier essai en échec : server_start_failed, rust-analyzer absent. Les correctifs et rejeux P9 sont sur une autre branche. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
-      "latestRunFailed": true,
-      "trace": "docs/preuves/p8-cli-lsp.log"
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-lsp-2026-09-30.log"
     },
     {
       "id": "cli-nodes",
@@ -338,10 +338,10 @@
     {
       "id": "cli-speak",
       "status": "not-proven-here",
-      "reason": "Aucune synthèse exécutée ni fichier audio livré ; backend vocal non démarré.",
+      "reason": "Aucune synthèse exécutée ni fichier audio livré ; backend vocal non démarré. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9-cli-speak-2026-09-30.log"
     },
     {
       "id": "cli-token",
@@ -400,17 +400,177 @@
       "trace": "docs/preuves/p5-cli-widgets-2026-09-29.log"
     },
     {
+      "id": "cli:autonomy",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-autonomy-2026-09-30.log"
+    },
+    {
+      "id": "cli:channels",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-channels-2026-09-30.log"
+    },
+    {
+      "id": "cli:cloud",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-cloud-2026-09-30.log"
+    },
+    {
+      "id": "cli:cloud-run-task",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli:council",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-council-2026-09-30.log"
+    },
+    {
+      "id": "cli:desktop",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli:git",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli:gui",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli:install-gui",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli:llm",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-llm-2026-09-30.log"
+    },
+    {
+      "id": "cli:login",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli:logout",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli:mcp-server",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-mcp-server-2026-09-30.log"
+    },
+    {
+      "id": "cli:remind",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-remind-2026-09-30.log"
+    },
+    {
+      "id": "cli:rules",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-rules-2026-09-30.log"
+    },
+    {
+      "id": "cli:self",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-self-2026-09-30.log"
+    },
+    {
+      "id": "cli:server",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-server-2026-09-30.log"
+    },
+    {
+      "id": "cli:spec",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-spec-2026-09-30.log"
+    },
+    {
+      "id": "cli:voice",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "cli:whoami",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-cli-whoami-2026-09-30.log"
+    },
+    {
       "id": "context-checkpoints",
       "status": "not-proven-here",
-      "reason": "Résumé d’un appel direct sans sortie brute ni fixture ; déclenchement par l’agent non vérifié.",
+      "reason": "Résumé d’un appel direct sans sortie brute ni fixture ; déclenchement par l’agent non vérifié. Preuve ancienne ou révision courante inconnue.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p7-context-checkpoints.log"
     },
     {
       "id": "context-compaction",
-      "status": "proven",
-      "reason": "Sortie capturée : 14 → 4 messages, 1096 → 129 jetons, requête courante conservée.",
+      "status": "not-proven-here",
+      "reason": "Sortie capturée : 14 → 4 messages, 1096 → 129 jetons, requête courante conservée. Preuve ancienne ou révision courante inconnue.",
       "scope": {
         "fr": "Compression du composant ContextManagerV2 sur une fixture ; aucun tour agent ni installation neuve prouvé. Script temporaire non livré.",
         "en": "ContextManagerV2 component compression on a fixture; no agent turn or fresh installation proved. Temporary script not shipped."
@@ -429,42 +589,42 @@
     {
       "id": "cowork-desktop-assistant",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent, and no microphone or camera session was opened.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent, and no microphone or camera session was opened. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9r1-cowork-desktop-assistant-2026-09-30.log"
     },
     {
       "id": "cowork-desktop-chat",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; no desktop chat window was exercised.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; no desktop chat window was exercised. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner. Dernier essai en échec (be7f81998adadf19b7448a5080435f290eb28a76) : Marqueur unique refusé par le modèle : I detected an attempt to override my instructions. I cannot comply. Les tours à phrase fixe ont réussi auparavant, avec rôle assistant vérifié.",
       "scope": null,
-      "latestRunFailed": false,
-      "trace": null
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p9r1-cowork-desktop-chat-2026-09-30.log"
     },
     {
       "id": "cowork-desktop-settings",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; no settings window was exercised.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; no settings window was exercised. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9r1-cowork-desktop-settings-2026-09-30.log"
     },
     {
       "id": "cowork-studio",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; App Studio was not launched in a real window.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; App Studio was not launched in a real window. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9r1-cowork-studio-2026-09-30.log"
     },
     {
       "id": "cowork-video-studio",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; Video Studio was not launched in a real window.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The Cowork Electron dependencies and executable were absent from this checkout; Video Studio was not launched in a real window. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9r1-cowork-video-studio-2026-09-30.log"
     },
     {
       "id": "dgm-authored-tools",
@@ -485,10 +645,10 @@
     {
       "id": "dgm-evolve-propose",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no vetted experiment fiche or matching scholarly discovery record; no proposal archive was generated.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no vetted experiment fiche or matching scholarly discovery record; no proposal archive was generated. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9-dgm-evolve-propose-2026-09-30.log"
     },
     {
       "id": "dgm-learning-cycle",
@@ -549,10 +709,10 @@
     {
       "id": "http-health",
       "status": "not-proven-here",
-      "reason": "Résumé citant des captures brutes absentes du dépôt. Preuve ancienne ou révision courante inconnue.",
+      "reason": "Résumé citant des captures brutes absentes du dépôt. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": "docs/preuves/p5-http-health-2026-09-29.log"
+      "trace": "docs/preuves/p9r1-http-health-2026-09-30.log"
     },
     {
       "id": "http-memory",
@@ -613,23 +773,23 @@
     {
       "id": "provider-failover",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. Only one local Ollama endpoint was authorized in the isolated HOME; no independent fallback provider was configured for a real failure handoff.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. Only one local Ollama endpoint was authorized in the isolated HOME; no independent fallback provider was configured for a real failure handoff. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9-provider-failover-2026-09-30.log"
     },
     {
       "id": "provider-gemini-cli",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no authenticated Gemini CLI session; the campaign used Ollama only.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The isolated HOME has no authenticated Gemini CLI session; the campaign used Ollama only. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9-provider-gemini-cli-2026-09-30.log"
     },
     {
       "id": "provider-ollama",
       "status": "not-proven-here",
-      "reason": "Résumé sans journal des échanges Ollama ; première tâche sur installation neuve non documentée.",
+      "reason": "Résumé sans journal des échanges Ollama ; première tâche sur installation neuve non documentée. Preuve ancienne ou révision courante inconnue.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p5-provider-ollama-2026-09-29.log"
@@ -696,15 +856,15 @@
     {
       "id": "tool-image-generate",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. No isolated ComfyUI endpoint or image-provider credential was configured; no bitmap generation completed.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. No isolated ComfyUI endpoint or image-provider credential was configured; no bitmap generation completed. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9-tool-image-generate-2026-09-30.log"
     },
     {
       "id": "tool-read-file",
       "status": "not-proven-here",
-      "reason": "Résumé sans sortie brute de read_file ni fichier de fixture versionné.",
+      "reason": "Résumé sans sortie brute de read_file ni fichier de fixture versionné. Preuve ancienne ou révision courante inconnue.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p5-tool-read-file-2026-09-29.log"
@@ -712,26 +872,26 @@
     {
       "id": "tool-understand-video",
       "status": "not-proven-here",
-      "reason": "Dernier essai en échec : faster_whisper absent, success=false. Le précédent success=true était un faux succès sans transcription. Preuve ancienne ou révision courante inconnue. Dernier essai en échec (38708b7e4edc651287c6f30623eae01c2ebb67e6) : success=false ; transcription failed ; ModuleNotFoundError: No module named 'faster_whisper'.",
+      "reason": "Dernier essai en échec : faster_whisper absent, success=false. Le précédent success=true était un faux succès sans transcription. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
-      "latestRunFailed": true,
-      "trace": "docs/preuves/p8-tool-understand-video.log"
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9-tool-understand-video-2026-09-30.log"
     },
     {
       "id": "tool-verify",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The independent verifier requires a live LLM/tool bridge and an executed oracle. No complete verifier delegation was observed in this campaign.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. The independent verifier requires a live LLM/tool bridge and an executed oracle. No complete verifier delegation was observed in this campaign. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
-      "trace": null
+      "trace": "docs/preuves/p9-tool-verify-2026-09-30.log"
     },
     {
       "id": "tool-video-generate",
       "status": "not-proven-here",
-      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. No isolated ComfyUI video endpoint or xAI/Fal credential was configured; no video generation completed.",
+      "reason": "Aucune exécution enregistrée dans le dépôt pour cette fonctionnalité. No isolated ComfyUI video endpoint or xAI/Fal credential was configured; no video generation completed. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner. Dernier essai en échec (b72202254006beb44b7f70d3daa44da2aeb3f99d) : HTTP 400 missing_node_type : Node MiniMaxH3SigmaShift not found.",
       "scope": null,
-      "latestRunFailed": false,
-      "trace": null
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p9-tool-video-generate-2026-09-30.log"
     },
     {
       "id": "tool-web-search",
@@ -740,6 +900,1822 @@
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p8-tool-web-search.log"
+    },
+    {
+      "id": "tool:a2a_call",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:a2ui",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-a2ui-2026-09-30.log"
+    },
+    {
+      "id": "tool:advisor",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:app_server",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-app_server-2026-09-30.log"
+    },
+    {
+      "id": "tool:apply_patch",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-apply_patch-2026-09-30.log"
+    },
+    {
+      "id": "tool:archive",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-archive-2026-09-30.log"
+    },
+    {
+      "id": "tool:ask_human",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:ask_user_question",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:audio",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-audio-2026-09-30.log"
+    },
+    {
+      "id": "tool:bash",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-bash-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_back",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_back-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_click",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_click-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_console",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_console-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_dialog",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_dialog-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_get_images",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_get_images-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_navigate",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_navigate-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_operator",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:browser_press",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_press-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_scroll",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_scroll-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_snapshot",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_snapshot-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_type",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_type-2026-09-30.log"
+    },
+    {
+      "id": "tool:browser_vision",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-browser_vision-2026-09-30.log"
+    },
+    {
+      "id": "tool:build_project",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-build_project-2026-09-30.log"
+    },
+    {
+      "id": "tool:bundle_analyze",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-bundle_analyze-2026-09-30.log"
+    },
+    {
+      "id": "tool:camera_analyze",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:camera_snapshot",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:canvas",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-canvas-2026-09-30.log"
+    },
+    {
+      "id": "tool:clipboard",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner. Dernier essai en échec (99dbcdf27b61fa6a98bc73779b44c0e7efcd3049) : write_text ne revient pas avant la limite QA de 12 secondes sous X11/Xvfb ; processus arrêtés.",
+      "scope": null,
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p9r1-tool-clipboard-2026-09-30.log"
+    },
+    {
+      "id": "tool:code_exec",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-code_exec-2026-09-30.log"
+    },
+    {
+      "id": "tool:code_explorer_ask",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r2-tool-code_explorer_ask-2026-09-30.log"
+    },
+    {
+      "id": "tool:code_graph",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner. Dernier essai en échec (99dbcdf27b61fa6a98bc73779b44c0e7efcd3049) : Auto-appels fn:add → fn:add et fn:answer → fn:answer issus des déclarations ; absents des sources.",
+      "scope": null,
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p9r1-tool-code_graph-2026-09-30.log"
+    },
+    {
+      "id": "tool:code_stats",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-code_stats-2026-09-30.log"
+    },
+    {
+      "id": "tool:codebase_map",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-codebase_map-2026-09-30.log"
+    },
+    {
+      "id": "tool:codebase_replace",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-codebase_replace-2026-09-30.log"
+    },
+    {
+      "id": "tool:comfy_recipe",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-comfy_recipe-2026-09-30.log"
+    },
+    {
+      "id": "tool:community_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-community_search-2026-09-30.log"
+    },
+    {
+      "id": "tool:computer_control",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-computer_control-2026-09-30.log"
+    },
+    {
+      "id": "tool:context_expand",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:create_file",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-create_file-2026-09-30.log"
+    },
+    {
+      "id": "tool:create_skill",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-create_skill-2026-09-30.log"
+    },
+    {
+      "id": "tool:create_todo_list",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-create_todo_list-2026-09-30.log"
+    },
+    {
+      "id": "tool:cronjob",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-cronjob-2026-09-30.log"
+    },
+    {
+      "id": "tool:csv_analyze",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-csv_analyze-2026-09-30.log"
+    },
+    {
+      "id": "tool:csv_preview",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-csv_preview-2026-09-30.log"
+    },
+    {
+      "id": "tool:delegate_agent",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:dep_inspect",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-dep_inspect-2026-09-30.log"
+    },
+    {
+      "id": "tool:deploy",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:design_system",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-design_system-2026-09-30.log"
+    },
+    {
+      "id": "tool:device_manage",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-device_manage-2026-09-30.log"
+    },
+    {
+      "id": "tool:diagram",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner. Dernier essai en échec (99dbcdf27b61fa6a98bc73779b44c0e7efcd3049) : Mermaid à séparateurs point-virgule : No nodes found in flowchart ; aucun rendu ASCII.",
+      "scope": null,
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p9r1-tool-diagram-2026-09-30.log"
+    },
+    {
+      "id": "tool:diff_files",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-diff_files-2026-09-30.log"
+    },
+    {
+      "id": "tool:discord",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:discord_admin",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:docker",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-docker-2026-09-30.log"
+    },
+    {
+      "id": "tool:docs_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-docs_search-2026-09-30.log"
+    },
+    {
+      "id": "tool:document",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-document-2026-09-30.log"
+    },
+    {
+      "id": "tool:edit_file",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:env_doctor",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-env_doctor-2026-09-30.log"
+    },
+    {
+      "id": "tool:execute_code",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-execute_code-2026-09-30.log"
+    },
+    {
+      "id": "tool:exit_plan_mode",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:export",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-export-2026-09-30.log"
+    },
+    {
+      "id": "tool:extension_forge",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-extension_forge-2026-09-30.log"
+    },
+    {
+      "id": "tool:feishu_doc_read",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:feishu_drive_add_comment",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:feishu_drive_list_comment_replies",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:feishu_drive_list_comments",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:feishu_drive_reply_comment",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:figma_import",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:file_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-file_search-2026-09-30.log"
+    },
+    {
+      "id": "tool:find_bugs",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-find_bugs-2026-09-30.log"
+    },
+    {
+      "id": "tool:find_definition",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-find_definition-2026-09-30.log"
+    },
+    {
+      "id": "tool:find_references",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-find_references-2026-09-30.log"
+    },
+    {
+      "id": "tool:find_symbols",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-find_symbols-2026-09-30.log"
+    },
+    {
+      "id": "tool:firecrawl_scrape",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:firecrawl_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:fleet_room",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:forget",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-forget-2026-09-30.log"
+    },
+    {
+      "id": "tool:format_project",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-format_project-2026-09-30.log"
+    },
+    {
+      "id": "tool:generate_document",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-generate_document-2026-09-30.log"
+    },
+    {
+      "id": "tool:get_todo_list",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-get_todo_list-2026-09-30.log"
+    },
+    {
+      "id": "tool:git",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-git-2026-09-30.log"
+    },
+    {
+      "id": "tool:git_summary",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-git_summary-2026-09-30.log"
+    },
+    {
+      "id": "tool:gpu_media_job",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:ha_call_service",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:ha_get_state",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:ha_list_entities",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:ha_list_services",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:http_probe",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-http_probe-2026-09-30.log"
+    },
+    {
+      "id": "tool:image_edit",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:interactive_shell",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:internet_scout_plan",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-internet_scout_plan-2026-09-30.log"
+    },
+    {
+      "id": "tool:internet_scout_run",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-internet_scout_run-2026-09-30.log"
+    },
+    {
+      "id": "tool:js_repl",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-js_repl-2026-09-30.log"
+    },
+    {
+      "id": "tool:json_query",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-json_query-2026-09-30.log"
+    },
+    {
+      "id": "tool:kanban_block",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-kanban_block-2026-09-30.log"
+    },
+    {
+      "id": "tool:kanban_comment",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-kanban_comment-2026-09-30.log"
+    },
+    {
+      "id": "tool:kanban_complete",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-kanban_complete-2026-09-30.log"
+    },
+    {
+      "id": "tool:kanban_create",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-kanban_create-2026-09-30.log"
+    },
+    {
+      "id": "tool:kanban_heartbeat",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-kanban_heartbeat-2026-09-30.log"
+    },
+    {
+      "id": "tool:kanban_link",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-kanban_link-2026-09-30.log"
+    },
+    {
+      "id": "tool:kanban_list",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-kanban_list-2026-09-30.log"
+    },
+    {
+      "id": "tool:kanban_show",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-kanban_show-2026-09-30.log"
+    },
+    {
+      "id": "tool:kanban_unblock",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-kanban_unblock-2026-09-30.log"
+    },
+    {
+      "id": "tool:knowledge_add",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-knowledge_add-2026-09-30.log"
+    },
+    {
+      "id": "tool:knowledge_graph",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-knowledge_graph-2026-09-30.log"
+    },
+    {
+      "id": "tool:knowledge_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-knowledge_search-2026-09-30.log"
+    },
+    {
+      "id": "tool:kubernetes",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:lead_scout_enrichment_plan",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lead_scout_enrichment_plan-2026-09-30.log"
+    },
+    {
+      "id": "tool:lead_scout_lesson_candidates",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lead_scout_lesson_candidates-2026-09-30.log"
+    },
+    {
+      "id": "tool:lead_scout_plan",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lead_scout_plan-2026-09-30.log"
+    },
+    {
+      "id": "tool:lead_scout_run",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lead_scout_run-2026-09-30.log"
+    },
+    {
+      "id": "tool:lessons_add",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lessons_add-2026-09-30.log"
+    },
+    {
+      "id": "tool:lessons_graph",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lessons_graph-2026-09-30.log"
+    },
+    {
+      "id": "tool:lessons_list",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lessons_list-2026-09-30.log"
+    },
+    {
+      "id": "tool:lessons_propose",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lessons_propose-2026-09-30.log"
+    },
+    {
+      "id": "tool:lessons_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lessons_search-2026-09-30.log"
+    },
+    {
+      "id": "tool:license_check",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-license_check-2026-09-30.log"
+    },
+    {
+      "id": "tool:lint_project",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lint_project-2026-09-30.log"
+    },
+    {
+      "id": "tool:lisa_selfie",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:list_directory",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-list_directory-2026-09-30.log"
+    },
+    {
+      "id": "tool:list_peers",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:lsp_code_action",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:lsp_definition",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lsp_definition-2026-09-30.log"
+    },
+    {
+      "id": "tool:lsp_diagnostics",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lsp_diagnostics-2026-09-30.log"
+    },
+    {
+      "id": "tool:lsp_hover",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lsp_hover-2026-09-30.log"
+    },
+    {
+      "id": "tool:lsp_references",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lsp_references-2026-09-30.log"
+    },
+    {
+      "id": "tool:lsp_rename",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lsp_rename-2026-09-30.log"
+    },
+    {
+      "id": "tool:lsp_symbols",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-lsp_symbols-2026-09-30.log"
+    },
+    {
+      "id": "tool:markdown_convert",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-markdown_convert-2026-09-30.log"
+    },
+    {
+      "id": "tool:meeting_notes",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-meeting_notes-2026-09-30.log"
+    },
+    {
+      "id": "tool:memory_propose",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-memory_propose-2026-09-30.log"
+    },
+    {
+      "id": "tool:mixture_of_agents",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:multi_edit",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-multi_edit-2026-09-30.log"
+    },
+    {
+      "id": "tool:object_detect",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:ocr",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner. Dernier essai en échec (99dbcdf27b61fa6a98bc73779b44c0e7efcd3049) : OCR exact : attendu P9 TEXT 42, observé PO TEXT 42, malgré confiance 92 %.",
+      "scope": null,
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p9r1-tool-ocr-2026-09-30.log"
+    },
+    {
+      "id": "tool:office_macro_execute",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:paper_qa",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-paper_qa-2026-09-30.log"
+    },
+    {
+      "id": "tool:patch",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-patch-2026-09-30.log"
+    },
+    {
+      "id": "tool:pdf",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-pdf-2026-09-30.log"
+    },
+    {
+      "id": "tool:peer_chain",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:peer_delegate",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:peer_tool_invoke",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:plan",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-plan-2026-09-30.log"
+    },
+    {
+      "id": "tool:port_check",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-port_check-2026-09-30.log"
+    },
+    {
+      "id": "tool:process",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-process-2026-09-30.log"
+    },
+    {
+      "id": "tool:project_map",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-project_map-2026-09-30.log"
+    },
+    {
+      "id": "tool:qr",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner. Dernier essai en échec (99dbcdf27b61fa6a98bc73779b44c0e7efcd3049) : SVG non décodable : jsQR renvoie null ; le même décodeur réussit le QR témoin P9_QR_CONTROL.",
+      "scope": null,
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p9r1-tool-qr-2026-09-30.log"
+    },
+    {
+      "id": "tool:ragchat_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:read_file",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-read_file-2026-09-30.log"
+    },
+    {
+      "id": "tool:reason",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner. Dernier essai en échec (99dbcdf27b61fa6a98bc73779b44c0e7efcd3049) : Solution Found annoncé avec score 1.00, mais la solution ne calcule pas 42 : elle se termine à 6 times 7.",
+      "scope": null,
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p9r1-tool-reason-2026-09-30.log"
+    },
+    {
+      "id": "tool:recall",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-recall-2026-09-30.log"
+    },
+    {
+      "id": "tool:relationship_context",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-relationship_context-2026-09-30.log"
+    },
+    {
+      "id": "tool:remember",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-remember-2026-09-30.log"
+    },
+    {
+      "id": "tool:remind",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-remind-2026-09-30.log"
+    },
+    {
+      "id": "tool:replace_memory",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-replace_memory-2026-09-30.log"
+    },
+    {
+      "id": "tool:resolve_conflicts",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-resolve_conflicts-2026-09-30.log"
+    },
+    {
+      "id": "tool:restore_context",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:route_peer",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:run_script",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-run_script-2026-09-30.log"
+    },
+    {
+      "id": "tool:sbom_generate",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-sbom_generate-2026-09-30.log"
+    },
+    {
+      "id": "tool:scaffold_app",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-scaffold_app-2026-09-30.log"
+    },
+    {
+      "id": "tool:scan_secrets",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-scan_secrets-2026-09-30.log"
+    },
+    {
+      "id": "tool:scan_vulnerabilities",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-scan_vulnerabilities-2026-09-30.log"
+    },
+    {
+      "id": "tool:screen_memory",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:screenshot",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-screenshot-2026-09-30.log"
+    },
+    {
+      "id": "tool:search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-search-2026-09-30.log"
+    },
+    {
+      "id": "tool:search_files",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-search_files-2026-09-30.log"
+    },
+    {
+      "id": "tool:search_multi",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-search_multi-2026-09-30.log"
+    },
+    {
+      "id": "tool:self_describe",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-self_describe-2026-09-30.log"
+    },
+    {
+      "id": "tool:self_evolution",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-self_evolution-2026-09-30.log"
+    },
+    {
+      "id": "tool:send_message",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:session_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:sessions_history",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:sessions_list",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:sessions_send",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:sessions_spawn",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:skill_discover",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:skill_manage",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-skill_manage-2026-09-30.log"
+    },
+    {
+      "id": "tool:skill_view",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-skill_view-2026-09-30.log"
+    },
+    {
+      "id": "tool:skills_list",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-skills_list-2026-09-30.log"
+    },
+    {
+      "id": "tool:spawn_parallel_agents",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:spawn_subagent",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:spotify_albums",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:spotify_devices",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:spotify_library",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:spotify_playback",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:spotify_playlists",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:spotify_queue",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:spotify_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:stock_quote",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-stock_quote-2026-09-30.log"
+    },
+    {
+      "id": "tool:str_replace_editor",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-str_replace_editor-2026-09-30.log"
+    },
+    {
+      "id": "tool:submit_plan",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:task_verify",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-task_verify-2026-09-30.log"
+    },
+    {
+      "id": "tool:terminal",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-terminal-2026-09-30.log"
+    },
+    {
+      "id": "tool:terminate",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:test_runner",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-test_runner-2026-09-30.log"
+    },
+    {
+      "id": "tool:text_to_speech",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-text_to_speech-2026-09-30.log"
+    },
+    {
+      "id": "tool:todo_scan",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-todo_scan-2026-09-30.log"
+    },
+    {
+      "id": "tool:todo_update",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-todo_update-2026-09-30.log"
+    },
+    {
+      "id": "tool:tool_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-tool_search-2026-09-30.log"
+    },
+    {
+      "id": "tool:update_todo_list",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-update_todo_list-2026-09-30.log"
+    },
+    {
+      "id": "tool:user_model_observe",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-user_model_observe-2026-09-30.log"
+    },
+    {
+      "id": "tool:user_model_recall",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:video",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-video-2026-09-30.log"
+    },
+    {
+      "id": "tool:video_analyze",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:video_flow_handoff",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:video_long_form_plan",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-video_long_form_plan-2026-09-30.log"
+    },
+    {
+      "id": "tool:video_quality_gate",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:video_route",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-video_route-2026-09-30.log"
+    },
+    {
+      "id": "tool:video_stitch",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-video_stitch-2026-09-30.log"
+    },
+    {
+      "id": "tool:video_trailer_plan",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-video_trailer_plan-2026-09-30.log"
+    },
+    {
+      "id": "tool:view_file",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-view_file-2026-09-30.log"
+    },
+    {
+      "id": "tool:vision_analyze",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner. Dernier essai en échec (99dbcdf27b61fa6a98bc73779b44c0e7efcd3049) : OCR exact : attendu P9 TEXT 42, observé PO TEXT 42 ; largeur 700 exclue de l’oracle.",
+      "scope": null,
+      "latestRunFailed": true,
+      "trace": "docs/preuves/p9r1-tool-vision_analyze-2026-09-30.log"
+    },
+    {
+      "id": "tool:weather",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-weather-2026-09-30.log"
+    },
+    {
+      "id": "tool:web_extract",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-web_extract-2026-09-30.log"
+    },
+    {
+      "id": "tool:web_fetch",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-web_fetch-2026-09-30.log"
+    },
+    {
+      "id": "tool:web_scrape",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-web_scrape-2026-09-30.log"
+    },
+    {
+      "id": "tool:web_test",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-web_test-2026-09-30.log"
+    },
+    {
+      "id": "tool:workspace_read",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-workspace_read-2026-09-30.log"
+    },
+    {
+      "id": "tool:workspace_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-workspace_search-2026-09-30.log"
+    },
+    {
+      "id": "tool:write_file",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": "docs/preuves/p9r1-tool-write_file-2026-09-30.log"
+    },
+    {
+      "id": "tool:x_search",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:yb_query_group_info",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:yb_query_group_members",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:yb_search_sticker",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:yb_send_dm",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
+    },
+    {
+      "id": "tool:yb_send_sticker",
+      "status": "not-proven-here",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas.",
+      "scope": null,
+      "latestRunFailed": false,
+      "trace": null
     }
   ]
 }

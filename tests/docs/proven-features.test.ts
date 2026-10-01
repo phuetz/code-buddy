@@ -165,6 +165,16 @@ describe('generated proven features showcase', () => {
     expect(() => updateReadme('<!-- proven-features:start --><!-- proven-features:start --><!-- proven-features:end -->', 'block')).toThrow('marker pair');
   });
 
+  it('reads a scenario command label from a qualified P9 trace', () => {
+    const directory = fixture();
+    proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUCCESS');
+    put(directory, 'docs/preuves/passed.log', 'Commande/scénario: buddy fixture --json\nPortée: fixture only.\n');
+    review(directory, 'accept', 'docs/preuves/passed.log');
+    const files = generateProvenFeatures(directory, revision);
+    expect(files['docs/PROVEN-FEATURES.md']).toContain('buddy fixture --json');
+    expect(files['docs/PROVEN-FEATURES.md']).toContain('**Proven**');
+  });
+
   it('qualifies the scenario limit promise when a proven trace records no scope', () => {
     const directory = fixture();
     proof(directory, 'passed', '2026-09-29T12:00:00Z', 'SUCCESS');
