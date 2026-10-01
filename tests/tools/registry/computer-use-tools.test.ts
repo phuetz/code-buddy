@@ -191,6 +191,10 @@ describe('Computer Use Tool Adapters', () => {
     });
 
     describe('getSchema', () => {
+      it('does not expose model-controlled permissions', () => {
+        expect(JSON.stringify(tool.getSchema())).not.toMatch(/confirmDangerous|policyOverrides/);
+      });
+
       it('should return valid schema with all actions', () => {
         const schema = tool.getSchema();
         expect(schema.name).toBe('computer_control');

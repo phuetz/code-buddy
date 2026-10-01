@@ -566,11 +566,7 @@ export class ComputerControlExecuteTool implements ITool {
           safetyProfile: {
             type: 'string',
             enum: ['balanced', 'strict'],
-            description: 'Safety profile for action gating (strict blocks dangerous actions unless confirmed)',
-          },
-          confirmDangerous: {
-            type: 'boolean',
-            description: 'Required in strict profile for dangerous actions',
+            description: 'Safety preset for matching; sensitive actions require human confirmation in every profile',
           },
           simulateOnly: {
             type: 'boolean',
@@ -583,10 +579,6 @@ export class ComputerControlExecuteTool implements ITool {
           exportAuditPath: {
             type: 'string',
             description: 'Optional output path for export_audit_log JSON file',
-          },
-          policyOverrides: {
-            type: 'object',
-            description: 'Per-action safety overrides: { "close_window": "confirm|allow|block", ... }',
           },
           ref: { type: 'number', description: 'Element reference number from snapshot' },
           appName: { type: 'string', description: 'Application profile id/name, e.g. excel, notepad, calculator, browser, vscode' },

@@ -28,6 +28,8 @@ import {
 import { getActiveRunStore } from '../observability/run-store.js';
 import { getPermissionModeManager } from '../security/permission-modes.js';
 import { logger } from '../utils/logger.js';
+import { ConfirmationService } from '../utils/confirmation-service.js';
+import { getSettingsManager } from '../utils/settings-manager.js';
 import { resolveUserName } from '../companion/user-name.js';
 import {
   getDesktopAutomation,
@@ -201,10 +203,12 @@ export interface ComputerControlInput {
   action: ComputerAction;
   pilotMode?: 'cautious' | 'normal' | 'fast';
   safetyProfile?: 'balanced' | 'strict';
+  /** @deprecated Ignored compatibility field. Only the host can authorize actions. */
   confirmDangerous?: boolean;
   auditLimit?: number;
   simulateOnly?: boolean;
   exportAuditPath?: string;
+  /** @deprecated Ignored compatibility field. Configure computerControl in settings instead. */
   policyOverrides?: Record<string, 'allow' | 'block' | 'confirm'>;
   // Snapshot params
   interactiveOnly?: boolean;
@@ -358,7 +362,7 @@ export class ComputerControlTool {
    * Execute a computer control action
    */
   async execute(input: ComputerControlInput): Promise<ToolResult> {
-    const enrichedInput = this.applyPilotDefaults(input);
+    const enrichedInput = this.applyPilotDefaults(this.ignoreModelPermissions(input));
     const { action } = enrichedInput;
     this.lastWindowMatchError = null;
     this.lastTargetFocusProof = null;
@@ -368,7 +372,7 @@ export class ComputerControlTool {
     logger.debug('Computer control action', { action, input: enrichedInput });
 
     try {
-      const safetyError = this.enforceSafetyPolicy(enrichedInput);
+      const safetyError = await this.enforceSafetyPolicy(enrichedInput);
       if (safetyError) {
         return this.finalizeActionResult(action, enrichedInput, {
           success: false,
@@ -1365,15 +1369,18 @@ export class ComputerControlTool {
       };
     }
 
-    if (selection.button.risk !== 'safe' && !input.confirmDangerous) {
-      return {
-        success: false,
-        error: (
-          `Dialog button "${selection.button.name}" is ${selection.button.risk}. ` +
-          'Use inspect_dialog first, or set confirmDangerous=true when this is the intended action.'
-        ),
-        data: { dialog: inspection, selectedButton: selection.button, reason: selection.reason },
-      };
+    // Judge the observed button, not the agent's description of its intent.
+    const policy = this.resolveConfiguredPolicy(input.action);
+    if (policy === 'block') return { success: false, error: `Action "${input.action}" is blocked by safety policy.` };
+    if (policy === 'confirm' || (policy !== 'allow' && selection.button.risk !== 'safe')) {
+      const error = await this.requestHumanConfirmation(input, inspection, selection.button);
+      if (error) {
+        return {
+          success: false,
+          error,
+          data: { dialog: inspection, selectedButton: selection.button, reason: selection.reason },
+        };
+      }
     }
 
     let clickedInspection: DialogInspection | null = null;
@@ -6307,34 +6314,87 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     return ranked;
   }
 
-  private enforceSafetyPolicy(input: ComputerControlInput): string | null {
-    const policy = this.resolveActionPolicy(input);
-    if (policy === 'allow') return null;
-    if (policy === 'block') {
-      return `Action "${input.action}" is blocked by safety policy.`;
+  private ignoreModelPermissions(input: ComputerControlInput): ComputerControlInput {
+    const ignored = ['confirmDangerous', 'policyOverrides'].filter(field =>
+      Object.prototype.hasOwnProperty.call(input, field));
+    if (ignored.length) {
+      logger.warn('Ignoring model-supplied computer control permissions', { action: input.action, fields: ignored });
     }
-    // policy === 'confirm'
-    if (input.simulateOnly) return null; // a dry-run applies no system changes
+    const out = { ...input };
+    delete out.confirmDangerous;
+    delete out.policyOverrides;
+    // Workflows and stored macros must cross the same trust boundary per step.
+    if (out.steps) out.steps = out.steps.map(step => this.ignoreModelPermissions(step));
+    return out;
+  }
 
-    // S5: give the confirmation real teeth via the active permission mode instead
-    // of trusting the model-set `confirmDangerous` flag alone (a prompt-injected
-    // model can set it). A read-only posture (plan mode) must NEVER mutate the
-    // desktop; full-auto postures (bypass/dontAsk) pre-approve; otherwise the
-    // agent must at least assert intent with confirmDangerous.
-    const mode = getPermissionModeManager().getMode();
-    if (mode === 'plan') {
+  private async enforceSafetyPolicy(input: ComputerControlInput): Promise<string | null> {
+    const policy = this.resolveActionPolicy(input);
+    if (policy === 'block') return `Action "${input.action}" is blocked by safety policy.`;
+    if (input.simulateOnly) return null;
+    if (this.isMutatingAction(input.action, input) && getPermissionModeManager().getMode() === 'plan') {
       return `Action "${input.action}" is blocked: only read-only actions are allowed in plan mode.`;
     }
-    if (mode === 'bypassPermissions' || mode === 'dontAsk') {
-      return null;
+    if (policy === 'allow') return null;
+    // Each workflow step and each observed dialog button gets its own gate.
+    if (input.action === 'macro') {
+      return this.resolveConfiguredPolicy(input.action) === 'confirm' ? this.requestHumanConfirmation(input) : null;
     }
-    if (!input.confirmDangerous) {
-      return (
-        `Action "${input.action}" requires explicit confirmation. ` +
-        `Use simulateOnly=true for a dry-run or set confirmDangerous=true to proceed intentionally.`
-      );
+    if (['click_dialog_button', 'handle_dialog'].includes(input.action)) return null;
+    if (input.action === 'use_app_workflow' && !this.requiresApplicationConfirmation(input)) return null;
+    return this.requestHumanConfirmation(input);
+  }
+
+  private resolveConfiguredPolicy(action: ComputerAction): 'allow' | 'block' | 'confirm' | undefined {
+    const settings = getSettingsManager();
+    const project = settings.getProjectSetting('computerControl')?.policyOverrides;
+    const user = settings.getUserSetting('computerControl')?.policyOverrides;
+    const value = project && Object.prototype.hasOwnProperty.call(project, action)
+      ? project[action] : user?.[action];
+    if (value === undefined) return undefined;
+    if (value === 'allow' || value === 'block' || value === 'confirm') return value;
+    logger.warn('Invalid host computer control policy; requiring human confirmation', { action });
+    return 'confirm';
+  }
+
+  private async requestHumanConfirmation(
+    input: ComputerControlInput,
+    dialog?: DialogInspection,
+    button?: DialogButtonEvidence,
+  ): Promise<string | null> {
+    const officeApp = /^(excel|word|powerpoint)_/.exec(input.action)?.[1];
+    const profile = officeApp ? resolveApplicationProfile(officeApp) : this.resolveAppProfileFromInput(input);
+    const applicationAction = /^(excel_|word_|powerpoint_)/.test(input.action) || input.action === 'open_app' || input.action === 'use_app_workflow';
+    let application = applicationAction ? profile?.name ?? input.action.split('_')[0] : undefined;
+    if (dialog) {
+      application = `${dialog.processName ?? 'Unknown application'} — ${dialog.title}`;
+    } else if (!application) {
+      try {
+        // Observe an already initialized backend; never load native control just to ask permission.
+        const targeted = input.windowHandle || input.windowTitle || input.windowTitleRegex || input.processName;
+        const window = targeted ? await this.findWindowFromInput(input) : await this.automation.getActiveWindow();
+        if (window) application = `${window.processName} — ${window.title}`;
+      } catch {
+        logger.warn('Could not identify application for computer control confirmation', { action: input.action });
+      }
     }
-    return null;
+    const requestedTarget = input.processName ?? input.windowTitle ?? input.windowHandle ?? profile?.name;
+    application ??= requestedTarget
+      ? `Unknown application (requested target: ${requestedTarget}; not verified)`
+      : 'Unknown application (target could not be verified)';
+    const riskLevel = profile?.riskLevel === 'critical' ? 'critical' : 'high';
+    const choice = button ? `; button "${button.name}" (${button.risk})` : '';
+    const decision = await ConfirmationService.getInstance().requestConfirmation({
+      operation: `Computer control: ${input.action}${choice} — risk: ${riskLevel}`,
+      filename: application,
+      toolName: 'computer_control',
+      toolArgs: { ...input },
+      content: `Application: ${application}\nAction: ${input.action}${choice}\nRisk level: ${riskLevel}\nA fresh human confirmation is required before this action.`,
+      riskLevel,
+      forcePrompt: true,
+    }, 'tool');
+    return decision.confirmed ? null
+      : `Action "${input.action}" requires explicit human confirmation. ${decision.feedback ?? 'Human approval was not granted.'}`;
   }
 
   private applyPilotDefaults(input: ComputerControlInput): ComputerControlInput {
@@ -6404,10 +6464,8 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
   }
 
   private resolveActionPolicy(input: ComputerControlInput): 'allow' | 'block' | 'confirm' {
-    const override = input.policyOverrides?.[input.action];
-    if (override === 'allow' || override === 'block' || override === 'confirm') {
-      return override;
-    }
+    const configured = this.resolveConfiguredPolicy(input.action);
+    if (configured) return configured;
 
     const profile = input.safetyProfile ?? 'balanced';
     if (this.requiresApplicationConfirmation(input)) {
@@ -6508,6 +6566,9 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     simulated: boolean
   ): ToolResult {
     const safetyProfile = input.safetyProfile ?? 'balanced';
+    const selectedButton = (result.data as { selectedButton?: DialogButtonEvidence } | undefined)?.selectedButton;
+    const observedDialogRisk = (action === 'handle_dialog' || action === 'click_dialog_button')
+      && selectedButton !== undefined && selectedButton.risk !== 'safe';
     const entry: ComputerControlAuditEntry = {
       id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       timestamp: new Date().toISOString(),
@@ -6515,7 +6576,7 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
       success: Boolean(result.success),
       durationMs: Math.max(0, Date.now() - startedAtMs),
       safetyProfile,
-      dangerous: this.isDangerousAction(action, input),
+      dangerous: observedDialogRisk || this.isDangerousAction(action, input),
       simulated,
       error: result.success ? undefined : result.error,
     };

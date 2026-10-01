@@ -32,7 +32,13 @@ import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
  * User-level settings stored in ~/.codebuddy/user-settings.json
  * These are global settings that apply across all projects
  */
+export interface ComputerControlSettings {
+  /** Host configuration only; never taken from tool arguments. */
+  policyOverrides?: Record<string, 'allow' | 'block' | 'confirm'>;
+}
+
 export interface UserSettings {
+  computerControl?: ComputerControlSettings;
   apiKey?: string; // CodeBuddy API key
   baseURL?: string; // API base URL
   defaultModel?: string; // User's preferred default model
@@ -47,6 +53,7 @@ export interface UserSettings {
  * These are project-specific settings
  */
 export interface ProjectSettings {
+  computerControl?: ComputerControlSettings;
   model?: string; // Current model for this project
   mcpServers?: Record<string, unknown>; // MCP server configurations
   thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high'; // Gemini 3.x thinking depth

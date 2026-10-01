@@ -226,16 +226,12 @@ ACTIONS:
         safetyProfile: {
           type: 'string',
           enum: ['balanced', 'strict'],
-          description: 'Safety profile for action gating (strict blocks dangerous actions unless confirmed)',
+          description: 'Safety preset for matching; sensitive actions require human confirmation in every profile',
         },
         pilotMode: {
           type: 'string',
           enum: ['cautious', 'normal', 'fast'],
           description: 'High-level piloting preset for default safety + matching behavior',
-        },
-        confirmDangerous: {
-          type: 'boolean',
-          description: 'Required in strict profile for dangerous actions',
         },
         simulateOnly: {
           type: 'boolean',
@@ -248,10 +244,6 @@ ACTIONS:
         exportAuditPath: {
           type: 'string',
           description: 'Optional output path for export_audit_log JSON file',
-        },
-        policyOverrides: {
-          type: 'object',
-          description: 'Per-action safety overrides: { "close_window": "confirm|allow|block", ... }',
         },
         ref: {
           type: 'number',
@@ -344,7 +336,7 @@ ACTIONS:
         dialogIntent: {
           type: 'string',
           enum: ['accept', 'cancel', 'save', 'dont_save', 'discard', 'retry', 'continue', 'close', 'yes', 'no', 'ok', 'custom'],
-          description: 'Desired dialog decision for handle_dialog/click_dialog_button. Risky affirmative choices require confirmDangerous=true.',
+          description: 'Desired dialog decision for handle_dialog/click_dialog_button. Risky affirmative choices require human confirmation.',
         },
         dialogText: {
           type: 'string',

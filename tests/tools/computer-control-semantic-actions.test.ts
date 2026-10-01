@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
+import { afterEach } from 'vitest';
 import type { Snapshot, UIElement } from '../../src/desktop-automation/smart-snapshot.js';
 
 const {
@@ -147,6 +149,8 @@ vi.mock('../../src/tools/ocr-tool.js', () => {
     }
   };
 });
+
+afterEach(() => ConfirmationService.getInstance().setInteractiveBridge(null));
 
 describe('ComputerControlTool semantic actions', () => {
   beforeEach(() => {
@@ -416,9 +420,10 @@ describe('ComputerControlTool semantic actions', () => {
       name: 'Delete',
     });
     expect(blocked.success).toBe(false);
-    expect(blocked.error).toContain('requires explicit confirmation');
+    expect(blocked.error).toContain('requires explicit human confirmation');
     expect(mockAutomation.click).not.toHaveBeenCalled();
 
+    ConfirmationService.getInstance().setInteractiveBridge(async () => ({ confirmed: true }));
     const confirmed = await tool.execute({
       action: 'handle_dialog',
       dialogIntent: 'discard',
@@ -427,6 +432,31 @@ describe('ComputerControlTool semantic actions', () => {
     expect(confirmed.success).toBe(true);
     expect(mockAutomation.click).toHaveBeenCalledWith(deleteButton.center.x, deleteButton.center.y, { button: 'left' });
   });
+
+  it.each([
+    { action: 'handle_dialog', dialogIntent: 'yes', confirmDangerous: true },
+    { action: 'click_dialog_button', name: 'Delete', policyOverrides: { click_dialog_button: 'allow' } },
+    // Fuzzy matching must judge the actual button, even with a safe-looking request.
+    { action: 'click_dialog_button', name: 'Cancel' },
+  ] as import('../../src/tools/computer-control-tool.js').ComputerControlInput[])(
+    'requires human approval for the observed affirmative/destructive button: %j', async (input) => {
+      const button = makeElement({ ref: 17, role: 'button', name: 'Cancel and Delete' }) as UIElement;
+      setCurrentSnapshot(makeSnapshot([button]) as Snapshot);
+      // For explicit Yes/Delete use matching observed choices.
+      if (input.dialogIntent === 'yes') button.name = 'Yes';
+      if (input.name === 'Delete') button.name = 'Delete';
+      const human = vi.fn().mockResolvedValue({ confirmed: false });
+      ConfirmationService.getInstance().setInteractiveBridge(human);
+      const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+      const result = await new ComputerControlTool().execute(input);
+      expect(result.success).toBe(false);
+      expect(human).toHaveBeenCalledTimes(1);
+      expect(human.mock.calls[0]?.[0]).toMatchObject({
+        forcePrompt: true, riskLevel: 'high',
+        operation: expect.stringContaining(button.name),
+      });
+      expect(mockAutomation.click).not.toHaveBeenCalled();
+    });
 
   it('lists app profiles and exposes Excel as a known application profile', async () => {
     const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
@@ -467,7 +497,7 @@ describe('ComputerControlTool semantic actions', () => {
       appName: 'terminal',
     });
     expect(terminalResult.success).toBe(false);
-    expect(terminalResult.error).toContain('requires explicit confirmation');
+    expect(terminalResult.error).toContain('requires explicit human confirmation');
 
     const excelResult = await tool.execute({
       action: 'excel_set_cell',
@@ -475,7 +505,7 @@ describe('ComputerControlTool semantic actions', () => {
       value: 'protected',
     });
     expect(excelResult.success).toBe(false);
-    expect(excelResult.error).toContain('requires explicit confirmation');
+    expect(excelResult.error).toContain('requires explicit human confirmation');
 
     const notepadSaveResult = await tool.execute({
       action: 'save_app_document',
@@ -483,7 +513,7 @@ describe('ComputerControlTool semantic actions', () => {
       filePath: 'C:\\temp\\codebuddy-notepad.txt',
     });
     expect(notepadSaveResult.success).toBe(false);
-    expect(notepadSaveResult.error).toContain('requires explicit confirmation');
+    expect(notepadSaveResult.error).toContain('requires explicit human confirmation');
   });
 
   it('applies app profile safety and window context to workflows', async () => {
@@ -496,7 +526,7 @@ describe('ComputerControlTool semantic actions', () => {
       steps: [{ action: 'type', text: 'dir' }],
     });
     expect(terminalResult.success).toBe(false);
-    expect(terminalResult.error).toContain('requires explicit confirmation');
+    expect(terminalResult.error).toContain('requires explicit human confirmation');
 
     const notepadWindow = {
       handle: 'notepad-window',

@@ -115,11 +115,7 @@ describe('computer control harness', () => {
       defaultDryRun: true,
       requires: 'approval-required',
     });
-    expect(bundle.approval).toMatchObject({
-      kind: 'approval',
-      decision: 'approved',
-      target: 'codebuddy.computer_control.click',
-    });
+    expect(bundle.approval).toBeUndefined();
   });
 
   it('keeps useful result evidence in proof artifacts while bounding and redacting it', () => {

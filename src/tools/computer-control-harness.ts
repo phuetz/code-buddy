@@ -1,5 +1,4 @@
 import {
-  approvalSchema,
   capabilitySchema,
   proofSchema,
   runSchema,
@@ -91,24 +90,6 @@ export function buildComputerControlHarnessBundle(
       })
     : undefined;
 
-  const approval = sensitiveAction && options.input.confirmDangerous
-    ? approvalSchema.parse({
-        kind: 'approval',
-        schemaVersion: 1,
-        id: `approval_${options.audit.id}`,
-        target: sensitiveAction.id,
-        runId,
-        decision: 'approved',
-        // Honest provenance: this approval came from the AGENT setting
-        // confirmDangerous=true, NOT from a human operator. Labelling it
-        // 'human-operator' misrepresented the audit trail (S5).
-        reviewer: 'agent-self-attested',
-        reason: 'Computer control action carried agent-set confirmDangerous=true (no human approval).',
-        decidedAt: endedAt,
-        scope: options.audit.action,
-      })
-    : undefined;
-
   return {
     run: runSchema.parse({
       kind: 'run',
@@ -147,7 +128,6 @@ export function buildComputerControlHarnessBundle(
       ref: options.artifactRef,
     }),
     ...(sensitiveAction ? { sensitiveAction } : {}),
-    ...(approval ? { approval } : {}),
     capabilities: buildComputerControlCapabilities(),
   };
 }
