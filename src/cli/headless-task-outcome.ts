@@ -99,7 +99,7 @@ function checkIdentity(entry: TaskEvidenceEntry, command: string | undefined, su
   let formatted = false;
   while (formatter.test(body)) { body = body.replace(formatter, ''); formatted = true; }
   const clean = (part: string) => part.replace(/\s*2>&1\s*$/, '').trim();
-  const simpleCheck = (part: string) => /^(?:npm|pnpm|yarn|bun|npx|node|vitest|jest|eslint|tsc|pytest|cargo|go|dotnet|just)\s/.test(part)
+  const simpleCheck = (part: string) => /^(?:npm|pnpm|yarn|bun|npx|node|vitest|jest|eslint|tsc|pytest|cargo|go|dotnet|just)(?:\s|$)/.test(part)
     && /\b(?:test|tests|lint|eslint|vitest|jest|tsc|pytest|check|typecheck)\b/.test(part)
     && !/[;&|<>$`\n]/.test(part);
   const script = runtimeShell(entry)?.testScript;

@@ -36,9 +36,14 @@ export function captureShellExecution(command: string, cwd: string): ShellExecut
   if (!/[$`<>\n]/.test(scope.body)) {
     const parsed = parseBashCommand(scope.body);
     if (!parsed.warnings.length) {
-      const edits = parsed.commands.filter(part => !part.isSubshell && part.command === 'sed' && part.args[0] === '-i')
-        .flatMap(part => part.args.slice(2)).filter(file => !file.startsWith('-'))
-        .map(file => path.resolve(scope.directory ?? cwd, file))
+      // The optional native parser omits single-quoted raw_string arguments.
+      // Match this bounded literal form from raw text so native availability
+      // cannot change which existing file is observed. Other sed forms stay closed.
+      const edits = parsed.commands.filter(part => !part.isSubshell && part.command === 'sed')
+        .flatMap(part => {
+          const literal = part.raw.match(/^sed\s+-i\s+(?:'[^']*'|"[^"$`]*"|[^\s'";&|<>$`]+)\s+('[^']+'|"[^"$`]+"|[^\s'";&|<>$`]+)\s*$/);
+          return literal ? [path.resolve(scope.directory ?? cwd, literal[1]!.replace(/^['"]|['"]$/g, ''))] : [];
+        })
         .flatMap(file => { const sha256 = fileDigest(file); return sha256 ? [{ file, sha256 }] : []; });
       if (edits.length) evidence.editFiles = edits;
     }

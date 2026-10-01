@@ -45,6 +45,10 @@ describe('headless recovery with execution evidence', () => {
   it.each(['npm test; true', 'npm test || echo passed', 'npm run lint || npm test', 'npm test || npm test; rm -rf fixture'])('keeps a red or unproven compound check closed: %s', command => {
     expect(exit([shell(command, false, red, '/workspace'), edit, shell('npm test', true, green, '/workspace')])).toBe(1);
   });
+  it('recovers a literal npm/yarn/bare-jest fallback from its completed npm member', () => {
+    expect(exit([shell('npm test 2>&1 || yarn test 2>&1 || jest 2>&1 | head -100', false, red, '/workspace'), edit,
+      shell('npm test 2>&1', true, green, '/workspace')])).toBe(0);
+  });
   it('does not count a missing read and subsequent echo as a repaired file', () => {
     expect(exit([shell('cat greet.js', false, 'No such file', '/workspace'), shell('echo fixed', true, 'fixed', '/workspace')], 'Replace Bonjour by Salut in greet.js')).toBe(1);
   });
