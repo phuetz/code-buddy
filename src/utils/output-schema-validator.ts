@@ -54,8 +54,25 @@ function validateValue(value: unknown, schema: JSONSchema, path: string): string
   if (schema.type !== undefined) {
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
     const actualType = getJSONType(value);
-    if (!types.includes(actualType)) {
-      errors.push(`${path}: expected type ${types.join(' | ')}, got ${actualType}`);
+
+    let typeMatched = false;
+    for (const t of types) {
+      if (t === actualType) {
+        typeMatched = true;
+        break;
+      }
+      if (t === 'integer' && actualType === 'number' && Number.isInteger(value)) {
+        typeMatched = true;
+        break;
+      }
+    }
+
+    if (!typeMatched) {
+      if (actualType === 'number' && types.includes('integer') && !types.includes('number')) {
+        errors.push(`${path}: expected type ${types.join(' | ')}, got number (${value} is not an integer)`);
+      } else {
+        errors.push(`${path}: expected type ${types.join(' | ')}, got ${actualType}`);
+      }
       return errors; // No point checking further if type is wrong
     }
   }
