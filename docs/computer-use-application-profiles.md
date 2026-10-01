@@ -23,8 +23,38 @@ Profiles live in `src/tools/application-profiles.ts`.
 ## Safety Model
 
 Read-only actions can run autonomously. Mutating desktop actions create harness
-metadata and proof artifacts. High-risk profile actions require either
-`simulateOnly: true` or `confirmDangerous: true`.
+metadata and proof artifacts. Sensitive actions and high-risk profile actions
+require a fresh human decision through `ConfirmationService`, or
+`simulateOnly: true` for a dry-run. The confirmation names the application and
+the action's risk level. Without an interactive terminal or approval bridge,
+the action fails closed. Session approvals, YOLO, `dontAsk`,
+`bypassPermissions`, and auto-confirm do not replace this action confirmation.
+Plan mode blocks mutating actions.
+
+The model schema exposes neither `confirmDangerous` nor `policyOverrides`.
+Legacy calls containing these fields are ignored with a `logger.warn` warning,
+including workflow steps. They never produce an approval in harness evidence.
+Human decisions are audited by `ConfirmationService`.
+
+Optional per-action policies come only from host settings:
+`.codebuddy/settings.json` (project) or `~/.codebuddy/user-settings.json`
+(user), with project entries taking precedence:
+
+```json
+{
+  "computerControl": {
+    "policyOverrides": { "close_window": "confirm", "sleep": "block" }
+  }
+}
+```
+
+Values are `confirm`, `block`, or `allow`. An explicit host `allow` preauthorizes
+that action; use it only when the user intends to waive its action gate.
+Unrecognized configured values require confirmation. Tool arguments never
+change these policies. These settings files must be maintained by the user;
+this change does not protect them from other tools that can edit files.
+The classification covers the recognized dangerous actions, keystrokes and
+dialog buttons; it does not infer every possible effect of arbitrary UI clicks.
 
 Proof artifacts keep the structured evidence returned by each action, such as
 `targetFocus`, `visualContext`, dialog text, button risk classification,
@@ -50,9 +80,10 @@ Dialogs are handled as their own control surface:
 
 Safe exits like Cancel, No, Close, Dismiss, and their French equivalents can be
 clicked directly. Affirmative or destructive choices like OK, Yes, Save,
-Delete, Discard, Overwrite, Run, Install, and Allow require
-`confirmDangerous: true`. This keeps pop-up handling useful without letting an
-unexpected system prompt approve risky actions by accident.
+Delete, Discard, Overwrite, Run, Install, and Allow require human confirmation
+unless explicitly allowed by host configuration. The gate uses the observed
+button's name and risk, including when a safe-looking requested label matches
+a destructive button.
 
 Generic desktop controls now cover more than buttons and fields:
 
@@ -64,8 +95,8 @@ Generic desktop controls now cover more than buttons and fields:
 
 Notepad no longer relies on `Ctrl+S` for the proof test. `save_app_document`
 reads the targeted Notepad editor through UIAutomation and writes the explicit
-`filePath` only when `confirmDangerous: true` is present. This avoids sending a
-global save hotkey into whichever app the user happens to be using.
+`filePath` after human confirmation or explicit host authorization. This avoids
+sending a global save hotkey into whichever app the user happens to be using.
 
 Excel write/save operations are treated as high risk:
 
@@ -87,8 +118,7 @@ Word write/save operations are treated as high risk:
 - `word_save_document`
 
 Terminal, VS Code, and File Explorer launch actions are guarded by the profile
-policy. This prevents prompt-injected page content from silently escalating into
-system-level actions.
+policy. Screen content and model arguments do not authorize these actions.
 
 ## Visual grounding — OmniParser (optional, self-hosted)
 
