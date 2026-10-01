@@ -17,7 +17,7 @@ const fail = (error: string) => ({ success: false as const, error });
 describe('tool loop guardrails', () => {
   it('keeps the historical 5-then-3 sequence when nothing is configured', () => {
     expect(DEFAULT_TOOL_LOOP_GUARDRAILS.warnAfter).toEqual({
-      exact_failure: 0,
+      exact_failure: 2,
       same_tool_failure: 0,
       idempotent_no_progress: 5,
     });
@@ -31,7 +31,7 @@ describe('tool loop guardrails', () => {
   });
 
   it('does not treat a different error text as a loop until exact_failure is enabled', () => {
-    const historical = new ToolLoopGuard({ isRepeatSafe: () => false });
+    const historical = new ToolLoopGuard({ isRepeatSafe: () => false, guardrails: { warnAfter: { exact_failure: 0 }, hardStopAfter: { exact_failure: 0 } } });
     for (let i = 0; i < 6; i++) {
       expect(historical.observe({
         name: 'view_file',
@@ -159,7 +159,7 @@ describe('tool loop guardrails', () => {
       hard_stop_after: { exact_failure: '4', idempotent_no_progress: 2 },
     });
     expect(resolved.warnAfter).toEqual(DEFAULT_TOOL_LOOP_GUARDRAILS.warnAfter);
-    expect(resolved.hardStopAfter.exact_failure).toBe(0);
+    expect(resolved.hardStopAfter.exact_failure).toBe(DEFAULT_TOOL_LOOP_GUARDRAILS.hardStopAfter.exact_failure);
     expect(resolved.hardStopAfter.idempotent_no_progress).toBeGreaterThan(resolved.warnAfter.idempotent_no_progress);
   });
 
@@ -264,4 +264,11 @@ idempotent_no_progress = 7
     expect(ran.status, ran.stderr ?? '').toBe(0);
     expect(ran.stdout ?? '').toContain('GUARD_RESULT {"applied":false}');
   }, 20_000);
+});
+
+it('default exact failures warn at two and stop at five even when diagnostics change', () => {
+  const guard = new ToolLoopGuard({ isRepeatSafe: () => false });
+  const decisions = Array.from({ length: 5 }, (_, i) => guard.observe({ name: 'bash', argumentsJson: '{"command":"missing"}', result: fail('diagnostic ' + i) }));
+  expect(decisions.map(d => d.action)).toEqual(['none', 'warn', 'none', 'none', 'stop']);
+  expect(decisions.at(-1)).toMatchObject({ kind: 'exact_failure' });
 });

@@ -22,9 +22,9 @@
  *   YOLO configuration disables it. A new guard instance is created per task.
  *
  * Optional `[tool_loop_guardrails]` in config.toml (Hermes-shaped keys).
- * Defaults reproduce the contract above. `exact_failure` and
- * `same_tool_failure` stay off (0) until set, because the historical guard
- * does not count a different error or different arguments as the same loop.
+ * Independently written thresholds inspired by Hermes agent/tool_guardrails.py: `exact_failure`
+ * warns at 2 and stops at 5 by default, even when error text changes.
+ * `same_tool_failure` stays off (0) to preserve legitimate argument changes.
  * `0` does not disable `idempotent_no_progress`: an explicit 0 keeps the
  * default, and the value cannot fall below 2. `same_tool_failure` adds every
  * failure of that tool in the turn, even when the arguments change, so a low
@@ -81,12 +81,12 @@ export const DEFAULT_TOOL_LOOP_GUARDRAILS: ToolLoopGuardrailsConfig = {
   warningsEnabled: true,
   hardStopEnabled: true,
   warnAfter: {
-    exact_failure: 0,
+    exact_failure: 2,
     same_tool_failure: 0,
     idempotent_no_progress: 5,
   },
   hardStopAfter: {
-    exact_failure: 0,
+    exact_failure: 5,
     same_tool_failure: 0,
     idempotent_no_progress: 8,
   },
