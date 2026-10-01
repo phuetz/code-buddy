@@ -1,11 +1,13 @@
 # Hermes memory providers — connectors & self-hosting
 
+**Current showcase status: not proven here.** Connector configuration and shape tests are not executed outcomes for this candidate. See the [catalogue](PROVEN-FEATURES.md).
+
 Date: 2026-06-04
 
 > **Living reference** for the memory-provider connectors and self-hosting. For the overall Hermes/OpenClaw parity
 > state, see [`hermes-openclaw-parity.md`](hermes-openclaw-parity.md) (`memory-providers` is one of its tracked features).
 
-Code Buddy maps Hermes' 8 external memory providers onto native TypeScript
+Code Buddy maps the external memory-provider interfaces listed below onto native TypeScript
 **connector adapters**. Each adapter is a thin pipe: it shuttles
 `remember`/`recall`/`search` across the provider's network or CLI boundary and
 **falls back to the built-in local memory** when the provider is not configured.
@@ -13,8 +15,7 @@ The clever part (fact extraction, dialectic reasoning, tiered retrieval) lives
 in the service, not in the adapter — so this is connector parity, not a
 re-implementation.
 
-> Honest scope: 6 of 8 providers have a real network/CLI boundary and are
-> adapted. **Holographic** (in-process Python SQLite + HRR) and **Hindsight**
+> Configuration scope: the adapters listed below have network/CLI boundaries. **Holographic** (in-process Python SQLite + HRR) and **Hindsight**
 > (Python SDK / embedded daemon) have no clean boundary to wrap from
 > TypeScript; adapting them would be parity-by-label, so they are deliberately
 > out of native scope. Use upstream Hermes (Python) for those, or Code Buddy's
@@ -131,7 +132,7 @@ export CODEBUDDY_MEMORY_PROVIDER=byterover
 > connect byterover` refuses without a signed-in ByteRover account, so the live
 > round-trip (`buddy hermes memory probe byterover`) cannot pass on this box
 > without credentials. The adapter (brv detection + curate/query subprocess) is
-> proven by shape tests; live validation is account-gated like the cloud
+> checked in shape tests; that is not an executed showcase proof. Live validation is account-gated like the cloud
 > providers.
 
 ## Validate it actually works (the real test)
@@ -151,9 +152,12 @@ is not configured (the adapter degraded to local memory rather than failing). A
 write-without-read on an extraction-based backend (Mem0/OpenViking run an LLM)
 can be eventual-consistency — re-run the probe, or check the server logs.
 
-## Validated live on a self-hosted box (2026-06-04, hub)
+<!-- showcase:historical:start -->
+## Historical self-hosted account (2026-06-04, outside the current catalogue)
 
-Honcho is **live-validated** end-to-end against a real self-hosted instance with
+This account has not been revalidated here and does not change the current evidence statuses.
+
+The earlier Honcho account describes a self-hosted instance with
 a 100% local LLM stack (Ollama) — `buddy hermes memory probe honcho` → `PASS`,
 `remote=true`, `fellBackToLocal=false`; the Honcho server logs confirm real v3
 endpoints (`POST /v3/workspaces|/peers|/sessions|/messages|/search`). The exact
@@ -196,10 +200,10 @@ recipe and the gotchas that bit us:
 
 Then on the same host: `export CODEBUDDY_MEMORY_PROVIDER=honcho HONCHO_BASE_URL=http://localhost:8000` and `buddy hermes memory probe honcho`.
 
-### Mem0 on the same box — LIVE-VALIDATED (2026-06-04)
+### Mem0 on the same box — historical account (2026-06-04)
 
 Mem0 (OSS REST server, built from `mem0/server`, AUTH_DISABLED, Postgres+pgvector,
-Ollama for LLM+embeddings) is now **live-validated end-to-end**:
+Ollama for LLM+embeddings) was described by the earlier account as follows:
 `buddy hermes memory probe mem0` → `PASS`, `remote=true`, `wrote=true`,
 `retrieved=true`, `fellBackToLocal=false`. Getting there required fixing three
 distinct things — and the third was a real Code Buddy bug only the live probe
@@ -257,3 +261,5 @@ buddy hermes memory probe mem0           # -> PASS
 their published REST APIs but are **not live-validated** here (no account). Set
 `SUPERMEMORY_API_KEY` / `RETAINDB_API_KEY` and run `buddy hermes memory probe` to
 validate against your account.
+
+<!-- showcase:historical:end -->

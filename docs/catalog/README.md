@@ -41,3 +41,19 @@ node --import tsx scripts/generate-proven-features.ts --check
 Les résultats P9 relus sur une autre branche ne sont pas importés dans cet arbre.
 Le critère de sortie reste une installation neuve avec un petit modèle local et une
 première tâche vérifiée ; aucune trace de ce catalogue ne prouve ce parcours complet.
+
+## Contrôle des formulations documentaires
+
+Aucun compte d’outils ou de fournisseurs n’est utilisé comme argument dans les pages de présentation ou de marketing. Une référence technique ne peut publier un tel compte que s’il est exact et produit par un script du dépôt ; cette reprise retire les comptes fixes non mesurés. Les quantités d’un scénario enregistré, limites d’exécution et exemples ne sont pas des totaux du catalogue.
+
+```bash
+node --import tsx scripts/check-showcase-claims.ts
+node --import tsx scripts/check-showcase-claims.ts --json
+node --import tsx scripts/check-showcase-claims.ts --revision <commit> --json
+```
+
+Le contrôle parcourt tous les fichiers textuels suivis, et les nouveaux fichiers non ignorés, du périmètre documentaire : README et Markdown à la racine, `docs/**`, Markdown sous `cowork/**`. Il ne suit pas seulement les liens. Les variantes numériques, plages, suffixes `+`, quantités écrites en lettres, qualifications de registre et comptes inversés sont détectées. Les SVG et métadonnées HTML sont inclus. Toute occurrence est consignée avec sa ligne et sa classification ; le code de sortie vaut 1 pour une assertion non qualifiée.
+
+Les journaux, archives, audits et propositions sont recensés séparément. Les comptes rendus historiques de référence et sections datées autorisés sont nommés dans le script et portent une limite explicite ; un nouveau document ne peut pas s’exempter en ajoutant un marqueur. Les résultats et statuts générés restent soumis au contrôle du générateur et à la revue du catalogue. Les tests de la vitrine exécutent ce garde et exercent les variantes de formulation.
+
+Le contrôle reste lexical : son zéro signifie « aucune violation des règles exécutées », pas une preuve universelle d’absence de survente. Une nouvelle formulation doit être examinée et, si nécessaire, ajoutée aux cas de régression.

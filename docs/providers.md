@@ -1,5 +1,7 @@
 # AI Providers
 
+**Current showcase status: not proven here.** Provider configuration and historical QA do not establish a fresh local installation. See the [catalogue](PROVEN-FEATURES.md) for reasons and limits.
+
 Code Buddy resolves providers through a shared runtime catalog in
 `src/providers/provider-catalog.ts`. The catalog mirrors the Hermes-style
 runtime split: provider id, API mode, base URL, credential source, and default
@@ -130,8 +132,7 @@ For local providers the catalog normalizes host-only values to OpenAI-compatible
 ## Local Models (Ollama) — Agentic Loop Checklist
 
 Three things decide whether a free local model can actually *drive the
-agent* (edit files, call tools) instead of just chatting. All three were
-validated end-to-end in the [1.0.0 QA campaign](qa/v1.0.0-validation.md):
+agent* (edit files, call tools) instead of just chatting. The [1.0.0 QA campaign](qa/v1.0.0-validation.md) is a historical account outside the current evidence catalogue and has not been revalidated here. These configuration checks do not prove the candidate’s local agent loop:
 
 1. **Force the provider.** Auto-detection prefers an active ChatGPT
    login over `OLLAMA_HOST` — set `CODEBUDDY_PROVIDER=ollama`

@@ -1,5 +1,7 @@
 # VIDEO — Code Buddy 2.0
 
+**Brouillon à reprendre avant toute publication.** Les faits et scénarios datés ci-dessous ne sont pas des preuves du candidat 2.3.0. Aucun compte d’outils ou de fournisseurs n’est utilisé comme argument. Les [statuts et raisons actuels](../FONCTIONNALITES-PROUVEES.md) font référence ; le critère d’installation neuve avec petit modèle reste non prouvé ici.
+
 Chaîne **Lisa IA** · publication 09/09/2026 · voix ElevenLabs · avatar Lisa  
 Durée cible voix : 10 à 12 min · débit visé ~160 mots/min · **le texte à l'écran = le script, mot pour mot**  
 Citations `[fichier:ligne]` devant chaque chiffre : à retirer à la relecture.
@@ -9,7 +11,7 @@ Les 5 cases
 | Case | Valeur |
 | --- | --- |
 | STAR | Code Buddy 2.0 (Lisa parle en « je » pour le studio Agile Up) |
-| CHIFFRE | [README.md:35] 64 fournisseurs, zéro rupture depuis la [README.md:38] 1.8.0 |
+| ANGLE | [README.md:35] des fournisseurs configurables, zéro rupture depuis la [README.md:38] 1.8.0 |
 | ENNEMI | l'agent qui promet et qui casse l'interface |
 | MÉTAPHORE | cinq pièces autour d'un moteur qui, lui, n'a pas bougé |
 | TWIST (~70 %) | ce qui n'est pas prêt est dans le README, section Not ready — avant le CTA npm |
@@ -24,10 +26,10 @@ Les 5 cases
 Code Buddy 2.0 vient de sortir sur npm
 ```
 
-**Repli 1 (50 caractères)**
+**Repli 1**
 
 ```
-Code Buddy 2.0 : 64 fournisseurs, rien n'est cassé
+Code Buddy 2.0 : un agent local-first
 ```
 
 **Repli 2 (48 caractères)**
@@ -42,7 +44,7 @@ L'agent de code du studio vient de passer en 2.0
 
 **Texte (3 mots)** : `2.0 SUR NPM`
 
-**Description visuelle.** Fond bleu nuit, grille technique discrète. À gauche, en capitales blanches outline noir : `2.0 SUR NPM` ; en dessous, plus petit, jaune : `64 FOURNISSEURS`. À droite, Lisa détourée (buste, blazer, regard caméra, légère inclinaison), lumière latérale froide. Petit carton npm en bas à gauche : `@phuetz/code-buddy`. Pas de photo d'auteur, pas de prix, pas de logo GitHub envahissant. Contraste fort, lisible à 320 px.
+**Description visuelle.** Fond bleu nuit, grille technique discrète. À gauche, en capitales blanches outline noir : `2.0 SUR NPM` ; en dessous, plus petit, jaune : `LOCAL-FIRST`. À droite, Lisa détourée (buste, blazer, regard caméra, légère inclinaison), lumière latérale froide. Petit carton npm en bas à gauche : `@phuetz/code-buddy`. Pas de photo d'auteur, pas de prix, pas de logo GitHub envahissant. Contraste fort, lisible à 320 px.
 
 ---
 
@@ -51,7 +53,7 @@ L'agent de code du studio vient de passer en 2.0
 ```
 Contenu synthétique : présentatrice générée par IA. Lisa parle pour le studio Agile Up. Les faits sont sourcés.
 
-Code Buddy 2.0 est sur npm. Un agent de code dans le terminal : il lit ton dépôt, écrit, lance des commandes. 64 fournisseurs derrière un routeur. 220+ outils choisis par requête. La 2.0 ajoute cinq surfaces, toutes optionnelles. Sans la variable d'environnement, le comportement est le même que la 1.8.0. Zéro rupture d'interface.
+Code Buddy 2.0 est sur npm. Un agent de code dans le terminal : il lit ton dépôt, écrit, lance des commandes. Des fournisseurs configurables derrière un routeur. Des outils choisis par requête. La 2.0 ajoute cinq surfaces, toutes optionnelles. Sans la variable d'environnement, le comportement est le même que la 1.8.0. Zéro rupture d'interface.
 
 Un hub multi-IA : outils distants en lecture seule, trois verrous, ça ferme si la racine manque. Cowork, cockpit de bureau (install à part, Node 22). Une boucle à quatre faces, jugée sur les faits, qui ne touche jamais le src de l'agent. Un conseil de modèles dont le juge s'abstient. Une perception muette tant que tu ne l'allumes pas.
 
@@ -80,8 +82,8 @@ Horloge cumulée en tête de plan. Total visé **~11:05**.
 - **Écran :** Lisa regard caméra. Carton `2.0 SUR NPM`. Karaoké identique.
 
 #### Plan 2 · 0:04–0:08 · 4 s
-- **Dit :** [README.md:35] 64 fournisseurs derrière un seul routeur.
-- **Écran :** infographie routeur, [README.md:35] 64 pastilles (cloud / passerelle / local). Karaoké identique.
+- **Dit :** [README.md:35] Des fournisseurs configurables derrière un seul routeur.
+- **Écran :** infographie routeur, pastilles étiquetées cloud / passerelle / local, sans nombre annoncé. Karaoké identique.
 
 #### Plan 3 · 0:08–0:12 · 4 s
 - **Dit :** Et rien n'a cassé depuis la [README.md:38] 1.8.
@@ -132,8 +134,8 @@ Horloge cumulée en tête de plan. Total visé **~11:05**.
 - **Écran :** tampon `0 BREAKING CHANGE` [RELEASE-NOTES-2.0.0.md:15].
 
 #### Plan 14 · 0:59–1:04 · 5 s
-- **Dit :** [README.md:36] 220 outils et plus, choisis par requête. Toujours là. Rien de ça n'a bougé.
-- **Écran :** compteur `220+` [README.md:36], liste d'outils qui défile.
+- **Dit :** [README.md:36] Des outils du registre, choisis par requête. Toujours là. Rien de ça n'a bougé.
+- **Écran :** libellé `OUTILS DU REGISTRE`, liste de noms d'outils qui défile sans compteur.
 
 #### Plan 15 · 1:04–1:09 · 5 s
 - **Dit :** Pour installer : [README.md:78] trois commandes. Le plancher, c'est Node [README.md:78] 20.

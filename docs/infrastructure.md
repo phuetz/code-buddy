@@ -1,5 +1,7 @@
 # Infrastructure
 
+**Current evidence scope:** this is an implementation/configuration guide, not an executed validation of the candidate. Use the [catalogue](PROVEN-FEATURES.md) for statuses and reasons. No fixed provider or tool count is claimed here.
+
 ## HTTP Server
 
 Start the server:
@@ -201,7 +203,7 @@ Code Buddy can be used as the backend for [Open Cowork](https://github.com/phuet
 2. Start Code Buddy server: `buddy --server`
 3. In Open Cowork settings, enable Code Buddy backend:
    - Endpoint: `http://localhost:3000`
-   - The desktop app routes all LLM calls through Code Buddy's 110+ tools
+   - The desktop app can use Code Buddy provider routing and repository tools
 
 ### Architecture
 
@@ -209,8 +211,8 @@ Code Buddy can be used as the backend for [Open Cowork](https://github.com/phuet
 Open Cowork (Electron GUI)
     │
     ├─ HTTP POST /api/chat/completions ──→ Code Buddy Server
-    │                                       ├─ 15 LLM providers
-    │                                       ├─ 110+ tools + RAG selection
+    │                                       ├─ Provider routing
+    │                                       ├─ Repository tools + RAG selection
     │                                       ├─ MCTSr reasoning
     │                                       └─ TurboQuant local inference
     │

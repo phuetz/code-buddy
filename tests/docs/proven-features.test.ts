@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { checkGenerated, generateProvenFeatures, updateReadme } from '../../scripts/generate-proven-features.js';
 import { currentCatalogSourceDigest } from '../../src/catalog/status.js';
+import { auditShowcase, inspectDocument } from '../../scripts/check-showcase-claims.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const temporaryRoots: string[] = [];
@@ -234,5 +235,67 @@ describe('generated proven features showcase', () => {
     expect(files['README.fr.md']).toContain('](docs/FONCTIONNALITES-PROUVEES.md)');
     expect(JSON.parse(files['docs/catalog/showcase-status.json']!).counts)
       .toEqual({ total: 1, passed: 1, failed: 0, unavailable: 0 });
+  });
+});
+
+
+describe('documentary claims guard', () => {
+  it('scans every current documentation file, including unlinked pages and textual assets', () => {
+    const audit = auditShowcase(root);
+    expect(audit.files).toContain('docs/infrastructure.md');
+    expect(audit.files).toContain('docs/marketing/VIDEO-LISA-2026-09-code-buddy.md');
+    expect(audit.files).toContain('docs/architecture/tool-system.svg');
+    expect(audit.files).toContain('cowork/ARCHITECTURE.md');
+    expect(audit.violations).toEqual([]);
+  });
+
+  it.each([
+    '~110 tools', '~ 110 outils', '110+ tools', '110+tools',
+    '~110 built-in tools', '100+ outils', '15 providers', '15 LLM providers',
+    '64 fournisseurs', '220+ outils', '230 tools', '45+ Tool Categories',
+    '**110+** built-in tools', '<b>110</b> tools', '12 native tools',
+    'Tools (110)', 'Providers: 64', 'Tools | 230 |', 'tool_count: 230',
+    'Tool definitions: 110', 'fournisseurs — 64', '5-Provider Fallback',
+    'three tools', 'one hundred tools', 'thirty providers', 'quinze fournisseurs',
+    '<meta name="description" content="30 tools over MCP">',
+    'compteur 220+ ; liste d’outils', '5 LLM-callable tools', '5 read-only semantic navigation tools', 'Five read-only semantic navigation tools', '## 110 tools', '64 pastilles (cloud / passerelle / local)',
+  ])('rejects a numeric inventory argument in a newly added presentation page: %s', (claim) => {
+    expect(inspectDocument('docs/marketing/new-presentation.md', claim)
+      .some((row) => row.kind === 'count' && row.violation)).toBe(true);
+  });
+
+  it('also rejects unmeasured reference counts and historical labels in marketing', () => {
+    expect(inspectDocument('docs/reports/README.md', '64 providers')
+      .some((row) => row.violation)).toBe(true);
+    expect(inspectDocument('docs/new-reference.md', '64 providers')
+      .some((row) => row.violation)).toBe(true);
+    expect(inspectDocument('docs/marketing/new.md', '<!-- showcase:historical -->\n2026-09-01\n110+ tools')
+      .some((row) => row.violation)).toBe(true);
+    expect(inspectDocument('docs/new-presentation.md', '<!-- showcase:historical -->\n2026-09-01\n110+ tools')
+      .some((row) => row.violation)).toBe(true);
+    expect(inspectDocument('README.md', '<!-- proven-features:start -->\n110+ tools\n<!-- proven-features:end -->')
+      .some((row) => row.violation)).toBe(true);
+  });
+
+  it('records historical counts and execution limits without presenting them as current totals', () => {
+    const old = inspectDocument('docs/archive/old.md', '110+ tools; 15 providers');
+    expect(old).toHaveLength(1);
+    expect(old[0]).toMatchObject({ classification: 'historical-record', violation: false });
+    const limits = inspectDocument('docs/new-reference.md', '400 tool rounds\n12 tool calls\n## 8.1 Outils');
+    expect(limits.length).toBeGreaterThan(0);
+    expect(limits.every((row) => !row.violation)).toBe(true);
+  });
+
+  it.each(['Proven voice', 'validated end-to-end', 'validated E2E', 'voice is proved', 'prove the configured provider works', 'Voix prouvée', 'Compagnon prouvé'])('rejects an unsupported evidence claim: %s', (claim) => {
+    expect(inspectDocument('docs/new-presentation.md', claim)
+      .some((row) => row.kind === 'evidence' && row.violation)).toBe(true);
+  });
+
+  it('preserves negative evidence statements and bounded historical sections', () => {
+    expect(inspectDocument('README.fr.md', 'Ce critère n’est pas\nprouvé par les traces de cette branche.')
+      .every((row) => !row.violation)).toBe(true);
+    const text = '2026-06-04\n<!-- showcase:historical:start -->\nvalidated end-to-end\n<!-- showcase:historical:end -->\nProven voice';
+    const rows = inspectDocument('docs/hermes-memory-providers-selfhost.md', text);
+    expect(rows.map((row) => row.violation)).toEqual([false, true]);
   });
 });

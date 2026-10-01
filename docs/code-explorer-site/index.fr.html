@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Code Explorer — intelligence de code par graphe, pour les agents IA</title>
-  <meta name="description" content="Un moteur Rust qui pré-indexe tout ton dépôt en un graphe de connaissance et expose 30 outils via MCP — appelants, appelés, rayon d'impact — pour que les agents IA comprennent une base de code au lieu de lire les fichiers un par un. 14 langages, 100 % local." />
+  <meta name="description" content="Un moteur Rust qui pré-indexe tout ton dépôt en un graphe de connaissance et expose des interfaces d’outils via MCP — appelants, appelés, rayon d'impact — pour que les agents IA comprennent une base de code au lieu de lire les fichiers un par un. 14 langages, 100 % local." />
   <meta property="og:title" content="Code Explorer — intelligence de code pour agents IA" />
-  <meta property="og:description" content="Graphe de connaissance pré-indexé via MCP. Rayon d'impact en 0,65 s au lieu de lire 35 000 tokens de source. 30 outils, 14 langages, 100 % local. Rust." />
+  <meta property="og:description" content="Graphe de connaissance pré-indexé via MCP. Rayon d'impact en 0,65 s au lieu de lire 35 000 tokens de source. Intégration MCP, langages pris en charge, 100 % local. Rust." />
   <meta property="og:type" content="website" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -47,7 +47,7 @@
           </div>
           <div class="trust">
             <span>🦀 Écrit en Rust</span>
-            <span>🔌 30 outils via MCP</span>
+            <span>🔌 Interfaces d’outils via MCP</span>
             <span>💻 100 % local · hors-ligne</span>
             <span>🧩 Claude Code · Cursor · VS Code</span>
           </div>
@@ -142,7 +142,7 @@
           </div>
           <div class="card">
             <div class="ic">🔌</div>
-            <h3>30 outils via MCP</h3>
+            <h3>Interfaces d’outils via MCP</h3>
             <p><code>context</code>, <code>impact</code>, <code>find_cycles</code>, <code>detect_changes</code>, <code>cypher</code> et plus — vers n'importe quel agent MCP : Claude Code, Cursor, VS Code.</p>
           </div>
           <div class="card">
@@ -177,7 +177,7 @@ gitnexus analyze .
 # 3. Brancher ton agent dessus via MCP
 gitnexus mcp-install         # écrit .mcp.json pour Claude Code
 # …ou à la main :  { "command": "gitnexus", "args": ["mcp"] }</code></pre>
-        <p class="sub">Vérif : ton agent doit afficher <b>« gitnexus · 30 tools »</b>.</p>
+        <p class="sub">Vérifie la connexion et inspecte les noms d’outils affichés avec <code>buddy mcp test code-explorer</code>.</p>
         <div class="cta center">
           <a class="btn btn-primary lg" href="https://github.com/phuetz/code-explorer">⭐ Star sur GitHub</a>
           <a class="btn btn-ghost lg" href="https://github.com/phuetz/code-explorer#readme">Documentation</a>

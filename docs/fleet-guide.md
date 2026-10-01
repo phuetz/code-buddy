@@ -492,7 +492,7 @@ Errors as Error with `code`:
 Read-only remote tool invocation. Lets a peer execute a tightly-scoped
 set of read tools on THIS peer's filesystem — like a logged, gated
 "ssh remote read" baked into the mesh. **V1 is intentionally narrow**
-(read-only, allowlist of 3 tools, mandatory workspace root). Future
+(read-only, tool allowlist, mandatory workspace root). Future
 phases extend to mutating tools with explicit per-call approval.
 
 Request:
@@ -793,7 +793,7 @@ The fleet through Phase (d).16a was peer-RPC plumbing. Phases (d).17 →
 
 ### `peer_delegate` + `list_peers` LLM tools (Phase d.17)
 
-Two new tools registered on every Code Buddy:
+Tool registrations described for Code Buddy:
 
 - `list_peers()` — fast read-only snapshot of `FleetRegistry`. Returns
   peer ids + URL + last-seen + compaction state +

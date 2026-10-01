@@ -1,5 +1,8 @@
 # Cowork runner audit — engine vs pi (2026-05-09)
 
+<!-- showcase:historical -->
+**Historical record — outside the current evidence catalogue, not revalidated here.** Counts and validation labels below describe the dated snapshot, not this candidate. For current statuses and reasons, see the root feature catalogue.
+
 > Snapshot at commit `a6568c59`. Maintained at each runner-related
 > change so the deprecation path of `ClaudeAgentRunner` (pi-coding-agent)
 > is traceable.

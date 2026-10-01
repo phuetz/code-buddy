@@ -1,4 +1,7 @@
-# Proof it works — real, reproducible, `$0`
+# Historical execution account — 2026-08-22
+
+<!-- showcase:historical -->
+**Historical record — outside the current evidence catalogue, not revalidated here.** Counts and validation labels below describe the dated snapshot, not this candidate. For current statuses and reasons, see the root feature catalogue.
 
 This page records what actually happened when every proof scenario was attempted again. Green runs
 are shown as green runs; failures and unavailable environments are shown as failures. No paid API

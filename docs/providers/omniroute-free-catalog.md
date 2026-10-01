@@ -1,5 +1,8 @@
 # Catalogue OmniRoute → fournisseurs à palier gratuit (import 22/08/2026)
 
+<!-- showcase:historical -->
+Import historique du 2026-08-22, hors catalogue de preuves actuel et non rafraîchi ici. Les quantités et conditions de cette capture ne sont pas un compte exact des fournisseurs actuels ni une promesse de gratuité pour le candidat.
+
 > Généré par `python3 scripts/providers/import-omniroute-free-catalog.py --curated` (source : paquet npm global `omniroute` 3.8.49, MIT). Les 24 entrées « curées » sont dans `src/providers/provider-catalog.ts` (priorité 300, actives seulement si `<ID>_API_KEY` est posé). OmniRoute lui-même est aussi un provider (`omniroute`, gateway local `http://localhost:20128/v1`, profil `buddy --profile omniroute`). **Paliers gratuits = à vérifier live avant de s'y fier ; re-lancer le script pour rafraîchir.**
 
 > **Registre actif / flotte (23/08/2026).** Le gateway est enrôlé comme un runtime local : la `capability-registry` sonde `GET {OMNIROUTE_BASE_URL}/v1/models` (défaut `http://127.0.0.1:20128`, timeout 800 ms, silencieux si absent — bearer `OMNIROUTE_API_KEY` si posé). S'il répond, `buildActiveLlmRegistry` l'active (`auto/best-free` ou `OMNIROUTE_MODEL`, coût 0, **`isLocal: false` / egress `cloud`** : le proxy tourne sur la machine mais l'inférence part chez les fournisseurs — exclu de `localOnly`), et le pool du council (`CODEBUDDY_COUNCIL_POOL=full`) l'étend aux combos `auto/*` puis aux ids servis (plafonnés comme un runtime). Gateway absent ⇒ rien ne change.

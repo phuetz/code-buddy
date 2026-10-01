@@ -84,12 +84,12 @@ run an offline AI demo.
 ```bash
 buddy login          # ChatGPT subscription, no API key (opens a browser)
 buddy try            # ← after login: a real coding demo; duration depends on the model.
-                     #    Writes FizzBuzz + tests, runs them, and independently verifies them.
+                     #    Requests FizzBuzz + tests; inspect the files and the independent test output.
 
 buddy onboard        # Interactive guided setup. If a free provider is detected,
                      #    it offers the quick path; on a blank machine, choose a provider.
                      #    Writes the config for you (no env var to type).
-buddy try            # prove the configured provider works
+buddy try            # run a demo; inspect its result and run the project checks
 
 buddy                # Start chatting once a provider is configured.
 buddy --prompt "analyze the codebase structure"   # one-shot / headless
@@ -197,7 +197,7 @@ In interactive chat, mention files using `@path/to/file` (with fuzzy autocomplet
 
 ### Read-Only LSP Navigation Tools
 
-Code Buddy connects to configured language servers to expose 5 read-only semantic navigation tools:
+Code Buddy connects to configured language servers to expose the read-only semantic navigation interfaces listed below:
 
 - `lsp_definition` — Resolve semantic definitions for a symbol or 1-based line:column.
 - `lsp_references` — Find usages and callers across the codebase.

@@ -62,7 +62,7 @@ The `str_replace` operation tries 4+ matching strategies in cascade:
 
 ## LSP Navigation Tools
 
-Five read-only semantic navigation tools connect directly to the configured language server:
+The read-only semantic navigation interfaces below connect to the configured language server:
 
 - `lsp_definition` — Resolve semantic definitions for a symbol or 1-based line:column.
 - `lsp_references` — Find all semantic usages and callers of a symbol across the project.
@@ -143,7 +143,7 @@ Add tools via three mechanisms:
 - **Plugins** -- create a plugin in `~/.codebuddy/plugins/` with a `manifest.json`; register tools via `context.registerTool()`
 - **Source code** -- create a class in `src/tools/`, add a definition in `src/codebuddy/tools.ts`, add execution in `CodeBuddyAgent.executeTool()`, register in `src/tools/registry/`
 
-## Web Search (5-Provider Fallback)
+## Web Search (configured provider fallback)
 
 | Priority | Provider | Key Required | Notes |
 | :------- | :--------- | :------------------------------------------- | :----------------------------------- |

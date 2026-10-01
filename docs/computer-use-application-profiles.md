@@ -34,7 +34,7 @@ data, truncates long strings, and redacts secret-like keys before writing JSON.
 Targeted keyboard and text actions fail closed. If a step names a window or
 inherits one from an application profile, Code Buddy focuses the target and then
 verifies the real foreground window before typing. If the target cannot be
-proved active, the action fails instead of sending keystrokes to the current app.
+confirmed as the foreground window, the action fails instead of sending keystrokes to the current app.
 Set `visualContext: true` to attach a focused-window snapshot plus screenshot OCR
 evidence to the action result.
 

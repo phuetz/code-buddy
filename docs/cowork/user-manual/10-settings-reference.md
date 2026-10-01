@@ -1,5 +1,7 @@
 # 10. Référence des réglages
 
+**Statut dans la vitrine : non prouvée ici.** Les [entrées Cowork du catalogue](../../FONCTIONNALITES-PROUVEES.md#domain-cowork) ne disposent pas de trace exécutée. Cette page décrit les réglages, sans compte fixe d’outils ou de fournisseurs.
+
 Ouvrez les réglages avec `Cmd/Ctrl+,` (ou l'icône engrenage). Les panneaux sont organisés en **sept
 groupes**. Utilisez la recherche pour aller à un panneau par son nom. Les panneaux conseillés aux
 débutants sont marqués « ★ Start here ».
@@ -10,7 +12,7 @@ débutants sont marqués « ★ Start here ».
 - **General** — thème (Clair/Sombre/Open Cowork/Système), langue (en/fr/zh), préférences d'UI,
   stratégie de mémoire.
 - **Audio & TTS** — micro, haut-parleur, voix de synthèse et débit de parole.
-- **Code Buddy** — le backend agentique local (le moteur aux 100+ outils) et ses options.
+- **Code Buddy** — le backend agentique local (le moteur et son registre d’outils) et ses options.
 - **Core engine** — choisir quelle boucle agentique tourne (Core engine vs runner embarqué).
 
 ## Models & Cost

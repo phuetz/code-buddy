@@ -1,4 +1,7 @@
-# Hermes Agent & OpenClaw — parity and gaps (canonical)
+# Historical Hermes/OpenClaw parity audit — 2026-07-06
+
+<!-- showcase:historical -->
+**Historical record — outside the current evidence catalogue, not revalidated here.** Counts and validation labels below describe the dated snapshot, not this candidate. For current statuses and reasons, see the root feature catalogue.
 
 **Date: 2026-07-06** (supersedes 2026-06-09/13/14; previous anchor 2026-07-03) · Machine: Hub Linux (Ryzen AI 9
 HX 470, Ollama Vulkan) · Verified against live installs: Hermes Agent `v0.16.0` (2026.6.5), OpenClaw `2026.6.11`
