@@ -1740,7 +1740,7 @@ program
   )
   .option(
     "--auto-approve",
-    "automatically approve all tool executions (like mistral-vibe)"
+    "approve legacy session requests; use --permission-mode dontAsk for headless tools"
   )
   .option(
     "--system-prompt <id>",
@@ -2032,7 +2032,7 @@ program
       }
 
       await sessionStore.resumeSession(lastSession.id);
-      cli.info(`📂 Resuming session: ${lastSession.name} (${lastSession.id.slice(0, 8)})`);
+      cli.info(`📂 Resuming session: ${lastSession.name} (${lastSession.id})`);
       cli.info(`   ${lastSession.messages.length} messages, last accessed: ${lastSession.lastAccessedAt.toLocaleString()}\n`);
     }
 
@@ -2060,13 +2060,13 @@ program
         cli.info("\n📋 Recent sessions:");
         const recent = await sessionStore.getRecentSessions(5);
         recent.forEach(s => {
-          cli.info(`   ${s.id.slice(0, 8)} - ${s.name} (${s.messages.length} messages)`);
+          cli.info(`   ${s.id} - ${s.name} (${s.messages.length} messages)`);
         });
         process.exit(1);
       }
 
       await sessionStore.resumeSession(session.id);
-      cli.info(`📂 Resuming session: ${session.name} (${session.id.slice(0, 8)})`);
+      cli.info(`📂 Resuming session: ${session.name} (${session.id})`);
       cli.info(`   ${session.messages.length} messages, last accessed: ${session.lastAccessedAt.toLocaleString()}`);
       const { buildSessionRecap, formatSessionRecap } = await import("./cli/session-picker.js");
       cli.info(`${formatSessionRecap(buildSessionRecap(session)).join("\n")}\n`);
@@ -2222,7 +2222,7 @@ program
         const { ConfirmationService } = await import("./utils/confirmation-service.js");
         const confirmationService = ConfirmationService.getInstance();
         confirmationService.setSessionFlag("allOperations", true);
-        cli.error("✅ Auto-approve: ENABLED (all tool executions will be approved)");
+        cli.error("✅ Legacy session auto-approve enabled; exact tool approvals still apply");
       }
 
       // Handle --dangerously-skip-permissions (natively)
@@ -3301,7 +3301,7 @@ program
   });
 
 // Cowork (the Electron desktop GUI) needs Node >= 22; the terminal CLI runs on
-// Node >= 18. Without this guard a Node 18/20 user gets a cryptic Electron/Vite
+// Node >= 20. Without this guard a Node 18/20 user gets a cryptic Electron/Vite
 // crash mid-launch instead of a clear message — a classic first-run star-killer.
 const COWORK_MIN_NODE_MAJOR = 22;
 function assertNodeForCowork(): void {
@@ -3311,7 +3311,7 @@ function assertNodeForCowork(): void {
       `❌ Cowork (the desktop GUI) requires Node.js >= ${COWORK_MIN_NODE_MAJOR} — you're on v${process.versions.node}.`,
     );
     cli.stdout(
-      `   The terminal CLI works on Node >= 18; only the Electron app needs >= ${COWORK_MIN_NODE_MAJOR}.`,
+      `   The terminal CLI works on Node >= 20; only the Electron app needs >= ${COWORK_MIN_NODE_MAJOR}.`,
     );
     cli.stdout(
       `   Upgrade Node (e.g. \`nvm install 22 && nvm use 22\`) and retry. Linux build notes: cowork/DEV-LINUX.md`,
@@ -4559,7 +4559,7 @@ function isRootHelpRequest(argv: readonly string[]): boolean {
     return false;
   }
 
-  const commandNames = new Set(program.commands.map((command) => command.name()));
+  const commandNames = new Set(program.commands.flatMap((command) => [command.name(), ...command.aliases()]));
   const { operands } = program.parseOptions(args);
   return !operands.some((operand) => commandNames.has(operand));
 }
@@ -4573,9 +4573,9 @@ if (process.exitCode !== 1) {
   1. buddy try
      Writes FizzBuzz and its test, then runs it in a sandbox.
   2. /loop "Fix the failing tests"                    (inside a buddy session)
-  3. buddy research "Map this repository"
+  3. buddy research "Compare TypeScript test runners"
   4. buddy dev pr "Add a small feature"
-  5. /think deep "Propose the safest refactoring"     (inside a buddy session)
+  5. /think deep "Propose the safest refactoring"     (requires GROK_API_KEY)
   6. /share create demo                               (inside a buddy session)
 
 `);

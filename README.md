@@ -117,8 +117,8 @@ npm run build && npm link
 If the `@vscode/ripgrep` install script receives a GitHub 403, see the
 [source-install workaround](docs/install.md#ripgrep-download-blocked-during-npm-ci).
 
-The **Cowork** desktop app is a separate step needing Node.js ≥ 22: `buddy install-gui`, then
-`buddy gui`. Details in [Getting started](docs/getting-started.md).
+The **Cowork** desktop app is a separate step needing Node.js ≥ 22: a source checkout with `cowork/` (the npm CLI tarball excludes it).
+Build and launch it from that checkout. Details in [Getting started](docs/getting-started.md).
 
 ---
 
@@ -154,7 +154,8 @@ Other paths worth knowing on day one:
 ```bash
 buddy try                             # coding demo: writes FizzBuzz + a test, runs it, verifies
 buddy -p "explain the entry point"    # one-shot, headless — good for scripts and CI
-buddy research "map this repository"  # parallel research workers
+buddy explain                         # local repository report, no model needed
+buddy research "compare TypeScript test runners"  # web research
 buddy cost --latency                  # measured per-model TTFT/TTFM, read-only
 ```
 
@@ -230,7 +231,7 @@ Honest limits for a first-time visitor:
 - **Node ≥ 20 is the declared CLI floor** (`engines.node`); Node 22 or 24 is
   recommended when working from source. Some ancillary packages can warn about
   their own Node ≥ 22 requirement during installation. The CI runs Node 20 and 22.
-- **Cowork** is a separate install (Node.js ≥ 22, `buddy install-gui`), not part of the three
+- **Cowork** requires a source checkout and Node.js ≥ 22; it is not part of the three
   commands above.
 - **Film production** needs `ffmpeg`; without a local voice binary, scenes stay silent rather than
   getting a fake voice-over.

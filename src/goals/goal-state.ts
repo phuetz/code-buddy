@@ -144,8 +144,12 @@ export const JUDGE_SYSTEM_PROMPT =
   'test output, or artifact path backed by tool output. If a side-effect goal ' +
   'has no concrete evidence, return CONTINUE.\n\n' +
   'Otherwise the goal is NOT done — CONTINUE.\n\n' +
+  'Attach the specific evidence from the supplied response that supports your ' +
+  'decision (for example, a command result or independent verifier output). ' +
+  'Never invent evidence. If no supporting evidence is present, use an empty ' +
+  'evidence string.\n\n' +
   'Reply ONLY with a single JSON object on one line:\n' +
-  '{"done": <true|false>, "reason": "<one-sentence rationale>"}';
+  '{"done": <true|false>, "reason": "<one-sentence rationale>", "evidence": "<specific supporting evidence or empty>"}';
 
 export const JUDGE_USER_PROMPT_TEMPLATE =
   'Goal:\n{goal}\n\n' +

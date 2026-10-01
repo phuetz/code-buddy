@@ -63,7 +63,7 @@ Recent sessions (1):
 
 Use `buddy sessions resume <id>` to resume a session
 ```
-Exit code: 0. Displays session ID prefix, title, message count, timestamp, and origin (`cli`, `cowork`, or `mobile`).
+Exit code: 0. Displays the complete session ID, title, message count, timestamp, and origin (`cli`, `cowork`, or `mobile`).
 
 ### 3. `buddy session search <query>` (no match)
 ```
@@ -87,8 +87,10 @@ $ buddy session resume test-123
 Resuming session: Test Session Documenter 2.3 (test-123)
    1 messages, last accessed: 9/18/2026, 2:00:00 AM
    Recap (local, no model call): 0 user / 0 assistant turns, 0 tool call(s)
+   Continue chatting: buddy --resume test-123
 ```
-Exit code: 0.
+Exit code: 0. This command prints the recap. Use the suggested root
+`buddy --resume test-123` command to open the conversation and continue chatting.
 
 ## Profile and Identity Isolation
 

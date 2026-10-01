@@ -20,10 +20,6 @@ import {
 } from '../../templates/db-auth/index.js';
 import { ProvisionError } from '../../templates/db-auth/types.js';
 
-function writeLine(line: string): void {
-  logger.info(line);
-}
-
 export function registerProvisionCommands(program: Command): void {
   const provision = program
     .command('provision')
@@ -88,9 +84,7 @@ export function registerProvisionCommands(program: Command): void {
           )
           : formatProvisionPlan(plan);
         assertNoSecretLeak(rendered, process.env);
-        for (const line of rendered.split('\n')) {
-          writeLine(line);
-        }
+        process.stdout.write(`${rendered}\n`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         assertNoSecretLeak(message, process.env);

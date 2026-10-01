@@ -11,7 +11,7 @@ development. This guide is the lighter loop.
 
 ```bash
 cd /path/to/code-buddy
-# Node.js >= 22 is required for Cowork (the root CLI still supports >= 18).
+# Node.js >= 22 is required for Cowork (the root CLI still supports >= 20).
 npm install                                                            # root deps
 (cd cowork && npm install)                                             # cowork deps
 npx tsc -p .                                                           # compile core into ./dist/
