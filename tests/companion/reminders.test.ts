@@ -15,6 +15,7 @@ import {
   pendingAcks,
   resetAcks,
   parseVoiceReminder,
+  parseRelativeFrenchDate,
   type Reminder,
 } from '../../src/companion/reminders.js';
 
@@ -206,6 +207,19 @@ describe('reminders — markDone / markFired', () => {
     const r = await addReminder({ label: 'meds', time: '09:00' });
     const fired = await markFired(r.id, new Date('2026-06-26T09:00:10'));
     expect(fired?.lastFiredAt).toBe(new Date('2026-06-26T09:00:10').toISOString());
+  });
+});
+
+describe('reminders — parseRelativeFrenchDate', () => {
+  it('resolves valid dates for reminders on specific day of month', () => {
+    // 31 in a month with 30 days should skip to next valid month
+    expect(parseRelativeFrenchDate('le 31', new Date(2026, 3, 10, 9))).toBe('2026-05-31');
+    // 30 since jan 31 should skip feb and go to march
+    expect(parseRelativeFrenchDate('le 30', new Date(2026, 0, 31, 9))).toBe('2026-03-30');
+    // 15 april, standard behavior
+    expect(parseRelativeFrenchDate('le 15', new Date(2026, 3, 10, 9))).toBe('2026-04-15');
+    // 29 feb 2027, skip to march
+    expect(parseRelativeFrenchDate('le 29', new Date(2027, 0, 30, 9))).toBe('2027-03-29');
   });
 });
 

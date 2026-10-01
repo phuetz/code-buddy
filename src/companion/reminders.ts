@@ -529,18 +529,18 @@ export function parseRelativeFrenchDate(text: string, now: Date = new Date()): s
   if (dom) {
     const day = parseInt(dom[1]!, 10);
     if (day >= 1 && day <= 31) {
-      // This month if the day is still ahead, else next month.
       let month = now.getMonth();
       let year = now.getFullYear();
       if (day <= now.getDate()) {
         month += 1;
-        if (month > 11) {
-          month = 0;
-          year += 1;
-        }
       }
-      const d = new Date(year, month, day);
-      if (d.getDate() === day) return localDateKey(d);
+      // Look ahead up to 12 months for a month that actually has this day
+      for (let i = 0; i < 12; i++) {
+        const m = (month + i) % 12;
+        const y = year + Math.floor((month + i) / 12);
+        const d = new Date(y, m, day);
+        if (d.getDate() === day) return localDateKey(d);
+      }
     }
   }
   return null;
