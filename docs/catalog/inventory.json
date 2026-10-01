@@ -1972,7 +1972,7 @@
           },
           {
             "file": "cowork/src/main/index.ts",
-            "contains": "registerStudioFilesIpc(ipcMain)"
+            "contains": "registerStudioFilesIpc(ipcMain, { trustedRoots: () => creativeWorkspaceRoots() })"
           }
         ]
       },
