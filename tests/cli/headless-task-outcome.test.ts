@@ -43,6 +43,21 @@ describe('headless task evidence', () => {
   it('accepts red then green for the same verification', () => {
     expect(exit('run tests and fix failures', [result('bash', 'npm test', false), result('str_replace_editor', 'str_replace', true), result('bash', 'npm test', true)])).toBe(0);
   });
+  it.each(['tail -8', 'tail -n 8', 'head -30', 'tail', 'head -n30'])('recognizes a completed red then green suite despite output formatting: %s', formatter => {
+    const red = { ...result('bash', 'cd /workspace && npm test 2>&1 | tail -20', true), toolResult: { success: true, output: '# tests 1\n# fail 1' } };
+    const green = { ...result('bash', `cd /workspace && npm test 2>&1 | ${formatter}`, true), toolResult: { success: true, output: '# tests 1\n# pass 1\n# fail 0' } };
+    expect(exit('run tests and fix failures', [red, result('str_replace_editor', 'str_replace', true), green])).toBe(0);
+  });
+  it('does not clear a red suite using a formatter which hides its summary', () => {
+    const red = { ...result('bash', 'cd /workspace && npm test 2>&1 | tail -20', true), toolResult: { success: true, output: '# tests 1\n# fail 1' } };
+    const hidden = { ...result('bash', 'cd /workspace && npm test 2>&1 | head -1', true), toolResult: { success: true, output: '> npm test' } };
+    expect(exit('fix the tests', [red, hidden])).toBe(1);
+  });
+  it('does not clear red tests with passing tests in another explicit shell directory', () => {
+    const red = { ...result('bash', 'cd /first && npm test 2>&1 | tail -20', true), toolResult: { success: true, output: '# tests 1\n# fail 1' } };
+    const green = { ...result('bash', 'cd /second && npm test 2>&1 | tail -8', true), toolResult: { success: true, output: '# tests 1\n# pass 1\n# fail 0' } };
+    expect(exit('fix the tests', [red, green])).toBe(1);
+  });
   it('does not let a green test erase red lint', () => {
     expect(exit('fix lint errors', [result('bash', 'npm run lint', false), result('bash', 'npm test', true)])).toBe(1);
   });

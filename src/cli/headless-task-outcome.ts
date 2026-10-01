@@ -56,6 +56,28 @@ function hasRedVerification(entry: TaskEvidenceEntry, name: string, command?: st
     || /(?:npm ERR!|npm error|Error: Cannot find module|(?:eslint|vitest|jest|tsc|pytest): command not found)/i.test(output);
 }
 
+/** Match only a literal directory and harmless formatting of a completed check. */
+function checkIdentity(entry: TaskEvidenceEntry, command: string | undefined, success: boolean): { command?: string; directory?: string } {
+  if (!command) return {};
+  const scoped = command.match(/^cd\s+(\/[^\s;&|<>$`'"\\]+|"\/[^"$`\\]+"|'\/[^'\\]+')\s*&&\s*(.+)$/);
+  const directory = scoped?.[1]?.replace(/^['"]|['"]$/g, '');
+  let body = scoped?.[2] ?? command;
+  const formatter = /\s*\|\s*(?:head|tail)(?:\s+(?:-\d+|-n\s*\d+))?\s*$/;
+  let formatted = false;
+  while (formatter.test(body)) { body = body.replace(formatter, ''); formatted = true; }
+  body = body.replace(/\s*2>&1\s*$/, '').trim();
+  const simpleCheck = /^(?:npm|pnpm|yarn|bun|npx|node|vitest|jest|eslint|tsc|pytest|cargo|go|dotnet)\s/.test(body)
+    && /\b(?:test|tests|lint|eslint|vitest|jest|tsc|pytest|check|typecheck)\b/.test(body)
+    && !/[;&|<>$`\n]/.test(body);
+  const output = stripVTControlCharacters([entry.toolResult?.output, entry.content].filter(Boolean).join('\n'));
+  const completedGreen = /^\s*# tests [1-9]\d*\b/m.test(output) && /^\s*# fail 0\b/m.test(output)
+    || /\bTest (?:Files|Suites):?\s+[1-9]\d*\s+passed\b/i.test(output) && /\bTests:?\s+[1-9]\d*\s+passed\b/i.test(output);
+  // A successful pipeline can hide a runner's exit code. It may clear a
+  // previous failure only when the runner's completed green summary is seen.
+  if (simpleCheck && (!formatted || !success || completedGreen)) return { command: body, ...(directory ? { directory } : {}) };
+  return { command, ...(directory ? { directory } : {}) };
+}
+
 export function evaluateHeadlessTaskOutcome(
   prompt: string,
   entries: readonly TaskEvidenceEntry[],
@@ -81,9 +103,11 @@ export function evaluateHeadlessTaskOutcome(
       // explicit cwd, a green suite after `cd` cannot clear the earlier red
       // suite: the executor has not supplied evidence that they share a root.
       if (name === 'bash' && /(?:^|[;&|]\s*)(?:cd|pushd|popd)(?:\s|$)/.test(command ?? '')) shellDirectoryGeneration++;
-      const directory = args.cwd ?? args.root ?? args.directory ?? (name === 'bash' ? shellDirectoryGeneration : '');
-      const key = JSON.stringify([name, command, directory, args.args ?? args.runner ?? '']);
-      checks.set(key, { tool: name, ...(command ? { command } : {}), success: entry.toolResult.success && !hasRedVerification(entry, name, command) });
+      const success = entry.toolResult.success && !hasRedVerification(entry, name, command);
+      const identity = name === 'bash' ? checkIdentity(entry, command, success) : { command };
+      const directory = identity.directory ?? args.cwd ?? args.root ?? args.directory ?? (name === 'bash' ? shellDirectoryGeneration : '');
+      const key = JSON.stringify([name, identity.command, directory, args.args ?? args.runner ?? '']);
+      checks.set(key, { tool: name, ...(command ? { command } : {}), success });
     }
   }
   const reasons: string[] = [];
