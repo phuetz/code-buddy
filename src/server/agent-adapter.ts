@@ -3,6 +3,7 @@ import type { CodeBuddyMessage } from '../codebuddy/client.js';
 import type { ContextManagerConversationState } from '../context/context-manager-v2.js';
 import type { ToolResult } from '../types/index.js';
 import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { resolveServerProvider } from './provider-resolution.js';
 
 export interface ServerAgentConfig {
   apiKey: string;
@@ -91,6 +92,10 @@ export interface ServerAgentRequestOptions {
 }
 
 export function resolveServerAgentConfig(): ServerAgentConfig {
+  const selected = resolveServerProvider();
+  if (selected?.apiKey && selected.model) {
+    return { apiKey: selected.apiKey, baseURL: selected.baseURL, model: selected.model };
+  }
   const detected = detectProviderFromEnv();
 
   return {
@@ -101,6 +106,10 @@ export function resolveServerAgentConfig(): ServerAgentConfig {
 }
 
 export function listServerModels(): ServerModelInfo[] {
+  const selected = resolveServerProvider();
+  if (selected?.model) {
+    return [{ id: selected.model, object: 'model', created: Math.floor(Date.now() / 1000), owned_by: selected.provider }];
+  }
   const detected = detectProviderFromEnv();
   const created = Math.floor(Date.now() / 1000);
   const configuredModel = process.env.GROK_MODEL || detected?.defaultModel;
