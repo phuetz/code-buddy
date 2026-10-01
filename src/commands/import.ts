@@ -679,9 +679,13 @@ export function createImportCommand(dependencies: ImportConfigDependencies = {})
         );
         return;
       }
-      const result = await importProjectConfiguration(options, dependencies);
-      const write =
-        dependencies.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
-      write(formatConfigImportResult(result));
+      try {
+        const result = await importProjectConfiguration(options, dependencies);
+        const write =
+          dependencies.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
+        write(formatConfigImportResult(result));
+      } catch (error) {
+        command.error(error instanceof Error ? error.message : String(error));
+      }
     });
 }

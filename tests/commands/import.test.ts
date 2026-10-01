@@ -299,6 +299,36 @@ describe('buddy import', () => {
     await expect(importProjectConfiguration({ from: outside }, { cwd: root })).rejects.toThrow(
       '--from doit rester dans le projet courant'
     );
+    const command = createImportCommand({ cwd: root, stdout: () => {} });
+    command.exitOverride();
+    await expect(
+      command.parseAsync(['node', 'import', '--from', outside])
+    ).rejects.toMatchObject({ exitCode: 1 });
+    await expect(fs.stat(path.join(root, 'CODEBUDDY.md'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('rejects --from paths pointing to a non-existent directory', async () => {
+    const root = await temporaryProject('codebuddy-import-project-');
+    const command = createImportCommand({ cwd: root, stdout: () => {} });
+    command.exitOverride();
+    await expect(
+      command.parseAsync(['node', 'import', '--from', 'does_not_exist'])
+    ).rejects.toMatchObject({ exitCode: 1 });
+    await expect(fs.stat(path.join(root, 'CODEBUDDY.md'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('rejects --from paths pointing to a regular file', async () => {
+    const root = await temporaryProject('codebuddy-import-project-');
+    await writeFixture(root, 'not-a-dir.txt', 'Je suis un fichier, pas un dossier.\n');
+    const command = createImportCommand({ cwd: root, stdout: () => {} });
+    command.exitOverride();
+    await expect(
+      command.parseAsync(['node', 'import', '--from', 'not-a-dir.txt'])
+    ).rejects.toMatchObject({ exitCode: 1 });
     await expect(fs.stat(path.join(root, 'CODEBUDDY.md'))).rejects.toMatchObject({
       code: 'ENOENT',
     });
