@@ -1,5 +1,7 @@
+import * as path from 'path';
 import { ToolRegistration } from '../tools/tool-manager.js';
 import { SlashCommand } from '../commands/slash-commands.js';
+import { isPathInside } from '../security/path-comparison.js';
 import { Logger } from '../utils/logger.js';
 import type { LLMMessage } from '../providers/types.js';
 import type { ContextEngine } from '../context/context-engine.js';
@@ -461,7 +463,8 @@ export function hasPermission(
   if (Array.isArray(perm) && target) {
     if (type === 'filesystem') {
       // For filesystem, check if path starts with any allowed path
-      return perm.some(allowed => target.startsWith(allowed));
+      const resolvedTarget = path.resolve(target);
+      return perm.some(allowed => isPathInside(resolvedTarget, path.resolve(allowed)));
     }
     if (type === 'network') {
       // For network, check exact domain match or subdomain

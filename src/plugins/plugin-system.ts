@@ -12,6 +12,7 @@ import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { isPathInside } from '../security/path-comparison.js';
 
 export type PluginType = 'tool' | 'middleware' | 'theme' | 'integration';
 
@@ -180,7 +181,7 @@ export class PluginManager extends EventEmitter {
 
       // Load the plugin module (validate path stays inside plugin directory)
       const mainPath = path.resolve(pluginDir, manifest.main);
-      if (!mainPath.startsWith(path.resolve(pluginDir))) {
+      if (!isPathInside(mainPath, path.resolve(pluginDir))) {
         throw new Error(`Plugin main path traversal blocked: ${manifest.main}`);
       }
       const pluginModule = await import(mainPath);

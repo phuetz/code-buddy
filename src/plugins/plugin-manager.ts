@@ -21,6 +21,15 @@ import { createLogger, Logger } from '../utils/logger.js';
 import { readJsonAtomicSync, readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { IsolatedPluginRunner, createIsolatedPluginRunner } from './isolated-plugin-runner.js';
 import { getBundledProviders } from './bundled/index.js';
+import { isPathInside } from '../security/path-comparison.js';
+
+/**
+ * Checks if a plugin is considered a workspace plugin rather than a home plugin.
+ * Extracted for testing path confinement logic.
+ */
+export function isWorkspacePlugin(pluginPath: string, homePluginDir: string): boolean {
+  return !isPathInside(pluginPath, homePluginDir);
+}
 
 // Re-export PluginProvider for backward compatibility
 export type { PluginProvider } from './types.js';
@@ -307,9 +316,9 @@ export class PluginManager extends EventEmitter {
 
         // Check if plugin is from workspace (not home dir)
         const homePluginDir = path.join(os.homedir(), '.codebuddy', 'plugins');
-        const isWorkspacePlugin = !normalizedPath.startsWith(homePluginDir);
+        const workspacePlugin = isWorkspacePlugin(normalizedPath, homePluginDir);
 
-        if (isWorkspacePlugin) {
+        if (workspacePlugin) {
           this.logger.warn(
             `Workspace plugin "${manifest.id}" is not in the trusted list. ` +
             `Add it to trustedPlugins in .codebuddy/settings.json or call trustPlugin().`
