@@ -46,28 +46,32 @@ describe.skipIf(!hasBuiltProtocolCore)(
       const summary = await getHermesProtocolGatewaysForReview();
       const smoke = await runHermesProtocolGatewaysSmokeForReview();
 
+      const expectedCapabilities = [
+        'mcp-client',
+        'mcp-server',
+        'a2a-http',
+        'a2a-jsonrpc-v1',
+        'acp-http',
+        'channel-a2a-bridge',
+        'acp-editor-integration',
+      ];
+      // 1 partial capability: 'acp-editor-integration'
+      const partialCount = 1;
+
       expect(summary).toMatchObject({
         kind: 'hermes_protocol_gateway_readiness',
         ok: true,
         schemaVersion: 1,
         smokeCommand: 'buddy hermes protocols-smoke local --json',
         summary: {
-          availableCount: 6,
+          availableCount: expectedCapabilities.length - partialCount,
           missingCount: 0,
-          partialCount: 1,
-          total: 7,
+          partialCount: partialCount,
+          total: expectedCapabilities.length,
         },
       });
       expect(summary?.capabilities.map((capability) => capability.id)).toEqual(
-        expect.arrayContaining([
-          'mcp-client',
-          'mcp-server',
-          'a2a-http',
-          'acp-http',
-          'channel-a2a-bridge',
-          'acp-editor-integration',
-          'a2a-jsonrpc-v1',
-        ])
+        expect.arrayContaining(expectedCapabilities)
       );
       expect(smoke).toMatchObject({
         kind: 'hermes_protocol_gateway_smoke',
