@@ -126,7 +126,7 @@ to `lm-resizer mcp --store …`, calling the published 0.2.4
 `/health` advertises `tool-output-v1`; the 0.2.4 HTTP server does not.
 Code Buddy executes commands normally, then sends eligible large observations
 for compression; it does not wrap commands with `lm-resizer exec`.
-The 0.2.4 MCP tool has no dynamic token-budget parameter. Code Buddy enforces
+This native MCP tool has no dynamic token-budget parameter. Code Buddy enforces
 minimum savings and rejects any result that grows after the recovery note.
 For an authenticated sidecar, prefer a private
 `CODEBUDDY_LM_RESIZER_TOKEN_FILE` over a token stored directly in the
