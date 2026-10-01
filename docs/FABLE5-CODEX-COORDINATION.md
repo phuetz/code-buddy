@@ -19,8 +19,6 @@ Passation 2026-09-27 — Codex (Sol) : patch Jules intégré sur `jules/cb-ws-re
 
 ## Tableau de contrôle
 
-Passation 2026-10-01 : **Codex GPT-6 — LIVRÉ LOCAL, zone libre**. Worktree `jules/lot-cb-securite-2026-10-01`, base `70bcab004`, quatre commits thématiques : `497023d15` (TOML), `e06b35b32` (webhooks), `fe882c355` (Studio), puis le commit de cette passation (configurations partagées). Rouge→vert : 2/2 TOML, 3/3 webhooks, 2/2 Studio sur base et 1/1 lien pendant sur patch initial, 5/5 configurations. Tests ciblés et voisins verts ; typecheck racine/Cowork, build racine/Vite Cowork et lint ciblé vérifiés. Test voisin StudioVersionsService : un échec `spawnSync git EPERM` lié au bac à sable. Rapport dans le partage. Aucun push, aucune tâche de fond.
-
 | Priorité | Chantier | Propriétaire | État vérifié | Prochaine action sûre | Zone / garde-fou |
 |---|---|---|---|---|---|
 | P1 | Intégration des quatre patchs Jules du 28/09 | **Codex GPT-6 — LIVRÉ LOCAL, zone libre** | `jules/cb-lot-2026-09-28`, départ `92f25d62b`, patchs `acdc3cf59`, `e8f492f00`, `d848352fb`, vidéo `HEAD` ; rapport dans le partage. | Build et typecheck verts ; 21/21 ciblés ; navigateur, Telegram et vidéo rouge→vert. Windows non reproduit ; 8 échecs de sous-processus identiques avant/après. Vidéo 32/34 fichiers verts, 1 échec ffmpeg EPERM. Rejouer réseau, subprocess et Windows hors bac. Aucun push. | Browser operator, tests commandes Windows, Telegram, vidéo ; hunk ffprobe dangereux écarté. |
