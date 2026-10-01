@@ -30,7 +30,12 @@ describe('LLM Provider', () => {
     it('should have correct type and name', () => {
       expect(provider.type).toBe('grok');
       expect(provider.name).toBe('Grok (xAI)');
-      expect(provider.defaultModel).toBe('grok-3-latest');
+      vi.stubEnv('GROK_MODEL', 'fixture-provider-model');
+      try {
+        expect(provider.defaultModel).toBe('fixture-provider-model');
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
     it('should not be ready before initialization', () => {

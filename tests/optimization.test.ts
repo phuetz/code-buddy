@@ -116,6 +116,13 @@ describe('Model Routing', () => {
   });
 
   describe('selectModel', () => {
+    beforeEach(() => {
+      vi.stubEnv('CODEBUDDY_XAI_MODEL_FAST', 'fixture-fast-model');
+      vi.stubEnv('CODEBUDDY_XAI_MODEL_REASONING', 'fixture-reasoning-model');
+    });
+
+    afterEach(() => vi.unstubAllEnvs());
+
     it('should respect user preference', () => {
       const classification: TaskClassification = {
         complexity: 'simple',
@@ -157,7 +164,8 @@ describe('Model Routing', () => {
       };
 
       const result = selectModel(classification);
-      expect(result.recommendedModel).toBe('grok-3-mini');
+      expect(result.recommendedModel).toBe('fixture-fast-model');
+      expect(result.tier).toBe('mini');
     });
 
     it('should select reasoning model for complex reasoning', () => {
@@ -171,7 +179,8 @@ describe('Model Routing', () => {
       };
 
       const result = selectModel(classification);
-      expect(result.recommendedModel).toBe('grok-3-reasoning');
+      expect(result.recommendedModel).toBe('fixture-reasoning-model');
+      expect(result.tier).toBe('reasoning');
     });
 
     it('should provide alternative model', () => {

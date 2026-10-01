@@ -3,7 +3,7 @@
  * Serveur réel en processus, 127.0.0.1, port éphémère.
  */
 import { readFileSync } from 'node:fs';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
   type CatalogueServer,
@@ -32,6 +32,8 @@ beforeAll(async () => {
 afterAll(async () => {
   if (ctx) await ctx.restore();
 }, 60_000);
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe('catalogue HTTP partie A', () => {
   it('GET /api/health répond 200 dégradé sans fournisseur', async () => {
@@ -116,6 +118,7 @@ describe('catalogue HTTP partie A', () => {
   });
 
   it('POST /api/sessions crée une session relue dans la liste et par identifiant', async () => {
+    vi.stubEnv('GROK_MODEL', 'fixture-http-session-model');
     const refused = await httpCall(
       ctx.baseUrl,
       ctx.token,
@@ -132,7 +135,7 @@ describe('catalogue HTTP partie A', () => {
     const body = asObject(parseJson(created.text, 'création'), 'création');
     expect(typeof body.id).toBe('string');
     expect(body.name).toBe('Catalogue HTTP');
-    expect(body.model).toBe('grok-3-latest');
+    expect(body.model).toBe('fixture-http-session-model');
     const id = String(body.id);
 
     const listed = await httpCall(ctx.baseUrl, ctx.token, 'GET', '/api/sessions');
@@ -148,7 +151,7 @@ describe('catalogue HTTP partie A', () => {
     const detail = asObject(parseJson(fetched.text, 'détail'), 'détail');
     expect(detail.id).toBe(id);
     expect(detail.name).toBe('Catalogue HTTP');
-    expect(detail.model).toBe('grok-3-latest');
+    expect(detail.model).toBe('fixture-http-session-model');
     expect(detail.messageCount).toBe(0);
     expect(detail.messages).toEqual([]);
   });

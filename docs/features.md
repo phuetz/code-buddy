@@ -20,3 +20,5 @@ static wiring check or configuration command is not proof of its user outcome.
 Existing source documentation describes intended behavior and activation conditions.
 It does not extend the proven scope. No provider/tool/platform count, competitor
 performance comparison or productivity gain is used as a showcase claim here.
+
+[Dev workflows](commands.md#dev-workflows) describe auto-commit and PR creation conditions. Those workflows remain unproven here.

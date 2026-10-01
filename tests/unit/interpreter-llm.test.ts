@@ -262,15 +262,15 @@ describe('InterpreterService LLM Integration', () => {
 
       const result = await service.chat('expensive query');
 
-      // Default profile uses grok-3-mini: input=$0.30/1M, output=$0.50/1M
-      // Cost = (1M / 1M) * 0.30 + (1M / 1M) * 0.50 = 0.80
-      const expectedCost = service.calculateCost('grok-3-mini', {
+      // The central fast-role default costs $0.20/1M input and $1.50/1M output.
+      // Check the active profile and the independent numeric total.
+      const expectedCost = service.calculateCost(service.profile.model, {
         input: 1_000_000,
         output: 1_000_000,
         total: 2_000_000,
       });
       expect(result.cost).toBeCloseTo(expectedCost, 6);
-      expect(result.cost).toBeCloseTo(0.80, 6);
+      expect(result.cost).toBeCloseTo(1.70, 6);
     });
   });
 

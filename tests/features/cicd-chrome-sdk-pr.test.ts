@@ -420,11 +420,16 @@ describe('AgentSDK', () => {
 
   describe('constructor', () => {
     it('should use defaults when no config', () => {
-      const defaultSdk = new AgentSDK();
-      const config = defaultSdk.getConfig();
-      expect(config.model).toBe('grok-3-mini');
-      expect(config.maxTurns).toBe(10);
-      expect(config.systemPrompt).toBeDefined();
+      vi.stubEnv('CODEBUDDY_XAI_MODEL_FAST', 'fixture-sdk-fast-model');
+      try {
+        const defaultSdk = new AgentSDK();
+        const config = defaultSdk.getConfig();
+        expect(config.model).toBe('fixture-sdk-fast-model');
+        expect(config.maxTurns).toBe(10);
+        expect(config.systemPrompt).toBeDefined();
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
     it('should accept custom config', () => {
