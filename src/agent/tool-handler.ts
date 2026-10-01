@@ -25,6 +25,7 @@ import {
   BashTool,
 } from "../tools/index.js";
 import { isBareChangeDirectory } from "../tools/bash/bash-tool.js";
+import { captureShellExecution } from '../cli/shell-execution-evidence.js';
 import { getFormalToolRegistry } from "../tools/registry/index.js";
 import type { FormalToolRegistry, IToolExecutionContext } from "../tools/registry/index.js";
 // The adapter list (base tools + aliases, with the audit-history rationale for
@@ -897,6 +898,7 @@ export class ToolHandler {
         output: finalHookResult.output,
         error: finalHookResult.error,
         ...(result.data !== undefined ? { data: result.data } : {}),
+        ...(result.metadata !== undefined ? { metadata: result.metadata } : {}),
       };
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);
@@ -1548,6 +1550,7 @@ export class ToolHandler {
       });
     }
 
+    const shellExecution = captureShellExecution(command, context.cwd);
     const directoryChange = this.changeSessionDirectory(command, context.cwd);
     // Execute bash through registry unless the stateful cd builtin was handled
     // locally; both paths still receive the normal post-bash lifecycle hook.
@@ -1588,7 +1591,7 @@ export class ToolHandler {
       logger.warn("Post-bash hook failed", { error: getErrorMessage(hookError) });
     }
 
-    return bashResult;
+    return { ...bashResult, metadata: { ...bashResult.metadata, shellExecution } };
   }
 
   /**
@@ -1690,6 +1693,8 @@ export class ToolHandler {
     try {
       const command = finalArgs.command as string;
       const timeout = (finalArgs.timeout as number) || 30000;
+      const shellExecution = typeof command === 'string'
+        ? captureShellExecution(command, this.currentWorkingDirectory ?? process.cwd()) : undefined;
 
       // A weaker model can emit a `bash` call without a `command` (or a
       // non-string one). Fail with a clear, recoverable message instead of
@@ -1796,6 +1801,7 @@ export class ToolHandler {
         output: finalHookResult.output,
         error: finalHookResult.error,
         ...(bashResult.data !== undefined ? { data: bashResult.data } : {}),
+        ...(shellExecution ? { metadata: { ...bashResult.metadata, shellExecution } } : {}),
       };
     } catch (error) {
       return { success: false, error: `Streaming execution error: ${getErrorMessage(error)}` };

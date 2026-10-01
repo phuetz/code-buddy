@@ -110,7 +110,9 @@ describe('ToolHandler streaming bash observability', () => {
 
     const { chunks, result } = await drain(handler.executeToolStreaming(bashCall('echo hello')));
 
-    expect(result).toEqual({ success: true, output: 'hello' });
+    expect(result).toMatchObject({ success: true, output: 'hello', metadata: {
+      shellExecution: { command: 'echo hello', cwd: process.cwd() },
+    } });
     expect(chunks).toEqual(['hello\n']);
     expect(streamingSpy).toHaveBeenCalledOnce();
 
@@ -163,6 +165,23 @@ describe('ToolHandler streaming bash observability', () => {
     expect(result.success).toBe(true);
     expect(streamingSpy).toHaveBeenCalledOnce();
     expect(prompts).toEqual([]);
+  });
+
+  it.each(['streaming', 'buffered'] as const)('records the host cwd and script before %s execution, never a model cwd', async mode => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-evidence-'));
+    fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ scripts: { test: 'node --test math.test.js' } }));
+    const buffered = vi.spyOn(BashTool.prototype, 'execute').mockResolvedValue({ success: true, output: 'hello' });
+    try {
+      handler.setWorkingDirectory(directory);
+      const call = bashCall('npm test');
+      call.function.arguments = JSON.stringify({ command: 'npm test', cwd: '/untrusted-model-value' });
+      const result = mode === 'streaming' ? (await drain(handler.executeToolStreaming(call))).result : await handler.executeTool(call);
+      expect(result.success).toBe(true);
+      expect(result.metadata?.shellExecution).toEqual({ command: 'npm test', cwd: directory, testScript: 'node --test math.test.js' });
+    } finally {
+      buffered.mockRestore();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('blocks a non-readonly shell in plan mode before launching the stream', async () => {
