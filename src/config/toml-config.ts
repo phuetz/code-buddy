@@ -1854,7 +1854,8 @@ class ConfigManager {
             return { allowed: false, reason: `Blocked by pattern: ${pattern}` };
           }
         } catch {
-          // Invalid regex, skip
+          logger.warn(`Invalid denylist pattern: ${pattern}`, { source: 'ConfigManager' });
+          return { allowed: false, reason: `Invalid denylist pattern: ${pattern}` };
         }
       }
     }
@@ -1863,12 +1864,12 @@ class ConfigManager {
     if (toolConfig.allowlist?.length) {
       for (const pattern of toolConfig.allowlist) {
         try {
-          const regex = new RegExp(`^${pattern}$`);
+          const regex = new RegExp(`^(?:${pattern})$`);
           if (regex.test(command)) {
             return { allowed: true };
           }
         } catch {
-          // Invalid regex, skip
+          logger.warn(`Invalid allowlist pattern: ${pattern}`, { source: 'ConfigManager' });
         }
       }
       return { allowed: false, reason: 'Command not in allowlist' };

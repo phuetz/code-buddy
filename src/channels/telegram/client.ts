@@ -7,6 +7,7 @@ import { lisaPolicyEnabled, lisaTelegramAction, lisaTrigger, runLisaAction, LISA
  */
 
 import { EventEmitter } from 'events';
+import { secretsEqual } from '../../security/secret-compare.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
@@ -767,7 +768,7 @@ export class TelegramChannel extends BaseChannel {
    */
   async handleWebhook(update: TelegramUpdate, secret?: string): Promise<boolean> {
     // Validate secret if configured
-    if (this.telegramConfig.webhookSecret && secret !== this.telegramConfig.webhookSecret) {
+    if (this.telegramConfig.webhookSecret && !secretsEqual(this.telegramConfig.webhookSecret, secret)) {
       return false;
     }
 

@@ -27,6 +27,7 @@ import type {
   MessageAttachment,
 } from '../core.js';
 import { BaseChannel, getSessionKey, checkDMPairing } from '../core.js';
+import { secretsEqual } from '../../security/secret-compare.js';
 import { logger } from '../../utils/logger.js';
 import { readFileSync } from 'fs';
 import crypto from 'crypto';
@@ -477,7 +478,7 @@ export class GoogleChatChannel extends BaseChannel {
   ): Promise<Record<string, unknown> | void> {
     // Verify token if configured
     if (this.gchatConfig.verificationToken) {
-      if (event.token !== this.gchatConfig.verificationToken) {
+      if (!secretsEqual(this.gchatConfig.verificationToken, event.token)) {
         logger.debug('Google Chat: webhook token mismatch');
         return;
       }

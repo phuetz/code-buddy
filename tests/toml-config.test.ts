@@ -347,3 +347,49 @@ describe('Model Configurations', () => {
     expect(gemini.max_context_tokens).toBe(1000000);
   });
 });
+describe('Tool command regex validation', () => {
+  it('anchors every allowlist alternative', () => {
+    const manager = getConfigManager();
+    const origGetToolConfig = manager.getToolConfig;
+    manager.getToolConfig = (toolName: string) => {
+      if (toolName === 'test_tool_allow') {
+        return {
+          permission: 'ask',
+          allowlist: ['git status|git diff'],
+          denylist: [],
+        };
+      }
+      return origGetToolConfig.call(manager, toolName);
+    };
+    try {
+      expect(manager.isToolCommandAllowed('test_tool_allow', 'git status; rm -rf x').allowed).toBe(false);
+      expect(manager.isToolCommandAllowed('test_tool_allow', 'echo git diff').allowed).toBe(false);
+      expect(manager.isToolCommandAllowed('test_tool_allow', 'git status').allowed).toBe(true);
+      expect(manager.isToolCommandAllowed('test_tool_allow', 'git diff').allowed).toBe(true);
+    } finally {
+      manager.getToolConfig = origGetToolConfig;
+    }
+  });
+
+  it('fails closed on an invalid denylist pattern', () => {
+    const manager = getConfigManager();
+    const origGetToolConfig = manager.getToolConfig;
+    manager.getToolConfig = (toolName: string) => {
+      if (toolName === 'test_tool_deny') {
+        return {
+          permission: 'ask',
+          allowlist: [],
+          denylist: ['rm -rf ('],
+        };
+      }
+      return origGetToolConfig.call(manager, toolName);
+    };
+    try {
+      const result = manager.isToolCommandAllowed('test_tool_deny', 'anything');
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('Invalid denylist pattern');
+    } finally {
+      manager.getToolConfig = origGetToolConfig;
+    }
+  });
+});

@@ -378,7 +378,13 @@ export class DataRedactionEngine extends EventEmitter {
 
   constructor(config: Partial<RedactionConfig> = {}) {
     super();
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+      patterns: config.patterns ? [...config.patterns] : [...DEFAULT_CONFIG.patterns],
+      customPatterns: config.customPatterns ? [...config.customPatterns] : [...DEFAULT_CONFIG.customPatterns],
+      whitelist: config.whitelist ? [...config.whitelist] : [...DEFAULT_CONFIG.whitelist],
+    };
   }
 
   /**
