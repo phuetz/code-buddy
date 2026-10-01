@@ -3,21 +3,26 @@
 These release notes document the features and fixes integrated for the upcoming **2.3.0** release on top of published **2.2.0**.
 The repository is prepared with `package.json` at 2.3.0; publication remains pending.
 
+This is a source-change summary, not an execution verdict. Use the generated
+[feature statuses and reasons](PROVEN-FEATURES.md) for evidence. The release criterion
+(fresh installation with a small local model and a verified first task) remains
+unproven on this branch; no success on that path is claimed by these notes.
+
 | Feature / Topic | Area | Documentation |
 |:----------------|:-----|:--------------|
 | One-click web publish | CLI & Engine | [one-click-deploy.md](one-click-deploy.md) |
 | Database & Auth overlay | CLI & Templates | [provision-db-auth.md](provision-db-auth.md) |
 | Unified recents (CLI / Cowork / mobile) | CLI & Persistence | [unified-history.md](unified-history.md) |
-| Figma import to React screens | CLI & Tool | [figma.md](figma.md) |
+| Figma import to React screens | CLI & Tool | [CLI commands](commands.md) |
 | Expo / React Native starter | App Studio & Scaffolding | [expo-mobile-template.md](expo-mobile-template.md) |
 | Cowork folder instructions | Cowork UI & Context | [cowork.md](cowork.md#folder-instructions) |
-| Authored skills discovery | Self-improvement engine | [self-improvement-engine.md](self-improvement-engine.md#authored-skill-discovery) |
-| Kernel watcher limit resilience | Skills registry & inotify | [skills.md](skills.md#watcher-health) |
+| Authored skills discovery | Proposal mechanisms | [self-improvement-engine.md](self-improvement-engine.md#authored-skill-discovery) |
+| Kernel watcher limit resilience | Skills registry & inotify | [CLI commands](commands.md) |
 | Thin CLI bootstrap | CLI boot | [getting-started.md](getting-started.md#installation) |
 
 ---
 
-## Key Features and Real Behaviors
+## Source changes and intended behavior
 
 ### 1. One-click web publish (`buddy deploy run`)
 - **What it does:** Builds a web application and publishes its output directory to Cloudflare Pages or Netlify using their official CLIs.

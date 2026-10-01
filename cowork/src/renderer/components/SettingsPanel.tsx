@@ -294,7 +294,7 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
       id: 'codebuddy' as TabId,
       label: 'Code Buddy',
       icon: Zap,
-      description: t('settings.codebuddyDesc', 'Local agentic backend with 110+ tools'),
+      description: t('settings.codebuddyDesc', 'Local agentic backend with a repository tool registry'),
     },
     {
       id: 'sandbox' as TabId,

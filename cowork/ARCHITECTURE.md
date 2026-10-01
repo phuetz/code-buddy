@@ -1,5 +1,7 @@
 # Cowork architecture
 
+**Current showcase status: not proven here.** The [Cowork catalogue](../docs/PROVEN-FEATURES.md#domain-cowork) has no executed trace for the desktop entries. This architecture guide describes wiring, not current CLI/GUI parity or a measured tool count.
+
 Electron desktop app split across three contexts: **main** (Node-side
 privileged code), **preload** (the IPC bridge exposed to the renderer
 via `contextBridge`), and **renderer** (the React UI). The core
@@ -132,7 +134,7 @@ combining the user's Settings → Core engine choice (`'auto' |
 The **engine path** is preferred because it brings the core's 7
 middlewares (turn limit, cost, context warning, reasoning, workflow
 guard, auto-repair, quality gate), output sanitizer, transcript
-repair, and ~110 built-in tools. The **pi path** stays as fallback
+repair, and the core tool registry. The **pi path** stays as fallback
 for environments where the engine bundle didn't ship (e.g. `cowork`
 checked out without building the parent CLI).
 

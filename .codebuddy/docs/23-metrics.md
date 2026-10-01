@@ -7,7 +7,7 @@
 | Layer | Modules |
 |-------|---------|
 | `src/agent` | 149 |
-| `src/tools` | 145 |
+| `src/tools` | See the tool registry; no inventory total claimed |
 | `src/commands` | 90 |
 | `src/utils` | 73 |
 | `src/context` | 53 |
@@ -35,7 +35,7 @@
 ```mermaid
 graph TD
   "agent"["agent (149)"]
-  "tools"["tools (145)"]
+  "tools"["tool registry"]
   "commands"["commands (90)"]
   "utils"["utils (73)"]
   "context"["context (53)"]

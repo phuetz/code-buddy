@@ -16,7 +16,7 @@ state, IPC, Test Runner bundles) from a shell or from any MCP client.
 |---|---|
 | `pilot-core.mjs` | `CoworkPilot` class — launch/attach, chat, screenshot, eval, IPC, state, Test Runner bundles. |
 | `cli.mjs` | `cowork-pilot` CLI — long-lived **daemon** + thin client subcommands (+ `once` one-shot mode). |
-| `mcp-server.mjs` | `cowork-pilot-mcp` — stdio **MCP server** exposing 12 tools. |
+| `mcp-server.mjs` | `cowork-pilot-mcp` — stdio **MCP server** exposing named tools. |
 
 ## Requirements
 
@@ -57,7 +57,7 @@ node cli.mjs once run-bundle <id>
 
 ## MCP server
 
-stdio server (MCP `2024-11-05`). 12 tools:
+stdio server (MCP `2024-11-05`). Tool interfaces:
 
 `cowork_launch` (args: `real?`, `userDataDir?`, `attach?`) · `cowork_chat`
 (`prompt`, `marker?`, `timeoutMs?`) · `cowork_screenshot` (`path?`,

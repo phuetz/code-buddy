@@ -17,3 +17,45 @@ Le générateur ajoute les commandes CLI enregistrées dans `src/index.ts` et le
 L'[audit statique](../preuves/verification-statique.md) répertorie les maillons vérifiés et les limites de chaque entrée. Il ne constitue pas une preuve d'exécution. Les [vitrines française](../FONCTIONNALITES.md) et [anglaise](../feature-catalog.md) renvoient à cette source ou à une trace réelle sous `docs/preuves/` lorsqu'un parcours a été exécuté.
 
 Le [bilan de la campagne P9](../preuves/campagne-p9.md) précise les décomptes, corrections, échecs et limites des scénarios exécutés.
+
+## Qualification de la vitrine après audit
+
+La vitrine utilise deux statuts : **Prouvée** ou **Non prouvée ici**, avec raison.
+`showcase-review.json` qualifie le contenu de chaque trace : un manifeste `passed`,
+un raccordement ou un résumé sans sortie suffisante ne valide pas le bénéfice annoncé.
+Une acceptation est attachée au chemin et au SHA-256 du journal examiné ; une trace
+nouvelle ou modifiée exige une nouvelle qualification. L’empreinte source doit aussi
+être valide. Cette revue documentaire ne crée ni ne modifie une preuve d’exécution.
+
+`showcase-status.json` contient les états et compteurs générés : les derniers essais
+en échec sont un sous-ensemble des entrées non prouvées, y compris lorsque la source
+est périmée. Les essais remplacés restent dans les journaux historiques, sans devenir
+un échec courant. Le CLI `catalog status` conserve son calcul mécanique d’intégrité ;
+il ne qualifie pas le contenu et ne constitue pas le compteur éditorial de la vitrine.
+
+Les deux README, les pages détaillées FR/EN et les trois résumés sont régénérés ensemble :
+
+```bash
+node --import tsx scripts/generate-proven-features.ts
+node --import tsx scripts/generate-proven-features.ts --check
+```
+
+Les résultats P9 sont intégrés comme traces historiques ; leur contenu ne reçoit pas automatiquement une qualification éditoriale positive.
+Le critère de sortie reste une installation neuve avec un petit modèle local et une
+première tâche vérifiée ; aucune trace de ce catalogue ne prouve ce parcours complet.
+
+## Contrôle des formulations documentaires
+
+Aucun compte d’outils ou de fournisseurs n’est utilisé comme argument dans les pages de présentation ou de marketing. Une référence technique ne peut publier un tel compte que s’il est exact et produit par un script du dépôt ; cette reprise retire les comptes fixes non mesurés. Les quantités d’un scénario enregistré, limites d’exécution et exemples ne sont pas des totaux du catalogue.
+
+```bash
+node --import tsx scripts/check-showcase-claims.ts
+node --import tsx scripts/check-showcase-claims.ts --json
+node --import tsx scripts/check-showcase-claims.ts --revision <commit> --json
+```
+
+Le contrôle parcourt tous les fichiers textuels suivis, et les nouveaux fichiers non ignorés, du périmètre documentaire : README et Markdown à la racine, `docs/**`, Markdown sous `cowork/**`. Il ne suit pas seulement les liens. Les variantes numériques, plages, suffixes `+`, quantités écrites en lettres, qualifications de registre et comptes inversés sont détectées. Les SVG et métadonnées HTML sont inclus. Toute occurrence est consignée avec sa ligne et sa classification ; le code de sortie vaut 1 pour une assertion non qualifiée.
+
+Les journaux, archives, audits et propositions sont recensés séparément. Les comptes rendus historiques de référence et sections datées autorisés sont nommés dans le script et portent une limite explicite ; un nouveau document ne peut pas s’exempter en ajoutant un marqueur. Les résultats et statuts générés restent soumis au contrôle du générateur et à la revue du catalogue. Les tests de la vitrine exécutent ce garde et exercent les variantes de formulation.
+
+Le contrôle reste lexical : son zéro signifie « aucune violation des règles exécutées », pas une preuve universelle d’absence de survente. Une nouvelle formulation doit être examinée et, si nécessaire, ajoutée aux cas de régression.

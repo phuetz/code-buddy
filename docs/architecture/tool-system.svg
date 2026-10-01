@@ -42,7 +42,7 @@
     <text x="125" y="50" text-anchor="middle" fill="#ddd6fe" font-family="system-ui" font-size="11">Semantic matching</text>
     <text x="125" y="70" text-anchor="middle" fill="#ddd6fe" font-family="system-ui" font-size="11">Query → Tool embeddings</text>
     <rect x="20" y="82" width="210" height="30" rx="4" fill="#1e1b4b"/>
-    <text x="125" y="102" text-anchor="middle" fill="#a5b4fc" font-family="system-ui" font-size="10">45 tools → 5-8 relevant</text>
+    <text x="125" y="102" text-anchor="middle" fill="#a5b4fc" font-family="system-ui" font-size="10">Tools → query selection</text>
   </g>
 
   <!-- Arrow to filtered tools -->
@@ -64,7 +64,7 @@
   <!-- Tool Categories Box -->
   <g transform="translate(50, 200)">
     <rect x="0" y="0" width="750" height="150" rx="10" fill="#1e293b" stroke="#475569" stroke-width="1"/>
-    <text x="375" y="25" text-anchor="middle" fill="#94a3b8" font-family="system-ui" font-size="14" font-weight="bold">45+ Tool Categories</text>
+    <text x="375" y="25" text-anchor="middle" fill="#94a3b8" font-family="system-ui" font-size="14" font-weight="bold">Tool categories</text>
 
     <!-- File Tools -->
     <g transform="translate(30, 45)">

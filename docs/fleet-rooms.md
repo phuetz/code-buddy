@@ -10,7 +10,7 @@ Status: opt-in, first lot (2026-09-14). Off by default — without
 `CODEBUDDY_FLEET_ROOMS=true`, `buddy server` opens nothing and `/ws` answers
 `UNKNOWN_TYPE` for every `fleet.rooms.*` message.
 
-The design reuses the proven parts of [block/buzz](https://github.com/block/buzz)
+The design reuses the message-ledger design of [block/buzz](https://github.com/block/buzz)
 (Apache-2.0, studied at `4cd82f513214aad11c2b742ce7cc7c681e8e32a0`): Nostr NIP-01
 signed events, `h`/`p`/`e` tags for room/mentions/threads, NIP-42 key proof,
 REQ → stored events → EOSE → live delivery, and `OK` acknowledgements with

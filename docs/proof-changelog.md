@@ -1,5 +1,8 @@
 # Proof refresh changelog
 
+<!-- showcase:historical -->
+**Historical record — outside the current evidence catalogue, not revalidated here.** Counts and validation labels below describe the dated snapshot, not this candidate. For current statuses and reasons, see the root feature catalogue.
+
 ## 2026-08-22 — v1.8.0, code-under-test commit `82f7f3fa`
 
 This refresh replaces the 2026-06-18/v1.6 capture with attempts made on the current worktree. No

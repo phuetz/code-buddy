@@ -312,8 +312,7 @@ export function SettingsCodeBuddy() {
           Code Buddy Backend
                           </h3>
         <p className="text-sm text-text-muted mt-1">
-          Connect to a Code Buddy server for 110+ tools, MCTSr reasoning, multi-agent orchestration,
-                            and TurboQuant local inference.
+          {t('settings.connectToACodeBuddyServer', 'Connect to a Code Buddy server to configure repository tools, reasoning, orchestration and local inference. These settings do not establish an executed outcome.')}
                           </p>
       </div>
 
@@ -626,9 +625,9 @@ export function SettingsCodeBuddy() {
         <div className="p-4 rounded-lg bg-accent/5 border border-accent/20">
           <p className="text-sm font-medium text-text-primary mb-2">{t('settings.whenEnabledYouGet', `When enabled, you get:`)}</p>
           <ul className="text-xs text-text-muted space-y-1">
-            <li>{t('settings.110ToolsFileOpsSearch', `• 110+ tools (file ops, search, git, web, code analysis, documents)`)}</li>
+            <li>{t('settings.110ToolsFileOpsSearch', `• Repository tools (file ops, search, git, web, code analysis, documents)`)}</li>
             <li>{t('settings.mCTSrReasoningTreeOfTho', `• MCTSr reasoning (Tree-of-Thought + Monte Carlo search)`)}</li>
-            <li>{t('settings.15LLMProvidersGeminiCl', `• 15 LLM providers (Gemini, Claude, GPT, Grok, Ollama, vLLM...)`)}</li>
+            <li>{t('settings.15LLMProvidersGeminiCl', `• Configurable LLM routing (Gemini, Claude, GPT, Grok, Ollama, vLLM...)`)}</li>
             <li>{t('settings.multiAgentOrchestrationS', `• Multi-agent orchestration (spawn, send, wait, close, resume)`)}</li>
             <li>{t('settings.turboQuantLocalInference', `• TurboQuant local inference (4-8x KV cache compression)`)}</li>
             <li>{t('settings.documentGenerationPPTXD', `• Document generation (PPTX, DOCX, XLSX, PDF) — native TypeScript`)}</li>

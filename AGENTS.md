@@ -60,7 +60,7 @@ Pour les changements utilisateur CLI/flotte/DGM : lancer l'application réelle a
 
 ## Architecture
 
-Terminal multi-provider AI coding agent. **15 providers** via OpenAI-compatible routing (Grok, Codex, GPT, Gemini, Ollama, LM Studio, AWS Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral) + a separate Gemini native path. Core is an agentic loop where the LLM autonomously calls tools.
+Terminal multi-provider AI coding agent. Provider integrations via OpenAI-compatible routing (Grok, Codex, GPT, Gemini, Ollama, LM Studio, AWS Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral) + a separate Gemini native path. Core is an agentic loop where the LLM autonomously calls tools.
 
 ```
 User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
@@ -86,7 +86,7 @@ User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
 - `src/agent/execution/agent-executor.ts` — middleware pipeline, reasoning, tool streaming. **Single source of truth via `runTurnLoop` async generator (task #5 fusion done 2026-04-26).** `processUserMessageStream` is a thin `yield*` wrapper; `processUserMessage` is a thin sequential collector that consumes events and returns the new entries pushed to history. Per-turn injections, transcript repair, output sanitization, and the `__SESSIONS_YIELD__` signal all live in `runTurnLoop` — touch them in one place. Streaming-only events (`ask_user`, `tool_stream`, `token_count`, `reasoning`, `steer`) are silently dropped in the sequential collector (décision #3).
 - `src/codebuddy/client.ts` — thin dispatcher (~400 LOC) that delegates to a `Provider` strategy: `GeminiNativeProvider`, `ChatGptResponsesProvider`, `GeminiCliProvider`, `AgyCliProvider`, or `OpenAICompatProvider`, according to the selected backend. Strategies live under `src/codebuddy/providers/`. Adding a new provider = one new strategy file + a branch in the constructor. `defaultMaxTokens` comes from `getModelToolConfig(model).maxOutputTokens`. Anthropic-specific message hooks (`injectAnthropicCacheBreakpoints`, `injectJsonSystemPromptForAnthropic`) live in `provider-openai-compat-hooks.ts` and are called by both `chat()` and `chatStream()` on the OpenAI-compat strategy.
 - `src/services/prompt-builder.ts` — **real** system prompt builder (not the deleted `src/agent/system-prompt-builder.ts`). Applies model-aware token-budget truncation.
-- `src/codebuddy/tools.ts` — ~110 tool definitions + RAG selection
+- `src/codebuddy/tools.ts` — tool assembly + RAG selection (no fixed count)
 - `src/ui/components/ChatInterface.tsx` — React/Ink terminal UI
 
 ### Non-obvious Architecture Decisions

@@ -1,8 +1,8 @@
 # Agents and Orchestration
 
-## Multi-Agent Orchestration (5-Tool API)
+## Multi-Agent Orchestration (tool API)
 
-Code Buddy provides 5 LLM-callable tools for agent orchestration:
+Code Buddy declares the following LLM-callable interfaces for agent orchestration:
 
 | Tool | Purpose |
 |:-----|:--------|
@@ -93,7 +93,7 @@ posture.
 
 ## SWE Agent (OpenManus)
 
-Think-act loop with 3 tools: `bash`, `str_replace_editor`, `terminate`. Features:
+Think-act loop exposing: `bash`, `str_replace_editor`, `terminate`. Features:
 - Max-step limit with stuck detection (3 duplicate actions trigger perturbation)
 - Output truncation for long results
 - State machine: IDLE -> RUNNING -> THINKING -> ACTING -> FINISHED/ERROR

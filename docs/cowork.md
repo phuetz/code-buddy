@@ -1,5 +1,12 @@
 # Cowork Desktop
 
+**Current showcase status: not proven here.** The five Cowork entries in the
+[feature catalogue](PROVEN-FEATURES.md#domain-cowork) have no execution trace in
+this catalogue. This guide describes intended UI behavior and configuration.
+Its screenshots and historical validation accounts are outside the current
+evidence catalogue; they have not been revalidated here and do not prove this
+candidate's desktop, voice or retained-improvement outcomes.
+
 Cowork is the desktop cockpit for Code Buddy. It gives the same core agent a
 visual workspace: chat, model configuration, tools, test execution, traces,
 sessions, workflows, MCP connectors, skills, companion controls, and Hermes-style
@@ -86,8 +93,8 @@ npm run build:e2e
 xvfb-run -a npx playwright test e2e/cowork-smoke.spec.ts --reporter=list --workers=1
 ```
 
-Cowork itself requires Node.js 22 or newer. The root CLI still supports Node.js
-20 or newer.
+Cowork itself requires Node.js 22 or newer. The root CLI declares Node.js
+20 or newer in `package.json`.
 
 ## Visual Tour
 
@@ -124,8 +131,10 @@ Reproduction and privacy rules: [Autonomous Coding And Cowork Progress](autonomo
 
 The Home view also discovers the daemon-owned
 `~/.codebuddy/fleet/briefings/latest.json` artifact. Its **Living Briefing**
-shows the proven overnight results, retained improvements, paid-model count,
-attention points and safest next opportunity. The adjacent report action opens
+shows results, proposal outcomes and paid-model usage recorded in that artifact,
+along with attention points and a suggested next opportunity. Displaying an
+artifact does not prove a retained improvement; the current showcase has no
+qualified trace for this UI or such an outcome. The adjacent report action opens
 `latest.md`; the voice action reads only the compact synthesis through the
 existing local TTS route.
 
@@ -245,11 +254,11 @@ real-provider smoke tests also configure the same profile inside an isolated
 Electron user-data directory, so the test does not depend on or expose a normal
 Cowork profile.
 
-## Real Validation
+## Real Validation — historical account, outside the current evidence catalogue
 
-Latest local validation in this branch: 2026-06-01, Europe/Paris.
+Historical account dated 2026-06-01, Europe/Paris; not revalidated on this checkout.
 
-The checks below were run in PowerShell against the real ChatGPT OAuth backend
+The earlier account reports checks run in PowerShell against the ChatGPT OAuth backend
 with `gpt-5.5`. The account email and account id from `buddy whoami` were
 intentionally not copied into this document.
 
@@ -271,7 +280,7 @@ npx playwright test e2e/test-runner-server-real-gpt55.spec.ts --reporter=list --
 Pop-Location
 ```
 
-Result:
+Reported historical results (not a current execution verdict):
 
 - ChatGPT OAuth status: connected, paid plan detected, private identifiers
   redacted from public docs.
@@ -284,13 +293,13 @@ Result:
   completions, model listing) through real ChatGPT `gpt-5.5`: passed.
 - Cowork `Tests & executions` launching the real server `gpt-5.5` smoke: passed.
 
-Public-safe real-provider proof screenshots:
+Screenshots from that historical account (outside the current evidence catalogue):
 
-![Cowork real GPT-5.5 chat proof](qa/code-buddy-studio/screenshots/public-real-gpt55-cowork-chat.png)
+![Historical Cowork GPT-5.5 chat capture](qa/code-buddy-studio/screenshots/public-real-gpt55-cowork-chat.png)
 
 ![Cowork test runner launching real GPT-5.5 chat](qa/code-buddy-studio/screenshots/public-test-runner-cowork-real-gpt55.png)
 
-![Cowork test runner launching real GPT-5.5 server API proof](qa/code-buddy-studio/screenshots/public-test-runner-server-real-gpt55.png)
+![Historical Cowork test runner server API capture](qa/code-buddy-studio/screenshots/public-test-runner-server-real-gpt55.png)
 
 ### Publication Hardening
 
@@ -299,7 +308,7 @@ the public evidence trail:
 
 - GitHub entry links now point at the actual lower-case `cowork/README.md`
   path.
-- Real-provider proof screenshots use reviewed `public-*` crops; raw GPT-5.5
+- Historical provider screenshots use reviewed `public-*` crops; raw GPT-5.5
   captures were removed from the tracked tree and ignored locally.
 - The GPT-5.5 Playwright producers now write cropped `public-*` targets by
   default, so future opt-in replays do not regenerate publishable full-page
@@ -319,7 +328,8 @@ Equivalent CLI proof:
 npx tsx src/index.ts hermes smoke --json
 ```
 
-Latest real local proof on this branch:
+Historical smoke results reported by this guide, outside the current evidence
+catalogue and not revalidated here:
 
 - runtime: passed (`OK-HERMES-LOCAL`)
 - browser: passed (`OK-HERMES-BROWSER` through local Playwright)
@@ -346,7 +356,8 @@ npx tsx src/index.ts hermes browser status --json
 npx tsx src/index.ts hermes runtime status --json
 ```
 
-Latest local privacy proof on this branch:
+Historical privacy observations reported by this guide, outside the current
+evidence catalogue and not revalidated here:
 
 - sampled Hermes status JSON outputs did not contain the local user profile path
   or the absolute repository checkout path.

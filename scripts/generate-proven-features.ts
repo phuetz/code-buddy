@@ -1,0 +1,300 @@
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { buildCatalog, type CatalogFeature } from '../src/catalog/status.js';
+
+type Language = 'fr' | 'en';
+type Counts = { total: number; passed: number; failed: number; unavailable: number };
+type Review = {
+  id: string;
+  decision: 'accept' | 'insufficient';
+  artifact: string | null;
+  artifactSha256: string | null;
+  reason: string;
+  scope?: Record<Language, string>;
+};
+type Row = {
+  feature: CatalogFeature;
+  commands: string[];
+  scope: string[];
+  review: Review;
+  proven: boolean;
+  reason: string;
+};
+
+const START = '<!-- proven-features:start -->';
+const END = '<!-- proven-features:end -->';
+const REGENERATE = 'node --import tsx scripts/generate-proven-features.ts';
+const DOMAINS: Record<string, Record<Language, string>> = {
+  'agent-tools': { fr: 'Agent et outils', en: 'Agent and tools' },
+  cli: { fr: 'Terminal et configuration', en: 'Terminal and configuration' },
+  'context-memory': { fr: 'Contexte et mémoire', en: 'Context and memory' },
+  cowork: { fr: 'Application de bureau Cowork', en: 'Cowork desktop app' },
+  dgm: { fr: 'Apprentissage et expériences', en: 'Learning and experiments' },
+  fleet: { fr: 'Coopération entre agents', en: 'Agent cooperation' },
+  media: { fr: 'Médias et montage', en: 'Media and editing' },
+  providers: { fr: 'Modèles et fournisseurs', en: 'Models and providers' },
+  security: { fr: 'Sécurité et isolation', en: 'Security and isolation' },
+  sensory: { fr: 'Voix et perception', en: 'Voice and perception' },
+  'server-api': { fr: 'Serveur et API', en: 'Server and API' },
+};
+
+function text(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/([\\`*_[\]|])/g, '\\$1').replace(/\r?\n/g, ' ');
+}
+
+function code(value: string): string {
+  const fence = '`'.repeat(Math.max(0, ...[...value.matchAll(/`+/g)].map((match) => match[0].length)) + 1);
+  return `${fence} ${value} ${fence}`;
+}
+
+function count(rows: Row[]): Counts {
+  return {
+    total: rows.length,
+    passed: rows.filter((row) => row.proven).length,
+    failed: rows.filter(({ feature }) => feature.latestEvidence?.result === 'failed').length,
+    unavailable: rows.filter((row) => !row.proven).length,
+  };
+}
+
+function renderReadmeBlock(c: Counts, language: Language): string {
+  const fr = language === 'fr';
+  return [START, fr ? '## État des fonctionnalités' : '## Feature status', '',
+    fr ? `[\`PROUVÉES ${c.passed}/${c.total} | NON PROUVÉES ICI ${c.unavailable} | DONT DERNIERS ESSAIS EN ÉCHEC ${c.failed}\`](docs/FONCTIONNALITES-PROUVEES.md)`
+      : `[\`PROVEN ${c.passed}/${c.total} | NOT PROVEN HERE ${c.unavailable} | INCLUDING LATEST FAILED RUNS ${c.failed}\`](docs/PROVEN-FEATURES.md)`,
+    fr ? `**${c.passed}/${c.total} fonctionnalités prouvées** ; ${c.unavailable} non prouvées ici, avec raison (dont ${c.failed} derniers essais en échec, historiques si l’empreinte est périmée).`
+      : `**${c.passed}/${c.total} features proven**; ${c.unavailable} not proven here, with reasons (including ${c.failed} latest failed runs, historical when the source digest is stale).`,
+    fr ? 'Chaque état « prouvée » est limité au composant et au scénario capturés, avec la limite du scénario lorsqu’elle est consignée. Ce total ne valide pas une installation neuve.'
+      : 'Each “proven” state covers the captured component scenario, with its scenario limit when recorded. This total does not validate a fresh installation.',
+    fr ? '[Statuts, raisons et traces par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: feature status](docs/PROVEN-FEATURES.md)'
+      : '[Statuses, reasons and traces by domain](docs/PROVEN-FEATURES.md) · [Français : état des fonctionnalités](docs/FONCTIONNALITES-PROUVEES.md)',
+    END].join('\n');
+}
+
+function state(row: Row, language: Language): string {
+  return language === 'fr' ? (row.proven ? 'Prouvée' : 'Non prouvée ici')
+    : (row.proven ? 'Proven' : 'Not proven here');
+}
+
+function heading(domain: string, language: Language): string {
+  return DOMAINS[domain]?.[language] ?? domain;
+}
+
+function traceLink(artifact: string): string {
+  return path.posix.relative('docs', artifact).split('/').map(encodeURIComponent).join('/');
+}
+
+function assertPublic(content: string): void {
+  // Loopback URLs and API paths are valid evidence; machine paths are not.
+  if (/(?:\/home\/|\/Users\/|\/data\/|\/tmp\/|[a-z]:[\\/]Users[\\/])|\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i.test(content)) {
+    throw new Error('Generated content contains a machine path or email; redact the catalogue or trace first.');
+  }
+}
+
+function renderPage(rows: Row[], digest: string, language: Language): string {
+  const fr = language === 'fr';
+  const counts = count(rows);
+  const dates = rows.flatMap(({ feature }) => feature.latestEvidence ? [feature.latestEvidence.date] : [])
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+  const lines = [
+    `<!-- Generated by scripts/generate-proven-features.ts; catalogue SHA-256: ${digest} -->`,
+    `# Code Buddy : ${fr ? 'état des fonctionnalités et traces' : 'feature status and traces'}`, '',
+    fr ? '[English version](PROVEN-FEATURES.md) · [README](../README.md)'
+      : '[Version française](FONCTIONNALITES-PROUVEES.md) · [README](../README.md)', '',
+    fr ? `**${counts.passed}/${counts.total} prouvées · ${counts.unavailable} non prouvées ici (dont ${counts.failed} derniers essais en échec).**`
+      : `**${counts.passed}/${counts.total} proven · ${counts.unavailable} not proven here (including ${counts.failed} latest failed runs).**`, '',
+    fr ? '« Prouvée » exige une sortie capturée dans le dépôt, suffisante pour le scénario annoncé, une qualification documentaire explicite et une empreinte source encore valide. Les autres fonctionnalités sont « non prouvées ici », avec raison. Les échecs historiques restent visibles même si leur empreinte est périmée ; ils ne prouvent pas un échec du code courant.'
+      : '“Proven” requires captured output in the repository sufficient for the stated scenario, explicit documentary review and a valid source digest. Other features are “not proven here”, with a reason. Historical failures remain visible even when stale; they do not prove a failure of current code.', '',
+    fr ? 'Cette page couvre les capacités explicitement suivies dans le [catalogue](catalog/README.md), pas toutes les commandes et métadonnées détectées. « Prouvée » vaut pour le scénario décrit ; cela ne certifie ni tous les usages, ni toutes les plateformes, ni le paquet installé.'
+      : 'This page covers the capabilities explicitly tracked in the [catalogue](catalog/README.md), rather than every detected command or tool metadata entry. “Proven” applies to the stated scenario; it does not certify every use, platform or installed package.', '',
+    fr ? 'Les commandes sont celles enregistrées dans les traces, y compris les appels directs de composants. Les paramètres entre chevrons et les scripts `_qa/` désignent des fixtures temporaires ; ces lignes ne sont pas toutes des recettes autonomes. Les observations et raisons, ainsi que les limites consignées, conservent la langue du catalogue ou de la trace.'
+      : 'Commands are recorded from the traces, including direct component calls. Angle-bracket parameters and `_qa/` scripts refer to temporary fixtures; these lines are not all standalone recipes. Observations and reasons, along with recorded limits, retain the language of the catalogue or trace.', '',
+    fr ? `Dates des exécutions enregistrées (UTC) : ${dates[0]?.slice(0, 10) ?? '—'} → ${dates.at(-1)?.slice(0, 10) ?? '—'}.`
+      : `Recorded execution dates (UTC): ${dates[0]?.slice(0, 10) ?? '—'} → ${dates.at(-1)?.slice(0, 10) ?? '—'}.`, '',
+    `## ${fr ? 'Échecs observés' : 'Observed failures'}`, '',
+  ];
+  const failures = rows.filter(({ feature }) => feature.latestEvidence?.result === 'failed');
+  if (failures.length) {
+    lines.push(fr ? '| Fonctionnalité | Résultat observé | Date (UTC) | Preuve |' : '| Feature | Observed result | Date (UTC) | Evidence |',
+      '|---|---|---|---|');
+    for (const { feature } of failures) {
+      const proof = feature.latestEvidence!;
+      lines.push(`| ${text(feature.title)} (${code(feature.id)}) | ${text(proof.summary)} | ${proof.date} | [Trace](${traceLink(proof.artifact)}) |`);
+    }
+  } else lines.push(fr ? 'Aucun dernier essai en échec enregistré (ceci n’est pas une validation du candidat).' : 'No latest failed run recorded (this does not validate the candidate).');
+  lines.push('', `## ${fr ? 'Par domaine' : 'By domain'}`, '',
+    fr ? '| Domaine | Prouvées / suivies | Non prouvées ici | Dont derniers essais en échec |' : '| Domain | Proven / tracked | Not proven here | Including latest failed runs |',
+    '|---|---|---|---|');
+  const domains = [...new Set(rows.map(({ feature }) => feature.domain!))].sort();
+  for (const domain of domains) {
+    const c = count(rows.filter(({ feature }) => feature.domain === domain));
+    lines.push(`| [${text(heading(domain, language))}](#domain-${domain}) | ${c.passed}/${c.total} | ${c.unavailable} | ${c.failed} |`);
+  }
+  for (const domain of domains) {
+    lines.push('', `<a id="domain-${domain}"></a>`, '', `## ${heading(domain, language)}`, '');
+    for (const row of rows.filter(({ feature }) => feature.domain === domain)) {
+      const { feature, commands, scope, review } = row;
+      const proof = feature.latestEvidence;
+      lines.push(`### ${text(feature.title)} · ${code(feature.id)}`, '', `${fr ? 'Usage visé' : 'Intended use'} : ${text(feature.benefit![language])}`, '',
+        `**${state(row, language)}** · ${fr ? 'Date de l’exécution (UTC)' : 'Execution date (UTC)'} : ${proof?.date ?? '—'}.`);
+      if (proof) {
+        lines.push(`${fr ? 'Résultat enregistré' : 'Recorded result'} : ${text(proof.summary)}`,
+          `${fr ? 'Commande de preuve enregistrée' : 'Recorded evidence command'} : ${commands.map(code).join(' ; ')}`,
+          `[${fr ? 'Trace d’exécution' : 'Execution trace'}](${traceLink(proof.artifact)}) · ${fr ? 'révision testée' : 'tested revision'} : ${code(proof.revision)}.`);
+      } else {
+        lines.push(fr ? 'Commande de preuve : aucune exécution enregistrée.' : 'Evidence command: no recorded execution.');
+      }
+      lines.push(`${fr ? 'Qualification' : 'Review'} : ${text(row.reason)}`);
+      if (review.scope) lines.push(`${fr ? 'Portée admise' : 'Accepted scope'} : ${text(review.scope[language])}`);
+      if (scope.length) lines.push(`${fr ? 'Portée de l’essai' : 'Run scope'} : ${text(scope.join(' '))}`);
+      lines.push('');
+    }
+  }
+  lines.push(`## ${fr ? 'Régénérer et contrôler' : 'Regenerate and check'}`, '',
+    fr ? 'Les pages détaillées, les résumés, les deux README et les compteurs JSON sont générés ensemble depuis l’inventaire, le calcul de validité de `buddy catalog status`, les traces versionnées et la [qualification documentaire](catalog/showcase-review.json). Le CLI calcule l’intégrité des manifestes ; son état mécanique ne remplace pas cette qualification du contenu. Aucun total n’est saisi à la main.'
+      : 'Detailed pages, summaries, both READMEs and JSON counts are generated together from the inventory, the `buddy catalog status` validity calculation, committed traces and [documentary review](catalog/showcase-review.json). The CLI checks manifest integrity; its mechanical state does not replace review of the trace content. No total is entered manually.', '',
+    '```bash', REGENERATE, `${REGENERATE} --check`, 'npm test -- tests/docs/proven-features.test.ts', '```', '');
+  return `${lines.join('\n').trimEnd()}\n`;
+}
+
+function renderSummary(rows: Row[], digest: string, language: Language): string {
+  const fr = language === 'fr';
+  const c = count(rows);
+  const page = fr ? 'FONCTIONNALITES-PROUVEES.md' : 'PROVEN-FEATURES.md';
+  const lines = [
+    `<!-- Generated by scripts/generate-proven-features.ts; catalogue SHA-256: ${digest} -->`,
+    `# ${fr ? 'Fonctionnalités : statuts et raisons' : 'Features: status and reasons'}`, '',
+    fr ? `**${c.passed}/${c.total} prouvées · ${c.unavailable} non prouvées ici (dont ${c.failed} derniers essais en échec).**`
+      : `**${c.passed}/${c.total} proven · ${c.unavailable} not proven here (including ${c.failed} latest failed runs).**`, '',
+    fr ? `Même qualification que la [page détaillée](${page}). Un raccordement statique ou un résumé de succès ne suffit pas. Les usages visés ne sont pas des bénéfices démontrés. Les échecs historiques ne sont pas une validation du code courant.`
+      : `Same qualification as the [detailed page](${page}). Static wiring or a success summary is insufficient. Intended uses are not demonstrated benefits. Historical failures do not validate current code.`, '',
+    fr ? '| Fonctionnalité | Statut | Raison / portée admise | Trace |' : '| Feature | Status | Reason / accepted scope | Trace |',
+    '|---|---|---|---|',
+  ];
+  for (const row of rows) {
+    const proof = row.feature.latestEvidence;
+    const scope = row.review.scope?.[language];
+    lines.push(`| ${code(row.feature.id)} — ${text(row.feature.title)} | **${state(row, language)}** | ${text(row.reason + (scope ? ' ' + scope : ''))} | ${proof ? `[Trace](${traceLink(proof.artifact)})` : '—'} |`);
+  }
+  lines.push('', `\`node --import tsx scripts/generate-proven-features.ts --check\``, '');
+  return lines.join('\n');
+}
+
+export function updateReadme(readme: string, block: string): string {
+  const start = readme.indexOf(START);
+  const end = readme.indexOf(END);
+  if (start < 0 || end < start || readme.indexOf(START, start + 1) !== -1 || readme.indexOf(END, end + 1) !== -1) {
+    throw new Error('README: expected exactly one proven-features marker pair.');
+  }
+  return readme.slice(0, start) + block + readme.slice(end + END.length);
+}
+
+/** Require both catalogue source validity and documentary qualification; never promote lastProof. */
+export function generateProvenFeatures(root: string, revision?: string | null): Record<string, string> {
+  if (revision === undefined) {
+    try {
+      revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    } catch { revision = null; }
+  }
+  const catalog = buildCatalog({ root, revision });
+  if (catalog.warnings.length) throw new Error(catalog.warnings.join('\n'));
+  const inventoryFile = 'docs/catalog/inventory.json';
+  const inventory = JSON.parse(readFileSync(path.join(root, inventoryFile), 'utf8')) as { features: Array<{ id: string }> };
+  const ids = new Set(inventory.features.map((feature) => feature.id));
+  if (ids.size !== inventory.features.length) throw new Error('Duplicate catalogue IDs.');
+  const features = catalog.features.filter((feature) => ids.has(feature.id)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  if (features.length !== ids.size || !features.length) throw new Error('Incomplete catalogue.');
+  const reviewFile = 'docs/catalog/showcase-review.json';
+  const reviews = JSON.parse(readFileSync(path.join(root, reviewFile), 'utf8')) as { schemaVersion: number; features: Review[] };
+  if (reviews.schemaVersion !== 1 || !Array.isArray(reviews.features)
+    || reviews.features.length !== ids.size || new Set(reviews.features.map((review) => review.id)).size !== ids.size
+    || reviews.features.some((review) => !ids.has(review.id) || !['accept', 'insufficient'].includes(review.decision) || !review.reason?.trim())) {
+    throw new Error('Incomplete or invalid documentary review.');
+  }
+  const inputs = new Set([inventoryFile, reviewFile, ...readdirSync(path.join(root, 'docs/preuves'))
+    .filter((name) => name.endsWith('.json')).map((name) => `docs/preuves/${name}`)]);
+  const rows = features.map((feature): Row => {
+    if (!feature.domain || !feature.benefit?.fr || !feature.benefit.en) throw new Error(`Missing domain or benefit: ${feature.id}`);
+    if (!/^[a-z0-9-]+$/.test(feature.domain)) throw new Error(`Invalid domain: ${feature.id}`);
+    const review = reviews.features.find((item) => item.id === feature.id)!;
+    const proof = feature.latestEvidence;
+    const reasons = [review.reason];
+    if (feature.states.testedInSituation === 'inconnu' && proof) reasons.push('Preuve ancienne ou révision courante inconnue.');
+    if (!proof) return { feature, commands: [], scope: [], review, proven: false, reason: reasons.join(' ') };
+    inputs.add(proof.artifact);
+    const trace = readFileSync(path.join(root, proof.artifact), 'utf8');
+    const commands = [...trace.matchAll(/^(?:Commande(?: serveur| client)?|Command)\s*:\s*(.+)$/gm)].map((match) => match[1]!.trim());
+    if (!commands.length) throw new Error(`Missing recorded command: ${feature.id}`);
+    const scope = [...trace.matchAll(/^(?:Limite|Portée|Scope)\s*:\s*(.+)$/gm)].map((match) => match[1]!.trim());
+    const reviewedTrace = review.artifact === proof.artifact
+      && review.artifactSha256 === createHash('sha256').update(trace).digest('hex');
+    if (!reviewedTrace) reasons.push('Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.');
+    const proven = review.decision === 'accept' && reviewedTrace && feature.states.testedInSituation === 'vrai';
+    if (proof.result === 'failed') reasons.push(`Dernier essai en échec (${proof.revision}) : ${proof.summary}`);
+    return { feature, commands, scope, review, proven, reason: reasons.join(' ') };
+  });
+  // Track even editorial changes in the catalogue, without timestamps or HEAD
+  // churn. Current source validity is represented by the computed feature states.
+  const hash = createHash('sha256');
+  for (const file of [...inputs].sort()) hash.update(file).update('\0').update(readFileSync(path.join(root, file))).update('\0');
+  hash.update(JSON.stringify(features));
+  const digest = hash.digest('hex');
+  const c = count(rows);
+  const blocks = { fr: renderReadmeBlock(c, 'fr'), en: renderReadmeBlock(c, 'en') };
+  const status = {
+    schemaVersion: 1,
+    counts: c,
+    features: rows.map((row) => ({
+      id: row.feature.id,
+      status: row.proven ? 'proven' : 'not-proven-here',
+      reason: row.reason,
+      scope: row.review.scope ?? null,
+      latestRunFailed: row.feature.latestEvidence?.result === 'failed',
+      trace: row.feature.latestEvidence?.artifact ?? null,
+    })),
+  };
+  const files: Record<string, string> = {
+    'docs/FONCTIONNALITES-PROUVEES.md': renderPage(rows, digest, 'fr'),
+    'docs/PROVEN-FEATURES.md': renderPage(rows, digest, 'en'),
+    'docs/FONCTIONNALITES.md': renderSummary(rows, digest, 'fr'),
+    'docs/feature-catalog.md': renderSummary(rows, digest, 'en'),
+    'docs/INVENTAIRE-FONCTIONNALITES.md': renderSummary(rows, digest, 'fr'),
+    'README.md': updateReadme(readFileSync(path.join(root, 'README.md'), 'utf8'), blocks.en),
+    'docs/catalog/showcase-status.json': `${JSON.stringify(status, null, 2)}\n`,
+    'README.fr.md': updateReadme(readFileSync(path.join(root, 'README.fr.md'), 'utf8'), blocks.fr),
+  };
+  for (const [file, content] of Object.entries(files)) {
+    assertPublic(file === 'README.md' ? blocks.en : file === 'README.fr.md' ? blocks.fr : content);
+  }
+  return files;
+}
+
+export function checkGenerated(root: string, files: Record<string, string>): string[] {
+  return Object.entries(files).filter(([file, expected]) => {
+    try { return readFileSync(path.join(root, file), 'utf8') !== expected; } catch { return true; }
+  }).map(([file]) => file);
+}
+
+const script = fileURLToPath(import.meta.url);
+if (process.argv[1] && path.resolve(process.argv[1]) === script) {
+  try {
+    const args = process.argv.slice(2);
+    if (args.some((arg) => arg !== '--check') || args.length > 1) throw new Error(`Usage: ${REGENERATE} [--check]`);
+    const root = path.resolve(path.dirname(script), '..');
+    const files = generateProvenFeatures(root);
+    if (args.includes('--check')) {
+      const stale = checkGenerated(root, files);
+      if (stale.length) throw new Error(`Regenerate with ${REGENERATE}: ${stale.join(', ')}`);
+      process.stdout.write('Proven feature pages and README are up to date.\n');
+    } else {
+      for (const [file, content] of Object.entries(files)) writeFileSync(path.join(root, file), content);
+      process.stdout.write(`Generated: ${Object.keys(files).join(', ')}\n`);
+    }
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
+}

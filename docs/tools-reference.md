@@ -1,6 +1,9 @@
 # Tools
 
-Code Buddy includes ~110 tools organized into categories. Tools are selected per query via RAG embedding to minimize prompt tokens.
+This reference describes tool categories and intended operations in the source.
+The RAG selector ranks tools per query; no fixed tool count is claimed here.
+Definitions and configuration are not execution evidence. Use the
+[feature statuses and reasons](PROVEN-FEATURES.md) for the scope proved on this branch.
 
 ## Tool Categories
 
@@ -24,7 +27,11 @@ Code Buddy includes ~110 tools organized into categories. Tools are selected per
 
 ## RAG Tool Selection
 
-Not all ~110 tools are sent to the LLM every turn. The RAG-based tool selector (`src/codebuddy/tools.ts`) filters tools per query using embedding similarity. Only relevant tools are included in each API call, reducing prompt tokens significantly. Tools are cached after the first selection round.
+The RAG-based tool selector (`src/codebuddy/tools.ts`) filters tools per query
+using embedding similarity and caches the selection after the first round.
+The selected set depends on the query and configuration. The recorded selection
+scenario is **not proven here**: its summary lacks captured output and a model
+turn. No general relevance guarantee or measured token reduction is claimed.
 
 ## Computer Use (desktop automation over MCP)
 
@@ -55,7 +62,7 @@ The `str_replace` operation tries 4+ matching strategies in cascade:
 
 ## LSP Navigation Tools
 
-Five read-only semantic navigation tools connect directly to the configured language server:
+The read-only semantic navigation interfaces below connect to the configured language server:
 
 - `lsp_definition` — Resolve semantic definitions for a symbol or 1-based line:column.
 - `lsp_references` — Find all semantic usages and callers of a symbol across the project.
@@ -89,7 +96,8 @@ Operations: `Add File`, `Delete File`, `Update File` (with `Move to`). The `seek
 
 ## Streaming Adapter
 
-9 tools support extended streaming for real-time output: `view_file`, `search`, `grep`, `web_fetch`, `list_files`, `tree`, and more. Line-based chunking sends results as they arrive.
+The streaming adapter forwards line-based output from tools such as `view_file`,
+`search`, `grep`, `web_fetch`, `list_files` and `tree` as results arrive.
 
 ## RTK Shell Output Compression
 
@@ -135,7 +143,7 @@ Add tools via three mechanisms:
 - **Plugins** -- create a plugin in `~/.codebuddy/plugins/` with a `manifest.json`; register tools via `context.registerTool()`
 - **Source code** -- create a class in `src/tools/`, add a definition in `src/codebuddy/tools.ts`, add execution in `CodeBuddyAgent.executeTool()`, register in `src/tools/registry/`
 
-## Web Search (5-Provider Fallback)
+## Web Search (configured provider fallback)
 
 | Priority | Provider | Key Required | Notes |
 | :------- | :--------- | :------------------------------------------- | :----------------------------------- |

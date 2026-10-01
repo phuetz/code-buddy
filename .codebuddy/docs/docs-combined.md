@@ -1,6 +1,6 @@
 # @phuetz/code-buddy — Documentation
 
-> Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and OpenClaw-inspired architecture.
+> Source-available multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with repository tools, multi-channel messaging, skills system, and OpenClaw-inspired architecture.
 
 *Generated: 2026-03-28*
 
@@ -72,7 +72,7 @@
 
 </details>
 
-> Open-source multi-provider AI coding [agent](./12-agent.md) for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ [tools](./5-tools.md), multi-channel messaging, skills system, and OpenClaw-inspired [architecture](./2-architecture.md).
+> Source-available multi-provider AI coding [agent](./12-agent.md) for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with [repository tools](./5-tools.md), multi-channel messaging, skills system, and OpenClaw-inspired [architecture](./2-architecture.md).
 
 | Metric | Value |
 |--------|-------|
@@ -112,7 +112,7 @@
 - **Guardian Sub-Agent** (Codex) (`src/security/guardian-agent.ts`) — AI-powered automatic approval reviewer in `src/security/guardian-agent.ts`. Risk scoring 0-100: auto-approves < 80, prompts 80-90, denies >= 90. Always-safe set (no LLM needed): `read_file`, `grep`, `
 - **Ghost Snapshots** (Codex) (`src/checkpoints/ghost-snapshot.ts`)
 - **apply_patch Format** (Codex) (`src/tools/apply-patch.ts`) — *** Begin Patch
-- **Multi-Agent 5-Tool Surface** (Codex) (`src/agent/multi-agent/agent-tools.ts`) — Max 10 concurrent agents. Completion watchers auto-notify parents. Nickname pool (24 names) with generation suffixes.
+- **Multi-Agent Tool Surface** (Codex) (`src/agent/multi-agent/agent-tools.ts`) — Max 10 concurrent agents. Completion watchers auto-notify parents. Nickname pool (24 names) with generation suffixes.
 - **Code Exec** (Codex) (`src/tools/code-exec-tool.ts`)
 - **Memory Consolidation** (Codex) (`src/memory/memory-consolidation.ts`) — - **Phase 1**: Extract memories from user messages (preference/pattern/context/decision signals)
 - **OpenManus Architecture** (OpenManus) (`src/agent/state-machine.ts`) — OpenManus-compatible agent framework with 5 subsystems:
@@ -292,7 +292,7 @@ Architecture type: **plugin-based**
 | Layer | Modules |
 |-------|---------|
 | `src/agent` | 149 |
-| `src/tools` | 145 |
+| `src/tools` | See the tool registry; no inventory total claimed |
 | `src/commands` | 90 |
 | `src/utils` | 73 |
 | `src/context` | 53 |
@@ -320,7 +320,7 @@ Architecture type: **plugin-based**
 ```mermaid
 graph TD
   "agent"["agent (149)"]
-  "tools"["tools (145)"]
+  "tools"["tool registry"]
   "commands"["commands (90)"]
   "utils"["utils (73)"]
   "context"["context (53)"]
@@ -1655,7 +1655,7 @@ Core component: src/services/vfs/unified-vfs-router
 | Layer | Modules |
 |-------|---------|
 | `src/agent` | 149 |
-| `src/tools` | 145 |
+| `src/tools` | See the tool registry; no inventory total claimed |
 | `src/commands` | 90 |
 | `src/utils` | 73 |
 | `src/context` | 53 |
@@ -1683,7 +1683,7 @@ Core component: src/services/vfs/unified-vfs-router
 ```mermaid
 graph TD
   "agent"["agent (149)"]
-  "tools"["tools (145)"]
+  "tools"["tool registry"]
   "commands"["commands (90)"]
   "utils"["utils (73)"]
   "context"["context (53)"]

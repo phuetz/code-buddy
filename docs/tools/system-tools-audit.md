@@ -1,5 +1,8 @@
 # System Tools Audit & `fleetSafe` Wiring
 
+<!-- showcase:historical -->
+**Historical record — outside the current evidence catalogue, not revalidated here.** Counts and validation labels below describe the dated snapshot, not this candidate. For current statuses and reasons, see the root feature catalogue.
+
 **Date:** 2026-05-07
 **Scope:** Code Buddy tool architecture review + first-pass fleet-safety
 flag (binding multi-AI gaps closed by [`913d1f6`](#commit-913d1f6) toward

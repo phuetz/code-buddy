@@ -1,5 +1,8 @@
 # Agentic loop + goal feature: Hermes Agent ↔ Code Buddy (2026-06-16)
 
+<!-- showcase:historical -->
+**Historical record — outside the current evidence catalogue, not revalidated here.** Counts and validation labels below describe the dated snapshot, not this candidate. For current statuses and reasons, see the root feature catalogue.
+
 Comparative audit of **(a)** the core agentic loop and **(b)** the autonomous "goal" feature in
 [Hermes Agent](https://github.com/) (`~/hermes-agent`, Python) vs Code Buddy (this repo, TS), plus the
 improvements shipped from it. Companion to [`hermes-openclaw-parity.md`](./hermes-openclaw-parity.md).

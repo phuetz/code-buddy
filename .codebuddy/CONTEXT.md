@@ -4,7 +4,7 @@ This file is automatically loaded by Code Buddy to provide project context.
 
 ## Project Overview
 
-Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and OpenClaw-inspired architecture.
+Source-available multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with repository tools, multi-channel messaging, skills system, and OpenClaw-inspired architecture.
 
 - **Languages:** TypeScript, JavaScript
 - **Framework:** Ink (terminal UI)

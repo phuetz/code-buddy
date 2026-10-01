@@ -1,5 +1,8 @@
 # Portage des audits de juillet — matrice de reprise
 
+<!-- showcase:historical -->
+**Historical record — outside the current evidence catalogue, not revalidated here.** Counts and validation labels below describe the dated snapshot, not this candidate. For current statuses and reasons, see the root feature catalogue.
+
 **État au 2 août 2026.** Le lot sécurité, deux sous-lots Tools/RAG, le
 sous-lot Fleet lifecycle, le premier sous-lot Providers/context et l'activation
 LM-Resizer + Code Explorer sont portés et commités sur cinq branches isolées ;

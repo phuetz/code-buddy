@@ -25,7 +25,7 @@ Sans `CODEBUDDY_VAULT_KEY` ni `CODEBUDDY_MCP_KEY`, la phrase est `mcp-oauth-<USE
 
 Les handlers CLI actuels appellent le même `addServer` :
 - `buddy mcp test <name>` : la configuration désactivée est exclue par le lecteur ; la commande répond **Server <name> not found**, code de sortie 1, sans ouvrir le navigateur.
-- `buddy mcp audit <name>` : charge la config y compris désactivée, puis `addServer` → même no-op (rapport 0 outil, pas d'erreur OAuth). `audit` sans nom n'inclut les désactivés qu'avec `--all`, et le no-op reste.
+- `buddy mcp audit <name>` : charge la config y compris désactivée, puis `addServer` → même no-op (rapport sans outil, pas d'erreur OAuth). `audit` sans nom n'inclut les désactivés qu'avec `--all`, et le no-op reste.
 
 Pour un vrai probe OAuth : passer `enabled: true` le temps du test, puis le remettre à `false` si le serveur ne doit pas entrer dans l'agent. Le template reste `enabled: false` pour ne pas charger ElevenLabs au démarrage.
 

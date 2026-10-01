@@ -18,7 +18,7 @@ export function SheetStudioPanel() {
   const config: DeliverableStudioConfig<ParsedSheet> = {
     sessionTitlePrefix: 'Feuille — ',
     placeholder:
-      'Sujet de la feuille — ex. « comparatif des 15 providers LLM de Code Buddy ». Ctrl/⌘+Entrée pour générer.',
+      'Sujet de la feuille — ex. « budget mensuel par catégorie ». Ctrl/⌘+Entrée pour générer.',
     generateLabel: 'Générer la feuille',
     exportLabel: 'Exporter en .xlsx',
     exportTooltip: "L'agent écrit le fichier .xlsx avec le skill xlsx (dossier de travail)",

@@ -1,5 +1,7 @@
 # LinkedIn — Code Buddy 2.0.0 (brouillons, à publier par Patrice / page Agile Up)
 
+**Brouillon à reprendre avant toute publication.** Les faits et scénarios datés ci-dessous ne sont pas des preuves du candidat 2.3.0. Aucun compte d’outils ou de fournisseurs n’est utilisé comme argument. Les [statuts et raisons actuels](../FONCTIONNALITES-PROUVEES.md) font référence ; le critère d’installation neuve avec petit modèle reste non prouvé ici.
+
 Faits vérifiés le 09/09/2026 : `npm view @phuetz/code-buddy version` = 2.0.0, provenance signée depuis GitHub Actions ; README `main` ; installation réelle testée sur un poste vierge (116 s, `buddy --version` = 2.0.0, tour headless « OK » contre Ollama local). Ne pas ajouter de chiffre absent d'ici. Tests : 38 088 mesurés le 10/09 (`npm test`, 2 115 fichiers).
 
 Visuel conseillé : `docs/assets/showcase-appstudio.gif` (App Studio qui scaffolde, lance le serveur et montre l'aperçu) ou `docs/assets/cowork-chat-demo.gif` (modèle local qui raisonne à l'écran). Lien : https://www.npmjs.com/package/@phuetz/code-buddy · https://github.com/phuetz/code-buddy
@@ -20,7 +22,7 @@ Ce que la 2.0 ajoute, et tout est optionnel : sans la variable d'environnement, 
 • Un conseil de modèles qui apprend à qui faire confiance selon la tâche, avec un juge qui s'abstient plutôt que deviner.
 • Une couche de perception (audio, vision, écran) qui reste muette tant que vous ne l'allumez pas.
 
-64 fournisseurs derrière un routeur, 220+ outils choisis par requête, plus de 38 000 tests, publié avec provenance signée depuis GitHub Actions.
+Fournisseurs configurables et sélection d’outils par requête, plus de 38 000 tests, publié avec provenance signée depuis GitHub Actions.
 
 npm i -g @phuetz/code-buddy
 
@@ -57,7 +59,7 @@ Code Buddy 2.0 is on npm. A terminal coding agent that runs on the subscriptions
 
 New in 2.0, all opt-in: a multi-AI fleet hub with fail-closed remote read-only tools, a desktop cockpit, an empirically gated self-improvement loop (never touches its own src/), a model council with an abstaining judge, and a perception layer that stays silent until you turn it on.
 
-64 providers, 220+ tools, 38,000+ tests, published with signed provenance from GitHub Actions. The README says what is not ready yet.
+Configurable providers and query-based tool selection, 38,000+ tests, published with signed provenance from GitHub Actions. The README says what is not ready yet.
 
 npm i -g @phuetz/code-buddy
 Claude Code users: claude plugin marketplace add phuetz/code-buddy && claude plugin install code-buddy@code-buddy

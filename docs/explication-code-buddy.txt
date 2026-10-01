@@ -1,3 +1,7 @@
+Portée : descriptions et scénarios visés, pas des résultats prouvés du candidat.
+Statuts, raisons et limites : docs/FONCTIONNALITES-PROUVEES.md.
+Installation neuve avec petit modèle : non prouvée ici.
+
 Code Buddy — explication simple
 ================================
 
@@ -12,7 +16,7 @@ Ce qu'il sait faire
 -------------------
 - Lire un dépôt de code et comprendre sa structure.
 - Écrire et modifier des fichiers, puis exécuter tes commandes de test.
-- Router entre 64 fournisseurs de modèles (cloud, passerelle, ou local).
+- Router vers des fournisseurs de modèles configurés (cloud, passerelle, ou local).
 - Tourner en flotte : plusieurs instances se parlent et s'appellent entre elles.
 - Proposer ses propres améliorations (leçons, outils, compétences), mais chaque
   proposition est testée sur un instantané avant d'être gardée.
@@ -64,7 +68,7 @@ en Apache 2.0 le 31 août 2030.
 
 Dans l'écosystème
 -----------------
-Code Buddy est l'agent. Deux outils frères portent le travail de contexte :
+Code Buddy est l'agent. Les intégrations de contexte présentées ici sont :
 - lm-resizer : filtre le bruit des sorties de commandes avant qu'elles
   n'atteignent le modèle (Rust, Apache-2.0).
 - Code Explorer : indexe un dépôt en graphe de connaissances interrogeable

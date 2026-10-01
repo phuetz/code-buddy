@@ -84,12 +84,12 @@ run an offline AI demo.
 ```bash
 buddy login          # ChatGPT subscription, no API key (opens a browser)
 buddy try            # ← after login: a real coding demo; duration depends on the model.
-                     #    Writes FizzBuzz + tests, runs them, and independently verifies them.
+                     #    Requests FizzBuzz + tests; inspect the files and the independent test output.
 
 buddy onboard        # Interactive guided setup. If a free provider is detected,
                      #    it offers the quick path; on a blank machine, choose a provider.
                      #    Writes the config for you (no env var to type).
-buddy try            # prove the configured provider works
+buddy try            # run a demo; inspect its result and run the project checks
 
 buddy                # Start chatting once a provider is configured.
 buddy --prompt "analyze the codebase structure"   # one-shot / headless
@@ -146,12 +146,12 @@ buddy --yolo                       # full autonomy (see Special Modes)
 
 `buddy --help` lists many commands and the configuration has many optional
 variables. **Ignore almost all of it to start.** These are the ones a new
-user needs; the rest (companion/voice, film, robot, fleet, self-improvement, …)
+user needs; the rest (companion/voice, film, fleet, learning, …)
 are opt-in and stay out of your way until you go looking for them.
 
 | Command | What it does |
 | ---------------------- | ------------------------------------------------------------ |
-| `buddy try` | Proof the configured free provider works through a real coding demo. |
+| `buddy try` | Run a coding demo with the configured provider; inspect the generated result. |
 | `buddy onboard` | Interactive setup; uses a detected free path or asks you to choose one. |
 | `buddy login` | Sign in with a ChatGPT subscription ($0, no API key). |
 | `buddy` | Start an interactive session. |
@@ -161,6 +161,8 @@ are opt-in and stay out of your way until you go looking for them.
 | `buddy triage [--json] [--out <dir>]` | Local support bundle: offline doctor (no child process), versions, recent failed runs, a bounded masked log tail and config **key names** only, plus a prompt ≤ 8 KiB. Written 0600 in a fresh 0700 directory (default `~/.codebuddy/triage/`). Nothing is sent and no agent is started; a section the secret scanner still flags is withheld, and nothing is written if the scan fails. Review `prompt.md`, then run the printed command yourself. |
 | `buddy --continue` | Resume your last session. |
 | `buddy --init` | Drop a `.codebuddy/` + `AGENTS.md` into the current repo. |
+
+Inspect the demo's generated files and run the project's checks. A successful process exit alone does not establish a correct coding result; the [fresh-installation criterion](../README.md) remains unproven here.
 
 Nothing above needs an environment variable. `buddy try` still needs a ChatGPT
 login or a reachable local model; everything advanced is gated behind
@@ -195,7 +197,7 @@ In interactive chat, mention files using `@path/to/file` (with fuzzy autocomplet
 
 ### Read-Only LSP Navigation Tools
 
-Code Buddy connects to configured language servers to expose 5 read-only semantic navigation tools:
+Code Buddy connects to configured language servers to expose the read-only semantic navigation interfaces listed below:
 
 - `lsp_definition` — Resolve semantic definitions for a symbol or 1-based line:column.
 - `lsp_references` — Find usages and callers across the codebase.

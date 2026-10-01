@@ -210,7 +210,7 @@ Lorsque l'interlocuteur est identifié et que le coupe-circuit `CODEBUDDY_COMPAN
 
 ### Résolution d'identité
 
-- **PWA (WebSocket)** : L'authentification par JWT serveur validé identifie le `userId`. Si `CODEBUDDY_OWNER_USER_ID` est configuré, seul l'utilisateur correspondant obtient le niveau `owner` ; par défaut, tout token JWT serveur valide confère le niveau `owner`. Une session anonyme ou non authentifiée retombe en `guest` (0 outil, comportement historique).
+- **PWA (WebSocket)** : L'authentification par JWT serveur validé identifie le `userId`. Si `CODEBUDDY_OWNER_USER_ID` est configuré, seul l'utilisateur correspondant obtient le niveau `owner` ; par défaut, tout token JWT serveur valide confère le niveau `owner`. Une session anonyme ou non authentifiée retombe en `guest` (sans accès aux outils).
 - **Telegram** : L'expéditeur ou le canal présent dans l'allowlist (`allowedUsers` ou `CODEBUDDY_SENSORY_ALERT_CHAT`) obtient le niveau `owner`.
 - **Voix** : La présence détectée face au robot avec interpellation nominale (« Lisa ») confère le niveau `present`.
 
@@ -220,7 +220,7 @@ Lorsque l'interlocuteur est identifié et que le coupe-circuit `CODEBUDDY_COMPAN
 | ---- | ------------------ |
 | `owner` | `image_generate`, `image_edit`, `remind`, `web_search`, `weather`, `stock_quote`, `understand_video`, `camera_analyze`, `recall` |
 | `present` | Idem sans `remind` (pas de création aveugle) ni `camera_analyze` (œil déjà actif) |
-| `guest` | Aucun outil (0 outil, fail-closed strict) |
+| `guest` | Aucun outil (fail-closed strict) |
 
 ### Sécurité et garde-fous
 

@@ -45,7 +45,7 @@ disque et répond instantanément aux questions de structure :
 | Mon diff actuel est-il risqué ? | `detect_changes` |
 | Tout le reste | `cypher` (requête graphe en lecture seule) |
 
-**30 outils via MCP · 14 langages · 100 % local, aucune connexion requise.** (Le build public expose 30 outils ; l'outil `business` vit dans une édition privée.)
+**Outils via MCP · 14 langages · 100 % local, aucune connexion requise.** (Le build public expose une interface d’outils ; l'outil `business` vit dans une édition privée.)
 Compatible avec n'importe quel agent MCP (Claude Code, Cursor, VS Code…).
 
 ## Le gain, mesuré
@@ -88,7 +88,7 @@ gitnexus mcp-install         # écrit .mcp.json pour Claude Code
 # …ou à la main :  { "command": "gitnexus", "args": ["mcp"] }
 ```
 
-Vérif : ton agent doit afficher **« gitnexus · 30 tools »**.
+Vérifie la connexion et inspecte les noms d’outils affichés avec `buddy mcp test code-explorer`.
 
 ## Limites assumées
 
@@ -108,6 +108,6 @@ test et de dérivation pour tout usage **non commercial** — projets perso,
 recherche, éducation, évaluation. **L'usage commercial nécessite une licence
 séparée** — ouvre une issue ou contacte-moi.
 
-<sub>La référence détaillée (les 30 outils, tous les langages, le support .NET
+<sub>La référence détaillée (les interfaces d’outils, tous les langages, le support .NET
 legacy, le générateur de doc HTML et l'app desktop) se trouve dans
 [docs/REFERENCE.md](docs/REFERENCE.md).</sub>

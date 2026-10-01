@@ -1,5 +1,8 @@
 # Livecheck des fournisseurs gratuits OmniRoute — 2026-08-22
 
+<!-- showcase:historical -->
+**Historical record — outside the current evidence catalogue, not revalidated here.** Counts and validation labels below describe the dated snapshot, not this candidate. For current statuses and reasons, see the root feature catalogue.
+
 Test réalisé le `2026-08-22T11:55:47.110Z` (UTC), depuis `~/code-buddy-vitrine`, sur les 24 fournisseurs importés et le gateway local `omniroute`. Chaque cible a reçu `GET <defaultBaseURL>/models` sans en-tête d’autorisation, puis avec `Authorization: Bearer test`. Timeout par appel : 10 s ; quatre fournisseurs au maximum en parallèle ; aucune clé réelle utilisée.
 
 Le tableau ci-dessous reprend la dernière exécution ciblée. La colonne HTTP est dans l’ordre `sans clé / Bearer test`.

@@ -81,5 +81,5 @@ ssh -o ServerAliveInterval=30 patri@192.0.2.42 \
 ## Notes
 
 - Anti-dépendance / persona inchangés côté Code Buddy.
-- Selfie prouvé via GPU node Comfy (2026-07-17) sans LoRA ; re-tester avec `CODEBUDDY_COMFYUI_LORA=lisa` après train.
+- Récit historique de selfie via GPU node Comfy (2026-07-17) sans LoRA, hors catalogue actuel et non revalidé ici ; il ne prouve pas le résultat de ce candidat.
 - Ne pas tuer la session SSH qui héberge Comfy tant qu’on en a besoin (pas de service Windows auto encore).

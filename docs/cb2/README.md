@@ -35,7 +35,7 @@ Specs d'origine : [`docs/specs/cb2/`](../specs/cb2/).
 
 ## Garanties transverses
 
-- **Opt-in strict** : chaque feature est gardée par env var, prouvé par des tests de non-régression
+- **Opt-in strict** : chaque feature est gardée par env var, décrit dans les tests de non-régression ; cela ne constitue pas une preuve utilisateur du candidat
   (« sans l'env var, byte-identique / aucun listener / tool absent »).
 - **Fail-closed** sur les surfaces de confiance (installation de skills, sync fleet, lecture
   cross-repo) ; **never-throws/fail-open** sur les chemins de confort (timeline, archive de

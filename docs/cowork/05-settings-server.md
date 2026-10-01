@@ -1,5 +1,7 @@
 # Réglages & serveur embarqué
 
+**Statut dans la vitrine : non prouvée ici.** Les [entrées Cowork du catalogue](../FONCTIONNALITES-PROUVEES.md#domain-cowork) ne disposent pas de trace exécutée. Cette page décrit les réglages et leur câblage ; elle ne prouve ni l'authentification réelle, ni le changement de modèle, ni le démarrage du serveur pour ce candidat.
+
 Cette page décrit deux sous-systèmes des réglages de Cowork :
 
 1. **Providers / modèles** — le choix du LLM, des clés et des endpoints (panneau `LLMConfigPanel.tsx`, persistance dans `config-store.ts`).
@@ -13,7 +15,7 @@ Les deux partagent la même couche de persistance : un `electron-store` chiffré
 
 ### Vue d'ensemble
 
-Le panneau de configuration LLM (`src/renderer/components/LLMConfigPanel.tsx`) expose **15 providers** répartis en trois groupes :
+Le panneau de configuration LLM (`src/renderer/components/LLMConfigPanel.tsx`) propose des fournisseurs répartis en trois groupes, sans revendiquer de compte fixe :
 
 | Groupe | Providers |
 |--------|-----------|
@@ -42,7 +44,7 @@ Deux modes coexistent selon le provider :
 
 Le changement de provider/modèle est appliqué **en cours de session**, sans redémarrage de l'app : `controller.changeProvider()` et la sauvegarde (`handleSave`) mettent à jour le profil actif, propagé à l'adaptateur moteur. Le niveau de raisonnement (`thinkingLevel`, `off..xhigh`) est lui aussi hot-swappable mid-session via le sélecteur dédié.
 
-> **Solide.** Le panneau providers/modèles, l'OAuth ChatGPT, la découverte locale Ollama/LM Studio et le hot-swap sont des chemins éprouvés et testés.
+> **Limite de validation.** Le câblage décrit ci-dessus ne constitue pas une trace exécutée de l'OAuth, de la découverte locale ou du changement de modèle dans ce catalogue.
 
 ---
 
@@ -98,7 +100,7 @@ Autrement dit : le chat SSE est sous `/api/chat`, la complétion OpenAI-compat s
 
 `ServerBridge.dashboard()` expose en lecture seule le journal des 50 dernières requêtes et des stats agrégées (total, erreurs, latence moyenne, uptime, répartition par status), alimentant la modale « Server activity » de la barre de titre.
 
-> **Solide** : start/stop/restart, persistance du port/host/WS, gestion du secret JWT (fichier `0600` + fallback). **À garder en tête** : le serveur tourne en-process — le couper coupe aussi les registres partagés ; et exposer en `0.0.0.0` ouvre l'API sur le réseau local (prévoir un secret JWT persistant et fixe).
+> **Câblage décrit** : start/stop/restart, persistance du port/host/WS, gestion du secret JWT (fichier `0600` + fallback). **À garder en tête** : le serveur tourne en-process — le couper coupe aussi les registres partagés ; et exposer en `0.0.0.0` ouvre l'API sur le réseau local (prévoir un secret JWT persistant et fixe).
 
 ---
 

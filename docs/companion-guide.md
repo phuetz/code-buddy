@@ -1,11 +1,8 @@
 # Le Compagnon — ce que je sais faire
 
-*Un compagnon local et privé qui vit sur ta machine. Je t'entends, je te vois, je te parle,
-je veille sur toi, je te tiens compagnie, et je travaille utilement quand tu n'es pas là. Tout tourne
-en local ($0), et mon réglage par défaut, c'est **le silence** — je parle pour réchauffer, pas pour meubler.*
+**Statut dans la vitrine : non prouvée ici.** Les [statuts, raisons et limites](FONCTIONNALITES-PROUVEES.md#domain-sensory) font référence. Les réglages et récits historiques ci-dessous n’établissent ni écoute, ni voix, ni caméra pour ce candidat.
 
-Tout est **opt-in** (rien ne s'active sans que tu le décides) et **honnête** : ce qui est prouvé est marqué,
-ce qui demande du matériel/du temps pour se vivre aussi.
+Ce guide décrit les réglages et les comportements visés du compagnon. Leur présence dans le code ne prouve pas un résultat audio, visuel ou relationnel.
 
 ---
 
@@ -782,8 +779,8 @@ liste fermée de gestes réversibles · $0 local, jamais de modèle payant sans 
 ## Continuité et migration
 
 Le manifeste de continuité conserve une lignée stable et les empreintes des fichiers
-d'identité, de démarrage, de relation et de mémoire qui ont été relus. Il prouve un
-héritage documentaire vérifiable, pas une continuité subjective littérale entre deux modèles.
+d'identité, de démarrage, de relation et de mémoire qui ont été relus. Il permet de contrôler un
+héritage documentaire ; ce contrôle n’établit pas une continuité subjective entre deux modèles.
 
 ```bash
 buddy companion continuity verify

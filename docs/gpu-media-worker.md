@@ -1,5 +1,9 @@
 # GPU media worker (GPU node)
 
+**Current showcase status: not proven here.** The deployment measurements below
+are a historical account outside the [current evidence catalogue](PROVEN-FEATURES.md),
+not revalidated on this branch. Configuration describes the intended interfaces.
+
 Code Buddy keeps heavyweight CUDA runtimes outside the CLI and Cowork processes. The
 `gpu_media_job` tool talks to one authenticated worker over HTTPS or a private/Tailscale
 HTTP address.
@@ -208,7 +212,7 @@ scripts/gpu-runners/setup-longcat-env.sh
 scripts/gpu-runners/download-longcat-avatar.sh
 ```
 
-The validated GPU node profile renders 93 frames at 25 FPS (3.72 seconds). A real Lisa
+The historical GPU node account reports a profile rendering 93 frames at 25 FPS (3.72 seconds). A real Lisa
 portrait-and-French-voice smoke render completed all eight denoising steps in about
 4 minutes 14 seconds before VAE decoding. The measured portrait used latent grid
 `(24, 44, 34)`, peaked near 24.3 GiB on one RTX 3090, and produced a 544×704 H.264/AAC
@@ -226,7 +230,7 @@ An unreadable sensor also stops the job. The limit may be configured only betwee
 92 °C, so a deployment cannot accidentally turn the guard into an unbounded value. This
 gate was added after a private pilot reached 95 °C on GPU 0; that attempt was cancelled
 before an MP4 was produced and must not be treated as a valid quality sample. Two later
-content-identical retries proved that the guard works: it stopped the process group after
+content-identical retries were reported to stop the process group after
 two 88 °C samples, including with a temporary 150 W then 120 W cap. Opening and dusting
 the case and adding a large external fan resolved the observed airflow fault: the same
 three-clip pilot completed at a 150 W cap, with GPU 0 measuring roughly 58–67 °C under

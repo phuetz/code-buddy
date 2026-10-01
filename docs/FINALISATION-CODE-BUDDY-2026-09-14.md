@@ -1,5 +1,8 @@
 # Finalisation Code Buddy — 14 septembre 2026
 
+<!-- showcase:historical -->
+Rapport daté du 2026-09-14, hors catalogue actuel et non rejoué ici. Les comptes et validations consignés ne sont pas des annonces pour ce candidat.
+
 Branche locale `finalization/code-buddy-2026-09-14`, base `ce80171e7`. Travail réalisé par l’agent Codex existant, sans nouvelle délégation AGY/Opus. Les audits antérieurs restent conservés dans Partage. Aucune publication npm, push ou fusion vers main réalisée.
 
 ## Code intégré

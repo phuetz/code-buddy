@@ -127,7 +127,7 @@ export function SettingsControlCenter({
         {
           id: 'codebuddy',
           title: 'Code Buddy',
-          description: t('settings.codebuddyDesc', 'Local agentic backend with 110+ tools'),
+          description: t('settings.codebuddyDesc', 'Local agentic backend with a repository tool registry'),
           icon: TerminalSquare,
           actionLabel: configureLabel,
           onClick: () => onNavigate('codebuddy'),

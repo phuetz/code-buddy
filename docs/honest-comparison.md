@@ -1,9 +1,10 @@
 # Comparaison honnête / Honest comparison
 
-Code Buddy, Claude Code, Codex CLI, Aider et Gemini CLI sont tous capables de
-modifier un dépôt et d'exécuter des commandes. Le bon choix dépend surtout du
-modèle économique, du besoin de rester local et du niveau d'orchestration
-souhaité.
+**Lecture datée, hors validation du candidat.** Les descriptions Code Buddy ci-dessous portent sur les interfaces visées ; seuls les [statuts et traces du catalogue](FONCTIONNALITES-PROUVEES.md) font référence pour les résultats exécutés. Les offres externes n’ont pas été revérifiées ici.
+
+Cette lecture compare les interfaces annoncées par Code Buddy, Claude Code,
+Codex CLI, Aider et Gemini CLI. Pour Code Buddy, une interface déclarée n'établit
+pas le résultat d'une tâche exécutée : lire le catalogue avant tout essai.
 
 Cette matrice a été vérifiée le **23 août 2026** à partir des documentations
 officielles liées plus bas. Les offres et quotas changent : vérifiez les pages
@@ -17,12 +18,12 @@ la qualité générale du produit.
 
 | Critère                                          | Code Buddy                                                                | Claude Code                                                              | Codex CLI                                                             | Aider                                                                                       | Gemini CLI                                                            |
 | :----------------------------------------------- | :------------------------------------------------------------------------ | :----------------------------------------------------------------------- | :-------------------------------------------------------------------- | :------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------- |
-| Plusieurs fournisseurs de modèles                | ✅ 64 intégrations, routage et repli                                      | ❌ modèles Claude uniquement, avec plusieurs backends d'hébergement      | ◐ OpenAI, providers compatibles configurables et modèles locaux OSS   | ✅ nombreux fournisseurs via LiteLLM et APIs compatibles                                    | ❌ modèles Gemini via Google AI ou Vertex AI                          |
-| Forfait existant, sans facture API marginale     | ✅ ChatGPT Plus/Pro et SuperGrok ; limites du forfait                     | ✅ Claude Pro, Max, Team ou Enterprise ; limites du forfait              | ✅ connexion ChatGPT ; limites du forfait                             | ◐ forfait GitHub Copilot possible ; les forfaits ChatGPT/Claude ne remplacent pas leurs API | ✅ compte Google gratuit ; quotas supérieurs avec Google AI Pro/Ultra |
-| Inférence locale / hors ligne                    | ✅ Ollama et LM Studio                                                    | ❌ connexion réseau requise pour le modèle                               | ✅ `--oss` avec Ollama ou LM Studio                                   | ✅ Ollama, LM Studio et endpoints locaux compatibles                                        | ❌ le CLI appelle les services Gemini                                 |
-| MCP                                              | ✅ client **et** serveur                                                  | ✅ client **et** serveur                                                 | ✅ client **et** serveur                                              | ❌ pas de prise en charge MCP native documentée                                             | ✅ client MCP                                                         |
-| Fleet de pairs sur plusieurs machines et modèles | ✅ événements live, appels de modèles et outils distants en lecture seule | ❌ Agent Teams existe, mais ce n'est pas un mesh de pairs multi-provider | ❌ les sous-agents existent, mais pas un mesh de pairs multi-provider | ❌                                                                                          | ❌ un sous-agent d'exploration existe, pas une fleet réseau           |
-| Interface graphique                              | ✅ Cowork, application Electron                                           | ✅ Claude Code Desktop sur macOS et Windows                              | ✅ application desktop séparée du CLI                                 | ◐ interface navigateur expérimentale                                                        | ❌ terminal-first                                                     |
+| Plusieurs fournisseurs de modèles                | Visé : routage et repli ; non prouvé ici                                      | ❌ modèles Claude uniquement, avec plusieurs backends d'hébergement      | ◐ OpenAI, providers compatibles configurables et modèles locaux OSS   | ✅ nombreux fournisseurs via LiteLLM et APIs compatibles                                    | ❌ modèles Gemini via Google AI ou Vertex AI                          |
+| Forfait existant, sans facture API marginale     | Visé : connexions par forfait ; non prouvé ici                     | ✅ Claude Pro, Max, Team ou Enterprise ; limites du forfait              | ✅ connexion ChatGPT ; limites du forfait                             | ◐ forfait GitHub Copilot possible ; les forfaits ChatGPT/Claude ne remplacent pas leurs API | ✅ compte Google gratuit ; quotas supérieurs avec Google AI Pro/Ultra |
+| Inférence locale / hors ligne                    | Visé : Ollama et LM Studio ; non prouvé ici                                                    | ❌ connexion réseau requise pour le modèle                               | ✅ `--oss` avec Ollama ou LM Studio                                   | ✅ Ollama, LM Studio et endpoints locaux compatibles                                        | ❌ le CLI appelle les services Gemini                                 |
+| MCP                                              | Visé : client et serveur ; non prouvé ici                                                  | ✅ client **et** serveur                                                 | ✅ client **et** serveur                                              | ❌ pas de prise en charge MCP native documentée                                             | ✅ client MCP                                                         |
+| Fleet de pairs sur plusieurs machines et modèles | Visé : appels entre pairs ; non prouvé ici | ❌ Agent Teams existe, mais ce n'est pas un mesh de pairs multi-provider | ❌ les sous-agents existent, mais pas un mesh de pairs multi-provider | ❌                                                                                          | ❌ un sous-agent d'exploration existe, pas une fleet réseau           |
+| Interface graphique                              | Visé : Cowork Electron ; non prouvé ici                                           | ✅ Claude Code Desktop sur macOS et Windows                              | ✅ application desktop séparée du CLI                                 | ◐ interface navigateur expérimentale                                                        | ❌ terminal-first                                                     |
 
 ### Ce que les critères veulent dire
 
@@ -50,19 +51,17 @@ la qualité générale du produit.
 - **Codex CLI** si vous utilisez surtout les modèles OpenAI et ChatGPT, tout en
   gardant la possibilité de lancer un modèle OSS local et de passer à
   l'application desktop ou au cloud Codex.
-- **Aider** si vous préférez un outil Git ciblé et léger, avec une très large
-  compatibilité de modèles et une boucle d'édition éprouvée.
+- **Aider** si vous préférez un outil Git ciblé et léger, avec une
+  compatibilité de modèles documentée.
 - **Gemini CLI** si vous cherchez le chemin terminal officiel vers Gemini, un
-  quota Google généreux et un client MCP sans couche multi-provider.
+  quota Google décrit dans sa documentation et un client MCP sans couche multi-provider.
 
 ## Ce que Code Buddy n'est pas
 
 Code Buddy ne développe pas son propre modèle de fondation et ne fournit pas un
 cloud managé mondial équivalent aux offres hébergées d'Anthropic, OpenAI ou
-Google. Son périmètre plus large implique aussi davantage de configuration et
-une communauté bien plus petite que celles des outils établis. Enfin, pouvoir
-exécuter un modèle local à `$0` ne garantit ni la vitesse ni la qualité d'un
-modèle frontier hébergé : cela dépend du matériel et du modèle choisis.
+Google. Chaque interface a ses propres prérequis et nécessite de la configuration. Les performances d'un modèle local
+dépendent du matériel et du modèle choisis ; elles ne sont pas mesurées ici.
 
 ## Sources
 

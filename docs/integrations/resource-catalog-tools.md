@@ -33,6 +33,11 @@ Après configuration privée de l’origine, du JWT et du profil RagChat, demand
 
 ## Recette native
 
+<!-- showcase:historical:start -->
+Récit daté du 2026-09-15, hors catalogue de preuves actuel, non rejoué ici.
+
 Le 15 septembre 2026, serveur RagChat natif .NET et corpus synthétique réutilisé : le pilote enregistre la ressource puis lance une sonde CLI explicite. Buddy ChatGPT `gpt-5.6-sol` appelle réellement liste, sélection, profils RagChat, recherche. Il rend 42 750 euros avec page 2 et précise l’absence de reconfiguration automatique. Le catalogue reste identique octet par octet après le tour Buddy. RAG activé et désactivé : définitions complètes des deux outils observées, paramètres et champs requis conservés.
 
 La recette est bornée à cinq outils autorisés : resource_catalog, ragchat_search, view_file, search, list_directory. Elle ne démontre pas une bascule automatique entre deux corpus. Les limites OCR à 90°, pack français absent et test UI RagChat préexistant restent celles de la recette [RagChat](ragchat.md). Aucun moteur OCR modifié ici.
+
+<!-- showcase:historical:end -->
