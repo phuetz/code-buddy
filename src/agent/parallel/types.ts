@@ -177,8 +177,8 @@ export interface ParallelConfig {
 /**
  * Default configuration
  */
-export const DEFAULT_PARALLEL_CONFIG: ParallelConfig = {
-  models: [],
+export const DEFAULT_PARALLEL_CONFIG: ParallelConfig = Object.freeze({
+  models: Object.freeze([]) as unknown as ModelConfig[],
   strategy: "best",
   aggregation: "best_confidence",
   timeout: 60000,
@@ -188,7 +188,7 @@ export const DEFAULT_PARALLEL_CONFIG: ParallelConfig = {
   debateRounds: 2,
   cacheResponses: true,
   preferLowLatency: false,
-};
+});
 
 /**
  * Task for routing

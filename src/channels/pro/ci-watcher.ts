@@ -16,13 +16,13 @@ import type {
 } from './types.js';
 
 /** Default config */
-const DEFAULT_CONFIG: CIWatchConfig = {
+const DEFAULT_CONFIG: CIWatchConfig = Object.freeze({
   enabled: false,
   chatId: '',
-  providers: [],
-  alertOn: ['build-failure', 'deploy-failure', 'vulnerable-deps'],
-  mutedPatterns: [],
-};
+  providers: Object.freeze([]) as unknown as CIWatchConfig['providers'],
+  alertOn: Object.freeze(['build-failure', 'deploy-failure', 'vulnerable-deps']) as unknown as CIWatchConfig['alertOn'],
+  mutedPatterns: Object.freeze([]) as unknown as CIWatchConfig['mutedPatterns'],
+});
 
 /** Max events to retain */
 const MAX_EVENTS = 200;
@@ -45,7 +45,13 @@ export class CIWatcher extends EventEmitter {
 
   constructor(config?: Partial<CIWatchConfig>, authManager?: ScopedAuthManager) {
     super();
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+      providers: [...(config?.providers ?? DEFAULT_CONFIG.providers)],
+      alertOn: [...(config?.alertOn ?? DEFAULT_CONFIG.alertOn)] as CIWatchConfig['alertOn'],
+      mutedPatterns: [...(config?.mutedPatterns ?? DEFAULT_CONFIG.mutedPatterns)],
+    };
     this.authManager = authManager;
   }
 
