@@ -1,6 +1,7 @@
 /** `buddy explain` — turn an unfamiliar repository into one orientation artifact. */
 
 import fs from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { Command, InvalidArgumentError } from 'commander';
@@ -137,7 +138,14 @@ export function createExplainCommand(dependencies: ExplainCommandDependencies = 
         command.error(error instanceof Error ? error.message : String(error));
         return;
       }
-      const { outputPath, format } = resolveOutput(cwd, rootPath, options);
+      let outputPath: string;
+      let format: 'markdown' | 'html';
+      try {
+        ({ outputPath, format } = resolveOutput(cwd, rootPath, options));
+      } catch (error) {
+        command.error(error instanceof Error ? error.message : String(error));
+        return;
+      }
       const generatedAt = dependencies.now?.() ?? new Date();
 
       let input: RepoExplanationInput;
@@ -168,8 +176,19 @@ export function createExplainCommand(dependencies: ExplainCommandDependencies = 
         artifact = renderRepoExplanationMarkdown(explanation);
       }
 
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
-      await fs.writeFile(outputPath, artifact, 'utf8');
+      let temporaryPath: string | undefined;
+      try {
+        await fs.mkdir(path.dirname(outputPath), { recursive: true });
+        temporaryPath = `${outputPath}.${randomUUID()}.tmp`;
+        await fs.writeFile(temporaryPath, artifact, 'utf8');
+        await fs.rename(temporaryPath, outputPath);
+      } catch (error) {
+        if (temporaryPath) await fs.rm(temporaryPath, { force: true }).catch(() => undefined);
+        command.error(
+          `Impossible d'écrire l'artefact dans ${outputPath} : ${error instanceof Error ? error.message : String(error)}`
+        );
+        return;
+      }
       logger.info(`Explication du repo générée : ${outputPath}`);
     });
 }

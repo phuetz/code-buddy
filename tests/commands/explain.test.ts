@@ -121,4 +121,46 @@ describe('buddy explain command', () => {
       command.parseAsync(['node', 'explain', 'un-fichier.txt']),
     ).rejects.toMatchObject({ exitCode: 1 });
   });
+
+  it('rejette une extension invalide en erreur CLI propre', async () => {
+    const command = createExplainCommand({ cwd: tempDirectory });
+    command.exitOverride();
+    await expect(
+      command.parseAsync(['node', 'explain', '.', '--out', 'sortie.txt'])
+    ).rejects.toMatchObject({ exitCode: 1 });
+  });
+
+  it('rejette l’incompatibilité --html et .md en erreur CLI propre', async () => {
+    const command = createExplainCommand({ cwd: tempDirectory });
+    command.exitOverride();
+    await expect(
+      command.parseAsync(['node', 'explain', '.', '--html', '--out', 'sortie.md'])
+    ).rejects.toMatchObject({ exitCode: 1 });
+  });
+
+  it('rejette l’impossibilité d’écrire l’artefact en erreur CLI propre', async () => {
+    const filePath = path.join(tempDirectory, 'fichier-parent');
+    await fs.writeFile(filePath, 'x');
+    const command = createExplainCommand({ cwd: tempDirectory });
+    command.exitOverride();
+    await expect(
+      command.parseAsync(['node', 'explain', '.', '--out', path.join(filePath, 'sortie.md')])
+    ).rejects.toMatchObject({ exitCode: 1 });
+  });
+
+  it('conserve un artefact existant si la publication échoue', async () => {
+    const outputPath = path.join(tempDirectory, 'existant.md');
+    await fs.writeFile(outputPath, 'contenu précédent');
+    const rename = vi.spyOn(fs, 'rename').mockRejectedValueOnce(new Error('échec simulé'));
+    try {
+      const command = createExplainCommand({ cwd: tempDirectory });
+      command.exitOverride();
+      await expect(command.parseAsync(['node', 'explain', '.', '--out', outputPath]))
+        .rejects.toMatchObject({ exitCode: 1 });
+      expect(await fs.readFile(outputPath, 'utf8')).toBe('contenu précédent');
+      expect((await fs.readdir(tempDirectory)).filter((name) => name.startsWith('existant.md.'))).toEqual([]);
+    } finally {
+      rename.mockRestore();
+    }
+  });
 });
