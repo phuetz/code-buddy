@@ -73,7 +73,7 @@ describe("OperatingModeManager", () => {
       const config = manager.getModeConfig();
 
       expect(config.name).toBe("Quality");
-      expect(config.preferredModel).toBe("grok-3");
+      expect(config.preferredModel).toBe("grok-4-latest");
       expect(config.enableExtendedThinking).toBe(true);
       expect(config.thinkingBudget).toBe(32000);
       expect(config.maxToolRounds).toBe(30);
@@ -86,7 +86,7 @@ describe("OperatingModeManager", () => {
       const config = manager.getModeConfig();
 
       expect(config.name).toBe("Balanced");
-      expect(config.preferredModel).toBe("grok-2-latest");
+      expect(config.preferredModel).toBe("grok-code-fast-1");
       expect(config.enableExtendedThinking).toBe(true);
       expect(config.thinkingBudget).toBe(8000);
       expect(config.maxToolRounds).toBe(20);
@@ -98,7 +98,7 @@ describe("OperatingModeManager", () => {
       const config = manager.getModeConfig();
 
       expect(config.name).toBe("Fast");
-      expect(config.preferredModel).toBe("grok-2-mini");
+      expect(config.preferredModel).toBe("grok-code-fast-1");
       expect(config.enableExtendedThinking).toBe(false);
       expect(config.thinkingBudget).toBe(0);
       expect(config.maxToolRounds).toBe(10);
@@ -129,7 +129,7 @@ describe("OperatingModeManager", () => {
       // Custom override
       expect(config.maxToolRounds).toBe(100);
       // Defaults from balanced
-      expect(config.preferredModel).toBe("grok-2-latest");
+      expect(config.preferredModel).toBe("grok-code-fast-1");
     });
   });
 
@@ -282,17 +282,17 @@ describe("OperatingModeManager", () => {
   describe("getRecommendedModel", () => {
     it("should return quality mode model", () => {
       manager.setMode("quality");
-      expect(manager.getRecommendedModel()).toBe("grok-3");
+      expect(manager.getRecommendedModel()).toBe("grok-4-latest");
     });
 
     it("should return balanced mode model", () => {
       manager.setMode("balanced");
-      expect(manager.getRecommendedModel()).toBe("grok-2-latest");
+      expect(manager.getRecommendedModel()).toBe("grok-code-fast-1");
     });
 
     it("should return fast mode model", () => {
       manager.setMode("fast");
-      expect(manager.getRecommendedModel()).toBe("grok-2-mini");
+      expect(manager.getRecommendedModel()).toBe("grok-code-fast-1");
     });
 
     it("should return custom preferred model when set", () => {

@@ -1,5 +1,6 @@
+import { getModelPricing, hasModelPricing } from '../config/model-pricing.js';
+import { getModelForRole, getProviderDefaultModel, getProviderModels } from '../config/model-defaults.js';
 import { OPTIMIZATION_MODEL_DATA } from '../config/model-price-data.js';
-import { getModelPricing } from '../config/model-pricing.js';
 
 /**
  * Model Tier Routing
@@ -161,7 +162,7 @@ export function classifyTaskComplexity(
 export function selectModel(
   classification: TaskClassification,
   preferredModel?: string,
-  availableModels: string[] = Object.keys(GROK_MODELS)
+  availableModels: string[] = [...new Set([...getProviderModels('xai'), ...Object.keys(GROK_MODELS), getModelForRole('xai', 'fast'), getModelForRole('xai', 'reasoning'), getModelForRole('xai', 'vision')])]
 ): RoutingDecision {
   // If user explicitly requested a model, use it
   if (preferredModel && availableModels.includes(preferredModel)) {
@@ -174,9 +175,15 @@ export function selectModel(
     };
   }
 
+  const choose = (role: string, tier: ModelTier): string => {
+    const configured = role === 'primary' ? getProviderDefaultModel('xai') : getModelForRole('xai', role);
+    return availableModels.includes(configured) ? configured
+      : availableModels.find(model => GROK_MODELS[model]?.tier === tier) ?? configured;
+  };
+
   // Vision requirement takes priority
   if (classification.requiresVision) {
-    const visionModel = "grok-2-vision";
+    const visionModel = choose('vision', 'vision');
     if (availableModels.includes(visionModel)) {
       return {
         recommendedModel: visionModel,
@@ -195,42 +202,42 @@ export function selectModel(
 
   switch (classification.complexity) {
     case "simple":
-      recommendedModel = "grok-3-mini";
+      recommendedModel = choose('fast', 'mini');
       reason = "Simple task - using cost-effective mini model";
-      alternativeModel = "grok-3";
+      alternativeModel = choose('primary', 'standard');
       alternativeReason = "Use standard model for better quality";
       break;
 
     case "moderate":
-      recommendedModel = "grok-3";
+      recommendedModel = choose('primary', 'standard');
       reason = "Moderate complexity - using balanced standard model";
-      alternativeModel = "grok-3-mini";
+      alternativeModel = choose('fast', 'mini');
       alternativeReason = "Use mini model to reduce costs";
       break;
 
     case "complex":
-      recommendedModel = "grok-3";
+      recommendedModel = choose('primary', 'standard');
       reason = "Complex task - using standard model with good reasoning";
-      alternativeModel = "grok-3-reasoning";
+      alternativeModel = choose('reasoning', 'reasoning');
       alternativeReason = "Use reasoning model for deeper analysis";
       break;
 
     case "reasoning_heavy":
-      recommendedModel = "grok-3-reasoning";
+      recommendedModel = choose('reasoning', 'reasoning');
       reason = "Reasoning-heavy task - using extended reasoning model";
-      alternativeModel = "grok-3";
+      alternativeModel = choose('primary', 'standard');
       alternativeReason = "Use standard model to reduce costs";
       break;
 
     default:
-      recommendedModel = "grok-3";
+      recommendedModel = choose('primary', 'standard');
       reason = "Default selection";
   }
 
   // Verify model is available
   if (!availableModels.includes(recommendedModel)) {
     // Fall back to first available model
-    recommendedModel = availableModels[0] || "grok-3";
+    recommendedModel = availableModels[0] || getProviderDefaultModel('xai');
     reason = "Fallback - preferred model not available";
   }
 
@@ -238,7 +245,7 @@ export function selectModel(
 
   return {
     recommendedModel,
-    tier: config?.tier || "standard",
+    tier: config?.tier || (recommendedModel === getModelForRole('xai', 'reasoning') ? 'reasoning' : recommendedModel === getModelForRole('xai', 'fast') ? 'mini' : 'standard'),
     reason,
     estimatedCost: calculateCost(classification.estimatedTokens, recommendedModel),
     alternativeModel,
@@ -251,7 +258,11 @@ export function selectModel(
  */
 export function calculateCost(tokens: number, modelId: string): number {
   const config = GROK_MODELS[modelId];
-  if (!config) return 0;
+  if (!config) {
+    if (!hasModelPricing(modelId)) return 0;
+    const price = getModelPricing(modelId);
+    return (tokens / 1_000_000) * (price.inputPerMillion + price.outputPerMillion * 0.5);
+  }
 
   // Rough estimate: input + output tokens
   const totalTokens = tokens * 1.5; // Assume 50% output ratio
@@ -315,7 +326,7 @@ export interface RoutingConfig {
  */
 export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   enabled: true,
-  defaultModel: "grok-3",
+  defaultModel: getProviderDefaultModel('xai'),
   minConfidence: 0.7,
   costSensitivity: "medium",
   allowFallback: true,
@@ -364,7 +375,7 @@ export class ModelRouter {
     }
 
     // Apply cost sensitivity
-    const availableModels = Object.keys(GROK_MODELS).filter(
+    const availableModels = [...new Set([...getProviderModels('xai'), ...Object.keys(GROK_MODELS), getModelForRole('xai', 'fast'), getModelForRole('xai', 'reasoning'), getModelForRole('xai', 'vision')])].filter(
       (m) => !this.config.excludeModels.includes(m)
     );
 

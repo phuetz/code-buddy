@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../config/model-defaults.js';
 /**
  * Enterprise-grade CLI commands
  *
@@ -1240,7 +1241,7 @@ export function registerFleetAutonomyCommands(program: Command): void {
     .description('Install the autonomous daemon as an always-on systemd service (survives reboot)')
     .option('--dir <path>', 'colab queue dir (default ~/.codebuddy/fleet)')
     .option('--output-dir <path>', 'artifact dir (default <dir>/out)')
-    .option('--model <model>', 'local model', 'qwen2.5:7b-instruct')
+    .option('--model <model>', 'local model', getModelForRole('ollama', 'autonomy'))
     .option('--ollama-url <url>', 'Ollama OpenAI-compatible base URL', getOllamaV1BaseUrl())
     .option('--interval <ms>', 'fallback heartbeat interval (events drive the rest)', '60000')
     .option('--executor <mode>', 'executor: "artifact" (v0, no repo edits) or "agent" (real edits; needs --workspace)', 'artifact')
@@ -1278,7 +1279,7 @@ export function registerFleetAutonomyCommands(program: Command): void {
         fs.mkdirSync(ws, { recursive: true });
         agentEnv['CODEBUDDY_AUTONOMY_EXECUTOR'] = 'agent';
         agentEnv['CODEBUDDY_AUTONOMY_WORKSPACE_ROOT'] = ws;
-        if (opts.model === 'qwen2.5:7b-instruct') {
+        if (opts.model === getModelForRole('ollama', 'autonomy')) {
           console.warn('⚠️  --executor agent needs a tool-capable model; qwen2.5:7b is chat-only and cannot edit. Pass --model qwen3.6:35b-a3b-q4_K_M (or another qwen3/devstral/mistral).');
         }
       }

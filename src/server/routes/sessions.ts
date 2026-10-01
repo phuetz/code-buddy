@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Sessions Routes
  *
@@ -270,7 +271,7 @@ router.post(
 
     const session = await store.createSession(
       name || `Session ${Date.now()}`,
-      model || process.env.GROK_MODEL || 'grok-3-latest',
+      model || process.env.GROK_MODEL || getProviderDefaultModel('xai'),
     );
     session.description = description;
     session.metadata = metadata;

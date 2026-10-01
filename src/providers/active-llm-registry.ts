@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 import { getModelPricing } from '../config/model-pricing.js';
 import { UNKNOWN_MODEL_PRICE } from '../config/model-price-data.js';
 
@@ -121,7 +122,7 @@ async function resolveXaiOAuthProvider(
       authMode: entry.authMode,
       apiKey: token,
       baseURL: 'https://api.x.ai/v1',
-      defaultModel: env.GROK_MODEL || 'grok-4-latest',
+      defaultModel: getProviderDefaultModel('xai', env),
       source: 'override',
     };
   } catch (err) {

@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Unified Script Built-in Functions
  *
@@ -44,7 +45,7 @@ async function getOrCreateAgent(config: CodeBuddyScriptConfig): Promise<ScriptAg
     cachedAgent = new CodeBuddyAgent(
       apiKey,
       process.env.GROK_BASE_URL,
-      process.env.GROK_MODEL || 'grok-3-latest'
+      process.env.GROK_MODEL || getProviderDefaultModel('xai')
     ) as unknown as ScriptAgentInterface;
     return cachedAgent;
   } catch (error) {

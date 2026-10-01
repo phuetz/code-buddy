@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * GitHub Action entry point for Code Buddy AI
  *
@@ -314,7 +315,7 @@ export async function run(): Promise<void> {
   try {
     const mode = core.getInput('mode') || 'review';
     const apiKey = core.getInput('anthropic_api_key') || core.getInput('api_key');
-    const model = core.getInput('model') || 'gemini-2.5-flash';
+    const model = core.getInput('model') || getProviderDefaultModel('google');
     const maxTurns = Math.max(1, parseInt(core.getInput('max_turns') || '10', 10));
     const githubToken = core.getInput('github_token') || process.env['GITHUB_TOKEN'] || '';
 

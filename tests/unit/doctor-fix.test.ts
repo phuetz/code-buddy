@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { runDoctorChecks, runFixes } from '../../src/doctor/index.js';
 import type { DoctorCheck, FixResult } from '../../src/doctor/index.js';
 import type { EnvironmentSnapshot } from '../../src/wizard/environment-detection.js';
@@ -9,6 +9,7 @@ import type { EnvironmentSnapshot } from '../../src/wizard/environment-detection
 // Mock external commands so doctor checks don't depend on system state
 vi.mock('child_process', () => ({
   execSync: vi.fn(() => ''),
+  execFileSync: vi.fn(() => ''),
   spawnSync: vi.fn(() => ({ status: 0, stdout: '', stderr: '' })),
 }));
 
@@ -80,12 +81,14 @@ describe('doctor --fix', () => {
   beforeEach(() => {
     tmpDir = makeTmpDir();
     vi.mocked(execSync).mockReset().mockReturnValue('');
+    vi.mocked(execFileSync).mockReset().mockReturnValue('');
     mockSaveUserSettings.mockReset();
     mockReadUserSettingsIfPresent.mockReset().mockReturnValue(undefined);
     mockDetectEnvironment.mockReset().mockResolvedValue(EMPTY_ENVIRONMENT);
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     cleanupDir(tmpDir);
   });
 
@@ -109,7 +112,7 @@ describe('doctor --fix', () => {
       const results = await runFixes(checks);
 
       // VERIF3 T16 : remplacer `ollama pull` par `ollama run` restait vert.
-      expect(execSync).toHaveBeenCalledWith('ollama pull qwen3:8b', {
+      expect(execFileSync).toHaveBeenCalledWith('ollama', ['pull', 'qwen3:8b'], {
         stdio: 'inherit',
       });
       expect(mockSaveUserSettings).toHaveBeenCalledWith({
@@ -125,13 +128,16 @@ describe('doctor --fix', () => {
       expect(selection!.message).toContain('qwen3:8b');
     });
 
+    it('transmet le modèle configuré comme un argument unique sans interpolation shell', async () => {
+      vi.stubEnv('CODEBUDDY_OLLAMA_MODEL_ONBOARDING', 'modele-test; echo marqueur');
+      const checks = await runDoctorChecks(tmpDir);
+      await runFixes(checks);
+      expect(execFileSync).toHaveBeenCalledWith('ollama', ['pull', 'modele-test; echo marqueur'], { stdio: 'inherit' });
+      expect(mockSaveUserSettings).toHaveBeenCalledWith(expect.objectContaining({ model: 'modele-test; echo marqueur' }));
+    });
+
     it('should report a failure and select nothing when the pull fails', async () => {
-      vi.mocked(execSync).mockImplementation((command: string) => {
-        if (String(command).startsWith('ollama pull')) {
-          throw new Error('ollama introuvable');
-        }
-        return '';
-      });
+      vi.mocked(execFileSync).mockImplementation(() => { throw new Error('ollama introuvable'); });
 
       const checks = await runDoctorChecks(tmpDir);
       const results = await runFixes(checks);

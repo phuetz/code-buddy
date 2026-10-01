@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderModels } from '../config/model-defaults.js';
 import { getPricingPer1M } from '../config/model-pricing.js';
 
 /**
@@ -28,7 +29,7 @@ import type {
 export class OpenAIProvider extends BaseProvider {
   readonly type: ProviderType = 'openai';
   readonly name = 'GPT (OpenAI)';
-  readonly defaultModel = 'gpt-4o';
+  get defaultModel(): string { return getProviderDefaultModel('openai'); }
 
   private client: unknown = null;
 
@@ -183,7 +184,7 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   async getModels(): Promise<string[]> {
-    return ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini'];
+    return getProviderModels('openai');
   }
 
   getPricing(): { input: number; output: number } {

@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../config/model-defaults.js';
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../codebuddy/client.js";
 import { EventEmitter } from "events";
 import { randomUUID } from "crypto";
@@ -115,7 +116,7 @@ End with a summary and overall assessment.`,
       "delete_file",
       "bash",
     ],
-    model: "grok-3-latest",
+    get model() { return getModelForRole('xai', 'review'); },
     maxRounds: 10,
   },
 
@@ -133,7 +134,7 @@ Approach:
 
 Be methodical and thorough. Use the available tools to investigate the codebase.`,
     tools: ["view_file", "search", "bash"],
-    model: "grok-code-fast-1",
+    get model() { return getModelForRole('xai', 'debug'); },
     maxRounds: 20,
   },
 
@@ -151,7 +152,7 @@ Responsibilities:
 
 Be clear about which tests pass and fail.`,
     tools: ["bash", "view_file"],
-    model: "grok-code-fast-1",
+    get model() { return getModelForRole('xai', 'testing'); },
     maxRounds: 15,
   },
 
@@ -171,7 +172,7 @@ Be clear about which tests pass and fail.`,
       "delete_file",
       "bash",
     ],
-    model: "grok-code-fast-1",
+    get model() { return getModelForRole('xai', 'exploration'); },
     maxRounds: 10,
   },
 
@@ -192,7 +193,7 @@ Be clear about which tests pass and fail.`,
       "delete_file",
       "bash",
     ],
-    model: "grok-code-fast-1",
+    get model() { return getModelForRole('xai', 'exploration'); },
     maxRounds: 10,
   },
 
@@ -210,7 +211,7 @@ Focus on:
 
 Always verify that refactoring maintains existing behavior.`,
     tools: ["view_file", "search", "str_replace_editor", "create_file"],
-    model: "grok-3-latest",
+    get model() { return getModelForRole('xai', 'refactoring'); },
     maxRounds: 25,
   },
 
@@ -229,7 +230,7 @@ Create documentation that includes:
 
 Write in clear, concise language accessible to developers of all levels.`,
     tools: ["view_file", "search", "create_file", "str_replace_editor"],
-    model: "grok-3-latest",
+    get model() { return getModelForRole('xai', 'docs'); },
     maxRounds: 15,
   },
 };
@@ -253,7 +254,7 @@ export class Subagent extends EventEmitter {
     };
     this.client = new CodeBuddyClient(
       apiKey,
-      config.model || "grok-code-fast-1",
+      config.model || getProviderDefaultModel('xai'),
       baseURL
     );
   }
@@ -391,7 +392,7 @@ export class Subagent extends EventEmitter {
                 query: task,
                 workspaceRoot: options?.workspaceRoot ?? process.cwd(),
                 sessionId: recoverySessionId,
-                model: this.config.model ?? "grok-code-fast-1",
+                model: this.config.model ?? getProviderDefaultModel('xai'),
                 messages,
                 allowOptimization: Boolean(
                   filteredTools?.some((tool) => tool.function?.name === "restore_context"),

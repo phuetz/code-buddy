@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import {
   CodeBuddyClient,
   type ChatOptions,
@@ -69,7 +70,6 @@ const DEFAULT_AUXILIARY_TIMEOUT_MS: Record<RuntimeAuxiliaryTask, number> = {
   semantic_review: 30_000,
 };
 
-const OPENROUTER_VISION_MODEL = 'google/gemini-2.5-flash';
 
 export function resolveRuntimeAuxiliaryProvider(
   options: RuntimeAuxiliaryResolveOptions,
@@ -142,7 +142,7 @@ function resolveAutoAuxiliaryProvider(
       options.env ?? process.env,
       {
         ...config,
-        model: config.model || OPENROUTER_VISION_MODEL,
+        model: config.model || getModelForRole('openrouter', 'vision', options.env ?? process.env),
       },
       timeoutMs,
       hasOAuth,

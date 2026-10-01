@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * IDE Extensions Server
  *
@@ -466,7 +467,7 @@ Return a focused replacement for the problematic range only.`,
     }
 
     const { CodeBuddyClient } = await import('../../codebuddy/client.js');
-    this.codebuddyClient = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || 'grok-code-fast-1') as IDEChatClient;
+    this.codebuddyClient = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || getProviderDefaultModel('xai')) as IDEChatClient;
     return this.codebuddyClient;
   }
 

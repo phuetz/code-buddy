@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Interpreter Profiles
  *
@@ -21,7 +22,7 @@ export const DEFAULT_PROFILE: InterpreterProfile = {
   name: 'Default',
   description: 'General purpose assistant',
   provider: 'grok',
-  model: 'grok-3-mini',
+  model: getModelForRole('xai', 'fast'),
   autoRun: false,
   safeMode: 'ask',
   maxBudget: 5.00,
@@ -46,7 +47,7 @@ export const FAST_PROFILE: InterpreterProfile = {
   name: 'Fast',
   description: 'Quick responses with auto-execution',
   provider: 'gemini',
-  model: 'gemini-2.0-flash',
+  model: getProviderDefaultModel('google'),
   autoRun: true,
   safeMode: 'off',
   maxBudget: 1.00,
@@ -74,7 +75,7 @@ export const VISION_PROFILE: InterpreterProfile = {
   name: 'Vision',
   description: 'Screen control and visual understanding',
   provider: 'gemini',
-  model: 'gemini-2.0-flash',
+  model: getProviderDefaultModel('google'),
   autoRun: false,
   safeMode: 'ask',
   maxBudget: 5.00,
@@ -111,7 +112,7 @@ export const SAFE_PROFILE: InterpreterProfile = {
   name: 'Safe',
   description: 'Maximum security with approval for all actions',
   provider: 'grok',
-  model: 'grok-3-mini',
+  model: getModelForRole('xai', 'fast'),
   autoRun: false,
   safeMode: 'auto',
   maxBudget: 2.00,
@@ -179,7 +180,7 @@ export const CODING_PROFILE: InterpreterProfile = {
   name: 'Coding',
   description: 'Optimized for code generation and development',
   provider: 'anthropic',
-  model: 'claude-3-5-sonnet',
+  model: getProviderDefaultModel('anthropic'),
   autoRun: true,
   safeMode: 'off',
   maxBudget: 10.00,
@@ -218,7 +219,7 @@ export const RESEARCH_PROFILE: InterpreterProfile = {
   name: 'Research',
   description: 'Web research and information gathering',
   provider: 'grok',
-  model: 'grok-3',
+  model: getProviderDefaultModel('xai'),
   autoRun: true,
   safeMode: 'auto',
   maxBudget: 5.00,

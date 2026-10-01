@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../config/model-defaults.js';
 import { randomUUID } from 'crypto';
 import { constants as fsConstants } from 'fs';
 import fs from 'fs/promises';
@@ -1777,7 +1778,7 @@ async function generateComfyUIImage(
       prompt,
       config.model,
       (env(envSource, 'CODEBUDDY_COMFYUI_KREA2_TEXT_ENCODER')
-        ?? 'qwen3vl_4b_fp8_scaled.safetensors').trim(),
+        ?? getModelForRole('ollama', 'krea_text_encoder', envSource)).trim(),
       (env(envSource, 'CODEBUDDY_COMFYUI_KREA2_VAE')
         ?? 'qwen_image_vae.safetensors').trim(),
       dims,
@@ -2077,7 +2078,7 @@ async function generateFalVideo(
   generatedAt: string,
 ): Promise<VideoGenerateResult> {
   const prompt = input.prompt.trim();
-  const familyId = FAL_VIDEO_FAMILIES[config.model] ? config.model : 'pixverse-v6';
+  const familyId = FAL_VIDEO_FAMILIES[config.model] ? config.model : getProviderDefaultModel('fal', runtime.env ?? process.env);
   const family = FAL_VIDEO_FAMILIES[familyId];
   if (!family) {
     throw new Error(`Unsupported FAL video model family: ${config.model}`);
@@ -2292,7 +2293,7 @@ export function resolveImageProvider(
       ?? envSource.CODEBUDDY_IMAGE_BASE_URL
       ?? CHATGPT_RESPONSES_URL
     ).trim().replace(/\/+$/, '');
-    const model = (envSource.CODEBUDDY_IMAGE_MODEL ?? 'gpt-image-2.5-flare').trim();
+    const model = (envSource.CODEBUDDY_IMAGE_MODEL ?? getModelForRole('openai', 'image', envSource)).trim();
     assertProviderReady('chatgpt', '', baseUrl, 'image', { hasCredentials: hasChatGptAuth });
     return { provider: 'chatgpt', model, baseUrl, apiKey: '' };
   }
@@ -2307,7 +2308,7 @@ export function resolveImageProvider(
   const model = (envSource.CODEBUDDY_IMAGE_MODEL
     ?? (provider === 'xai' ? envSource.XAI_IMAGE_MODEL : envSource.OPENAI_IMAGE_MODEL)
     ?? getImageGenerationModel()
-    ?? (provider === 'xai' ? 'grok-imagine-image' : 'gpt-image-2.5-flare')).trim();
+    ?? getModelForRole(provider === 'xai' ? 'xai' : 'openai', 'image', envSource)).trim();
   // Route through the Nous Tool Gateway when configured (transparent base-URL +
   // token substitution); otherwise use the direct provider.
   const route = resolveToolGatewayRoute('image_gen', envSource);
@@ -2394,7 +2395,7 @@ function buildMiniMaxH3VideoWorkflow(options: {
 }): Record<string, unknown> {
   const e = options.envSource;
   const unet = (env(e, 'CODEBUDDY_H3_UNET') ?? 'minimax_h3_ref2va_pruned_fp8_scaled.safetensors').trim();
-  const textEncoder = (env(e, 'CODEBUDDY_H3_TEXT_ENCODER') ?? 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors').trim();
+  const textEncoder = (env(e, 'CODEBUDDY_H3_TEXT_ENCODER') ?? getModelForRole('ollama', 'h3_text_encoder', e)).trim();
   const videoVae = (env(e, 'CODEBUDDY_H3_VIDEO_VAE') ?? 'minimax_h3_video_vae_fp16.safetensors').trim();
   const audioVae = (env(e, 'CODEBUDDY_H3_AUDIO_VAE') ?? 'minimax_h3_audio_vae_fp32.safetensors').trim();
   const graph: Record<string, unknown> = {
@@ -2577,7 +2578,7 @@ function resolveVideoProvider(modelOverride: string | undefined, envSource: Node
     const comfyBase = (envSource.CODEBUDDY_VIDEO_BASE_URL
       ?? envSource.COMFYUI_URL
       ?? 'http://127.0.0.1:8188').trim().replace(/\/+$/, '');
-    const comfyModel = (modelOverride ?? envSource.CODEBUDDY_VIDEO_MODEL ?? 'minimax-h3').trim();
+    const comfyModel = (modelOverride ?? envSource.CODEBUDDY_VIDEO_MODEL ?? getModelForRole('ollama', 'video', envSource)).trim();
     return { provider, model: comfyModel, baseUrl: comfyBase, apiKey: '' };
   }
   const baseUrl = (envSource.CODEBUDDY_VIDEO_BASE_URL
@@ -2589,7 +2590,7 @@ function resolveVideoProvider(modelOverride: string | undefined, envSource: Node
   const model = (modelOverride
     ?? envSource.CODEBUDDY_VIDEO_MODEL
     ?? (provider === 'fal' ? envSource.FAL_VIDEO_MODEL : envSource.XAI_VIDEO_MODEL)
-    ?? (provider === 'fal' ? 'pixverse-v6' : 'grok-imagine-video')).trim();
+    ?? (provider === 'fal' ? getProviderDefaultModel('fal', envSource) : getModelForRole('xai', 'video', envSource))).trim();
   const route = resolveToolGatewayRoute('video_gen', envSource);
   const effectiveBaseUrl = route ? route.baseUrl : baseUrl;
   const effectiveApiKey = route?.token ?? apiKey;

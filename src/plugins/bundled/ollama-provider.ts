@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Ollama Provider Plugin (Bundled)
  *
@@ -175,7 +176,7 @@ export function createOllamaProvider(): PluginProvider | null {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'llama3',
+          model: getProviderDefaultModel('ollama'),
           messages,
           stream: false,
         }),

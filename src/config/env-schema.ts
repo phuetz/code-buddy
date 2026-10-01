@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from './model-defaults.js';
 /**
  * Environment Variable Schema & Validation
  *
@@ -98,7 +99,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'GROK_MODEL',
     type: 'string',
-    default: 'grok-3-fast',
+    default: getProviderDefaultModel('xai'),
     description: 'Default LLM model to use',
     category: 'core',
   },

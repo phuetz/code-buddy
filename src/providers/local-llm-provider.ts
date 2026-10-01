@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Local LLM Providers
  *
@@ -154,7 +155,7 @@ export class NodeLlamaCppProvider extends EventEmitter implements LocalLLMProvid
     await fs.ensureDir(this.modelsDir);
 
     // Check if model path exists
-    const modelPath = config.modelPath || path.join(this.modelsDir, 'llama-3.1-8b-q4_k_m.gguf');
+    const modelPath = config.modelPath || path.join(this.modelsDir, getModelForRole('ollama', 'file'));
 
     if (!await fs.pathExists(modelPath)) {
       // Get available models for helpful error message
@@ -374,7 +375,7 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
         });
       }
 
-      const model = config.model || 'Llama-3.1-8B-Instruct-q4f16_1-MLC';
+      const model = config.model || getModelForRole('ollama', 'web');
 
       this.engine = new webllm.MLCEngine() as ChatCompletionEngine;
 
@@ -529,7 +530,7 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
     }
 
     // Check if model is available
-    const model = config.model || 'llama3.1';
+    const model = config.model || getModelForRole('ollama', 'runtime');
     const models = await this.getModels();
 
     if (!models.includes(model)) {
@@ -627,7 +628,7 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
     }
 
     const startTime = Date.now();
-    const model = options?.model || this.config?.model || 'llama3.1';
+    const model = options?.model || this.config?.model || getModelForRole('ollama', 'runtime');
 
     // Use retry with exponential backoff for Ollama API calls
     const response = await retry(
@@ -690,7 +691,7 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
       throw new Error('Local LLM provider not initialized. Call initialize() with a valid model path first.');
     }
 
-    const model = options?.model || this.config?.model || 'llama3.1';
+    const model = options?.model || this.config?.model || getModelForRole('ollama', 'runtime');
 
     // Use retry with exponential backoff for stream initialization
     const response = await retry(

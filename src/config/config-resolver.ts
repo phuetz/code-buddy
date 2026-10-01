@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from './model-defaults.js';
 /**
  * Configuration Resolver
  *
@@ -122,7 +123,7 @@ export class ConfigResolver extends EventEmitter {
     return {
       baseURL: cli.baseURL || process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
       apiKey: cli.apiKey || process.env.GROK_API_KEY || '',
-      model: cli.model || process.env.GROK_MODEL || 'grok-code-fast-1',
+      model: cli.model || process.env.GROK_MODEL || getProviderDefaultModel('xai'),
       provider: cli.provider || this.detectProvider(cli.baseURL) || 'grok',
       source: 'cli',
     };
@@ -142,7 +143,7 @@ export class ConfigResolver extends EventEmitter {
     return {
       baseURL: cli?.baseURL || profile.baseURL,
       apiKey: cli?.apiKey || profile.apiKey || '',
-      model: cli?.model || profile.model || 'grok-code-fast-1',
+      model: cli?.model || profile.model || getProviderDefaultModel('xai'),
       provider: cli?.provider || profile.provider,
       profileId: profile.id,
       profileName: profile.name,
@@ -173,7 +174,7 @@ export class ConfigResolver extends EventEmitter {
     return {
       baseURL,
       apiKey: '',
-      model: process.env.GROK_MODEL || 'grok-code-fast-1',
+      model: process.env.GROK_MODEL || getProviderDefaultModel('xai'),
       provider: this.detectProvider(baseURL) || 'grok',
       source: 'environment',
     };
@@ -192,7 +193,7 @@ export class ConfigResolver extends EventEmitter {
     return {
       baseURL: 'https://api.x.ai/v1',
       apiKey: '',
-      model: 'grok-code-fast-1',
+      model: getProviderDefaultModel('xai'),
       provider: 'grok',
       source: 'default',
     };

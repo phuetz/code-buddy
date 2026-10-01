@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Speculative Decoding Support
  *
@@ -82,8 +83,8 @@ export type TargetModelCallback = (
 ) => Promise<VerificationResult>;
 
 export const DEFAULT_SPECULATIVE_CONFIG: SpeculativeConfig = {
-  draftModel: 'qwen2.5-0.5b',
-  targetModel: 'qwen2.5-7b',
+  draftModel: getModelForRole('ollama', 'draft'),
+  targetModel: getModelForRole('ollama', 'target'),
   speculationLength: 4,
   minAcceptanceRate: 0.5,
   adaptiveLength: true,

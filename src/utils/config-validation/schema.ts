@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel, getProviderModels } from '../../config/model-defaults.js';
 /**
  * Configuration Schema Definitions
  *
@@ -320,9 +321,9 @@ export const SettingsSchema = z.object({
       skipLayers: z.union([z.array(z.number().int()), z.literal('auto')]).default('auto'),
     }).optional(),
     modelRouting: z.object({
-      lightweight: z.string().default('llama3.2')
+      lightweight: z.string().default(() => getProviderDefaultModel('ollama'))
         .describe('Ollama model for short/simple requests'),
-      heavy: z.string().default('qwen2.5-72b-instruct')
+      heavy: z.string().default(() => getModelForRole('ollama', 'heavy'))
         .describe('vLLM model for long/complex requests'),
       complexityThreshold: z.union([z.literal('auto'), z.number().int().positive()])
         .default('auto')
@@ -353,11 +354,11 @@ export const UserSettingsSchema = z.object({
   defaultModel: z.string()
     .min(1)
     .max(100)
-    .default('grok-code-fast-1')
+    .default(() => getProviderDefaultModel('xai'))
     .describe('Default model for all sessions'),
 
   models: z.array(z.string().min(1))
-    .default(['grok-code-fast-1', 'grok-4-latest', 'grok-3-latest', 'grok-3-fast', 'grok-3-mini-fast'])
+    .default(() => getProviderModels('xai'))
     .describe('List of available models'),
 
   provider: z.enum(AI_PROVIDERS)
@@ -628,7 +629,7 @@ export const SCHEMAS: Record<string, JSONSchema> = {
       model: {
         type: 'string',
         description: 'Default AI model to use',
-        default: 'grok-3-latest',
+        default: getProviderDefaultModel('xai'),
       },
       maxRounds: {
         type: 'number',

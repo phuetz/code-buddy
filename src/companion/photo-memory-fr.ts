@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * French memory line for a shared photo.
  *
@@ -256,7 +257,7 @@ async function defaultCompanionSummarizer(description: string): Promise<string |
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
     const client = new CodeBuddyClient(
       resolved.apiKey || 'ollama',
-      resolved.model || 'qwen3:4b-instruct',
+      resolved.model || getModelForRole('ollama', 'photo'),
       resolved.baseURL,
     );
     const chat = client.chat(

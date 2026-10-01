@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../../config/model-defaults.js';
 /**
  * Reviewer Agent
  *
@@ -98,7 +99,7 @@ Always be constructive and respectful. Explain WHY something is an issue, not ju
     "search",
     "bash", // For running linters
   ],
-  model: "grok-3-latest",
+  model: getModelForRole('xai', 'review'),
   maxRounds: 25,
   temperature: 0.5,
 };

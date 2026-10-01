@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Model Profile Manager
  *
@@ -384,7 +385,7 @@ export class ModelProfileManager extends EventEmitter {
       baseUrl: process.env.GROK_BASE_URL || 'https://api.x.ai/v1',
       priority: 100,
       models: ['grok-4-latest', 'grok-3', 'grok-code-fast-1', 'grok-*'],
-      defaultModel: 'grok-code-fast-1',
+      defaultModel: getProviderDefaultModel('xai'),
       enabled: !!process.env.GROK_API_KEY,
     });
 
@@ -398,7 +399,7 @@ export class ModelProfileManager extends EventEmitter {
       baseUrl: 'https://api.openai.com/v1',
       priority: 80,
       models: ['gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'gpt-*'],
-      defaultModel: 'gpt-4o',
+      defaultModel: getProviderDefaultModel('openai'),
       enabled: !!process.env.OPENAI_API_KEY,
     });
 
@@ -412,7 +413,7 @@ export class ModelProfileManager extends EventEmitter {
       baseUrl: 'https://api.anthropic.com',
       priority: 90,
       models: ['claude-sonnet-4', 'claude-opus-4', 'claude-3-opus', 'claude-3-sonnet', 'claude-*'],
-      defaultModel: 'claude-sonnet-4',
+      defaultModel: getProviderDefaultModel('anthropic'),
       enabled: !!process.env.ANTHROPIC_API_KEY,
     });
 
@@ -426,7 +427,7 @@ export class ModelProfileManager extends EventEmitter {
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
       priority: 70,
       models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-*'],
-      defaultModel: 'gemini-2.5-flash',
+      defaultModel: getProviderDefaultModel('google'),
       enabled: !!process.env.GOOGLE_API_KEY,
     });
 

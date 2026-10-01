@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import { execFile as nodeExecFile } from 'child_process';
 import { existsSync, readdirSync, statSync } from 'fs';
 import * as os from 'os';
@@ -41,7 +42,7 @@ import {
   type CompanionPerceptStats,
 } from './percepts.js';
 
-export const COMPANION_DEFAULT_MODEL = 'gpt-5.6-sol';
+export const COMPANION_DEFAULT_MODEL = getModelForRole('chatgpt', 'companion');
 export const COMPANION_DEFAULT_LANGUAGE = 'fr';
 export const COMPANION_DEFAULT_TTS_VOICE = 'fr-FR-HenriNeural';
 
@@ -848,7 +849,7 @@ export async function setupCompanionMode(
   const cwd = resolveCwd(options.cwd);
   const configureVoice = options.configureVoice !== false;
   const configureModel = options.configureModel !== false;
-  const model = options.model || COMPANION_DEFAULT_MODEL;
+  const model = options.model || getModelForRole('chatgpt', 'companion');
 
   const identity = getIdentityManager();
   await identity.load(cwd);

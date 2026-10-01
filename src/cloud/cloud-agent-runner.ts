@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Cloud Agent Runner — Headless background agent task execution
  *
@@ -436,7 +437,7 @@ export class CloudAgentRunner extends EventEmitter {
 
       // Create client
       const apiKey = process.env.GROK_API_KEY || process.env.OPENAI_API_KEY || '';
-      const model = config.model || process.env.GROK_MODEL || 'grok-3-latest';
+      const model = config.model || process.env.GROK_MODEL || getProviderDefaultModel('xai');
       const client = new CodeBuddyClient(apiKey, model);
       const maxRounds = config.maxToolRounds ?? MAX_TOOL_ROUNDS_DEFAULT;
 

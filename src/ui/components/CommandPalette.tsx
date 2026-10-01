@@ -1,3 +1,4 @@
+import { getProviderModels } from '../../config/model-defaults.js';
 /**
  * Command Palette Component (Ctrl+K)
  *
@@ -38,20 +39,10 @@ export interface CommandPaletteProps {
 /**
  * Common models available for selection
  */
-const COMMON_MODELS: Array<{ model: string; description: string }> = [
-  { model: 'grok-3', description: 'xAI Grok 3' },
-  { model: 'grok-3-mini', description: 'xAI Grok 3 Mini' },
-  { model: 'grok-3-fast', description: 'xAI Grok 3 Fast' },
-  { model: 'claude-sonnet-4-20250514', description: 'Anthropic Claude Sonnet 4' },
-  { model: 'claude-opus-4-20250514', description: 'Anthropic Claude Opus 4' },
-  { model: 'gpt-4o', description: 'OpenAI GPT-4o' },
-  { model: 'gpt-4o-mini', description: 'OpenAI GPT-4o Mini' },
-  { model: 'o3', description: 'OpenAI o3' },
-  { model: 'gemini-2.5-pro', description: 'Google Gemini 2.5 Pro' },
-  { model: 'gemini-2.5-flash', description: 'Google Gemini 2.5 Flash' },
-  { model: 'deepseek-r1', description: 'DeepSeek R1' },
-  { model: 'deepseek-v3', description: 'DeepSeek V3' },
-];
+function commonModels(): Array<{ model: string; description: string }> {
+  return (['xai', 'chatgpt', 'openai', 'anthropic', 'google', 'deepseek'] as const)
+    .flatMap(provider => getProviderModels(provider).map(model => ({ model, description: provider })));
+}
 
 /**
  * Simple fuzzy matching score (reuses logic from FuzzyPicker)
@@ -115,7 +106,11 @@ export function buildPaletteItems(
   }
 
   // Add models
-  for (const m of COMMON_MODELS) {
+  const models = commonModels();
+  if (currentModel && !models.some(item => item.model === currentModel)) {
+    models.unshift({ model: currentModel, description: 'Session' });
+  }
+  for (const m of models) {
     const isCurrent = currentModel === m.model;
     items.push({
       id: `model:${m.model}`,

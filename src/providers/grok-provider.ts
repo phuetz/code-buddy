@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderModels } from '../config/model-defaults.js';
 import { getPricingPer1M } from '../config/model-pricing.js';
 
 /**
@@ -26,7 +27,7 @@ import type {
 export class GrokProvider extends BaseProvider {
   readonly type: ProviderType = 'grok';
   readonly name = 'Grok (xAI)';
-  readonly defaultModel = 'grok-3-latest';
+  get defaultModel(): string { return getProviderDefaultModel('xai'); }
 
   private client: unknown = null;
 
@@ -159,7 +160,17 @@ export class GrokProvider extends BaseProvider {
   }
 
   async getModels(): Promise<string[]> {
-    return ['grok-4.6', 'grok-4-1-fast', 'grok-4-latest', 'grok-4-fast', 'grok-code-fast-1', 'grok-3-latest', 'grok-3-fast', 'grok-3-mini'];
+    try {
+      const client = this.client as { models?: { list(): Promise<{ data: Array<{ id: string }> }> } } | null;
+      if (client?.models) {
+        const result = await client.models.list();
+        const ids = result.data.map(model => model.id).filter(Boolean);
+        if (ids.length) return ids;
+      }
+    } catch {
+      // Offline catalogue remains usable when discovery is unavailable.
+    }
+    return getProviderModels('xai');
   }
 
   getPricing(): { input: number; output: number } {

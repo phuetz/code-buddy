@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { Readable } from 'stream';
@@ -238,7 +239,7 @@ export class AudioTool {
     const form = new FormData();
     const buffer = await this.vfs.readFileBuffer(filePath);
     form.append('file', Readable.from(buffer), { filename: path.basename(filePath) });
-    form.append('model', 'whisper-1');
+    form.append('model', getModelForRole('openai', 'transcription'));
 
     if (options.language) {
       form.append('language', options.language);

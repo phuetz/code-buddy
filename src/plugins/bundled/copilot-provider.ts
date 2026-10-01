@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * GitHub Copilot Provider Plugin (Bundled)
  *
@@ -42,7 +43,7 @@ export function createCopilotProvider(): PluginProvider | null {
           'Editor-Version': 'codebuddy/1.0',
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: getProviderDefaultModel('openai'),
           messages,
           max_tokens: 4096,
           stream: false,

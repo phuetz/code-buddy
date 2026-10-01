@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../config/model-defaults.js';
 /**
  * Parallel Summarizer
  *
@@ -110,7 +111,7 @@ function formatMessagesForSummary(messages: ChatMessage[]): string {
 async function summarizeChunk(
   chunk: MessageChunk,
   summarizer: Summarizer,
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): Promise<ChunkSummary> {
   const text = formatMessagesForSummary(chunk.messages);
 
@@ -151,7 +152,7 @@ async function summarizeChunk(
 export async function summarizeChunksParallel(
   chunks: MessageChunk[],
   summarizer: Summarizer = defaultSummarizer,
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): Promise<ChunkSummary[]> {
   if (chunks.length === 0) {
     return [];
@@ -175,7 +176,7 @@ export async function summarizeChunksParallel(
  */
 export function mergeSummaries(
   summaries: ChunkSummary[],
-  model: string = 'gpt-4'
+  model: string = getModelForRole('openai', 'tokenizer')
 ): { merged: string; tokenCount: number } {
   if (summaries.length === 0) {
     return { merged: '', tokenCount: 0 };

@@ -687,6 +687,18 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   // The catalogue does not publish an output ceiling: 128 000 follows the
   // GPT-5.6 family and is an assumption, not a measurement.
   {
+    model: 'gpt-6.1-*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 272_000,
+    maxOutputTokens: 128_000,
+    patchFormat: 'unified',
+    promptProfile: 'rich',
+  },
+  {
     model: 'gpt-6-*',
     strengths: ['code', 'thinking'],
     supportsReasoning: true,
@@ -800,9 +812,44 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     maxOutputTokens: 128000,
     patchFormat: 'unified',
   },
+  // Build uses the CLI's 256K budget; the API flagship has 500K.
+  {
+    model: 'grok-4.7-build*',
+    strengths: ['thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 256000,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
+  {
+    model: 'grok-4.7*',
+    strengths: ['thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 500000,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
   // Grok 4.1 Fast (2M context)
   {
-    model: 'grok-4*fast*',
+    model: 'grok-4-1-fast*',
+    strengths: ['thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 2000000,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
+  // Grok 4 Fast (2M context)
+  {
+    model: 'grok-4-fast*',
     strengths: ['thinking'],
     supportsReasoning: true,
     supportsToolCalls: true,

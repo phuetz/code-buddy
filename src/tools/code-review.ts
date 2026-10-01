@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * AI Code Review Tool
  *
@@ -90,7 +91,7 @@ const DEFAULT_CONFIG: ReviewConfig = {
   maxFunctionLength: 50,
   excludePatterns: ['node_modules', 'dist', 'build', '.git', '*.min.js'],
   includeOnlyPatterns: [],
-  model: 'grok-3-latest',
+  model: getProviderDefaultModel('xai'),
   contextLines: 5,
 };
 

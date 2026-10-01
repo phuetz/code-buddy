@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * A2A inbound TaskExecutor — Code Buddy implementation
  *
@@ -67,7 +68,7 @@ export function resolveA2AProviderCredentials():
     ...(process.env.GROK_BASE_URL || detected?.baseURL
       ? { baseURL: process.env.GROK_BASE_URL || detected?.baseURL }
       : {}),
-    model: process.env.GROK_MODEL || detected?.defaultModel || 'grok-3-latest',
+    model: process.env.GROK_MODEL || detected?.defaultModel || getProviderDefaultModel('xai'),
   };
 }
 

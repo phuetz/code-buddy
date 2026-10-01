@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * TurboQuant Provider
  *
@@ -559,8 +560,8 @@ export function createTurboQuantProvider(
       ...overrides?.turboquant,
     },
     modelRouting: {
-      lightweight: process.env['TURBOQUANT_LIGHTWEIGHT_MODEL'] ?? 'llama3.2',
-      heavy: process.env['TURBOQUANT_HEAVY_MODEL'] ?? 'qwen2.5-72b-instruct',
+      lightweight: process.env['TURBOQUANT_LIGHTWEIGHT_MODEL'] ?? getProviderDefaultModel('ollama'),
+      heavy: process.env['TURBOQUANT_HEAVY_MODEL'] ?? getModelForRole('ollama', 'heavy'),
       complexityThreshold: 'auto',
       ...overrides?.modelRouting,
     },

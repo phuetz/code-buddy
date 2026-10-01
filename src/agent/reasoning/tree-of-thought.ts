@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Tree-of-Thought Reasoner
  *
@@ -99,7 +100,7 @@ export class TreeOfThoughtReasoner extends EventEmitter {
     };
     this.client = new CodeBuddyClient(
       apiKey,
-      config.model || process.env.GROK_MODEL || "grok-3-latest",
+      config.model || process.env.GROK_MODEL || getProviderDefaultModel('xai'),
       baseURL
     );
     this.executeCommand = executeCommand;

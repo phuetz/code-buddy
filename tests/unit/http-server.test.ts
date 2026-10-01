@@ -314,8 +314,8 @@ describe('HttpServer', () => {
 
       const htmlContent = res.end.mock.calls[0][0];
       expect(htmlContent).toContain('model-select');
-      expect(htmlContent).toContain('grok-4-latest');
-      expect(htmlContent).toContain('grok-3-latest');
+      expect(htmlContent).toContain('data.models.map');
+      expect(htmlContent).toContain('model-select');
     });
   });
 
@@ -574,7 +574,10 @@ describe('HttpServer', () => {
 
       expect(mockAgent.getCurrentModel).toHaveBeenCalled();
       expect(res.writeHead).toHaveBeenCalledWith(200, { 'Content-Type': 'application/json' });
-      expect(res.end).toHaveBeenCalledWith('{"model":"grok-3-fast"}');
+      const body = JSON.parse(res.end.mock.calls[0][0]);
+      expect(body.model).toBe('grok-3-fast');
+      expect(body.models).toContain('grok-4.7');
+      expect(body.models).toContain(body.model);
     });
 
     it('should set model on POST', async () => {

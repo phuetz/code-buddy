@@ -658,9 +658,6 @@
       <div class="sidebar-section">
         <div class="sidebar-section-title">Model</div>
         <select id="model-select">
-          <option value="grok-3-latest">grok-3-latest</option>
-          <option value="grok-3-fast">grok-3-fast</option>
-          <option value="grok-2-latest">grok-2-latest</option>
         </select>
       </div>
 
@@ -1250,6 +1247,16 @@
     // Model selector updates status bar
     // =========================================================================
 
+    fetch(API + '/api/chat/models').then(r => r.json()).then(data => {
+      const models = data.data || [];
+      $('#model-select').replaceChildren(...models.map(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = model.id;
+        return option;
+      }));
+      $('#status-model').textContent = 'Model: ' + ($('#model-select').value || '--');
+    }).catch(() => {});
     $('#model-select').addEventListener('change', () => {
       $('#status-model').textContent = 'Model: ' + $('#model-select').value;
     });

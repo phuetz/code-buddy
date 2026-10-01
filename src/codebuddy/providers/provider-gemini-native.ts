@@ -1,3 +1,4 @@
+import { getProviderFallbackModels } from '../../config/model-defaults.js';
 /**
  * Gemini native provider — Vague 2 Phase B.
  *
@@ -534,15 +535,16 @@ export class GeminiNativeProvider implements Provider {
           message.includes('is not found');
         const alreadyTriedFallback = opts?.geminiModelFallbackTried === true;
 
-        if (looksLikeModel404 && !alreadyTriedFallback && model !== 'gemini-2.5-flash') {
+        const fallbackModel = getProviderFallbackModels('google').find(candidate => candidate !== model);
+        if (looksLikeModel404 && !alreadyTriedFallback && fallbackModel) {
           logger.warn('Gemini model not found, retrying with fallback model', {
             source: 'GeminiNativeProvider',
             originalModel: model,
-            fallbackModel: 'gemini-2.5-flash',
+            fallbackModel,
           });
           return await this.chat(messagesPayload, tools, {
             ...opts,
-            model: 'gemini-2.5-flash',
+            model: fallbackModel,
             geminiModelFallbackTried: true,
           });
         }

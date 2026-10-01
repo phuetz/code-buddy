@@ -1,3 +1,4 @@
+import { getModelForRole } from '../../config/model-defaults.js';
 /**
  * Multi-stage Compaction Module
  *
@@ -93,7 +94,7 @@ export async function compactMessages(
   const startTime = Date.now();
   const config = { ...DEFAULT_COMPACTION_CONFIG, ...options.config };
   const summarizer = options.summarizer ?? defaultSummarizer;
-  const model = options.model ?? 'gpt-4';
+  const model = options.model ?? getModelForRole('openai', 'tokenizer');
 
   // Calculate original tokens
   let originalTokens = 0;

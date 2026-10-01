@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Code Buddy Language Server Protocol (LSP) Server
  *
@@ -63,7 +64,7 @@ interface CodeBuddyLSPSettings {
 
 const defaultSettings: CodeBuddyLSPSettings = {
   apiKey: '',
-  model: process.env.GROK_MODEL?.trim() || 'grok-3-latest',
+  model: process.env.GROK_MODEL?.trim() || getProviderDefaultModel('xai'),
   enableDiagnostics: true,
   enableCompletions: true,
   maxTokens: 2048,

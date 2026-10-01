@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * /docs slash command — Generate DeepWiki-style documentation
  *
@@ -134,9 +135,9 @@ async function handleGenerateWithLLM(thinkingLevelOverride?: 'minimal' | 'low' |
     const isGemini = !!(process.env.GOOGLE_API_KEY && !process.env.GROK_API_KEY);
     const isOpenAI = !!(process.env.OPENAI_API_KEY && !process.env.GROK_API_KEY && !process.env.GOOGLE_API_KEY);
 
-    let model = process.env.GROK_MODEL || 'grok-3-latest';
-    if (isGemini) model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
-    if (isOpenAI) model = 'gpt-4o-mini';
+    let model = process.env.GROK_MODEL || getProviderDefaultModel('xai');
+    if (isGemini) model = process.env.GEMINI_MODEL || getModelForRole('google', 'fast');
+    if (isOpenAI) model = getModelForRole('openai', 'fast');
 
     let llmCall: (sys: string, user: string, thinking?: string) => Promise<string>;
 
@@ -270,9 +271,9 @@ async function handleGenerateV2(withLLM: boolean, thinkingLevel?: 'minimal' | 'l
       if (apiKey) {
         const isGemini = !!(process.env.GOOGLE_API_KEY && !process.env.GROK_API_KEY);
         const isOpenAI = !!(process.env.OPENAI_API_KEY && !process.env.GROK_API_KEY && !process.env.GOOGLE_API_KEY);
-        let model = process.env.GROK_MODEL || 'grok-3-latest';
-        if (isGemini) model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
-        if (isOpenAI) model = 'gpt-4o-mini';
+        let model = process.env.GROK_MODEL || getProviderDefaultModel('xai');
+        if (isGemini) model = process.env.GEMINI_MODEL || getModelForRole('google', 'fast');
+        if (isOpenAI) model = getModelForRole('openai', 'fast');
 
         if (isGemini) {
           const baseURL = 'https://generativelanguage.googleapis.com/v1beta';

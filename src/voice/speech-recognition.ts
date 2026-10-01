@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Speech Recognition
  *
@@ -141,7 +142,7 @@ export class SpeechRecognizer extends EventEmitter implements ISpeechRecognizer 
 
     const formData = new FormData();
     formData.append('file', new Blob([new Uint8Array(audio)], { type: 'audio/wav' }), 'audio.wav');
-    formData.append('model', 'whisper-1');
+    formData.append('model', getModelForRole('openai', 'transcription'));
     formData.append('language', this.config.language.split('-')[0] ?? this.config.language);
 
     if (this.config.vocabulary && this.config.vocabulary.length > 0) {

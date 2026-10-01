@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Enterprise-grade Smart Context Compaction System
  *
@@ -572,7 +573,7 @@ export class SmartCompactionEngine extends EventEmitter {
         const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
         if (API_KEY) {
             const genAI = new GoogleGenerativeAI(API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+            const model = genAI.getGenerativeModel({ model: getProviderDefaultModel('google') });
             const prompt = `Summarize the following chat history densely in one short paragraph. Focus on the core problem, tools used, and final resolution. Do not include pleasantries. If a "Failed tool attempts (do not retry)" section is present, preserve it verbatim at the end.\n\nChat History:\n${basicSummary}`;
             const result = await model.generateContent(prompt);
             const llmSummary = result.response.text().trim();

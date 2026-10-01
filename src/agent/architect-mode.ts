@@ -1,3 +1,4 @@
+import { getModelForRole, getProviderDefaultModel } from '../config/model-defaults.js';
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from "../codebuddy/client.js";
 import { EventEmitter } from "events";
 import { getErrorMessage } from "../types/index.js";
@@ -87,8 +88,8 @@ export class ArchitectMode extends EventEmitter {
   ) {
     super();
     this.config = {
-      architectModel: config.architectModel || process.env.GROK_MODEL || "grok-3-latest",
-      editorModel: config.editorModel || "grok-code-fast-1",
+      architectModel: config.architectModel || getModelForRole('xai', 'architect'),
+      editorModel: config.editorModel || getProviderDefaultModel('xai'),
       autoApprove: config.autoApprove || false,
       maxSteps: config.maxSteps || 20,
       ...config,

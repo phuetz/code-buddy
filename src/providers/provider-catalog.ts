@@ -1,3 +1,4 @@
+import { MODEL_DEFAULTS, PROVIDER_MODEL_LISTS, getProviderDefaultModel, type ProviderKey } from '../config/model-defaults.js';
 import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 /**
  * Runtime provider catalog.
@@ -250,8 +251,8 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     baseUrlEnvKeys: ['GROK_BASE_URL', 'XAI_BASE_URL'],
     modelEnvKeys: ['GROK_MODEL', 'XAI_MODEL'],
     defaultBaseURL: 'https://api.x.ai/v1',
-    defaultModel: 'grok-3-fast',
-    models: ['grok-4-1-fast', 'grok-code-fast-1', 'grok-3-fast', 'grok-3-mini'],
+    get defaultModel() { return getProviderDefaultModel('xai'); },
+    models: PROVIDER_MODEL_LISTS.xai!,
   },
   {
     id: 'gemini',
@@ -1255,7 +1256,11 @@ export function resolvePluginRuntimeProvider(
   if (!entry || entry.runtimeSupport !== 'plugin-native') return null;
 
   const baseURL = resolvePluginBaseURL(entry, env);
-  const defaultModel = firstEnvValue(env, entry.modelEnvKeys) || entry.defaultModel;
+  const providerKey = entry.id === 'grok' ? 'xai' : entry.id === 'gemini' ? 'google' : entry.id;
+  const configuredDefault = Object.hasOwn(MODEL_DEFAULTS, providerKey)
+    ? getProviderDefaultModel(providerKey as ProviderKey, env, entry.id === 'grok' ? undefined : entry.defaultModel)
+    : entry.defaultModel;
+  const defaultModel = firstEnvValue(env, entry.modelEnvKeys) || configuredDefault;
   const credentialSources = [
     ...entry.apiKeyEnvKeys.filter((key) => hasAnyEnvValue(env, [key])),
     ...entry.baseUrlEnvKeys.filter((key) => hasAnyEnvValue(env, [key])),
@@ -1310,7 +1315,11 @@ function resolveEntry(
     firstEnvValue(env, entry.baseUrlEnvKeys) || entry.defaultBaseURL,
     entry,
   );
-  const defaultModel = firstEnvValue(env, entry.modelEnvKeys) || entry.defaultModel;
+  const providerKey = entry.id === 'grok' ? 'xai' : entry.id === 'gemini' ? 'google' : entry.id;
+  const configuredDefault = Object.hasOwn(MODEL_DEFAULTS, providerKey)
+    ? getProviderDefaultModel(providerKey as ProviderKey, env, entry.id === 'grok' ? undefined : entry.defaultModel)
+    : entry.defaultModel;
+  const defaultModel = firstEnvValue(env, entry.modelEnvKeys) || configuredDefault;
 
   if (options.requireConfigured && !apiKey && entry.authMode === 'api-key') {
     return null;

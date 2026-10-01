@@ -1,3 +1,5 @@
+import { inferProvider } from '../../config/resolve-model.js';
+import { getProviderModels } from '../../config/model-defaults.js';
 import http from 'http';
 import { CodeBuddyAgent, ChatEntry } from '../../agent/codebuddy-agent.js';
 import { withStreamTimeout as _withStreamTimeout, withMaxIterations as _withMaxIterations, handleStreamError as _handleStreamError } from '../../utils/stream-helpers.js';
@@ -203,7 +205,8 @@ export class HttpServer {
   private async handleModel(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     if (req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ model: this.agent.getCurrentModel() }));
+      const model = this.agent.getCurrentModel();
+      res.end(JSON.stringify({ model, models: [...new Set([model, ...getProviderModels(inferProvider(model) ?? 'xai')])] }));
     } else if (req.method === 'POST') {
       try {
         const body = await this.readBody(req);
@@ -352,10 +355,7 @@ export class HttpServer {
   <header>
     <h1>🤖 Code Buddy</h1>
     <select id="model-select">
-      <option value="grok-4-latest">Grok 4 (Latest)</option>
-      <option value="grok-3-latest">Grok 3 (Latest)</option>
-      <option value="grok-3-fast">Grok 3 (Fast)</option>
-      <option value="grok-3-mini-fast">Grok 3 Mini (Fast)</option>
+
     </select>
   </header>
 
@@ -374,6 +374,12 @@ export class HttpServer {
 
     // Load current model
     fetch('/api/model').then(r => r.json()).then(data => {
+      modelSelect.replaceChildren(...data.models.map(model => {
+        const option = document.createElement('option');
+        option.value = model;
+        option.textContent = model;
+        return option;
+      }));
       modelSelect.value = data.model;
     });
 

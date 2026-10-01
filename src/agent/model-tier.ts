@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Autonomous model tiering — a free-first escalation ladder.
  *
@@ -76,7 +77,6 @@ export interface AutonomousModelChoice {
   reason: string;
 }
 
-const DEFAULT_LOCAL_MODEL = 'llama3.2';
 const DEFAULT_LOCAL_BASE_URL = getOllamaV1BaseUrl();
 const DEFAULT_ESCALATE_AFTER_FAILURES = 2;
 
@@ -90,7 +90,7 @@ const DEFAULT_ESCALATE_AFTER_FAILURES = 2;
  * - escalation:     `CODEBUDDY_ESCALATION_MODEL` → `GROK_MODEL` → none.
  */
 export function resolveModelTierConfig(env: NodeJS.ProcessEnv = process.env): ModelTierConfig {
-  const localModel = env['CODEBUDDY_LOCAL_MODEL']?.trim() || DEFAULT_LOCAL_MODEL;
+  const localModel = getProviderDefaultModel('ollama', env);
   const localBaseUrl = normalizeBaseUrl(
     env['OLLAMA_BASE_URL']?.trim()
     || (env['OLLAMA_HOST']?.trim() ? `${env['OLLAMA_HOST']!.trim().replace(/\/+$/, '')}/v1` : '')

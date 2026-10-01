@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Automated Program Repair Engine
  *
@@ -106,7 +107,7 @@ export class RepairEngine extends EventEmitter {
     this.config = { ...DEFAULT_REPAIR_CONFIG, ...config };
 
     if (apiKey) {
-      this.client = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || "grok-3-latest", baseURL);
+      this.client = new CodeBuddyClient(apiKey, process.env.GROK_MODEL || getProviderDefaultModel('xai'), baseURL);
     }
 
     this.faultLocalizer = createFaultLocalizer(

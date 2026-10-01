@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import type { ToolResult } from '../types/index.js';
 
 export interface XSearchOptions {
@@ -40,7 +41,7 @@ interface InlineCitation {
 }
 
 const DEFAULT_XAI_BASE_URL = 'https://api.x.ai/v1';
-const DEFAULT_X_SEARCH_MODEL = 'grok-4.20-reasoning';
+const DEFAULT_X_SEARCH_MODEL = getModelForRole('xai', 'search');
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_RETRIES = 2;
 const MAX_HANDLES = 10;

@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * Agent State Module
  *
@@ -93,7 +94,7 @@ export class AgentState extends EventEmitter {
     this.costTracker = getCostTracker();
     this.modeManager = getAgentModeManager();
     this.sandboxManager = getSandboxManager();
-    this.contextManager = createContextManager("grok-3-latest");
+    this.contextManager = createContextManager(getProviderDefaultModel('xai'));
     this.sessionStore = getSessionStore();
   }
 

@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderModels } from '../config/model-defaults.js';
 import { getPricingPer1M } from '../config/model-pricing.js';
 
 /**
@@ -32,7 +33,7 @@ import type {
 export class ClaudeProvider extends BaseProvider {
   readonly type: ProviderType = 'claude';
   readonly name = 'Claude (Anthropic)';
-  readonly defaultModel = 'claude-sonnet-4-20250514';
+  get defaultModel(): string { return getProviderDefaultModel('anthropic'); }
 
   private client: unknown = null;
 
@@ -159,13 +160,7 @@ export class ClaudeProvider extends BaseProvider {
   }
 
   async getModels(): Promise<string[]> {
-    return [
-      'claude-sonnet-4-20250514',
-      'claude-opus-4-20250514',
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-haiku-20241022',
-      'claude-3-opus-20240229',
-    ];
+    return getProviderModels('anthropic');
   }
 
   getPricing(): { input: number; output: number } {

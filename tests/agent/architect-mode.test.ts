@@ -77,7 +77,7 @@ describe("ArchitectMode", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
       const config = (architect as any).config;
 
-      expect(config.architectModel).toBe("grok-3-latest");
+      expect(config.architectModel).toBe("grok-4-latest");
       expect(config.editorModel).toBe("grok-code-fast-1");
       expect(config.autoApprove).toBe(false);
       expect(config.maxSteps).toBe(20);

@@ -1,3 +1,5 @@
+import { getModelStrengths, getModelToolConfig } from '../config/model-tools.js';
+import { getProviderDefaultModel, getProviderModels } from '../config/model-defaults.js';
 import { getModelPricing } from '../config/model-pricing.js';
 
 /**
@@ -33,7 +35,6 @@ import * as os from 'os';
 import * as path from 'node:path';
 import { logger } from '../utils/logger.js';
 import { getFleetLoad } from './fleet-load.js';
-import { getModelStrengths } from '../config/model-tools.js';
 import { findRuntimeProvider } from '../providers/provider-catalog.js';
 import { classifyModelEgress } from '../providers/model-egress.js';
 import type {
@@ -323,7 +324,7 @@ function buildOpenAICatalog(): FleetModelDescriptor[] {
 }
 
 function buildChatGptOAuthCatalog(): FleetModelDescriptor[] {
-  const preferred = process.env.CHATGPT_MODEL || 'gpt-6-sol';
+  const preferred = process.env.CHATGPT_MODEL || getProviderDefaultModel('chatgpt');
   const ids = [
     preferred,
     'gpt-6-sol',
@@ -490,10 +491,10 @@ function deriveAgyStrengths(modelId: string): ModelStrength[] {
 }
 
 function buildGrokCatalog(): FleetModelDescriptor[] {
-  const ids = ['grok-3-latest', 'grok-3-fast', 'grok-2-vision'];
+  const ids = getProviderModels('xai');
   return ids.map((id) => ({
     id,
-    contextWindow: 128_000,
+    contextWindow: getModelToolConfig(id).contextWindow ?? 32768,
     strengths: deriveStrengths(id, 'grok'),
     costInputUsdPerMtok: getModelPricing(id).inputPerMillion,
     costOutputUsdPerMtok: getModelPricing(id).outputPerMillion,
@@ -525,7 +526,7 @@ function buildMistralCatalog(): FleetModelDescriptor[] {
 
 function buildOpenRouterCatalog(): FleetModelDescriptor[] {
   const entry = findRuntimeProvider('openrouter');
-  const ids = entry?.models ?? ['openrouter/free'];
+  const ids = entry?.models ?? getProviderModels('openrouter');
   return ids.map((id): FleetModelDescriptor => ({
     id,
     contextWindow: id === 'openrouter/free' ? 128_000 : 64_000,

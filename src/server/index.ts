@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 import { createA2AJsonRpcRoutes } from './routes/a2a-jsonrpc.js';
 /**
  * API Server
@@ -1242,7 +1243,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
         hubBaseUrl: baseUrl,
         channelManager: manager,
         defaultSkill: process.env.A2A_BRIDGE_DEFAULT_SKILL || 'ollama-qwen3-4b',
-        defaultModel: process.env.A2A_BRIDGE_DEFAULT_MODEL || 'qwen3:4b',
+        defaultModel: process.env.A2A_BRIDGE_DEFAULT_MODEL || getProviderDefaultModel('ollama'),
         defaultAgent: process.env.A2A_BRIDGE_DEFAULT_AGENT,
       });
       // Stash on the http server for graceful shutdown.

@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Daemon and Trigger CLI commands
  *
@@ -156,7 +157,7 @@ export function registerDaemonCommands(program: Command): void {
           const bridge = getCronAgentBridge({
             apiKey,
             baseURL: process.env.GROK_BASE_URL,
-            model: process.env.GROK_MODEL || 'grok-3-latest',
+            model: process.env.GROK_MODEL || getProviderDefaultModel('xai'),
             maxToolRounds: 20,
             jobTimeoutMs: 300000,
             notepadDir: scheduler.notepadDir,
@@ -183,7 +184,7 @@ export function registerDaemonCommands(program: Command): void {
             const bridge = getCronAgentBridge({
               apiKey: process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
               baseURL: process.env.GROK_BASE_URL,
-              model: process.env.GROK_MODEL || 'grok-3-latest',
+              model: process.env.GROK_MODEL || getProviderDefaultModel('xai'),
               maxToolRounds: 20,
               jobTimeoutMs: 600000,
               notepadDir: scheduler.notepadDir,

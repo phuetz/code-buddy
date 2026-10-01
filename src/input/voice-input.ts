@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 import { EventEmitter } from "events";
 import fs from "fs-extra";
 import * as path from "path";
@@ -171,7 +172,7 @@ export class VoiceInput extends EventEmitter {
     const audioData = await fs.readFile(audioFile);
     const formData = new FormData();
     formData.append("file", new Blob([audioData]), path.basename(audioFile));
-    formData.append("model", this.config.model || "whisper-1");
+    formData.append("model", this.config.model || getModelForRole('openai', 'transcription'));
 
     if (this.config.language) {
       formData.append("language", this.config.language);

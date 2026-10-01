@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderModels } from '../config/model-defaults.js';
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -76,14 +77,8 @@ export interface ProjectSettings {
  */
 const DEFAULT_USER_SETTINGS: Partial<UserSettings> = {
   baseURL: DEFAULT_BASE_URL,
-  defaultModel: "grok-code-fast-1",
-  models: [
-    "grok-code-fast-1",
-    "grok-4-latest",
-    "grok-3-latest",
-    "grok-3-fast",
-    "grok-3-mini-fast",
-  ],
+  get defaultModel() { return getProviderDefaultModel('xai'); },
+  get models() { return getProviderModels('xai'); },
 };
 
 const repairedEmptyUserSettings = new Set<string>();
@@ -92,7 +87,7 @@ const repairedEmptyUserSettings = new Set<string>();
  * Default values for project settings
  */
 const DEFAULT_PROJECT_SETTINGS: Partial<ProjectSettings> = {
-  model: "grok-code-fast-1",
+  get model() { return getProviderDefaultModel('xai'); },
 };
 
 /**
@@ -458,7 +453,7 @@ export class SettingsManager {
       return userDefaultModel;
     }
 
-    return DEFAULT_PROJECT_SETTINGS.model || "grok-code-fast-1";
+    return DEFAULT_PROJECT_SETTINGS.model || getProviderDefaultModel('xai');
   }
 
   /**

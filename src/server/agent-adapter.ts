@@ -1,3 +1,4 @@
+import { getProviderDefaultModel, getProviderModels } from '../config/model-defaults.js';
 import type { ChatEntry, StreamingChunk } from '../agent/types.js';
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
 import type { ContextManagerConversationState } from '../context/context-manager-v2.js';
@@ -96,7 +97,7 @@ export function resolveServerAgentConfig(): ServerAgentConfig {
   return {
     apiKey: detected?.apiKey || process.env.GROK_API_KEY || process.env.XAI_API_KEY || '',
     baseURL: detected?.baseURL || process.env.GROK_BASE_URL,
-    model: process.env.GROK_MODEL || detected?.defaultModel || 'grok-3-latest',
+    model: process.env.GROK_MODEL || detected?.defaultModel || getProviderDefaultModel('xai'),
   };
 }
 
@@ -108,7 +109,7 @@ export function listServerModels(): ServerModelInfo[] {
   if (detected?.provider === 'chatgpt') {
     return [
       {
-        id: configuredModel || 'gpt-6-sol',
+        id: configuredModel || getProviderDefaultModel('chatgpt'),
         object: 'model',
         created,
         owned_by: 'chatgpt',
@@ -119,7 +120,7 @@ export function listServerModels(): ServerModelInfo[] {
   if (detected?.provider === 'openai') {
     return [
       {
-        id: configuredModel || 'gpt-4o',
+        id: configuredModel || getProviderDefaultModel('openai'),
         object: 'model',
         created,
         owned_by: 'openai',
@@ -130,7 +131,7 @@ export function listServerModels(): ServerModelInfo[] {
   if (detected?.provider === 'gemini') {
     return [
       {
-        id: configuredModel || 'gemini-2.5-flash',
+        id: configuredModel || getProviderDefaultModel('google'),
         object: 'model',
         created,
         owned_by: 'google',
@@ -141,7 +142,7 @@ export function listServerModels(): ServerModelInfo[] {
   if (detected?.provider === 'anthropic') {
     return [
       {
-        id: configuredModel || 'claude-sonnet-4-20250514',
+        id: configuredModel || getProviderDefaultModel('anthropic'),
         object: 'model',
         created,
         owned_by: 'anthropic',
@@ -152,7 +153,7 @@ export function listServerModels(): ServerModelInfo[] {
   if (detected?.provider === 'ollama') {
     return [
       {
-        id: configuredModel || 'qwen2.5-coder:7b',
+        id: configuredModel || getProviderDefaultModel('ollama'),
         object: 'model',
         created,
         owned_by: 'ollama',
@@ -160,26 +161,7 @@ export function listServerModels(): ServerModelInfo[] {
     ];
   }
 
-  return [
-    {
-      id: process.env.GROK_MODEL || 'grok-3-latest',
-      object: 'model',
-      created,
-      owned_by: 'xai',
-    },
-    {
-      id: 'grok-3-fast',
-      object: 'model',
-      created,
-      owned_by: 'xai',
-    },
-    {
-      id: 'grok-2-latest',
-      object: 'model',
-      created,
-      owned_by: 'xai',
-    },
-  ];
+  return getProviderModels('xai').map(id => ({ id, object: 'model', created, owned_by: 'xai' }));
 }
 
 export async function createServerAgent(): Promise<ServerAgent> {

@@ -162,7 +162,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       process.env.OPENAI_API_KEY = 'sk-x';
       const result = createPeerChatClientFromEnv();
       expect(result!.info.provider).toBe('chatgpt-oauth');
-      expect(result!.info.model).toBe('gpt-5.5');
+      expect(result!.info.model).toBe('gpt-6-sol');
       expect(result!.info.isLocal).toBe(false);
     });
 
@@ -383,8 +383,8 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       process.env.CODEBUDDY_PEER_MODEL = 'gpt-5.5';
       const resolved = resolveProviderFromEnv('ollama');
       expect(resolved!.provider).toBe('ollama');
-      expect(resolved!.model).toBe('qwen2.5-coder:7b');
-      expect(createPeerChatClientFromEnv()!.info.model).toBe('qwen2.5-coder:7b');
+      expect(resolved!.model).toBe('llama3.2');
+      expect(createPeerChatClientFromEnv()!.info.model).toBe('llama3.2');
       expect(warn.mock.calls.some((call) => String(call[0]).includes('CODEBUDDY_PEER_MODEL'))).toBe(true);
       warn.mockRestore();
     });
@@ -392,7 +392,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
     it('ignores CODEBUDDY_MODEL when it belongs to another provider', () => {
       process.env.OLLAMA_HOST = 'localhost:11434';
       process.env.CODEBUDDY_MODEL = 'gpt-5.5';
-      expect(resolveProviderFromEnv('ollama')!.model).toBe('qwen2.5-coder:7b');
+      expect(resolveProviderFromEnv('ollama')!.model).toBe('llama3.2');
     });
 
     it('keeps a same-family CODEBUDDY_PEER_MODEL on Ollama', () => {
@@ -410,7 +410,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
     it('ignores an incompatible GROK_MODEL leftover on Ollama', () => {
       process.env.OLLAMA_HOST = 'localhost:11434';
       process.env.GROK_MODEL = 'gpt-5.5';
-      expect(resolveProviderFromEnv('ollama')!.model).toBe('qwen2.5-coder:7b');
+      expect(resolveProviderFromEnv('ollama')!.model).toBe('llama3.2');
     });
   });
 

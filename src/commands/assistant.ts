@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../config/model-defaults.js';
 /**
  * `buddy assistant` — manage the voice assistant (Lisa).
  *
@@ -744,7 +745,7 @@ export function registerAssistantCommand(program: Command): void {
             model ||
             process.env.CODEBUDDY_SENSORY_SPEAK_MODEL?.trim() ||
             process.env.GROK_MODEL?.trim() ||
-            'qwen3.6:35b-a3b-q4_K_M';
+            getProviderDefaultModel('ollama');
           provider = 'ollama';
           generate = createOllamaConversationGenerator({
             host: ollamaHost,

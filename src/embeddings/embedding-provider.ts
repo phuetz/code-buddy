@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Embedding Provider
  *
@@ -334,7 +335,7 @@ export class EmbeddingProvider extends EventEmitter {
       },
       body: JSON.stringify({
         input: texts,
-        model: this.config.modelName || 'text-embedding-3-small',
+        model: this.config.modelName || getModelForRole('openai', 'embedding'),
       }),
     });
 
@@ -392,7 +393,7 @@ export class EmbeddingProvider extends EventEmitter {
       },
       body: JSON.stringify({
         input: texts,
-        model: this.config.modelName || 'grok-embedding',
+        model: this.config.modelName || getModelForRole('xai', 'embedding'),
       }),
     });
 

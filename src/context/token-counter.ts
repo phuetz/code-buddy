@@ -1,3 +1,4 @@
+import { getModelForRole } from '../config/model-defaults.js';
 /**
  * Token Counter — unified surface that re-exports the canonical class
  * from src/utils/token-counter.ts while keeping the free-function API
@@ -73,7 +74,7 @@ export function textFromMessageContent(content: unknown): string {
  * so streaming-handler, context-manager-v2 and friends all share the
  * same implementation and the same tiktoken WASM load.
  */
-export function createTokenCounter(model: string = 'gpt-4'): CanonicalTokenCounter {
+export function createTokenCounter(model: string = getModelForRole('openai', 'tokenizer')): CanonicalTokenCounter {
   return canonicalCreateTokenCounter(model);
 }
 
@@ -118,7 +119,7 @@ function estimateTokensFromChars(text: string): number {
 }
 
 /** Count tokens in a plain text string for the given model. */
-export function countTokens(text: string, model: string = 'gpt-4'): number {
+export function countTokens(text: string, model: string = getModelForRole('openai', 'tokenizer')): number {
   if (!text) return 0;
   const enc = getEncoder(model);
   if (!enc) return estimateTokensFromChars(text);
@@ -151,12 +152,12 @@ function tokensForMessage(message: TokenCounterMessage, model: string): number {
 }
 
 /** Count tokens in a single message. */
-export function countMessageTokens(message: TokenCounterMessage, model: string = 'gpt-4'): number {
+export function countMessageTokens(message: TokenCounterMessage, model: string = getModelForRole('openai', 'tokenizer')): number {
   return tokensForMessage(message, model) + 3; // priming tokens
 }
 
 /** Count tokens in an array of messages. */
-export function countMessagesTokens(messages: TokenCounterMessage[], model: string = 'gpt-4'): number {
+export function countMessagesTokens(messages: TokenCounterMessage[], model: string = getModelForRole('openai', 'tokenizer')): number {
   let total = 0;
   for (const m of messages) total += tokensForMessage(m, model);
   return total + 3; // priming tokens

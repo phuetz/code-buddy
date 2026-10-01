@@ -1,3 +1,4 @@
+import { getProviderDefaultModel } from '../../config/model-defaults.js';
 /**
  * Base Agent Class
  *
@@ -43,7 +44,7 @@ export function resolveMultiAgentModel(
   if (fromEnv) return fromEnv;
   const fromConfig = configModel?.trim();
   if (fromConfig) return fromConfig;
-  return 'grok-3-latest';
+  return getProviderDefaultModel('xai');
 }
 
 /**
