@@ -5,22 +5,23 @@
 - Les estimations de coût utilisent une table tarifaire commune avec source et date ; les alias utilisent le prix de leur cible.
 - Dans Cowork, un nouveau budget YOLO vaut 100 $ et 400 tours ; les budgets enregistrés sont conservés et le plafond reste configurable jusqu'à 1 000 $.
 
-### Sécurité des tâches sans terminal (candidat 2.3.0)
-
-- `buddy -p` expose `status`, `success`, `exitCode`, `reasons` et les vérifications réellement exécutées dans le JSON. Une modification sans outil d'action réussi ou une vérification encore rouge produit un code non nul. Un contrôle ultérieur ne réhabilite que la même commande dans le même répertoire.
-- Le mode implicite de `-p` est `acceptEdits` pour tous les fournisseurs : les éditions sont autorisées, les commandes nécessitant une approbation restent contrôlées. Un `--permission-mode` explicite et les règles de refus conservent la priorité.
-
-
 ## [2.3.0] (2026-10-01)
 
 Candidat d'intégration préparé le 1er octobre pour la sortie prévue le 8 octobre. Cette section décrit les branches réunies dans la RC ; elle ne certifie pas tous les parcours utilisateur.
 
 ### Premier usage et Cowork
 
+- `buddy doctor` compte un fournisseur non prêt parmi les erreurs et imprime la commande exacte de sélection. `--fix` sélectionne un modèle déjà installé, conserve le point d’accès Ollama et borne le contexte selon la politique JSON ; aucun téléchargement implicite. `buddy try` conserve également la sélection locale pour les commandes suivantes.
+
 - `buddy try` travaille dans un projet temporaire CommonJS, vérifie des fichiers non vides et dix résultats attendus avec un contrôle indépendant ; la confiance est limitée à cette session et le fournisseur précédent est rétabli. Le parcours des petits modèles conserve les permissions explicites de l'utilisateur.
 - Les identifiants complets de reprise de session sont conservés ; les commandes JSON isolent leurs diagnostics de stdout. Les réglages MCP et de télémétrie sont validés, et un échec de lint est transmis au bilan d'exécution.
 - L'installation de Cowork depuis les sources exige Node 22 et vérifie le bundle complet. Une erreur d'installation est signalée au CLI ; la reconstruction native concerne le sous-projet Cowork. Le verrou Linux accepte les longs chemins temporaires.
 - App Studio installe les dépendances nécessaires à ses projets, conserve le bon espace de travail lors d'un changement de projet et laisse accessibles les commandes de l'éditeur. Le test Hermes distingue les six capacités disponibles de la capacité partielle.
+
+### Sécurité des tâches sans terminal
+
+- `buddy -p` expose `status`, `success`, `exitCode`, `reasons` et les vérifications réellement exécutées dans le JSON. Une modification sans outil d'action réussi ou une vérification encore rouge produit un code non nul. Un contrôle ultérieur ne réhabilite que la même commande dans le même répertoire.
+- Le mode implicite de `-p` est `acceptEdits` pour tous les fournisseurs : les éditions sont autorisées, les commandes nécessitant une approbation restent contrôlées. Un `--permission-mode` explicite et les règles de refus conservent la priorité.
 
 ### Configuration et outils
 

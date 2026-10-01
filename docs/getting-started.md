@@ -104,30 +104,33 @@ for ChatGPT. Without a display, use a local model instead (`buddy onboard`).
 
 `buddy try` is a real coding demo, not a timer: there is no fixed cutoff. A small
 or cold local model can take several minutes. The model must be able to **call tools**
-(edit files, run commands): use a `qwen3` tag such as `qwen3:8b`, `devstral`, or
-`qwen2.5-coder:14b` and above. `qwen2.5:7b`, `qwen2.5-coder:7b` and `llama3` 8B can
-chat, but Code Buddy treats them as chat-only, so `buddy try` cannot go green with them.
+(edit files, run commands). The current local recommendations and context ceiling
+come from [doctor-local-models.json](doctor-local-models.json): `qwen3.5:4b`, then
+`gemma4:e4b`, with a maximum context of 32768 tokens. Installed fallback models
+can be selected with a visible quality warning; this does not qualify their results.
 
-`buddy onboard` also needs a terminal because it asks questions. In a pipe or CI
-job, configure provider environment variables and use `buddy doctor` for a
-non-interactive check. Without a configured provider, `buddy doctor` can report
-zero errors but still exit with status 1 because chatting is not ready.
+`buddy onboard` needs a terminal because it asks questions. In a pipe or CI job,
+use `buddy doctor` for a non-interactive check and `buddy doctor --fix` to save
+an installed model. A provider that is not ready counts as an error in the report
+and causes exit status 1. Optional missing tools remain informational.
 
 ### The two $0 paths in detail
 
-- **Local & private (Ollama).** Install [Ollama](https://ollama.com), then run
-  `buddy onboard` — it detects the running server, offers to pull `qwen3:8b` (a
-  small model that can call tools) if you have none, and saves the choice.
-  Nothing leaves your machine. If you already ran `buddy login`, the ChatGPT login
-  wins over `OLLAMA_HOST` in the terminal: set `CODEBUDDY_PROVIDER=ollama` to force
-  the local model.
-- **ChatGPT subscription.** `buddy login` reuses your existing ChatGPT plan
-  through the Codex backend at **$0 marginal cost** — no key, no billing setup.
+- **Local inference (Ollama).** Install [Ollama](https://ollama.com), then run
+  `buddy doctor`. If a recommended model is already installed, run
+  `buddy doctor --fix` to select it and save its local endpoint and context cap.
+  Otherwise, the diagnostic prints the exact download command and approximate
+  size; execute it explicitly if you want to download the model, then rerun
+  `buddy doctor --fix`. Local inference does not establish that every optional
+  tool or service stays local. If you already ran `buddy login`, set
+  `CODEBUDDY_PROVIDER=ollama` to explicitly select local inference.
+- **ChatGPT subscription.** `buddy login` uses your existing ChatGPT plan
+  through the Codex backend, without an API key; plan limits still apply.
 
 > Stuck? `buddy doctor` prints a ready / not-ready verdict first, then the checks.
-> **`buddy doctor --fix`** points a running Ollama at a suitable model **already
-> installed** and saves that choice; only when Ollama has no model at all does it
-> pull `qwen3:8b`. It does not install Ollama itself.
+> **`buddy doctor --fix`** selects a suitable model **already installed**.
+> It does not download a model or install Ollama. Recommendations are configurable
+> in [doctor-local-models.json](doctor-local-models.json), including download size.
 
 ### Advanced: bring your own API key
 
@@ -658,9 +661,12 @@ Most providers need an env var **and** the matching base URL. Common pairs:
 - Google Gemini: `export GOOGLE_API_KEY=...` or `GEMINI_API_KEY=...`
 - OpenAI: `export OPENAI_API_KEY=...`
 - Ollama (local): no key needed. Install from https://ollama.com, then
-  `ollama pull qwen3:8b`, `export OLLAMA_HOST=http://127.0.0.1:11434`,
-  `export CODEBUDDY_PROVIDER=ollama` (needed if you ever ran `buddy login`), and
-  `buddy doctor --fix`. Avoid `llama3` 8B and `qwen2.5` under 14B for coding: Code
+  `buddy doctor`, then `buddy doctor --fix` if the recommended model is installed.
+  If it is absent, follow the explicit command printed from
+  [doctor-local-models.json](doctor-local-models.json) (currently
+  `ollama pull qwen3.5:4b`, approximately 3.4 GB), then rerun `buddy doctor --fix`.
+  To force local inference after a prior login, set
+  `export CODEBUDDY_PROVIDER=ollama`, then run `buddy doctor --fix`. Avoid `llama3` 8B and `qwen2.5` under 14B for coding: Code
   Buddy treats them as chat-only (no tool calls).
 
 Run `buddy doctor` to verify which keys are detected. Check the active provider mid-session with `/status`.

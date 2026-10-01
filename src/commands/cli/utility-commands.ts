@@ -36,16 +36,21 @@ export function registerUtilityCommands(program: Command): void {
       const integrationChecks = withIntegrations
         ? await (await import('../../doctor/integrations.js')).runIntegrationChecks(cwd)
         : [];
-      const checks = [...coreChecks, ...integrationChecks];
+      // A missing provider blocks the CLI, so it is an error in the same
+      // report that determines the process exit status, rather than a warning.
+      const checks = [...coreChecks, ...integrationChecks].map(check =>
+        check.name === 'AI provider ready' && check.status !== 'ok'
+          ? { ...check, status: 'error' as const }
+          : check);
+      const fixes = options.fix ? await runFixes(checks.filter(check => check.fixable)) : undefined;
+      const selectionFix = fixes?.find(fix => fix.success && fix.action === 'select-running-ollama');
+      const effectiveChecks = checks.map(check => check.name === 'AI provider ready' && check.fixable && selectionFix
+        ? { ...check, status: 'ok' as const, fixable: false, message: selectionFix.message }
+        : check);
+      const summary = summarizeDoctorChecks(effectiveChecks);
 
       if (options.json) {
         const { buildDoctorJsonReport } = await import('../../doctor/integrations.js');
-        const fixes = options.fix ? await runFixes(checks.filter((c) => c.fixable)) : undefined;
-        const selectionFix = fixes?.find(f => f.success && f.action === 'select-running-ollama');
-        const effectiveChecks = checks.map(check => check.name === 'AI provider ready' && check.fixable && selectionFix
-          ? { ...check, status: 'ok' as const, fixable: false, message: selectionFix.message }
-          : check);
-        const summary = summarizeDoctorChecks(effectiveChecks);
         const report = buildDoctorJsonReport(effectiveChecks, summary, { offline, ...(fixes ? { fixes } : {}) });
         console.log(JSON.stringify(report, null, 2));
         const readinessJson = effectiveChecks.find((c) => c.name === 'AI provider ready');
@@ -60,18 +65,18 @@ export function registerUtilityCommands(program: Command): void {
       const icons = { ok: '✅', warn: '⚠️', error: '❌' };
 
       // Headline verdict: the first question a newcomer has is "can I chat yet?"
-      const readiness = checks.find((c) => c.name === 'AI provider ready');
+      const readiness = effectiveChecks.find((c) => c.name === 'AI provider ready');
       if (readiness) {
         if (readiness.status === 'ok') {
           console.log(`  ✅ Ready to chat — a provider is configured (${readiness.message})`);
           console.log('     Start now:  buddy         (or try the demo:  buddy try)');
         } else {
-          console.log(`  ⚠️  Not ready to chat yet — ${readiness.message}`);
+          console.log(`  ❌ Not ready to chat yet — ${readiness.message}`);
         }
         console.log('');
       }
 
-      for (const check of checks) {
+      for (const check of effectiveChecks) {
         if (check.name === 'AI provider ready') continue; // already shown as the headline
         if (integrationChecks.length > 0 && check === integrationChecks[0]) console.log('\n  Integrations (no network):');
         if (options.verbose || check.status !== 'ok') {
@@ -81,8 +86,8 @@ export function registerUtilityCommands(program: Command): void {
       }
 
       const { passed: oks, warnings: warns, errors, optionalNotInstalled } =
-        summarizeDoctorChecks(checks);
-      const fixable = checks.filter(c => c.fixable).length;
+        summary;
+      const fixable = effectiveChecks.filter(c => c.fixable).length;
       const readinessNeedsAttention = readiness !== undefined && readiness.status !== 'ok';
 
       console.log(`\n  Summary: ${oks} passed, ${warns} warnings, ${errors} errors`);
@@ -94,28 +99,17 @@ export function registerUtilityCommands(program: Command): void {
       }
       console.log('');
 
-      if (options.fix && fixable > 0) {
-        console.log('🔧 Running auto-fixes...\n');
-        const fixResults = await runFixes(checks);
-
-        for (const result of fixResults) {
+      if (fixes?.length) {
+        console.log('🔧 Auto-fix results...\n');
+        for (const result of fixes) {
           const icon = result.success ? '✅' : '❌';
           console.log(`  ${icon} [${result.action}] ${result.message}`);
         }
-
-        const fixed = fixResults.filter(r => r.success).length;
-        const failed = fixResults.filter(r => !r.success).length;
+        const fixed = fixes.filter(result => result.success).length;
+        const failed = fixes.filter(result => !result.success).length;
         console.log(`\n  Fix summary: ${fixed} fixed, ${failed} failed\n`);
-
-        // A successful fix can resolve a fixable readiness warning (for
-        // example, selecting an already-running Ollama). A missing provider
-        // remains a real failure even if unrelated housekeeping was fixed.
-        const unresolvedReadiness = readinessNeedsAttention && !readiness?.fixable;
-        if (failed > 0 || errors > 0 || unresolvedReadiness) process.exitCode = 1;
-      } else if (errors > 0 || readinessNeedsAttention) {
-        // `doctor` is also useful in CI and scripts: a clear "not ready"
-        // verdict must not look successful merely because the warnings are
-        // non-fatal for an already-configured user.
+      }
+      if (errors > 0 || readinessNeedsAttention || fixes?.some(fix => !fix.success)) {
         process.exitCode = 1;
       }
     });

@@ -869,7 +869,7 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
     return {
       name: 'AI provider ready',
       status: 'warn',
-      message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but ${selectionContext} — --fix to select ${selection.model} ($0; ${selection.reason})`,
+      message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but ${selectionContext} — run \`buddy doctor --fix\` to select ${selection.model} ($0; ${selection.reason})`,
       fixable: true,
       fix: async () => fixSelectRunningOllama(ollama.baseURL!, selection.model!, selection.reason, selection.maxContext),
     };
@@ -898,7 +898,7 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
     return {
       name: 'AI provider ready',
       status: 'warn',
-      message: `Ollama is running but has no model — ${localModelInstallGuidance()}; run doctor --fix again after installation`,
+      message: `Ollama is running but has no model — ${localModelInstallGuidance()}; run \`buddy doctor --fix\` again after installation`,
     };
   }
 
