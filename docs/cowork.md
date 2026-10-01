@@ -291,11 +291,11 @@ Reported historical results (not a current execution verdict):
 
 Screenshots from that historical account (outside the current evidence catalogue):
 
-![Cowork real GPT-5.5 chat proof](qa/code-buddy-studio/screenshots/public-real-gpt55-cowork-chat.png)
+![Historical Cowork GPT-5.5 chat capture](qa/code-buddy-studio/screenshots/public-real-gpt55-cowork-chat.png)
 
 ![Cowork test runner launching real GPT-5.5 chat](qa/code-buddy-studio/screenshots/public-test-runner-cowork-real-gpt55.png)
 
-![Cowork test runner launching real GPT-5.5 server API proof](qa/code-buddy-studio/screenshots/public-test-runner-server-real-gpt55.png)
+![Historical Cowork test runner server API capture](qa/code-buddy-studio/screenshots/public-test-runner-server-real-gpt55.png)
 
 ### Publication Hardening
 
@@ -304,7 +304,7 @@ the public evidence trail:
 
 - GitHub entry links now point at the actual lower-case `cowork/README.md`
   path.
-- Real-provider proof screenshots use reviewed `public-*` crops; raw GPT-5.5
+- Historical provider screenshots use reviewed `public-*` crops; raw GPT-5.5
   captures were removed from the tracked tree and ignored locally.
 - The GPT-5.5 Playwright producers now write cropped `public-*` targets by
   default, so future opt-in replays do not regenerate publishable full-page

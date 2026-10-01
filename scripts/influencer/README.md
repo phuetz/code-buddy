@@ -1,6 +1,6 @@
 # Pipeline influenceuse IA & trailers — scripts de production
 
-Scripts Python prouvés en production (2026-07-23 : 36 trailers romans FR+EN, 7 trailers
+Compte rendu historique de scripts Python en production, hors catalogue actuel et non revalidé ici (2026-07-23 : 36 trailers romans FR+EN, 7 trailers
 tech, 2 compilations YouTube, 49 plans B-roll Veo Quality, 12 Shorts influenceuse).
 
 ## Règle éditoriale Lisa/Ambre
@@ -140,7 +140,7 @@ contact autour des raccords, détection d’images noires, puis écoute du maste
 
 `~/.codebuddy/personas/lisa/` : `lisa-hotel-soiree.mp4` (référence choisie par Patrice)
 + `identity-kit/*.jpg` (5 frames pour verrouiller l'identité — création de personnage
-Flow multi-frames ; une seule image ⇒ dérive d'identité prouvée).
+Flow multi-frames ; une seule image ⇒ dérive d'identité décrite dans ce compte rendu historique).
 
 ## Pièges connus
 

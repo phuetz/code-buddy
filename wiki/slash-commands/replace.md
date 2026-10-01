@@ -1,5 +1,7 @@
 # /replace
 
+Compte rendu historique du 2026-09-14, hors catalogue actuel et non rejoué ici. La capture liée est hors dépôt ; son ancienne étiquette de recette ne valide pas le candidat.
+
 [Accueil](Home.md) · [Wiki interactif](index.html#replace)
 
 Rechercher et remplacer du texte dans plusieurs fichiers.
@@ -23,7 +25,7 @@ Rechercher et remplacer du texte dans plusieurs fichiers.
 
 Une occurrence remplacée dans invoice.js ; git-after.txt confirme QA\_REPLACED à la place de QA\_CHANGE.
 
-Attendu : Le marqueur QA\_CHANGE dans invoice.js devient QA\_REPLACED, modification prouvée par git diff.
+Attendu : Le marqueur QA\_CHANGE dans invoice.js devient QA\_REPLACED, modification à vérifier par git diff.
 
 [Capture locale](../../../../Videos/Partage/20260914-commandes-wiki/cases/replace/terminal.txt)
 

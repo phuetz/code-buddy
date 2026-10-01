@@ -285,7 +285,7 @@
     "title": "设置",
     "apiSettings": "API 设置",
     "apiSettingsDesc": "配置 API 提供商和密钥",
-    "codebuddyDesc": "带 110+ 工具的本地智能体后端",
+    "codebuddyDesc": "本地智能体后端，提供仓库工具接口",
     "sandbox": "沙盒",
     "sandboxDesc": "隔离执行环境",
     "connectors": "MCP 连接器",

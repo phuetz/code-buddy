@@ -51,7 +51,7 @@
 - **Guardian Sub-Agent** (Codex) (`src/security/guardian-agent.ts`) — AI-powered automatic approval reviewer in `src/security/guardian-agent.ts`. Risk scoring 0-100: auto-approves < 80, prompts 80-90, denies >= 90. Always-safe set (no LLM needed): `read_file`, `grep`, `
 - **Ghost Snapshots** (Codex) (`src/checkpoints/ghost-snapshot.ts`)
 - **apply_patch Format** (Codex) (`src/tools/apply-patch.ts`) — *** Begin Patch
-- **Multi-Agent 5-Tool Surface** (Codex) (`src/agent/multi-agent/agent-tools.ts`) — Max 10 concurrent agents. Completion watchers auto-notify parents. Nickname pool (24 names) with generation suffixes.
+- **Multi-Agent Tool Surface** (Codex) (`src/agent/multi-agent/agent-tools.ts`) — Max 10 concurrent agents. Completion watchers auto-notify parents. Nickname pool (24 names) with generation suffixes.
 - **Code Exec** (Codex) (`src/tools/code-exec-tool.ts`)
 - **Memory Consolidation** (Codex) (`src/memory/memory-consolidation.ts`) — - **Phase 1**: Extract memories from user messages (preference/pattern/context/decision signals)
 - **OpenManus Architecture** (OpenManus) (`src/agent/state-machine.ts`) — OpenManus-compatible agent framework with 5 subsystems:

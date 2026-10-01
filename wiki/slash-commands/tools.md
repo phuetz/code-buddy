@@ -1,5 +1,7 @@
 # /tools
 
+Compte rendu historique du 2026-09-14, hors catalogue actuel et non rejoué ici. La capture liée est hors dépôt ; son ancienne étiquette de recette ne valide pas le candidat.
+
 [Accueil](Home.md) · [Wiki interactif](index.html#tools)
 
 Lister et filtrer les outils disponibles.
@@ -20,7 +22,7 @@ Lister et filtrer les outils disponibles.
 /tools list
 ```
 
-/tools list (liste complète des 220 outils disponibles).
+/tools list (noms des outils disponibles selon la configuration).
 
 Attendu : Liste des outils disponibles
 

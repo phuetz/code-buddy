@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { checkGenerated, generateProvenFeatures, updateReadme } from '../../scripts/generate-proven-features.js';
 import { currentCatalogSourceDigest } from '../../src/catalog/status.js';
-import { auditShowcase, inspectDocument } from '../../scripts/check-showcase-claims.js';
+import { auditShowcase, inspectDocument, inDocumentationScope, pagePublicationSources } from '../../scripts/check-showcase-claims.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const temporaryRoots: string[] = [];
@@ -297,5 +298,106 @@ describe('documentary claims guard', () => {
     const text = '2026-06-04\n<!-- showcase:historical:start -->\nvalidated end-to-end\n<!-- showcase:historical:end -->\nProven voice';
     const rows = inspectDocument('docs/hermes-memory-providers-selfhost.md', text);
     expect(rows.map((row) => row.violation)).toEqual([false, true]);
+  });
+});
+
+
+describe('published presentation surfaces', () => {
+  it.each([
+    'index.html', 'site/index.html', 'other-site/landing.html', 'other-site/LANDING.HTML',
+    'src/server/web-ui/index.html', 'src/server/mobile/assets/manifest.webmanifest',
+    'cowork/src/renderer/i18n/locales/fr.json', '.claude-plugin/plugin.json',
+    'package.json', 'packages/new-package/package.json', 'wiki/slash-commands/index.html',
+    '.codebuddy/docs/2-architecture.md', '.github/workflows/release.yml',
+  ])('includes the displayed surface %s', (file) => {
+    expect(inDocumentationScope(file)).toBe(true);
+  });
+
+  it.each([
+    '<strong>15+</strong><span>provider routes</span>',
+    '<strong>110+</strong>\n<span>tools</span>',
+    '<strong>~110</strong><span>agent tools</span>',
+    '<th>Multiple providers</th><td>15 routes / 64-entry catalogue</td>',
+    'Conservative counts: 15 direct provider strategies; the extended catalogue lists 64 entries.',
+    '64 intégrations, routage et repli',
+    '带 110+ 工具的本地智能体后端',
+    '支持 15 个提供商',
+  ])('rejects a displayed inventory argument: %s', (claim) => {
+    expect(inspectDocument('index.html', claim).some((row) => row.violation)).toBe(true);
+  });
+
+  it.each(['reproducible proof', 'Reproducible buddy try proof', 'real FizzBuzz proof', 'preuve reproductible'])('rejects an unsupported proof promise: %s', (claim) => {
+    expect(inspectDocument('new-site/index.html', claim).some((row) => row.violation)).toBe(true);
+  });
+
+  it('rejects a known promotional infographic even when its alt text omits the counts', () => {
+    expect(inspectDocument('index.html', '<img src="docs/assets/infographic-code-buddy-2.webp" alt="Architecture">')
+      .some((row) => row.classification === 'unsupported-promotional-media' && row.violation)).toBe(true);
+  });
+
+  it('reads actual Pages sources and refuses an unparsed copy command', () => {
+    expect(pagePublicationSources('cp index.html .nojekyll .pages-artifact/\ncp -R assets/new-site .pages-artifact/assets/')).toEqual(['index.html', '.nojekyll', 'assets/new-site']);
+    expect(() => pagePublicationSources('cp "$UNREVIEWED_FILE" .pages-artifact/')).toThrow('Unparsed Pages');
+  });
+
+  it('checks a newly published script outside the fixed documentation extensions', () => {
+    const directory = fixture();
+    execFileSync('git', ['init', '--quiet', directory]);
+    put(directory, '.github/workflows/pages.yml', 'cp public-landing/client.mjs .pages-artifact/');
+    put(directory, 'public-landing/client.mjs', 'export const caption = "110+ tools";');
+    for (const file of ['.github/workflows/pages.yml', 'public-landing/client.mjs']) {
+      execFileSync('git', ['add', '--', file], { cwd: directory });
+    }
+    expect(inDocumentationScope('public-landing/client.mjs')).toBe(false);
+    const audit = auditShowcase(directory);
+    expect(audit.pagesSources).toContain('public-landing/client.mjs');
+    expect(audit.violations).toContainEqual(expect.objectContaining({ file: 'public-landing/client.mjs', kind: 'count' }));
+  });
+
+  it('does not turn section identifiers or symbol/test metrics into inventory totals', () => {
+    for (const content of [
+      '"5-tools": {', '- [5. Tools](./5-tools.md)',
+      '| Module | Functions | Classes | Imported By |\n| src/tools | 0 | 0 | 8 |',
+      '| Type | Files |\n| providers | 2 |',
+    ]) expect(inspectDocument('.codebuddy/docs/reference.md', content).every((row) => !row.violation)).toBe(true);
+  });
+});
+
+
+describe('displayed claims rather than internal identifiers', () => {
+  it('decodes metadata entities and JSON escapes while preserving internal translation IDs', () => {
+    expect(inspectDocument('index.html', '<meta content="110&#43; tools">').some((row) => row.violation)).toBe(true);
+    expect(inspectDocument('cowork/src/renderer/i18n/locales/en.json', '"110ToolsFileOpsSearch": "Repository tools",').every((row) => !row.violation)).toBe(true);
+    expect(inspectDocument('cowork/src/renderer/i18n/locales/en.json', '"desc": "\\u0031\\u0031\\u0030+ tools",').some((row) => row.violation)).toBe(true);
+    expect(inspectDocument('package.json', '{"toolCount":110}').some((row) => row.violation)).toBe(true);
+    expect(inspectDocument('index.html', 'This is not a reproducible proof of the candidate.').every((row) => !row.violation)).toBe(true);
+  });
+});
+
+
+describe('public metadata and decoded reference text', () => {
+  it('distinguishes numbered steps inside encoded Markdown from a real inventory count', () => {
+    const ordinary = JSON.stringify({ body: '1. **Tool Registration**: declare interfaces.\n2. **Tool Call**: inspect the result.' });
+    expect(inspectDocument('docs-generated/reference.json', ordinary).every((row) => !row.violation)).toBe(true);
+    const argument = JSON.stringify({ body: '1. **Tool Registration**: declare interfaces.\n110+ tools available.' });
+    expect(inspectDocument('docs-generated/reference.json', argument).some((row) => row.violation)).toBe(true);
+  });
+
+  it('keeps candidate version, license and Node requirements consistent on the public landing pages', () => {
+    const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
+    const cowork = JSON.parse(readFileSync(path.join(root, 'cowork/package.json'), 'utf8'));
+    for (const file of ['index.html', 'site/index.html']) {
+      const content = readFileSync(path.join(root, file), 'utf8');
+      expect(content).toContain(`candidate ${pkg.version}`);
+      expect(content).toContain('BSL 1.1');
+      expect(content).not.toContain('MIT');
+      expect(content).toContain('not proven here');
+      expect(content).toContain('docs/PROVEN-FEATURES.md');
+    }
+    expect(pkg.license).toBe('BUSL-1.1');
+    expect(cowork.license).toBe('BUSL-1.1');
+    const legacy = readFileSync(path.join(root, 'site/index.html'), 'utf8');
+    expect(legacy).toContain(`Node ≥ ${pkg.engines.node.match(/\d+/)[0]}`);
+    expect(legacy).toContain(`Node ≥ ${cowork.engines.node.match(/\d+/)[0]}`);
   });
 });
