@@ -2321,58 +2321,56 @@ export async function stopServer(server: HttpServer): Promise<void> {
     ._cognitionPort;
   cognitionPort?.close();
   cognitiveHub?.close();
-  return new Promise((resolve, reject) => {
-    // Phase (d).9 — cancel the heartbeat timer so it doesn't keep
-    // emitting against a half-shut server. Idempotent.
-    stopFleetHeartbeat();
-    // Stop the autonomous tick daemon (no-op when never started).
-    stopAutonomousTick();
-    stopApiHeartbeatMonitor();
-    // Phase (d).10 — detach the compaction-event bridge so the
-    // SmartCompactionEngine doesn't retain dangling listener refs.
-    unwireCompactionBridge();
-    // Phase (d).15 — un-register peer.chat method.
-    unwirePeerChatBridge();
-    // Phase (d).20 — un-register peer.chat-session.* methods.
-    unwirePeerSessionBridge();
-    // Phase (d).23 — un-register peer.tool.invoke + .stream.
-    unwirePeerToolBridge();
-    unwirePeerCkgBridge();
-    unwireRucheBridge();
-    unwirePeerMissionExchangeBridge();
-    unwireMobileConfirmationBridge();
+  // Phase (d).9 — cancel the heartbeat timer so it doesn't keep
+  // emitting against a half-shut server. Idempotent.
+  stopFleetHeartbeat();
+  // Stop the autonomous tick daemon (no-op when never started).
+  stopAutonomousTick();
+  stopApiHeartbeatMonitor();
+  // Phase (d).10 — detach the compaction-event bridge so the
+  // SmartCompactionEngine doesn't retain dangling listener refs.
+  unwireCompactionBridge();
+  // Phase (d).15 — un-register peer.chat method.
+  unwirePeerChatBridge();
+  // Phase (d).20 — un-register peer.chat-session.* methods.
+  unwirePeerSessionBridge();
+  // Phase (d).23 — un-register peer.tool.invoke + .stream.
+  unwirePeerToolBridge();
+  unwirePeerCkgBridge();
+  unwireRucheBridge();
+  unwirePeerMissionExchangeBridge();
+  unwireMobileConfirmationBridge();
 
-    const unwireCognition = (server as unknown as { _unwireCognition?: () => void })
-      ._unwireCognition;
-    unwireCognition?.();
-    (server as unknown as { _fleetRooms?: { stop: () => void } })._fleetRooms?.stop();
+  const unwireCognition = (server as unknown as { _unwireCognition?: () => void })
+    ._unwireCognition;
+  unwireCognition?.();
+  (server as unknown as { _fleetRooms?: { stop: () => void } })._fleetRooms?.stop();
 
-    // Detach the channel-A2A bridge handler + shut down the
-    // ChannelManager so polling loops (Telegram, Discord, ...) stop.
-    const bridgeStop = (server as unknown as { _channelA2ABridge?: { stop: () => void } })
-      ._channelA2ABridge;
-    if (bridgeStop) {
-      try {
-        bridgeStop.stop();
-      } catch {
-        /* ignore */
-      }
+  // Detach the channel-A2A bridge handler + shut down the
+  // ChannelManager so polling loops (Telegram, Discord, ...) stop.
+  const bridgeStop = (server as unknown as { _channelA2ABridge?: { stop: () => void } })
+    ._channelA2ABridge;
+  if (bridgeStop) {
+    try {
+      bridgeStop.stop();
+    } catch {
+      /* ignore */
     }
-    void (async () => {
-      try {
-        const { getChannelManager } = await import('../channels/index.js');
-        await getChannelManager().shutdown();
-      } catch {
-        /* shutdown is best-effort */
-      }
-    })();
+  }
+  try {
+    const { getChannelManager } = await import('../channels/index.js');
+    await getChannelManager().shutdown();
+  } catch {
+    /* shutdown is best-effort, but completion is awaited */
+  }
 
-    // Close WebSocket connections
-    closeAllConnections();
-    // Tear down the desktop endpoint (detaches its upgrade listener + closes sockets).
-    closeDesktopWebSocket();
+  // Close WebSocket connections
+  closeAllConnections();
+  // Tear down the desktop endpoint (detaches its upgrade listener + closes sockets).
+  closeDesktopWebSocket();
 
-    // Close HTTP server
+  // Close HTTP server
+  return new Promise((resolve, reject) => {
     server.close((err) => {
       if (err) {
         reject(err);
