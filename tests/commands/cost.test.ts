@@ -176,10 +176,42 @@ describe('buddy cost', () => {
 
     await expect(
       command().parseAsync(['node', 'cost', '--last', '--session', 'latest'])
-    ).rejects.toThrow('incompatibles');
-    await expect(command().parseAsync(['node', 'cost', '--session', 'missing'])).rejects.toThrow(
-      'Session introuvable'
-    );
+    ).rejects.toMatchObject({ exitCode: 1, code: 'commander.error', message: expect.stringContaining('incompatibles') });
+
+    await expect(command().parseAsync(['node', 'cost', '--session', 'missing'])).rejects.toMatchObject({
+      exitCode: 1,
+      code: 'commander.error',
+      message: expect.stringContaining('Session introuvable'),
+    });
+  });
+
+  it('resolves unique prefix and rejects ambiguous prefix', async () => {
+    const ambiguousSessions = [
+      ...sessions,
+      {
+        id: 'latest-alt',
+        model: 'gpt-4o',
+        provider: 'openai',
+        createdAt: '2026-08-15T08:00:00.000Z',
+        lastAccessedAt: '2026-08-15T08:05:00.000Z',
+        messages: [],
+      }
+    ];
+
+    const command = () =>
+      createCostCommand({
+        loadSessions: async () => ambiguousSessions,
+        now: () => now,
+        stdout: () => undefined,
+      }).exitOverride();
+
+    await expect(command().parseAsync(['node', 'cost', '--session', 'old'])).resolves.toBeDefined();
+
+    await expect(command().parseAsync(['node', 'cost', '--session', 'late'])).rejects.toMatchObject({
+      exitCode: 1,
+      code: 'commander.error',
+      message: expect.stringContaining('Identifiant de session ambigu : late correspond à 2 sessions (latest, latest-alt)'),
+    });
   });
 });
 

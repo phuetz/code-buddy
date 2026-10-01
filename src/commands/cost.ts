@@ -15,6 +15,7 @@ import {
   type CostReport,
   type CostSessionEntry,
 } from '../analytics/cost-report.js';
+import { resolveSessionIdMatch } from '../cli/session-commands.js';
 import { getModelPricing } from '../config/model-pricing.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -187,16 +188,24 @@ function latestSessionTimestamp(entry: CostSessionEntry): number {
 
 function selectSessions(
   sessions: readonly CostSessionEntry[],
-  options: CostCommandOptions
+  options: CostCommandOptions,
+  command: Command
 ): CostSessionEntry[] {
   if (options.last && options.session) {
-    throw new Error('`--last` et `--session` sont incompatibles.');
+    command.error('`--last` et `--session` sont incompatibles.');
   }
   if (options.session) {
     const requested = options.session.trim();
-    const match = sessions.find((entry) => sessionId(entry) === requested);
-    if (!match) throw new Error(`Session introuvable : ${requested}`);
-    return [match];
+    const identifiable = sessions.flatMap((entry) => {
+      const id = sessionId(entry);
+      return id ? [{ id, entry }] : [];
+    });
+    const match = resolveSessionIdMatch(identifiable, requested);
+    if (match.kind === 'none') command.error(`Session introuvable : ${requested}`);
+    if (match.kind === 'ambiguous') {
+      command.error(`Identifiant de session ambigu : ${requested} correspond à ${match.matches.length} sessions (${match.matches.map((m) => m.id).join(', ')})`);
+    }
+    return [match.session.entry];
   }
   if (options.last) {
     const latest = [...sessions].sort(
@@ -397,7 +406,7 @@ export function createCostCommand(dependencies: CostCommandDependencies = {}): C
     .option('--by <model|provider|day>', 'Ventilation du tableau', parseGroupBy, 'model')
     .option('--latency', 'Show measured TTFT and TTFM p50/p95 by model', false)
     .option('--json', 'Produire un JSON lisible par machine', false)
-    .action(async (options: CostCommandOptions) => {
+    .action(async (options: CostCommandOptions, command: Command) => {
       const write =
         dependencies.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
       if (options.latency) {
@@ -425,7 +434,7 @@ export function createCostCommand(dependencies: CostCommandDependencies = {}): C
       );
       for (const warning of loaded.warnings) logger.warn(`[cost] ${warning}`);
 
-      const selected = selectSessions(loaded.sessions, options);
+      const selected = selectSessions(loaded.sessions, options, command);
       const now = dependencies.now?.() ?? new Date();
       const report = aggregateCostReport(selected, {
         now,
