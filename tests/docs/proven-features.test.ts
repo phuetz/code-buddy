@@ -60,6 +60,14 @@ afterEach(() => {
 });
 
 describe('generated proven features showcase', () => {
+  it('keeps the released CHANGELOG counter aligned with the delivered showcase', () => {
+    const counts = JSON.parse(readFileSync(path.join(root, 'docs/catalog/showcase-status.json'), 'utf8')).counts;
+    const changelog = readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+    const line = changelog.split('\n').find(value => value.includes('La vitrine'));
+    expect(line).toContain(`${counts.passed}/${counts.total}`);
+    expect(line).toContain(`${counts.unavailable} restent non prouvées ici`);
+  });
+
   it('matches both committed pages and the README exactly from the current catalogue', () => {
     const files = generateProvenFeatures(root);
     expect(checkGenerated(root, files), 'Run npx tsx scripts/generate-proven-features.ts').toEqual([]);

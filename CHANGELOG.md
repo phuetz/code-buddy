@@ -43,7 +43,7 @@ Candidat d'intégration préparé le 1er octobre pour la sortie prévue le 8 oct
 
 ### Documentation et LM Resizer
 
-- Le catalogue réunit 338 entrées, dont les outils et commandes. Les traces P8/P9 sont conservées ; une trace historique ne qualifie pas automatiquement la RC. La vitrine est régénérée à partir des qualifications et de la fraîcheur des sources : une entrée reste prouvée ici, 337 restent non prouvées ici, dont neuf avec un dernier essai en échec.
+- Le catalogue réunit 338 entrées, dont les outils et commandes. Les traces P8/P9 sont conservées ; une trace historique ne qualifie pas automatiquement la RC. La vitrine publiée affiche 45/338 entrées prouvées pour leurs scénarios de composant capturés ; 293 restent non prouvées ici, dont neuf avec un dernier essai en échec. Les 45 traces P9 ont reçu une qualification documentaire sur leurs champs retournés et leurs empreintes encore valides, sans nouvelle exécution ni modification des dates d'origine. Ce total ne valide pas une installation neuve.
 - Les guides d'installation, les aides et les exemples de flotte décrivent leurs prérequis et limites. Les rapports internes d'intégration restent hors des fichiers publiés.
 - LM Resizer, déjà présent dans la base, reste disponible pour réduire les observations d'outils avec conservation du contenu brut et repli si le traitement échoue. Cette intégration ne revendique aucun gain de qualité ou de coût mesuré.
 
