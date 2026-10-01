@@ -506,7 +506,6 @@ export class UnifiedDiffEditor {
    */
   async listBackups(filePath: string): Promise<string[]> {
     const fileName = path.basename(filePath);
-    const pattern = new RegExp(`^${fileName}\\..*\\.bak$`);
 
     try {
       const exists = await this.vfs.exists(this.backupDir);
@@ -516,7 +515,7 @@ export class UnifiedDiffEditor {
 
       const files = await this.vfs.readdir(this.backupDir);
       return files
-        .filter(f => pattern.test(f))
+        .filter(f => f.startsWith(fileName + '.') && f.endsWith('.bak') && !f.slice(fileName.length + 1, -4).includes('.'))
         .map(f => path.join(this.backupDir, f))
         .sort()
         .reverse(); // Most recent first
