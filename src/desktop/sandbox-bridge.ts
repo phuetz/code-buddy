@@ -9,6 +9,8 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { isPathWithin } from '../utils/path-within.js';
+
 
 export interface SandboxConfig {
   enabled: boolean;
@@ -50,7 +52,7 @@ export class SandboxPathBridge {
     const normalizedBase = this.config.hostPath.replace(/\\/g, '/').replace(/\/+$/, '');
     const mountPath = this.config.sandboxMountPath.replace(/\/+$/, '');
 
-    if (normalizedHost.startsWith(normalizedBase)) {
+    if (isPathWithin(normalizedHost, normalizedBase)) {
       const relative = normalizedHost.slice(normalizedBase.length);
       // relative is either empty or starts with '/'
       return `${mountPath}${relative}`;
@@ -69,7 +71,7 @@ export class SandboxPathBridge {
     const mountPath = this.config.sandboxMountPath.replace(/\/+$/, '');
     const hostBase = this.config.hostPath.replace(/\/+$/, '');
 
-    if (sandboxPath.startsWith(mountPath)) {
+    if (isPathWithin(sandboxPath, mountPath)) {
       const relative = sandboxPath.slice(mountPath.length);
       return `${hostBase}${relative}`;
     }
