@@ -1151,6 +1151,7 @@ async function processPromptHeadless(
   outputLastMessagePath?: string,
   outputSchemaPath?: string,
   agentName?: string,
+  permissionModeExplicit: boolean = false,
 ): Promise<number> {
   const previousDisableMCP = process.env.CODEBUDDY_DISABLE_MCP;
   const previousHeadless = process.env.CODEBUDDY_HEADLESS;
@@ -1174,8 +1175,17 @@ async function processPromptHeadless(
   } = await import('./cli/headless-options.js');
   const { validateOutputText } = await import('./utils/output-schema-validator.js');
   const { writeFileAtomic } = await import('./utils/atomic-write.js');
+  const { getPermissionModeManager } = await import('./security/permission-modes.js');
+  const permissionManager = getPermissionModeManager();
+  const previousPermissionMode = permissionManager.getMode();
 
   try {
+    // -p cannot answer edit prompts. The legacy allOperations flag no longer
+    // covers exact tool-action approvals, so use the edit posture explicitly.
+    // User-selected postures, shell escalation and declarative denials survive.
+    if (!permissionModeExplicit && previousPermissionMode === 'default') {
+      permissionManager.setMode('acceptEdits');
+    }
     const customAgentConfig = await loadCustomAgentForCli(agentName, false);
     const modelToUse = customAgentConfig?.model ?? model;
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
@@ -1600,6 +1610,9 @@ async function processPromptHeadless(
       delete process.env.CODEBUDDY_HEADLESS;
     } else {
       process.env.CODEBUDDY_HEADLESS = previousHeadless;
+    }
+    if (permissionManager.getMode() !== previousPermissionMode) {
+      permissionManager.setMode(previousPermissionMode);
     }
   }
 }
@@ -2358,7 +2371,8 @@ program
           resolveHeadlessOutputFormat(options),
           options.outputLastMessage,
           options.outputSchema,
-          options.agent
+          options.agent,
+          Boolean(options.permissionMode),
         );
         await finalizeHeadlessRun(headlessExitCode);
         return;

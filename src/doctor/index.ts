@@ -782,6 +782,25 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
   const p = (userSettings?.provider || '').toLowerCase();
   const onboardedLocal = p === 'ollama' || p === 'lmstudio';
   const envLocal = Boolean(process.env.OLLAMA_HOST || process.env.LMSTUDIO_HOST);
+  const providerOverride = process.env.CODEBUDDY_PROVIDER?.trim().toLowerCase();
+  const envOllama = providerOverride === 'ollama' || (!providerOverride && Boolean(process.env.OLLAMA_HOST));
+  const requestedModel = process.env.OLLAMA_MODEL?.trim() || process.env.GROK_MODEL?.trim();
+  if (envOllama && requestedModel && ollama?.available) {
+    const model = advertisedModel(ollama.models ?? [], requestedModel);
+    return model ? {
+      name: 'AI provider ready', status: 'ok',
+      message: `Ollama ($0) — environment selects installed model ${model}`,
+    } : {
+      name: 'AI provider ready', status: 'warn',
+      message: `Ollama is running but requested model ${requestedModel} is not currently advertised — choose an installed tag or change the model environment variable`,
+    };
+  }
+  if (providerOverride && !['ollama', 'lmstudio'].includes(providerOverride) && !oauthOrKey) {
+    return {
+      name: 'AI provider ready', status: 'warn',
+      message: `Requested provider ${providerOverride} is not configured; an ambient local runtime does not override CODEBUDDY_PROVIDER`,
+    };
+  }
   // OLLAMA_HOST alone is not a saved model selection. Treating the grok
   // defaultModel that loadUserSettings() used to invent as "the user's
   // Ollama tag" made doctor lie on a virgin profile.
