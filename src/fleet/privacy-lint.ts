@@ -118,8 +118,7 @@ const PATTERNS: Array<{
   // arbitrary 13-19 digit strings.
   {
     kind: 'pii-credit-card',
-    regex:
-      /\b(?:4\d{12}(?:\d{3})?|5[1-5]\d{14}|3[47]\d{13}|6(?:011|5\d{2})\d{12}|(?:2131|1800|35\d{3})\d{11})\b/g,
+    regex: /\b\d(?:[ -]?\d){12,18}\b/g,
     highConfidence: true,
   },
 ];
@@ -246,10 +245,14 @@ export function scanForSecrets(prompt: string): PrivacyLintResult {
       const matched = m[0];
       // Skip if this range overlaps with an earlier (higher priority) match.
       if (seen.some(([s, e]) => start < e && end > s)) continue;
-      // Credit-card pattern: filter through Luhn to drop arbitrary
-      // digit runs that just happened to start with 4 or 5.
-      if (kind === 'pii-credit-card' && !luhnValid(matched.replace(/\D/g, ''))) {
-        continue;
+      // Credit-card pattern: verify length, network prefix, and Luhn
+      // to drop arbitrary digit runs.
+      if (kind === 'pii-credit-card') {
+        const digits = matched.replace(/\D/g, '');
+        if (digits.length < 13 || digits.length > 19) continue;
+        const networkPrefixRegex = /^(?:4\d{12}(?:\d{3})?|5[1-5]\d{14}|3[47]\d{13}|6(?:011|5\d{2})\d{12}|(?:2131|1800|35\d{3})\d{11})$/;
+        if (!networkPrefixRegex.test(digits)) continue;
+        if (!luhnValid(digits)) continue;
       }
       seen.push([start, end]);
       if (hc) highConfidence = true;

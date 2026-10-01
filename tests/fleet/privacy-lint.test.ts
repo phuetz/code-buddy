@@ -140,10 +140,27 @@ describe('scanForSecrets', () => {
       expect(out.matches.some((m) => m.kind === 'pii-credit-card')).toBe(true);
     });
 
+    it('detects grouped credit card numbers', () => {
+      const cards = [
+        '4111 1111 1111 1111',
+        '4111-1111-1111-1111',
+        '5500 0000 0000 0004',
+        '3782 822463 10005'
+      ];
+      for (const card of cards) {
+        const out = scanForSecrets(`Card: ${card} exp 12/27`);
+        expect(out.matches.some((m) => m.kind === 'pii-credit-card')).toBe(true, `Failed for ${card}`);
+        expect(out.highConfidence).toBe(true, `Failed highConfidence for ${card}`);
+      }
+    });
+
     it('skips digit runs that look like cards but fail Luhn', () => {
       // 4111111111111112 — flips the last digit, breaks Luhn.
-      const out = scanForSecrets('Random sequence: 4111111111111112 ignore');
-      expect(out.matches.some((m) => m.kind === 'pii-credit-card')).toBe(false);
+      const out1 = scanForSecrets('Random sequence: 4111111111111112 ignore');
+      expect(out1.matches.some((m) => m.kind === 'pii-credit-card')).toBe(false);
+
+      const out2 = scanForSecrets('Random sequence: 4111 1111 1111 1112 ignore');
+      expect(out2.matches.some((m) => m.kind === 'pii-credit-card')).toBe(false);
     });
 
     it('does not flag normal sentences with numbers', () => {
