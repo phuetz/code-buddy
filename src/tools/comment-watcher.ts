@@ -2,6 +2,7 @@ import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from "path";
 import { execFile } from "child_process";
 import { EventEmitter } from "events";
+import { logger } from "../utils/logger.js";
 
 const RIPGREP_TIMEOUT_MS = 30_000;
 
@@ -105,11 +106,20 @@ export class CommentWatcher extends EventEmitter {
   private projectRoot: string;
   private detectedComments: DetectedComment[] = [];
   private vfs = UnifiedVfsRouter.Instance;
+  private scanFileCount = 0;
+  private readonly MAX_SCAN_FILES = 20000;
+  private readonly MAX_FILE_SIZE_BYTES = 1024 * 1024; // 1 MB
 
   constructor(projectRoot: string = process.cwd(), config: Partial<CommentWatcherConfig> = {}) {
     super();
     this.projectRoot = projectRoot;
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+      triggers: config.triggers ? [...config.triggers] : [...DEFAULT_CONFIG.triggers],
+      ignoreDirs: config.ignoreDirs ? [...config.ignoreDirs] : [...DEFAULT_CONFIG.ignoreDirs],
+      fileExtensions: config.fileExtensions ? [...config.fileExtensions] : [...DEFAULT_CONFIG.fileExtensions],
+    };
   }
 
   /**
@@ -207,6 +217,7 @@ export class CommentWatcher extends EventEmitter {
       }
     } catch (_error) {
       // Fallback to manual scan
+      this.scanFileCount = 0;
       await this.manualScan();
     }
 
@@ -222,9 +233,17 @@ export class CommentWatcher extends EventEmitter {
    * Manual scan fallback (slower but works without ripgrep)
    */
   private async manualScan(dir: string = this.projectRoot): Promise<void> {
+    if (this.scanFileCount >= this.MAX_SCAN_FILES) {
+      return;
+    }
+
     const entries = await this.vfs.readDirectory(dir);
 
     for (const entry of entries) {
+      if (this.scanFileCount >= this.MAX_SCAN_FILES) {
+        return;
+      }
+
       const fullPath = path.join(dir, entry.name);
 
       if (entry.isDirectory) {
@@ -234,8 +253,20 @@ export class CommentWatcher extends EventEmitter {
       } else if (entry.isFile) {
         const ext = path.extname(entry.name);
         if (this.config.fileExtensions.includes(ext)) {
-          const comments = await this.scanFile(fullPath);
-          this.detectedComments.push(...comments);
+          this.scanFileCount++;
+          if (this.scanFileCount === this.MAX_SCAN_FILES) {
+            logger.warn(`CommentWatcher: Reached MAX_SCAN_FILES limit (${this.MAX_SCAN_FILES}). Stopping manual scan.`);
+          }
+
+          try {
+            const stat = await this.vfs.stat(fullPath);
+            if (stat.size <= this.MAX_FILE_SIZE_BYTES) {
+              const comments = await this.scanFile(fullPath);
+              this.detectedComments.push(...comments);
+            }
+          } catch (_error) {
+            // Ignore stat errors
+          }
         }
       }
     }
