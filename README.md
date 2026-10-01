@@ -118,7 +118,7 @@ and [French presentation](https://youtu.be/2XgFHxBeI8Q) are secondary illustrati
 The presentation uses a synthetic voice and portrait. These media are not part of
 the evidence count and do not validate a fresh installation.
 
-LM Resizer is optional (`CODEBUDDY_LM_RESIZER=true`). The 0.2.4 native integration uses MCP `lm_resizer_tool_output` to process large observations after Code Buddy executes the command, with raw-output recovery and fallback on error. See the [tool reference](docs/tools-reference.md#lm-resizer).
+LM Resizer is optional (`CODEBUDDY_LM_RESIZER=true`). The 0.2.4 native integration uses MCP `lm_resizer_tool_output` to process large observations after Code Buddy executes the command, with raw-output recovery and fallback on error. See the [tool reference](docs/tools-reference.md).
 
 ## License
 
