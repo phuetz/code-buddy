@@ -234,15 +234,34 @@ export const createFileSchema = z.object({
 /**
  * Schema for str_replace_editor tool
  */
-export const strReplaceEditorSchema = z.object({
-  path: safePathSchema,
-  old_str: z.string()
-    .min(1, 'old_str cannot be empty')
-    .max(VALIDATION_LIMITS.MAX_CONTENT_SIZE, 'old_str exceeds maximum size'),
-  new_str: z.string()
-    .max(VALIDATION_LIMITS.MAX_CONTENT_SIZE, 'new_str exceeds maximum size'),
-  replace_all: z.boolean().optional(),
-});
+export const strReplaceEditorSchema = z.preprocess(
+  (val: unknown) => {
+    if (typeof val === 'object' && val !== null) {
+      const v = val as Record<string, unknown>;
+      return {
+        ...v,
+        old_str: v.old_str ?? v.pattern ?? v.find ?? v.old_text ?? v.old_content ?? v.old_string,
+        new_str: v.new_str ?? v.replacement ?? v.replace ?? v.new_text ?? v.new_content ?? v.new_string,
+      };
+    }
+    return val;
+  },
+  z.object({
+    path: safePathSchema,
+    old_str: z.string({
+      required_error: 'old_str (or pattern, find, old_text, old_content, old_string) is required',
+      invalid_type_error: 'old_str (or pattern, find, old_text, old_content, old_string) must be a string',
+    })
+      .min(1, 'old_str (or pattern, find, old_text, old_content, old_string) cannot be empty')
+      .max(VALIDATION_LIMITS.MAX_CONTENT_SIZE, 'old_str exceeds maximum size'),
+    new_str: z.string({
+      required_error: 'new_str (or replacement, replace, new_text, new_content, new_string) is required',
+      invalid_type_error: 'new_str (or replacement, replace, new_text, new_content, new_string) must be a string',
+    })
+      .max(VALIDATION_LIMITS.MAX_CONTENT_SIZE, 'new_str exceeds maximum size'),
+    replace_all: z.boolean().optional(),
+  })
+);
 
 /**
  * Schema for edit_file (Morph) tool

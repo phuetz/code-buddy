@@ -19,6 +19,7 @@ import {
   ViewFileTool,
   resetTextEditorInstance,
 } from '../../src/tools/registry/text-editor-tools.js';
+import { strReplaceEditorSchema } from '../../src/utils/input-validation/index.js';
 
 describe('text-editor-tools aliases', () => {
   beforeEach(() => {
@@ -105,6 +106,25 @@ describe('text-editor-tools aliases', () => {
     expect(tool.validate(args).valid).toBe(true);
     expect(mockEditor.strReplace).toHaveBeenCalledWith('src/index.ts', 'foo', 'bar', false);
     expect(result.success).toBe(true);
+  });
+
+  it('StrReplaceEditorTool accepts pattern/replacement aliases', async () => {
+    mockEditor.strReplace.mockResolvedValue({ success: true, content: 'edited' });
+    const tool = new StrReplaceEditorTool();
+    const args = {
+      file_path: 'src/index.ts',
+      pattern: 'foo',
+      replacement: 'bar',
+    };
+    const result = await tool.execute(args);
+
+    expect(tool.validate(args).valid).toBe(true);
+    expect(mockEditor.strReplace).toHaveBeenCalledWith('src/index.ts', 'foo', 'bar', false);
+    expect(result.success).toBe(true);
+    expect(strReplaceEditorSchema.parse({ path: 'src/index.ts', pattern: 'foo', replacement: 'bar' })).toMatchObject({
+      old_str: 'foo',
+      new_str: 'bar',
+    });
   });
 
   it('schema allows alias-only replace args without requiring old_str/new_str keys', () => {

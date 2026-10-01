@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -73,7 +74,7 @@ describe('buddy shadow list/clean', () => {
 
   it('lists a created ghost worktree and clean removes it without touching the real repo', async () => {
     const workspace = new ShadowWorkspace(repo, undefined, shadowBase);
-    const before = execFileSync('sha256sum', [path.join(repo, 'tracked.txt')], { encoding: 'utf8' });
+    const before = createHash('sha256').update(fs.readFileSync(path.join(repo, 'tracked.txt'))).digest('hex');
     const result = await workspace.runSpeculative([{ path: 'tracked.txt', content: 'ghost-only\n' }]);
     expect(result.ok).toBe(true);
 
@@ -95,7 +96,7 @@ describe('buddy shadow list/clean', () => {
 
     const status = await workspace.getStatus();
     expect(status.exists).toBe(false);
-    expect(execFileSync('sha256sum', [path.join(repo, 'tracked.txt')], { encoding: 'utf8' })).toBe(before);
+    expect(createHash('sha256').update(fs.readFileSync(path.join(repo, 'tracked.txt'))).digest('hex')).toBe(before);
     expect(fs.readFileSync(path.join(repo, 'tracked.txt'), 'utf8')).toBe('committed-v1\n');
   });
 });

@@ -16,6 +16,16 @@ function extractPath(input: Record<string, unknown>): string | undefined {
   return typeof candidate === 'string' ? candidate : undefined;
 }
 
+export function extractOldStr(input: Record<string, unknown>): string | undefined {
+  const candidate = input.old_str ?? input.pattern ?? input.find ?? input.old_text ?? input.old_content ?? input.old_string;
+  return typeof candidate === 'string' ? candidate : undefined;
+}
+
+export function extractNewStr(input: Record<string, unknown>): string | undefined {
+  const candidate = input.new_str ?? input.replacement ?? input.replace ?? input.new_text ?? input.new_content ?? input.new_string;
+  return typeof candidate === 'string' ? candidate : undefined;
+}
+
 /**
  * Resolve a (possibly relative) tool path against the execution context's cwd.
  *
@@ -252,8 +262,8 @@ export class StrReplaceEditorTool implements ITool {
 
   async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
     const path = resolveAgainstCwd(extractPath(input) as string, context);
-    const oldStr = (input.old_str ?? input.old_text ?? input.old_content ?? input.find ?? input.old_string) as string;
-    const newStr = (input.new_str ?? input.new_text ?? input.new_content ?? input.replace ?? input.new_string) as string;
+    const oldStr = extractOldStr(input) as string;
+    const newStr = extractNewStr(input) as string;
     const replaceAll = (input.replace_all as boolean) ?? false;
 
     return await getTextEditor().strReplace(path, oldStr, newStr, replaceAll);
@@ -298,6 +308,10 @@ export class StrReplaceEditorTool implements ITool {
             type: 'string',
             description: 'Alias for old_str',
           },
+          pattern: {
+            type: 'string',
+            description: 'Alias for old_str',
+          },
           new_str: {
             type: 'string',
             description: 'Replacement text',
@@ -315,6 +329,10 @@ export class StrReplaceEditorTool implements ITool {
             description: 'Alias for new_str',
           },
           new_string: {
+            type: 'string',
+            description: 'Alias for new_str',
+          },
+          replacement: {
             type: 'string',
             description: 'Alias for new_str',
           },
@@ -341,14 +359,14 @@ export class StrReplaceEditorTool implements ITool {
       return { valid: false, errors: ['path must be a non-empty string'] };
     }
 
-    const oldStr = data.old_str ?? data.old_text ?? data.old_content ?? data.find ?? data.old_string;
+    const oldStr = extractOldStr(data);
     if (typeof oldStr !== 'string') {
-      return { valid: false, errors: ['old_str must be a string'] };
+      return { valid: false, errors: ['old_str (or pattern, find, old_text, old_content, old_string) must be a string'] };
     }
 
-    const newStr = data.new_str ?? data.new_text ?? data.new_content ?? data.replace ?? data.new_string;
+    const newStr = extractNewStr(data);
     if (typeof newStr !== 'string') {
-      return { valid: false, errors: ['new_str must be a string'] };
+      return { valid: false, errors: ['new_str (or replacement, replace, new_text, new_content, new_string) must be a string'] };
     }
 
     if (data.replace_all !== undefined && typeof data.replace_all !== 'boolean') {

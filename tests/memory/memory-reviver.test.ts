@@ -7,7 +7,7 @@ import {
   isPlaceholderEntry,
   reviveMemory,
   loadRevivedSummary,
-} from './memory-reviver.js';
+} from '../../src/memory/memory-reviver.js';
 
 function seedWorkspace(root: string) {
   const agentDir = path.join(root, '.codebuddy', 'agent-memory', 'alice');
