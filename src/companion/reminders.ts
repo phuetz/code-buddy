@@ -559,11 +559,25 @@ export function parseVoiceReminder(text: string, now: Date = new Date()): AddRem
   // Accept the spelled-out "heure(s)" too — otherwise "à 9 heures" matched only
   // the "h" of "heures" and left "eures" in the label (a reminder named "eures").
   const tm =
-    t.match(/(?:^|\s)(?:à|a)\s*(\d{1,2})\s*(?:h(?:eures?)?|:)\s*(\d{2})?/i) ||
+    t.match(/(?:^|\s)(?:à|a)\s*(\d{1,2})\s*(?:h(?:eures?)?|:)\s*(et demie|et quart|moins le quart|\d{2})?/i) ||
     t.match(/\b(\d{1,2}):(\d{2})\b/);
   if (!tm) return null;
-  const hh = parseInt(tm[1]!, 10);
-  const mm = tm[2] ? parseInt(tm[2], 10) : 0;
+  let hh = parseInt(tm[1]!, 10);
+  let mm = 0;
+  if (tm[2]) {
+    const mStr = tm[2].toLowerCase();
+    if (mStr === 'et demie') {
+      mm = 30;
+    } else if (mStr === 'et quart') {
+      mm = 15;
+    } else if (mStr === 'moins le quart') {
+      mm = 45;
+      hh -= 1;
+      if (hh < 0) hh = 23;
+    } else {
+      mm = parseInt(tm[2], 10);
+    }
+  }
   if (hh > 23 || mm > 59) return null;
   // Lead time — "rappelle-moi 30 min AVANT mon train à 10h38" fires at 10h08 (event − lead), with a
   // label that says how far ahead. Only same-day (a lead crossing midnight keeps the event time).
@@ -587,7 +601,7 @@ export function parseVoiceReminder(text: string, now: Date = new Date()): AddRem
     (t
       .replace(CREATE_VERB, ' ')
       .replace(/\b\d+\s*(?:min|minute|minutes|h|heure|heures)\s+avant\b/gi, ' ') // strip the lead phrase
-      .replace(/(?:^|\s)(?:à|a)\s*\d{1,2}\s*(?:h(?:eures?)?|:)\s*\d{0,2}/i, ' ')
+      .replace(/(?:^|\s)(?:à|a)\s*\d{1,2}\s*(?:h(?:eures?)?|:)\s*(?:et demie|et quart|moins le quart|\d{0,2})/i, ' ')
       .replace(/\b\d{1,2}:\d{2}\b/, ' ')
       // Strip the date cue too, so the label is "train", not "train demain".
       .replace(

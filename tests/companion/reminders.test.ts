@@ -215,6 +215,15 @@ describe('reminders — parseVoiceReminder', () => {
     expect(parseVoiceReminder('rappelle moi de prendre mes médicaments à 21h30')).toMatchObject({ time: '21:30' });
     expect(parseVoiceReminder('rappelle-moi le rendez-vous à 14:15')).toEqual({ label: 'le rendez-vous', time: '14:15' });
   });
+  it('handles minutes spelled out (et demie, et quart, moins le quart)', () => {
+    expect(parseVoiceReminder('rappelle-moi de sortir le chien à 8 heures et demie')).toMatchObject({ label: 'sortir le chien', time: '08:30' });
+    expect(parseVoiceReminder('rappelle-moi à 8 heures et quart')).toMatchObject({ time: '08:15' });
+    expect(parseVoiceReminder('rappelle-moi à 9 heures moins le quart')).toMatchObject({ time: '08:45' });
+    expect(parseVoiceReminder('rappelle-moi à 9h30')).toMatchObject({ time: '09:30' });
+    expect(parseVoiceReminder('rappelle-moi à 9 h 15')).toMatchObject({ time: '09:15' });
+    expect(parseVoiceReminder('rappelle-moi à 24h')).toBeNull();
+  });
+
   it('handles the spelled-out "heures" (no more "eures" label)', () => {
     // Regression: "à 9 heures" used to match only the "h" of "heures" and leave
     // "eures" as the label.
