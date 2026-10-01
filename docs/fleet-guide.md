@@ -1623,3 +1623,11 @@ in `sourceContext` (maximum 48,000 characters), or first obtain them with
 `peer.tool.invoke` and explicitly include those results. A successful reply
 contains `sourceAccess: "supplied-text-only"` and `sourceWarning`; its review
 covers only the supplied text, with no claim of a repository-wide inspection.
+
+
+`peer_delegate` and `peer_chain` accept `sourceContext` with explicit paths and
+source excerpts (up to 48,000 characters). `/fleet route --delegate --profile review`
+accepts `--source-context "path: excerpt"`. Supply only content you intend to send
+to the selected peer. The receiver rejects a review without sources before inference;
+these calls never read the caller’s or peer’s files implicitly. Routing considers
+secrets in the supplied excerpts as well as the prompt.

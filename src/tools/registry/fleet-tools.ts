@@ -54,6 +54,7 @@ export class PeerDelegateTool implements ITool {
     return executePeerDelegate({
       peer: typeof input.peer === 'string' ? input.peer : '',
       prompt: typeof input.prompt === 'string' ? input.prompt : '',
+      sourceContext: typeof input.sourceContext === 'string' ? input.sourceContext : undefined,
       systemPrompt: typeof input.systemPrompt === 'string' ? input.systemPrompt : undefined,
       provider: typeof input.provider === 'string' ? input.provider : undefined,
       model: typeof input.model === 'string' ? input.model : undefined,
@@ -74,6 +75,7 @@ export class PeerDelegateTool implements ITool {
             description:
               'The peer ID (from /fleet listen --name). Use list_peers to discover available peer IDs.',
           },
+          sourceContext: { type: 'string', maxLength: 48000, description: 'Explicit source paths and excerpts for an audit; no implicit file access.' },
           prompt: {
             type: 'string',
             description:
@@ -524,6 +526,7 @@ export class PeerChainTool implements ITool {
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     return executePeerChain({
       prompt: typeof input.prompt === 'string' ? input.prompt : '',
+      sourceContext: typeof input.sourceContext === 'string' ? input.sourceContext : undefined,
       chainRoles: input.chainRoles,
       privacyTag:
         input.privacyTag === 'sensitive' || input.privacyTag === 'public'
@@ -545,6 +548,7 @@ export class PeerChainTool implements ITool {
       parameters: {
         type: 'object',
         properties: {
+          sourceContext: { type: 'string', maxLength: 48000, description: 'Explicit source paths and excerpts for an audit; no implicit file access.' },
           prompt: {
             type: 'string',
             description:

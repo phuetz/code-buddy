@@ -293,6 +293,7 @@ describe('Fleet loopback smoke', () => {
     const result = await executePeerDelegate({
       peer: 'loopback',
       prompt: 'review this patch',
+      sourceContext: 'hello.txt: hello from loopback',
       dispatchProfile: 'review',
       timeoutMs: loopbackTimeoutMs,
     });
@@ -303,6 +304,7 @@ describe('Fleet loopback smoke', () => {
 
     const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
     expect(messages[0].content).toContain('Prioritize defects');
+    expect(messages[1].content).toContain('hello.txt: hello from loopback');
     expect(messages[0].content).toContain('Tool policy hint:');
 
     expect(result.data).toMatchObject({
@@ -321,12 +323,22 @@ describe('Fleet loopback smoke', () => {
     });
   });
 
+  it('refuses review delegation without sources before invoking the model', async () => {
+    const { client, chat } = makeMockPeerChatClient();
+    await connectLoopbackPeer(client);
+    const result = await executePeerDelegate({ peer: 'loopback', prompt: 'review this patch', dispatchProfile: 'review' });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('SOURCES_REQUIRED');
+    expect(chat).not.toHaveBeenCalled();
+  });
+
   it('executes peer_chain stages through real loopback peer.chat', async () => {
     const { client, chat } = makeMockPeerChatClient('loopback chain stage answer');
     await connectLoopbackPeer(client);
 
     const result = await executePeerChain({
       prompt: 'coordinate a bounded docs edit',
+      sourceContext: 'hello.txt: hello from loopback',
       chainRoles: ['research', 'review', 'safe'],
       privacyTag: 'public',
       describeTimeoutMs: loopbackTimeoutMs,
@@ -370,6 +382,8 @@ describe('Fleet loopback smoke', () => {
       '--profile',
       'review',
       '--delegate',
+      '--source-context',
+      'hello.txt: hello from loopback',
       '--privacy',
       'public',
       '--timeout',
@@ -387,6 +401,7 @@ describe('Fleet loopback smoke', () => {
 
     const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
     expect(messages[0].content).toContain('Prioritize defects');
+    expect(messages[1].content).toContain('hello.txt: hello from loopback');
   });
 
   it('routes /fleet chat start --profile through real loopback peer.chat-session', async () => {

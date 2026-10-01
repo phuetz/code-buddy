@@ -211,6 +211,7 @@ interface ParsedDescribeArgs {
 
 interface ParsedRouteArgs {
   prompt: string;
+  sourceContext?: string;
   routeParams: Omit<RoutePeerParams, 'prompt'>;
   delegate: boolean;
   delegateTimeoutMs?: number;
@@ -473,6 +474,7 @@ function parseRouteArgs(rest: string[]): ParsedRouteArgs {
   const routeParams: ParsedRouteArgs['routeParams'] = {};
   let delegate = false;
   let delegateTimeoutMs: number | undefined;
+  let sourceContext: string | undefined;
   let json = false;
   let council = false;
 
@@ -527,6 +529,11 @@ function parseRouteArgs(rest: string[]): ParsedRouteArgs {
       if (parsed.error) return { prompt: '', routeParams, delegate, json, error: parsed.error };
       delegateTimeoutMs = parsed.value;
       i++;
+    } else if (arg === '--source-context') {
+      sourceContext = rest[++i];
+      if (!sourceContext?.trim() || sourceContext.length > 48_000) {
+        return { prompt: '', routeParams, delegate, json, error: 'Error: --source-context requires a non-empty excerpt of at most 48000 characters.' };
+      }
     } else if (arg === '--delegate') {
       delegate = true;
     } else if (arg === '--council') {
@@ -546,6 +553,7 @@ function parseRouteArgs(rest: string[]): ParsedRouteArgs {
 
   return {
     prompt: promptParts.join(' ').trim(),
+    ...(sourceContext ? { sourceContext } : {}),
     routeParams,
     delegate,
     ...(delegateTimeoutMs !== undefined ? { delegateTimeoutMs } : {}),
@@ -1703,7 +1711,7 @@ async function handleRoute(rest: string[]): Promise<CommandHandlerResult> {
   }
 
   const routeResult = await executeRoutePeer({
-    prompt: parsed.prompt,
+    prompt: [parsed.prompt, parsed.sourceContext].filter(Boolean).join('\n'),
     ...parsed.routeParams,
   });
 
@@ -1738,6 +1746,7 @@ async function handleRoute(rest: string[]): Promise<CommandHandlerResult> {
     provider: routeData.recommendation.provider,
     model: routeData.recommendation.model,
     dispatchProfile: routeData.nextCall.args.dispatchProfile ?? parsed.routeParams.dispatchProfile,
+    ...(parsed.sourceContext ? { sourceContext: parsed.sourceContext } : {}),
     ...(parsed.delegateTimeoutMs !== undefined ? { timeoutMs: parsed.delegateTimeoutMs } : {}),
   });
 

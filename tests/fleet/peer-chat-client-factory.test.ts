@@ -21,6 +21,7 @@ import {
   isModelCompatibleWithProvider,
   pickCompatibleModelForProvider,
 } from '../../src/fleet/compatible-model.js';
+import { getSettingsManager } from '../../src/utils/settings-manager.js';
 import { logger } from '../../src/utils/logger.js';
 import type { ResolvedCommandProvider } from '../../src/commands/llm-provider-resolution.js';
 const { commandProvider } = vi.hoisted(() => ({ commandProvider: vi.fn<() => ResolvedCommandProvider | null>(() => null) }));
@@ -83,10 +84,25 @@ beforeEach(() => {
 });
 
 it('inherits the saved doctor target without ambient provider variables', () => {
-  commandProvider.mockReturnValue({ providerLabel: 'ollama', model: 'qwen3:4b-instruct', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1' });
-  const factory = createPeerChatClientFromEnv();
-  expect(factory?.info).toMatchObject({ provider: 'ollama', model: 'qwen3:4b-instruct', isLocal: true });
-  expect(resolveProviderFromEnv()).toMatchObject({ provider: 'ollama', model: 'qwen3:4b-instruct', baseUrl: 'http://127.0.0.1:11434/v1' });
+  const savedSelection = vi.spyOn(getSettingsManager(), 'readUserSettingsIfPresent').mockReturnValue({ provider: 'ollama' });
+  try {
+    commandProvider.mockReturnValue({ providerLabel: 'ollama', model: 'qwen3:4b-instruct', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1' });
+    const factory = createPeerChatClientFromEnv();
+    expect(factory?.info).toMatchObject({ provider: 'ollama', model: 'qwen3:4b-instruct', isLocal: true });
+    expect(resolveProviderFromEnv()).toMatchObject({ provider: 'ollama', model: 'qwen3:4b-instruct', baseUrl: 'http://127.0.0.1:11434/v1' });
+  } finally { savedSelection.mockRestore(); }
+});
+
+it('does not materialize an ambient paid-key target before local auto-detection', () => {
+  const absentSelection = vi.spyOn(getSettingsManager(), 'readUserSettingsIfPresent').mockReturnValue(undefined);
+  try {
+    process.env.OLLAMA_HOST = 'localhost:11434';
+    process.env.GROK_API_KEY = 'test-key';
+    commandProvider.mockReturnValue({ providerLabel: 'grok', model: 'fixture-cloud', apiKey: 'test-key' });
+    expect(resolveProviderFromEnv('auto')?.provider).toBe('ollama');
+    expect(createPeerChatClientFromEnv()?.info.provider).toBe('ollama');
+    expect(commandProvider).not.toHaveBeenCalled();
+  } finally { absentSelection.mockRestore(); }
 });
 
 afterEach(() => {

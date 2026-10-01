@@ -20,6 +20,7 @@ import { scanForSecrets } from '../fleet/privacy-lint.js';
 
 export interface PeerChainParams {
   prompt: string;
+  sourceContext?: string;
   chainRoles: unknown;
   privacyTag?: 'sensitive' | 'public';
   maxCostUsd?: number;
@@ -72,7 +73,7 @@ export async function executePeerChain(params: PeerChainParams): Promise<ToolRes
     return { success: false, error: rolesResult.error };
   }
   const roles = rolesResult.roles!;
-  const privacyLint = scanForSecrets(params.prompt);
+  const privacyLint = scanForSecrets([params.prompt, params.sourceContext].filter(Boolean).join('\n'));
   const privacyTag = privacyLint.hasSecrets ? 'sensitive' : params.privacyTag;
 
   const routeResult = await executeRoutePeer({
@@ -114,6 +115,7 @@ export async function executePeerChain(params: PeerChainParams): Promise<ToolRes
     const delegateResult = await executePeerDelegate({
       peer: call.args.peer,
       prompt: stagePrompt,
+      ...(params.sourceContext ? { sourceContext: params.sourceContext } : {}),
       model: call.args.model,
       dispatchProfile: role,
       ...(typeof params.stageTimeoutMs === 'number' ? { timeoutMs: params.stageTimeoutMs } : {}),

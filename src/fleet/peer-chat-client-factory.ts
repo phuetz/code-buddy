@@ -41,6 +41,7 @@ import { logger } from '../utils/logger.js';
 import { classifyProviderModelEgress, type ModelEgress } from '../providers/model-egress.js';
 import { pickCompatibleModelForProvider } from './compatible-model.js';
 import { resolveCommandProvider } from '../commands/llm-provider-resolution.js';
+import { getSettingsManager } from '../utils/settings-manager.js';
 
 export type PeerChatProviderId =
   | 'ollama'
@@ -468,6 +469,9 @@ export interface ResolvedProvider {
 }
 
 function resolvedCommandTarget(): ResolvedProvider | null {
+  // Capture before resolution: loading absent settings may materialize defaults.
+  const savedProvider = getSettingsManager().readUserSettingsIfPresent()?.provider;
+  if (!process.env.CODEBUDDY_PROVIDER?.trim() && !savedProvider) return null;
   const target = resolveCommandProvider();
   const provider = normalizePeerChatProviderId(target?.providerLabel);
   if (!target?.model || !provider) return null;

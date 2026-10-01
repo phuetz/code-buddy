@@ -39,6 +39,7 @@ export const PEER_DELEGATE_TOOL_DEF: CodeBuddyTool = {
           description:
             'The peer ID (from /fleet listen --name). Use list_peers to discover available peer IDs.',
         },
+        sourceContext: { type: 'string', maxLength: 48000, description: 'Explicit source paths and excerpts, required for an audit or review. No files are read implicitly.' },
         prompt: {
           type: 'string',
           description:
@@ -113,6 +114,7 @@ export const PEER_CHAIN_TOOL_DEF: CodeBuddyTool = {
     parameters: {
       type: 'object',
       properties: {
+        sourceContext: { type: 'string', maxLength: 48000, description: 'Explicit source paths and excerpts, required for an audit or review. No files are read implicitly.' },
         prompt: {
           type: 'string',
           description:

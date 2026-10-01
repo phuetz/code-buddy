@@ -74,6 +74,8 @@ function checkAndIncrementCallCap(): ToolResult | null {
 export interface PeerDelegateParams {
   peer: string;
   prompt: string;
+  /** Explicit excerpts only; the peer never reads files for this call. */
+  sourceContext?: string;
   systemPrompt?: string;
   provider?: PeerChatProviderId | string;
   model?: string;
@@ -82,6 +84,8 @@ export interface PeerDelegateParams {
 }
 
 interface PeerChatRpcResult {
+  sourceAccess?: string;
+  sourceWarning?: string;
   text?: string;
   modelRequested?: string;
   providerRequested?: string;
@@ -176,6 +180,7 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
       'peer.chat',
       {
         prompt: params.prompt,
+        ...(params.sourceContext ? { sourceContext: params.sourceContext } : {}),
         ...(systemPrompt ? { systemPrompt } : {}),
         ...(params.provider ? { provider: params.provider } : {}),
         ...(params.model ? { model: params.model } : {}),
@@ -191,6 +196,7 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
     // <think>/<|im_start|>/[INST]/<<SYS>> or invisible characters into our prompt.
     const text = sanitizePeerText(raw?.text);
     const lines: string[] = [`[peer: ${params.peer}] [${elapsedMs}ms]`, text];
+    if (raw?.sourceWarning) lines.push(`[scope: ${sanitizePeerText(raw.sourceWarning)}]`);
     if (raw?.usage?.total_tokens != null) {
       const inT = raw.usage.prompt_tokens ?? '?';
       const outT = raw.usage.completion_tokens ?? '?';

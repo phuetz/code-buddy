@@ -138,6 +138,14 @@ describe('peer_chain tool', () => {
     expect(prompts.safe).toContain('review stage output');
   });
 
+  it('vetoes cloud routing when secrets appear only in supplied excerpts', async () => {
+    const chat = vi.fn(() => 'unexpected cloud answer');
+    registerPeer('cloud-box', capability({ egress: 'cloud', roles: ['review'], models: [{ id: 'cloud-fixture', provider: 'openai', contextWindow: 32000, strengths: ['reasoning'] }] }), chat);
+    const result = await executePeerChain({ prompt: 'review the supplied excerpt', sourceContext: 'fixture.txt: SSN 123-45-6789', chainRoles: ['review'], privacyTag: 'public' });
+    expect(result.success).toBe(false);
+    expect(chat).not.toHaveBeenCalled();
+  });
+
   it('stops on the first failed stage and returns completed stage context', async () => {
     const sharedModel = {
       id: 'reasoner',
