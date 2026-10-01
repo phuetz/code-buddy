@@ -934,6 +934,13 @@ describe('CostTracker', () => {
         expect(result.pricing).toBe('subscription');
         expect(result.billing).toBe('subscription');
       });
+
+      it('reports local inference as local, with zero marginal cost', () => {
+        const result = tracker.calculateCostExtended(100, 50, 'qwen3.5:4b', 0,
+          { promptTokens: 80, completionTokens: 20 });
+        expect(result).toMatchObject({ total: 0, estimated: false,
+          pricing: 'local', billing: 'local', inputTokens: 80, outputTokens: 20 });
+      });
     });
   });
 });

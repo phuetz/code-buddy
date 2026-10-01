@@ -20,8 +20,7 @@ import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastruc
 import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
 import type { Session, SessionStore } from "../persistence/session-store.js";
 import type { CostTracker, ExtendedCostInfo } from "../utils/cost-tracker.js";
-import { isChatGptSubscriptionModel, isLocalNoCostModel } from "../utils/cost-tracker.js";
-import { hasModelPricing } from "../config/model-pricing.js";
+import { getModelCostMetadata } from "../utils/cost-tracker.js";
 import { getLaneQueue } from "../concurrency/lane-queue.js";
 import type { RouteAgentConfig } from "../channels/peer-routing.js";
 import { findSkill, findStarterPack, resetSkillRegistry } from "../skills/index.js";
@@ -1811,15 +1810,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     const estimated = lastProviderUsage === null || lastProviderUsage === undefined;
 
     // Get billing and pricing status
-    const billing: 'pay-per-use' | 'subscription' =
-      isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)
-        ? 'subscription'
-        : 'pay-per-use';
-
-    const pricing: 'known' | 'unknown' | 'subscription' =
-      billing === 'subscription'
-        ? 'subscription'
-        : hasModelPricing(model) ? 'known' : 'unknown';
+    const { billing, pricing } = getModelCostMetadata(model);
 
     return {
       total: this.sessionCost,

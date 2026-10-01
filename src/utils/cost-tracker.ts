@@ -42,10 +42,10 @@ export interface TokenUsage {
   cost: number;
   /** Whether this usage is based on provider-reported tokens (true) or local estimate (false) */
   estimated?: boolean;
-  /** Pricing model used: 'known' | 'unknown' | 'subscription' */
-  pricing?: 'known' | 'unknown' | 'subscription';
-  /** Billing type: 'pay-per-use' | 'subscription' */
-  billing?: 'pay-per-use' | 'subscription';
+  /** Pricing model used: 'known' | 'unknown' | 'subscription' | 'local' */
+  pricing?: 'known' | 'unknown' | 'subscription' | 'local';
+  /** Billing type: 'pay-per-use' | 'subscription' | 'local' */
+  billing?: 'pay-per-use' | 'subscription' | 'local';
 }
 
 export interface CostReport {
@@ -69,13 +69,20 @@ export interface ExtendedCostInfo {
   /** Whether the cost is based on provider-reported tokens (false) or local estimate (true) */
   estimated: boolean;
   /** Pricing model: 'known' (model has known pricing), 'unknown' (model not in pricing table), 'subscription' (forfait) */
-  pricing: 'known' | 'unknown' | 'subscription';
+  pricing: 'known' | 'unknown' | 'subscription' | 'local';
   /** Billing type: 'pay-per-use' or 'subscription' */
-  billing: 'pay-per-use' | 'subscription';
+  billing: 'pay-per-use' | 'subscription' | 'local';
   /** Input tokens used for this cost calculation */
   inputTokens: number;
   /** Output tokens used for this cost calculation */
   outputTokens: number;
+}
+
+/** Keep session and per-call metadata consistent without calling local inference a subscription. */
+export function getModelCostMetadata(model: string): Pick<ExtendedCostInfo, 'billing' | 'pricing'> {
+  if (isLocalNoCostModel(model)) return { billing: 'local', pricing: 'local' };
+  if (isChatGptSubscriptionModel(model)) return { billing: 'subscription', pricing: 'subscription' };
+  return { billing: 'pay-per-use', pricing: hasModelPricing(model) ? 'known' : 'unknown' };
 }
 
 export interface CostConfig {
@@ -201,20 +208,15 @@ export class CostTracker extends EventEmitter {
   /**
    * Determine billing type for a model
    */
-  private determineBillingType(model: string): 'subscription' | 'pay-per-use' {
-    return isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)
-      ? 'subscription'
-      : 'pay-per-use';
+  private determineBillingType(model: string): ExtendedCostInfo['billing'] {
+    return getModelCostMetadata(model).billing;
   }
 
   /**
    * Determine pricing status for a model
    */
-  private determinePricingStatus(model: string): 'known' | 'unknown' | 'subscription' {
-    if (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
-      return 'subscription';
-    }
-    return hasModelPricing(model) ? 'known' : 'unknown';
+  private determinePricingStatus(model: string): 'known' | 'unknown' | 'subscription' | 'local' {
+    return getModelCostMetadata(model).pricing;
   }
 
   /**
@@ -270,7 +272,7 @@ export class CostTracker extends EventEmitter {
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
 
     let total = 0;
-    if (billing === 'subscription') {
+    if (billing === 'subscription' || billing === 'local') {
       total = 0;
     } else {
       const pricing = getPricingPer1k(model);
