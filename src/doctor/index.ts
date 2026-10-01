@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from 'child_process';
+import { execSync } from 'child_process';
 import {
   accessSync,
   chmodSync,
@@ -28,7 +28,7 @@ import {
   type OllamaModelSelection,
 } from './ollama-model-selection.js';
 import { checkDomainPolicy } from './domain-policy-check.js';
-import { loadDoctorLocalModelPolicy } from './local-model-policy.js';
+import { loadDoctorLocalModelPolicy, localModelInstallGuidance } from './local-model-policy.js';
 import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
 import { isDeclaredProviderFallbackEnabled } from '../providers/provider-failover-policy.js';
 import { formatProviderHealthLines, readProviderHealthSnapshot } from '../providers/provider-health.js';
@@ -871,13 +871,10 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
   }
 
   if (ollama?.available && ollama.baseURL) {
-    const baseURL = ollama.baseURL;
     return {
       name: 'AI provider ready',
       status: 'warn',
-      message: `Ollama is running but has no model — run \`buddy onboard\`, or --fix to pull ${DOCTOR_PULL_MODEL} ($0, can call tools)`,
-      fixable: true,
-      fix: async () => fixPullAndSelectOllama(baseURL),
+      message: `Ollama is running but has no model — ${localModelInstallGuidance()}; run doctor --fix again after installation`,
     };
   }
 
@@ -891,12 +888,10 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
 /** Point buddy at an already-running Ollama by writing user-settings (no download). */
 async function fixSelectRunningOllama(baseURL: string, model: string, reason?: string, maxContext?: number): Promise<FixResult> {
   try {
-    const { getSettingsManager } = await import('../utils/settings-manager.js');
-    if (maxContext !== undefined) {
-      const { persistDoctorLocalContextCap } = await import('./local-context-cap.js');
-      persistDoctorLocalContextCap(model, maxContext);
-    }
-    getSettingsManager().saveUserSettings({ provider: 'ollama', baseURL, model, defaultModel: model });
+    const { persistLocalProviderSelection } = await import('./local-provider-selection.js');
+    const endpoint = baseURL.replace(/\/+$/, '');
+    persistLocalProviderSelection(endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`, model, maxContext);
+
     return {
       success: true,
       message: `Selected local Ollama model ${model}: ${reason ?? 'selected from the installed model list'} (written to user-settings.json) — try: buddy try`,
@@ -909,26 +904,6 @@ async function fixSelectRunningOllama(baseURL: string, model: string, reason?: s
       action: 'select-running-ollama',
     };
   }
-}
-
-/**
- * Configured first choice when Ollama has no installed model.
- */
-export const DOCTOR_PULL_MODEL = loadDoctorLocalModelPolicy().preferredModels[0]!;
-
-/** Pull a small tool-capable model with Ollama, then select it. */
-async function fixPullAndSelectOllama(baseURL: string): Promise<FixResult> {
-  const model = DOCTOR_PULL_MODEL;
-  try {
-    execFileSync('ollama', ['pull', model], { stdio: 'inherit' });
-  } catch (err) {
-    return {
-      success: false,
-      message: `Failed to pull ${model}: ${err instanceof Error ? err.message : String(err)}. Install Ollama from https://ollama.com`,
-      action: 'pull-ollama-model',
-    };
-  }
-  return fixSelectRunningOllama(baseURL, model, undefined, loadDoctorLocalModelPolicy().maxContext);
 }
 
 // ============================================================================

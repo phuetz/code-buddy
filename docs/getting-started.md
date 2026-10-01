@@ -763,11 +763,22 @@ checks remain authoritative. The independent verifier still runs before success.
 separately from the model capability catalogue. The current order is
 `qwen3.5:4b`, then `gemma4:e4b`, with a context ceiling of 32,768 tokens
 persisted in the user configuration before selecting the model. Existing lower
-ceilings are preserved. If neither recommended tag is installed, doctor reports
-that fact and does not silently choose an unbenchmarked default. You can choose
-an installed model explicitly with `--model`, or supply an alternative policy
-file through `CODEBUDDY_DOCTOR_LOCAL_POLICY`. A policy is a JSON object containing
-`preferredModels`, `maxContext`, and `allowUnbenchmarkedFallback`.
+ceilings are preserved. If neither recommended tag is installed, doctor selects
+an installed model declaring tool support and shows a visible warning:
+“modèle de repli, qualité réduite ; installez qwen3.5:4b”. It proposes the exact
+command `ollama pull qwen3.5:4b` (approximately 3.4 GB) for you to run explicitly.
+`doctor --fix` never downloads models. Known models fitting free RAM rank first
+among fallbacks; otherwise an additional memory warning is shown. If no installed
+model supports tools, doctor reports the missing model and the install command.
+You can supply an alternative policy file through `CODEBUDDY_DOCTOR_LOCAL_POLICY`.
+The JSON contains `preferredModels`, `maxContext`, `allowUnbenchmarkedFallback`
+and optionally `recommendedDownloadSizeGB` for the first recommendation.
+
+`buddy try` and `doctor --fix` save the same local provider selection: the actual
+endpoint, `provider: ollama`, both model fields and the model's context ceiling.
+After either command, `buddy -p "explain the entry point"` uses the saved local
+model without `--model` or a provider environment variable. An explicit endpoint
+or model supplied to `try` is saved as actually used.
 
 `--permission-mode dontAsk` still requires confinement for shell commands.
 Run `buddy doctor` to check the native sandbox. Commands outside that boundary,
@@ -794,5 +805,8 @@ atomically; a failed match leaves the file unchanged.
 Headless task status fails closed for ambiguous requests: without a successful
 write or execution, they return `unverified` and a nonzero exit code. Explicit
 informational requests such as `explain`, `summarize`, or `reply` may succeed
-without an action. A compound request such as “explain the code, then fix lint”
+without an action. Other informational requests outside this recognized set
+(for example “raconte une blague”) may return `unverified`; phrase them as
+“reply with a joke” when no repository action is intended. This conservative
+status does not establish semantic correctness of generated code. A compound request such as “explain the code, then fix lint”
 still requires execution evidence for its modification.

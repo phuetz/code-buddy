@@ -13,10 +13,8 @@ vi.mock('child_process', () => ({
   spawnSync: vi.fn(() => ({ status: 0, stdout: '', stderr: '' })),
 }));
 
-// VERIF3 T16 : la réparation `ollama pull` n'était couverte par aucun test.
-// La sonde d'environnement et le gestionnaire de settings sont doublés pour
-// rendre `checkProviderReadiness` déterministe (et pour ne jamais écrire dans
-// le vrai user-settings.json).
+// Probe and settings doubles keep installation guidance and provider selection
+// deterministic, without downloading or writing the real user's profile.
 const { mockDetectEnvironment, mockSaveUserSettings, mockReadUserSettingsIfPresent } = vi.hoisted(
   () => ({
     mockDetectEnvironment: vi.fn(),
@@ -96,54 +94,30 @@ describe('doctor --fix', () => {
       mockDetectEnvironment.mockResolvedValue(OLLAMA_WITHOUT_MODEL);
     });
 
-    it('should mark the missing Ollama model as fixable', async () => {
+    it('proposes the exact install command and size without downloading on --fix', async () => {
+      vi.mocked(execFileSync).mockClear();
       const checks = await runDoctorChecks(tmpDir);
       const providerCheck = checks.find(c => c.name === 'AI provider ready');
-
-      expect(providerCheck).toBeDefined();
-      expect(providerCheck!.status).toBe('warn');
-      expect(providerCheck!.fixable).toBe(true);
-      expect(providerCheck!.message).toContain('qwen3.5:4b');
-    });
-
-    it('should pull the model with `ollama pull` then select it', async () => {
-      const checks = await runDoctorChecks(tmpDir);
-      const results = await runFixes(checks);
-
-      // VERIF3 T16 : remplacer `ollama pull` par `ollama run` restait vert.
-      expect(execFileSync).toHaveBeenCalledWith('ollama', ['pull', 'qwen3.5:4b'], {
-        stdio: 'inherit',
-      });
-      expect(mockSaveUserSettings).toHaveBeenCalledWith({
-        provider: 'ollama',
-        baseURL: 'http://127.0.0.1:11434',
-        model: 'qwen3.5:4b',
-        defaultModel: 'qwen3.5:4b',
-      });
-
-      const selection = results.find(r => r.action === 'select-running-ollama');
-      expect(selection).toBeDefined();
-      expect(selection!.success).toBe(true);
-      expect(selection!.message).toContain('qwen3.5:4b');
-    });
-
-    it('should report a failure and select nothing when the pull fails', async () => {
-      vi.mocked(execFileSync).mockImplementation((command: string) => {
-        if (String(command) === 'ollama') {
-          throw new Error('ollama introuvable');
-        }
-        return '';
-      });
-
-      const checks = await runDoctorChecks(tmpDir);
-      const results = await runFixes(checks);
-
-      const pullFix = results.find(r => r.action === 'pull-ollama-model');
-      expect(pullFix).toBeDefined();
-      expect(pullFix!.success).toBe(false);
-      expect(pullFix!.message).toContain('Failed to pull qwen3.5:4b');
+      expect(providerCheck?.status).toBe('warn');
+      expect(providerCheck?.fixable).not.toBe(true);
+      expect(providerCheck?.message).toContain('ollama pull qwen3.5:4b');
+      expect(providerCheck?.message).toContain('3,4 Go');
+      await runFixes(checks);
+      expect(execFileSync).not.toHaveBeenCalledWith('ollama', expect.anything(), expect.anything());
       expect(mockSaveUserSettings).not.toHaveBeenCalled();
     });
+  });
+
+  it('selects an installed tool fallback, warns visibly, and persists the actual local endpoint', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen3:4b-instruct'], modelDetails: [{ name: 'qwen3:4b-instruct', sizeBytes: 2497293819 }] }], ready: true });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready')!;
+    expect(check.fixable).toBe(true);
+    expect(check.message).toContain('modèle de repli, qualité réduite');
+    const results = await runFixes([check]);
+    expect(results[0].success).toBe(true);
+    expect(results[0].message).toContain('installez qwen3.5:4b');
+    expect(mockSaveUserSettings).toHaveBeenCalledWith({ provider: 'ollama', model: 'qwen3:4b-instruct', defaultModel: 'qwen3:4b-instruct', baseURL: 'http://127.0.0.1:11434/v1' });
   });
 
   it('repairs an already-selected preferred local model whose context cap is missing', async () => {

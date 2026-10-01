@@ -17,6 +17,7 @@ import { getModelToolConfig } from '../config/model-tools.js';
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import { resolveProviderFromCatalog } from '../providers/provider-catalog.js';
 import { getTrustFolderManager } from '../security/trust-folders.js';
+import { loadDoctorLocalModelPolicy, localModelInstallGuidance } from '../doctor/local-model-policy.js';
 
 const OLLAMA_PROBE_TIMEOUT_MS = 2_000;
 const DEMO_MAX_TOOL_ROUNDS = 12;
@@ -97,11 +98,11 @@ export const NO_TRY_PROVIDER_MESSAGE = [
   '',
   '2. Or run a model locally with Ollama (install it from https://ollama.com first):',
   '   ollama serve',
-  '   ollama pull qwen3:8b',
+  `   ${localModelInstallGuidance()}`,
   '   buddy try',
   '',
-  'The demo edits files, so the model must be able to call tools. qwen2.5 under 14B',
-  '(including qwen2.5-coder:7b) is chat-only in Code Buddy and cannot pass the demo.',
+  'The demo edits files, so the model must be able to call tools.',
+  'Chat-only models cannot pass this demo.',
 ].join('\n');
 
 /** Pick a coding-oriented local model without assuming one exact Ollama tag. */
@@ -117,6 +118,11 @@ export function chooseOllamaModel(models: readonly string[], requested?: string)
   // (supportsToolCalls: false, e.g. qwen2.5-coder:7b) cannot pass it, so a
   // tool-capable model is preferred whenever one is installed.
   const toolCapable = usable.filter((model) => getModelToolConfig(model).supportsToolCalls !== false);
+  const recommended = loadDoctorLocalModelPolicy().preferredModels;
+  for (const model of recommended) {
+    const installed = toolCapable.find(candidate => candidate.toLowerCase() === model.toLowerCase());
+    if (installed) return installed;
+  }
   for (const pool of [toolCapable, usable]) {
     for (const pattern of [/qwen.*coder/i, /devstral/i, /codestral/i, /coder/i, /code/i]) {
       const match = pool.find((model) => pattern.test(model));
@@ -421,6 +427,11 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   write('      The agent is creating FizzBuzz, writing its tests, and running them…');
 
   try {
+    if (provider.kind === 'ollama') {
+      const { persistLocalProviderSelection } = await import('../doctor/local-provider-selection.js');
+      persistLocalProviderSelection(provider.baseURL, provider.model);
+      write(`      Saved local provider and model for the next buddy command: ${provider.model}`);
+    }
     // The agent's cwd differs from process.cwd(), which the trust gate uses.
     // Keep this grant in memory and release it even when construction fails.
     releaseTrust = getTrustFolderManager().trustFolderForSession(workspace);
@@ -439,7 +450,7 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
       if (isChatOnlyModel(provider.model)) {
         writeError(
           `   Likely cause: ${provider.model} is chat-only in Code Buddy (it cannot call tools, so it cannot edit files).\n` +
-            '   Pull a tool-capable model (for example `ollama pull qwen3:8b`) and run `buddy try` again.',
+            `   ${localModelInstallGuidance()} ; puis relancez buddy try.`,
         );
       }
       if (verification.output) writeError(verification.output);

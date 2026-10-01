@@ -16,6 +16,10 @@ import {
   type TryProvider,
 } from '../../src/commands/try.js';
 
+const { saveLocalSettings } = vi.hoisted(() => ({ saveLocalSettings: vi.fn() }));
+vi.mock('../../src/utils/settings-manager.js', () => ({ getSettingsManager: () => ({ saveUserSettings: saveLocalSettings }) }));
+vi.mock('../../src/doctor/local-context-cap.js', () => ({ persistDoctorLocalContextCap: vi.fn() }));
+
 const chatGptProvider: TryProvider = {
   kind: 'chatgpt',
   label: 'ChatGPT OAuth',
@@ -28,6 +32,20 @@ describe('buddy try', () => {
   let workspace: string;
   beforeEach(async () => { workspace = await mkdtemp(join(tmpdir(), 'try-unit-')); });
   afterEach(async () => { await rm(workspace, { recursive: true, force: true }); });
+  it('persists the detected local provider before starting the demo, so the next -p uses it', async () => {
+    saveLocalSettings.mockClear();
+    const local: TryProvider = { kind: 'ollama', label: 'Ollama', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', model: 'qwen3:4b-instruct' };
+    const code = await runTryDemo({
+      resolveProvider: async () => local, createWorkspace: async () => workspace,
+      createAgent: async () => {
+        expect(saveLocalSettings).toHaveBeenCalledWith({ provider: 'ollama', baseURL: local.baseURL, model: local.model, defaultModel: local.model });
+        return { processUserMessage: async () => [] };
+      }, verify: async () => ({ success: true, output: '' }), stdout: () => {}, stderr: () => {},
+    });
+    expect(code).toBe(0);
+    expect(saveLocalSettings).toHaveBeenCalledTimes(1);
+  });
+
   it('prefers a coding-oriented Ollama model while honoring an installed request', () => {
     const models = ['llama3.2:latest', 'qwen2.5-coder:7b', 'devstral:latest'];
 
@@ -38,6 +56,25 @@ describe('buddy try', () => {
     expect(chooseOllamaModel(['llama3.2:latest', 'qwen2.5-coder:7b'])).toBe('qwen2.5-coder:7b');
     expect(chooseOllamaModel(['llama3.2:latest', 'qwen3:8b'])).toBe('qwen3:8b');
     expect(chooseOllamaModel([])).toBeNull();
+  });
+
+  it('uses the configured recommendation order for the automatic demo choice too', () => {
+    expect(chooseOllamaModel(['qwen3:4b-instruct', 'gemma4:e4b', 'qwen3.5:4b'])).toBe('qwen3.5:4b');
+    expect(chooseOllamaModel(['qwen3:4b-instruct', 'gemma4:e4b'])).toBe('gemma4:e4b');
+  });
+
+  it('does not announce demo success when saving the selected local provider fails', async () => {
+    saveLocalSettings.mockImplementationOnce(() => { throw new Error('profile not writable'); });
+    const createAgent = vi.fn();
+    const errors: string[] = [];
+    const code = await runTryDemo({
+      resolveProvider: async () => ({ kind: 'ollama', label: 'Ollama', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', model: 'qwen3:4b-instruct' }),
+      createWorkspace: async () => workspace, createAgent,
+      stdout: () => {}, stderr: text => errors.push(text),
+    });
+    expect(code).toBe(1);
+    expect(createAgent).not.toHaveBeenCalled();
+    expect(errors.join('\n')).toContain('profile not writable');
   });
 
   it('names a chat-only model as the likely cause when the demo test stays red', async () => {
@@ -60,14 +97,14 @@ describe('buddy try', () => {
     expect(code).toBe(1);
     const text = errors.join('\n');
     expect(text).toContain('qwen2.5-coder:7b is chat-only');
-    expect(text).toContain('ollama pull qwen3:8b');
+    expect(text).toContain('ollama pull qwen3.5:4b');
   });
 
   it('flags chat-only models and recommends a tool-capable pull', () => {
     expect(isChatOnlyModel('qwen2.5-coder:7b')).toBe(true);
     expect(isChatOnlyModel('qwen3:8b')).toBe(false);
     expect(isChatOnlyModel(undefined)).toBe(false);
-    expect(NO_TRY_PROVIDER_MESSAGE).toContain('ollama pull qwen3:8b');
+    expect(NO_TRY_PROVIDER_MESSAGE).toContain('ollama pull qwen3.5:4b');
     expect(NO_TRY_PROVIDER_MESSAGE).not.toContain('ollama pull qwen2.5');
   });
 

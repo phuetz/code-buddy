@@ -160,6 +160,33 @@ describe('utility CLI commands', () => {
     }
   });
 
+  it.each(['success', 'failure', 'unrelated'] as const)('--json --fix reports the post-selection readiness honestly: %s', async outcome => {
+    doctorMocks.runDoctorChecks.mockResolvedValueOnce([
+      { name: 'AI provider ready', status: 'warn', message: 'modèle de repli, qualité réduite', fixable: true },
+    ]);
+    doctorMocks.runFixes.mockResolvedValueOnce([
+      { success: outcome !== 'failure', action: outcome === 'unrelated' ? 'create-codebuddy-dir' : 'select-running-ollama', message: 'actual selection saved' },
+    ]);
+    const integrations = await import('../../src/doctor/integrations.js');
+    const integrationSpy = vi.spyOn(integrations, 'runIntegrationChecks').mockResolvedValueOnce([]);
+    const program = new Command().exitOverride();
+    registerUtilityCommands(program);
+    const out: string[] = [];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => { out.push(args.join(' ')); });
+    try {
+      process.exitCode = 0;
+      await program.parseAsync(['node', 'test', 'doctor', '--json', '--fix']);
+      expect(process.exitCode).toBe(outcome === 'success' ? 0 : 1);
+      const report = integrations.doctorJsonReportSchema.parse(JSON.parse(out.join('\n')));
+      expect(report.checks[0].status).toBe(outcome === 'success' ? 'ok' : 'warn');
+      expect(report.fixes?.[0].action).toBe(outcome === 'unrelated' ? 'create-codebuddy-dir' : 'select-running-ollama');
+    } finally {
+      process.exitCode = 0;
+      logSpy.mockRestore();
+      integrationSpy.mockRestore();
+    }
+  });
+
   it('registers the ollama status command', async () => {
     const program = new Command();
     const logs: unknown[][] = [];
