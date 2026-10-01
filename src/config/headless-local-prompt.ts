@@ -3,16 +3,11 @@
  * runtime (Ollama / LM Studio / vLLM), or against any provider on request.
  * Opt-in: `CODEBUDDY_PROMPT_COMPACT=true`. Opt-out: `CODEBUDDY_PROMPT_COMPACT=false`.
  *
- * `HEADLESS_LOCAL_COMPACT_MAX_TOOLS` is the number of tool schemas sent, not a
- * hint the selector may exceed. The selector's anti-starvation slack
- * (`alwaysInclude.length + 5` when `maxTools` > 5, `src/tools/tool-selector.ts`)
- * turned a compact request into 10 schemas: the four names below, plus
- * `restore_context` (forced by the selection strategy — observation contract,
- * kept inside the ceiling), plus five RAG hits. The last two of those hits
- * (`peer_tool_invoke`, `web_test` on « Réponds uniquement : OK ») were the
- * overflow. They are not fleet-surface injections: that path only prepends
- * fleet tools when the registry is non-empty or the question is about the
- * fleet. `capCompactToolList` drops the overflow after selection.
+ * The schema ceiling remains eight: file reading/editing, shell, search,
+ * discovery and observation recovery take priority over unrelated RAG hits.
+ * Both editors are guaranteed: str_replace_editor for simple replacements,
+ * apply_patch for file creation and strict write policy. Execution still goes
+ * through the normal permission, trust and write-policy gates.
  */
 
 import { logger } from '../utils/logger.js';
@@ -21,6 +16,8 @@ export const HEADLESS_LOCAL_COMPACT_MAX_TOOLS = 8;
 export const HEADLESS_LOCAL_COMPACT_MAX_TOKENS = 1500;
 export const HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE = [
   'view_file',
+  'str_replace_editor',
+  'apply_patch',
   'bash',
   'search',
   'tool_search',
