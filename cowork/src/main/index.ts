@@ -2830,7 +2830,7 @@ registerDevServerIpc(
 // contexte joint aux demandes (fichiers choisis, élément → fichier/lignes).
 registerPreviewBridgeIpc(ipcMain, new PreviewBridge({ redact: redactProjectSecrets }));
 registerStudioContextIpc(ipcMain, new StudioContextService({ trustedRoots: () => creativeWorkspaceRoots() }));
-registerStudioFilesIpc(ipcMain);
+registerStudioFilesIpc(ipcMain, { trustedRoots: () => creativeWorkspaceRoots() });
 // Commandes du studio (npm install, terminal) : dossier de confiance exigé,
 // environnement en liste blanche + secrets du projet (jamais les clés de Cowork).
 registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null, async (cwd) => {

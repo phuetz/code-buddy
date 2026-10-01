@@ -39,6 +39,48 @@ export function safeJoin(root: string, relPath: string): string | null {
   return target;
 }
 
+async function assertSafeJoin(root: string, relPath: string): Promise<string> {
+  const target = safeJoin(root, relPath);
+  if (!target) throw new Error('Invalid path');
+
+  const rootReal = await fs.realpath(root);
+  let current = target;
+  while (true) {
+    try {
+      const currentReal = await fs.realpath(current);
+      const relative = path.relative(rootReal, currentReal);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        throw new Error('Path points outside root');
+      }
+      break;
+    } catch (e: unknown) {
+      if (errorCode(e) === 'ENOENT') {
+        // A dangling link also reports ENOENT from realpath. Never treat it
+        // as a missing directory: a later write could follow it outside root.
+        try {
+          await fs.lstat(current);
+          throw new Error('Path contains a dangling symbolic link');
+        } catch (lstatError) {
+          if (errorCode(lstatError) !== 'ENOENT') throw lstatError;
+        }
+        const parent = path.dirname(current);
+        if (parent === current) {
+          throw new Error('Path points outside root');
+        }
+        current = parent;
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  return target;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return error instanceof Error && 'code' in error ? String(error.code) : undefined;
+}
+
 function toPosix(value: string): string {
   return value.split(path.sep).join('/');
 }
@@ -49,12 +91,15 @@ async function buildTree(root: string, absoluteDir: string, relDir = ''): Promis
   for (const entry of entries) {
     if (IGNORED_NAMES.has(entry.name)) continue;
     const relPath = toPosix(path.join(relDir, entry.name));
-    const absolutePath = safeJoin(root, relPath);
-    if (!absolutePath) continue;
-    if (entry.isDirectory()) {
-      nodes.push({ name: entry.name, path: relPath, type: 'directory', children: await buildTree(root, absolutePath, relPath) });
-    } else if (entry.isFile()) {
-      nodes.push({ name: entry.name, path: relPath, type: 'file' });
+    try {
+      const absolutePath = await assertSafeJoin(root, relPath);
+      if (entry.isDirectory()) {
+        nodes.push({ name: entry.name, path: relPath, type: 'directory', children: await buildTree(root, absolutePath, relPath) });
+      } else if (entry.isFile()) {
+        nodes.push({ name: entry.name, path: relPath, type: 'file' });
+      }
+    } catch {
+      // Ignore paths pointing outside root
     }
   }
   return nodes.sort((a, b) => Number(b.type === 'directory') - Number(a.type === 'directory') || a.name.localeCompare(b.name));
@@ -62,8 +107,7 @@ async function buildTree(root: string, absoluteDir: string, relDir = ''): Promis
 
 export async function readProjectFile(root: string, relPath: string): Promise<StudioFileResult<string>> {
   try {
-    const target = safeJoin(root, relPath);
-    if (!target) return fail('Invalid path');
+    const target = await assertSafeJoin(root, relPath);
     return ok(await fs.readFile(target, 'utf8'));
   } catch (error) {
     return fail(errorMessage(error));
@@ -72,8 +116,7 @@ export async function readProjectFile(root: string, relPath: string): Promise<St
 
 export async function writeProjectFile(root: string, relPath: string, content: string): Promise<StudioFileResult<{ path: string }>> {
   try {
-    const target = safeJoin(root, relPath);
-    if (!target) return fail('Invalid path');
+    const target = await assertSafeJoin(root, relPath);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.writeFile(target, content, 'utf8');
     return ok({ path: relPath });
@@ -84,8 +127,7 @@ export async function writeProjectFile(root: string, relPath: string, content: s
 
 export async function listProjectTree(root: string): Promise<StudioFileResult<StudioTreeNode[]>> {
   try {
-    const target = safeJoin(root, '.');
-    if (!target) return fail('Invalid root');
+    const target = await assertSafeJoin(root, '.');
     return ok(await buildTree(target, target));
   } catch (error) {
     return fail(errorMessage(error));
@@ -94,8 +136,7 @@ export async function listProjectTree(root: string): Promise<StudioFileResult<St
 
 export async function createFile(root: string, relPath: string): Promise<StudioFileResult<{ path: string }>> {
   try {
-    const target = safeJoin(root, relPath);
-    if (!target) return fail('Invalid path');
+    const target = await assertSafeJoin(root, relPath);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.writeFile(target, '', { flag: 'wx' });
     return ok({ path: relPath });
@@ -106,9 +147,8 @@ export async function createFile(root: string, relPath: string): Promise<StudioF
 
 export async function renameEntry(root: string, from: string, to: string): Promise<StudioFileResult<{ from: string; to: string }>> {
   try {
-    const source = safeJoin(root, from);
-    const target = safeJoin(root, to);
-    if (!source || !target) return fail('Invalid path');
+    const source = await assertSafeJoin(root, from);
+    const target = await assertSafeJoin(root, to);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.rename(source, target);
     return ok({ from, to });
@@ -119,8 +159,8 @@ export async function renameEntry(root: string, from: string, to: string): Promi
 
 export async function deleteEntry(root: string, relPath: string): Promise<StudioFileResult<{ path: string }>> {
   try {
-    const target = safeJoin(root, relPath);
-    if (!target || target === path.resolve(root)) return fail('Invalid path');
+    const target = await assertSafeJoin(root, relPath);
+    if (target === path.resolve(root)) return fail('Invalid path');
     await fs.rm(target, { recursive: true, force: true });
     return ok({ path: relPath });
   } catch (error) {
