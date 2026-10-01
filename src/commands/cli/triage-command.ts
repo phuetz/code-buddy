@@ -5,7 +5,7 @@
  * prompt to a local agent is printed for the user to review and run.
  */
 
-import type { Command } from 'commander';
+import { InvalidArgumentError, type Command } from 'commander';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,12 +29,17 @@ export function registerTriageCommand(program: Command): void {
     .description('Write a local redacted support bundle and a ≤ 8 KiB prompt (no network, launches nothing)')
     .option('--json', 'Print a JSON summary on stdout')
     .option('--out <dir>', 'Parent directory for the bundle (default ~/.codebuddy/triage)')
-    .option('--log-lines <n>', 'Maximum log lines to include', '200')
-    .action(async (options: { json?: boolean; out?: string; logLines?: string }) => {
+    .option('--log-lines <n>', 'Maximum log lines to include (0 to 2000)', (val) => {
+      if (!/^\d+$/.test(val)) throw new InvalidArgumentError('must be an integer');
+      const parsed = parseInt(val, 10);
+      if (parsed > 2000) throw new InvalidArgumentError('maximum allowed is 2000');
+      return parsed;
+    }, 200)
+    .action(async (options: { json?: boolean; out?: string; logLines: number }) => {
       const { writeTriageBundle } = await import('../../doctor/triage.js');
       const directory = (program.opts() as { directory?: string }).directory;
       const cwd = resolve(process.cwd(), directory || process.cwd());
-      const logLines = Math.max(0, Math.min(2000, Number.parseInt(options.logLines ?? '200', 10) || 0));
+      const logLines = options.logLines;
       try {
         const result = await writeTriageBundle({
           cwd,
