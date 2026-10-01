@@ -103,6 +103,8 @@ export async function writeNixConfigs(
   const flakeContent = generateFlakeNix(config);
   const defaultContent = generateDefaultNix(config);
 
+  await fs.mkdir(outputDir, { recursive: true });
+
   const flakePath = path.join(outputDir, 'flake.nix');
   const defaultPath = path.join(outputDir, 'default.nix');
 

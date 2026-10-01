@@ -40,7 +40,7 @@ export interface RepairConfig {
 /**
  * Default repair patterns that can be auto-repaired
  */
-export const DEFAULT_REPAIR_PATTERNS: RegExp[] = [
+export const DEFAULT_REPAIR_PATTERNS: RegExp[] = Object.freeze([
   /error TS\d+:/i,           // TypeScript errors
   /SyntaxError:/i,           // Syntax errors
   /ReferenceError:/i,        // Reference errors
@@ -49,17 +49,17 @@ export const DEFAULT_REPAIR_PATTERNS: RegExp[] = [
   /FAIL.*test/i,             // Test failures
   /npm ERR!/i,               // npm errors
   /Build failed/i,           // Build failures
-];
+]) as unknown as RegExp[];
 
 /**
  * Default configuration for RepairCoordinator
  */
-export const DEFAULT_REPAIR_CONFIG: RepairConfig = {
+export const DEFAULT_REPAIR_CONFIG: RepairConfig = Object.freeze({
   enabled: true,
   maxAttempts: 3,
   timeout: 120000, // 2 minutes
   patterns: DEFAULT_REPAIR_PATTERNS,
-};
+});
 
 /**
  * Result from a repair attempt
@@ -114,7 +114,11 @@ export class RepairCoordinator extends EventEmitter {
     private baseURL?: string
   ) {
     super();
-    this.config = { ...DEFAULT_REPAIR_CONFIG, ...config };
+    this.config = {
+      ...DEFAULT_REPAIR_CONFIG,
+      ...config,
+      patterns: [...(config.patterns ?? DEFAULT_REPAIR_CONFIG.patterns)],
+    };
   }
 
   /**

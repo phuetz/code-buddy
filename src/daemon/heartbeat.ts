@@ -89,6 +89,19 @@ export class HeartbeatEngine extends EventEmitter {
   constructor(config: Partial<HeartbeatConfig> = {}) {
     super();
     this.config = { ...DEFAULT_HEARTBEAT_CONFIG, ...config };
+
+    // Validate intervalMs
+    if (
+      typeof this.config.intervalMs !== 'number' ||
+      !Number.isSafeInteger(this.config.intervalMs) ||
+      this.config.intervalMs < 1000
+    ) {
+      logger.warn('Invalid heartbeat intervalMs, falling back to default', {
+        providedIntervalMs: this.config.intervalMs,
+        fallbackIntervalMs: DEFAULT_HEARTBEAT_CONFIG.intervalMs,
+      });
+      this.config.intervalMs = DEFAULT_HEARTBEAT_CONFIG.intervalMs;
+    }
   }
 
   start(): void {

@@ -44,7 +44,11 @@ export class ParallelExecutor extends EventEmitter {
 
   constructor(config: Partial<ParallelConfig> = {}) {
     super();
-    this.config = { ...DEFAULT_PARALLEL_CONFIG, ...config };
+    this.config = {
+      ...DEFAULT_PARALLEL_CONFIG,
+      ...config,
+      models: [...(config.models ?? DEFAULT_PARALLEL_CONFIG.models)],
+    };
     this.initializeClients();
   }
 

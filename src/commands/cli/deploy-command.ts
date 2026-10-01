@@ -79,8 +79,7 @@ export function registerDeployCommands(
       write('  hetzner     Hetzner Cloud — European VPS');
       write('  northflank  Northflank — Kubernetes PaaS');
       write('  gcp         Google Cloud Platform');
-      write('  nix         Nix flake — declarative installation');
-      write('\nUsage: buddy deploy run [--apply]   |   buddy deploy init <platform>');
+      write('\nUsage: buddy deploy run [--apply]   |   buddy deploy init <platform>   |   buddy deploy nix');
     });
 
   deploy
@@ -92,24 +91,34 @@ export function registerDeployCommands(
     .option('--region <region>', 'Deployment region')
     .option('--output <dir>', 'Output directory', '.')
     .action(async (platform, opts) => {
+      const { parseListenPort } = await import('../../cli/listen-port.js');
+      let port: number;
+      try {
+        port = parseListenPort(opts.port);
+      } catch (err: unknown) {
+        writeErr(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+        return;
+      }
+
       const { generateDeployConfig, writeDeployConfigs } = await import('../../deploy/cloud-configs.js');
 
       const result = await writeDeployConfigs(opts.output, {
         platform: platform as import('../../deploy/cloud-configs.js').CloudPlatform,
         appName: opts.name,
-        port: parseInt(opts.port, 10),
+        port,
         region: opts.region,
       });
 
       if (result.success) {
-        console.log(`\nDeployment config generated for ${platform}:`);
+        write(`\nDeployment config generated for ${platform}:`);
         for (const file of result.files) {
-          console.log(`  Created: ${file.path}`);
+          write(`  Created: ${file.path}`);
         }
-        console.log(`\n${result.instructions}`);
+        write(`\n${result.instructions}`);
       } else {
-        console.error(`Failed: ${result.instructions}`);
-        process.exit(1);
+        writeErr(`Failed: ${result.instructions}`);
+        process.exitCode = 1;
       }
     });
 
