@@ -32,16 +32,21 @@ export interface MaisonVoiceActionDeps {
 }
 
 function parseSpokenDuration(text: string): number | undefined {
-  const match = text.match(/\b(\d{1,3})\s*(seconde|secondes|minute|minutes|heure|heures)\b/);
-  if (!match) return undefined;
-  const amount = Number(match[1]);
-  const unit = match[2]!;
-  const multiplier = unit.startsWith('seconde')
-    ? 1_000
-    : unit.startsWith('minute')
-      ? 60_000
-      : 3_600_000;
-  const durationMs = amount * multiplier;
+  const matches = [...text.matchAll(/\b(\d{1,3})\s*(seconde|secondes|minute|minutes|heure|heures)\b/g)];
+  if (matches.length === 0) return undefined;
+
+  let durationMs = 0;
+  for (const match of matches) {
+    const amount = Number(match[1]);
+    const unit = match[2]!;
+    const multiplier = unit.startsWith('seconde')
+      ? 1_000
+      : unit.startsWith('minute')
+        ? 60_000
+        : 3_600_000;
+    durationMs += amount * multiplier;
+  }
+
   return durationMs >= 1_000 && durationMs <= 24 * 3_600_000 ? durationMs : undefined;
 }
 

@@ -74,6 +74,16 @@ describe('Maison voice actions', () => {
     expect(speak).toHaveBeenCalledWith(expect.stringMatching(/10 minutes/));
   });
 
+  it('supports composite durations in timer commands', () => {
+    expect(parseMaisonVoiceCommand('mets un minuteur de 1 heure et 30 minutes'))
+      .toMatchObject({ kind: 'timer-start', durationMs: 5_400_000 });
+    expect(parseMaisonVoiceCommand('mets un minuteur de 2 minutes 30 secondes'))
+      .toMatchObject({ kind: 'timer-start', durationMs: 150_000 });
+    expect(parseMaisonVoiceCommand('mets un minuteur de 90 minutes'))
+      .toMatchObject({ kind: 'timer-start', durationMs: 5_400_000 });
+    expect(parseMaisonVoiceCommand('mets un minuteur de 25 heures')).toBeNull();
+  });
+
   it('sets silence until the next local midnight for “aujourd’hui”', async () => {
     await handleMaisonVoiceCommand('Silence aujourd’hui', {
       identity: owner,
