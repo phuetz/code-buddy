@@ -104,7 +104,7 @@ export async function* executeStreaming(
       const { stdout, stderr, exitCode, backend, timedOut } = sandboxed.result;
       if (timedOut) {
         if (stdout) yield stdout;
-        return { success: false, error: `Command timed out after ${timeout}ms\n[sandbox:${backend}]` };
+        return { success: false, error: `Command timed out after ${timeout}ms\n[sandbox:${backend}]`, output: stdout };
       }
       if (exitCode === 0 || !isSandboxBoundaryFailure(sandboxed.result)) {
         if (stdout) yield stdout;
@@ -114,6 +114,7 @@ export async function* executeStreaming(
           : {
               success: false,
               error: `${(stderr || stdout || `Command exited with code ${exitCode}`).trim()}\n[sandbox:${backend}; exit code ${exitCode}]`,
+              output: stdout,
             };
       }
       requiresDirectApproval = true;

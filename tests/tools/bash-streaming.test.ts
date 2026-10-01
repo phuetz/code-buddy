@@ -47,6 +47,20 @@ describe('BashTool - Streaming Execution', () => {
     expect(result.value.success).toBe(true);
   });
 
+  it('keeps sandbox stdout in the final failed observation sent to the model', async () => {
+    vi.spyOn(executionPolicy, 'executeInWorkspaceSandbox').mockResolvedValue({
+      available: true,
+      result: { stdout: 'STREAM_STDOUT', stderr: 'STREAM_STDERR', exitCode: 17,
+        duration: 1, timedOut: false, backend: 'landlock', sandboxed: true },
+    });
+    const gen = bash.executeStreaming('echo fixture');
+    let result = await gen.next();
+    while (!result.done) result = await gen.next();
+    expect(result.value.success).toBe(false);
+    expect(result.value.output).toContain('STREAM_STDOUT');
+    expect(result.value.error).toContain('STREAM_STDERR');
+  });
+
   it('should return error result for blocked commands', async () => {
     const gen = bash.executeStreaming('rm -rf /', 10000);
     const result = await gen.next();

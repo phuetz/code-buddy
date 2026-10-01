@@ -308,6 +308,38 @@ describe('BashTool', () => {
     bashTool.dispose();
   });
 
+  describe('failed command observations', () => {
+    it.each(['direct', 'healing', 'sandbox', 'shell-free'] as const)(
+      'preserves stdout and stderr through %s execution', async mode => {
+        bashTool.setSelfHealing(mode === 'healing');
+        if (mode === 'healing') {
+          mockAttemptHealing.mockResolvedValueOnce({ success: false, attempts: [{ pattern: 'test', fix: 'test' }] });
+        }
+        let result;
+        if (mode === 'sandbox') {
+          mockExecuteInWorkspaceSandbox.mockResolvedValueOnce({
+            available: true,
+            result: { stdout: 'OBSERVED_STDOUT', stderr: 'OBSERVED_STDERR', exitCode: 17,
+              duration: 1, timedOut: false, backend: 'docker', sandboxed: true },
+          });
+          result = await bashTool.execute('touch fixture.txt');
+        } else {
+          const child = createMockChildProcess();
+          mockSpawn.mockImplementationOnce(() => {
+            emitAfterSpawn(child, { stdout: 'OBSERVED_STDOUT', stderr: 'OBSERVED_STDERR', exitCode: 17 });
+            return child;
+          });
+          result = mode === 'shell-free'
+            ? await bashTool.shellFreeExec(['fixture-command'])
+            : await bashTool.execute('echo fixture');
+        }
+        expect(result.success).toBe(false);
+        expect(result.output).toContain('OBSERVED_STDOUT');
+        expect(result.error).toContain('OBSERVED_STDERR');
+      },
+    );
+  });
+
   describe('Constructor and Disposal', () => {
     it('should register with disposable manager on construction', () => {
       expect(registerDisposable).toHaveBeenCalled();

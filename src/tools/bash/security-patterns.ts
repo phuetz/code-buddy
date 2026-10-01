@@ -220,6 +220,8 @@ export const SAFE_ENV_VARS: Set<string> = new Set([
   // Les deux sont dans BLOCKED_ENV_VARS (src/security/env-blocklist.ts).
   // Voir tests/security/node-options-injection.test.ts.
   'NODE_ENV',
+  // Explicit toolchain locations; no *_OPTS, tokens or prefix inheritance.
+  'RUSTUP_HOME', 'CARGO_HOME', 'GOPATH', 'GOROOT', 'JAVA_HOME', 'JDK_HOME', 'NVM_DIR',
   // Development tools
   'EDITOR',
   'VISUAL',

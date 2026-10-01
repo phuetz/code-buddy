@@ -281,6 +281,7 @@ describe('PromptBuilder — Phase T4', () => {
         true,
         '/work',
         'do X',
+        false,
       );
       // Cache always called with the FINAL prompt (after potential injections / truncation)
       expect(cacheSystemPrompt).toHaveBeenCalledOnce();

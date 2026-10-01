@@ -294,8 +294,9 @@ export class PromptBuilder {
     options?: BuildOptions,
     query?: string,
   ): Promise<string> {
+    const compact = isHeadlessPromptCompact();
     const gates: Required<BuildOptions> = { ...ALL_BLOCKS, ...options };
-    if (isHeadlessPromptCompact()) {
+    if (compact) {
       Object.assign(gates, gatesForComplexity('trivial'));
     }
     this.lastPromptBlocks = [];
@@ -437,7 +438,8 @@ export class PromptBuilder {
           promptMode,
           this.config.morphEditorEnabled,
           this.config.cwd,
-          customInstructions || undefined
+          customInstructions || undefined,
+          compact,
         );
       }
 
@@ -527,7 +529,7 @@ export class PromptBuilder {
       // / GEMINI.md / CONTEXT.md / INSTRUCTIONS.md) via the unified hierarchical
       // loader, then soul/bootstrap files. A fresh dedup registry is created per
       // build and reused by the JIT pass (`getContextRegistry`).
-      if (gates.includeBootstrap) {
+      if (gates.includeBootstrap || compact) {
         this.contextRegistry = createContextRegistry();
         // Publish for the JIT pass so it skips files injected here at startup.
         setActiveContextRegistry(this.contextRegistry);
@@ -538,6 +540,11 @@ export class PromptBuilder {
           const ctx = resolveProjectContext({
             cwd: this.config.cwd,
             registry: this.contextRegistry,
+            // Leave room for the compact style block and the context header.
+            // Use the canonical loader: hierarchy, exclusions, imports and dedup
+            // must be identical to the full prompt path.
+            ...(compact ? { budgetBytes: Math.max(0, Math.min(2_000,
+              HEADLESS_LOCAL_COMPACT_MAX_TOKENS * 4 - systemPrompt.length - 600)) } : {}),
             ...(contextFileNames ? { fileNames: contextFileNames } : {}),
           });
           if (ctx.text) {
@@ -560,7 +567,9 @@ export class PromptBuilder {
         } catch (err) {
           logger.warn("Failed to load project context", { error: getErrorMessage(err) });
         }
+      }
 
+      if (gates.includeBootstrap) {
         // Soul/identity bootstrap files (SOUL.md, USER.md, …) + PROJECT_KNOWLEDGE.md.
         // Instruction files are handled above by the unified loader, not here.
         try {
@@ -952,7 +961,10 @@ Use the \`user_model_observe\` tool proactively when you learn a stable coding p
       //
       // Always-on (no `memoryEnabled` gate) — output discipline is
       // universally useful, even for sessions with no persistent memory.
-      const writingRulesBlock = `<writing_rules>
+      const writingRulesBlock = compact ? `<writing_rules>
+Be concise and use the user's language. Use clear markdown and path:line references.
+Never emit model control tokens or invisible characters. Report uncertainty and untested results honestly.
+</writing_rules>` : `<writing_rules>
 Output formatting discipline:
 
 - Never emit model control tokens in your output: no \`<|im_start|>\`, \`<|im_end|>\`, \`<think>\`, \`<reasoning>\`, \`[INST]\`, \`<<SYS>>\`, GLM-5 full-width brackets, or any \`<|…|>\` variant. The runtime strips these as a safety net but the cost is wasted tokens.

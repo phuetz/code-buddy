@@ -577,6 +577,7 @@ export class BashTool implements Disposable {
             return {
               success: false,
               error: `${errorMessage}\n\n🔧 Self-healing attempted ${healingResult.attempts.length} fix(es) but failed.`,
+              output: result.stdout,
             };
           }
         }
@@ -584,6 +585,7 @@ export class BashTool implements Disposable {
         return {
           success: false,
           error: errorMessage,
+          output: result.stdout,
         };
       }
 
@@ -641,6 +643,7 @@ export class BashTool implements Disposable {
       return {
         success: false,
         error: `${diagnostic}\n[${source}; exit code ${exitCode}]`,
+        output: stdout,
       };
     }
 
@@ -769,11 +772,11 @@ export class BashTool implements Disposable {
       proc.on('close', (code) => {
         clearTimeout(timer);
         if (timedOut) {
-          resolve({ success: false, error: 'Command timed out' });
+          resolve({ success: false, error: 'Command timed out', output: stdout.trim() });
         } else if (code === 0) {
           resolve({ success: true, output: stdout.trim() || 'Done' });
         } else {
-          resolve({ success: false, error: stderr.trim() || `Exit code ${code}` });
+          resolve({ success: false, error: stderr.trim() || `Exit code ${code}`, output: stdout.trim() });
         }
       });
 

@@ -8,6 +8,7 @@
  * guaranteed core. The ceiling must preserve creation, editing and patches,
  * as well as reading, execution, discovery and observation recovery; otherwise
  * a local coding agent can discover an editor but never receive its schema.
+ * Tool schemas do not grant permissions: execution keeps the normal gates.
  */
 
 import { logger } from '../utils/logger.js';

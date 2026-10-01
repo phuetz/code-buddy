@@ -119,6 +119,20 @@ describe('headless local compact prompt', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it('guarantees an editor even when unrelated RAG hits fill the compact ceiling', () => {
+    expect(HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE).toContain('apply_patch');
+    expect(HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE).toContain('str_replace_editor');
+    const names = [
+      'list_peers', 'route_peer', 'peer_delegate', 'peer_tool_invoke',
+      'view_file', 'bash', 'search', 'tool_search', 'restore_context', 'apply_patch', 'str_replace_editor',
+    ];
+    const capped = capCompactToolList(names.map(name => ({ function: { name } })));
+    expect(capped).toHaveLength(8);
+    expect(capped.map(tool => tool.function.name)).toContain('apply_patch');
+    expect(capped.map(tool => tool.function.name)).toContain('str_replace_editor');
+    expect(capped.map(tool => tool.function.name)).toContain('restore_context');
+  });
+
   it('caps the schemas actually sent at 8, with restore_context inside the ceiling', () => {
     const schema = (name: string) => ({ function: { name } });
     // Mesure lot 9, question « Réponds uniquement : OK » : 5 garantis
