@@ -79,6 +79,12 @@ configuration are described separately:
 - [Permissions and sandboxing](docs/security.md): the captured Linux bubblewrap
   probe covers one component scenario, not every agent command or platform.
 
+In a session, `/batch <goal>` requests bounded sub-agents;
+`CODEBUDDY_BATCH_CONCURRENCY` caps their concurrency. `buddy improve status`
+inspects the experimental proposal mechanisms. They are **propose-only** by
+default; applying a result requires `CODEBUDDY_SELF_IMPROVE=true` and `--apply`.
+No retained improvement or productivity gain is established here.
+
 Enabling an option or locating its code does not prove its user outcome. These
 areas use the same statuses as the generated feature index.
 
@@ -97,6 +103,8 @@ areas use the same statuses as the generated feature index.
   documentary review. Consult the checks for the exact release you use.
 
 ## Existing illustrations
+
+![Historical Cowork capture, illustration only; not a fresh-install proof](docs/screenshots/cowork-first-bonjour.png)
 
 The [coding GIF](docs/assets/showcase-try.gif), [Cowork recording](docs/qa/code-buddy-studio/cowork-demo-moneyshot.mp4)
 and [French presentation](https://youtu.be/2XgFHxBeI8Q) are secondary illustrations.

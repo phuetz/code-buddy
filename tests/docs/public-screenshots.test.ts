@@ -227,7 +227,7 @@ describe('public README screenshots', () => {
     }
 
     expect(anchorCountsByFile.get(path.join(repoRoot, 'README.md'))).toBeGreaterThan(0);
-    expect(anchorCountsByFile.get(path.join(repoRoot, 'cowork', 'README.md'))).toBe(6);
+    expect(anchorCountsByFile.get(path.join(repoRoot, 'cowork', 'README.md'))).toBe(7);
   });
 
   it('keeps screenshot gallery text free of personal workstation details', () => {
