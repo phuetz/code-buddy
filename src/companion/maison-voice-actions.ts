@@ -32,7 +32,7 @@ export interface MaisonVoiceActionDeps {
 }
 
 function parseSpokenDuration(text: string): number | undefined {
-  const matches = [...text.matchAll(/\b(\d{1,3})\s*(seconde|secondes|minute|minutes|heure|heures)\b/g)];
+  const matches = [...text.matchAll(/\b(\d+)\s*(seconde|secondes|minute|minutes|heure|heures)\b/g)];
   if (matches.length === 0) return undefined;
 
   let durationMs = 0;

@@ -84,6 +84,22 @@ describe('Maison voice actions', () => {
     expect(parseMaisonVoiceCommand('mets un minuteur de 25 heures')).toBeNull();
   });
 
+  it('keeps all digits of a long duration term within the 24-hour limit', async () => {
+    expect(parseMaisonVoiceCommand('mets un minuteur de 1000 minutes'))
+      .toMatchObject({ kind: 'timer-start', durationMs: 60_000_000 });
+    expect(parseMaisonVoiceCommand('mets un minuteur de 1200 secondes'))
+      .toMatchObject({ kind: 'timer-start', durationMs: 1_200_000 });
+    expect(parseMaisonVoiceCommand('mets un minuteur de 1500 minutes')).toBeNull();
+    expect(await handleMaisonVoiceCommand('mets un minuteur de 1000 minutes', {
+      identity: owner,
+      speak,
+      now: () => new Date(now),
+      homeModeStore: modes,
+      cookingTimerStore: timers,
+    })).toBe(true);
+    expect((await timers.listActive(now))[0]?.durationMs).toBe(60_000_000);
+  });
+
   it('sets silence until the next local midnight for “aujourd’hui”', async () => {
     await handleMaisonVoiceCommand('Silence aujourd’hui', {
       identity: owner,
