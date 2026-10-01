@@ -51,6 +51,8 @@ const CORE_VARS = new Set([
   // Node.js / npm — NODE_PATH exclu volontairement (détournement de résolution
   // de modules) ; NODE_OPTIONS ne l'a jamais été et ne doit pas l'être.
   'NODE_ENV', 'NPM_CONFIG_PREFIX',
+  // Explicit toolchain locations; no *_OPTS, tokens or prefix inheritance.
+  'RUSTUP_HOME', 'CARGO_HOME', 'GOPATH', 'GOROOT', 'JAVA_HOME', 'JDK_HOME', 'NVM_DIR',
   // Common CI vars (non-sensitive)
   'CI', 'GITHUB_ACTIONS', 'GITLAB_CI',
 ]);
