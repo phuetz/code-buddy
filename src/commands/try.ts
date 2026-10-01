@@ -82,8 +82,8 @@ interface OllamaTagsResponse {
 export const TRY_DEMO_PROMPT = `You are driving a short coding-agent demo in an empty temporary folder.
 
 Exact goal:
-1. Create fizzbuzz.js in CommonJS. Export a function fizzBuzz(value) that returns the number as a string, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and "FizzBuzz" for multiples of 15.
-2. Create fizzbuzz.test.js using node:test and node:assert/strict. Import test with const { test } = require('node:test') and assert with const assert = require('node:assert/strict'). Use test() and assert.equal() to test at least 1, 3, 5, and 15. These APIs provide no Jest globals or expect().
+1. Create fizzbuzz.js in CommonJS. Define function fizzBuzz(value) that returns the number as a string, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and "FizzBuzz" for multiples of 15. Export it exactly with module.exports = { fizzBuzz }; so callers can destructure fizzBuzz (not a bare function or a default export).
+2. Create fizzbuzz.test.js using node:test and node:assert/strict. At module scope import the function with const { fizzBuzz } = require('./fizzbuzz.js');, test with const { test } = require('node:test'); and assert with const assert = require('node:assert/strict');. Use test() and assert.equal() to test at least 1, 3, 5, and 15. These APIs provide no Jest globals or expect().
 3. Run exactly: node --test fizzbuzz.test.js
 4. If a test fails, fix the code and run it again.
 5. Finish with a very short summary naming the two files you created and the test result.

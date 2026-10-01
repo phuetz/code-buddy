@@ -32,6 +32,22 @@ describe('buddy try', () => {
   let workspace: string;
   beforeEach(async () => { workspace = await mkdtemp(join(tmpdir(), 'try-unit-')); });
   afterEach(async () => { await rm(workspace, { recursive: true, force: true }); });
+  it('states the CommonJS export and test import required by the independent oracle', async () => {
+    const processUserMessage = vi.fn(async (_prompt: string) => []);
+    await runTryDemo({
+      resolveProvider: async () => chatGptProvider,
+      createWorkspace: async () => workspace,
+      createAgent: async () => ({ processUserMessage }),
+      verify: async () => ({ success: true, output: '' }),
+      stdout: () => {}, stderr: () => {},
+    });
+    expect(processUserMessage).toHaveBeenCalledOnce();
+    // A bare function export can pass generated tests while the oracle
+    // destructures fizzBuzz. The request must communicate that same API.
+    const prompt = processUserMessage.mock.calls[0]![0];
+    expect(prompt).toContain('module.exports = { fizzBuzz };');
+    expect(prompt).toContain("const { fizzBuzz } = require('./fizzbuzz.js');");
+  });
   it('persists the detected local provider before starting the demo, so the next -p uses it', async () => {
     saveLocalSettings.mockClear();
     const local: TryProvider = { kind: 'ollama', label: 'Ollama', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', model: 'qwen3:4b-instruct' };
