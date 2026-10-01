@@ -184,7 +184,7 @@ function applyRateLimit(
     entry.resetAt = now + options.windowMs;
   }
 
-  // Entire entry expires when the most recent request leaves the window (or now + windowMs)
+  // Retain the entry for one window after each attempt, including refused requests.
   entry.expiresAt = now + options.windowMs;
 
   const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
