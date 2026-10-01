@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { isLmResizerEnabled, resolveLmResizerBin } from './lm-resizer-compressor.js';
+import { isLmResizerEnabled, probeLmResizerToolOutput, resolveLmResizerBin } from './lm-resizer-compressor.js';
 const run = promisify(execFile);
 /** Read-only host probe. Availability alone does not establish protocol support. */
 export async function diagnoseLmResizer() {
@@ -12,10 +12,9 @@ export async function diagnoseLmResizer() {
     result.available = true;
     try { result.version = (await run(binary, ['--version'], options)).stdout.trim(); } catch { /* Older CLI has no version flag. */ }
     try {
-      const probe = await run(binary, ['tool-output', '--help'], options);
-      result.toolOutputSupported = /tool-output/.test(probe.stdout);
+      result.toolOutputSupported = await probeLmResizerToolOutput({ bin: binary, timeoutMs: 3000, maxStdoutBytes: 64 * 1024 });
     } catch { /* Old protocol: retain raw observations. */ }
-    if (!result.toolOutputSupported) result.warning = 'This binary lacks the tool-output protocol. Buddy keeps raw observations; install a compatible release to enable observation compression.';
+    if (!result.toolOutputSupported) result.warning = 'This binary lacks the lm_resizer_tool_output MCP tool. Buddy keeps raw observations; install a compatible release to enable observation compression.';
   } catch {
     result.warning = 'LM Resizer is unavailable on the host. Buddy keeps raw observations.';
   }

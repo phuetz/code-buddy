@@ -191,7 +191,7 @@ remote endpoint's retention policy.
 | `CODEBUDDY_LM_RESIZER` | Enable recoverable post-execution compression of large tool outputs | false (Cowork: auto) |
 | `CODEBUDDY_LM_RESIZER_BIN` | Override path to the `lm-resizer` binary | local release build, then PATH |
 | `CODEBUDDY_LM_RESIZER_STORE` | Override the CCR SQLite store used by Code Buddy | `~/.codebuddy/lm-resizer.db` |
-| `CODEBUDDY_LM_RESIZER_URL` / `LM_RESIZER_URL` | HTTP sidecar URL (preferred low-latency transport; CLI is the fallback) | `http://127.0.0.1:8787` |
+| `CODEBUDDY_LM_RESIZER_URL` / `LM_RESIZER_URL` | HTTP sidecar URL (requires tool-output-v1; published 0.2.4 uses MCP stdio fallback) | `http://127.0.0.1:8787` |
 | `CODEBUDDY_LM_RESIZER_TOKEN_FILE` | Private sidecar-token file; rejected when group/world-readable on Unix | `~/.codebuddy/lm-resizer/server-token` |
 | `CODEBUDDY_LM_RESIZER_SERVER_TOKEN` / `CODEBUDDY_LM_RESIZER_TOKEN` | Direct sidecar-token override (sensitive; prefer the token file) | unset |
 | `CODEBUDDY_FALLBACK_PROVIDERS` | Comma-separated provider/model fallbacks, for example `openai:gpt-4o,glm:glm-5-code` | unset |

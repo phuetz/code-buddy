@@ -80,7 +80,13 @@ function fakeSpawn(
       calls.push(call);
       const response = responder(call);
       queueMicrotask(() => {
-        if (response.stdout) child.stdout.write(response.stdout);
+        if (response.stdout) {
+          const stdout = response.stdout.startsWith('{') && !response.stdout.includes('"jsonrpc"')
+            ? JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }) + '\n'
+              + JSON.stringify({ jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: response.stdout }] } }) + '\n'
+            : response.stdout;
+          child.stdout.write(stdout);
+        }
         if (response.stderr) child.stderr.write(response.stderr);
         if (!response.neverClose) child.emit('close', response.code ?? 0);
       });
@@ -106,7 +112,36 @@ describe('robust lm-resizer client', () => {
     vi.restoreAllMocks();
   });
 
-  it('uses the stdin-only tool-output CLI fallback with workspace cwd and filtered env', async () => {
+  it('uses the published 0.2.4 MCP contract and the last CCR key for the exact original', async () => {
+    const content = 'verbose test output\n'.repeat(2_000);
+    const runtime = fakeSpawn((call) => {
+      if (call.args[0] !== 'mcp') return { code: 2, stderr: 'unexpected --request-json' };
+      const messages = call.stdin.trim().split('\n').map((line) => JSON.parse(line));
+      expect(messages.map((message) => message.method)).toEqual([
+        'initialize', 'notifications/initialized', 'tools/call',
+      ]);
+      expect(messages[2].params).toEqual({
+        name: 'lm_resizer_tool_output',
+        arguments: { content, command: 'npm test', query: 'private query', exit_code: 0, raw_on_failure: false },
+      });
+      const report = JSON.parse(toolReport(content));
+      delete report.recovery_hash;
+      delete report.accepted;
+      report.cache_keys = ['filtered-intermediate', 'exact-original'];
+      return { stdout: JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }) + '\n'
+        + JSON.stringify({ jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: JSON.stringify(report) }] } }) + '\n' };
+    });
+    const result = await optimizeToolOutputWithLmResizer({ content, command: 'npm test', query: 'private query' }, {
+      httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl,
+    });
+    expect(result?.compressed).toBe('short result');
+    expect(result?.hash).toBe('exact-original');
+    expect(runtime.calls).toHaveLength(1);
+    expect(runtime.calls[0]!.args).toEqual(['mcp', '--store', expect.any(String)]);
+    expect(runtime.calls[0]!.args.join(' ')).not.toMatch(/npm test|private query|verbose/);
+  });
+
+  it('uses the stdin-only MCP fallback with workspace cwd and filtered env', async () => {
     const content = 'noisy\n'.repeat(2_000);
     const query = 'private user query that must not enter argv';
     process.env.OPENAI_API_KEY = 'sk-super-secret';
@@ -128,17 +163,53 @@ describe('robust lm-resizer client', () => {
     expect(result?.transport).toBe('cli');
     expect(runtime.calls).toHaveLength(1);
     const call = runtime.calls[0]!;
-    expect(call.args).toEqual(expect.arrayContaining(['tool-output', '--request-json', '--json']));
+    expect(call.args).toEqual(['mcp', '--store', expect.any(String)]);
     expect(call.args.join(' ')).not.toContain(query);
     expect(call.args.join(' ')).not.toContain('npm test -- --runInBand');
     expect(call.options.cwd).toBe('/tmp/workspace');
     expect((call.options.env as NodeJS.ProcessEnv).OPENAI_API_KEY).toBeUndefined();
-    expect(JSON.parse(call.stdin)).toMatchObject({
+    expect(JSON.parse(call.stdin.trim().split('\n')[2]!).params.arguments).toMatchObject({
       query,
       command: 'npm test -- --runInBand',
-      workspace_root: '/tmp/workspace',
-      token_budget: 512,
+      content,
+      exit_code: 0,
+      raw_on_failure: false,
     });
+  });
+
+  it.each([
+    { jsonrpc: '2.0', id: 2, error: { code: -32000, message: 'unknown tool' } },
+    { jsonrpc: '2.0', id: 2, result: { isError: true, content: [{ type: 'text', text: 'error' }] } },
+    { jsonrpc: '2.0', id: 99, result: { content: [{ type: 'text', text: '{}' }] } },
+  ])('keeps the host fallback on an unsuccessful MCP response: %j', async (response) => {
+    const runtime = fakeSpawn(() => ({ stdout:
+      JSON.stringify({ jsonrpc: '2.0', id: 1, result: {} }) + '\n' + JSON.stringify(response) + '\n',
+    }));
+    expect(await optimizeToolOutputWithLmResizer({ content: 'raw'.repeat(1_000) }, {
+      httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl,
+    })).toBeNull();
+  });
+
+  it('enforces minimum savings locally because the 0.2.4 MCP tool has no such parameters', async () => {
+    const content = 'x'.repeat(100);
+    const runtime = fakeSpawn(() => ({ stdout: toolReport(content, 'x'.repeat(90)) }));
+    const result = await optimizeToolOutputWithLmResizer({ content, minSavingsBytes: 20 }, {
+      httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl,
+    });
+    expect(result?.accepted).toBe(false);
+  });
+
+  it('sends failure preservation over MCP and never accepts a shortened failed output', async () => {
+    const content = 'error: failure diagnostic\n'.repeat(100);
+    const runtime = fakeSpawn((call) => {
+      const args = JSON.parse(call.stdin.trim().split('\n')[2]!).params.arguments;
+      expect(args).toMatchObject({ exit_code: 7, raw_on_failure: true });
+      return { stdout: toolReport(content, 'shortened diagnostic') };
+    });
+    const result = await optimizeToolOutputWithLmResizer({ content, exitCode: 7 }, {
+      httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl,
+    });
+    expect(result?.accepted).toBe(false);
   });
 
   it('discovers tool-output-v1 and reads the sidecar token from a private file', async () => {

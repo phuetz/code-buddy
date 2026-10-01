@@ -2,9 +2,9 @@
  * Safe client for the Rust `lm-resizer`.
  *
  * The preferred transport is the local HTTP sidecar. When it is unavailable,
- * Code Buddy falls back to `lm-resizer tool-output --request-json`, sending the
- * complete request through stdin. User queries, commands and tool output are
- * therefore never exposed in the process argument list.
+ * Code Buddy falls back to the published MCP `lm_resizer_tool_output` tool,
+ * sending the complete request through stdin. User queries, commands and tool
+ * output are therefore never exposed in the process argument list.
  *
  * Every public operation is best-effort and never throws. Callers always retain
  * the unmodified observation as their fallback.
@@ -28,7 +28,7 @@ const DEFAULT_CIRCUIT_COOLDOWN_MS = 30_000;
 const SIDECAR_CAPABILITY_TTL_MS = 60_000;
 const MAX_TOKEN_FILE_BYTES = 4_096;
 
-type Transport = 'http' | 'tool-output-cli' | 'compress-cli';
+type Transport = 'http' | 'tool-output-mcp' | 'compress-cli';
 
 interface CircuitState {
   failures: number;
@@ -37,7 +37,7 @@ interface CircuitState {
 
 const circuitStates: Record<Transport, CircuitState> = {
   http: { failures: 0, openUntil: 0 },
-  'tool-output-cli': { failures: 0, openUntil: 0 },
+  'tool-output-mcp': { failures: 0, openUntil: 0 },
   'compress-cli': { failures: 0, openUntil: 0 },
 };
 
@@ -300,6 +300,7 @@ function parseToolOutputReport(
   raw: string,
   original: WireToolOutputRequest,
   transport: 'http' | 'cli',
+  rawKeyLast = false,
 ): LmResizerToolOutputResult | null {
   let report: WireToolOutputReport;
   try {
@@ -315,7 +316,7 @@ function parseToolOutputReport(
   const cacheKeys = stringArray(report.cache_keys);
   const recoveryHash = typeof report.recovery_hash === 'string'
     ? report.recovery_hash
-    : cacheKeys[0];
+    : rawKeyLast ? cacheKeys.at(-1) : cacheKeys[0];
 
   return {
     compressed: report.output,
@@ -670,6 +671,7 @@ async function runCli(
         return;
       }
       recordCircuitSuccess(transport);
+      logger.debug(`[lm-resizer] CLI ${transport} exit 0`);
       finish({ stdout: Buffer.concat(stdoutChunks).toString('utf8'), code: code ?? 0 });
     });
     child.stdin?.on('error', (error) => fail(`stdin: ${msg(error)}`));
@@ -681,9 +683,56 @@ async function runCli(
   });
 }
 
+/** A finite MCP stdio exchange: EOF closes the child, so no server is left running. */
+async function requestMcp(
+  method: 'tools/call' | 'tools/list',
+  params: Record<string, unknown>,
+  options: LmResizerClientOptions,
+  workspaceRoot?: string,
+): Promise<unknown> {
+  const messages = [
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: {
+      protocolVersion: '2024-11-05', capabilities: {},
+      clientInfo: { name: 'code-buddy', version: '1' },
+    } },
+    { jsonrpc: '2.0', method: 'notifications/initialized' },
+    { jsonrpc: '2.0', id: 2, method, params },
+  ];
+  const cli = await runCli(
+    ['mcp', '--store', resolveStorePath(options)],
+    messages.map((message) => JSON.stringify(message)).join('\n') + '\n',
+    'tool-output-mcp', options, workspaceRoot,
+  );
+  if (!cli) return null;
+  try {
+    const responses = cli.stdout.trim().split('\n').map((line) => JSON.parse(line) as {
+      jsonrpc?: unknown; id?: unknown; error?: unknown; result?: unknown;
+    });
+    const initialized = responses.find((response) => response.id === 1);
+    const response = responses.find((item) => item.id === 2);
+    if (initialized?.jsonrpc !== '2.0' || !initialized.result || initialized.error
+      || response?.jsonrpc !== '2.0' || response.error || !response.result) {
+      recordCircuitFailure('tool-output-mcp', options);
+      return null;
+    }
+    return response.result;
+  } catch {
+    recordCircuitFailure('tool-output-mcp', options);
+    return null;
+  }
+}
+
+/** Read the actual published MCP tool catalogue without sending any observation. */
+export async function probeLmResizerToolOutput(options: LmResizerClientOptions = {}): Promise<boolean> {
+  const result = await requestMcp('tools/list', {}, options) as { tools?: { name?: unknown }[] } | null;
+  return Array.isArray(result?.tools)
+    && result.tools.some((tool) => tool?.name === 'lm_resizer_tool_output');
+}
+
 /**
  * Reduce an already-executed tool observation. The HTTP sidecar is attempted
- * first, then the stdin-only CLI protocol. Never throws.
+ * first, then the 0.2.4 MCP stdio protocol. Never executes the supplied command.
+ * MCP has no token-budget option; minimum savings are enforced here.
  */
 export async function optimizeToolOutputWithLmResizer(
   request: LmResizerToolOutputRequest,
@@ -694,16 +743,35 @@ export async function optimizeToolOutputWithLmResizer(
   const viaHttp = await requestHttp(normalized, options);
   if (viaHttp) return viaHttp;
 
-  const cli = await runCli(
-    ['tool-output', '--request-json', '--json', '--store', resolveStorePath(options)],
-    JSON.stringify(normalized),
-    'tool-output-cli',
+  const result = await requestMcp('tools/call', {
+    name: 'lm_resizer_tool_output',
+    arguments: {
+      content: normalized.content,
+      command: normalized.command || 'generic',
+      query: normalized.query,
+      exit_code: normalized.exit_code,
+      raw_on_failure: normalized.raw_on_failure,
+    },
+  },
     options,
     normalized.workspace_root,
-  );
-  if (!cli || !cli.stdout.trim()) return null;
-  const parsed = parseToolOutputReport(cli.stdout, normalized, 'cli');
-  if (!parsed) recordCircuitFailure('tool-output-cli', options);
+  ) as { isError?: unknown; content?: { type?: unknown; text?: unknown }[] } | null;
+  if (!result || result.isError || !Array.isArray(result.content)) return null;
+  const text = result.content.find((item) => item?.type === 'text')?.text;
+  if (typeof text !== 'string') return null;
+  // 0.2.4 appends the complete raw payload AFTER any intermediate pipeline keys.
+  const parsed = parseToolOutputReport(text, normalized, 'cli', true);
+  if (!parsed) {
+    recordCircuitFailure('tool-output-mcp', options);
+    return null;
+  }
+  const originalBytes = Buffer.byteLength(normalized.content);
+  const outputBytes = Buffer.byteLength(parsed.compressed);
+  const saved = originalBytes - outputBytes;
+  parsed.accepted = parsed.accepted && saved >= normalized.min_savings_bytes
+    && saved / Math.max(1, originalBytes) >= normalized.min_savings_ratio
+    && !(normalized.raw_on_failure && normalized.exit_code !== 0);
+  logger.debug(`[lm-resizer] MCP tool-output bytes ${originalBytes} -> ${outputBytes}; accepted=${parsed.accepted}`);
   return parsed;
 }
 
@@ -727,7 +795,7 @@ async function legacyCompress(
  * Backwards-compatible compressor API.
  *
  * It uses the tool-output protocol first so `query` travels through HTTP JSON
- * or stdin. A stale lm-resizer binary may not know that subcommand yet; in that
+ * or MCP stdin. A stale lm-resizer binary may not know that tool yet; in that
  * case the legacy `compress` fallback is used without placing `query` in argv.
  */
 export async function compressWithLmResizer(
