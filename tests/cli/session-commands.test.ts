@@ -26,7 +26,7 @@ vi.mock('../../src/utils/logger.js', () => ({
   },
 }));
 
-import { Command } from 'commander';
+import { Command, CommanderError } from 'commander';
 import { registerSessionCommands, searchSessions } from '../../src/cli/session-commands.js';
 
 describe('CLI session commands', () => {
@@ -133,6 +133,35 @@ describe('CLI session commands', () => {
 
     expect(mocks.getRecentSessions).toHaveBeenCalledWith(2);
     expect(logSpy).toHaveBeenCalledWith('No sessions found.');
+  });
+
+  it('rejects invalid --limit values for session list, search, and resume', async () => {
+    const program = new Command();
+    program.exitOverride();
+    registerSessionCommands(program);
+
+    const invalidValues = ['abc', '0', '-5', '5abc', '1.5', '999999999999999999999999'];
+    const commands = [
+      ['session', 'list'],
+      ['session', 'search', 'query'],
+      ['session', 'resume']
+    ];
+
+    for (const cmd of commands) {
+      for (const val of invalidValues) {
+        let err: any;
+        try {
+          await program.parseAsync(['node', 'buddy', ...cmd, '--limit', val]);
+        } catch (e) {
+          err = e;
+        }
+        expect(err).toBeInstanceOf(CommanderError);
+        expect(err.code).toBe('commander.invalidArgument');
+      }
+    }
+    expect(mocks.getRecentSessions).not.toHaveBeenCalled();
+    expect(mocks.searchSessions).not.toHaveBeenCalled();
+    expect(mocks.resumeSession).not.toHaveBeenCalled();
   });
 
   it('prints legacy or malformed session summaries without crashing', async () => {

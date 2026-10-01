@@ -4,7 +4,7 @@
  * Handles session continuation and resumption
  */
 
-import type { Command } from 'commander';
+import { type Command, InvalidArgumentError } from 'commander';
 import { logger } from '../utils/logger.js';
 
 interface CliSessionSummary {
@@ -94,9 +94,12 @@ function clip(value: string, maxLength: number): string {
 }
 
 function parsePositiveInteger(value: string): number {
+  if (!/^\d+$/.test(value)) {
+    throw new InvalidArgumentError(`entier >= 1, reçu : ${value}`);
+  }
   const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    throw new Error(`Expected a positive integer, received: ${value}`);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new InvalidArgumentError(`entier >= 1, reçu : ${value}`);
   }
   return parsed;
 }
