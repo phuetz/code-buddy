@@ -142,10 +142,21 @@ export class ScaffoldAppTool {
       }
 
       filesCreated.sort();
+      const entryPath = filesCreated.find(file => /(?:^|\/)(?:index|main|server)\.[cm]?[jt]sx?$/.test(file));
+      const entryContent = entryPath
+        ? await fs.readFile(path.join(resolvedTarget, entryPath), 'utf8')
+        : undefined;
+      const observation = [
+        `Created ${filesCreated.length} files in ${resolvedTarget}`,
+        `Files: ${filesCreated.join(', ')}`,
+        'This is generated starter code; its requested behavior has not been verified.',
+        ...(entryPath && entryContent !== undefined
+          ? [`Entry preview (${entryPath}, first 3000 characters):\n${entryContent.slice(0, 3_000)}`] : []),
+      ].join('\n');
       const data: ScaffoldAppData = { template, targetDir: resolvedTarget, filesCreated };
       return {
         success: true,
-        output: `Created ${filesCreated.length} files in ${resolvedTarget}`,
+        output: observation,
         data,
       };
     } catch (error) {

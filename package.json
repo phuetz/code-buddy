@@ -169,6 +169,7 @@
     "dist",
     "docs/catalog/inventory.json",
     "docs/catalog/README.md",
+    "docs/doctor-local-models.json",
     "docs/preuves/*.json",
     "docs/preuves/*.log",
     "codebuddy-runtime.json",

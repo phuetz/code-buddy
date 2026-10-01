@@ -1,4 +1,5 @@
 import { sanitizeModelOutput } from '../utils/output-sanitizer.js';
+import { evaluateHeadlessTaskOutcome, type TaskEvidenceEntry } from './headless-task-outcome.js';
 
 export interface HeadlessOutputOptions {
   output?: string;
@@ -144,9 +145,9 @@ export function resolveHeadlessTurnExitCode(
   resultText: string,
   knownToolNames: Iterable<string>,
   executedToolNames: Iterable<string>,
+  evidence?: { prompt: string; entries: readonly TaskEvidenceEntry[] },
 ): number {
-  if (findUnexecutedProseToolCall(resultText, knownToolNames, executedToolNames)) {
-    return 3;
-  }
-  return resolveHeadlessResultExitCode(resultText);
+  const responseCode = findUnexecutedProseToolCall(resultText, knownToolNames, executedToolNames)
+    ? 3 : resolveHeadlessResultExitCode(resultText);
+  return evidence ? evaluateHeadlessTaskOutcome(evidence.prompt, evidence.entries, responseCode).exitCode : responseCode;
 }

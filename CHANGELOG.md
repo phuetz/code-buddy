@@ -5,6 +5,12 @@
 - Les estimations de coût utilisent une table tarifaire commune avec source et date ; les alias utilisent le prix de leur cible.
 - Dans Cowork, un nouveau budget YOLO vaut 100 $ et 400 tours ; les budgets enregistrés sont conservés et le plafond reste configurable jusqu'à 1 000 $.
 
+### Sécurité des tâches sans terminal (candidat 2.3.0)
+
+- `buddy -p` expose `status`, `success`, `exitCode`, `reasons` et les vérifications réellement exécutées dans le JSON. Une modification sans outil d'action réussi ou une vérification encore rouge produit un code non nul. Un contrôle ultérieur ne réhabilite que la même commande dans le même répertoire.
+- Le mode implicite de `-p` est `acceptEdits` pour tous les fournisseurs : les éditions sont autorisées, les commandes nécessitant une approbation restent contrôlées. Un `--permission-mode` explicite et les règles de refus conservent la priorité.
+
+
 ## [2.3.0] (2026-10-01)
 
 Candidat d'intégration préparé le 1er octobre pour la sortie prévue le 8 octobre. Cette section décrit les branches réunies dans la RC ; elle ne certifie pas tous les parcours utilisateur.
@@ -38,7 +44,7 @@ Candidat d'intégration préparé le 1er octobre pour la sortie prévue le 8 oct
 
 ### Limites
 
-- La recette de premier usage de la RC est publiée séparément ; les reprises de la lane sortie-sûre ne sont pas incluses dans cette phase A.
+- La recette de premier usage de la RC est publiée séparément ; le modèle local recommandé doit être qualifié sur les tâches réellement exécutées.
 - Le filtre statique du shell ne protège pas toutes les lectures récursives ni les chemins calculés. Un secret suivi par Git peut être lu via les objets Git ; cette garantie reste reportée à la 2.3.1.
 - Les contrôles Linux ne valident ni Windows, ni macOS, ni les comptes et services externes. Cowork requiert ses dépendances et binaires propres.
 
@@ -1057,6 +1063,7 @@ Index: [`docs/cb2/README.md`](docs/cb2/README.md).
 - **vision:** swallow EPIPE on a shell action's stdin (a command that ignores stdin would crash the host) ([b6fe1a4](https://github.com/phuetz/code-buddy/commit/b6fe1a4ac896a72c899d3611745db3b06f5b5fb6))
 
 # Changelog
+
 
 All notable changes to Code Buddy are documented here.
 

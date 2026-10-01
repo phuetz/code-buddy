@@ -1,3 +1,4 @@
+import { resolveFirstTokenStallTimeoutMs } from '../utils/stream-stall-guard.js';
 /**
  * Goal judge — asks an auxiliary LLM whether the standing goal is satisfied
  * by the agent's last response.
@@ -48,6 +49,7 @@ export interface GoalJudgeParams {
   /** Optional per-call cap for judge output. */
   maxTokens?: number;
   timeoutMs?: number;
+  adaptiveTimeout?: boolean;
   verifyGated?: boolean;
 }
 
@@ -69,7 +71,15 @@ export async function judgeGoal(
   }
 
   const prompt = buildJudgeUserPrompt(params);
-  const timeoutMs = params.timeoutMs ?? DEFAULT_JUDGE_TIMEOUT_MS;
+  const targetIsLocal = client.isEffectiveTargetLocal?.()
+    ?? /^(local|ollama|lm studio|vllm|lemonade)$/i.test(client.getProviderName?.() ?? '');
+  const adaptive = params.adaptiveTimeout ?? params.timeoutMs === undefined;
+  // The judge is non-streaming: allow prompt evaluation AND a short generation.
+  // Reuse local first-token policy, but never lengthen a remote judge by env alone.
+  const timeoutMs = adaptive && targetIsLocal
+    ? resolveFirstTokenStallTimeoutMs(Math.ceil((JUDGE_SYSTEM_PROMPT.length + prompt.length) / 4),
+      process.env, { targetIsLocal: true }) + 60_000
+    : params.timeoutMs ?? DEFAULT_JUDGE_TIMEOUT_MS;
 
   let raw = '';
   try {

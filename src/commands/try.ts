@@ -17,6 +17,7 @@ import { getModelToolConfig } from '../config/model-tools.js';
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import { resolveProviderFromCatalog } from '../providers/provider-catalog.js';
 import { getTrustFolderManager } from '../security/trust-folders.js';
+import { loadDoctorLocalModelPolicy, localModelInstallGuidance } from '../doctor/local-model-policy.js';
 
 const OLLAMA_PROBE_TIMEOUT_MS = 2_000;
 const DEMO_MAX_TOOL_ROUNDS = 12;
@@ -81,8 +82,8 @@ interface OllamaTagsResponse {
 export const TRY_DEMO_PROMPT = `You are driving a short coding-agent demo in an empty temporary folder.
 
 Exact goal:
-1. Create fizzbuzz.js in CommonJS. Export a function fizzBuzz(value) that returns the number as a string, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and "FizzBuzz" for multiples of 15.
-2. Create fizzbuzz.test.js in CommonJS with const { test } = require('node:test'), const assert = require('node:assert/strict'), and require('./fizzbuzz.js'), never import/export syntax. Use test() and assert.equal() to test at least 1, 3, 5, and 15. These APIs provide no Jest globals or expect().
+1. Create fizzbuzz.js in CommonJS. Define function fizzBuzz(value) that returns the number as a string, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and "FizzBuzz" for multiples of 15. Export it exactly with module.exports = { fizzBuzz }; so callers can destructure fizzBuzz (not a bare function or a default export).
+2. Create fizzbuzz.test.js using node:test and node:assert/strict. At module scope import the function with const { fizzBuzz } = require('./fizzbuzz.js');, test with const { test } = require('node:test'); and assert with const assert = require('node:assert/strict');. Use test() and assert.equal() to test at least 1, 3, 5, and 15. These APIs provide no Jest globals or expect().
 3. Run exactly: node --test fizzbuzz.test.js
 4. If a test fails, fix the code and run it again.
 5. Finish with a very short summary naming the two files you created and the test result.
@@ -97,11 +98,11 @@ export const NO_TRY_PROVIDER_MESSAGE = [
   '',
   '2. Or run a model locally with Ollama (install it from https://ollama.com first):',
   '   ollama serve',
-  '   ollama pull qwen3:8b',
+  `   ${localModelInstallGuidance()}`,
   '   buddy try',
   '',
-  'The demo edits files, so the model must be able to call tools. qwen2.5 under 14B',
-  '(including qwen2.5-coder:7b) is chat-only in Code Buddy and cannot pass the demo.',
+  'The demo edits files, so the model must be able to call tools.',
+  'Chat-only models cannot pass this demo.',
 ].join('\n');
 
 /** Pick a coding-oriented local model without assuming one exact Ollama tag. */
@@ -117,6 +118,11 @@ export function chooseOllamaModel(models: readonly string[], requested?: string)
   // (supportsToolCalls: false, e.g. qwen2.5-coder:7b) cannot pass it, so a
   // tool-capable model is preferred whenever one is installed.
   const toolCapable = usable.filter((model) => getModelToolConfig(model).supportsToolCalls !== false);
+  const recommended = loadDoctorLocalModelPolicy().preferredModels;
+  for (const model of recommended) {
+    const installed = toolCapable.find(candidate => candidate.toLowerCase() === model.toLowerCase());
+    if (installed) return installed;
+  }
   for (const pool of [toolCapable, usable]) {
     for (const pattern of [/qwen.*coder/i, /devstral/i, /codestral/i, /coder/i, /code/i]) {
       const match = pool.find((model) => pattern.test(model));
@@ -431,6 +437,11 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   write('      The agent is creating FizzBuzz, writing its tests, and running them…');
 
   try {
+    if (provider.kind === 'ollama') {
+      const { persistLocalProviderSelection } = await import('../doctor/local-provider-selection.js');
+      persistLocalProviderSelection(provider.baseURL, provider.model);
+      write(`      Saved local provider and model for the next buddy command: ${provider.model}`);
+    }
     // The agent's cwd differs from process.cwd(), which the trust gate uses.
     // Keep this grant in memory and release it even when construction fails.
     releaseTrust = getTrustFolderManager().trustFolderForSession(workspace);
@@ -449,7 +460,7 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
       if (isChatOnlyModel(provider.model)) {
         writeError(
           `   Likely cause: ${provider.model} is chat-only in Code Buddy (it cannot call tools, so it cannot edit files).\n` +
-            '   Pull a tool-capable model (for example `ollama pull qwen3:8b`) and run `buddy try` again.',
+            `   ${localModelInstallGuidance()} ; puis relancez buddy try.`,
         );
       }
       if (verification.output) writeError(verification.output);

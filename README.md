@@ -56,6 +56,13 @@ In a disposable project, `buddy try` offers a coding exercise. Inspect the writt
 files and test output. A process exit code alone does not prove that the requested
 result exists.
 
+`buddy loop` accepts a verification command. Inspect its result and the files
+changed before relying on the outcome:
+
+```bash
+buddy loop "make the failing tests pass" --verify-cmd "npm test"
+```
+
 ```bash
 buddy try
 buddy -p "explain the entry point"

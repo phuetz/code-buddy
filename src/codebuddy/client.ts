@@ -703,7 +703,10 @@ export class CodeBuddyClient {
       const first = this.fallbackProviders[0] ?? this.credentialPoolProviders[0];
       if (first) return isLocalFailoverCandidate(first);
     }
-    return isLocalLlmProvider();
+    // doctor/profile resolution does not require provider environment variables.
+    // Conversely, an ambient local setting must not lengthen a cloud request.
+    return isLocalLlmProvider({ CODEBUDDY_PROVIDER: this.getRuntimeProviderId() })
+      || this.getProviderName() === 'Local';
   }
 
   /**

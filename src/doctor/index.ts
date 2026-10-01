@@ -1,4 +1,3 @@
-import { getModelForRole } from '../config/model-defaults.js';
 import { execSync, execFileSync } from 'child_process';
 import {
   accessSync,
@@ -29,6 +28,7 @@ import {
   type OllamaModelSelection,
 } from './ollama-model-selection.js';
 import { checkDomainPolicy } from './domain-policy-check.js';
+import { loadDoctorLocalModelPolicy, localModelInstallGuidance } from './local-model-policy.js';
 import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
 import { isDeclaredProviderFallbackEnabled } from '../providers/provider-failover-policy.js';
 import { formatProviderHealthLines, readProviderHealthSnapshot } from '../providers/provider-health.js';
@@ -812,6 +812,46 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
     )
     : undefined;
 
+  if (p === 'ollama' && ollama?.available && ollama.baseURL && isOllamaSelectionCurrent(ollama.models ?? [], userSettings)) {
+    const policy = loadDoctorLocalModelPolicy();
+    const model = advertisedModel(ollama.models ?? [], userSettings?.model)!;
+    const supportsTools = selectOllamaModel([{ name: model }], freemem(), {
+      ...policy, allowUnbenchmarkedFallback: true,
+    }).model === model;
+    const replacement = liveOllamaSelection;
+    if (replacement?.model && replacement.model !== model
+      && (policy.preferredModels.includes(replacement.model) || !supportsTools)) {
+      return {
+        name: 'AI provider ready', status: 'warn', fixable: true,
+        message: `Selected model ${model} should be replaced by installed agent model ${replacement.model} — --fix (${replacement.reason})`,
+        fix: () => fixSelectRunningOllama(ollama.baseURL!, replacement.model!, replacement.reason, replacement.maxContext),
+      };
+    }
+    if (!supportsTools) {
+      return {
+        name: 'AI provider ready', status: 'warn',
+        message: `Selected model ${model} cannot call coding tools and no suitable installed replacement is available — ${localModelInstallGuidance(policy)}`,
+      };
+    }
+    if (!policy.preferredModels.includes(model)) {
+      return {
+        name: 'AI provider ready', status: 'ok',
+        message: `Ollama local ${model} — AVERTISSEMENT : modèle de repli, qualité réduite ; ${localModelInstallGuidance(policy)}`,
+      };
+    }
+    if (policy.preferredModels.includes(model)) {
+      const { readDoctorLocalContextCap } = await import('./local-context-cap.js');
+      const cap = readDoctorLocalContextCap(model);
+      if (cap === undefined || cap > policy.maxContext) {
+        return {
+          name: 'AI provider ready', status: 'warn', fixable: true,
+          message: `Selected local model ${model} has no safe context ceiling — --fix to cap it at ${policy.maxContext} tokens`,
+          fix: () => fixSelectRunningOllama(ollama.baseURL!, model, 'retained existing selection; capped context', policy.maxContext),
+        };
+      }
+    }
+  }
+
   if (ollama?.available && ollamaModels > 0 && ollama.baseURL && !isOllamaSelectionCurrent(ollama.models ?? [], userSettings)) {
     const selection = liveOllamaSelection;
     if (!selection?.model) {
@@ -831,7 +871,7 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
       status: 'warn',
       message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but ${selectionContext} — --fix to select ${selection.model} ($0; ${selection.reason})`,
       fixable: true,
-      fix: async () => fixSelectRunningOllama(ollama.baseURL!, selection.model!, selection.reason),
+      fix: async () => fixSelectRunningOllama(ollama.baseURL!, selection.model!, selection.reason, selection.maxContext),
     };
   }
 
@@ -855,13 +895,10 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
   }
 
   if (ollama?.available && ollama.baseURL) {
-    const baseURL = ollama.baseURL;
     return {
       name: 'AI provider ready',
       status: 'warn',
-      message: `Ollama is running but has no model — run \`buddy onboard\`, or --fix to pull ${getModelForRole('ollama', 'onboarding')} ($0, can call tools)`,
-      fixable: true,
-      fix: async () => fixPullAndSelectOllama(baseURL),
+      message: `Ollama is running but has no model — ${localModelInstallGuidance()}; run doctor --fix again after installation`,
     };
   }
 
@@ -873,10 +910,12 @@ async function checkProviderReadiness(offline = false): Promise<DoctorCheck> {
 }
 
 /** Point buddy at an already-running Ollama by writing user-settings (no download). */
-async function fixSelectRunningOllama(baseURL: string, model: string, reason?: string): Promise<FixResult> {
+async function fixSelectRunningOllama(baseURL: string, model: string, reason?: string, maxContext?: number): Promise<FixResult> {
   try {
-    const { getSettingsManager } = await import('../utils/settings-manager.js');
-    getSettingsManager().saveUserSettings({ provider: 'ollama', baseURL, model, defaultModel: model });
+    const { persistLocalProviderSelection } = await import('./local-provider-selection.js');
+    const endpoint = baseURL.replace(/\/+$/, '');
+    persistLocalProviderSelection(endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`, model, maxContext);
+
     return {
       success: true,
       message: `Selected local Ollama model ${model}: ${reason ?? 'selected from the installed model list'} (written to user-settings.json) — try: buddy try`,
@@ -889,28 +928,6 @@ async function fixSelectRunningOllama(baseURL: string, model: string, reason?: s
       action: 'select-running-ollama',
     };
   }
-}
-
-/**
- * Model pulled by `buddy doctor --fix` when Ollama has none. It must call
- * tools: the qwen2.5 family under 14B is chat-only in model-tools.ts, so
- * `buddy try` could never go green with it.
- */
-export const DOCTOR_PULL_MODEL = getModelForRole('ollama', 'onboarding');
-
-/** Pull a small tool-capable model with Ollama, then select it. */
-async function fixPullAndSelectOllama(baseURL: string): Promise<FixResult> {
-  const model = getModelForRole('ollama', 'onboarding');
-  try {
-    execFileSync('ollama', ['pull', model], { stdio: 'inherit' });
-  } catch (err) {
-    return {
-      success: false,
-      message: `Failed to pull ${model}: ${err instanceof Error ? err.message : String(err)}. Install Ollama from https://ollama.com`,
-      action: 'pull-ollama-model',
-    };
-  }
-  return fixSelectRunningOllama(baseURL, model);
 }
 
 // ============================================================================

@@ -49,6 +49,8 @@ export interface GoalsConfig {
   plannerModel: string;
   judgeMaxTokens: number;
   judgeTimeoutMs: number;
+  /** No explicit timeout: adapt to the actual judge provider and prompt. */
+  judgeTimeoutAdaptive?: boolean;
 }
 
 export class GoalManager {
@@ -268,6 +270,8 @@ export function resolveGoalsConfig(): GoalsConfig {
     judgeModel,
     plannerModel,
     judgeMaxTokens: positiveInt(raw.judgeMaxTokens, DEFAULT_JUDGE_MAX_TOKENS),
+    ...(!positiveInt(process.env.CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS, 0) && !positiveInt(raw.judgeTimeoutMs, 0)
+      ? { judgeTimeoutAdaptive: true } : {}),
     judgeTimeoutMs:
       positiveInt(process.env.CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS, 0) ||
       positiveInt(raw.judgeTimeoutMs, DEFAULT_JUDGE_TIMEOUT_MS),

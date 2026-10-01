@@ -1155,6 +1155,10 @@ async function processPromptHeadless(
   agentName?: string,
   permissionModeExplicit: boolean = false,
 ): Promise<number> {
+  // Retain the one-shot process while SDK backoff timers are unref'ed. An
+  // awaited request failure must reach the failure envelope, not exit 0 with
+  // empty stdout because Node has no remaining referenced handles.
+  const keepAlive = setInterval(() => { /* Await the pending headless request. */ }, 1000);
   const previousDisableMCP = process.env.CODEBUDDY_DISABLE_MCP;
   const previousHeadless = process.env.CODEBUDDY_HEADLESS;
   const startedAt = Date.now();
@@ -1175,6 +1179,7 @@ async function processPromptHeadless(
     isHeadlessFinalResponseEmpty,
     resolveHeadlessTurnExitCode,
   } = await import('./cli/headless-options.js');
+  const { evaluateHeadlessTaskOutcome } = await import('./cli/headless-task-outcome.js');
   const { validateOutputText } = await import('./utils/output-schema-validator.js');
   const { writeFileAtomic } = await import('./utils/atomic-write.js');
   const { getPermissionModeManager } = await import('./security/permission-modes.js');
@@ -1318,6 +1323,9 @@ async function processPromptHeadless(
           const slashEffectiveModel = modelToUse || process.env.GROK_MODEL || 'unknown';
           const slashCostExtended = agent.getSessionCostExtended?.() ?? { total: agent.getSessionCost(), estimated: true, pricing: 'unknown' as const, billing: 'pay-per-use' as const, inputTokens: 0, outputTokens: 0 };
           const slashOutputData: Record<string, unknown> = {
+            status: slash.failed || slash.denied ? 'failed' : 'success',
+            success: !slash.failed && !slash.denied,
+            exitCode: slash.failed || slash.denied ? 1 : 0,
             result: resultText,
             cost: {
               total: slashCostExtended.total,
@@ -1436,8 +1444,8 @@ async function processPromptHeadless(
         model: effectiveModel,
         durationMs: Date.now() - startedAt,
       })}\n`);
-      runStatus = 'failed';
-      return 1;
+      // Keep the diagnostic AND emit the same explicit failure envelope as
+      // other turns (including tools denied immediately before an empty reply).
     }
 
     // Validate before writing or emitting any successful output. The schema
@@ -1450,7 +1458,7 @@ async function processPromptHeadless(
         for (const error of validation.errors) {
           cli.error(`  - ${error}`);
         }
-        return 1;
+        throw new Error(`Output schema validation failed: ${validation.errors.join('; ')}`);
       }
     }
 
@@ -1475,11 +1483,14 @@ async function processPromptHeadless(
         line: proseToolCall.line,
       });
     }
-    const exitCode = resolveHeadlessTurnExitCode(
+    const responseExitCode = resolveHeadlessTurnExitCode(
       resultText,
       knownToolNames,
       executedToolNames,
     );
+    const outcome = evaluateHeadlessTaskOutcome(prompt, chatEntries, responseExitCode);
+    const exitCode = outcome.exitCode;
+    if (!outcome.success) process.stderr.write(`Task ${outcome.status}: ${outcome.reasons.join(', ')}\n`);
     runStatus = exitCode === 0 ? 'completed' : 'failed';
 
     // Gather cost and model info from the agent
@@ -1513,6 +1524,7 @@ async function processPromptHeadless(
       // Emit a final summary event
       const summaryData: Record<string, unknown> = {
         type: 'summary',
+        ...outcome,
         result: resultText,
         cost: {
           total: sessionCost,
@@ -1539,6 +1551,7 @@ async function processPromptHeadless(
       // registry; typed payloads also bypass the table length gate.
       const candidate = widget.candidate ?? detectWidgetable(resultText, widgetPayloads);
       const outputData: Record<string, unknown> = {
+        ...outcome,
         result: resultText,
         cost: {
           total: sessionCost,
@@ -1568,6 +1581,8 @@ async function processPromptHeadless(
       cli.stdout(
         JSON.stringify({
           error: errorMessage,
+          status: 'failed', success: false, exitCode: 1,
+          reasons: ['execution_error'],
           result: null,
           cost: { total: 0 },
           model: model || process.env.GROK_MODEL || 'unknown',
@@ -1576,6 +1591,7 @@ async function processPromptHeadless(
     }
     return 1;
   } finally {
+    clearInterval(keepAlive);
     if (runStore && runId) {
       try {
         if (agent) {

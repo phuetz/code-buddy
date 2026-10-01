@@ -122,7 +122,7 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
     }
     args.push(
       '--prompt',
-      options.prompt ?? 'Return HEADLESS_JSON_CONTRACT_OK exactly.',
+      options.prompt ?? 'Reply with HEADLESS_JSON_CONTRACT_OK exactly.',
       '--api-key',
       'test-key',
       '--base-url',
@@ -401,7 +401,7 @@ describe('headless CLI exit codes', () => {
         throw new Error('Expected TCP server address');
       }
 
-      for (const prompt of ['first persistent turn', 'second persistent turn']) {
+      for (const prompt of ['reply for first persistent turn', 'reply for second persistent turn']) {
         const result = await runCliAgainstSuccessfulProvider(address.port, {
           homeDir,
           directory: workspace,

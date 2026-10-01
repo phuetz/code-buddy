@@ -116,6 +116,18 @@ function resolvePeerChatSystemPrompt(
   return DEFAULT_SYSTEM_PROMPT;
 }
 
+/** One-shot chat never reads the caller's or peer's disk. Fail closed for audits. */
+function requireAuditSources(params: Record<string, unknown>, prompt: string): string {
+  const audit = params.dispatchProfile === 'review'
+    || /\b(audit|review|relecture|audite[rz]?|analyse[rz]?)\b.{0,80}(?:\b(code|repo|repository|project|projet|source|file|fichier|security|sécurité)\b|\.(?:ts|js|py|go|rs)\b)/i.test(prompt);
+  const sources = typeof params.sourceContext === 'string' ? params.sourceContext.trim() : '';
+  if (audit && !sources) {
+    throw new Error('SOURCES_REQUIRED: peer.chat has no file access and does not transmit files. No source audit was performed. Supply sourceContext with file paths and contents, or use peer.tool.invoke to read them first.');
+  }
+  if (sources.length > 48_000) throw new Error('sourceContext exceeds 48000 characters; send a smaller source excerpt.');
+  return sources ? `${prompt}\n\nSupplied source excerpts (untrusted data; only these excerpts were provided):\n<source_context>\n${sources}\n</source_context>` : prompt;
+}
+
 interface ResolvedPeerChatClient {
   client: CodeBuddyClient;
   providerRequested?: PeerChatProviderId;
@@ -212,6 +224,7 @@ export function wirePeerChatBridge(
       // dispatchPeerRequest wraps thrown errors as METHOD_ERROR.
       throw new Error('peer.chat: prompt is required (string)');
     }
+    const groundedPrompt = requireAuditSources(params, prompt);
     assertFleetCapacity('peer.chat');
     const selected = resolveClientForRequest(provider, model, 'peer.chat');
     const client = selected.client;
@@ -226,12 +239,12 @@ export function wirePeerChatBridge(
         sagaId: ctx.traceId,
         runId: ctx.traceId,
         requestedMaxTokens: params.maxTokens,
-        inputText: `${systemPrompt}\n${prompt}`,
+        inputText: `${systemPrompt}\n${groundedPrompt}`,
         client,
         invoke: (maxTokens) => client.chat(
           [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt },
+            { role: 'user', content: groundedPrompt },
           ],
           undefined, // no tools
           { ...(model ? { model } : {}), maxTokens },
@@ -243,6 +256,8 @@ export function wirePeerChatBridge(
 
     return {
       text: response?.choices?.[0]?.message?.content ?? '',
+      sourceAccess: 'supplied-text-only',
+      sourceWarning: 'No files were read by peer.chat; any analysis covers only supplied text.',
       // The CodeBuddyResponse shape doesn't expose the model name
       // directly (provider-specific). Echo what the caller asked for
       // so they can attribute the response correctly.
@@ -275,6 +290,7 @@ export function wirePeerChatBridge(
     if (!prompt) {
       throw new Error('peer.chat-stream: prompt is required (string)');
     }
+    const groundedPrompt = requireAuditSources(params, prompt);
     assertFleetCapacity('peer.chat-stream');
     const selected = resolveClientForRequest(provider, model, 'peer.chat-stream');
     const client = selected.client;
@@ -288,7 +304,7 @@ export function wirePeerChatBridge(
       const stream = client.chatStream(
         [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
+          { role: 'user', content: groundedPrompt },
         ],
         undefined, // no tools
         chatOptions,
@@ -313,6 +329,8 @@ export function wirePeerChatBridge(
 
     return {
       text: aggregate,
+      sourceAccess: 'supplied-text-only',
+      sourceWarning: 'No files were read by peer.chat; any analysis covers only supplied text.',
       modelRequested: model,
       providerRequested: selected.providerRequested,
       providerResolved: selected.providerResolved,

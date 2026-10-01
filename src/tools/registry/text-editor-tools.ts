@@ -10,6 +10,7 @@ import path from 'path';
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
 import { TextEditorTool } from '../index.js';
+import { normalizeReplacementArguments } from './replacement-arguments.js';
 
 function extractPath(input: Record<string, unknown>): string | undefined {
   const candidate = input.path ?? input.file_path ?? input.target_file ?? input.file;
@@ -262,11 +263,20 @@ export class StrReplaceEditorTool implements ITool {
 
   async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
     const path = resolveAgainstCwd(extractPath(input) as string, context);
-    const oldStr = extractOldStr(input) as string;
-    const newStr = extractNewStr(input) as string;
-    const replaceAll = (input.replace_all as boolean) ?? false;
-
-    return await getTextEditor().strReplace(path, oldStr, newStr, replaceAll);
+    try {
+      const { edits, replaceAll } = normalizeReplacementArguments(input);
+      if (edits.length === 1) return await getTextEditor().strReplace(path, edits[0]!.old_string, edits[0]!.new_string, replaceAll);
+      // Retain the editor's omission protection before using atomic MultiEdit.
+      const { detectOmissionPlaceholders, formatOmissionError } = await import('../omission-placeholder-detector.js');
+      for (const edit of edits) {
+        const omission = detectOmissionPlaceholders(edit.new_string, edit.old_string);
+        if (omission.hasOmissions) return { success: false, error: formatOmissionError(omission) };
+      }
+      const { MultiEditTool } = await import('../multi-edit.js');
+      const editor = new MultiEditTool();
+      editor.setBaseDirectory(context?.cwd ?? process.cwd());
+      return await editor.execute(path, edits);
+    } catch (error) { return { success: false, error: error instanceof Error ? error.message : String(error) }; }
   }
 
   getSchema(): ToolSchema {
@@ -359,19 +369,8 @@ export class StrReplaceEditorTool implements ITool {
       return { valid: false, errors: ['path must be a non-empty string'] };
     }
 
-    const oldStr = extractOldStr(data);
-    if (typeof oldStr !== 'string') {
-      return { valid: false, errors: ['old_str (or pattern, find, old_text, old_content, old_string) must be a string'] };
-    }
-
-    const newStr = extractNewStr(data);
-    if (typeof newStr !== 'string') {
-      return { valid: false, errors: ['new_str (or replacement, replace, new_text, new_content, new_string) must be a string'] };
-    }
-
-    if (data.replace_all !== undefined && typeof data.replace_all !== 'boolean') {
-      return { valid: false, errors: ['replace_all must be a boolean'] };
-    }
+    try { normalizeReplacementArguments(data); }
+    catch (error) { return { valid: false, errors: [error instanceof Error ? error.message : String(error)] }; }
 
     return { valid: true };
   }

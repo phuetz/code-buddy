@@ -1,3 +1,5 @@
+import { bootstrapRepositoryReads } from './repository-read-bootstrap.js';
+import { isToolNameAllowed } from '../../utils/tool-filter.js';
 import { bindFactsMemorySession } from '../../memory/facts-memory.js';
 /**
  * Agent Executor Module
@@ -1311,6 +1313,30 @@ export class AgentExecutor {
       }
       yield { type: 'done' };
       return;
+    }
+
+    // A small local model may deny file access without ever trying a tool.
+    // Supply real, bounded reads before asking it to explain the repository.
+    if (surface === 'cli' && this.deps.client.isEffectiveTargetLocal?.()
+      && isToolNameAllowed('view_file')) {
+      for await (const { toolCall, toolResult } of bootstrapRepositoryReads(
+        turnQueryText, turnCwd, call => this.executeToolViaLane(call, {
+          ...(abortController ? { abortSignal: abortController.signal } : {}),
+        }),
+      )) {
+        if (abortController?.signal.aborted) return;
+        // This call is host-authored. Keep the human-readable provenance in
+        // history, without teaching the model to repeat it as assistant prose.
+        messages.push({ role: 'assistant', content: '', tool_calls: [toolCall] });
+        messages.push({ role: 'tool', name: 'view_file', tool_call_id: toolCall.id,
+          content: sanitizeToolResult(toolResult.success ? toolResult.output ?? 'Success' : toolResult.error ?? 'Read failed') } as CodeBuddyMessage);
+        history.push({ type: 'assistant', content: 'Repository context read requested by Code Buddy. Base repository claims on these tool results; do not invent missing files, commands or purposes.',
+          timestamp: new Date(), toolCalls: [toolCall] });
+        history.push({ type: 'tool_result', content: toolResult.output ?? toolResult.error ?? '',
+          timestamp: new Date(), toolCall, toolResult });
+        yield { type: 'tool_calls', toolCalls: [toolCall] };
+        yield { type: 'tool_result', toolCall, toolResult };
+      }
     }
 
     // Pure, per-turn tone context. Keep it out of the persisted transcript and

@@ -21,6 +21,7 @@ import {
   isSandboxBoundaryFailure,
 } from '../../src/tools/bash/execution-policy.js';
 import { sandboxAvailable } from '../helpers/sandbox-availability.js';
+import { setSandboxCapabilityProbe } from '../../src/sandbox/os-sandbox.js';
 
 describe('Bash runtime execution policy', () => {
   beforeEach(() => {
@@ -37,6 +38,7 @@ describe('Bash runtime execution policy', () => {
   });
 
   afterEach(() => {
+    setSandboxCapabilityProbe(null);
     delete process.env.CODEBUDDY_NATIVE_SANDBOX;
     delete process.env.CODEBUDDY_SANDBOX_BACKEND;
     delete process.env.CODEBUDDY_SSH_HOST;
@@ -95,6 +97,15 @@ describe('Bash runtime execution policy', () => {
     await expect(evaluateShellExecution('npm install', process.cwd())).resolves.toMatchObject({
       action: 'ask',
     });
+  });
+
+  it('does not convert dontAsk into unsandboxed authority when confinement is unavailable', async () => {
+    getPermissionModeManager().setMode('dontAsk');
+    setSandboxCapabilityProbe(() => ({ landlock: false, bubblewrap: false, seatbelt: false, docker: false, recommended: 'none' }));
+    const result = await new BashTool().execute('pwd', 30000, undefined, undefined, { refuseUnconfinedEscalation: true });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('sandbox');
+    expect(result.output ?? '').not.toContain(process.cwd());
   });
 
   it('retains deterministic denials', async () => {

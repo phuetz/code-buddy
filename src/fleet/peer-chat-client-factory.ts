@@ -40,6 +40,7 @@ import {
 import { logger } from '../utils/logger.js';
 import { classifyProviderModelEgress, type ModelEgress } from '../providers/model-egress.js';
 import { pickCompatibleModelForProvider } from './compatible-model.js';
+import { resolveCommandProvider } from '../commands/llm-provider-resolution.js';
 
 export type PeerChatProviderId =
   | 'ollama'
@@ -345,6 +346,18 @@ export function createPeerChatClientFromEnv():
     }
     return buildOne(override, undefined, true, true);
   }
+  // A doctor-selected provider is a saved user choice, not an ambient CLI
+  // binary probe. Reuse the CLI resolver before the historical env fallback.
+  const target = resolvedCommandTarget();
+  if (target) {
+    try {
+      return { client: new CodeBuddyClient(target.apiKey, target.model, target.baseUrl, { enableFallbacks: false }),
+        info: { provider: target.provider, model: target.model, isLocal: target.isLocal } };
+    } catch (error) {
+      logger.warn('[peer-chat-factory] configured target unavailable', { error: String(error) });
+      return null;
+    }
+  }
   for (const id of AUTO_DETECT_ORDER) {
     const built = buildOne(id, undefined, false, true);
     if (built) return built;
@@ -454,6 +467,16 @@ export interface ResolvedProvider {
   egress: ModelEgress;
 }
 
+function resolvedCommandTarget(): ResolvedProvider | null {
+  const target = resolveCommandProvider();
+  const provider = normalizePeerChatProviderId(target?.providerLabel);
+  if (!target?.model || !provider) return null;
+  const spec = SPECS[provider];
+  const baseUrl = target.baseURL ?? spec.defaultBaseUrl;
+  return { provider, apiKey: target.apiKey, baseUrl, model: target.model,
+    isLocal: spec.isLocal, egress: classifyProviderModelEgress(provider, baseUrl, spec.isLocal) };
+}
+
 /**
  * Resolve provider env without constructing a client. Useful for
  * non-`peer.chat` consumers that need the same auto-detection logic
@@ -496,6 +519,8 @@ export function resolveProviderFromEnv(
     const r = resolveProviderFromEnv(override);
     if (r) return r;
   }
+  const target = resolvedCommandTarget();
+  if (target) return target;
   for (const id of AUTO_DETECT_ORDER) {
     // Auto-detection is a probe, not an explicit selection. Calling the public
     // explicit branch here made local providers resolve to their default URL

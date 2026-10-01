@@ -180,6 +180,15 @@ Code Buddy includes standalone CLI utilities for cost tracking, changelog genera
 | `buddy explain`     | One-shot repository explanation report (conventions, hotspots, risks) as Markdown or self-contained HTML | `--out <f.md\|.html>`, `--depth <quick\|deep>`, `--html` |
 | `buddy dev explain` | Summarise repository conventions, architecture, critical paths, and workflows from a fresh repo profile                        | `buddy dev explain`                                                                             |
 
+Local repository orientation reads available entry files before asking a local model
+to explain them; the reads appear in the tool transcript. `buddy dev explain --model
+<model>` honours the selected model and uses a fresh profile without starting a
+background indexer. Models can still make mistakes; compare their claims with the
+reported files and commands.
+
+`buddy research` requires usable web search sources. If search is blocked or returns
+none, it exits with an error instead of presenting a source-free essay as research.
+
 `buddy changelog` reads the local Git history. It must be run from a Git checkout;
 an installation npm pack does not include the `.git` directory. From
 an npm installation, the command exits with an explicit “Ce dossier n’est pas
@@ -293,8 +302,17 @@ buddy -p "reply with {\"ok\": true}" --output-schema schema.json
 Headless mode exits after completion. A successful process exit or valid JSON
 does not prove that a requested code change or explanation is correct: inspect
 `.result`, tool results and the generated files, then run your verification command.
+JSON and the final `stream-json` summary expose `status`, `success`, `exitCode`,
+`reasons`, `actionTools`, and `checks`. A repository modification with no successful
+write/execution tool is `unverified` and exits nonzero. An executed command/check
+still failing is `failed`, even when the model claims completion. A later passing
+result clears only the same check in the same directory. These fields attest to
+observed execution; they do not replace an independent oracle for correctness.
 The legacy `--auto-approve` session flag does not cover approvals tied to exact
-tool arguments. Use `--permission-mode dontAsk` for ordinary headless tools;
+tool arguments. Without an explicit permission mode, `-p` uses `acceptEdits`
+for every provider: file edits can proceed, while shell approvals and configured
+denials remain enforced. Explicit `default` and `plan` preserve their restrictions.
+Use `--permission-mode dontAsk` for ordinary headless tools;
 destructive operations and explicit deny rules keep their own gates.
 
 `-o`/`--output-last-message <file>` writes the agent's last text response
@@ -307,6 +325,14 @@ run a real task (file writes, `bash`) without interactive confirmation
 prompts in a script or CI job.
 
 ## Session Management
+
+`buddy dev explain` reads up to six distinct files once, supplies bounded prefixes,
+and makes one synthesis call with no callable tools. It prints the observed scope,
+truncation notices and provider token usage; it does not claim the whole repository
+was read or tests executed. `CODEBUDDY_DEV_EXPLAIN_MAX_INPUT_TOKENS` can reduce the
+input budget (also capped by the model window with an output reserve).
+`CODEBUDDY_DEV_EXPLAIN_TIMEOUT_MS` overrides the local-aware synthesis deadline.
+A missing/empty answer or timeout exits nonzero with `Orientation incomplete`.
 
 ```bash
 # List recent saved sessions
@@ -716,3 +742,76 @@ runtime that launches the app.
 - [`docs/fleet-guide.md`](fleet-guide.md) — Fleet-specific issues and architecture
 - [`CHANGELOG.md`](../CHANGELOG.md) — what changed when
 - [GitHub Issues](https://github.com/phuetz/code-buddy/issues) — known problems
+
+### Local repository explanations and loop judge budget
+
+For local headless requests about an entry point or README, Code Buddy first
+reads bounded repository files through `view_file`. The transcript records
+these host-requested reads and their real results. The model answers from
+those observations; unsupported claims still require checking. Tool filters
+and file permissions apply to these reads as usual.
+
+The loop judge keeps a 30-second default for remote providers. On a local
+provider its default covers prompt evaluation using the first-token budget
+plus 60 seconds for generation. `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` and
+`CODEBUDDY_STALL_MAX_MS` tune prompt evaluation. An explicit
+`CODEBUDDY_GOAL_JUDGE_TIMEOUT_MS` or `goals.judgeTimeoutMs` takes priority
+(environment before settings). This budget changes no verification gate:
+`--verify-cmd` must still succeed for a `CONFIRMED` result.
+
+`buddy loop` runs headlessly and defaults to `acceptEdits` for ordinary edits
+when no permission posture was selected, just like `buddy -p`. An explicit
+`--permission-mode default` or `plan`, configured denials, and shell safety
+checks remain authoritative. The independent verifier still runs before success.
+
+`doctor --fix` selects its local default from `docs/doctor-local-models.json`,
+separately from the model capability catalogue. The current order is
+`qwen3.5:4b`, then `gemma4:e4b`, with a context ceiling of 32,768 tokens
+persisted in the user configuration before selecting the model. Existing lower
+ceilings are preserved. If neither recommended tag is installed, doctor selects
+an installed model declaring tool support and shows a visible warning:
+“modèle de repli, qualité réduite ; installez qwen3.5:4b”. It proposes the exact
+command `ollama pull qwen3.5:4b` (approximately 3.4 GB) for you to run explicitly.
+`doctor --fix` never downloads models. Known models fitting free RAM rank first
+among fallbacks; otherwise an additional memory warning is shown. If no installed
+model supports tools, doctor reports the missing model and the install command.
+You can supply an alternative policy file through `CODEBUDDY_DOCTOR_LOCAL_POLICY`.
+The JSON contains `preferredModels`, `maxContext`, `allowUnbenchmarkedFallback`
+and optionally `recommendedDownloadSizeGB` for the first recommendation.
+
+`buddy try` and `doctor --fix` save the same local provider selection: the actual
+endpoint, `provider: ollama`, both model fields and the model's context ceiling.
+After either command, `buddy -p "explain the entry point"` uses the saved local
+model without `--model` or a provider environment variable. An explicit endpoint
+or model supplied to `try` is saved as actually used.
+
+`--permission-mode dontAsk` still requires confinement for shell commands.
+Run `buddy doctor` to check the native sandbox. Commands outside that boundary,
+or on a machine without a working sandbox, require an approval channel;
+`dontAsk` does not grant permission to execute them on the host. A refused
+command is reported as a failed task in headless JSON output. File reading tools
+remain available without that shell escalation.
+
+In non-interactive mode, `buddy research` produces a draft from search excerpts:
+the linked pages are not fetched and the facts are not independently verified.
+Use the listed links to check claims before relying on them. Direct synthesis
+allows up to ten minutes on local providers and two minutes on cloud providers,
+within the overall `--timeout-ms` deadline. Set
+`CODEBUDDY_DIRECT_RESEARCH_TIMEOUT_MS` to override that synthesis budget. On
+timeout, the active provider request is cancelled.
+
+For literal edits, `str_replace_editor` also accepts `pattern` / `replacement`
+(with `regex: false`) and `operations` / `changes` batches. Textual operations
+must contain quoted before/after strings; textual changes can provide an
+old/new pair or a single-file unified diff. Expressions, regex replacements,
+and replacement-only overwrites are refused. Multiple replacements are applied
+atomically; a failed match leaves the file unchanged.
+
+Headless task status fails closed for ambiguous requests: without a successful
+write or execution, they return `unverified` and a nonzero exit code. Explicit
+informational requests such as `explain`, `summarize`, or `reply` may succeed
+without an action. Other informational requests outside this recognized set
+(for example “raconte une blague”) may return `unverified`; phrase them as
+“reply with a joke” when no repository action is intended. This conservative
+status does not establish semantic correctness of generated code. A compound request such as “explain the code, then fix lint”
+still requires execution evidence for its modification.

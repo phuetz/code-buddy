@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildJudgeUserPrompt, judgeGoal, parseJudgeResponse } from '../../src/goals/goal-judge.js';
+import { CodeBuddyClient } from '../../src/codebuddy/client.js';
 import { JUDGE_SYSTEM_PROMPT } from '../../src/goals/goal-state.js';
 
 const recordUsageSpy = vi.hoisted(() => vi.fn());
@@ -20,6 +21,33 @@ function mockClient(content: string) {
 }
 
 describe('judgeGoal', () => {
+  it('lets a local default judge finish after the old 30 second ceiling', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('CODEBUDDY_PROVIDER', 'openai'); // actual judge provider wins
+    try {
+      const client = new CodeBuddyClient('ollama', 'fixture-model', 'http://127.0.0.1:11434/v1');
+      vi.spyOn(client, 'chat').mockImplementation(() => new Promise(resolve => {
+        setTimeout(() => resolve({ choices: [{ message: { role: 'assistant', content: '{"done":true,"reason":"verified","evidence":"exit 0"}' }, finish_reason: 'stop', index: 0 }] } as Awaited<ReturnType<CodeBuddyClient['chat']>>), 35_000);
+      }));
+      const pending = judgeGoal(client, { goal: 'explain project', lastResponse: 'Read entry file.' });
+      await vi.advanceTimersByTimeAsync(35_001);
+      expect((await pending).verdict).toBe('done');
+    } finally { vi.useRealTimers(); vi.unstubAllEnvs(); }
+  });
+
+  it('keeps explicit local timeouts and the cloud default authoritative', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('CODEBUDDY_PROVIDER', 'ollama');
+    try {
+      for (const [local, timeoutMs] of [[true, 20_000], [false, undefined]] as const) {
+        const client = { isEffectiveTargetLocal: () => local, chat: vi.fn(() => new Promise(() => {})) } as never;
+        const pending = judgeGoal(client, { goal: 'g', lastResponse: 'r', timeoutMs });
+        await vi.advanceTimersByTimeAsync(timeoutMs ?? 30_000);
+        expect((await pending).reason).toContain('judge error');
+      }
+    } finally { vi.useRealTimers(); vi.unstubAllEnvs(); }
+  });
+
   it('returns done verdict from valid JSON', async () => {
     const client = mockClient('{"done": true, "reason": "tests are green"}');
     const result = await judgeGoal(client, { goal: 'fix tests', lastResponse: 'All 30 tests pass.' });

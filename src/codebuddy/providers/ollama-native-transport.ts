@@ -1,3 +1,4 @@
+import { readDoctorLocalContextCap } from '../../doctor/local-context-cap.js';
 /**
  * Ollama transport that can actually carry a context limit.
  *
@@ -213,7 +214,9 @@ export function ollamaNativeChatUrl(baseURL: string): string {
  * time, above the declared table AND above runtime discovery — wins here too.
  */
 export function resolveOllamaNumCtx(model: string): number | undefined {
-  const { contextWindow } = getModelToolConfig(model);
+  const configured = getModelToolConfig(model).contextWindow;
+  const cap = readDoctorLocalContextCap(model);
+  const contextWindow = cap === undefined ? configured : Math.min(configured ?? cap, cap);
   return Number.isSafeInteger(contextWindow) && (contextWindow ?? 0) > 0 ? contextWindow : undefined;
 }
 

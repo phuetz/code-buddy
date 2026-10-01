@@ -41,10 +41,14 @@ export function registerUtilityCommands(program: Command): void {
       if (options.json) {
         const { buildDoctorJsonReport } = await import('../../doctor/integrations.js');
         const fixes = options.fix ? await runFixes(checks.filter((c) => c.fixable)) : undefined;
-        const summary = summarizeDoctorChecks(checks);
-        const report = buildDoctorJsonReport(checks, summary, { offline, ...(fixes ? { fixes } : {}) });
+        const selectionFix = fixes?.find(f => f.success && f.action === 'select-running-ollama');
+        const effectiveChecks = checks.map(check => check.name === 'AI provider ready' && check.fixable && selectionFix
+          ? { ...check, status: 'ok' as const, fixable: false, message: selectionFix.message }
+          : check);
+        const summary = summarizeDoctorChecks(effectiveChecks);
+        const report = buildDoctorJsonReport(effectiveChecks, summary, { offline, ...(fixes ? { fixes } : {}) });
         console.log(JSON.stringify(report, null, 2));
-        const readinessJson = checks.find((c) => c.name === 'AI provider ready');
+        const readinessJson = effectiveChecks.find((c) => c.name === 'AI provider ready');
         if (summary.errors > 0 || (readinessJson && readinessJson.status !== 'ok') || fixes?.some((f) => !f.success)) {
           process.exitCode = 1;
         }

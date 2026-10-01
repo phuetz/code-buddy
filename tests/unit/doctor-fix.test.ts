@@ -13,10 +13,8 @@ vi.mock('child_process', () => ({
   spawnSync: vi.fn(() => ({ status: 0, stdout: '', stderr: '' })),
 }));
 
-// VERIF3 T16 : la réparation `ollama pull` n'était couverte par aucun test.
-// La sonde d'environnement et le gestionnaire de settings sont doublés pour
-// rendre `checkProviderReadiness` déterministe (et pour ne jamais écrire dans
-// le vrai user-settings.json).
+// Probe and settings doubles keep installation guidance and provider selection
+// deterministic, without downloading or writing the real user's profile.
 const { mockDetectEnvironment, mockSaveUserSettings, mockReadUserSettingsIfPresent } = vi.hoisted(
   () => ({
     mockDetectEnvironment: vi.fn(),
@@ -35,6 +33,7 @@ vi.mock('../../src/utils/settings-manager.js', () => ({
     readUserSettingsIfPresent: mockReadUserSettingsIfPresent,
   }),
 }));
+vi.mock('../../src/doctor/local-context-cap.js', () => ({ persistDoctorLocalContextCap: vi.fn(() => 32768), readDoctorLocalContextCap: vi.fn(() => undefined) }));
 
 const EMPTY_ENVIRONMENT: EnvironmentSnapshot = { capabilities: [], ready: false };
 
@@ -97,57 +96,72 @@ describe('doctor --fix', () => {
       mockDetectEnvironment.mockResolvedValue(OLLAMA_WITHOUT_MODEL);
     });
 
-    it('should mark the missing Ollama model as fixable', async () => {
+    it('proposes the exact install command and size without downloading on --fix', async () => {
+      vi.mocked(execFileSync).mockClear();
       const checks = await runDoctorChecks(tmpDir);
       const providerCheck = checks.find(c => c.name === 'AI provider ready');
-
-      expect(providerCheck).toBeDefined();
-      expect(providerCheck!.status).toBe('warn');
-      expect(providerCheck!.fixable).toBe(true);
-      expect(providerCheck!.message).toContain('qwen3:8b');
-    });
-
-    it('should pull the model with `ollama pull` then select it', async () => {
-      const checks = await runDoctorChecks(tmpDir);
-      const results = await runFixes(checks);
-
-      // VERIF3 T16 : remplacer `ollama pull` par `ollama run` restait vert.
-      expect(execFileSync).toHaveBeenCalledWith('ollama', ['pull', 'qwen3:8b'], {
-        stdio: 'inherit',
-      });
-      expect(mockSaveUserSettings).toHaveBeenCalledWith({
-        provider: 'ollama',
-        baseURL: 'http://127.0.0.1:11434',
-        model: 'qwen3:8b',
-        defaultModel: 'qwen3:8b',
-      });
-
-      const selection = results.find(r => r.action === 'select-running-ollama');
-      expect(selection).toBeDefined();
-      expect(selection!.success).toBe(true);
-      expect(selection!.message).toContain('qwen3:8b');
-    });
-
-    it('transmet le modèle configuré comme un argument unique sans interpolation shell', async () => {
-      vi.stubEnv('CODEBUDDY_OLLAMA_MODEL_ONBOARDING', 'modele-test; echo marqueur');
-      const checks = await runDoctorChecks(tmpDir);
+      expect(providerCheck?.status).toBe('warn');
+      expect(providerCheck?.fixable).not.toBe(true);
+      expect(providerCheck?.message).toContain('ollama pull qwen3.5:4b');
+      expect(providerCheck?.message).toContain('3,4 Go');
       await runFixes(checks);
-      expect(execFileSync).toHaveBeenCalledWith('ollama', ['pull', 'modele-test; echo marqueur'], { stdio: 'inherit' });
-      expect(mockSaveUserSettings).toHaveBeenCalledWith(expect.objectContaining({ model: 'modele-test; echo marqueur' }));
-    });
-
-    it('should report a failure and select nothing when the pull fails', async () => {
-      vi.mocked(execFileSync).mockImplementation(() => { throw new Error('ollama introuvable'); });
-
-      const checks = await runDoctorChecks(tmpDir);
-      const results = await runFixes(checks);
-
-      const pullFix = results.find(r => r.action === 'pull-ollama-model');
-      expect(pullFix).toBeDefined();
-      expect(pullFix!.success).toBe(false);
-      expect(pullFix!.message).toContain('Failed to pull qwen3:8b');
+      expect(execFileSync).not.toHaveBeenCalledWith('ollama', expect.anything(), expect.anything());
       expect(mockSaveUserSettings).not.toHaveBeenCalled();
     });
+  });
+
+  it('selects an installed tool fallback, warns visibly, and persists the actual local endpoint', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen3:4b-instruct'], modelDetails: [{ name: 'qwen3:4b-instruct', sizeBytes: 2497293819 }] }], ready: true });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready')!;
+    expect(check.fixable).toBe(true);
+    expect(check.message).toContain('modèle de repli, qualité réduite');
+    const results = await runFixes([check]);
+    expect(results[0].success).toBe(true);
+    expect(results[0].message).toContain('installez qwen3.5:4b');
+    expect(mockSaveUserSettings).toHaveBeenCalledWith({ provider: 'ollama', model: 'qwen3:4b-instruct', defaultModel: 'qwen3:4b-instruct', baseURL: 'http://127.0.0.1:11434/v1' });
+  });
+
+  it.each([1, 2, 3, 4, 5])('adopts a newly installed recommendation instead of retaining a fallback, simulation %i', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen3:4b-instruct', 'qwen3.5:4b'], modelDetails: [{ name: 'qwen3:4b-instruct', sizeBytes: 2497293819 }, { name: 'qwen3.5:4b', sizeBytes: 3400000000 }] }], ready: true });
+    mockReadUserSettingsIfPresent.mockReturnValue({ provider: 'ollama', model: 'qwen3:4b-instruct', defaultModel: 'qwen3:4b-instruct', baseURL: 'http://127.0.0.1:11434/v1' });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready')!;
+    expect(check.fixable).toBe(true);
+    await runFixes([check]);
+    expect(mockSaveUserSettings).toHaveBeenCalledWith(expect.objectContaining({ provider: 'ollama', model: 'qwen3.5:4b', defaultModel: 'qwen3.5:4b' }));
+  });
+
+  it('repairs an already-selected chat-only model when a tool model is installed', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen2.5:3b-instruct', 'qwen3:4b-instruct'], modelDetails: [{ name: 'qwen3:4b-instruct', sizeBytes: 2497293819 }] }], ready: true });
+    mockReadUserSettingsIfPresent.mockReturnValue({ provider: 'ollama', model: 'qwen2.5:3b-instruct', defaultModel: 'qwen2.5:3b-instruct' });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready')!;
+    expect(check.fixable).toBe(true);
+    await runFixes([check]);
+    expect(mockSaveUserSettings).toHaveBeenCalledWith(expect.objectContaining({ model: 'qwen3:4b-instruct' }));
+  });
+
+  it('keeps the reduced-quality warning visible on an already-configured fallback without failing readiness', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen3:4b-instruct'], modelDetails: [{ name: 'qwen3:4b-instruct', sizeBytes: 2497293819 }] }], ready: true });
+    mockReadUserSettingsIfPresent.mockReturnValue({ provider: 'ollama', model: 'qwen3:4b-instruct', defaultModel: 'qwen3:4b-instruct' });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready')!;
+    expect(check.status).toBe('ok');
+    expect(check.message).toContain('modèle de repli, qualité réduite');
+    expect(check.message).toContain('installez qwen3.5:4b');
+  });
+
+  it('repairs an already-selected preferred local model whose context cap is missing', async () => {
+    mockDetectEnvironment.mockResolvedValue({ capabilities: [{ ...OLLAMA_WITHOUT_MODEL.capabilities[0], models: ['qwen3.5:4b'] }], ready: true });
+    mockReadUserSettingsIfPresent.mockReturnValue({ provider: 'ollama', model: 'qwen3.5:4b', defaultModel: 'qwen3.5:4b' });
+    const checks = await runDoctorChecks(tmpDir);
+    const check = checks.find(c => c.name === 'AI provider ready');
+    expect(check?.status).toBe('warn');
+    expect(check?.message).toContain('32768');
+    expect(check?.fixable).toBe(true);
+    await runFixes([check!]);
+    expect(mockSaveUserSettings).toHaveBeenCalledWith(expect.objectContaining({ model: 'qwen3.5:4b' }));
   });
 
   describe('missing .codebuddy directory', () => {

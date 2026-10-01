@@ -12,7 +12,7 @@ import { asyncHandler } from '../middleware/index.js';
 import { getRequestStats } from '../middleware/logging.js';
 import { getDatabaseManager } from '../../database/database-manager.js';
 import { getConnectionStats } from '../websocket/handler.js';
-import { detectProviderFromEnv } from '../../utils/provider-detector.js';
+import { resolveServerProvider } from '../provider-resolution.js';
 import { getServerRuntimeStatus, type RuntimeStatus } from '../../runtime/runtime-status.js';
 import type { ServerStats } from '../types.js';
 
@@ -88,7 +88,7 @@ function checkMemory(): 'ok' | 'error' {
 }
 
 function getConfiguredProviderStatus(): { ready: boolean; message: string } {
-  const provider = detectProviderFromEnv();
+  const provider = resolveServerProvider();
   if (!provider) {
     return {
       ready: false,
@@ -115,7 +115,7 @@ function isLocalRuntimeProvider(provider: string | undefined): boolean {
 }
 
 async function probeProviderApi(): Promise<{ ready: boolean; message: string; latencyMs: number } | undefined> {
-  const provider = detectProviderFromEnv();
+  const provider = resolveServerProvider();
   const apiKey = process.env.GROK_API_KEY?.trim()
     || provider?.apiKey?.trim()
     || undefined;

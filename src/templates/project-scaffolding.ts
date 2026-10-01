@@ -1120,6 +1120,7 @@ TEMPLATES.set('express-api', {
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "prestart": "npm run build",
     "start": "node dist/index.js",
     "test": "jest",
     "lint": "eslint src --ext .ts"
@@ -1185,6 +1186,9 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.get('/', (_req, res) => {
+  res.send('Hello World!');
+});
 app.use('/health', healthRouter);
 
 // Error handler

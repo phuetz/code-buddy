@@ -207,10 +207,16 @@ export class RepoProfiler {
     const pkgJsonPath = path.join(this.cwd, 'package.json');
     if (this.exists(pkgJsonPath)) {
       configMtime = this.mtime(pkgJsonPath);
-      languages.push('TypeScript', 'JavaScript');
+      languages.push('JavaScript');
 
       try {
         const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
+        if (this.exists(path.join(this.cwd, 'tsconfig.json'))
+          || pkg.dependencies?.typescript || pkg.devDependencies?.typescript
+          || pkg.types || pkg.typings
+          || Object.values(pkg.scripts ?? {}).some(script => typeof script === 'string' && /\b(?:tsc|tsx|ts-node)\b/.test(script))) {
+          languages.unshift('TypeScript');
+        }
 
         // Package metadata
         name = pkg.name || undefined;
@@ -415,6 +421,11 @@ export class RepoProfiler {
       }
     } catch (err) {
       logger.debug('RepoProfiler: cartography scan failed (non-critical)', { err });
+    }
+
+    if (!languages.includes('TypeScript') && cartography
+      && ((cartography.fileStats.byExtension['.ts'] ?? 0) > 0 || (cartography.fileStats.byExtension['.tsx'] ?? 0) > 0)) {
+      languages.unshift('TypeScript');
     }
 
     // ── Populate code graph from cartography ───────────────────
