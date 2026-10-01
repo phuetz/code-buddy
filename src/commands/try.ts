@@ -7,10 +7,500 @@
  */
 
 import { execFile } from 'node:child_process';
-    ?? (async () => {
-      const folder = await mkdtemp(join(tmpdir(), 'code-buddy-try-'));
-      // TMPDIR may sit under an ESM project. Pin the demo's requested CommonJS
-      // format locally rather than inheriting that project's package type.
-      await writeFile(join(folder, 'package.json'), '{"private":true,"type":"commonjs"}\n');
-      return folder;
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Command } from 'commander';
+import type { ChatEntry } from '../agent/types.js';
+import { normalizeOllamaBaseUrl } from './ollama.js';
+import { getModelToolConfig } from '../config/model-tools.js';
+import { hasCodexCredentials } from '../providers/codex-oauth.js';
+import { resolveProviderFromCatalog } from '../providers/provider-catalog.js';
+import { getTrustFolderManager } from '../security/trust-folders.js';
+
+const OLLAMA_PROBE_TIMEOUT_MS = 2_000;
+const DEMO_MAX_TOOL_ROUNDS = 12;
+
+type EnvLike = Record<string, string | undefined>;
+
+export interface TryProvider {
+  kind: 'chatgpt' | 'ollama';
+  label: string;
+  apiKey: string;
+  baseURL: string;
+  model: string;
+}
+
+export interface TryDemoAgent {
+  systemPromptReady?: Promise<unknown>;
+  processUserMessage(
+    prompt: string,
+    options?: { surface?: string },
+  ): Promise<ChatEntry[]>;
+  dispose?(options?: { skipSessionLearning?: boolean }): void;
+}
+
+export interface TryVerification {
+  success: boolean;
+  output: string;
+}
+
+interface ResolveTryProviderOptions {
+  env?: EnvLike;
+  hasChatGptCredentials?: () => boolean;
+  fetchImpl?: typeof fetch;
+  ollamaProbeTimeoutMs?: number;
+  /** Endpoint imposé par l'utilisateur (`--base-url`) : prime sur toute auto-détection. */
+  baseUrlOverride?: string;
+  /** Modèle imposé par l'utilisateur (`--model`). */
+  modelOverride?: string;
+}
+
+export interface RunTryDemoOptions extends ResolveTryProviderOptions {
+  resolveProvider?: () => Promise<TryProvider | null>;
+  createWorkspace?: () => Promise<string>;
+  createAgent?: (provider: TryProvider, workspace: string) => Promise<TryDemoAgent>;
+  verify?: (workspace: string) => Promise<TryVerification>;
+  stdout?: (message: string) => void;
+  stderr?: (message: string) => void;
+  /**
+   * `false` masque la télémétrie, `true` la laisse passer. Une valeur omise préserve le niveau
+   * de l'appelant pour la compatibilité de l'API ; la commande CLI passe toujours un booléen.
+   */
+  verbose?: boolean;
+}
+
+export interface TryCommandDependencies {
+  runTryDemo?: (options: RunTryDemoOptions) => Promise<number>;
+}
+
+interface OllamaTagsResponse {
+  models?: Array<{ name?: unknown; model?: unknown }>;
+}
+
+export const TRY_DEMO_PROMPT = `You are driving a short coding-agent demo in an empty temporary folder.
+
+Exact goal:
+1. Create fizzbuzz.js in CommonJS. Export a function fizzBuzz(value) that returns the number as a string, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and "FizzBuzz" for multiples of 15.
+2. Create fizzbuzz.test.js in CommonJS with const { test } = require('node:test'), const assert = require('node:assert/strict'), and require('./fizzbuzz.js'), never import/export syntax. Use test() and assert.equal() to test at least 1, 3, 5, and 15. These APIs provide no Jest globals or expect().
+3. Run exactly: node --test fizzbuzz.test.js
+4. If a test fails, fix the code and run it again.
+5. Finish with a very short summary naming the two files you created and the test result.
+
+Write everything in English. Use the file and terminal tools with the configured permissions. Work only inside the temporary folder; no dependency installation is needed.`;
+
+export const NO_TRY_PROVIDER_MESSAGE = [
+  'No free provider is ready for the demo.',
+  '',
+  '1. Recommended — sign in with your ChatGPT account (OAuth, no API key, $0 marginal cost with your plan):',
+  '   buddy login',
+  '',
+  '2. Or run a model locally with Ollama (install it from https://ollama.com first):',
+  '   ollama serve',
+  '   ollama pull qwen3:8b',
+  '   buddy try',
+  '',
+  'The demo edits files, so the model must be able to call tools. qwen2.5 under 14B',
+  '(including qwen2.5-coder:7b) is chat-only in Code Buddy and cannot pass the demo.',
+].join('\n');
+
+/** Pick a coding-oriented local model without assuming one exact Ollama tag. */
+export function chooseOllamaModel(models: readonly string[], requested?: string): string | null {
+  const usable = models.map((model) => model.trim()).filter(Boolean);
+  const requestedModel = requested?.trim();
+  if (requestedModel) {
+    const exact = usable.find((model) => model.toLowerCase() === requestedModel.toLowerCase());
+    if (exact) return exact;
+  }
+
+  // The demo edits files: a model that Code Buddy treats as chat-only
+  // (supportsToolCalls: false, e.g. qwen2.5-coder:7b) cannot pass it, so a
+  // tool-capable model is preferred whenever one is installed.
+  const toolCapable = usable.filter((model) => getModelToolConfig(model).supportsToolCalls !== false);
+  for (const pool of [toolCapable, usable]) {
+    for (const pattern of [/qwen.*coder/i, /devstral/i, /codestral/i, /coder/i, /code/i]) {
+      const match = pool.find((model) => pattern.test(model));
+      if (match) return match;
+    }
+    if (pool.length > 0) return pool[0] ?? null;
+  }
+  return null;
+}
+
+/** True when Code Buddy treats this model as chat-only (no structured tool calls). */
+export function isChatOnlyModel(model: string | undefined): boolean {
+  if (!model) return false;
+  return getModelToolConfig(model).supportsToolCalls === false;
+}
+
+function normalizeTryOllamaHost(rawHost?: string): string {
+  let host = normalizeOllamaBaseUrl(rawHost);
+  if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
+  return host;
+}
+
+function parseOllamaModels(value: unknown): string[] {
+  if (!value || typeof value !== 'object') return [];
+  const models = (value as OllamaTagsResponse).models;
+  if (!Array.isArray(models)) return [];
+  return models
+    .map((entry) => {
+      const candidate = entry.name ?? entry.model;
+      return typeof candidate === 'string' ? candidate : null;
+    })
+    .filter((model): model is string => Boolean(model));
+}
+
+/** Demande à un endpoint OpenAI-compatible le premier modèle qu'il expose. */
+async function probeFirstModel(
+  baseURL: string,
+  options: ResolveTryProviderOptions,
+): Promise<string | undefined> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  try {
+    const response = await fetchImpl(`${baseURL}/models`, {
+      signal: AbortSignal.timeout(options.ollamaProbeTimeoutMs ?? OLLAMA_PROBE_TIMEOUT_MS),
     });
+    if (!response.ok) return undefined;
+    const payload = (await response.json()) as { data?: Array<{ id?: string }> };
+    return payload.data?.find((entry) => typeof entry.id === 'string')?.id;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Resolve only the free demo routes: ChatGPT OAuth first, local Ollama second. */
+export async function resolveTryProvider(
+  options: ResolveTryProviderOptions = {},
+): Promise<TryProvider | null> {
+  const env = options.env ?? process.env;
+
+  // Un endpoint demandé explicitement gagne toujours : l'auto-détection sert à
+  // deviner quand l'utilisateur n'a rien dit, pas à contredire ce qu'il a dit.
+  const baseUrlOverride = options.baseUrlOverride?.trim();
+  if (baseUrlOverride) {
+    const baseURL = baseUrlOverride.replace(/\/+$/, '');
+    const model =
+      options.modelOverride?.trim() ||
+      (await probeFirstModel(baseURL, options)) ||
+      env.OLLAMA_MODEL;
+    if (!model) return null;
+    return {
+      kind: 'ollama',
+      label: `endpoint imposé (${baseURL} · ${model})`,
+      apiKey: env.OPENAI_API_KEY ?? env.GROK_API_KEY ?? 'local',
+      baseURL,
+      model,
+    };
+  }
+
+  const providerOverride = env.CODEBUDDY_PROVIDER?.trim().toLowerCase();
+  const forceOllama = providerOverride === 'ollama';
+  const hasChatGpt = !forceOllama && (options.hasChatGptCredentials ?? hasCodexCredentials)();
+  if (hasChatGpt) {
+    const provider = resolveProviderFromCatalog({
+      env,
+      providerOverride: 'chatgpt',
+      hasChatGptOAuth: true,
+    });
+    if (provider) {
+      return {
+        kind: 'chatgpt',
+        label: 'ChatGPT OAuth',
+        apiKey: provider.apiKey,
+        baseURL: provider.baseURL,
+        model: options.modelOverride?.trim() || provider.defaultModel,
+      };
+    }
+  }
+
+  const host = normalizeTryOllamaHost(env.OLLAMA_HOST);
+  const fetchImpl = options.fetchImpl ?? fetch;
+  try {
+    const response = await fetchImpl(`${host}/api/tags`, {
+      signal: AbortSignal.timeout(options.ollamaProbeTimeoutMs ?? OLLAMA_PROBE_TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    const models = parseOllamaModels(await response.json());
+    const requestedModel = options.modelOverride?.trim() || env.OLLAMA_MODEL?.trim() || env.GROK_MODEL?.trim();
+    const model = requestedModel
+      ? models.find((candidate) => candidate.toLowerCase() === requestedModel.toLowerCase()) ?? null
+      : chooseOllamaModel(models);
+    if (!model) return null;
+    return {
+      kind: 'ollama',
+      label: `Ollama local (${model})`,
+      apiKey: 'ollama',
+      baseURL: `${host}/v1`,
+      model,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function createDefaultAgent(
+  provider: TryProvider,
+  workspace: string,
+): Promise<TryDemoAgent> {
+  const [{ CodeBuddyAgent }, { ConfirmationService }, { getPermissionModeManager }] =
+    await Promise.all([
+      import('../agent/codebuddy-agent.js'),
+      import('../utils/confirmation-service.js'),
+      import('../security/permission-modes.js'),
+    ]);
+  const confirmation = ConfirmationService.getInstance();
+  const previousFlags = confirmation.getSessionFlags();
+  confirmation.setSessionFlag('allOperations', true);
+  // The demo owns an isolated workspace. Non-destructive operations can run
+  // unattended; shell sandbox and trust/write policy gates still apply.
+  const permMgr = getPermissionModeManager();
+  const previousMode = permMgr.getMode();
+  permMgr.setMode('dontAsk');
+  try {
+    const agent = new CodeBuddyAgent(
+      provider.apiKey,
+      provider.baseURL,
+      provider.model,
+      DEMO_MAX_TOOL_ROUNDS,
+      true,
+      undefined,
+      workspace,
+    );
+    return {
+      systemPromptReady: agent.systemPromptReady,
+      processUserMessage: (prompt, options) => agent.processUserMessage(prompt, options),
+      dispose: (options) => {
+        try {
+          agent.dispose(options);
+        } finally {
+          confirmation.setSessionFlag('fileOperations', previousFlags.fileOperations);
+          confirmation.setSessionFlag('bashCommands', previousFlags.bashCommands);
+          confirmation.setSessionFlag('allOperations', previousFlags.allOperations);
+          permMgr.setMode(previousMode);
+        }
+      },
+    };
+  } catch (error) {
+    confirmation.setSessionFlag('fileOperations', previousFlags.fileOperations);
+    confirmation.setSessionFlag('bashCommands', previousFlags.bashCommands);
+    confirmation.setSessionFlag('allOperations', previousFlags.allOperations);
+    permMgr.setMode(previousMode);
+    throw error;
+  }
+}
+
+async function runVerificationCommand(workspace: string, args: string[]): Promise<TryVerification> {
+  return new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      args,
+      { cwd: workspace, timeout: 30_000, maxBuffer: 1024 * 1024 },
+      (error, stdout, stderr) => {
+        const output = `${stdout}${stderr}`.trim();
+        resolve({ success: error === null, output });
+      },
+    );
+  });
+}
+
+async function verifyDefaultDemo(workspace: string): Promise<TryVerification> {
+  try {
+    const contents = await Promise.all(['fizzbuzz.js', 'fizzbuzz.test.js']
+      .map((file) => readFile(join(workspace, file), 'utf8')));
+    if (contents.some((content) => !content.trim())) {
+      return { success: false, output: 'Demo files must contain code and tests; empty files are not a working demo.' };
+    }
+  } catch (error) {
+    return { success: false, output: error instanceof Error ? error.message : String(error) };
+  }
+  const generated = await runVerificationCommand(workspace, ['--test', 'fizzbuzz.test.js']);
+  if (!generated.success) return generated;
+  // The model's own test can be empty, trivial or wrong. Verify the requested
+  // behavior in a separate Node process using expectations owned by the product.
+  const oracle = await runVerificationCommand(workspace, ['--input-type=commonjs', '-e', `
+    const assert = require('node:assert/strict');
+    const { fizzBuzz } = require('./fizzbuzz.js');
+    assert.equal(typeof fizzBuzz, 'function', 'fizzbuzz.js must export fizzBuzz');
+    for (const [input, expected] of [[1,'1'], [2,'2'], [3,'Fizz'], [5,'Buzz'], [15,'FizzBuzz'], [16,'16'], [30,'FizzBuzz'], [6,'Fizz'], [10,'Buzz'], [7,'7']]) {
+      assert.equal(fizzBuzz(input), expected, 'fizzBuzz(' + input + ')');
+    }
+    process.stdout.write('Independent FizzBuzz oracle: 10/10');
+  `]);
+  return { success: oracle.success, output: `${generated.output}\n${oracle.output}` };
+}
+
+async function createDefaultWorkspace(): Promise<string> {
+  const workspace = await mkdtemp(join(tmpdir(), 'code-buddy-try-'));
+  await writeFile(join(workspace, 'package.json'), '{"private":true,"type":"commonjs"}\n', { flag: 'wx' });
+  return workspace;
+}
+
+function latestAssistantMessage(entries: readonly ChatEntry[]): string | null {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry?.type === 'assistant' && entry.content.trim()) return entry.content.trim();
+  }
+  return null;
+}
+
+function invokedToolNames(entries: readonly ChatEntry[]): string[] {
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (entry.toolCall?.function.name) names.add(entry.toolCall.function.name);
+    for (const toolCall of entry.toolCalls ?? []) names.add(toolCall.function.name);
+  }
+  return [...names];
+}
+
+function setTemporaryEnv(key: string, value: string): () => void {
+  const previous = process.env[key];
+  process.env[key] = value;
+  return () => {
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  };
+}
+
+/**
+ * Execute the scripted demo. Returns a process-style exit code.
+ *
+ * Programmatic callers that omit `verbose` keep their logger state unchanged. The CLI passes
+ * `false` by default because `buddy try` is a human-facing showcase whose short narrative must
+ * not be drowned out by agent telemetry.
+ */
+export async function runTryDemo(options: RunTryDemoOptions = {}): Promise<number> {
+  if (options.verbose !== false) return runTryDemoInner(options);
+
+  // `try` est la toute première chose qu'un nouvel utilisateur exécute. Dans la CLI, la
+  // télémétrie de l'agent (`INFO [notification] view_file completed in 26ms`, l'avertissement
+  // `bypassPermissions` du bac à sable) noyait les huit lignes qui racontent la démo — au point
+  // que la première capture vidéo en était illisible. On abaisse donc le niveau de journal pour
+  // la durée de la démo, sauf si l'utilisateur demande explicitement le détail. Le niveau est
+  // restauré à la fin, y compris en cas d'erreur.
+  // Poser `LOG_LEVEL` ne suffit PAS : le logger est un singleton qui lit la variable à
+  // l'import du module, donc bien avant cette ligne. Mesuré : 15 lignes de télémétrie
+  // survivaient au correctif « par l'environnement », alors que le test unitaire, lui,
+  // passait — il vérifiait la variable, pas le résultat. C'est `setLevel()` qui agit.
+  const restoreEnv = setTemporaryEnv('LOG_LEVEL', 'error');
+  let restoreLogger = () => {};
+  try {
+    const { logger } = await import('../utils/logger.js');
+    const previousLevel = logger.getLevel();
+    // Enregistrer la restauration AVANT la mutation : même un `setLevel` qui muterait puis
+    // lancerait ne pourrait pas laisser le singleton au niveau `error`.
+    restoreLogger = () => logger.setLevel(previousLevel);
+    logger.setLevel('error');
+    return await runTryDemoInner(options);
+  } finally {
+    try {
+      restoreLogger();
+    } finally {
+      restoreEnv();
+    }
+  }
+}
+
+async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
+  const write = options.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
+  const writeError = options.stderr ?? ((message: string) => process.stderr.write(`${message}\n`));
+  const resolveProvider = options.resolveProvider ?? (() => resolveTryProvider(options));
+  const provider = await resolveProvider();
+  if (!provider) {
+    writeError(NO_TRY_PROVIDER_MESSAGE);
+    return 2;
+  }
+
+  const createWorkspace = options.createWorkspace
+    ?? createDefaultWorkspace;
+  const workspace = await createWorkspace();
+  const createAgent = options.createAgent ?? createDefaultAgent;
+  const verify = options.verify ?? verifyDefaultDemo;
+  const restoreEnv = [
+    setTemporaryEnv('CODEBUDDY_HEADLESS', 'true'),
+    setTemporaryEnv('CODEBUDDY_DISABLE_MCP', 'true'),
+    // Auto-detected local demos need the same compact coding tools as -p.
+    ...(provider.kind === 'ollama' ? [setTemporaryEnv('CODEBUDDY_PROVIDER', 'ollama')] : []),
+  ];
+  let agent: TryDemoAgent | undefined;
+  let releaseTrust = () => {};
+
+  write('Code Buddy — coding-agent demo (duration depends on the model and hardware)');
+  write(`[1/3] Provider: ${provider.label}`);
+  write(`[2/3] Sandbox: ${workspace}`);
+  write('      The agent is creating FizzBuzz, writing its tests, and running them…');
+
+  try {
+    // The agent's cwd differs from process.cwd(), which the trust gate uses.
+    // Keep this grant in memory and release it even when construction fails.
+    releaseTrust = getTrustFolderManager().trustFolderForSession(workspace);
+    agent = await createAgent(provider, workspace);
+    await agent.systemPromptReady;
+    const entries = await agent.processUserMessage(TRY_DEMO_PROMPT, { surface: 'cli' });
+    const toolNames = invokedToolNames(entries);
+    if (toolNames.length > 0) write(`      Tools used: ${toolNames.join(', ')}`);
+    const assistantMessage = latestAssistantMessage(entries);
+    if (assistantMessage) write(`      Agent: ${assistantMessage}`);
+
+    write('[3/3] Independent verification: node --test fizzbuzz.test.js');
+    const verification = await verify(workspace);
+    if (!verification.success) {
+      writeError('❌ The demo did not produce a green test. The sandbox is kept for inspection.');
+      if (isChatOnlyModel(provider.model)) {
+        writeError(
+          `   Likely cause: ${provider.model} is chat-only in Code Buddy (it cannot call tools, so it cannot edit files).\n` +
+            '   Pull a tool-capable model (for example `ollama pull qwen3:8b`) and run `buddy try` again.',
+        );
+      }
+      if (verification.output) writeError(verification.output);
+      writeError(`   ${workspace}`);
+      return 1;
+    }
+
+    write('✅ Demo succeeded: the code was written and its tests pass.');
+    if (verification.output.includes('Independent FizzBuzz oracle: 10/10')) {
+      write('      Independent FizzBuzz oracle: 10/10');
+    }
+    if (verification.output) {
+      const passLine = verification.output.split('\n').find((line) => /pass/i.test(line));
+      if (passLine) write(`   ${passLine.trim()}`);
+    }
+    write(`   Files to inspect: ${workspace}`);
+    return 0;
+  } catch (error) {
+    writeError(`❌ Demo interrupted: ${error instanceof Error ? error.message : String(error)}`);
+    writeError(`   The sandbox is kept: ${workspace}`);
+    return 1;
+  } finally {
+    try {
+      agent?.dispose?.({ skipSessionLearning: true });
+    } finally {
+      releaseTrust();
+      for (const restore of restoreEnv.reverse()) restore();
+    }
+  }
+}
+
+export function createTryCommand(dependencies: TryCommandDependencies = {}): Command {
+  const executeTryDemo = dependencies.runTryDemo ?? runTryDemo;
+  return new Command('try')
+    .description('Run an isolated coding-agent demo that must end with a green test (ChatGPT OAuth or local Ollama)')
+    .option('--verbose', 'Show agent telemetry during the demo')
+    .option('--base-url <url>', 'Use this Ollama/OpenAI-compatible endpoint for the demo')
+    .option('--model <model>', 'Use this model for the demo')
+    .action(async (
+      options: { verbose?: boolean; baseUrl?: string; model?: string },
+      command: Command,
+    ) => {
+      // `--base-url` et `--model` sont des options GLOBALES : sans cette reprise,
+      // la démo les ignorait en silence et annonçait un succès obtenu ailleurs.
+      const globals = command.parent?.opts<{ baseUrl?: string; model?: string }>() ?? {};
+      const baseUrl = options.baseUrl ?? globals.baseUrl;
+      const model = options.model ?? globals.model;
+      process.exitCode = await executeTryDemo({
+        verbose: options.verbose === true,
+        ...(baseUrl ? { baseUrlOverride: baseUrl } : {}),
+        ...(model ? { modelOverride: model } : {}),
+      });
+    });
+}

@@ -57,3 +57,4 @@ export async function installGUI(): Promise<void> {
 export function isGUIInstalled(): boolean {
   const coworkDir = resolve(__dirname, '..', '..', 'cowork');
   return hasElectronBinary(coworkDir) && hasDesktopBundle(coworkDir);
+}

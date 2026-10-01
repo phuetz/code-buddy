@@ -4,9 +4,11 @@ const mocks = vi.hoisted(() => ({
   exists: vi.fn(),
   exec: vi.fn(),
   electron: vi.fn(),
+  info: vi.fn(),
 }));
 vi.mock('fs', () => ({ existsSync: mocks.exists, readFileSync: vi.fn() }));
 vi.mock('child_process', () => ({ execFileSync: mocks.exec }));
+vi.mock('../../src/utils/logger.js', () => ({ logger: { info: mocks.info } }));
 vi.mock('../../src/desktop/electron-paths.js', () => ({ hasElectronBinary: mocks.electron }));
 import { installGUI } from '../../src/desktop/installer.js';
 
@@ -16,6 +18,7 @@ describe('GUI installer reports the usable application', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     output = '';
+    mocks.info.mockImplementation((message: string) => { output += message; });
     process.exitCode = 0;
     vi.spyOn(console, 'log').mockImplementation((...args) => { output += args.join(' '); });
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -32,8 +35,7 @@ describe('GUI installer reports the usable application', () => {
 
   it('fails before installing anything when the npm package has no Cowork sources', async () => {
     mocks.exists.mockReturnValue(false);
-    await installGUI();
-    expect(process.exitCode).toBe(1);
+    await expect(installGUI()).rejects.toThrow(/source checkout/i);
     expect(mocks.exec).not.toHaveBeenCalled();
     expect(output).not.toContain('installed successfully');
   });
@@ -44,15 +46,13 @@ describe('GUI installer reports the usable application', () => {
       if (args.includes('rebuild') || args.includes('electron-rebuild')) throw new Error('ABI rebuild failed');
       return Buffer.alloc(0);
     });
-    await installGUI();
-    expect(process.exitCode).toBe(1);
+    await expect(installGUI()).rejects.toThrow(/ABI rebuild failed/);
     expect(output).not.toContain('installed successfully');
   });
 
   it('fails when the build exits zero but no application entry point exists', async () => {
     mocks.exists.mockImplementation((file: string) => file.endsWith('package.json'));
-    await installGUI();
-    expect(process.exitCode).toBe(1);
+    await expect(installGUI()).rejects.toThrow(/complete desktop bundle/i);
     expect(output).not.toContain('installed successfully');
   });
 

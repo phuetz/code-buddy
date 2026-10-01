@@ -42,6 +42,6 @@ describe('try verifies the generated behavior independently', () => {
   it('accepts correct code only after its test and the independent oracle pass', async () => {
     const result = await verifyGeneratedFiles('exports.fizzBuzz = n => n % 15 === 0 ? "FizzBuzz" : n % 3 === 0 ? "Fizz" : n % 5 === 0 ? "Buzz" : String(n);', 'const { test } = require("node:test"); const assert = require("node:assert/strict"); test("Fizz", () => assert.equal(require("./fizzbuzz.js").fizzBuzz(3), "Fizz"));');
     expect(result.exit).toBe(0);
-    expect(result.output).toContain('Independent FizzBuzz oracle: 7/7');
+    expect(result.output).toContain('Independent FizzBuzz oracle: 10/10');
   });
 });
