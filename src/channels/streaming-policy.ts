@@ -296,9 +296,19 @@ export class StreamingChunker {
 
     // Apply maxTotalLength truncation
     if (this.policy.maxTotalLength > 0) {
-      const remaining = this.policy.maxTotalLength - this.totalEmitted;
+      let remaining = this.policy.maxTotalLength - this.totalEmitted;
       if (remaining <= 0) return;
       if (content.length > remaining) {
+        if (
+          remaining > 0 &&
+          remaining < content.length &&
+          content.charCodeAt(remaining - 1) >= 0xd800 &&
+          content.charCodeAt(remaining - 1) <= 0xdbff &&
+          content.charCodeAt(remaining) >= 0xdc00 &&
+          content.charCodeAt(remaining) <= 0xdfff
+        ) {
+          remaining -= 1;
+        }
         content = content.slice(0, remaining) + '\n…[truncated]';
       }
     }
@@ -307,9 +317,24 @@ export class StreamingChunker {
     if (this.policy.maxChunkSize > 0 && content.length > this.policy.maxChunkSize) {
       let offset = 0;
       while (offset < content.length) {
-        const slice = content.slice(offset, offset + this.policy.maxChunkSize);
+        let chunkEnd = offset + this.policy.maxChunkSize;
+        if (chunkEnd < content.length) {
+          if (
+            content.charCodeAt(chunkEnd - 1) >= 0xd800 &&
+            content.charCodeAt(chunkEnd - 1) <= 0xdbff &&
+            content.charCodeAt(chunkEnd) >= 0xdc00 &&
+            content.charCodeAt(chunkEnd) <= 0xdfff
+          ) {
+            if (this.policy.maxChunkSize === 1) {
+              chunkEnd += 1;
+            } else {
+              chunkEnd -= 1;
+            }
+          }
+        }
+        const slice = content.slice(offset, chunkEnd);
         await this._sendOne(slice);
-        offset += this.policy.maxChunkSize;
+        offset = chunkEnd;
       }
     } else {
       await this._sendOne(content);
