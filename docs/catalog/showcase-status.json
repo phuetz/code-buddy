@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "counts": {
     "total": 338,
-    "passed": 1,
+    "passed": 0,
     "failed": 9,
-    "unavailable": 337
+    "unavailable": 338
   },
   "features": [
     {
@@ -804,8 +804,8 @@
     },
     {
       "id": "security-sandbox",
-      "status": "proven",
-      "reason": "Sortie capturée : bubblewrap 0.9.0, sandbox-ok, écriture hors projet refusée.",
+      "status": "not-proven-here",
+      "reason": "Sortie capturée : bubblewrap 0.9.0, sandbox-ok, écriture hors projet refusée. Preuve ancienne ou révision courante inconnue.",
       "scope": {
         "fr": "confineSpawn et sous-processus sous Linux/bubblewrap ; aucun outil bash d’agent ni autre plateforme prouvé. Script temporaire non livré.",
         "en": "confineSpawn and subprocesses on Linux/bubblewrap; no agent bash tool or other platform proved. Temporary script not shipped."
@@ -1360,7 +1360,7 @@
     {
       "id": "tool:env_doctor",
       "status": "not-proven-here",
-      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Entrée P9 intégrée à la RC ; aucune qualification documentaire indépendante du bénéfice annoncé. Une trace passed ou un raccordement ne suffit pas. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-env_doctor-2026-09-30.log"

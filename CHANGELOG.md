@@ -8,6 +8,8 @@
 ## [2.3.0] (2026-10-01)
 
 - L’intégration native LM Resizer utilise le MCP publié `lm_resizer_tool_output` de la 0.2.4, après exécution des commandes par Code Buddy. Les seuils de gain et le repli restent côté Code Buddy ; `doctor` vérifie le catalogue MCP et la dernière clé CCR de cette version permet de récupérer l’original.
+- Le prompt compact charge les consignes du dépôt et conserve les outils d’édition sous les portes habituelles. Bash transmet stdout et stderr en cas d’échec et préserve les emplacements explicitement autorisés des chaînes d’outils.
+- Les métadonnées de coût distinguent l’inférence locale (`pricing` et `billing` : `local`, coût marginal nul) d’un abonnement. L’arrêt du serveur attend la fermeture des canaux avant de déclarer sa fin.
 
 Candidat d'intégration préparé le 1er octobre pour la sortie prévue le 8 octobre. Cette section décrit les branches réunies dans la RC ; elle ne certifie pas tous les parcours utilisateur.
 
