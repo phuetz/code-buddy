@@ -1,3 +1,4 @@
+import { compactRuleDigest } from '../prompts/compact-rule-digest.js';
 /**
  * Prompt Builder Service
  *
@@ -543,12 +544,11 @@ export class PromptBuilder {
             // Leave room for the compact style block and the context header.
             // Use the canonical loader: hierarchy, exclusions, imports and dedup
             // must be identical to the full prompt path.
-            ...(compact ? { budgetBytes: Math.max(0, Math.min(2_000,
-              HEADLESS_LOCAL_COMPACT_MAX_TOKENS * 4 - systemPrompt.length - 600)) } : {}),
+            ...(compact ? { budgetBytes: 32_000 } : {}),
             ...(contextFileNames ? { fileNames: contextFileNames } : {}),
           });
           if (ctx.text) {
-            const workspaceBlock = '# Workspace Context\n\n' + ctx.text;
+            const workspaceBlock = compact ? compactRuleDigest(ctx.text) : '# Workspace Context\n\n' + ctx.text;
             systemPrompt = this.appendPromptBlock(
               systemPrompt,
               'workspace-context',
@@ -558,6 +558,11 @@ export class PromptBuilder {
               workspaceBlock,
               PROMPT_PRIORITIES.workspace,
             );
+            if (compact && workspaceBlock) {
+              systemPrompt = workspaceBlock + '\n\n' + systemPrompt.replace('\n\n' + workspaceBlock, '');
+              const part = this.lastPromptParts.pop();
+              if (part) this.lastPromptParts.unshift(part);
+            }
             logger.debug(`Loaded project context from ${ctx.sources.length} file(s)`, {
               sources: ctx.sources.map((s) => s.relPath),
               chars: ctx.bytes,
