@@ -24,9 +24,18 @@ export async function collectOrientationContext(
   const notices: string[] = [];
   const canonicalRoot = await realpath(root);
   const seenFiles = new Set<string>();
-  let text = `Observed repository profile (commands are declared, not executed):\n${JSON.stringify({
+  // Runtime metadata is independent of model knowledge and repository text.
+  // Claim support only for this Node CLI, not that project tests were executed.
+  const nodeMajor = Number(process.versions.node?.split('.')[0]);
+  const runtime = !process.versions.bun && !process.versions.deno && nodeMajor >= 20
+    ? `Observed CLI runtime: Node.js ${process.versions.node}; node --test is supported by this CLI runtime. Project tests have NOT been executed.\n`
+    : 'CLI runtime test-runner support not verified; project tests have NOT been executed.\n';
+  const invocationNote = profile.packageManager === 'npm'
+    ? 'npm run <script> invokes package.json scripts[<script>]: invocation and script body are not competing commands. Their validity is separate from whether tests were executed.\n'
+    : '';
+  let text = runtime + invocationNote + `Observed repository profile (commands are declared, not executed):\n${JSON.stringify({
     languages: profile.languages, framework: profile.framework, packageManager: profile.packageManager,
-    commands: profile.commands, directories: profile.directories, name: profile.name, description: profile.description,
+    commandInvocations: profile.commands, directories: profile.directories, name: profile.name, description: profile.description,
   })}\n`;
   // Preserve the budget even for a very large manifest/description.
   // UTF-8 bytes are a conservative upper bound for byte-tokenizing models.

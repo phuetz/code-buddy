@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 const mocks = vi.hoisted(() => ({
   chat: vi.fn(), read: vi.fn(), stream: vi.fn(), dispose: vi.fn(),
-  profile: { detectedAt: '2026-09-30', languages: ['JavaScript'], commands: { test: 'npm test' }, directories: {}, conventions: {}, contextPack: 'Entry point: index.js', entryPoints: ['index.js', 'index.js'] },
+  profile: { detectedAt: '2026-09-30', languages: ['JavaScript'], packageManager: 'npm' as const, commands: { test: 'npm test' }, directories: {}, conventions: {}, contextPack: 'Entry point: index.js', entryPoints: ['index.js', 'index.js'] },
 }));
 vi.mock('../../../src/agent/repo-profiler.js', () => ({ getRepoProfiler: () => ({ inspect: async () => mocks.profile }) }));
 vi.mock('../../../src/commands/llm-provider-resolution.js', () => ({ resolveCommandProvider: () => ({ apiKey: 'ollama', model: 'fixture-model', providerLabel: 'ollama' }) }));
@@ -52,6 +52,25 @@ describe('dev explain bounded orientation', () => {
     expect(paths.length).toBeLessThanOrEqual(6);
     expect(new Set(paths).size).toBe(paths.length);
   });
+  it('grounds declared test commands in the running Node features without executing project tests', async () => {
+    await run();
+    const messages = mocks.chat.mock.calls[0]?.[0];
+    expect(messages[1].content).toContain(`Node.js ${process.versions.node}`);
+    expect(messages[1].content).toContain('node --test is supported by this CLI runtime');
+    expect(messages[0].content).toContain('Never call a declared command invalid or unsupported merely because it was not executed');
+    expect(mocks.read.mock.calls.every(call => call[0] === 'view_file')).toBe(true);
+    expect(mocks.stream).not.toHaveBeenCalled();
+  });
+
+  it('explains that npm script invocations expand to the package script body rather than conflict with it', async () => {
+    await run();
+    const text = mocks.chat.mock.calls[0]?.[0][1].content;
+    expect(text).toContain('npm run <script> invokes package.json scripts[<script>]');
+    expect(text).toContain('invocation and script body are not competing commands');
+    expect(text).toContain('commandInvocations');
+    expect(mocks.read.mock.calls.every(call => call[0] === 'view_file')).toBe(true);
+  });
+
   it('bounds dense Unicode and code by bytes, not a chars/4 guess', async () => {
     mocks.read.mockResolvedValue({ success: true, output: '漢🙂'.repeat(10000) });
     const context = await collectOrientationContext(root, mocks.profile, 2000, mocks.read, 2);
