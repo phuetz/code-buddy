@@ -1,54 +1,48 @@
 ## [Unreleased]
 
+### Corrigé
+
+- Les estimations de coût utilisent une table tarifaire commune avec source et date ; les alias utilisent le prix de leur cible.
+- Dans Cowork, un nouveau budget YOLO vaut 100 $ et 400 tours ; les budgets enregistrés sont conservés et le plafond reste configurable jusqu'à 1 000 $.
+
 ## [2.3.0] (2026-10-01)
+
+Candidat d'intégration préparé le 1er octobre pour la sortie prévue le 8 octobre. Cette section décrit les branches réunies dans la RC ; elle ne certifie pas tous les parcours utilisateur.
+
+### Premier usage et Cowork
+
+- `buddy try` travaille dans un projet temporaire CommonJS, vérifie des fichiers non vides et dix résultats attendus avec un contrôle indépendant ; la confiance est limitée à cette session et le fournisseur précédent est rétabli. Le parcours des petits modèles conserve les permissions explicites de l'utilisateur.
+- Les identifiants complets de reprise de session sont conservés ; les commandes JSON isolent leurs diagnostics de stdout. Les réglages MCP et de télémétrie sont validés, et un échec de lint est transmis au bilan d'exécution.
+- L'installation de Cowork depuis les sources exige Node 22 et vérifie le bundle complet. Une erreur d'installation est signalée au CLI ; la reconstruction native concerne le sous-projet Cowork. Le verrou Linux accepte les longs chemins temporaires.
+- App Studio installe les dépendances nécessaires à ses projets, conserve le bon espace de travail lors d'un changement de projet et laisse accessibles les commandes de l'éditeur. Le test Hermes distingue les six capacités disponibles de la capacité partielle.
+
+### Configuration et outils
+
+- Les rôles de modèles utilisent un catalogue central et des réglages configurables ; les modèles découverts restent liés aux capacités du fournisseur et du compte. Une seule branche de catalogue a été intégrée.
+- Les registres d'outils attendent leurs résultats asynchrones ; les alias d'édition acceptent les paramètres documentés. Les tests déplacés hors des sources ne sont plus inclus dans le runtime construit.
+- Les diagnostics LSP attendent les réponses utiles et ferment le serveur ; les compteurs du lanceur de tests reflètent les résultats. Les événements de fermeture, les groupes d'autorisation et les données de nœuds persistés sont mieux traités.
+- Le heartbeat et les observateurs de commentaires bornent leurs paramètres et leurs ressources ; le serveur renvoie une erreur explicite pour les requêtes trop volumineuses et borne le stockage des canevas.
+- Le skill RagChat intégré possède des déclencheurs précis. Les règles facultatives du journal Lisa distinguent les observations des actions autorisées.
 
 ### Sécurité
 
-- **security:** Les lecteurs directs intégrés refusent les fichiers d’identifiants classés, y compris les lecteurs documentaires et multimédias ; les archives sont contrôlées avant lecture et extraction. `buddy server` et le serveur sans JWT de `buddy daemon` écoutent `127.0.0.1` par défaut. Le serveur limite le débit sans faire confiance aux en-têtes de proxy non configurés et refuse les JWT mal formés ; l’environnement Bash transmis aux commandes retire `*_PAT`, `*_HEADERS` et les proxys avec mot de passe. Les chemins personnels Windows sont aussi protégés (`c2948d198`, `15d704ed1`, `ed26c316b`, `58f729b58`, `5873af9b0`, `e68802997`, PR #275). **Limite connue : le filtre statique du shell ne couvre pas toutes les lectures récursives ni les chemins construits à l’exécution. Un secret suivi par Git peut encore être extrait par une commande shell qui lit les objets Git. La garantie « secret suivi par Git illisible » est reportée en 2.3.1.**
-- La liste des commandes dangereuses et leurs blocages utilisent une source commune ; la dépendance `fast-uri` corrige deux avis de sévérité haute (`7bb59e82a`, PR #276 ; PR #273).
-- Les chemins d'identifiants sont comparés sans tenir compte de la casse sur les volumes macOS concernés (`7bb473266`, PR #293). Le verrouillage des dépendances corrige `undici` et `brace-expansion` ; l'exception de l'audit npm est limitée et vérifiée (`d92d6183e`, `ec3c51b89`, PR #295).
-- `buddy security audit` vérifie les réglages de sécurité du profil, des skills et de MCP ; son option `--fix` resserre les permissions des fichiers après sauvegarde des modes. Les audits incomplets ou portant sur des fichiers spéciaux échouent explicitement (`36fac9ed1`, `16aa191df`, `aed8b35c9`).
-- Un serveur MCP ne peut plus lancer librement un shell ni écrire hors des emplacements autorisés ; ses outils d'écriture doivent être explicitement listés (`0d9c5b2c9`, `48adb3f31`, `1d713a409`, `c7e4066ca`).
-- L'App Studio limite l'environnement transmis aux commandes et masque les clés dans la console, le chat et l'historique des versions (`a508f43d4`, `ec47c2103`, `5390cb1d2`).
+- Les signatures de webhooks portent sur le corps brut ; les comparaisons de secrets évitent les comparaisons directes de chaînes. Les chemins du bac à sable, des plugins, des fichiers Studio et des URL MCP/OAuth sont confinés et validés.
+- Les contrôles de requêtes cloud refusent les destinations internes interdites ; les paramètres partagés ne peuvent plus être modifiés par mutation d'une copie retournée.
+- Les correctifs de dépendances `undici` et du parcours `/scan-todos` étaient déjà dans la base et n'ont pas été fusionnés une seconde fois.
 
-### Premier contact et commandes
+### Documentation et LM Resizer
 
-- L'aide du terminal et les erreurs d'entrée donnent des indications plus utiles ; les guides d'installation et de démarrage concordent avec les commandes réellement disponibles (`959dd8e75`, `aa434d58a`).
-- Le premier démarrage avec Ollama recommande un modèle capable d'appeler des outils (`175dd0b84`).
-- `buddy fleet token` accorde les droits nécessaires pour écouter la flotte et appeler un outil distant dans son usage par défaut (`c727be659`).
-- `buddy config set`, `patch` et `unset` permettent de modifier la configuration sans ouvrir une session interactive (`80f34be1c`).
-- Les réglages Ollama utilisent une URL de base cohérente ; les données du compagnon respectent `CODEBUDDY_HOME` (`6ff3d70be`, `b604b7516`, PR #291).
+- Le catalogue réunit 338 entrées, dont les outils et commandes. Les traces P8/P9 sont conservées ; une trace historique ne qualifie pas automatiquement la RC. La vitrine est régénérée à partir des qualifications et de la fraîcheur des sources : une entrée reste prouvée ici, 337 restent non prouvées ici, dont neuf avec un dernier essai en échec.
+- Les guides d'installation, les aides et les exemples de flotte décrivent leurs prérequis et limites. Les rapports internes d'intégration restent hors des fichiers publiés.
+- LM Resizer, déjà présent dans la base, reste disponible pour réduire les observations d'outils avec conservation du contenu brut et repli si le traitement échoue. Cette intégration ne revendique aucun gain de qualité ou de coût mesuré.
 
-### Travail quotidien
+### Limites
 
-- L'historique récent rassemble les sessions du terminal, de Cowork et du mobile ; les sessions de messagerie peuvent être remises à zéro avec archivage (`8268c410c`, `256f4a7ef`, `ed6532b02`).
-- L'App Studio peut corriger une génération, conserver des versions par projet, cibler un élément de l'aperçu, montrer les journaux du serveur de développement et exporter le site construit (`4275a2c7e`, `88ea45717`, `9bcbeb11a`).
-- `buddy research ingest` accepte des flux RSS/Atom, des dépôts GitHub et des modèles Hugging Face comme sources de recherche (`1cad66387`, `e53a94b15`).
-- `buddy deploy run` prépare le déploiement d'un site vers Cloudflare Pages ou Netlify en simulation par défaut ; `buddy provision db-auth` prépare une base Postgres et des vues d'authentification avec application explicite (`5efa2012b`, `b4dca6c68`).
-- `buddy figma import` convertit une maquette Figma en composants React ; un gabarit Expo est disponible dans l'atelier d'applications (`df56fa031`, `5f5f92969`).
+- La recette de premier usage de la RC est publiée séparément ; les reprises de la lane sortie-sûre ne sont pas incluses dans cette phase A.
+- Le filtre statique du shell ne protège pas toutes les lectures récursives ni les chemins calculés. Un secret suivi par Git peut être lu via les objets Git ; cette garantie reste reportée à la 2.3.1.
+- Les contrôles Linux ne valident ni Windows, ni macOS, ni les comptes et services externes. Cowork requiert ses dépendances et binaires propres.
 
-### Fiabilité et visibilité
-
-- Le navigateur reconnaît mieux certaines consignes d'action en français, vérifiées dans Chromium réel (`e01e83cc3`).
-- Le renouvellement de connexion ChatGPT indique la cause effective de l'échec ; la vidéo expose la réponse du service et évite un blocage de téléchargement (`feb9e2072`, `2069d6007`).
-- `understand_video` borne ses appels externes et ferme ses processus et workers de transcription pour rendre la main après le traitement ; l'ingestion facultative en mémoire ne bloque plus indéfiniment la réponse (`c4028a815`, `d936f3a4c`, `e0bc69780`, PR #290).
-- L'interface affiche l'état réel d'une exécution et les outils de projet signalent leurs échecs au lieu de laisser croire qu'ils ont réussi (`eb7c32aaf`, `ab11749d8`).
-- La PWA mobile cesse les reconnexions après un refus d'authentification ; la déconnexion Telegram attend la fin du traitement en cours (`74a96cd82`, `d848352fb`).
-- Le suivi des skills continue à fonctionner quand la limite des observateurs noyau est atteinte (`31f02fd9e`).
-- Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias utilisent le prix de leur cible (`43f86fe6f`, PR #277).
-- Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré (`43f86fe6f`, PR #277).
-- Des correctifs de portabilité Windows et de la suite macOS stabilisent les vérifications sur ces systèmes, sans prétendre à une validation locale de ces plateformes (`51da4cb48`, PR #279 ; `343e5407f`, PR #274). Les rejets asynchrones sont couverts par des tests (`f7c82bf49`, PR #280).
-- Le diagnostic CLI LSP ferme le serveur après la réponse ; les déclencheurs des skills intégrés sont précisés sans détourner la météo ; la veille vidéo borne ses reprises (`de2bc197a`, `a73dfe5de`, `078d76896`, PR #296).
-- Les tests de sécurité macOS couvrent les volumes insensibles à la casse ; le parcours `/scan-todos` est isolé dans les tests (`ee7812cdb`, PR #292 ; `98720d626`, PR #295).
-
-### Documentation
-
-- Le catalogue décrit 91 fonctionnalités avec un état et des preuves graduées ; les documents de prise en main et l'explication française ont été précisés (`6ee17ced4`, `de496d5c3`, `aa434d58a`, `5e42b991d`).
-- Le README suit les commandes réellement disponibles et les campagnes P5/P6 ajoutent des preuves d'utilisation au catalogue (`0f68f04a6`, PR #281 ; `7e0cbd8db`, PR #289).
-- La campagne P7 ajoute des preuves d'utilisation au catalogue (`ede88bcff`, PR #294).
-- Les exemples publics ne contiennent plus le prénom personnel auparavant présent dans le code (`b67d78b60`, PR #278).
-
-Voir les [notes de version 2.3.0](docs/RELEASE-NOTES-2.3.0.md) pour l'installation, les réglages et les limites.
+Voir les [notes de version](docs/RELEASE-NOTES-2.3.0.md) et les [limites des fonctionnalités](docs/whats-new-2.3.md).
 
 ## [2.2.0] (2026-09-17)
 
