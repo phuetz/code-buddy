@@ -36,8 +36,8 @@ RUN npm prune --production
 # ============================================================================
 FROM node:20-bookworm-slim AS production
 
-# Image version — override at build time: --build-arg CODEBUDDY_VERSION=1.8.0
-ARG CODEBUDDY_VERSION=1.8.0
+# Image version — override at build time: --build-arg CODEBUDDY_VERSION=$(node -p "require('./package.json').version")
+ARG CODEBUDDY_VERSION=2.3.0
 
 # Labels for container registry
 LABEL org.opencontainers.image.title="Code Buddy"
