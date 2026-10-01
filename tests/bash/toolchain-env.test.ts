@@ -6,7 +6,8 @@ import { sanitizeEnvVars } from '../../src/security/env-blocklist.js';
 afterEach(() => vi.unstubAllEnvs());
 
 describe('toolchain locations in the filtered bash environment', () => {
-  it.each(['RUSTUP_HOME', 'CARGO_HOME', 'GOPATH', 'GOROOT', 'JAVA_HOME', 'JDK_HOME', 'NVM_DIR'])(
+  it.each(['RUSTUP_HOME', 'CARGO_HOME', 'GOPATH', 'GOROOT', 'JAVA_HOME', 'JDK_HOME', 'NVM_DIR',
+    'FNM_DIR', 'VOLTA_HOME', 'PNPM_HOME', 'BUN_INSTALL', 'CONDA_DEFAULT_ENV', 'PYENV_ROOT'])(
     'preserves %s through both policy modes and native sanitization', name => {
       vi.stubEnv(name, '/toolchains/custom');
       for (const inherit of ['all', 'core'] as const) {

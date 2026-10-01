@@ -53,6 +53,7 @@ const CORE_VARS = new Set([
   'NODE_ENV', 'NPM_CONFIG_PREFIX',
   // Explicit toolchain locations; no *_OPTS, tokens or prefix inheritance.
   'RUSTUP_HOME', 'CARGO_HOME', 'GOPATH', 'GOROOT', 'JAVA_HOME', 'JDK_HOME', 'NVM_DIR',
+  'FNM_DIR', 'VOLTA_HOME', 'PNPM_HOME', 'BUN_INSTALL', 'CONDA_DEFAULT_ENV', 'PYENV_ROOT',
   // Common CI vars (non-sensitive)
   'CI', 'GITHUB_ACTIONS', 'GITLAB_CI',
 ]);

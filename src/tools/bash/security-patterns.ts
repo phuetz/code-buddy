@@ -222,6 +222,7 @@ export const SAFE_ENV_VARS: Set<string> = new Set([
   'NODE_ENV',
   // Explicit toolchain locations; no *_OPTS, tokens or prefix inheritance.
   'RUSTUP_HOME', 'CARGO_HOME', 'GOPATH', 'GOROOT', 'JAVA_HOME', 'JDK_HOME', 'NVM_DIR',
+  'FNM_DIR', 'VOLTA_HOME', 'PNPM_HOME', 'BUN_INSTALL', 'CONDA_DEFAULT_ENV', 'PYENV_ROOT',
   // Development tools
   'EDITOR',
   'VISUAL',
