@@ -80,6 +80,43 @@ describe('memory HTTP routes (real persistent store)', () => {
     expect(gotBody.accessCount).toBe(0);
   });
 
+  it('GET / validates limit and offset on list and search', async () => {
+    // 7 entries created to verify pagination
+    for (let i = 1; i <= 7; i++) {
+      await fetch(`${baseUrl}/api/memory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: `key${i}`, content: `content ${i}`, category: 'context' }),
+      });
+    }
+
+    // Invalid parameters -> 400
+    const listBadLimitAbc = await fetch(`${baseUrl}/api/memory?limit=abc`);
+    expect(listBadLimitAbc.status).toBe(400);
+
+    const listBadLimitNeg = await fetch(`${baseUrl}/api/memory?limit=-2`);
+    expect(listBadLimitNeg.status).toBe(400);
+
+    const listBadLimitZero = await fetch(`${baseUrl}/api/memory?limit=0`);
+    expect(listBadLimitZero.status).toBe(400);
+
+    const listBadOffsetNeg = await fetch(`${baseUrl}/api/memory?offset=-1`);
+    expect(listBadOffsetNeg.status).toBe(400);
+
+    const listBadOffsetAbc = await fetch(`${baseUrl}/api/memory?offset=abc`);
+    expect(listBadOffsetAbc.status).toBe(400);
+
+    const searchBadLimitAbc = await fetch(`${baseUrl}/api/memory/search?query=x&limit=abc`);
+    expect(searchBadLimitAbc.status).toBe(400);
+
+    // Valid pagination logic
+    const validPage = await fetch(`${baseUrl}/api/memory?limit=2&offset=1`);
+    expect(validPage.status).toBe(200);
+    const validData = (await validPage.json()) as { entries: Array<{ id: string }>, limit: number };
+    expect(validData.limit).toBe(2);
+    expect(validData.entries.length).toBe(2);
+  });
+
   it('GET / lists and /search finds entries; category filter applies', async () => {
     await fetch(`${baseUrl}/api/memory`, {
       method: 'POST',

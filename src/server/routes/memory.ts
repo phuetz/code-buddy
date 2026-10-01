@@ -121,8 +121,24 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const scope = parseScope(req.query.scope);
-    const limitParam = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : 100;
-    const offsetParam = typeof req.query.offset === 'string' ? parseInt(req.query.offset, 10) : 0;
+
+    let limitParam = 100;
+    if (req.query.limit !== undefined) {
+      limitParam = Number(req.query.limit);
+      if (typeof req.query.limit !== 'string' || !/^[1-9]\d*$/.test(req.query.limit) ||
+          !Number.isInteger(limitParam) || limitParam > 1000) {
+        throw ApiServerError.badRequest('Limit must be an integer between 1 and 1000');
+      }
+    }
+
+    let offsetParam = 0;
+    if (req.query.offset !== undefined) {
+      offsetParam = Number(req.query.offset);
+      if (typeof req.query.offset !== 'string' || !/^(?:0|[1-9]\d*)$/.test(req.query.offset) ||
+          !Number.isSafeInteger(offsetParam)) {
+        throw ApiServerError.badRequest('Offset must be a non-negative integer');
+      }
+    }
 
     const store = await getStore();
     let entries = allEntries(store, scope);
@@ -199,7 +215,15 @@ router.get(
     const query = typeof req.query.query === 'string' ? req.query.query : '';
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const scope = parseScope(req.query.scope);
-    const limitParam = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : 50;
+
+    let limitParam = 50;
+    if (req.query.limit !== undefined) {
+      limitParam = Number(req.query.limit);
+      if (typeof req.query.limit !== 'string' || !/^[1-9]\d*$/.test(req.query.limit) ||
+          !Number.isInteger(limitParam) || limitParam > 1000) {
+        throw ApiServerError.badRequest('Limit must be an integer between 1 and 1000');
+      }
+    }
 
     if (!query) {
       throw ApiServerError.badRequest('Query parameter is required');
