@@ -86,7 +86,7 @@ expects clients to authenticate across restarts.
 **Fix** —
 
 1. Generate a real secret: `openssl rand -hex 32`.
-2. Pass it via env: `JWT_SECRET=<hex> buddy serve` or set it in your
+2. Pass it via env: `JWT_SECRET=<hex> buddy server` or set it in your
    deployment's secret store.
 3. Restart the server. Existing client tokens minted under the random
    dev secret will be invalidated — clients need to re-auth.
@@ -118,7 +118,7 @@ WS error: 401 Unauthorized
    key.
 3. **Origin / CORS** — the peer's `corsOrigins` defaults to
    localhost-only; a remote listener needs the listening host's
-   origin to be allow-listed. Set `CODEBUDDY_FLEET_CORS_ORIGINS` on
+   origin to be allow-listed. Set `CORS_ORIGINS` on
    the peer.
 
 **Fix** —
@@ -136,7 +136,7 @@ nc -zv <peer-ip> 3000
 CODEBUDDY_FLEET_API_KEY=cb_sk_...
 
 # 3. CORS (on the peer)
-CODEBUDDY_FLEET_CORS_ORIGINS=http://<listener-host>:* buddy serve
+CORS_ORIGINS=http://peer.example.com:3000,http://192.0.2.5:3000 buddy server
 ```
 
 See [`docs/fleet-guide.md`](fleet-guide.md) for the full scope
@@ -163,7 +163,7 @@ though `ollama list` returns models on the same host.
 curl -s http://127.0.0.1:11434/api/tags | jq .
 
 # 2. Restart Code Buddy with OLLAMA_HOST set if non-default.
-OLLAMA_HOST=http://203.0.113.15:11434 buddy serve
+OLLAMA_HOST=http://203.0.113.15:11434 buddy server
 
 # 3. Verify peer.chat is wired.
 buddy
@@ -180,7 +180,7 @@ ping` first to warm the daemon, or pre-pull the model with
 
 ## `peer.chat-session.*` returns `SESSION_NOT_FOUND` after a restart
 
-**Symptoms** — you restart `buddy serve` on a peer that had open
+**Symptoms** — you restart `buddy server` on a peer that had open
 chat sessions, then the next `peer.chat-session.continue` returns:
 
 ```
@@ -196,7 +196,7 @@ boot, but **only** if `now - lastUsedAt < CODEBUDDY_PEER_SESSION_IDLE_MS`
 **Fix** — pick one:
 
 - For longer downtimes, raise the idle window:
-  `CODEBUDDY_PEER_SESSION_IDLE_MS=$((4*60*60*1000)) buddy serve`
+  `CODEBUDDY_PEER_SESSION_IDLE_MS=$((4*60*60*1000)) buddy server`
   (4 h example).
 - For development where you restart often, leave the default and use
   `/fleet chat start` to open a fresh session after each restart.
