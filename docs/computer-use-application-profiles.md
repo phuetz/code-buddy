@@ -38,7 +38,9 @@ Human decisions are audited by `ConfirmationService`.
 
 Optional per-action policies come only from host settings:
 `.codebuddy/settings.json` (project) or `~/.codebuddy/user-settings.json`
-(user), with project entries taking precedence:
+(user). Project entries can tighten policy with `block` or `confirm`;
+project `allow` entries are ignored with a warning. Only user-level settings
+can preauthorize an action:
 
 ```json
 {
@@ -48,13 +50,16 @@ Optional per-action policies come only from host settings:
 }
 ```
 
-Values are `confirm`, `block`, or `allow`. An explicit host `allow` preauthorizes
-that action; use it only when the user intends to waive its action gate.
+Values are `confirm`, `block`, or `allow`. An explicit user-level `allow`
+preauthorizes that action; use it only when the user intends to waive its action
+gate. Project restrictions take precedence over user authorization.
 Unrecognized configured values require confirmation. Tool arguments never
 change these policies. These settings files must be maintained by the user;
 this change does not protect them from other tools that can edit files.
-The classification covers the recognized dangerous actions, keystrokes and
-dialog buttons; it does not infer every possible effect of arbitrary UI clicks.
+The classification covers recognized dangerous actions, keystrokes and observed
+controls; it cannot infer every application's behavior from its accessible label.
+Dry-run exports and macro writes skip their filesystem effects as well as their
+actuators. Proof/audit metadata can still be recorded during simulation.
 
 Proof artifacts keep the structured evidence returned by each action, such as
 `targetFocus`, `visualContext`, dialog text, button risk classification,
@@ -83,7 +88,24 @@ clicked directly. Affirmative or destructive choices like OK, Yes, Save,
 Delete, Discard, Overwrite, Run, Install, and Allow require human confirmation
 unless explicitly allowed by host configuration. The gate uses the observed
 button's name and risk, including when a safe-looking requested label matches
-a destructive button.
+a destructive button. Safe labels are matched exactly, so a word such as `no`
+inside an affirmative label does not make it safe.
+
+This guard also applies to semantic clicks/selections, reference and coordinate
+clicks (including double/right/middle clicks), and Enter/Space activation.
+Coordinate hit testing checks visible controls in a valid snapshot within its
+TTL; a benign reference cannot hide an overlapping destructive control. Missing,
+expired or unclassified target evidence requires human confirmation. OCR and vision
+coordinates do not establish a harmless effect and require human confirmation.
+Windows UIAutomation paths that resolve and invoke a target in one script require
+confirmation before executing that script. A refusal stops the fallback chain.
+
+The parallel `gui_control` tool requires a fresh human decision for every `click`,
+`type`, `key`, and `scroll`, inside the executor itself. Generic tool approval,
+permission bypass and session flags cannot skip it. Screenshot and element
+observation stay available without this action gate; plan-mode and system-key
+restrictions still apply. Both desktop tools belong to `group:system` and
+`group:system:modify` for declarative policy rules.
 
 Generic desktop controls now cover more than buttons and fields:
 
