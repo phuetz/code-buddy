@@ -11,6 +11,10 @@
  * small Ollama models into hallucinating JSON tool calls.
  */
 
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
 // ---- mocks ----------------------------------------------------------
@@ -190,6 +194,32 @@ describe('PromptBuilder.buildForQuery() — headless local compact', () => {
     expect(sp).not.toContain('## Execution discipline');
     expect(sp).toContain('<writing_rules>');
     expect(Math.ceil(sp.length / 4)).toBeLessThanOrEqual(1500);
+  });
+
+  it('loads AGENTS.md in compact builds without soul/bootstrap sections', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'compact-instructions-'));
+    process.env.CODEBUDDY_HEADLESS = 'true';
+    process.env.CODEBUDDY_PROVIDER = 'ollama';
+    writeFileSync(join(cwd, 'package.json'), '{}');
+    writeFileSync(join(cwd, 'AGENTS.md'), 'Always end your answer with LOCAL_INSTRUCTION_42.');
+    mkdirSync(join(cwd, '.codebuddy'));
+    writeFileSync(join(cwd, '.codebuddy', 'SOUL.md'), 'OPTIONAL_SOUL_MUST_STAY_OUT');
+    try {
+      const { builder } = buildBuilder();
+      builder.updateConfig({ cwd, memoryEnabled: false });
+      for (const build of [
+        () => builder.buildForQuery('Ajoute une ligne à README.md', undefined, 'qwen3.5:4b', null),
+        () => builder.buildSystemPrompt(undefined, 'qwen3.5:4b', null),
+      ]) {
+        const prompt = await build();
+        expect(prompt).toContain('LOCAL_INSTRUCTION_42');
+        expect(prompt).not.toContain('OPTIONAL_SOUL_MUST_STAY_OUT');
+        expect(builder.getContextRegistry()?.size).toBeGreaterThan(0);
+        expect(Math.ceil(prompt.length / 4)).toBeLessThanOrEqual(1500);
+      }
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   it('keeps the rich prompt when CODEBUDDY_PROMPT_COMPACT=false', async () => {
