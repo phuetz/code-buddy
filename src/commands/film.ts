@@ -92,44 +92,48 @@ function printResult(res: Awaited<ReturnType<typeof produceFilm>>): void {
   if (!res.success) console.log(`\n   ✗ ${res.error ?? 'failed'}`);
 }
 
+function pick<T>(cli: T | undefined, plan: T | undefined): T | undefined {
+  return cli ?? plan;
+}
+
 function buildInput(name: string, plan: ScenePlanFile, opts: GenerateOpts): ProduceFilmInput {
+  const resolution = pick(opts.resolution, plan.output?.resolution);
+  const aspectRatio = pick(opts.aspect, plan.output?.aspectRatio);
+  const fps = pick(num(opts.fps), plan.output?.fps);
+
   const output = {
-    ...((opts.resolution ?? plan.output?.resolution)
-      ? { resolution: opts.resolution ?? plan.output?.resolution }
-      : {}),
-    ...((opts.aspect ?? plan.output?.aspectRatio)
-      ? { aspectRatio: opts.aspect ?? plan.output?.aspectRatio }
-      : {}),
-    ...((num(opts.fps) ?? plan.output?.fps) ? { fps: num(opts.fps) ?? plan.output?.fps } : {}),
+    ...(resolution !== undefined ? { resolution } : {}),
+    ...(aspectRatio !== undefined ? { aspectRatio } : {}),
+    ...(fps !== undefined ? { fps } : {}),
   };
+
+  const music = pick(opts.music, plan.audio?.music);
+  const musicVolume = pick(num(opts.musicVolume), plan.audio?.musicVolume);
+  const voiceover = pick(opts.voiceover, plan.audio?.voiceover);
+
   const audio = {
-    ...((opts.music ?? plan.audio?.music) ? { music: opts.music ?? plan.audio?.music } : {}),
-    ...((num(opts.musicVolume) ?? plan.audio?.musicVolume)
-      ? { musicVolume: num(opts.musicVolume) ?? plan.audio?.musicVolume }
-      : {}),
-    ...((opts.voiceover ?? plan.audio?.voiceover)
-      ? { voiceover: opts.voiceover ?? plan.audio?.voiceover }
-      : {}),
+    ...(music !== undefined ? { music } : {}),
+    ...(musicVolume !== undefined ? { musicVolume } : {}),
+    ...(voiceover !== undefined ? { voiceover } : {}),
     ...(opts.ducking === false
       ? { ducking: false }
       : plan.audio?.ducking !== undefined
         ? { ducking: plan.audio.ducking }
         : {}),
   };
-  const engineRaw = opts.engine ?? plan.engine;
+  const engineRaw = pick(opts.engine, plan.engine);
   const engine = engineRaw === 'gl' ? 'gl' : engineRaw === 'xfade' ? 'xfade' : undefined;
+
+  const transition = pick(opts.transition, plan.transition);
+  const transitionDuration = pick(num(opts.transitionDuration), plan.transitionDuration);
 
   return {
     name,
     ...(plan.pitch !== undefined ? { pitch: plan.pitch } : {}),
     ...(plan.scenes ? { scenes: plan.scenes } : {}),
     ...(Object.keys(output).length ? { output } : {}),
-    ...((opts.transition ?? plan.transition)
-      ? { transition: opts.transition ?? plan.transition }
-      : {}),
-    ...((num(opts.transitionDuration) ?? plan.transitionDuration)
-      ? { transitionDuration: num(opts.transitionDuration) ?? plan.transitionDuration }
-      : {}),
+    ...(transition !== undefined ? { transition } : {}),
+    ...(transitionDuration !== undefined ? { transitionDuration } : {}),
     ...(engine ? { engine } : {}),
     ...(Object.keys(audio).length ? { audio } : {}),
     ...(num(opts.seed) !== undefined ? { seed: num(opts.seed) } : {}),
