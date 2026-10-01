@@ -81,11 +81,12 @@ export function isolateCatalogueEnv(tempRoot: string): void {
     remember(frame, name);
     delete process.env[name];
   }
-  for (const name of ['HOME', 'CODEBUDDY_HOME', 'CODEBUDDY_SESSIONS_DIR', 'JWT_SECRET', ...METRICS_ENV]) {
+  for (const name of ['HOME', 'USERPROFILE', 'CODEBUDDY_HOME', 'CODEBUDDY_SESSIONS_DIR', 'JWT_SECRET', ...METRICS_ENV]) {
     remember(frame, name);
   }
   for (const name of METRICS_ENV) delete process.env[name];
   process.env.HOME = tempRoot;
+  process.env.USERPROFILE = tempRoot;
   process.env.CODEBUDDY_HOME = path.join(tempRoot, 'codebuddy-home');
   process.env.CODEBUDDY_SESSIONS_DIR = path.join(tempRoot, 'sessions');
   process.env.JWT_SECRET = CATALOGUE_JWT_SECRET;
