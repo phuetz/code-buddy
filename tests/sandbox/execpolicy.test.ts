@@ -56,6 +56,42 @@ describe("ExecPolicy", () => {
   });
 
   describe("Command Evaluation", () => {
+
+    it("should prevent prefix spoofing in allowedDirs", async () => {
+      const existingRule = policy.getRules().find(r => r.id === "builtin-read-safe");
+      expect(existingRule).toBeDefined();
+
+      existingRule.constraints = {
+        allowedDirs: ["/work/proj"]
+      };
+
+      const resAllowed = policy.evaluate("ls", [], "/work/proj/sub");
+      expect(resAllowed.action).toBe("allow");
+
+      const resSpoofed = policy.evaluate("ls", [], "/work/proj-evil");
+      expect(resSpoofed.action).toBe("sandbox");
+
+      const resSpoofed2 = policy.evaluate("ls", [], "/work/proj/../../etc");
+      expect(resSpoofed2.action).toBe("sandbox");
+    });
+
+    it("should correctly handle prefix spoofing in deniedDirs", async () => {
+      const existingRule = policy.getRules().find(r => r.id === "builtin-read-safe");
+      expect(existingRule).toBeDefined();
+
+      existingRule.constraints = {
+        deniedDirs: ["/home/u/.ssh"]
+      };
+
+      const resDenied = policy.evaluate("ls", [], "/home/u/.ssh/keys");
+      expect(resDenied.action).toBe("sandbox");
+
+      const resNotDenied = policy.evaluate("ls", [], "/home/u/.ssh-backup");
+      expect(resNotDenied.action).toBe("allow");
+
+      const resAlsoDenied = policy.evaluate("ls", [], "/home/u/./.ssh");
+      expect(resAlsoDenied.action).toBe("sandbox");
+    });
     it("should allow safe read commands", () => {
       const evaluation = policy.evaluate("ls", ["-la"]);
 

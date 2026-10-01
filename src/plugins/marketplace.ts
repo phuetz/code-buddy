@@ -20,6 +20,7 @@ import * as crypto from 'crypto';
 import axios from 'axios';
 import * as semver from 'semver';
 import { PluginSandbox, createPluginSandbox, SandboxPermission } from './sandbox-worker.js';
+import { isPathInside } from '../security/path-comparison.js';
 
 export interface Plugin {
   id: string;
@@ -484,7 +485,7 @@ export class PluginMarketplace extends EventEmitter {
     const normalizedPluginsDir = path.normalize(path.resolve(this.pluginsDir));
 
     // Ensure the module path is within the plugins directory
-    if (!normalizedPath.startsWith(normalizedPluginsDir)) {
+    if (!isPathInside(normalizedPath, normalizedPluginsDir)) {
       return false;
     }
 

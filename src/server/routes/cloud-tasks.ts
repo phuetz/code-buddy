@@ -16,6 +16,7 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/index.js';
 import { logger } from '../../utils/logger.js';
+import { assertSafeUrl } from '../../security/ssrf-guard.js';
 
 // Helper to extract string param (Express params can be string | string[])
 function getStringParam(param: string | string[] | undefined): string {
@@ -80,6 +81,14 @@ export function createCloudTaskRoutes(): Router {
       if (notifyOnComplete !== undefined && typeof notifyOnComplete !== 'string') {
         res.status(400).json({ error: 'notifyOnComplete must be a URL string' });
         return;
+      }
+
+      if (notifyOnComplete) {
+        const check = await assertSafeUrl(notifyOnComplete);
+        if (!check.safe) {
+          res.status(400).json({ error: 'notifyOnComplete must be a public http(s) URL' });
+          return;
+        }
       }
 
       try {

@@ -1,3 +1,4 @@
+import { isPathWithin } from '../utils/path-within.js';
 /**
  * Execpolicy Framework
  *
@@ -1109,7 +1110,7 @@ export class ExecPolicy extends EventEmitter {
       // Check allowed directories
       if (rule.constraints.allowedDirs) {
         const inAllowed = rule.constraints.allowedDirs.some(dir =>
-          workDir.startsWith(dir)
+          isPathWithin(workDir, dir)
         );
         if (!inAllowed) return false;
       }
@@ -1117,7 +1118,7 @@ export class ExecPolicy extends EventEmitter {
       // Check denied directories
       if (rule.constraints.deniedDirs) {
         const inDenied = rule.constraints.deniedDirs.some(dir =>
-          workDir.startsWith(dir)
+          isPathWithin(workDir, dir)
         );
         if (inDenied) return false;
       }

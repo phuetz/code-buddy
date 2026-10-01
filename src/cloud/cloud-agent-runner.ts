@@ -17,6 +17,36 @@ import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
 import { RunStore } from '../observability/run-store.js';
 import { shouldIsolateCloudTask, runCloudTaskSubprocess } from './cloud-task-subprocess.js';
+import { isPathInside } from '../security/path-comparison.js';
+import { safeFetchFollow } from '../security/safe-fetch.js';
+
+// ──────────────────────────────────────────────────────────────────
+// Context Files Helper
+// ──────────────────────────────────────────────────────────────────
+
+export function readContextFiles(files: string[], rootDir: string): string {
+  let contextContent = '';
+  if (!files || files.length === 0) return contextContent;
+
+  for (const filePath of files) {
+    try {
+      const absPath = path.resolve(rootDir, filePath);
+      if (fs.existsSync(absPath)) {
+        const realPath = fs.realpathSync(absPath);
+        if (isPathInside(realPath, rootDir)) {
+          const content = fs.readFileSync(realPath, 'utf-8');
+          const truncated = content.length > 50000 ? content.slice(0, 50000) + '\n... (truncated)' : content;
+          contextContent += `\n\n--- ${filePath} ---\n${truncated}`;
+        } else {
+          logger.warn(`Context file is outside root directory: ${filePath}`);
+        }
+      }
+    } catch {
+      // Skip unreadable files
+    }
+  }
+  return contextContent;
+}
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -406,21 +436,7 @@ export class CloudAgentRunner extends EventEmitter {
       const systemPrompt = getSystemPromptForMode('code');
 
       // Read context files
-      let contextContent = '';
-      if (config.contextFiles && config.contextFiles.length > 0) {
-        for (const filePath of config.contextFiles) {
-          try {
-            const absPath = path.resolve(filePath);
-            if (fs.existsSync(absPath)) {
-              const content = fs.readFileSync(absPath, 'utf-8');
-              const truncated = content.length > 50000 ? content.slice(0, 50000) + '\n... (truncated)' : content;
-              contextContent += `\n\n--- ${filePath} ---\n${truncated}`;
-            }
-          } catch {
-            // Skip unreadable files
-          }
-        }
-      }
+      const contextContent = readContextFiles(config.contextFiles || [], process.cwd());
 
       // Build messages
       const userMessage = contextContent
@@ -687,8 +703,16 @@ export class CloudAgentRunner extends EventEmitter {
         return;
       }
 
-      await fetch(url, {
+      const { assertSafeUrl } = await import('../security/ssrf-guard.js');
+      const check = await assertSafeUrl(url);
+      if (!check.safe) {
+        logger.warn('Cloud task webhook URL blocked by SSRF guard', { host: parsed.hostname, reason: check.reason });
+        return;
+      }
+
+      await safeFetchFollow(url, {
         method: 'POST',
+        redirect: 'manual',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           event: 'cloud_task_completed',
@@ -702,7 +726,7 @@ export class CloudAgentRunner extends EventEmitter {
           completedAt: task.completedAt?.toISOString(),
         }),
         signal: AbortSignal.timeout(10000),
-      });
+      }, { maxRedirects: 0 });
     } catch {
       // Webhook fire-and-forget
     }

@@ -173,7 +173,7 @@ router.post('/:source', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const manager = await getManager();
-  const result = await manager.handleWebhook(source, headers, req.body);
+  const result = await manager.handleWebhook(source, headers, req.body, (req as Request & { rawBody?: Buffer }).rawBody);
 
   if (result.fired) {
     try {
