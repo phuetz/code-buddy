@@ -23,6 +23,26 @@ import type { AddressInfo } from 'node:net';
 
 export const MCP_OAUTH_CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
 
+export function assertSafeAuthorizationUrl(url: URL): void {
+  if (url.username || url.password) {
+    throw new Error(`URL d'autorisation OAuth refusée : les identifiants intégrés ne sont pas autorisés`);
+  }
+
+  if (url.protocol === 'https:') {
+    return;
+  }
+
+  if (url.protocol === 'http:') {
+    const safeHosts = ['127.0.0.1', 'localhost', '[::1]'];
+    if (safeHosts.includes(url.hostname)) {
+      return;
+    }
+    throw new Error(`URL d'autorisation OAuth refusée : schéma http: autorisé uniquement pour la boucle locale`);
+  }
+
+  throw new Error(`URL d'autorisation OAuth refusée : schéma ${url.protocol} non autorisé`);
+}
+
 type OpenExternal = (url: string) => Promise<void> | void;
 
 /** Persisted OAuth state for a single MCP server, keyed by server id. */
@@ -155,6 +175,7 @@ export class CoworkMcpOAuthProvider implements OAuthClientProvider {
   }
 
   redirectToAuthorization(authorizationUrl: URL): void | Promise<void> {
+    assertSafeAuthorizationUrl(authorizationUrl);
     return this._openExternal(authorizationUrl.toString());
   }
 

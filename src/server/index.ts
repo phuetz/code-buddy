@@ -281,8 +281,8 @@ function createApp(
   }
 
   // Body parsing
-  app.use(express.json({ limit: config.maxRequestSize, verify: (req, _res, buf) => { (req as Request & { rawBody?: Buffer }).rawBody = buf; } }));
-  app.use(express.urlencoded({ extended: true, limit: config.maxRequestSize, verify: (req, _res, buf) => { (req as Request & { rawBody?: Buffer }).rawBody = buf; } }));
+  app.use(express.json({ limit: config.maxRequestSize, verify: (req, _res, buf) => { (req as typeof req & { rawBody?: Buffer }).rawBody = buf; } }));
+  app.use(express.urlencoded({ extended: true, limit: config.maxRequestSize, verify: (req, _res, buf) => { (req as typeof req & { rawBody?: Buffer }).rawBody = buf; } }));
 
   // Rate limiting
   if (config.rateLimit) {
