@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { getProviderDefaultModel } from './config/model-defaults.js';
 import { getOllamaBaseUrl, getOllamaV1BaseUrl } from './utils/ollama-url.js';
+import { resolveMaxPriceEnv } from './cli/max-price.js';
 // Record startup time as early as possible
 const STARTUP_TIME = Date.now();
 
@@ -1736,8 +1737,7 @@ program
   )
   .option(
     "--max-price <dollars>",
-    "maximum cost in dollars before stopping (like mistral-vibe)",
-    "10.0"
+    "maximum cost in dollars before stopping (like mistral-vibe)"
   )
   .option(
     "--auto-approve",
@@ -1868,7 +1868,7 @@ program
     "--channel <name>",
     "Start with a messaging channel (telegram, discord, slack, …)"
   )
-  .action(async (message, options) => {
+  .action(async (message, options, command) => {
     const unknownCommand = getNonInteractiveUnknownCommand({
       positionalArgs: Array.isArray(message) ? message : undefined,
       hasExplicitPrompt: Boolean(options.prompt || options.print),
@@ -2287,8 +2287,7 @@ program
       }
 
       // Set max-price for cost limit (like mistral-vibe)
-      const maxPrice = parseFloat(options.maxPrice) || 10.0;
-      process.env.MAX_COST = maxPrice.toString();
+      resolveMaxPriceEnv(options.maxPrice, command.getOptionValueSource('maxPrice'), process.env);
 
       // Handle tool filtering (like mistral-vibe --enabled-tools)
       if (options.enabledTools || options.disabledTools) {

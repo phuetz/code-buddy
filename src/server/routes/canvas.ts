@@ -35,6 +35,8 @@ export interface CanvasRouteConfig {
   enableA2UI: boolean;
 }
 
+export const MAX_CANVAS_SNAPSHOTS = 50;
+
 // ============================================================================
 // Canvas Store (in-memory, production would persist)
 // ============================================================================
@@ -49,6 +51,26 @@ class CanvasStore {
     const snapshot: CanvasSnapshot = { id, html, css, js, metadata, createdAt: new Date() };
     this.snapshots.set(id, snapshot);
     this.current = snapshot;
+
+    let limit = MAX_CANVAS_SNAPSHOTS;
+    if (process.env.CODEBUDDY_CANVAS_MAX_SNAPSHOTS) {
+      const parsed = Number(process.env.CODEBUDDY_CANVAS_MAX_SNAPSHOTS);
+      if (Number.isSafeInteger(parsed) && parsed > 0) {
+        limit = parsed;
+      }
+    }
+
+    if (this.snapshots.size > limit) {
+      let toRemove = this.snapshots.size - limit;
+      for (const key of this.snapshots.keys()) {
+        if (toRemove <= 0) break;
+        if (key !== this.current?.id) {
+          this.snapshots.delete(key);
+          toRemove--;
+        }
+      }
+    }
+
     return snapshot;
   }
 
@@ -61,7 +83,7 @@ class CanvasStore {
   }
 
   reset(): void {
-    this.current = null;
+    this.clear();
   }
 
   /** Wipe every snapshot. Tests and POST /reset use this so a blank canvas stays blank. */
