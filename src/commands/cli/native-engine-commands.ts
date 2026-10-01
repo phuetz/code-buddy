@@ -47,10 +47,17 @@ export function registerHeartbeatCommands(program: Command): void {
     .description('Start the heartbeat engine')
     .option('--interval <ms>', 'interval in milliseconds', '1800000')
     .action(async (opts: { interval: string }) => {
+      const interval = Number(opts.interval);
+      if (!Number.isSafeInteger(interval) || interval < 1000) {
+        console.error('Invalid interval. Must be a finite number >= 1000 ms.');
+        process.exitCode = 1;
+        return;
+      }
+
       const { getHeartbeatEngine } = await import('../../daemon/heartbeat.js');
-      const engine = getHeartbeatEngine({ intervalMs: parseInt(opts.interval) });
+      const engine = getHeartbeatEngine({ intervalMs: interval });
       engine.start();
-      console.log(`Heartbeat started (interval: ${parseInt(opts.interval) / 1000}s)`);
+      console.log(`Heartbeat started (interval: ${interval / 1000}s)`);
     });
 
   heartbeat
