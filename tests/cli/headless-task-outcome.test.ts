@@ -58,6 +58,23 @@ describe('headless task evidence', () => {
     const green = { ...result('bash', 'cd /second && npm test 2>&1 | tail -8', true), toolResult: { success: true, output: '# tests 1\n# pass 1\n# fail 0' } };
     expect(exit('fix the tests', [red, green])).toBe(1);
   });
+  it.each(['echo "exit: $?"', 'echo "status=$?"', 'echo exit: $?', 'echo "code: $?"', 'echo "EXIT: $?"'])('accepts the observed zero checker status printed immediately after it: %s', echo => {
+    const red = { ...result('bash', 'cd /workspace && npx eslint . 2>&1 | head -50', true), toolResult: { success: true, output: '✖ 2 problems (2 errors, 0 warnings)' } };
+    const label = echo.match(/exit|status|code/i)![0]!;
+    const green = { ...result('bash', `cd /workspace && npx eslint . 2>&1; ${echo}`, true), toolResult: { success: true, output: `${label}: 0\n[sandbox:landlock; exit code 0]` } };
+    expect(exit('fix lint errors', [red, green])).toBe(0);
+  });
+  it('rejects a nonzero checker status even when the following echo exits zero', () => {
+    const red = { ...result('bash', 'npm run lint; echo "exit: $?"', true), toolResult: { success: true, output: 'exit: 2\n[sandbox:landlock; exit code 0]' } };
+    expect(exit('fix lint errors', [red])).toBe(1);
+  });
+  it('does not trust an echoed constant or the exit code of an output pipeline', () => {
+    const red = { ...result('bash', 'cd /workspace && npx eslint .', false), toolResult: { success: false, output: 'Lint failed' } };
+    for (const command of ['cd /workspace && npx eslint .; echo "exit: 0"', 'cd /workspace && npx eslint . | head -1; echo "exit: $?"']) {
+      const hidden = { ...result('bash', command, true), toolResult: { success: true, output: 'exit: 0' } };
+      expect(exit('fix lint errors', [red, hidden])).toBe(1);
+    }
+  });
   it('does not let a green test erase red lint', () => {
     expect(exit('fix lint errors', [result('bash', 'npm run lint', false), result('bash', 'npm test', true)])).toBe(1);
   });

@@ -41,11 +41,24 @@ function argumentsOf(entry: TaskEvidenceEntry): Record<string, unknown> {
   } catch { return {}; }
 }
 
+/** Recognize only an immediate echo of the preceding command's real status. */
+function echoedCheckStatus(entry: TaskEvidenceEntry, command: string): { command: string; code?: number } | undefined {
+  const suffix = command.match(/;\s*echo\s+(?:"(exit|status|code)\s*[:=]\s*\$\?"|(exit|status|code)\s*[:=]\s*\$\?)\s*$/i);
+  if (!suffix) return undefined;
+  const label = suffix[1] ?? suffix[2];
+  const output = stripVTControlCharacters(entry.toolResult?.output ?? entry.content).trim()
+    .replace(/\n\[sandbox:[^\n]*\]\s*$/, '').trim();
+  const lastLine = output.split('\n').at(-1) ?? '';
+  const observed = lastLine.match(new RegExp(`^\\s*${label}\\s*[:=]\\s*(\\d+)\\s*$`, 'i'));
+  return { command: command.slice(0, suffix.index).trim(), ...(observed ? { code: Number(observed[1]) } : {}) };
+}
+
 function hasRedVerification(entry: TaskEvidenceEntry, name: string, command?: string): boolean {
   const verifies = name === 'lint_project' || name === 'test_runner'
     || /(?:^|[\s;&|])(?:npm|pnpm|yarn|bun|npx|node|vitest|jest|eslint|tsc|pytest|cargo|go|dotnet)(?=\s|$)/.test(command ?? '')
       && /\b(?:test|tests|lint|eslint|vitest|jest|tsc|pytest|check|typecheck)\b/.test(command ?? '');
   if (!verifies) return false;
+  if (command && (echoedCheckStatus(entry, command)?.code ?? 0) > 0) return true;
   const output = stripVTControlCharacters([entry.toolResult?.output, entry.toolResult?.error, entry.content].filter(Boolean).join('\n'));
   return /^\s*# fail [1-9]\d*\b/m.test(output)
     || /^\s*not ok \d+\b/m.test(output)
@@ -59,9 +72,11 @@ function hasRedVerification(entry: TaskEvidenceEntry, name: string, command?: st
 /** Match only a literal directory and harmless formatting of a completed check. */
 function checkIdentity(entry: TaskEvidenceEntry, command: string | undefined, success: boolean): { command?: string; directory?: string } {
   if (!command) return {};
-  const scoped = command.match(/^cd\s+(\/[^\s;&|<>$`'"\\]+|"\/[^"$`\\]+"|'\/[^'\\]+')\s*&&\s*(.+)$/);
+  const echoed = echoedCheckStatus(entry, command);
+  const checkCommand = echoed?.command ?? command;
+  const scoped = checkCommand.match(/^cd\s+(\/[^\s;&|<>$`'"\\]+|"\/[^"$`\\]+"|'\/[^'\\]+')\s*&&\s*(.+)$/);
   const directory = scoped?.[1]?.replace(/^['"]|['"]$/g, '');
-  let body = scoped?.[2] ?? command;
+  let body = scoped?.[2] ?? checkCommand;
   const formatter = /\s*\|\s*(?:head|tail)(?:\s+(?:-\d+|-n\s*\d+))?\s*$/;
   let formatted = false;
   while (formatter.test(body)) { body = body.replace(formatter, ''); formatted = true; }
@@ -74,7 +89,8 @@ function checkIdentity(entry: TaskEvidenceEntry, command: string | undefined, su
     || /\bTest (?:Files|Suites):?\s+[1-9]\d*\s+passed\b/i.test(output) && /\bTests:?\s+[1-9]\d*\s+passed\b/i.test(output);
   // A successful pipeline can hide a runner's exit code. It may clear a
   // previous failure only when the runner's completed green summary is seen.
-  if (simpleCheck && (!formatted || !success || completedGreen)) return { command: body, ...(directory ? { directory } : {}) };
+  const observedStatus = !echoed || !success || echoed.code === 0;
+  if (simpleCheck && observedStatus && (!formatted || !success || completedGreen)) return { command: body, ...(directory ? { directory } : {}) };
   return { command, ...(directory ? { directory } : {}) };
 }
 
