@@ -56,14 +56,14 @@ export class SandboxManager {
 
   constructor(config?: Partial<SandboxConfig>) {
     this.config = {
-      allowedPaths: [process.cwd()],
-      readOnlyPaths: [],
-      blockedPaths: DEFAULT_BLOCKED_PATHS,
       networkEnabled: true,
       timeoutMs: 30000,
       maxOutputSize: 1024 * 1024, // 1MB
       method: 'native',
-      ...config
+      ...config,
+      allowedPaths: config?.allowedPaths ? [...config.allowedPaths] : [process.cwd()],
+      readOnlyPaths: config?.readOnlyPaths ? [...config.readOnlyPaths] : [],
+      blockedPaths: config?.blockedPaths ? [...config.blockedPaths] : [...DEFAULT_BLOCKED_PATHS],
     };
   }
 
