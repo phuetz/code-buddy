@@ -447,6 +447,7 @@ export class BashTool implements Disposable {
 
       let requiresDirectApproval = policy.action === 'ask';
       let escalationReason = policy.reason;
+      let boundaryDenied = false;
 
       if (policy.action === 'sandbox') {
         const sandboxed = await executeInWorkspaceSandbox(
@@ -483,6 +484,7 @@ export class BashTool implements Disposable {
             );
           }
           requiresDirectApproval = true;
+          boundaryDenied = true;
           escalationReason = `Sandbox boundary denied the command: ${sandboxed.result.stderr || sandboxed.result.stdout}`;
         } else {
           requiresDirectApproval = true;
@@ -511,6 +513,9 @@ export class BashTool implements Disposable {
               `Working directory: ${effectiveCwd}\n` +
               `Boundary: ${escalationReason}`,
             approvalKey: policy.approvalKey,
+            // A real confinement denial still requires explicit approval;
+            // dontAsk's read-only classification must not undo that boundary.
+            ...(boundaryDenied || policy.action === 'ask' ? { forcePrompt: true } : {}),
             riskLevel: 'high',
             detail: { cwd: effectiveCwd },
           },

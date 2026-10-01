@@ -234,7 +234,13 @@ export class PermissionModeManager {
   /**
    * Don't ask mode: auto-approve everything except destructive
    */
-  private checkDontAsk(_action: string, toolName: string): PermissionDecision {
+  private checkDontAsk(action: string, toolName: string): PermissionDecision {
+    // Bash is potentially destructive, but its parsed read-only subset has
+    // the same proof used by plan mode. This works without a TTY or a broad
+    // AUTO_CONFIRM override; shell-policy and declarative denials still win.
+    if (normalizeToolName(toolName) === 'bash' && SafeBinariesChecker.getInstance().isSafeChain(action)) {
+      return { allowed: true, reason: 'Read-only shell expression auto-approved in dontAsk mode', prompted: false };
+    }
     if (this.isDestructiveTool(toolName)) {
       return { allowed: true, reason: 'Destructive tool requires confirmation in dontAsk mode', prompted: true };
     }

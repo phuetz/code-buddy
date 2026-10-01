@@ -1,3 +1,4 @@
+import * as executionPolicyModule from '../../src/tools/bash/execution-policy.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -124,6 +125,29 @@ describe('Bash runtime execution policy', () => {
       backend: 'docker',
       sandboxed: true,
     })).toBe(false);
+  });
+
+  it('requires explicit approval for a real confinement denial even for a read-only dontAsk command', async () => {
+    getPermissionModeManager().setMode('dontAsk');
+    vi.spyOn(executionPolicyModule, 'executeInWorkspaceSandbox').mockResolvedValue({
+      available: true, result: { exitCode: 1, stdout: '', stderr: 'Permission denied: sandbox boundary', duration: 1, timedOut: false, backend: 'bubblewrap', sandboxed: true },
+    });
+    const confirmation = vi.spyOn(ConfirmationService.getInstance(), 'requestConfirmation').mockResolvedValue({ confirmed: false });
+    const result = await new BashTool().execute('ls .');
+    expect(result.success).toBe(false);
+    expect(confirmation).toHaveBeenCalledWith(expect.objectContaining({ forcePrompt: true }), 'bash');
+  });
+
+  it('cannot auto-approve a read-only spelling when execution policy explicitly requires authority', async () => {
+    getPermissionModeManager().setMode('dontAsk');
+    vi.spyOn(executionPolicyModule, 'evaluateShellExecution').mockResolvedValue({ action: 'ask', reason: 'Untrusted executable identity', approvalKey: 'untrusted-read-only' });
+    const confirmation = vi.spyOn(ConfirmationService.getInstance(), 'requestConfirmation').mockResolvedValue({ confirmed: false });
+    const tool = new BashTool();
+    try {
+      const result = await tool.execute('ls .');
+      expect(result.success).toBe(false);
+      expect(confirmation).toHaveBeenCalledWith(expect.objectContaining({ forcePrompt: true }), 'bash');
+    } finally { tool.dispose(); }
   });
 
   it('recognizes an explicit filesystem boundary denial', () => {
