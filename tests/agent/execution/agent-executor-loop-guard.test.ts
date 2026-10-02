@@ -344,3 +344,24 @@ describe('refus headless définitif du banc', () => {
     } finally { vi.unstubAllEnvs(); }
   });
 });
+
+it.each([true, false])('un refus headless conserve les résultats ou signale les appels non exécutés (séquentiel=%s)', async (sequential) => {
+  vi.stubEnv('CODEBUDDY_HEADLESS', 'true');
+  try {
+    const deps = createDeps();
+    deps.toolHandler.executeToolStreaming = vi.fn(async function* () {
+      return { success: false, error: 'Approval requires an interactive terminal or configured remote approval channel' };
+    });
+    const executor = new AgentExecutor(deps, createConfig(50));
+    const provider = scriptProvider(deps, round => [toolCall('bash', { command: 'npm publish', wait_for_previous: sequential }, round), toolCall('view_file', { path: 'package.json', wait_for_previous: false }, round)]);
+    const messages: CodeBuddyMessage[] = [{ role: 'user', content: 'mission' }];
+    const chunks = await runStream(executor, messages);
+    expect(provider.rounds()).toBe(1);
+    expect(chunks.filter(chunk => chunk.type === 'tool_result')).toHaveLength(2);
+    expect(messages.filter(message => message.role === 'tool')).toHaveLength(2);
+    expect(deps.toolHandler.executeTool).toHaveBeenCalledTimes(sequential ? 0 : 1);
+    const viewResult = chunks.find(chunk => chunk.type === 'tool_result' && chunk.toolCall?.function.name === 'view_file')?.toolResult;
+    expect(viewResult?.success).toBe(!sequential);
+    if (sequential) expect(viewResult?.error).toContain('no execution started');
+  } finally { vi.unstubAllEnvs(); }
+});

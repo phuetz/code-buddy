@@ -2073,6 +2073,8 @@ export class AgentExecutor {
             (toolCall) => this.isToolParallelizable(toolCall),
           );
 
+          let terminalCapabilityFailure = false;
+          const completedToolIds = new Set<string>();
           toolExecution: for (const batch of executionBatches) {
             // Compaction mutates shared transcript state, so keep this preflight
             // ordered even when the calls themselves are safe to run together.
@@ -2444,6 +2446,7 @@ export class AgentExecutor {
               toolResult: visibleToolResult,
             };
             history.push(toolResultEntry);
+            completedToolIds.add(toolCall.id);
             yield { type: "tool_result", toolCall, toolResult: visibleToolResult };
 
             // Note: 'name' is required for Gemini API to match functionResponse with functionCall
@@ -2457,8 +2460,8 @@ export class AgentExecutor {
             if (process.env.CODEBUDDY_HEADLESS === 'true' && failure?.terminal) {
               yield { type: 'run_event', runEvent: { runId: this.deps.toolHandler.getRunId?.() ?? '', eventType: 'capability_blocked',
                 data: { code: failure.code, toolCallId: toolCall.id } } };
-              yield { type: 'done' };
-              return;
+              terminalCapabilityFailure = true;
+              continue;
             }
 
             // --- Auto-commit after file-modifying tools (streaming path) ---
@@ -2528,6 +2531,8 @@ export class AgentExecutor {
               await processYieldSignal(streamYieldChildId, messages);
             }
           }
+          // All outcomes in this already awaited batch are recorded before stopping.
+          if (terminalCapabilityFailure) break toolExecution;
           }
 
           for (const toolCall of deferredToolCalls) {
@@ -2551,6 +2556,17 @@ export class AgentExecutor {
             yield { type: 'tool_result', toolCall, toolResult };
           }
 
+          if (terminalCapabilityFailure) {
+            for (const toolCall of streamToolCallsToExecute.filter(call => !completedToolIds.has(call.id))) {
+              const skippedReason = 'Skipped after terminal capability failure; no execution started.';
+              const toolResult: ToolResult = { success: false, error: skippedReason };
+              history.push({ type: 'tool_result', content: skippedReason, timestamp: new Date(), toolCall, toolResult });
+              messages.push({ role: 'tool', content: skippedReason, tool_call_id: toolCall.id, name: toolCall.function.name } as CodeBuddyMessage);
+              yield { type: 'tool_result', toolCall, toolResult };
+            }
+            yield { type: 'done' };
+            return;
+          }
           if (terminateDetectedStreaming) break;
 
           if (abortController?.signal.aborted) {
