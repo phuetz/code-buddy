@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { evaluateShellExecution, executeInWorkspaceSandbox } from '../../src/tools/bash/execution-policy.js';
 import { getPermissionModeManager } from '../../src/security/permission-modes.js';
+import { BashTool } from '../../src/tools/bash/bash-tool.js';
 import { validateCommand } from '../../src/tools/bash/command-validator.js';
 import { probeNativeSandbox } from '../sandbox/native-sandbox-ready.js';
 
@@ -99,4 +100,20 @@ it('une commande non Git suivant un saut de ligne ne peut pas écrire dans les m
   const result = await executeInWorkspaceSandbox(command, cwd, 30000);
   expect(result.result?.exitCode).not.toBe(0);
   expect(fs.existsSync(path.join(cwd, '.git/smuggled'))).toBe(false);
+});
+
+it.each(['git log --oneline -1', 'git status --short', 'git diff --stat', 'node -e "console.log(1)"'])('explique avant exécution la séparation de la mutation Git et de %s', async verification => {
+  const cwd = fixture();
+  const tool = new BashTool();
+  try {
+    const command = `cd '${cwd}' && git add package.json && git commit -m fixture && ${verification}`;
+    const decision = await evaluateShellExecution(command, cwd);
+    expect(decision.capabilityRefusal).toContain('Separate');
+    expect(decision.capabilityRefusal).toContain('git add');
+    const result = await tool.execute(command, 30000, cwd);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Separate');
+    expect(result.error).not.toContain('Read-only file system');
+    expect(fs.existsSync(path.join(cwd, '.git/index'))).toBe(false);
+  } finally { tool.dispose(); }
 });

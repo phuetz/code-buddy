@@ -221,6 +221,17 @@ export async function evaluateShellExecution(
 
   const grants = shellCapabilities();
   const withoutPrompt = getPermissionModeManager().getMode() === 'dontAsk';
+  if (withoutPrompt && grants.has('git-local') && evaluation.action !== 'deny'
+    && evaluation.parsedSegments.some(argv => argv[0] === 'git' && ['add', 'commit'].includes(argv[1] ?? ''))
+    && !evaluation.parsedSegments.every((argv, index) =>
+      (index === 0 && argv[0] === 'cd' && argv.length === 2)
+      || (argv[0] === 'git' && capabilityAllowsSegment(argv, grants)))) {
+    // The metadata write grant is deliberately limited to add/commit. Do not
+    // turn a mixed sequence into a late EROFS error or widen that grant to
+    // other commands (even a nominally read-only Git command can write files).
+    return { ...evaluation, action: 'ask', capabilityRefusal: 'CAPABILITY_DENIED: Separate git add/commit from verification commands such as git status, git log or git diff. Only git add/commit (with an optional initial cd to this workspace) may share the git-local metadata write grant. Run verification in a separate tool call. No command was executed.' };
+  }
+
   // A routine's builtin sandbox classification must not bypass the narrower
   // explicit test grant (for example npm --prefix or --script-shell).
   if (evaluation.action !== 'deny' && withoutPrompt && grants.has('tests')
