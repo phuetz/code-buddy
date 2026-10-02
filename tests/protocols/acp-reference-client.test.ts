@@ -23,7 +23,7 @@ async function until(predicate: () => boolean, timeout = 20_000): Promise<void> 
   }
 }
 
-function launch(workspace: string, capabilities = true, permissionMode = 'default') {
+function spawnAgent(workspace: string, permissionMode = 'default') {
   let testHome = homes.get(workspace);
   if (!testHome) {
     testHome = fs.mkdtempSync(path.join(home, 'client-'));
@@ -41,6 +41,11 @@ function launch(workspace: string, capabilities = true, permissionMode = 'defaul
   children.push(child);
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+  return { child, stderr: () => stderr };
+}
+
+function launch(workspace: string, capabilities = true, permissionMode = 'default') {
+  const { child, stderr } = spawnAgent(workspace, permissionMode);
   const updates: SessionNotification[] = [];
   const permissions: RequestPermissionRequest[] = [];
   const reads: string[] = [];
@@ -62,7 +67,7 @@ function launch(workspace: string, capabilities = true, permissionMode = 'defaul
   return { child, connection, updates, permissions, reads, writes,
     allow: (value: typeof decision) => { decision = value; },
     resetBuffer: () => { buffer = 'buffer-original\n'; },
-    stderr: () => stderr,
+    stderr,
     initialize: () => connection.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: capabilities ? { fs: { readTextFile: true, writeTextFile: true } } : {} }),
     close: async () => { child.stdin.end(); await until(() => child.exitCode !== null, 15_000); },
   };
@@ -82,6 +87,35 @@ afterEach(async () => {
     if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await new Promise((resolve) => child.once('close', resolve)); }
   }
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+});
+
+describe('real buddy acp process shutdown', () => {
+  it('answers every accepted request and saves the session when stdin closes before the first response', async () => {
+    const dir = workspace();
+    const { child, stderr } = spawnAgent(dir);
+    let stdout = '';
+    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+    child.stdin.end([
+      { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: PROTOCOL_VERSION } },
+      { jsonrpc: '2.0', id: 2, method: 'session/new', params: { cwd: dir, mcpServers: [] } },
+      { jsonrpc: '2.0', id: 3, method: 'session/list', params: {} },
+      { jsonrpc: '2.0', id: 4, method: 'session/load', params: { sessionId: 'unknown' } },
+    ].map((message) => JSON.stringify(message)).join('\n') + '\n');
+    await closed;
+    expect(child.exitCode, stderr()).toBe(0);
+    const messages = stdout.trim().split('\n').map((line) => JSON.parse(line));
+    expect(messages.map((message) => message.id).sort()).toEqual([1, 2, 3, 4]);
+    const sessionId = messages.find((message) => message.id === 2)?.result.sessionId;
+    expect(sessionId).toEqual(expect.any(String));
+    expect(messages.find((message) => message.id === 3)?.result.sessions).toEqual([
+      expect.objectContaining({ sessionId, cwd: dir }),
+    ]);
+    expect(messages.find((message) => message.id === 4)?.error.code).toBe(-32602);
+    const saved = JSON.parse(fs.readFileSync(path.join(homes.get(dir)!, '.codebuddy/acp-sessions', `${sessionId}.json`), 'utf8'));
+    expect(saved).toMatchObject({ sessionId, cwd: dir });
+    fs.writeFileSync(path.join(qa, built ? 'eof-built-transcript.json' : 'eof-transcript.json'), JSON.stringify({ messages, exitCode: child.exitCode, saved }, null, 2));
+  }, 30_000);
 });
 
 describe('official ACP reference client → real buddy acp process', () => {
@@ -124,6 +158,19 @@ describe('official ACP reference client → real buddy acp process', () => {
     fs.writeFileSync(path.join(qa, built ? 'reference-built-transcript.json' : 'reference-transcript.json'), JSON.stringify({ updates: editor.updates, permissions: editor.permissions, resumedUpdates: resumed.updates, providerCalls: fs.readFileSync(path.join(dir, 'provider.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)), diskAfter: fs.readFileSync(path.join(dir, 'sample.txt'), 'utf8'), delayedWriteExists: fs.existsSync(path.join(dir, 'late.txt')), stderr: editor.stderr() + resumed.stderr() }, null, 2));
     await resumed.close();
   }, 90_000);
+
+  it('finishes the cancelled prompt response when stdin closes during an LLM request', async () => {
+    const dir = workspace();
+    const editor = launch(dir);
+    await editor.initialize();
+    const { sessionId } = await editor.connection.newSession({ cwd: dir, mcpServers: [] });
+    const pending = editor.connection.prompt({ sessionId, prompt: [{ type: 'text', text: 'stall model' }] });
+    await until(() => fs.existsSync(path.join(dir, 'provider.jsonl')) && fs.readFileSync(path.join(dir, 'provider.jsonl'), 'utf8').includes('stall model'));
+    const closing = editor.close();
+    expect(await pending).toEqual({ stopReason: 'cancelled' });
+    await closing;
+    expect(editor.child.exitCode, editor.stderr()).toBe(0);
+  }, 30_000);
 
   it('cancels an LLM request while waiting for its first token', async () => {
     const dir = workspace();

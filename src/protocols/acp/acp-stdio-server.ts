@@ -155,8 +155,9 @@ export class AcpStdioServer {
   private readonly store: AcpSessionStore;
   private storeLoaded = false;
   private storeLoading: Promise<void> | null = null;
+  /** Includes deferred store loading, dispatch and the corresponding response. */
+  private readonly pendingMessages = new Set<Promise<void>>();
   /** In-flight fire-and-forget persistSession() writes (see whenIdle()). */
-  private readonly pendingPrompts = new Set<Promise<unknown>>();
   private readonly pendingPersists = new Set<Promise<void>>();
   private clientCapabilities: AcpClientCapabilities = {};
   private nextClientRequestId = 0;
@@ -195,7 +196,11 @@ export class AcpStdioServer {
     while ((newlineIndex = this.buffer.indexOf('\n')) >= 0) {
       const line = this.buffer.slice(0, newlineIndex).trim();
       this.buffer = this.buffer.slice(newlineIndex + 1);
-      if (line) void this.handleLine(line);
+      if (line) {
+        const handled = this.handleLine(line);
+        this.pendingMessages.add(handled);
+        void handled.then(() => this.pendingMessages.delete(handled), () => this.pendingMessages.delete(handled));
+      }
     }
   }
 
@@ -262,14 +267,21 @@ export class AcpStdioServer {
   }
 
   /**
-   * Resolves once every in-flight session write has settled (successfully or
-   * not). Callers that stop the server and then remove its store directory
+   * Resolves once every in-flight session write has settled. After stop(),
+   * also drains accepted messages (including deferred dispatch and errors),
+   * and waits for their responses to reach the output stream before exit.
+   * Callers that stop the server and then remove its store directory
    * (tests, a tear-down) await this first: on Windows a write still holding
    * `<id>.json.tmp` open makes the directory removal fail with ENOTEMPTY.
    */
   async whenIdle(): Promise<void> {
-    while (this.pendingPersists.size > 0 || (!this.started && this.pendingPrompts.size > 0)) {
-      await Promise.allSettled([...this.pendingPersists, ...(!this.started ? this.pendingPrompts : [])]);
+    while (this.pendingPersists.size > 0 || (!this.started && this.pendingMessages.size > 0)) {
+      await Promise.allSettled([...this.pendingPersists, ...(!this.started ? this.pendingMessages : [])]);
+    }
+    if (!this.started) {
+      await new Promise<void>((resolve, reject) => {
+        this.output.write('', (error) => error ? reject(error) : resolve());
+      });
     }
   }
 
@@ -433,12 +445,8 @@ export class AcpStdioServer {
           return this.handleListSessions(params);
         case 'session/load':
           return this.handleLoadSession(params);
-        case 'session/prompt': {
-          const prompt = this.handlePrompt(params);
-          this.pendingPrompts.add(prompt);
-          void prompt.then(() => this.pendingPrompts.delete(prompt), () => this.pendingPrompts.delete(prompt));
-          return prompt;
-        }
+        case 'session/prompt':
+          return this.handlePrompt(params);
         default: {
           const error = new Error(`Method not found: ${method}`) as Error & { code?: number };
           error.code = -32601;
@@ -557,6 +565,9 @@ export class AcpStdioServer {
       throw error;
     }
     const prompt = parsePromptContentBlocks(params.prompt);
+    // EOF may arrive while dispatch is still waiting for the durable store.
+    // Finish the response, but never start new agent work after stop().
+    if (!this.started) return { stopReason: 'cancelled' };
     const controller = new AbortController();
     session.active = controller;
     if (!session.title) {

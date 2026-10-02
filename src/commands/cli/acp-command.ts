@@ -51,7 +51,7 @@ export function registerAcpCommand(program: Command): void {
       const server = new AcpStdioServer({ promptRunner });
       server.start();
 
-      // Drain atomic session writes before exiting when the editor closes stdio.
+      // Drain accepted requests, responses and atomic session writes at EOF.
       const shutdown = async (): Promise<void> => {
         server.stop();
         await server.whenIdle();

@@ -1,8 +1,8 @@
-import { PassThrough } from 'stream';
+import { PassThrough, Writable } from 'stream';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AcpStdioServer,
@@ -65,6 +65,39 @@ describe('AcpStdioServer (real ndjson transport)', () => {
 
   afterEach(() => {
     harness?.server.stop();
+  });
+
+  it('drains deferred requests and their output before shutdown without starting a queued prompt', async () => {
+    const store = new AcpSessionStore();
+    let releaseStore!: () => void;
+    const loading = new Promise<void>((resolve) => { releaseStore = resolve; });
+    const list = vi.spyOn(store, 'listAll').mockImplementation(async () => {
+      await loading;
+      return [{ sessionId: 'restored', cwd: process.cwd(), history: [], updatedAt: new Date().toISOString() }];
+    });
+    const runner = vi.fn<AcpPromptRunner>(async () => ({ stopReason: 'end_turn' }));
+    let releaseOutput!: () => void;
+    const output = new Writable({ write: (_chunk, _encoding, callback) => { releaseOutput = () => callback(); } });
+    harness = new AcpHarness(runner, { store, output });
+    harness.send({ jsonrpc: '2.0', id: 1, method: 'session/list', params: {} });
+    harness.send({ jsonrpc: '2.0', id: 2, method: 'session/prompt', params: { sessionId: 'restored', prompt: [{ type: 'text', text: 'must not start' }] } });
+    harness.server.stop();
+    let drained = false;
+    const draining = harness.server.whenIdle().then(() => { drained = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(drained).toBe(false);
+    releaseStore();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(runner).not.toHaveBeenCalled();
+    expect(drained).toBe(false);
+    // Two replies plus the final output barrier, each held by the sink.
+    for (let i = 0; i < 3; i++) {
+      releaseOutput();
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await draining;
+    expect(drained).toBe(true);
+    list.mockRestore();
   });
 
   it('negotiates capabilities on initialize', async () => {
