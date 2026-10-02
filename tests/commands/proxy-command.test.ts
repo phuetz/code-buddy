@@ -96,7 +96,7 @@ describe('proxy CLI command', () => {
     });
   });
 
-  it.each(['0.0.0.0', '192.168.1.20', '::', 'example.test', '127.0.0.1.example.test'])(
+  it.each(['0.0.0.0', '192.0.2.10', '::', 'example.test', '127.0.0.1.example.test'])(
     'refuses unauthenticated network binding to %s before starting the server', async (host) => {
       const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
       try {
