@@ -119,7 +119,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `tool-video-generate` — Video generation | Demandez un clip vidéo au moteur configuré. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-video-generate) |
 | `tool-understand-video` — Video understanding | Extrayez des informations vidéo avec les outils médias configurés. | **Échec constaté** | [Trace de l’échec](preuves/p7-tool-understand-video.log); [Maillons vérifiés](preuves/verification-statique.md#tool-understand-video) |
 | `media-film-assemble` — Film assembly | Assemblez des clips prêts avec ffmpeg ; cut, fade et wipeleft vérifiés sur deux clips synthétiques 320×240 à 25 i/s avec audio. | **Testée localement** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/media-film-assemble.md) ; [Raccordement](preuves/verification-statique.md#media-film-assemble) |
-| `media-video-stitch` — Video clip stitching | Combinez des clips prêts avec transitions. | **Testée localement** | [Trace réelle](preuves/p6-media-video-stitch.log); [Maillons vérifiés](preuves/verification-statique.md#media-video-stitch) |
+| `media-video-stitch` — Video clip stitching | Combinez des clips via video_stitch avec ffmpeg ; portée vérifiée : deux clips synthétiques avec audio et transitions cut/fade/wipeleft. | **Testée localement** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/media-video-stitch.md) ; [Raccordement](preuves/verification-statique.md#media-video-stitch) |
 
 ## Sécurité
 
