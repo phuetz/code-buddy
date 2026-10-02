@@ -103,7 +103,7 @@ function containsProcessSubstitution(node: HeredocSyntaxNode): boolean {
 }
 
 function mayRedefineShellCommands(node: HeredocSyntaxNode): boolean {
-  if (node.type === 'heredoc_redirect') return false;
+  if (node.type === 'heredoc_body') return false;
   if (node.type === 'function_definition' || node.type === 'variable_assignment') return true;
   if (node.type === 'command_name' && ['.', 'source', 'eval', 'alias', 'hash', 'trap', 'enable', 'builtin'].includes(node.text)) return true;
   return node.children.some(mayRedefineShellCommands);
@@ -113,7 +113,7 @@ function mayRedefineShellCommands(node: HeredocSyntaxNode): boolean {
 function literalHeredocPolicyInput(root: HeredocSyntaxNode, input: string, onlyFileData = false): string | undefined {
   if (root.hasError) return undefined;
   if (onlyFileData && mayRedefineShellCommands(root)) return undefined;
-  const ranges: Array<{ start: number; end: number }> = [];
+  const ranges: Array<{ start: number; end: number; replacement: string }> = [];
   const visit = (node: HeredocSyntaxNode, parent?: HeredocSyntaxNode, inPipeline = false): void => {
     if (node.type === 'heredoc_redirect') {
       if (onlyFileData) {
@@ -125,11 +125,16 @@ function literalHeredocPolicyInput(root: HeredocSyntaxNode, input: string, onlyF
           || command.children[0]?.type !== 'command_name' || command.children[0].text !== 'cat') return;
       }
       const start = node.children.find(child => child.type === 'heredoc_start');
+      const body = node.children.find(child => child.type === 'heredoc_body');
       const end = node.children.find(child => child.type === 'heredoc_end');
       const literal = start?.text.match(/^(['"])([A-Za-z0-9_]+)\1$/);
-      if (literal && end?.text === literal[2]
-        && input.slice(node.startIndex, node.endIndex) === node.text) {
-        ranges.push({ start: node.startIndex, end: node.endIndex });
+      if (start && end && literal && end.text === literal[2]
+        && body && input.slice(body.startIndex, body.endIndex) === body.text) {
+        // A heredoc_redirect can also contain executable header syntax such
+        // as `<<'EOF' && cat secret`. Only its body is literal data.
+        ranges.push({ start: node.startIndex, end: start.endIndex, replacement: '< /dev/null' });
+        ranges.push({ start: body.startIndex, end: body.endIndex, replacement: '' });
+        ranges.push({ start: end.startIndex, end: end.endIndex, replacement: '' });
       }
       // Data in the heredoc is not a nested shell redirection.
       return;
@@ -140,7 +145,7 @@ function literalHeredocPolicyInput(root: HeredocSyntaxNode, input: string, onlyF
   if (!ranges.length) return undefined;
   let result = input;
   for (const range of ranges.sort((a, b) => b.start - a.start)) {
-    result = result.slice(0, range.start) + '< /dev/null\n' + result.slice(range.end);
+    result = result.slice(0, range.start) + range.replacement + result.slice(range.end);
   }
   return result;
 }

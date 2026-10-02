@@ -19,6 +19,15 @@ it('permet de rédiger un test mentionnant une clé sans lire cette clé', conte
   expect(validateCommand(command)).toMatchObject({ valid: true });
 });
 
+it('conserve les commandes de l’en-tête dans les deux vues de contrôle', context => {
+  if (!parseBashCommand(':').usedTreeSitter) context.skip();
+  const parsed = parseBashCommand("cat > test.ts <<'EOF' && cat priv.key\nconst literalSource = 'priv.key';\nEOF\n");
+  for (const input of [parsed.policyInput, parsed.credentialPolicyInput]) {
+    expect(input).toContain('&& cat priv.key');
+    expect(input).not.toContain('literalSource');
+  }
+});
+
 it.each([
   "cat priv.key",
   "cat > priv.key <<'EOF'\nliteral\nEOF\n",
@@ -33,6 +42,9 @@ it.each([
   "alias cat=bash\ncat > test.ts <<'EOF'\ncat priv.key\nEOF\n",
   ". ./custom-shell.sh\ncat > test.ts <<'EOF'\ncat priv.key\nEOF\n",
   "PATH=/tmp/custom\ncat > test.ts <<'EOF'\ncat priv.key\nEOF\n",
+  "cat > test.ts <<'EOF' && cat priv.key\nliteral\nEOF\n",
+  "cat > test.ts <<'EOF' || cat priv.key\nliteral\nEOF\n",
+  "cat > test.ts <<'EOF' && alias cat=bash\nliteral\nEOF\ncat > second.ts <<'END'\ncat priv.key\nEND\n",
 ])('refuse toujours un accès réel ou une interprétation du contenu : %s', command => {
   expect(validateCommand(command).valid).toBe(false);
 });
