@@ -209,7 +209,14 @@ export async function evaluateShellExecution(
     return { ...evaluation, action: 'deny', reason: policyResult.reason };
   }
   if (evaluation.action === 'allow' && policyResult.decision === 'needs_approval') {
-    return { ...evaluation, action: 'ask', reason: policyResult.reason };
+    return {
+      ...evaluation,
+      action: 'ask',
+      reason: policyResult.reason,
+      ...(getPermissionModeManager().getMode() === 'dontAsk' ? {
+        capabilityRefusal: `CAPABILITY_DENIED: ${policyResult.reason} No command was executed. For source inspection, use the granted search or file-reading tools; do not change trust or permissions to bypass this refusal.`,
+      } : {}),
+    };
   }
 
   const grants = shellCapabilities();
