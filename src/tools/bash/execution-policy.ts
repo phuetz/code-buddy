@@ -424,7 +424,7 @@ export async function executeInWorkspaceSandbox(
       readWritePaths: [...config.readWritePaths, ...gitRoots],
     });
   }
-  const broker = grants.has('npm-registry')
+  const broker = grants.has('npm-registry') || grants.has('tests')
     ? await startNpmRegistryBroker(cwd, sessionTemporary(await getWorkspaceRoot(cwd)), signal) : undefined;
   if (broker) {
     const config = sandbox.getConfig();

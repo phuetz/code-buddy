@@ -153,8 +153,18 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
   const client = path.join(directory, 'npm-client.mjs');
   fs.writeFileSync(client, `import http from 'node:http';
 import {spawn} from 'node:child_process';
-const argv=process.argv.slice(2);
+import fs from 'node:fs';
+let argv=process.argv.slice(2);
 if (!['audit','view','pack','install','update'].includes(argv[0] ?? '')) {
+ // A simple Vitest npm script must not bundle its config into shared dependencies.
+ const task=argv[0]==='test'?'test':argv[0]==='run'?argv[1]:undefined;
+ try {
+  const script=JSON.parse(fs.readFileSync('package.json','utf8')).scripts?.[task];
+  if(typeof script==='string' && /^vitest(?:\\s+[a-z0-9_./:*=-]+)*$/i.test(script)
+   && ![script,...argv].some(arg=>/--configLoader(?:=|\\s|$)/.test(arg))) {
+   argv=[...argv,...(argv.includes('--')?[]:['--']),'--configLoader','runner'];
+  }
+ } catch {}
  const child=spawn(${JSON.stringify(process.execPath)},[${JSON.stringify(npmCli)},...argv],{stdio:'inherit'});
  child.on('close',(code)=>{process.exitCode=code??1});child.on('error',(error)=>{process.stderr.write(error.message);process.exitCode=1});
 } else {

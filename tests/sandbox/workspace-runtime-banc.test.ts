@@ -2,13 +2,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSandboxConfigForMode, OSSandbox } from '../../src/sandbox/os-sandbox.js';
 import { probeNativeSandbox } from './native-sandbox-ready.js';
+import { executeInWorkspaceSandbox } from '../../src/tools/bash/execution-policy.js';
+import { getPermissionModeManager } from '../../src/security/permission-modes.js';
 
 const ready = await probeNativeSandbox();
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.unstubAllEnvs(); getPermissionModeManager().setMode('default'); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 function git(cwd: string, ...args: string[]) {
   return execFileSync('git', ['-c', 'gc.auto=0', '-c', 'maintenance.auto=false', ...args], { cwd, encoding: 'utf8' }).trim();
 }
@@ -57,3 +59,18 @@ describe.sequential('banc shell : clone partagé et worktree', () => {
     }, 60000);
   }
 });
+
+it.each(['tests', 'tests,npm-registry'])('npm test charge Vitest sans écrire dans les dépendances partagées (%s)', async (capabilities) => {
+  const { workspace } = lane('shared');
+  fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ type: 'module', scripts: { test: 'vitest run --maxWorkers=1' } }));
+  fs.writeFileSync(path.join(workspace, 'vitest.config.mjs'), "import { defineConfig } from 'vitest/config'; export default defineConfig({test:{include:['sample.test.js']}});\n");
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', capabilities);
+  getPermissionModeManager().setMode('dontAsk');
+  if (!ready.ready) return;
+  const result = await executeInWorkspaceSandbox('npm test', workspace, 30000);
+  expect(result.result?.exitCode, result.result?.stderr).toBe(0);
+  expect(result.result?.stdout).toContain('1 passed');
+  const mutation = await executeInWorkspaceSandbox('node -e "require(\'node:fs\').writeFileSync(\'node_modules/vitest/smuggled\', \'bad\')"', workspace, 5000);
+  expect(mutation.result?.exitCode).not.toBe(0);
+  expect(fs.existsSync(path.join(workspace, 'node_modules/vitest/smuggled'))).toBe(false);
+}, 60000);

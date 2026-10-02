@@ -27,6 +27,10 @@ Les refus explicites et les règles personnalisées restent prioritaires.
   Ses workspaces acceptent des chemins relatifs et glob simples locaux ; les
   chemins absolus, traversées et expansions ambiguës sont refusés avant npm.
 
+Les scripts npm simples qui lancent Vitest utilisent `--configLoader runner`
+quand aucun chargeur n’est demandé explicitement : les dépendances partagées
+restent en lecture seule, sans configuration temporaire écrite dedans.
+
 Le shell conserve son réseau fermé. La passerelle et ses sous-processus sont
 fermés avant la fin de l’appel. Les temporaires entre appels se trouvent dans
 `$TMPDIR`, propre au workspace et au processus, retiré à sa fermeture.
