@@ -106,7 +106,6 @@ import { resolve as resolvePath } from 'node:path';
 import { maybeAutoCommit } from '../../tools/auto-commit.js';
 import {
   applyToolOutputMasking,
-  expireOldToolResults,
   pruneImageContent,
 } from '../../context/tool-output-masking.js';
 import { IncrementalMessageTokenCounter } from './incremental-token-counter.js';
@@ -2723,9 +2722,10 @@ export class AgentExecutor {
           }
           // Note: cost is recorded once at end-of-loop, not here (avoids double-counting)
 
-          // Apply TTL-based tool result expiry + image pruning + backward-scanned FIFO masking (streaming path)
+          // Age alone does not make a task observation dispensable. The context
+          // pipeline handles text pressure with scoped recovery references.
+          // Keep the independent image and large-output memory bounds here.
           try {
-            expireOldToolResults(messages, toolRounds);
             pruneImageContent(messages);
             applyToolOutputMasking(messages);
             incrementalTokenCounter.invalidate();

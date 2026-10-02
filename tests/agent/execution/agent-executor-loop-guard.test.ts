@@ -217,6 +217,38 @@ describe('AgentExecutor tool loop guard (P1)', () => {
     expect(snapshots[4]!.filter(m => m.tool_calls?.length && m.ollama_thinking)).toHaveLength(4);
   });
 
+  it.each([12, 17, 22])('conserve les observations sans pression de contexte après %i lectures', async (reads) => {
+    const deps = createDeps();
+    Object.assign(deps.contextManager, {
+      shouldAutoCompact: vi.fn().mockReturnValue(false),
+      getStats: vi.fn().mockReturnValue({ isNearLimit: false }),
+    });
+    const nonce = Math.random().toString(36).slice(2);
+    let outputIndex = 0;
+    (deps.toolHandler.executeTool as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => ({
+      success: true,
+      output: `Observation ${++outputIndex}\n${'Ligne de code à conserver.\n'.repeat(40)}SENTINELLE_FIN`,
+    }));
+    const snapshots: CodeBuddyMessage[][] = [];
+    let round = 0;
+    (deps.client.chatStream as unknown as ReturnType<typeof vi.fn>).mockImplementation(async function* (input: CodeBuddyMessage[]) {
+      snapshots.push(structuredClone(input));
+      round += 1;
+      yield { choices: [{ delta: { content: '' } }] };
+    });
+    (deps.streamingHandler.getAccumulatedMessage as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      content: round <= reads ? '' : 'final answer',
+      tool_calls: round <= reads ? [{ ...toolCall('view_file', { path: `src/module-${nonce}-${round}.ts` }, round), id: `ttl_${nonce}_${round}` }] : undefined,
+    }));
+    await runStream(new AgentExecutor(deps, createConfig(30)), [{ role: 'user', content: 'Inspect src/a.ts' }]);
+    const first = snapshots[1]!.find(message => message.role === 'tool')!;
+    const last = snapshots.at(-1)!;
+    expect(first.content).toContain('SENTINELLE_FIN');
+    expect(last.find(message => message.tool_call_id === first.tool_call_id)?.content).toBe(first.content);
+    expect(last.filter(message => message.role === 'tool')).toHaveLength(reads);
+    expect(guardMessages(last)).toHaveLength(0);
+  });
+
   it('sequential processUserMessage shares the same guard (same runTurnLoop)', async () => {
     const deps = createDeps();
     const executor = new AgentExecutor(deps, createConfig(50));
