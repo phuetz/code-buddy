@@ -399,12 +399,23 @@ const RECURSIVE_READERS = new Set([
  * Return the first token of `command` that designates a credential file (or a
  * glob / recursive read over a credential root), or null.
  */
+/** A literal jq filter selects JSON fields; filenames and filter strings remain scanned. */
+function maskJqFieldSelectors(command: string): string {
+  return command.replace(/(^|[|;&\n])([ \t]*jq[ \t]+(?:-[rRcCMSaejn]+[ \t]+)*)'([^']*)'/g,
+    (_match, boundary: string, invocation: string, filter: string) => {
+      // Keep JSON string literals intact: jq can use them as file/module names.
+      const masked = filter.replace(/"(?:\\.|[^"\\])*"|\.[A-Za-z_][A-Za-z0-9_]*/g,
+        token => token.startsWith('"') ? token : '.jsonField');
+      return `${boundary}${invocation}'${masked}'`;
+    });
+}
+
 export function findCredentialPathInCommand(command: string, platform: NodeJS.Platform = process.platform): string | null {
   if (typeof command !== 'string' || !command) return null;
   // Both POSIX-style escapes (`codex-auth\.json`) and Windows separators
   // (`C:\Users\...`) can occur on Windows. Check both interpretations before
   // allowing the command; expanding HOME afterwards preserves its separators.
-  const unquoted = command
+  const unquoted = maskJqFieldSelectors(command)
     .replace(/\$(?:""|'')/g, '')
     .replace(/["']/g, '');
   const variants = [expandHomeReferences(unquoted.replace(/\\([^\n])/g, '$1'), platform)];
