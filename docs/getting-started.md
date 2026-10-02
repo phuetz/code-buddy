@@ -315,6 +315,15 @@ The legacy `--auto-approve` session flag does not cover approvals tied to exact
 tool arguments. Without an explicit permission mode, `-p` uses `acceptEdits`
 for every provider: file edits can proceed, while shell approvals and configured
 denials remain enforced. Explicit `default` and `plan` preserve their restrictions.
+Headless edits are confined to the task's project directory (the resumed
+session's project when using `--resume`). Absolute paths, `..`, symlinks,
+patch moves and editor aliases cannot widen that scope. A broader trusted
+folder, `--add-dir`, `--allow-outside`, auto-approval or `bypassPermissions`
+does not authorize unattended writes outside that project. Such writes are
+refused. Shell mutations require a workspace sandbox; an unavailable backend
+or a boundary denial cannot trigger an automatic unconfined host retry.
+Read-only commands retain their ordinary permission policy.
+
 Use `--permission-mode dontAsk` for ordinary headless tools;
 destructive operations and explicit deny rules keep their own gates.
 

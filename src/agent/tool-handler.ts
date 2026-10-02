@@ -1,3 +1,4 @@
+import { isConfinedTarget } from './workspace-confine.js';
 import { lisaActionStillCurrent, inLisaTurn, lisaToolIntent, lisaTrigger, runLisaAction, LISA_REFUSAL } from '../companion/lisa-policy.js';
 /**
  * Tool Handler Module
@@ -361,7 +362,7 @@ export class ToolHandler {
   }
 
   /**
-   * MCP server only. An unconfined shell escalation is refused for every tool
+   * An unconfined shell escalation is refused for every tool
    * call on this handler, including when auto-confirm would otherwise grant it.
    */
   refuseUnconfinedShellEscalation(): void {
@@ -369,7 +370,7 @@ export class ToolHandler {
   }
 
   /**
-   * MCP server only. File writes on this handler must stay inside `root`,
+   * File writes on this handler must stay inside `root`,
    * even when trust-folder enforcement is off.
    */
   confineWritesToWorkspace(root: string): void {
@@ -392,6 +393,9 @@ export class ToolHandler {
     const requested = command.substring(3).trim().replace(/^["']|["']$/g, '');
     try {
       const candidate = resolve(baseCwd, requested);
+      if (this.workspaceWriteRoot && !isConfinedTarget(this.workspaceWriteRoot, candidate)) {
+        return { success: false, error: `Path outside workspace not allowed: ${candidate}` };
+      }
       if (!statSync(candidate).isDirectory()) {
         return { success: false, error: `Cannot change directory: not a directory: ${candidate}` };
       }
@@ -1041,7 +1045,7 @@ export class ToolHandler {
 
     const entry = lookupMcpWriteAllowlist(toolName);
     if (entry) {
-      const error = await confineAllowlistedWrite(root, args, entry);
+      const error = await confineAllowlistedWrite(root, args, entry, process.env.CODEBUDDY_HEADLESS === 'true' ? this.getWorkingDirectory() : root);
       return error ? { success: false, error } : null;
     }
     if (isMcpReadOnlyTool(this.mcpWriteFacts(toolName))) return null;

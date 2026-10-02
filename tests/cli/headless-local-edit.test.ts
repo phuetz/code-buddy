@@ -1,20 +1,30 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, symlink } from 'node:fs/promises';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('headless local editing without permission recipes', () => {
-  it.each([undefined, 'default', 'plan', 'plan-empty'] as const)('respects the %s posture through the real CLI', async posture => {
-    const mode = posture === 'plan-empty' ? 'plan' : posture;
+  it.each([undefined, 'default', 'plan', 'plan-empty', 'outside', 'outside-relative', 'outside-link', 'outside-auto', 'outside-bypass', 'outside-shell'] as const)('respects the %s posture through the real CLI', async posture => {
+    const outside = posture?.startsWith('outside') ?? false;
+    const mode = outside ? (posture === 'outside-bypass' || posture === 'outside-shell' ? 'bypassPermissions' : 'acceptEdits') : posture === 'plan-empty' ? 'plan' : posture;
     const emptyAfterDenial = posture === 'plan-empty';
     const root = await mkdtemp(join(tmpdir(), 'headless-local-edit-'));
     const home = join(root, 'home');
     const workspace = join(root, 'workspace');
     await mkdir(home);
+    await mkdir(join(home, '.codebuddy'));
+    // Trust a larger parent deliberately: trust is not permission to edit
+    // outside the project during a headless task.
+    await writeFile(join(home, '.codebuddy/trusted-folders.json'), JSON.stringify({ folders: [root], enforcementEnabled: true }));
     await mkdir(workspace);
-    const file = join(workspace, 'value.mjs');
+    const outsideDir = join(root, 'outside');
+    await mkdir(outsideDir);
+    const file = join(outside ? outsideDir : workspace, 'value.mjs');
+    if (posture === 'outside-link') await symlink(outsideDir, join(workspace, 'link'), process.platform === 'win32' ? 'junction' : 'dir');
+    const target = !outside ? 'value.mjs' : posture === 'outside-relative' ? '../outside/value.mjs' : posture === 'outside-link' ? 'link/value.mjs' : file;
+    const toolName = posture === 'outside-shell' ? 'bash' : 'str_replace_editor';
     await writeFile(file, 'export const value = 0;\n');
     const toolResults: string[] = [];
     const server = http.createServer(async (req, res) => {
@@ -33,15 +43,15 @@ describe('headless local editing without permission recipes', () => {
         messages?: Array<{ role: string; content?: string; name?: string; tool_name?: string }>;
         stream?: boolean;
       };
-      const results = body.messages?.filter(message => message.role === 'tool' && (message.name ?? message.tool_name) === 'str_replace_editor') ?? [];
+      const results = body.messages?.filter(message => message.role === 'tool' && (message.name ?? message.tool_name) === toolName) ?? [];
       toolResults.push(...results.map(message => message.content ?? ''));
       const completion = {
         id: 'fixture-completion', object: 'chat.completion', model: 'fixture-model',
         choices: [{ index: 0, finish_reason: results.length ? 'stop' : 'tool_calls',
           message: results.length ? { role: 'assistant', content: emptyAfterDenial ? '' : 'Finished.' } : {
             role: 'assistant', content: null, tool_calls: [{ index: 0, id: 'edit-1', type: 'function',
-              function: { name: 'str_replace_editor', arguments: JSON.stringify({
-                command: 'str_replace', path: 'value.mjs',
+              function: { name: toolName, arguments: JSON.stringify(toolName === 'bash' ? { command: `printf 'changed\n' > '${file}'` } : {
+                command: 'str_replace', path: target,
                 old_str: 'value = 0', new_str: 'value = 1',
               }) } }],
           } }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
@@ -72,7 +82,7 @@ describe('headless local editing without permission recipes', () => {
       const env = { ...process.env,
         HOME: home, USERPROFILE: home, CODEBUDDY_HOME: join(home, '.codebuddy'),
         CODEBUDDY_PROVIDER: 'ollama', OLLAMA_HOST: `http://127.0.0.1:${address.port}`,
-        GROK_MODEL: 'fixture-model', CODEBUDDY_LEARNING_BACKGROUND_REVIEW: 'false',
+        GROK_MODEL: 'fixture-model', CODEBUDDY_AUTO_CONFIRM: posture === 'outside-auto' ? 'true' : 'false', CODEBUDDY_LEARNING_BACKGROUND_REVIEW: 'false',
         CODEBUDDY_TELEMETRY: 'false', LOG_LEVEL: 'error', NODE_ENV: 'production',
       };
       const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((accept, reject) => {
@@ -92,6 +102,7 @@ describe('headless local editing without permission recipes', () => {
       expect(result.code, result.stderr).toBe(mode ? 1 : 0);
       expect(JSON.parse(result.stdout)).toMatchObject({ success: !mode, status: mode ? 'failed' : 'success', exitCode: mode ? 1 : 0 });
       if (mode) expect(JSON.parse(result.stdout).reasons).toContain('requested_edit_not_executed');
+      if (outside) expect(toolResults.join('\n') + result.stderr).toMatch(/outside|workspace|confin|sandbox|trusted/i);
       if (emptyAfterDenial) expect(result.stderr).toMatch(/empty|vide/i);
       expect(await readFile(file, 'utf8')).toBe(`export const value = ${mode ? 0 : 1};\n`);
       if (!mode) expect(toolResults.join('\n')).not.toMatch(/User cancelled|Permission denied/);

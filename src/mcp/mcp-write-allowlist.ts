@@ -102,19 +102,20 @@ function pushString(value: unknown, out: string[]): void {
  * outside the workspace. Short tokens such as "yaml" and bare ".." are not
  * matched here: ".." is confined only when it is a listed destination key.
  */
-export function stringEscapesWorkspace(root: string, value: string): boolean {
+export function stringEscapesWorkspace(root: string, value: string, cwd: string = root): boolean {
   const trimmed = value.trim();
   if (trimmed === '') return false;
   const absolute = path.isAbsolute(trimmed);
   const hasSeparator = trimmed.includes(path.sep) || trimmed.includes('/') || trimmed.includes('\\');
   if (!absolute && !hasSeparator) return false;
-  return !isConfinedTarget(root, trimmed);
+  return !isConfinedTarget(root, path.resolve(cwd, trimmed));
 }
 
 export async function confineAllowlistedWrite(
   root: string,
   args: Record<string, unknown>,
   entry: McpWriteAllowlistEntry,
+  cwd: string = root,
 ): Promise<string | null> {
   const destinations: string[] = [];
   for (const key of entry.destinationKeys) {
@@ -133,7 +134,7 @@ export async function confineAllowlistedWrite(
     }
   }
   for (const raw of destinations) {
-    if (!isConfinedTarget(root, raw)) {
+    if (!isConfinedTarget(root, path.resolve(cwd, raw))) {
       return `Path outside workspace not allowed: ${raw}`;
     }
   }
@@ -141,7 +142,7 @@ export async function confineAllowlistedWrite(
   const strings: string[] = [];
   pushString(args, strings);
   for (const raw of strings) {
-    if (stringEscapesWorkspace(root, raw)) {
+    if (stringEscapesWorkspace(root, raw, cwd)) {
       return `Path outside workspace not allowed: ${raw.trim()}`;
     }
   }

@@ -366,6 +366,13 @@ export class CodeBuddyAgent extends BaseAgent {
       contextZoomSessionIdProvider: () => this.contextManager.getSessionId(),
     });
     this.toolHandler.setWorkingDirectory(workingDirectory);
+    // Headless edit approval is project-scoped, even with a broader trusted
+    // folder, an auto-confirm variable or an explicit permissive posture.
+    // Shell mutations keep the same boundary: no automatic host fallback.
+    if (process.env.CODEBUDDY_HEADLESS === 'true') {
+      this.toolHandler.confineWritesToWorkspace(workingDirectory ?? process.cwd());
+      this.toolHandler.refuseUnconfinedShellEscalation();
+    }
     const mcpToolContext = launchOptions?.mcpToolContext;
     if (mcpToolContext?.refuseUnconfinedShellEscalation === true) {
       this.toolHandler.refuseUnconfinedShellEscalation();
