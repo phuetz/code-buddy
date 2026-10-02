@@ -155,6 +155,8 @@ export interface SearchOptions {
 export type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
 
 export interface ChatOptions {
+  /** Internal scope shared with restore_context; never serialized to the provider. */
+  contextScope?: { workDir: string; sessionId?: string };
   model?: string;
   temperature?: number;
   /** Optional per-call output-token cap. Providers fall back to their model default when omitted. */

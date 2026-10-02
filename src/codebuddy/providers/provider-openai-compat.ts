@@ -22,6 +22,9 @@
  */
 
 import OpenAI from 'openai';
+import { randomUUID } from 'node:crypto';
+import { getModelToolConfig } from '../../config/model-tools.js';
+import { budgetFinalPayload, type PayloadRecoveryScope } from '../../context/final-payload-budget.js';
 import type {
   ChatCompletionChunk,
   ChatCompletionCreateParamsNonStreaming,
@@ -263,6 +266,7 @@ export class OpenAICompatProvider implements Provider {
   // Prompt cache stats (OpenAI/xAI surface `cached_tokens`; provider-specific)
   private _promptCacheHits: number = 0;
   private _promptCacheMisses: number = 0;
+  private readonly payloadScopeId = randomUUID();
 
   /**
    * Models known to support function calling / tool use.
@@ -744,9 +748,19 @@ export class OpenAICompatProvider implements Provider {
   private async createChatCompletion(
     payload: ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming,
     signal?: AbortSignal,
+    scope?: PayloadRecoveryScope,
   ): Promise<unknown> {
-    const openAiPayload = payload as unknown as OpenAiChatPayload;
+    let openAiPayload = payload as unknown as OpenAiChatPayload;
     const hasParts = (openAiPayload.messages as Array<{ content?: unknown }>)?.some((m) => Array.isArray(m?.content));
+    if (!hasParts) {
+      const window = getModelToolConfig(openAiPayload.model).contextWindow ?? 32768;
+      const budget = budgetFinalPayload(openAiPayload, window, scope ?? { workDir: process.cwd(), sessionId: this.payloadScopeId });
+      openAiPayload = budget.payload;
+      payload = openAiPayload as unknown as typeof payload;
+      logger.debug('Final payload budget', { model: openAiPayload.model, window, beforeTokens: budget.beforeTokens,
+        inputTokens: budget.inputTokens, outputTokens: budget.outputTokens, safetyTokens: budget.safetyTokens,
+        recoveryIdentifier: budget.identifier });
+    }
     if (!hasParts && (await this.ensureOllamaEndpoint()) && isOllamaNativeChatEnabled()) {
       return this.createOllamaNativeCompletion(openAiPayload, signal);
     }
@@ -1043,7 +1057,7 @@ export class OpenAICompatProvider implements Provider {
               // Preserve the one-argument SDK call when there is no signal. Apart
               // from keeping existing adapters compatible, this avoids presenting
               // `undefined` as an intentional transport-options override.
-              return await this.createChatCompletion(payload, opts.signal);
+              return await this.createChatCompletion(payload, opts.signal, opts.contextScope);
             },
             {
               ...RetryStrategies.llmApi,
@@ -1246,7 +1260,7 @@ export class OpenAICompatProvider implements Provider {
           async () => {
             const payload = streamingPayload as unknown as ChatCompletionCreateParamsStreaming;
             ensureMeasuredTurn();
-            return await this.createChatCompletion(payload, opts.signal);
+            return await this.createChatCompletion(payload, opts.signal, opts.contextScope);
           },
           {
             ...RetryStrategies.llmApi,

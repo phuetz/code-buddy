@@ -48,6 +48,7 @@ export interface OpenAiChatPayload {
   tools?: unknown[];
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
   top_p?: number;
   stop?: string | string[];
   stream?: boolean;

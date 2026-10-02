@@ -1757,6 +1757,10 @@ export class AgentExecutor {
           tools,
           {
             streamRetry: false,
+            contextScope: {
+              workDir: this.deps.toolHandler.getWorkingDirectory?.() ?? process.cwd(),
+              sessionId: this.deps.toolHandler.getRecoverySessionId?.(),
+            },
             // An explicit request to inspect implementation needs an observation
             // before an answer. Only the confined self_describe reader is exposed.
             ...(codeResearch && toolRounds === 0 && tools.length ? { tool_choice: 'required' as const } : {}),

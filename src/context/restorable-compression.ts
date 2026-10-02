@@ -141,6 +141,12 @@ export class RestorableCompressor {
     }
   }
 
+  /** Capture an exact final-payload snapshot in this workspace and session. */
+  capture(identifier: string, content: string, workDir = process.cwd(), sessionId?: string): void {
+    this.store.set(this.scopedStoreKey(identifier, workDir, sessionId), content);
+    this.ensureCapacity();
+  }
+
   /**
    * Compress a slice of messages that are about to be dropped.
    *
