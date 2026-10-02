@@ -296,12 +296,11 @@ export function isOllamaThinkingModel(model: string): boolean {
 
 export function shouldDisableOllamaThink(
   payload: OpenAiChatPayload,
-  env: NodeJS.ProcessEnv = process.env,
+  _env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   if (!isOllamaThinkingModel(payload.model)) return false;
   const hasTools = Array.isArray(payload.tools) && payload.tools.length > 0;
-  const headless = env.CODEBUDDY_HEADLESS === 'true';
-  return !hasTools || headless;
+  return !hasTools;
 }
 
 /** OpenAI-compat payload → native `/api/chat` body, carrying `num_ctx`. */

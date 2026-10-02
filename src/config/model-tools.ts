@@ -1207,6 +1207,20 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     promptProfile: 'lite',
   },
   {
+    // Tagged local R1 served by Ollama advertises tools + thinking in /api/show.
+    // Keep the conservative local runtime clamp; do not inherit chat-only defaults.
+    model: 'deepseek-r1:*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 131072,
+    maxOutputTokens: 16384,
+    maxToolRounds: 50,
+    disabledTools: ['browser', 'computer_control'],
+    patchFormat: 'full_file',
+    promptProfile: 'lite',
+  },
+  {
     model: 'deepseek*',
     supportsReasoning: false,
     supportsToolCalls: false,

@@ -1,0 +1,11 @@
+{
+  "model": "deepseek-r1:32b",
+  "capabilities": [
+    "tools",
+    "thinking",
+    "completion"
+  ],
+  "model_info": {
+    "qwen2.context_length": 131072
+  }
+}
