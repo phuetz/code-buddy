@@ -8,6 +8,7 @@
  * @module agent/execution/post-tool-handlers
  */
 
+import { isHeadlessPromptCompact } from '../../config/headless-local-prompt.js';
 import { logger } from '../../utils/logger.js';
 import { getObservationVariator } from '../../context/observation-variator.js';
 import {
@@ -114,6 +115,9 @@ export function _resetForTests(): void {
  * Advances the variator's turn counter as a side-effect.
  */
 export function applyObservationVariator(toolName: string, rawContent: string): string {
+  // The tool role/name already identifies compact observations. Rotating
+  // prose wastes that budget and can be mistaken for literal program output.
+  if (isHeadlessPromptCompact()) return rawContent;
   const variator = getObservationVariator();
   variator.nextTurn();
   return variator.wrapToolResult(toolName, rawContent);
