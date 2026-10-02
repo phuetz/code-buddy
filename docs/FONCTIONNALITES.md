@@ -41,7 +41,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `cli-curator` — Local curator | Examinez des propositions d’entretien de la mémoire, des skills et des coûts. | **Testée localement** | [Trace réelle](preuves/p6-cli-curator.log); [Maillons vérifiés](preuves/verification-statique.md#cli-curator) |
+| `cli-curator` — Local curator | Examinez des propositions d’entretien mémoire/skills/CKG/leçons et agrégez les coûts du ledger council lorsqu’il existe. | **Testée localement** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/cli-curator.md) ; [Raccordement](preuves/verification-statique.md#cli-curator) |
 | `cli-identity` — Agent identity files | Gérez les fichiers locaux d’identité de l’agent et de l’utilisateur. | **Testée localement** | [Trace réelle](preuves/p5-cli-identity-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-identity) |
 | `cli-session` — Saved sessions | Gérez les conversations enregistrées et leur reprise. | **Testée localement** | [Trace réelle](preuves/p5-cli-session-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-session) |
 | `cli-user-model` — User preference model | Examinez un modèle structuré des préférences de travail. | **Testée localement** | [Trace réelle](preuves/p6-cli-user-model.log); [Maillons vérifiés](preuves/verification-statique.md#cli-user-model) |
