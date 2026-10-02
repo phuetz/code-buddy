@@ -141,6 +141,14 @@ export function writeRuntimeManifest(root = resolve(dirname(fileURLToPath(import
 export function verifyRuntimeManifest(root = resolve(dirname(fileURLToPath(import.meta.url)), '..')) {
   const target = join(root, 'codebuddy-runtime.json');
   const manifest = JSON.parse(readFileSync(target, 'utf8'));
+  // The model registry reads this file beside its compiled module.
+  try {
+    if (!statSync(join(root, 'dist/config/models-snapshot.json')).isFile()) {
+      throw new Error('not a file');
+    }
+  } catch {
+    throw new Error('Code Buddy compiled runtime is missing dist/config/models-snapshot.json; run npm run build');
+  }
   validateRuntimeManifest(root, manifest);
   const corePackage = readCorePackageIdentity(root);
   for (const field of ['name', 'version', 'description']) {

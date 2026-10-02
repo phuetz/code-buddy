@@ -15,6 +15,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { inferProvider } from './resolve-model.js';
 import { MODEL_PRICE_DATA, MODEL_ALIASES, UNKNOWN_MODEL_PRICE } from './model-price-data.js';
+import { logger } from '../utils/logger.js';
 
 // ============================================================================
 // Types
@@ -185,6 +186,8 @@ export class ModelRegistry {
 // Snapshot loader
 // ============================================================================
 
+let hasWarnedMissingSnapshot = false;
+
 function loadSnapshot(): Record<string, SnapshotEntry> {
   try {
     const __filename = fileURLToPath(import.meta.url);
@@ -193,6 +196,10 @@ function loadSnapshot(): Record<string, SnapshotEntry> {
     const raw = readFileSync(snapshotPath, 'utf-8');
     return JSON.parse(raw) as Record<string, SnapshotEntry>;
   } catch {
+    if (!hasWarnedMissingSnapshot) {
+      logger.warn('models-snapshot.json introuvable ou invalide. Registre de modèles potentiellement vide.');
+      hasWarnedMissingSnapshot = true;
+    }
     return {};
   }
 }

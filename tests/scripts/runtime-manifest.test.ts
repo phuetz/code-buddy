@@ -132,10 +132,12 @@ describe('npm runtime self-attestation', () => {
       description: 'provenance fixture',
     }));
     fs.mkdirSync(path.join(root, 'dist', 'desktop'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'dist', 'config'), { recursive: true });
     fs.writeFileSync(
       path.join(root, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
       'export const revisionA = true;\n',
     );
+    fs.writeFileSync(path.join(root, 'dist', 'config', 'models-snapshot.json'), '{}');
     execFileSync(process.execPath, [script, '--root', root], {
       env: { ...process.env, CODEBUDDY_SOURCE_REVISION: revision },
       stdio: 'pipe',

@@ -31,3 +31,11 @@ for (const entry of readdirSync(srcDir)) {
   }
 }
 console.log(`copy-bundled-skills: ${copied} skill package(s) → dist/skills/bundled/`);
+
+// Also copy the models snapshot needed by the model registry at runtime
+const snapshotSrc = join(root, 'src', 'config', 'models-snapshot.json');
+const snapshotDestDir = join(root, 'dist', 'config');
+const snapshotDest = join(snapshotDestDir, 'models-snapshot.json');
+mkdirSync(snapshotDestDir, { recursive: true });
+copyFileSync(snapshotSrc, snapshotDest);
+console.log('copy-bundled-skills: models-snapshot.json → dist/config/');
