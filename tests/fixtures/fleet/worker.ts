@@ -27,9 +27,21 @@ model.listen(0, '127.0.0.1');
 await once(model, 'listening');
 process.env.LMSTUDIO_HOST = `http://127.0.0.1:${(model.address() as AddressInfo).port}/v1`;
 process.env.GROK_BASE_URL = process.env.LMSTUDIO_HOST;
+const discovery = createServer((_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.end('{}');
+});
+discovery.listen(0, '127.0.0.1');
+await once(discovery, 'listening');
+const discoveryBaseUrl = `http://127.0.0.1:${(discovery.address() as AddressInfo).port}`;
+process.env.OLLAMA_BASE_URL = discoveryBaseUrl;
+process.env.LM_STUDIO_BASE_URL = discoveryBaseUrl;
+process.env.LEMONADE_HOST = discoveryBaseUrl;
+process.env.OMNIROUTE_BASE_URL = discoveryBaseUrl;
 const { startServer, stopServer } = await import('../../../src/server/index.js');
 const { getPeerChatProviderInfo } = await import('../../../src/fleet/peer-chat-bridge.js');
 const { listPeerMethods } = await import('../../../src/server/websocket/peer-rpc.js');
+const { getLocalCapabilities } = await import('../../../src/fleet/capability-registry.js');
 const handle = await startServer({ port: 0, host: '127.0.0.1', authEnabled: true,
   websocketEnabled: true, rateLimit: false, logging: false, docsEnabled: false,
   securityHeaders: { enabled: false } });
@@ -38,6 +50,7 @@ while (!getPeerChatProviderInfo() || !listPeerMethods().includes('peer.chat-sess
   if (Date.now() > deadline) throw new Error('Peer provider failed to initialize');
   await new Promise(resolve => setTimeout(resolve, 20));
 }
+await getLocalCapabilities();
 process.send?.({ type: 'ready', pid: process.pid, url: `ws://127.0.0.1:${(handle.server.address() as AddressInfo).port}/ws` });
 let stopping = false;
 async function stop() {
@@ -48,6 +61,8 @@ async function stop() {
   await stopServer(handle.server);
   model.closeAllConnections();
   await new Promise<void>(resolve => model.close(() => resolve()));
+  discovery.closeAllConnections();
+  await new Promise<void>(resolve => discovery.close(() => resolve()));
   process.exit(0);
 }
 process.on('message', message => { if (message === 'stop') void stop(); });

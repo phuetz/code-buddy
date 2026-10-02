@@ -20,11 +20,14 @@ it('authenticates two real Code Buddy processes, combines work, preserves a sess
     const peers = await Promise.all(['alpha', 'beta'].map(async (id, index) => {
       const home = path.join(directory, id);
       await mkdir(home);
+      const executableDirectory = path.join(home, 'bin');
+      await mkdir(executableDirectory);
       const env: NodeJS.ProcessEnv = {};
-      for (const key of ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP']) {
+      for (const key of ['SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP']) {
         if (process.env[key] !== undefined) env[key] = process.env[key];
       }
       Object.assign(env, { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: path.join(home, 'config'),
+        PATH: executableDirectory,
         XDG_DATA_HOME: path.join(home, 'data'), NODE_ENV: 'test', JWT_SECRET: secrets[index],
         CODEBUDDY_PEER_PROVIDER: 'lmstudio', CODEBUDDY_PEER_MODEL: 'local-model',
         CODEBUDDY_FLEET_HOSTNAME: id, CODEBUDDY_SENSORY: 'false', CODEBUDDY_FLEET_ROOMS: 'false',
