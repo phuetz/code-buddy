@@ -1026,6 +1026,9 @@ def get_elements(obj, depth=0, max_depth=5, window_title=""):
             "role": role,
             "name": name,
             "windowTitle": window_title,
+            "focused": obj.get_state_set().contains(Atspi.StateType.FOCUSED),
+            "enabled": obj.get_state_set().contains(Atspi.StateType.ENABLED),
+            "showing": obj.get_state_set().contains(Atspi.StateType.SHOWING),
             "bounds": bounds
         })
 
@@ -1071,9 +1074,9 @@ print(json.dumps(all_elements[:100]))
               y: item.bounds.y + item.bounds.height / 2,
             },
             interactive: this.isInteractiveRole(role),
-            focused: false,
-            enabled: true,
-            visible: item.bounds.width > 0 && item.bounds.height > 0,
+            focused: item.focused === true,
+            enabled: item.enabled === true,
+            visible: item.showing === true && item.bounds.width > 0 && item.bounds.height > 0,
           });
         }
       } catch (_err) {
