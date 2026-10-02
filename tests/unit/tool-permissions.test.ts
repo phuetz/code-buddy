@@ -58,10 +58,11 @@ describe('ToolPermissionManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetToolPermissionManager();
-    mockFs.existsSync.mockReturnValue(false);
-    mockFs.ensureDirSync.mockReturnValue(undefined);
-    mockFs.writeFileSync.mockReturnValue(undefined);
-    mockWriteJsonAtomicSync.mockImplementation(() => undefined);
+    mockFs.existsSync.mockReset().mockReturnValue(false);
+    mockFs.readFileSync.mockReset().mockReturnValue('{}');
+    mockFs.ensureDirSync.mockReset().mockReturnValue(undefined);
+    mockFs.writeFileSync.mockReset().mockReturnValue(undefined);
+    mockWriteJsonAtomicSync.mockReset().mockImplementation(() => undefined);
   });
 
   afterEach(() => {
@@ -72,6 +73,22 @@ describe('ToolPermissionManager', () => {
   // Initialization
   // ============================================================
   describe('Initialization', () => {
+    it('keeps default rules and lists private to each instance and reset', () => {
+      const first = new ToolPermissionManager('/test/first-permissions.json');
+      const defaults = structuredClone(first.getConfig());
+      first.addToAllowlist('only-first-allow');
+      first.addToDenylist('only-first-deny');
+      first.addRule({ pattern: 'only-first-tool', permission: ToolPermission.NEVER });
+      first.getRules()[0]!.permission = ToolPermission.NEVER;
+
+      const second = new ToolPermissionManager('/test/second-permissions.json');
+      expect(second.getConfig()).toEqual(defaults);
+      first.resetToDefaults();
+      expect(first.getConfig()).toEqual(defaults);
+      first.addToAllowlist('after-reset');
+      expect(new ToolPermissionManager('/test/third-permissions.json').getConfig()).toEqual(defaults);
+    });
+
     it('should initialize with default configuration', () => {
       const manager = new ToolPermissionManager();
 

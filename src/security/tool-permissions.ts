@@ -165,6 +165,7 @@ export class ToolPermissionManager {
    * Load configuration from file or use defaults
    */
   private loadConfig(): ToolPermissionConfig {
+    const defaults = structuredClone(DEFAULT_CONFIG);
     try {
       if (fs.existsSync(this.configPath)) {
         const data = fs.readFileSync(this.configPath, 'utf-8');
@@ -172,17 +173,17 @@ export class ToolPermissionManager {
 
         // Merge with defaults
         return {
-          default: loaded.default || DEFAULT_CONFIG.default,
-          rules: [...DEFAULT_CONFIG.rules, ...(loaded.rules || [])],
-          allowlist: [...DEFAULT_CONFIG.allowlist, ...(loaded.allowlist || [])],
-          denylist: [...DEFAULT_CONFIG.denylist, ...(loaded.denylist || [])],
+          default: loaded.default || defaults.default,
+          rules: [...defaults.rules, ...(loaded.rules || [])],
+          allowlist: [...defaults.allowlist, ...(loaded.allowlist || [])],
+          denylist: [...defaults.denylist, ...(loaded.denylist || [])],
         };
       }
     } catch (error) {
       logger.warn(`Failed to load tool permissions config: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    return { ...DEFAULT_CONFIG };
+    return defaults;
   }
 
   /**
@@ -324,7 +325,7 @@ export class ToolPermissionManager {
    * Reset to defaults
    */
   resetToDefaults(): void {
-    this.config = { ...DEFAULT_CONFIG };
+    this.config = structuredClone(DEFAULT_CONFIG);
     this.saveConfig();
   }
 
