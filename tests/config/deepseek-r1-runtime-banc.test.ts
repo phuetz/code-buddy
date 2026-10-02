@@ -6,7 +6,7 @@ import { toOllamaNativeRequest } from '../../src/codebuddy/providers/ollama-nati
 const runtime = JSON.parse(fs.readFileSync(new URL('../fixtures/ollama-deepseek-r1-runtime.json', import.meta.url), 'utf8'));
 afterEach(() => vi.unstubAllEnvs());
 
-describe('profil R1 de Darkstar observé pendant B', () => {
+describe('profil R1 du serveur local observé pendant B', () => {
   it('garde les capacités réelles au lieu de supprimer tous les outils', () => {
     const config = getModelToolConfig(runtime.model);
     expect(config.supportsToolCalls).toBe(runtime.capabilities.includes('tools'));
