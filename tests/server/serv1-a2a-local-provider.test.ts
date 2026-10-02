@@ -49,7 +49,7 @@ describe('SERV1 A2A inbound uses the configured local provider', () => {
     const resolved = resolveA2AProviderCredentials();
     expect(resolved.ok).toBe(false);
     if (!resolved.ok) {
-      expect(resolved.error).toMatch(/provider|api key/i);
+      expect(resolved.error).toMatch(/buddy login.*Ollama.*API key/);
     }
   });
 

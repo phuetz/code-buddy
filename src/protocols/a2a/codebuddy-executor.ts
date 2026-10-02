@@ -30,6 +30,7 @@
  * @module protocols/a2a/codebuddy-executor
  */
 
+import { PROVIDER_SETUP_MESSAGE } from '../../utils/provider-prerequisites.js';
 import { CodeBuddyClient } from '../../codebuddy/client.js';
 import { detectProviderFromEnv } from '../../utils/provider-detector.js';
 import type {
@@ -57,7 +58,7 @@ export function resolveA2AProviderCredentials():
   const apiKey = process.env.GROK_API_KEY || detected?.apiKey || '';
   if (!apiKey) {
     if (!detected) {
-      return { ok: false, error: 'No LLM provider configured' };
+      return { ok: false, error: PROVIDER_SETUP_MESSAGE };
     }
     return { ok: false, error: `Provider API key not configured (${detected.provider})` };
   }

@@ -75,7 +75,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `http-chat` — Chat HTTP API | Envoyez une conversation HTTP avec un fournisseur configuré ; sinon HTTP 503 avec instructions de configuration. | **Prérequis vérifiés** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/http-chat.md) ; [Raccordement](preuves/verification-statique.md#http-chat) |
 | `http-sessions` — Sessions HTTP API | Inspectez et gérez les sessions enregistrées en HTTP. | **Testée localement** | [Trace réelle](preuves/p7-http-sessions.log); [Maillons vérifiés](preuves/verification-statique.md#http-sessions) |
 | `http-memory` — Memory HTTP API | Lisez et mettez à jour la mémoire de l’agent en HTTP. | **Testée localement** | [Trace réelle](preuves/p7-http-memory.log); [Maillons vérifiés](preuves/verification-statique.md#http-memory) |
-| `http-a2a` — A2A task API | Échangez des tâches d’agents sur le point d’entrée A2A. | **Testée localement** | [Trace réelle](preuves/p5-http-a2a-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#http-a2a) |
+| `http-a2a` — A2A task API | Découvrez la carte A2A et soumettez une tâche ; consultez son état, qui peut être failed même avec HTTP 200. Un fournisseur est requis. | **Prérequis vérifiés** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/http-a2a.md) ; [Raccordement](preuves/verification-statique.md#http-a2a) |
 
 ## Cowork
 
