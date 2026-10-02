@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Sécurité
+
+- Les mutations de `computer_control` demandent désormais un humain dans l’exécuteur, y compris glisser, frapper, relâcher une touche, focaliser, annuler et exécuter une macro ; les lectures ciblant une fenêtre sont également gardées. Les règles de projet, modes automatiques et préautorisations utilisateur ne retirent plus cette confirmation. Les observations et simulations restent disponibles, les refus restent contraignants.
+- Les hooks de projet, connexions MCP des deux clients, macros Office et commandes de bureau reconnues par Bash passent par une confirmation humaine forcée avant lancement. Les hooks synchrones de compactage sont ignorés faute de pouvoir attendre cette confirmation. Le fournisseur Linux utilise des arguments séparés, nut.js refuse les touches inconnues et le schéma utilisateur conserve les politiques de bureau valides. Cette protection ne confine pas les effets de tout programme arbitraire.
+
 ### Corrigé
 
 - Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.

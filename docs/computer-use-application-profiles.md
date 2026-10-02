@@ -83,29 +83,53 @@ Dialogs are handled as their own control surface:
 - `handle_dialog` chooses by intent, such as `cancel`, `save`, `dont_save`,
   `discard`, `retry`, `continue`, or `close`.
 
-Safe exits like Cancel, No, Close, Dismiss, and their French equivalents can be
-clicked directly. Affirmative or destructive choices like OK, Yes, Save,
-Delete, Discard, Overwrite, Run, Install, and Allow require human confirmation
-unless explicitly allowed by host configuration. The gate uses the observed
-button's name and risk, including when a safe-looking requested label matches
-a destructive button. Safe labels are matched exactly, so a word such as `no`
-inside an affirmative label does not make it safe.
+Every live mutation now requires a fresh human confirmation **inside the executor**,
+before backend initialization or window focus. This includes dragging (even at one
+point), all keyboard input and releases, typing, focusing windows/apps, dialogs
+(including Cancel), recording, audit deletion/export, and macro storage/playback.
+Macro/workflow containers and every mutating child step are guarded independently.
+An Excel cell read is guarded because its COM path can open a workbook. Pure
+observations stay available; a window selector also requires confirmation because
+observation helpers may focus the target. Simulation skips these effects and does
+not initialize the native backend. User/project `block` remains binding, including
+in simulation. A user `allow` no longer waives this mandatory confirmation.
 
-This guard also applies to semantic clicks/selections, reference and coordinate
-clicks (including double/right/middle clicks), and Enter/Space activation.
-Coordinate hit testing checks visible controls in a valid snapshot within its
-TTL; a benign reference cannot hide an overlapping destructive control. Missing,
-expired or unclassified target evidence requires human confirmation. OCR and vision
-coordinates do not establish a harmless effect and require human confirmation.
-Windows UIAutomation paths that resolve and invoke a target in one script require
-confirmation before executing that script. A refusal stops the fallback chain.
+The prompt names the application and risk. Requested window selectors are shown
+as unverified; preparing the question never looks up a model-supplied handle.
+Cached accessible labels help explain a request but never authorize it. Cancel,
+Send, Pay, ordinary fields and a still-fresh snapshot can all describe a control
+whose effect has changed. The existing observed-button and UIAutomation guards
+remain in place after this initial approval; a refusal stops the fallback chain.
 
-The parallel `gui_control` tool requires a fresh human decision for every `click`,
-`type`, `key`, and `scroll`, inside the executor itself. Generic tool approval,
-permission bypass and session flags cannot skip it. Screenshot and element
-observation stay available without this action gate; plan-mode and system-key
-restrictions still apply. Both desktop tools belong to `group:system` and
-`group:system:modify` for declarative policy rules.
+The parallel `gui_control` executor requires the same fresh human decision for
+`click`, `type`, `key`, and `scroll`. `screenshot` and `find_element` only observe.
+Plan-mode and system-key restrictions remain binding. Automatic confirmation,
+`dontAsk`, `bypassPermissions`, session flags and a cloned project's
+`permissions.allow` cannot waive either executor's guard. The complete action
+inventory and proof tests are listed in [desktop-action-guards.md](desktop-action-guards.md).
+
+Other entry points covered by this guard:
+
+- Project hook handlers require human approval before execution. Hook variables
+  travel through the process environment rather than shell-source substitution;
+  quote them in POSIX commands (for example, `"$FILE"`). Windows commands use
+  their native environment syntax (`%FILE%`). Synchronous `pre_compact` commands
+  are skipped because that boundary cannot await a fresh human decision.
+- Both MCP clients require human approval before connecting, including stdio
+  process startup and reconnects. Without an approval channel, connection fails.
+- Windows `office_macro_execute` requires approval before writing/running its
+  script. The application/type are validated and PowerShell uses separate argv.
+- Buffered and streaming Bash require approval before dispatching recognized
+  desktop commands (`xdotool`, `ydotool`, `dotool`, `wmctrl`, `cliclick`,
+  `osascript`), including before the sandbox path.
+
+These are entry-point guards, not a confinement guarantee for arbitrary programs:
+an opaque shell/Python script, a trusted extension or another tool can have desktop
+effects outside the recognized command list. Approval does not prove the actual
+OS target stayed unchanged. Native Windows/macOS and real desktop behavior require
+platform-specific testing. Linux native input uses argv rather than a shell;
+invalid handles, key tokens and numeric coordinates are rejected. nut.js rejects
+unknown keys instead of silently emitting Space.
 
 Generic desktop controls now cover more than buttons and fields:
 
