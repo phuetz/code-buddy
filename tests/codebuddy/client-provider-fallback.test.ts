@@ -42,15 +42,10 @@ vi.mock('../../src/utils/logger', () => ({
   },
 }));
 
-vi.mock('../../src/utils/retry.js', () => ({
-  retry: vi.fn((fn: () => Promise<unknown>) => fn()),
-  RetryStrategies: {
-    llmApi: { maxRetries: 1, baseDelay: 1 },
-  },
-  RetryPredicates: {
-    llmApiError: vi.fn().mockReturnValue(true),
-  },
-}));
+vi.mock('../../src/codebuddy/llm-retry.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/codebuddy/llm-retry.js')>();
+  return { ...actual, withLlmRetry: vi.fn((fn: () => Promise<unknown>) => fn()) };
+});
 
 import { CodeBuddyClient } from '../../src/codebuddy/client.js';
 

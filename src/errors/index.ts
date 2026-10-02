@@ -135,6 +135,10 @@ export function mapProviderError(rawMessage: string, provider?: string): string 
   const configKey = provider ? `${provider}_api_key` : 'api_key';
   const prefix = `CodeBuddy API error: ${msg}`;
 
+  if (lower.includes('no user query found') || lower.includes('context_payload')) {
+    return `${prefix} — Hint: context/payload rejected by the chat template. Preserve the last user query, compact the final payload and verify the resolved runtime window; this is not a service outage.`;
+  }
+
   // Authentication / authorization
   if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('invalid api key') || lower.includes('authentication')) {
     return `${prefix} — Hint: API key invalid or revoked. Run: buddy config set ${configKey} <your-key>`;

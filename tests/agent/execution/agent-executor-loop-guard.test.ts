@@ -323,3 +323,24 @@ describe('first-use restore_context tip (P4)', () => {
     expect(fs.readdirSync(hintsDir)).toEqual([]);
   });
 });
+
+describe('refus headless définitif du banc', () => {
+  it('conserve un refus TTY et s’arrête après un outil, même si les commandes varient', async () => {
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true');
+    try {
+      const deps = createDeps();
+      const execute = vi.fn(async function* () {
+        return { success: false, error: 'Approval requires an interactive terminal or configured remote approval channel' };
+      });
+      deps.toolHandler.executeToolStreaming = execute;
+      const executor = new AgentExecutor(deps, createConfig(50));
+      const provider = scriptProvider(deps, round => [toolCall('bash', { command: `npm --version ${round}` }, round)]);
+      const chunks = await runStream(executor, [{ role: 'user', content: 'Run the authorised npm mission' }]);
+      expect(provider.rounds()).toBe(1);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(chunks.filter(chunk => chunk.type === 'tool_result')).toHaveLength(1);
+      expect(chunks.find(chunk => chunk.type === 'tool_result')?.toolResult?.error).toContain('Approval requires');
+      expect(chunks.at(-1)?.type).toBe('done');
+    } finally { vi.unstubAllEnvs(); }
+  });
+});

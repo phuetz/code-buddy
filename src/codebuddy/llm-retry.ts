@@ -7,6 +7,8 @@ export interface LlmRetryOptions {
   baseDelayMs?: number;
   maxDelayMs?: number;
   signal?: AbortSignal;
+  isRetryable?: (error: unknown) => boolean;
+  hasPartialOutput?: () => boolean;
   onRetry?: (retry: number, maxRetries: number, delayMs: number, error: unknown) => void;
 }
 
@@ -21,6 +23,7 @@ const RETRYABLE_MESSAGE =
 
 /** Classify an LLM/stream failure. Unknown errors fail closed as terminal. */
 export function classifyLlmError(error: unknown): LlmErrorClassification {
+  if ((error as { retryHandled?: boolean } | null)?.retryHandled) return 'terminal';
   const message = error instanceof Error
     ? `${error.name} ${error.message}`
     : typeof error === 'string'
@@ -32,6 +35,13 @@ export function classifyLlmError(error: unknown): LlmErrorClassification {
   if (providerClassification.fatal) return 'terminal';
   if (providerClassification.retryable || RETRYABLE_MESSAGE.test(message)) return 'retryable';
   return 'terminal';
+}
+
+function shouldRetry(error: unknown, options: LlmRetryOptions): boolean {
+  if ((error as { retryHandled?: boolean } | null)?.retryHandled || classifyProviderError(error).fatal) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  if (TERMINAL_MESSAGE.test(message)) return false;
+  return options.isRetryable ? options.isRetryable(error) : classifyLlmError(error) === 'retryable';
 }
 
 function abortError(): Error {
@@ -115,13 +125,34 @@ export async function withLlmRetry<T>(
       return await runWithAbort(operation, options.signal);
     } catch (error) {
       throwIfAborted(options.signal);
-      if (classifyLlmError(error) === 'terminal' || retries >= maxRetries) throw error;
+      if (!shouldRetry(error, options) || retries >= maxRetries) throw error;
       retries++;
       const delayMs = retryDelay(error, retries, options);
       options.onRetry?.(retries, maxRetries, delayMs, error);
       await delayWithAbort(delayMs, options.signal);
     }
   }
+}
+
+export class PartialStreamError extends Error {
+  readonly code = 'PARTIAL_STREAM';
+  readonly partialOutput = true;
+  readonly retryHandled = true;
+  constructor(cause: unknown, readonly emittedValues: number) {
+    super(`Réponse interrompue après un fragment déjà rendu ; retry refusé pour éviter une réponse hybride. Cause: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.name = 'PartialStreamError';
+  }
+}
+
+function hasGeneratedOutput(value: unknown): boolean {
+  if (typeof value === 'string') return value.length > 0;
+  const chunk = value as { choices?: Array<{ delta?: Record<string, unknown> }> } | null;
+  if (!Array.isArray(chunk?.choices)) return true;
+  return chunk.choices.some(choice => {
+    const delta = choice.delta ?? {};
+    return [delta.content, delta.reasoning, delta.reasoning_content].some(part => typeof part === 'string' && part.length > 0)
+      || (Array.isArray(delta.tool_calls) && delta.tool_calls.length > 0);
+  });
 }
 
 /** Retry a fresh async stream and surface retry boundaries to the caller. */
@@ -131,18 +162,23 @@ export async function* withLlmStreamRetry<T>(
 ): AsyncGenerator<LlmStreamRetryEvent<T>> {
   const maxRetries = Math.max(0, options.maxRetries ?? 2);
   let retries = 0;
+  let partialOutput = false;
+  let emittedValues = 0;
 
   while (true) {
     throwIfAborted(options.signal);
     try {
       for await (const value of factory()) {
         throwIfAborted(options.signal);
+        emittedValues++;
+        partialOutput ||= hasGeneratedOutput(value);
         yield { type: 'value', value };
       }
       return;
     } catch (error) {
       throwIfAborted(options.signal);
-      if (classifyLlmError(error) === 'terminal' || retries >= maxRetries) throw error;
+      if (partialOutput || options.hasPartialOutput?.()) throw new PartialStreamError(error, emittedValues);
+      if (!shouldRetry(error, options) || retries >= maxRetries) throw error;
       retries++;
       const delayMs = retryDelay(error, retries, options);
       options.onRetry?.(retries, maxRetries, delayMs, error);

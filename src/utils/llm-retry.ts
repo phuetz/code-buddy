@@ -137,9 +137,10 @@ export async function generateJsonWithRetry<T>(
   let lastRawText: string = '';
 
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    // Transport errors belong to the provider retry owner, not JSON repair.
+    const resultText = await generateFn(currentPrompt);
+    lastRawText = resultText;
     try {
-      const resultText = await generateFn(currentPrompt);
-      lastRawText = resultText;
 
       // Attempt to parse
       const parsed = parseJsonResponse(resultText);

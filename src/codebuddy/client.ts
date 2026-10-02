@@ -155,6 +155,8 @@ export interface SearchOptions {
 export type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
 
 export interface ChatOptions {
+  /** Internal ownership of one retry budget; prevents provider/SDK/caller multiplication. */
+  retryOwner?: 'caller';
   /** Internal scope shared with restore_context; never serialized to the provider. */
   contextScope?: { workDir: string; sessionId?: string };
   model?: string;
@@ -214,7 +216,7 @@ export interface ChatOptions {
    * (including `false`, which forces no retry even if the env var is on).
    *
    * Trade-off: a retried stream restarts from the beginning, so callers
-   * may see duplicated chunks across the retry boundary. See
+   * receives the original failure after partial output, without a second response. See
    * `src/codebuddy/stream-retry.ts` for the full helper documentation.
    */
   streamRetry?: boolean | {
@@ -1084,7 +1086,7 @@ export class CodeBuddyClient {
     this.maybeReturnToOriginal(opts);
 
     const primaryFactory = (): AsyncGenerator<ChatCompletionChunk, void, unknown> =>
-      this.dispatchChatStream(messages, tools, opts, searchOptions);
+      this.dispatchChatStream(messages, tools, retryEnabled ? { ...opts, retryOwner: 'caller' } : opts, searchOptions);
     const primaryStream = retryEnabled
       ? withStreamRetry(primaryFactory, { ...retryOpts, signal: opts.signal })
       : primaryFactory();

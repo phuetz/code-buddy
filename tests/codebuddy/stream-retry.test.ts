@@ -101,7 +101,7 @@ describe('withStreamRetry', () => {
       expect(calls).toBe(3);
     });
 
-    it('emits duplicated prefix when stream errors mid-yield then is retried', async () => {
+    it('preserves the partial prefix and cause without restarting', async () => {
       let calls = 0;
       const factory = () => {
         calls++;
@@ -126,11 +126,12 @@ describe('withStreamRetry', () => {
           out.push(v);
         }
       })();
+      const rejection = expect(promise).rejects.toMatchObject({ code: 'PARTIAL_STREAM', cause: expect.objectContaining({ message: 'socket hang up' }) });
       await vi.runAllTimersAsync();
-      await promise;
+      await rejection;
 
-      expect(out).toEqual(['a', 'b', 'a', 'b', 'c']);
-      expect(calls).toBe(2);
+      expect(out).toEqual(['a', 'b']);
+      expect(calls).toBe(1);
     });
   });
 

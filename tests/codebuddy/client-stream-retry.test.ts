@@ -80,7 +80,7 @@ describe('CodeBuddyClient.chatStream — withStreamRetry opt-in wirage', () => {
     expect(collected).toEqual(['a']);
   });
 
-  it('per-call opts.streamRetry=true: retries on ECONNRESET then succeeds', async () => {
+  it('per-call opts.streamRetry=true: stops after a partial response with the original cause', async () => {
     vi.useFakeTimers();
     let calls = 0;
     const provider: ProviderLike = {
@@ -105,12 +105,13 @@ describe('CodeBuddyClient.chatStream — withStreamRetry opt-in wirage', () => {
         collected.push(c.choices[0].delta.content ?? '');
       }
     })();
+    const rejection = expect(promise).rejects.toMatchObject({ code: 'PARTIAL_STREAM', cause: expect.objectContaining({ code: 'ECONNRESET' }) });
     await vi.runAllTimersAsync();
-    await promise;
+    await rejection;
 
-    expect(calls).toBe(2);
-    // Caller sees the duplicated prefix across the retry boundary (documented).
-    expect(collected).toEqual(['partial', 'full']);
+    expect(calls).toBe(1);
+    // The rendered prefix is retained; a second response never gets appended.
+    expect(collected).toEqual(['partial']);
   });
 
   it('env var CODEBUDDY_STREAM_RETRY=1: retries on ECONNRESET then succeeds', async () => {

@@ -17,11 +17,10 @@ vi.mock('../../../src/utils/model-utils.js', () => ({
   getModelInfo: providerMocks.getModelInfo,
 }));
 
-vi.mock('../../../src/utils/retry.js', () => ({
-  retry: vi.fn((fn: () => Promise<unknown>) => fn()),
-  RetryStrategies: { llmApi: {} },
-  RetryPredicates: { llmApiError: vi.fn(() => false) },
-}));
+vi.mock('../../../src/codebuddy/llm-retry.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/codebuddy/llm-retry.js')>();
+  return { ...actual, withLlmRetry: vi.fn((fn: () => Promise<unknown>) => fn()) };
+});
 
 vi.mock('../../../src/agent/extended-thinking.js', () => ({
   getExtendedThinking: () => ({ getThinkingConfig: () => ({}) }),

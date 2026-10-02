@@ -41,7 +41,7 @@ import type {
 } from '../client.js';
 import { hasToolCalls } from '../message-guards.js';
 import { logger } from '../../utils/logger.js';
-import { retry, RetryStrategies, RetryPredicates } from '../../utils/retry.js';
+import { withLlmRetry } from '../llm-retry.js';
 import { getCircuitBreaker, CircuitOpenError } from '../../providers/circuit-breaker.js';
 import type { CircuitBreakerConfig } from '../../providers/circuit-breaker.js';
 import { parseRateLimitHeaders, storeRateLimitInfo } from '../../utils/rate-limit-display.js';
@@ -303,6 +303,7 @@ export class OpenAICompatProvider implements Provider {
       apiKey: this.apiKey,
       baseURL: this.baseURL,
       timeout: 360000,
+      maxRetries: 0,
       ...(extraHeaders ? { defaultHeaders: extraHeaders } : {}),
     });
   }
@@ -802,7 +803,7 @@ export class OpenAICompatProvider implements Provider {
       const error = new Error(
         `Ollama API error: ${response.status} ${response.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
       );
-      (error as Error & { status: number }).status = response.status;
+      Object.assign(error, { status: response.status, responseBody: detail, headers: response.headers });
       throw error;
     }
 
@@ -1060,7 +1061,7 @@ export class OpenAICompatProvider implements Provider {
       const performCall = async (messagesPayload: CodeBuddyMessage[]) => {
         requestPayload.messages = messagesPayload;
         const response = await this.withCircuitBreaker(opts.circuitBreaker, () =>
-          retry(
+          withLlmRetry(
             async () => {
               const payload = requestPayload as unknown as ChatCompletionCreateParamsNonStreaming;
               // Preserve the one-argument SDK call when there is no signal. Apart
@@ -1069,9 +1070,12 @@ export class OpenAICompatProvider implements Provider {
               return await this.createChatCompletion(payload, opts.signal, opts.contextScope);
             },
             {
-              ...RetryStrategies.llmApi,
-              isRetryable: RetryPredicates.llmApiError,
-              onRetry: (error, attempt, delay) => {
+              baseDelayMs: 1000,
+              maxDelayMs: 8000,
+              signal: opts.signal,
+              maxRetries: opts.retryOwner === 'caller' ? 0 : 2,
+              isRetryable: error => classifyProviderError(error).retryable,
+              onRetry: (attempt, _maxRetries, delay, error) => {
                 logger.warn(`API call failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
                   source: 'OpenAICompatProvider',
                   error: error instanceof Error ? error.message : String(error),
@@ -1146,6 +1150,7 @@ export class OpenAICompatProvider implements Provider {
       if (error instanceof CircuitOpenError) {
         throw error;
       }
+      if (error && typeof error === 'object' && opts.retryOwner !== 'caller') Object.assign(error, { retryHandled: true });
       const message = error instanceof Error ? error.message : String(error);
       // Re-wrap for an actionable message, but PRESERVE the retry-relevant
       // metadata (HTTP status, error code/type, parsed Retry-After) from the
@@ -1265,16 +1270,19 @@ export class OpenAICompatProvider implements Provider {
       };
 
       const stream = await this.withCircuitBreaker(opts.circuitBreaker, () =>
-        retry(
+        withLlmRetry(
           async () => {
             const payload = streamingPayload as unknown as ChatCompletionCreateParamsStreaming;
             ensureMeasuredTurn();
             return await this.createChatCompletion(payload, opts.signal, opts.contextScope);
           },
           {
-            ...RetryStrategies.llmApi,
-            isRetryable: RetryPredicates.llmApiError,
-            onRetry: (error, attempt, delay) => {
+            baseDelayMs: 1000,
+              maxDelayMs: 8000,
+              signal: opts.signal,
+            maxRetries: opts.retryOwner === 'caller' ? 0 : 2,
+            isRetryable: error => classifyProviderError(error).retryable,
+            onRetry: (attempt, _maxRetries, delay, error) => {
               logger.warn(`Stream initialization failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
                 source: 'OpenAICompatProvider',
                 error: error instanceof Error ? error.message : String(error),
@@ -1335,6 +1343,7 @@ export class OpenAICompatProvider implements Provider {
       if (error instanceof CircuitOpenError) {
         throw error;
       }
+      if (error && typeof error === 'object' && opts.retryOwner !== 'caller') Object.assign(error, { retryHandled: true });
       const message = error instanceof Error ? error.message : String(error);
       // Re-wrap for an actionable message, but PRESERVE the retry-relevant
       // metadata (HTTP status, error code/type, parsed Retry-After) from the

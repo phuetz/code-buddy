@@ -94,6 +94,7 @@ import {
   renderLisaOperationalSelfResponse,
 } from '../../identity/lisa-introspection.js';
 import type { TimelineToolCall } from '../../sessions/timeline.js';
+import { classifyToolFailure } from '../../tools/tool-error-classifier.js';
 import { withLlmStreamRetry } from '../../codebuddy/llm-retry.js';
 import { getStreamingAdapter } from '../../tools/streaming-adapter.js';
 import { notify } from '../proactive/notification-default-sink.js';
@@ -1757,6 +1758,7 @@ export class AgentExecutor {
           tools,
           {
             streamRetry: false,
+            retryOwner: 'caller',
             contextScope: {
               workDir: this.deps.toolHandler.getWorkingDirectory?.() ?? process.cwd(),
               sessionId: this.deps.toolHandler.getRecoverySessionId?.(),
@@ -1793,7 +1795,8 @@ export class AgentExecutor {
             // visible has been yielded.
             if (streamEmittedVisibleDelta) {
               throw new Error(
-                'Réponse interrompue après un fragment déjà rendu ; retry refusé pour éviter une réponse hybride.',
+                `Réponse interrompue après un fragment déjà rendu ; retry refusé pour éviter une réponse hybride. Cause: ${getErrorMessage(streamEvent.error)}`,
+                { cause: streamEvent.error },
               );
             }
             this.deps.streamingHandler.reset();
@@ -2426,6 +2429,8 @@ export class AgentExecutor {
               sanitizedModelObservation,
             );
 
+            const failure = result.success ? undefined : classifyToolFailure(result.error);
+            if (failure) result = { ...result, metadata: { ...result.metadata, failure } };
             const visibleToolResult = relationshipSafety
               ? relationshipSafeToolResultForDisplay(result)
               : result;
@@ -2448,6 +2453,13 @@ export class AgentExecutor {
               tool_call_id: toolCall.id || `tool_${Date.now()}`,
               name: toolCall.function.name,
             } as CodeBuddyMessage);
+
+            if (process.env.CODEBUDDY_HEADLESS === 'true' && failure?.terminal) {
+              yield { type: 'run_event', runEvent: { runId: this.deps.toolHandler.getRunId?.() ?? '', eventType: 'capability_blocked',
+                data: { code: failure.code, toolCallId: toolCall.id } } };
+              yield { type: 'done' };
+              return;
+            }
 
             // --- Auto-commit after file-modifying tools (streaming path) ---
             if (result?.success) {

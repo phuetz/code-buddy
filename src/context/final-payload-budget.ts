@@ -14,7 +14,12 @@ export function estimateFinalPayloadTokens(payload: Pick<OpenAiChatPayload, 'mes
   const serialized = JSON.stringify({ messages: payload.messages, tools: payload.tools ?? [] });
   // Runtime tokenizer is not always exposed. Use both encoding and UTF-8,
   // with a margin for the chat template and non-identical local tokenizers.
-  return Math.max(Math.ceil(countTokens(serialized, payload.model) * 1.25), Math.ceil(Buffer.byteLength(serialized) / 3))
+  // Bound encoder work for very long repeated runs (BPE can be quadratic).
+  let encodedTokens = 0;
+  for (let offset = 0; offset < serialized.length; offset += 4096) {
+    encodedTokens += countTokens(serialized.slice(offset, offset + 4096), payload.model);
+  }
+  return Math.max(Math.ceil(encodedTokens * 1.25), Math.ceil(Buffer.byteLength(serialized) / 3))
     + payload.messages.length * 16;
 }
 

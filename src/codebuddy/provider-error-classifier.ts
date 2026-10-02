@@ -85,6 +85,8 @@ function getMessage(err: unknown): string {
     if (typeof e.error.status === 'string') parts.push(e.error.status);
     if (typeof e.error.statusText === 'string') parts.push(e.error.statusText);
   }
+  if (typeof (err as Record<string, unknown>).error === 'string') parts.push(String((err as Record<string, unknown>).error));
+  if (typeof (err as Record<string, unknown>).responseBody === 'string') parts.push(String((err as Record<string, unknown>).responseBody));
   return parts.join(' ');
 }
 
@@ -294,6 +296,14 @@ export function classifyProviderError(
 
   const base = { status, ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) };
 
+  // Deterministic template/context failures can be reported as HTTP 500.
+  if (code === 'context_payload' || /no user query found|context(?:[-_ ]window)?(?: length)? (?:exceeded|too|limit)|too many tokens|context_length_exceeded/.test(message)) {
+    return { retryable: false, fatal: true, reason: 'context_payload', ...base };
+  }
+  if (code === 'partial_stream' || (err as { partialOutput?: boolean })?.partialOutput === true) {
+    return { retryable: false, fatal: true, reason: 'partial_stream', ...base };
+  }
+
   // ---- 1. FATAL: quota / balance exhausted -------------------------------
   // Checked BEFORE 401/403/400: a 403 `out_of_credits` or Anthropic 400
   // "credit balance is too low" is a billing outage, not an auth/schema bug.
@@ -433,6 +443,12 @@ export function preserveProviderErrorMetadata(target: Error, source: unknown): E
       type?: string;
       retryAfterMs?: number;
     };
+    const fields = target as unknown as Record<string, unknown>;
+    const original = source as Record<string, unknown>;
+    if (target !== source && fields.cause === undefined) fields.cause = source;
+    for (const field of ['partialOutput', 'emittedValues', 'retryHandled', 'responseBody', 'headers']) {
+      if (fields[field] === undefined && original[field] !== undefined) fields[field] = original[field];
+    }
     const status = extractStatus(source);
     if (status !== undefined && t.status === undefined) t.status = status;
 
