@@ -34,7 +34,7 @@ function repositoryActionClauses(prompt: string): string[] {
   // verb's vocabulary. Otherwise an unfamiliar operation after "and" vanishes.
   const boundaries = /[?!;,\n]\s*|\.(?=\s|$)\s*|\b(?:then|puis|ensuite|but|mais|and|et)\s+/g;
   const clauses = unquoted.split(boundaries).map(clause => clause.trim().replace(/^(?:please|then|puis|ensuite|and|et)\s+/, '')).filter(Boolean);
-  const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|show|list|what|where|which|count|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|montre|liste|quel|quelle|quels|quelles|ou|combien|comment|pourquoi|reponds|dis|traduis)\b/;
+  const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|trace|cite|show|list|what|where|which|count|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|montre|liste|quel|quelle|quels|quelles|ou|combien|comment|pourquoi|reponds|dis|traduis)\b/;
   const outputConstraint = (clause: string): boolean => {
     // An output rule cannot exempt an independent, unfamiliar operation.
     const conjuncts = clause.split(/\s+\b(?:and|et)\b\s+/);
@@ -43,7 +43,7 @@ function repositoryActionClauses(prompt: string): string[] {
     if (/^(?:with\s+)?(?:no|without)\s+(?:extra\s+)?(?:commentary|chatter|prose|explanation|text)(?:\s+(?:afterwards|afterward|please))?$/.test(clause)) return true;
     // Restitution is an answer unless it names a write destination or changes
     // a function's return behavior. Source locations are not destinations.
-    if (/^(?:return|renvoie|affiche|present|presente|give\s+(?:me|us)|donne(?:-moi|\s+moi))\b/.test(clause)
+    if (/^(?:return|renvoie|affiche|present|presente|give\s+(?:me|us)|donne(?:-moi|\s+moi)?)\b/.test(clause)
       && !/\b(?:to|into|vers|dans)\s+(?:a\s+)?(?:file_target|file\b|[\w/-]+\.[a-z0-9]+\b)|\bfrom\s+(?:the\s+)?function\b/.test(clause)) return true;
     const outputVerb = /\b(?:write|use|output|return|ecris|utilise|renvoie|affiche)\b/.test(clause);
     const outputObject = /\b(?:answers?|repl(?:y|ies)|response|text|sentence|names?|values?|numerals?|numbers?|json|reponse|texte|phrase|nom|valeur|chiffre)\b/.test(clause);
@@ -60,13 +60,31 @@ function repositoryActionClauses(prompt: string): string[] {
     return outputVerb && (outputObject || /\b(?:only|alone|just)\b/.test(clause)) && !physical;
   };
   return clauses.filter((clause, index) => {
+    // Supplements constrain the preceding answer; they are not imperatives.
+    // Splitting coordination must not turn a noun phrase into a write request.
+    const dependent = /^(?:with|without|including|preserving|keeping|retaining|according to|avec|sans|en incluant|en conservant|selon)\b/;
+    const nominal = /^(?:the|their|its|these|those|le|la|les|ses|leurs)\s+/;
+    if (dependent.test(clause) || index > 0 && nominal.test(clause)
+      && !/\b(?:must|shall|should|needs?|requires?|doit|doivent|is|are|be|etre|sont|est)\b/.test(clause)) return false;
+    // Negation in French need not contain "pas" (aucun/rien/jamais/que).
+    if (/^ne\b.*\b(?:aucun\w*|rien|jamais|que)\b/.test(clause)) return false;
+    // Following a source means tracing it or obeying its reading rules. A
+    // physical change introduced by "by" remains an operation.
+    if (/^(?:follow|respect|obey|respecte|suis)(?:\b|-)/.test(clause)
+      && !/\b(?:by|en modifiant|en changeant)\b/.test(clause)
+      && !/\bfile_target\b|[\w/-]+\.[a-z0-9]+\b/.test(clause.replace(/\bagents\.md\b/g, 'agents'))) return false;
+    // Source-to-language conversion is an implementation request, unlike
+    // translating prose. Do not exempt it just because "translate" is a
+    // common informational verb.
+    if (/^(?:translate|traduis)\b/.test(clause)
+      && /\b(?:to|into|en)\s+(?:python|typescript|javascript|rust|go|java|ruby|c\+\+|c#|sql|bash)\b/.test(clause)) return true;
     if (/^(?:after|before|apres|avant)\b/.test(clause) && clauses[index + 1] && outputConstraint(clauses[index + 1]!)) return false;
     if (/^(?:do not|don't|never|ne\b.*\bpas)\b/.test(clause)) return false;
     if (outputConstraint(clause)) return false;
     if (informational.test(clause)) return false;
     // A coordinated noun list is still the object of the preceding read.
-    if (index > 0 && informational.test(clauses[index - 1]!)
-      && /^(?:files?|folders?|imports?|exports?|names?|values?|parameters?)$/.test(clause)) return false;
+    if (index > 0 && (informational.test(clauses[index - 1]!) || /^(?:follow|suis)\b/.test(clauses[index - 1]!))
+      && /^(?:files?|folders?|imports?|exports?|names?|values?|parameters?|calculations?|dependencies)$/.test(clause)) return false;
     if (/^(?:hi|hello|hey|bonjour|salut)$/.test(clause)) return false;
     if (/^write (?:a |an )?(?:poem|story|essay|email|sql query)\b/.test(clause)
       && !/\bfile_target\b/.test(clause)) return false;
@@ -175,7 +193,8 @@ function inspection(command: string): boolean {
   if (/[$`<>\n]/.test(command)) return false;
   const parsed = parseBashCommand(shellCheckScope(command).body);
   return !parsed.warnings.length && parsed.commands.length > 0 && parsed.commands.every(part =>
-    !part.isSubshell && ['cat', 'ls', 'pwd', 'echo', 'head', 'tail'].includes(part.command)
+    !part.isSubshell && ['cat', 'ls', 'pwd', 'echo', 'head', 'tail', 'grep', 'rg'].includes(part.command)
+    && !(part.command === 'rg' && part.args.some(arg => /^(?:--pre|--hostname-bin)(?:=|$)/.test(arg)))
     && (part.connector === null || part.connector === '&&'));
 }
 
@@ -289,7 +308,7 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
         && !physicalHead && !physicalDestination && paths.length === 0;
       if (manualWalk) continue;
       if (!physicalHead && !physicalDestination && (abstract || /^model\b/.test(head) && /\bmental(?:ly|ement)?\b/.test(object) || /^(?:into|across|out of)\b/.test(head)
-        || /^instructions?\b/.test(head) && /\bmentalement\b/.test(object))) continue;
+        || /^(?:instructions?|steps?|procedure)\b/.test(head) && paths.length === 0 && literalCommands.length === 0 && /\b(?:mentally|mentalement|de tete)\b/.test(object))) continue;
       if (/^(?:edited|modified|changed|updated|fixed|modifie|corrige|remplace|mis a jour)$/.test(verb)
         && (!observed.edit || !targetsObserved(editedPaths))) claims.add('edit');
       if (/^(?:created|written|wrote|cree|ecrit)$/.test(verb)
@@ -374,7 +393,7 @@ export function evaluateHeadlessTaskOutcome(
       const key = JSON.stringify([name, identity.command, directory, args.args ?? args.runner ?? '']);
       const optionalRead = name === 'bash' && command && inspection(command)
         && /\b(?:replace|edit|modify|change|fix|repair|refactor|remplace|modifie|corrige|repare)\b/i.test(prompt)
-        && !/\b(?:cat|ls|pwd|head|tail)\b/.test(prompt);
+        && !/\b(?:cat|ls|pwd|head|tail|grep|rg)\b/.test(prompt);
       checks.set(key, { tool: name, ...(command ? { command } : {}), success, directory,
         ...('alternatives' in identity ? { alternatives: identity.alternatives } : {}), optionalRead: !!optionalRead, sequence });
     }
