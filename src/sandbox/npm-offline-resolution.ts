@@ -23,10 +23,17 @@ export function assertOpaqueLockEntriesUnchanged(before: Lockfile, after: Lockfi
 
 /** Even offline npm must not read an arbitrary host file as a package source. */
 export function assertNoLocalPackageSources(value: unknown): void {
-  if (typeof value === 'string' && /(?:^|\s)(?:file|link):/i.test(value)) {
-    throw new Error('Registry lock resolution refuses file and link dependency specs');
+  if (!value || typeof value !== 'object') return;
+  const inspectSpecs = (spec: unknown): void => {
+    if (typeof spec === 'string' && /(?:^|\s)(?:file|link):/i.test(spec)) {
+      throw new Error('Registry lock resolution refuses file and link dependency specs');
+    }
+    if (spec && typeof spec === 'object') for (const nested of Object.values(spec)) inspectSpecs(nested);
+  };
+  for (const [key, entry] of Object.entries(value)) {
+    if (['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'overrides', 'resolved'].includes(key)) inspectSpecs(entry);
+    assertNoLocalPackageSources(entry);
   }
-  if (value && typeof value === 'object') for (const entry of Object.values(value)) assertNoLocalPackageSources(entry);
 }
 
 export async function resolveNpmLockOffline(
