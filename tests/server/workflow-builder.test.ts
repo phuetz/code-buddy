@@ -1,13 +1,20 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   createWorkflowBuilderRoutes,
   createWorkflowApiRouter,
   WorkflowStore,
   WorkflowRunTracker,
+  workflowStore,
 } from '../../src/server/routes/workflow-builder.js';
 import type { LobsterWorkflow } from '../../src/workflows/lobster-engine.js';
 import express from 'express';
 import { createServer, type Server } from 'http';
+
+beforeEach(() => {
+  for (const workflow of workflowStore.list()) {
+    workflowStore.delete(workflow.id);
+  }
+});
 
 // Mock logger
 vi.mock('../../src/utils/logger.js', () => ({
@@ -363,7 +370,7 @@ describe('Workflow REST API Router', () => {
     });
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     if (server) {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
