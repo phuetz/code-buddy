@@ -201,6 +201,21 @@ export class TextEditorTool implements Disposable {
 
       const content = await this.vfs.readFile(resolvedPath, "utf-8");
 
+      // view_file labels are display metadata. Approximate matching must not
+      // erase those labels from the search while inserting them into source.
+      // Literal numbered records remain valid when oldStr really exists.
+      const sourceLines = content.split(/\r?\n/);
+      const hasDisplayLabels = oldStr.split(/\r?\n/).some(line => {
+        const label = line.match(/^(\d+): ?(.*)$/);
+        return label && sourceLines[Number(label[1]) - 1] === label[2];
+      });
+      if (!content.includes(oldStr) && hasDisplayLabels) {
+        return {
+          success: false,
+          error: 'The search text contains display line numbers that are not in the file. Retry with literal file text in old_str and new_str, without the view_file line labels.',
+        };
+      }
+
       // Multi-strategy matching: exact → flexible → regex → fuzzy
       const strategyResult = multiStrategyMatch(content, oldStr);
 
