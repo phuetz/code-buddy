@@ -19,9 +19,9 @@
  * Idempotent (mirrors compaction-bridge): a second wire call is a no-op.
  */
 
-import type { CodeBuddyClient, ChatOptions } from '../codebuddy/client.js';
+import type { CodeBuddyClient } from '../codebuddy/client.js';
 import { beginFleetWork, isFleetSaturated } from './fleet-load.js';
-import { executeCostCappedFleetCall } from './fleet-cost-cap.js';
+import { executeCostCappedFleetCall, fleetStreamUsage } from './fleet-cost-cap.js';
 import { registerPeerMethod, unregisterPeerMethod } from '../server/websocket/peer-method-registry.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -279,34 +279,46 @@ export function wirePeerChatBridge(
     const selected = resolveClientForRequest(provider, model, 'peer.chat-stream');
     const client = selected.client;
 
-    const chatOptions: ChatOptions | undefined = model ? { model } : undefined;
     const doneLoad = beginFleetWork('peer.chat');
     let aggregate = '';
     let finishReason: string | null | undefined;
     let usage: unknown;
     try {
-      const stream = client.chatStream(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
-        undefined, // no tools
-        chatOptions,
-      );
+      await executeCostCappedFleetCall({
+        peerId: ctx.principalId ?? ctx.connectionId,
+        provider: selected.providerResolved ?? selected.providerRequested ?? cachedProviderInfo?.provider,
+        model,
+        sagaId: ctx.traceId,
+        runId: ctx.traceId,
+        requestedMaxTokens: params.maxTokens,
+        inputText: `${systemPrompt}\n${prompt}`,
+        client,
+        invoke: async (maxTokens) => {
+          const stream = client.chatStream(
+            [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: prompt },
+            ],
+            undefined, // no tools
+            { ...(model ? { model } : {}), maxTokens },
+          );
 
-      for await (const chunk of stream as AsyncIterable<ContentChunk>) {
-        const delta = chunk?.choices?.[0]?.delta?.content ?? '';
-        if (delta) {
-          aggregate += delta;
-          // Best-effort emit — undefined when the transport doesn't support
-          // streaming. We still aggregate locally for the final response so
-          // the client gets the full text either way.
-          ctx.emitChunk?.(delta);
-        }
-        const fr = chunk?.choices?.[0]?.finish_reason;
-        if (fr) finishReason = fr;
-        if (chunk?.usage) usage = chunk.usage;
-      }
+          for await (const chunk of stream as AsyncIterable<ContentChunk>) {
+            const delta = chunk?.choices?.[0]?.delta?.content ?? '';
+            if (delta) {
+              aggregate += delta;
+              // Best-effort emit — undefined when the transport doesn't support
+              // streaming. We still aggregate locally for the final response so
+              // the client gets the full text either way.
+              ctx.emitChunk?.(delta);
+            }
+            const fr = chunk?.choices?.[0]?.finish_reason;
+            if (fr) finishReason = fr;
+            if (chunk?.usage) usage = chunk.usage;
+          }
+          return { usage: fleetStreamUsage(usage) };
+        },
+      });
     } finally {
       doneLoad();
     }
@@ -395,6 +407,8 @@ interface DispatchState {
   toolset: FleetHermesToolsetDescriptor;
   traceId?: string;
   parentRunId?: string;
+  peerId?: string;
+  requestedMaxTokens?: unknown;
   status: 'pending' | 'running' | 'completed' | 'failed';
   startedAt: number;
   completedAt?: number;
@@ -453,6 +467,8 @@ export function dispatchPeerTask(input: {
   dispatchProfile?: FleetDispatchProfile;
   traceId?: string;
   parentRunId?: string;
+  peerId?: string;
+  requestedMaxTokens?: unknown;
 }): void {
   const dispatchProfile = input.dispatchProfile ?? 'balanced';
   const toolset = buildHermesToolsetDescriptor(
@@ -470,6 +486,8 @@ export function dispatchPeerTask(input: {
     toolset,
     traceId: input.traceId,
     parentRunId: input.parentRunId,
+    peerId: input.peerId,
+    requestedMaxTokens: input.requestedMaxTokens,
     status: 'pending',
     startedAt: Date.now(),
   };
@@ -501,20 +519,25 @@ async function runDispatchedTask(state: DispatchState): Promise<void> {
   }
   const client = selected.client;
   state.providerResolved = selected.providerResolved;
-  const chatOptions: ChatOptions | undefined = state.model
-    ? { model: state.model }
-    : undefined;
   const doneLoad = beginFleetWork('peer.dispatch');
   let response: Awaited<ReturnType<CodeBuddyClient['chat']>>;
   try {
-    response = await client.chat(
-      [
-        { role: 'system', content: buildDispatchSystemPrompt(state.dispatchProfile) },
-        { role: 'user', content: state.prompt },
-      ],
-      [],
-      chatOptions,
-    );
+    const systemPrompt = buildDispatchSystemPrompt(state.dispatchProfile);
+    response = await executeCostCappedFleetCall({
+      peerId: state.peerId ?? 'peer.dispatch',
+      provider: selected.providerResolved ?? state.provider ?? cachedProviderInfo?.provider,
+      model: state.model,
+      sagaId: state.traceId ?? state.runId,
+      runId: state.runId,
+      requestedMaxTokens: state.requestedMaxTokens,
+      inputText: `${systemPrompt}\n${state.prompt}`,
+      client,
+      invoke: maxTokens => client.chat(
+        [{ role: 'system', content: systemPrompt }, { role: 'user', content: state.prompt }],
+        [],
+        { ...(state.model ? { model: state.model } : {}), maxTokens },
+      ),
+    });
   } finally {
     doneLoad();
   }

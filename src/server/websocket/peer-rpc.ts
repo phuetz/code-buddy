@@ -22,6 +22,8 @@
  */
 
 import os from 'os';
+import { runWithPeerCallContext } from '../../fleet/peer-call-context.js';
+import { executeIdempotentPeerRequest } from './peer-idempotency.js';
 import {
   FLEET_DISPATCH_PROFILES,
   isFleetDispatchProfile,
@@ -73,6 +75,8 @@ export interface PeerRequestFrame {
    * the value would push past the configured ceiling.
    */
   depth?: number;
+  /** Optional retry key, scoped to the authenticated principal. */
+  idempotencyKey?: string;
 }
 
 /** Response frame sent back over WS (peer:response type). */
@@ -96,10 +100,8 @@ export interface PeerResponseFrame {
  *   main         — accepts all requests (default)
  *   orchestrator — accepts all requests (semantic only — no behaviour
  *                   change today; future hook for routing decisions)
- *   leaf         — accepts requests but tags responses to discourage
- *                   the caller from chaining further. Future role can
- *                   refuse outgoing peer.invoke (gated client-side in
- *                   FleetListener.request).
+ *   leaf         — serves local calls, refuses dispatch and any forwarding
+ *                   from an inbound handler, as well as outgoing calls.
  */
 export type PeerRole = 'main' | 'orchestrator' | 'leaf';
 
@@ -208,7 +210,7 @@ function registerBuiltInMethods(): void {
   // method is a thin async wrapper so the caller doesn't block waiting
   // for the LLM response.
   registerPeerMethod('peer.dispatch', async (params, ctx) => {
-    const { id, prompt, model, provider, traceId, parentRunId, dispatchProfile } = (params ?? {}) as {
+    const { id, prompt, model, provider, parentRunId, dispatchProfile } = (params ?? {}) as {
       id?: string;
       prompt?: string;
       model?: string;
@@ -235,9 +237,7 @@ function registerBuiltInMethods(): void {
         ? id
         : `disp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     const resolvedDispatchProfile = normalizeDispatchProfile(dispatchProfile);
-    const resolvedTraceId = typeof traceId === 'string' && traceId.length > 0
-      ? traceId
-      : ctx.traceId;
+    const resolvedTraceId = ctx.traceId;
     let resolvedProvider: PeerChatProviderId | undefined;
     if (provider !== undefined && provider !== 'unknown') {
       const { normalizePeerChatProviderId } = await import(
@@ -260,6 +260,8 @@ function registerBuiltInMethods(): void {
       dispatchProfile: resolvedDispatchProfile,
       traceId: resolvedTraceId,
       parentRunId,
+      peerId: ctx.principalId ?? ctx.connectionId,
+      requestedMaxTokens: params.maxTokens,
     });
     const state = getDispatchState(dispatchId);
     return {
@@ -366,6 +368,11 @@ export async function dispatchPeerRequest(
     };
   }
 
+  const leaf = getPeerRole() === 'leaf';
+  if (leaf && frame.method === 'peer.dispatch') {
+    return { id: frame.id, ok: false, error: { code: 'ROLE_LEAF', message: 'leaf receiver cannot accept peer.dispatch' } };
+  }
+
   const handler = getPeerMethodHandler(frame.method);
   if (!handler) {
     return {
@@ -384,13 +391,23 @@ export async function dispatchPeerRequest(
   };
   if (ctx.emitChunk) callCtx.emitChunk = ctx.emitChunk;
   try {
-    const payload = await handler(frame.params ?? {}, callCtx);
-    return { id: frame.id, ok: true, payload };
+    return await executeIdempotentPeerRequest(frame, callCtx, async (emitChunk) => {
+      try {
+        const payload = await runWithPeerCallContext({ ...callCtx, emitChunk, leaf },
+          () => handler(frame.params ?? {}, { ...callCtx, emitChunk }));
+        return { id: frame.id, ok: true, payload };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const code = err instanceof Error && 'code' in err && (err.code === 'SATURATED' || err.code === 'ROLE_LEAF')
+          ? err.code : 'METHOD_ERROR';
+        logger.debug(`[peer-rpc] method "${frame.method}" threw`, { error: message, traceId, depth });
+        return { id: frame.id, ok: false, error: { code, message } };
+      }
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const code = err instanceof Error && 'code' in err && err.code === 'SATURATED'
-      ? 'SATURATED'
-      : 'METHOD_ERROR';
+    const code = err instanceof Error && 'code' in err && typeof err.code === 'string'
+      ? err.code : 'METHOD_ERROR';
     logger.debug(`[peer-rpc] method "${frame.method}" threw`, { error: message, traceId, depth });
     return {
       id: frame.id,

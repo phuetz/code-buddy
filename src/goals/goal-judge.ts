@@ -40,6 +40,8 @@ export interface GoalJudgeResult extends GoalEvidenceFields {
 }
 
 export interface GoalJudgeParams {
+  /** Optional caller-specific model gate; normal local usage keeps client.chat. */
+  invokeChat?: CodeBuddyClient['chat'];
   goal: string;
   lastResponse: string;
   subgoals?: string[];
@@ -74,7 +76,7 @@ export async function judgeGoal(
   let raw = '';
   try {
     const response = await withTimeout(
-      client.chat(
+      (params.invokeChat ?? client.chat.bind(client))(
         [
           { role: 'system', content: JUDGE_SYSTEM_PROMPT },
           { role: 'user', content: prompt },

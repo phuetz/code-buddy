@@ -1662,6 +1662,7 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
     params?: Record<string, unknown>;
     traceId?: string;
     depth?: number;
+    idempotencyKey?: string;
   };
   const requestId = frame.id ?? '';
   if (!state.scopes.includes('peer:invoke')) {
@@ -1719,9 +1720,11 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
       params: frame.params,
       traceId: frame.traceId,
       depth: frame.depth,
+      idempotencyKey: frame.idempotencyKey,
     },
     {
       connectionId: state.id,
+      principalId: extensionPrincipal(state).id,
       scopes: state.scopes,
       // Placeholders — the dispatcher resolves traceId/depth from the
       // FRAME (so propagation is end-to-end) and overwrites these.

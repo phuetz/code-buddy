@@ -29,27 +29,27 @@ export interface FleetListenerPublicAPI {
   request: (
     method: string,
     params?: Record<string, unknown>,
-    options?: { timeoutMs?: number; traceId?: string; depth?: number },
+    options?: { timeoutMs?: number; traceId?: string; depth?: number; idempotencyKey?: string },
   ) => Promise<unknown>;
   /** Phase (d).19 — streaming variant; onChunk fires for every peer:chunk frame. */
   requestStream?: (
     method: string,
     params: Record<string, unknown>,
     onChunk: (delta: string) => void,
-    options?: { timeoutMs?: number; traceId?: string; depth?: number },
+    options?: { timeoutMs?: number; traceId?: string; depth?: number; idempotencyKey?: string },
   ) => Promise<unknown>;
   /** Phase (d).23 / V1.3 — convenience wrapper around peer.tool.invoke. */
   invokeTool?: (
     toolName: string,
     args?: Record<string, unknown>,
-    options?: { timeoutMs?: number; traceId?: string; depth?: number },
+    options?: { timeoutMs?: number; traceId?: string; depth?: number; idempotencyKey?: string },
   ) => Promise<{ tool: string; output: string; durationMs: number; truncated?: boolean }>;
   /** Phase (d).23 / V1.3 — streaming variant; onChunk fires for every peer:chunk frame. */
   invokeToolStream?: (
     toolName: string,
     args: Record<string, unknown>,
     onChunk: (delta: string) => void,
-    options?: { timeoutMs?: number; traceId?: string; depth?: number },
+    options?: { timeoutMs?: number; traceId?: string; depth?: number; idempotencyKey?: string },
   ) => Promise<{ tool: string; output: string; durationMs: number; truncated?: boolean }>;
   getLastSeen: () => { at: number | null; reason: string | null; ageMs: number | null };
   isStale: (thresholdMs?: number) => boolean;

@@ -13,9 +13,8 @@
  *   1. Tool guard: refuses if `CODEBUDDY_PEER_ROLE=leaf` (mirror of
  *      `fleet-listener.ts:668-674`).
  *   2. Wire guard: `FleetListener.request()` re-checks the role.
- *   3. Depth: we don't pass traceId/depth, so the dispatcher generates
- *      a fresh top-level chain. `peer.chat` is no-tools/no-history,
- *      so it physically cannot fan out.
+ *   3. Depth: FleetListener inherits the current inbound peer trace
+ *      and increments its depth. External calls start a fresh trace.
  *
  * Per-turn cap: rolling-window `MAX_PER_TURN` (env
  * `CODEBUDDY_PEER_DELEGATE_MAX_PER_TURN`, default 5; resets after 120s

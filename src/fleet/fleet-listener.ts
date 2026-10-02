@@ -46,6 +46,7 @@
  *   based on operational needs.
  */
 
+import { outgoingPeerCallOptions } from './peer-call-context.js';
 import { EventEmitter } from 'events';
 import { WebSocket } from 'ws';
 import { logger } from '../utils/logger.js';
@@ -710,8 +711,8 @@ export class FleetListener extends EventEmitter {
    *
    * Phase (d).14 — `traceId` and `depth` propagate the call chain so
    * the receiver can detect loops / enforce a depth cap. A handler
-   * fanning out to another peer should pass them from its received
-   * ctx: `request(m, p, { traceId: ctx.traceId, depth: ctx.depth + 1 })`.
+   * fanning out inherits the received context automatically. Explicit
+   * options cannot reset the inherited trace or depth.
    * Defaults: a fresh top-level call (no traceId, depth=0) lets the
    * server generate the traceId.
    *
@@ -723,7 +724,7 @@ export class FleetListener extends EventEmitter {
   async request(
     method: string,
     params: Record<string, unknown> = {},
-    options: { timeoutMs?: number; traceId?: string; depth?: number } = {},
+    options: { timeoutMs?: number; traceId?: string; depth?: number; idempotencyKey?: string } = {},
   ): Promise<unknown> {
     // Phase (d).14 — leaf role refuses outgoing requests entirely.
     if (process.env.CODEBUDDY_PEER_ROLE === 'leaf') {
@@ -733,6 +734,7 @@ export class FleetListener extends EventEmitter {
       (err as Error & { code?: string }).code = 'ROLE_LEAF';
       throw err;
     }
+    options = outgoingPeerCallOptions(options);
     if (!this.authenticated) {
       const err = new Error('peer.invoke NOT_AUTHENTICATED: listener is not authenticated');
       (err as Error & { code?: string }).code = 'NOT_AUTHENTICATED';
@@ -761,6 +763,7 @@ export class FleetListener extends EventEmitter {
       const frame: Record<string, unknown> = { id, method, params };
       if (options.traceId !== undefined) frame.traceId = options.traceId;
       if (options.depth !== undefined) frame.depth = options.depth;
+      if (options.idempotencyKey !== undefined) frame.idempotencyKey = options.idempotencyKey;
       this.send('peer:request', frame);
     });
   }
@@ -784,7 +787,7 @@ export class FleetListener extends EventEmitter {
     method: string,
     params: Record<string, unknown> = {},
     onChunk: (delta: string) => void,
-    options: { timeoutMs?: number; traceId?: string; depth?: number } = {},
+    options: { timeoutMs?: number; traceId?: string; depth?: number; idempotencyKey?: string } = {},
   ): Promise<unknown> {
     if (process.env.CODEBUDDY_PEER_ROLE === 'leaf') {
       const err = new Error(
@@ -793,6 +796,7 @@ export class FleetListener extends EventEmitter {
       (err as Error & { code?: string }).code = 'ROLE_LEAF';
       throw err;
     }
+    options = outgoingPeerCallOptions(options);
     if (!this.authenticated) {
       const err = new Error('peer.invoke NOT_AUTHENTICATED: listener is not authenticated');
       (err as Error & { code?: string }).code = 'NOT_AUTHENTICATED';
@@ -819,6 +823,7 @@ export class FleetListener extends EventEmitter {
       const frame: Record<string, unknown> = { id, method, params };
       if (options.traceId !== undefined) frame.traceId = options.traceId;
       if (options.depth !== undefined) frame.depth = options.depth;
+      if (options.idempotencyKey !== undefined) frame.idempotencyKey = options.idempotencyKey;
       this.send('peer:request', frame);
     });
   }
@@ -838,7 +843,7 @@ export class FleetListener extends EventEmitter {
   async invokeTool(
     toolName: string,
     args: Record<string, unknown> = {},
-    options: { timeoutMs?: number; traceId?: string; depth?: number } = {},
+    options: { timeoutMs?: number; traceId?: string; depth?: number; idempotencyKey?: string } = {},
   ): Promise<{ tool: string; output: string; durationMs: number; truncated?: boolean }> {
     const payload = await this.request(
       'peer.tool.invoke',
@@ -859,7 +864,7 @@ export class FleetListener extends EventEmitter {
     toolName: string,
     args: Record<string, unknown>,
     onChunk: (delta: string) => void,
-    options: { timeoutMs?: number; traceId?: string; depth?: number } = {},
+    options: { timeoutMs?: number; traceId?: string; depth?: number; idempotencyKey?: string } = {},
   ): Promise<{ tool: string; output: string; durationMs: number; truncated?: boolean }> {
     const payload = await this.requestStream(
       'peer.tool.invoke.stream',

@@ -16,7 +16,7 @@ import {
 
 export const DEFAULT_FLEET_MAX_TOKENS_PER_CALL = 4096;
 
-interface FleetUsage {
+export interface FleetUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
 }
@@ -121,9 +121,19 @@ export async function executeCostCappedFleetCall<T extends FleetCallResponse>(
       throw new Error(`FLEET_BUDGET_EXCEEDED: ${reason}`);
     }
 
-    const response = await input.invoke(maxTokens);
-    const tokensIn = validTokenCount(response.usage?.prompt_tokens) ?? estimatedTokensIn;
-    const tokensOut = validTokenCount(response.usage?.completion_tokens) ?? maxTokens;
+    let response: T | undefined;
+    let invocationError: unknown;
+    let failed = false;
+    try {
+      response = await input.invoke(maxTokens);
+    } catch (error) {
+      // A disconnected/failed stream can already have incurred model costs.
+      // Charge the reserved conservative estimate before releasing the gate.
+      failed = true;
+      invocationError = error;
+    }
+    const tokensIn = validTokenCount(response?.usage?.prompt_tokens) ?? estimatedTokensIn;
+    const tokensOut = validTokenCount(response?.usage?.completion_tokens) ?? maxTokens;
     const usd = calculateFleetCost(tokensIn, tokensOut, model, provider);
 
     try {
@@ -165,7 +175,8 @@ export async function executeCostCappedFleetCall<T extends FleetCallResponse>(
       tokensOut,
       remainingUsd,
     });
-    return response;
+    if (failed) throw invocationError;
+    return response as T;
   } finally {
     releaseGate?.();
   }
@@ -232,4 +243,14 @@ function nonNegativeNumberEnv(name: string, fallback: number): number {
     fallback,
   });
   return fallback;
+}
+
+/** Validate provider usage without trusting arbitrary streaming payload fields. */
+export function fleetStreamUsage(usage: unknown): FleetUsage | undefined {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const raw = usage as Record<string, unknown>;
+  return {
+    prompt_tokens: validTokenCount(raw.prompt_tokens),
+    completion_tokens: validTokenCount(raw.completion_tokens),
+  };
 }

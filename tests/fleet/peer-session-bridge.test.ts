@@ -758,6 +758,7 @@ describe('V1.2-saga — disk persistence', () => {
       path.join(storeTmpDir, 'sess_replay.json'),
       JSON.stringify({
         sessionId: 'sess_replay',
+        ownerId: 'connection:test-conn',
         systemPrompt: 'system',
         model: undefined,
         messages: [
@@ -968,7 +969,7 @@ describe('peer.chat-session.continue-stream', () => {
       providerResolved: 'openrouter',
     });
     expect(defaultClient.captured).toHaveLength(0);
-    expect(openRouterClient.captured[0]?.opts).toEqual({ model: 'openrouter/free' });
+    expect(openRouterClient.captured[0]?.opts).toEqual({ model: 'openrouter/free', maxTokens: 4096 });
   });
 
   it('returns session dispatchProfile policy metadata on streamed turns', async () => {

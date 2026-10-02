@@ -30,15 +30,15 @@
  * Idempotent (mirror of peer-chat-bridge): a second wire call is a no-op.
  */
 
-import type { CodeBuddyClient, ChatOptions } from '../codebuddy/client.js';
+import type { CodeBuddyClient } from '../codebuddy/client.js';
 import {
   normalizePeerChatProviderId,
   type PeerChatProviderId,
   type PeerChatProviderInfo,
 } from './peer-chat-client-factory.js';
 import { beginFleetWork } from './fleet-load.js';
-import { executeCostCappedFleetCall } from './fleet-cost-cap.js';
-import { registerPeerMethod, unregisterPeerMethod } from '../server/websocket/peer-rpc.js';
+import { executeCostCappedFleetCall, fleetStreamUsage } from './fleet-cost-cap.js';
+import { registerPeerMethod, unregisterPeerMethod, type PeerMethodContext } from '../server/websocket/peer-rpc.js';
 import {
   broadcastChatSessionEnd,
   broadcastChatSessionGoal,
@@ -91,6 +91,7 @@ interface ChatSessionMessage {
 
 interface ChatSession {
   sessionId: string;
+  ownerId?: string;
   systemPrompt: string;
   provider?: PeerChatProviderId;
   model?: string;
@@ -106,6 +107,7 @@ interface ChatSession {
   lastUsedAt: number;
   /** Promise chain for FIFO serialisation of concurrent `continue` calls. */
   pending: Promise<unknown>;
+  closing?: boolean;
 }
 
 const DEFAULT_SYSTEM_PROMPT =
@@ -121,6 +123,12 @@ const providerClients = new Map<PeerChatProviderId, {
   info: PeerChatProviderInfo;
 }>();
 let wired = false;
+
+function assertSessionOwner(session: ChatSession, ctx: PeerMethodContext): void {
+  if (ctx.scopes.includes('admin')) return;
+  if (session.ownerId && session.ownerId === (ctx.principalId ?? `connection:${ctx.connectionId}`)) return;
+  throw new Error('SESSION_FORBIDDEN: only the session creator or an admin may access this session');
+}
 
 function resolvePeerSessionProfile(params: Record<string, unknown>): {
   dispatchProfile?: FleetDispatchProfile;
@@ -322,6 +330,7 @@ async function purgeExpired(now: number, idleMs: number): Promise<void> {
 function snapshot(session: ChatSession): PersistedChatSession {
   return {
     sessionId: session.sessionId,
+    ownerId: session.ownerId,
     systemPrompt: session.systemPrompt,
     provider: session.provider,
     model: session.model,
@@ -362,6 +371,7 @@ async function evaluateSessionGoalAfterTurn(
   session: ChatSession,
   assistantText: string,
   baseClient: CodeBuddyClient,
+  ctx: PeerMethodContext,
 ): Promise<SessionGoalTurnReport | null> {
   const goal = session.goal;
   if (!goal || goal.status !== 'active') return null;
@@ -396,6 +406,21 @@ async function evaluateSessionGoalAfterTurn(
       lastResponse: assistantText,
       ...(criteria.length ? { subgoals: criteria } : {}),
       ...(config.judgeModel ? { model: config.judgeModel } : {}),
+      invokeChat: judgeClient ? (messages, tools, options) => {
+        const chatOptions = typeof options === 'string' ? { model: options } : options;
+        return executeCostCappedFleetCall({
+          peerId: ctx.principalId ?? ctx.connectionId,
+          // A separately resolved judge may use a different backend: charge conservatively.
+          provider: judgeClient === baseClient ? session.provider ?? cachedProviderInfo?.provider : undefined,
+          model: chatOptions?.model,
+          sagaId: ctx.traceId,
+          runId: session.sessionId,
+          requestedMaxTokens: chatOptions?.maxTokens,
+          inputText: messages.map(message => typeof message.content === 'string' ? message.content : JSON.stringify(message.content)).join('\n'),
+          client: judgeClient,
+          invoke: maxTokens => judgeClient.chat(messages, tools, { ...chatOptions, maxTokens }),
+        });
+      } : undefined,
       maxTokens: config.judgeMaxTokens,
       timeoutMs: config.judgeTimeoutMs,
     });
@@ -463,6 +488,7 @@ export async function wirePeerSessionBridge(
       const persistedProvider = normalizePeerChatProviderId(p.provider);
       sessions.set(p.sessionId, {
         sessionId: p.sessionId,
+        ownerId: p.ownerId,
         systemPrompt: p.systemPrompt,
         ...(persistedProvider ? { provider: persistedProvider } : {}),
         model: p.model,
@@ -505,6 +531,7 @@ export async function wirePeerSessionBridge(
     const sessionId = newSessionId();
     const session: ChatSession = {
       sessionId,
+      ownerId: ctx.principalId ?? `connection:${ctx.connectionId}`,
       systemPrompt,
       provider,
       model,
@@ -580,6 +607,8 @@ export async function wirePeerSessionBridge(
       broadcastChatSessionEnd({ sessionId, reason: 'expired' });
       throw new Error(`SESSION_EXPIRED: session "${sessionId}" idled past ${idleMs}ms`);
     }
+    assertSessionOwner(session, ctx);
+    if (session.closing) throw new Error('SESSION_CLOSING: session is ending');
     assertPeerSessionContinueProfile(params, session, 'peer.chat-session.continue');
     assertPeerSessionContinueProvider(params, session, 'peer.chat-session.continue');
 
@@ -648,7 +677,7 @@ export async function wirePeerSessionBridge(
       // mutate the session goal state, and report the verdict to the caller
       // (who drives the continuation). Runs BEFORE the disk flush so the
       // snapshot below persists the updated goal counters.
-      const goalReport = await evaluateSessionGoalAfterTurn(session, text, client);
+      const goalReport = await evaluateSessionGoalAfterTurn(session, text, client, ctx);
 
       // V1.2-saga — flush the new turn to disk before returning so a
       // crash mid-conversation can be replayed on next boot. Failure
@@ -727,6 +756,8 @@ export async function wirePeerSessionBridge(
       broadcastChatSessionEnd({ sessionId, reason: 'expired' });
       throw new Error(`SESSION_EXPIRED: session "${sessionId}" idled past ${idleMs}ms`);
     }
+    assertSessionOwner(session, ctx);
+    if (session.closing) throw new Error('SESSION_CLOSING: session is ending');
     assertPeerSessionContinueProfile(params, session, 'peer.chat-session.continue-stream');
     assertPeerSessionContinueProvider(params, session, 'peer.chat-session.continue-stream');
 
@@ -755,29 +786,40 @@ export async function wirePeerSessionBridge(
         { role: 'system' as const, content: session.systemPrompt },
         ...session.messages,
       ];
-      const chatOptions: ChatOptions | undefined = session.model
-        ? { model: session.model }
-        : undefined;
 
       const turnStartedAt = Date.now();
       let aggregate = '';
       let finishReason: string | null | undefined;
       let usage: unknown;
+      const doneLoad = beginFleetWork('peer.chat-session');
       try {
-        const stream = client.chatStream(requestMessages, undefined, chatOptions);
-        for await (const chunk of stream as AsyncIterable<{
-          choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>;
-          usage?: unknown;
-        }>) {
-          const delta = chunk?.choices?.[0]?.delta?.content ?? '';
-          if (delta) {
-            aggregate += delta;
-            ctx.emitChunk?.(delta);
-          }
-          const fr = chunk?.choices?.[0]?.finish_reason;
-          if (fr) finishReason = fr;
-          if (chunk?.usage) usage = chunk.usage;
-        }
+        await executeCostCappedFleetCall({
+          peerId: ctx.principalId ?? ctx.connectionId,
+          provider: selected.providerResolved ?? session.provider ?? cachedProviderInfo?.provider,
+          model: session.model,
+          sagaId: ctx.traceId,
+          runId: session.sessionId,
+          requestedMaxTokens: params.maxTokens,
+          inputText: requestMessages.map(message => message.content).join('\n'),
+          client,
+          invoke: async maxTokens => {
+            const stream = client.chatStream(requestMessages, undefined, { ...(session.model ? { model: session.model } : {}), maxTokens });
+            for await (const chunk of stream as AsyncIterable<{
+              choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>;
+              usage?: unknown;
+            }>) {
+              const delta = chunk?.choices?.[0]?.delta?.content ?? '';
+              if (delta) {
+                aggregate += delta;
+                ctx.emitChunk?.(delta);
+              }
+              const fr = chunk?.choices?.[0]?.finish_reason;
+              if (fr) finishReason = fr;
+              if (chunk?.usage) usage = chunk.usage;
+            }
+            return { usage: fleetStreamUsage(usage) };
+          },
+        });
       } catch (err) {
         // Mirror the non-streaming `continue` rollback: if the model
         // bailed before producing any answer we drop the user turn
@@ -797,13 +839,15 @@ export async function wirePeerSessionBridge(
           }
         }
         throw err;
+      } finally {
+        doneLoad();
       }
 
       session.messages.push({ role: 'assistant', content: aggregate });
       session.lastUsedAt = Date.now();
 
       // Goal Ralph-loop — same server-side judge as the non-streaming path.
-      const goalReport = await evaluateSessionGoalAfterTurn(session, aggregate, client);
+      const goalReport = await evaluateSessionGoalAfterTurn(session, aggregate, client, ctx);
 
       try {
         await getPeerSessionStore().save(snapshot(session));
@@ -888,6 +932,7 @@ export async function wirePeerSessionBridge(
       throw new Error(`SESSION_NOT_FOUND: no session with id "${sessionId}"`);
     }
 
+    assertSessionOwner(session, ctx);
     const persist = async (): Promise<void> => {
       try {
         await getPeerSessionStore().save(snapshot(session));
@@ -1027,6 +1072,12 @@ export async function wirePeerSessionBridge(
     const sessionId = typeof params.sessionId === 'string' ? params.sessionId : '';
     if (!sessionId) {
       throw new Error('peer.chat-session.end: sessionId is required (string)');
+    }
+    const session = sessions.get(sessionId);
+    if (session) assertSessionOwner(session, ctx);
+    if (session) {
+      session.closing = true;
+      await session.pending;
     }
     const closed = sessions.delete(sessionId);
     if (closed) {

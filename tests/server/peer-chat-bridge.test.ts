@@ -610,6 +610,7 @@ describe('peer-chat-bridge — Phase (d).15', () => {
         {
           id: 'dispatch-1',
           method: 'peer.dispatch',
+          traceId: 'trace-child',
           params: {
             id: 'run-review',
             prompt: 'Review this patch',
@@ -648,7 +649,7 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       const messages = chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
       expect(messages[0].content).toContain('Prioritize defects');
       expect(messages[0].content).toContain('Tool policy hint:');
-      expect(chat.mock.calls[0][2]).toEqual({ model: 'm-review' });
+      expect(chat.mock.calls[0][2]).toEqual({ model: 'm-review', maxTokens: 4096 });
 
       const status = await dispatchPeerRequest(
         {
