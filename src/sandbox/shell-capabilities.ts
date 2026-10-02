@@ -34,8 +34,14 @@ export function capabilityAllowsSegment(argv: string[], capabilities = shellCapa
   if (capabilities.has('tests') && ['ls', 'list', 'explain'].includes(operation ?? '')
     && args.every(arg => ['--json', '--all'].includes(arg) || /^--depth=\d+$/.test(arg)
       || /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(arg))) return true;
-  if (capabilities.has('tests') && (['--version', '-v', 'test'].includes(operation ?? '')
-    || (operation === 'run' && /^(?:test|build|lint|typecheck|check|verify|audit)(?:[-:]|$)/.test(args[0] ?? '')))) return true;
+  if (capabilities.has('tests') && ['--version', '-v'].includes(operation ?? '')) return args.length === 0;
+  if (capabilities.has('tests') && (operation === 'test'
+    || (operation === 'run' && /^(?:test|build|lint|typecheck|check|verify|audit)(?:[-:]|$)/.test(args[0] ?? '')))) {
+    const options = operation === 'run' ? args.slice(1) : args;
+    const separator = options.indexOf('--');
+    const npmOptions = separator < 0 ? options : options.slice(0, separator);
+    return npmOptions.every(arg => ['--silent', '-s', '--if-present', '--no-progress'].includes(arg));
+  }
   if (!capabilities.has('npm-registry')) return false;
   if (operation === 'audit') return args.every(arg => ['--json', '--omit=dev', '--production'].includes(arg));
   if (operation === 'pack') return args.length >= 1 && args.length <= 3

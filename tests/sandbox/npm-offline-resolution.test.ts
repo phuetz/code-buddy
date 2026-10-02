@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { assertNoLocalPackageSources, assertOpaqueLockEntriesUnchanged } from '../../src/sandbox/npm-offline-resolution.js';
 
-it.each(['file:/outside', 'link:/outside'])('refuse la source locale %s', spec => {
+it.each(['file:/outside', 'link:/outside', 'git+file:/outside'])('refuse la source locale %s', spec => {
   expect(() => assertNoLocalPackageSources({ dependencies: { dependency: spec } })).toThrow('file and link');
 });
 

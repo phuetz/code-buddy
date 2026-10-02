@@ -13,6 +13,24 @@ afterEach(() => {
 });
 
 describe.skipIf(process.platform !== 'linux')('lockfile B avec des sources externes déjà verrouillées', () => {
+  it.each(['file:/outside/package', 'git+file:/outside/package'])('refuse une source locale avant un audit hôte: %s', async spec => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'registry-audit-')); temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace'); const temporary = path.join(root, 'tmp');
+    fs.mkdirSync(workspace); fs.mkdirSync(temporary);
+    const manifest = { name: 'fixture', version: '1.0.0', dependencies: { outside: spec } };
+    fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify(manifest));
+    fs.writeFileSync(path.join(workspace, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: { '': manifest } }));
+    vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'npm-registry');
+    const broker = await startNpmRegistryBroker(workspace, temporary);
+    try {
+      const result = await new Promise<{ error: Error | null; stderr: string }>(resolve => execFile(process.execPath,
+        [path.join(broker.directory, 'npm-client.mjs'), 'audit', '--json'],
+        { cwd: workspace, encoding: 'utf8', timeout: 20000 }, (error, _stdout, stderr) => resolve({ error, stderr })));
+      expect(result.error).not.toBeNull();
+      expect(result.stderr).toContain('dependency specs');
+    } finally { await broker.close(); }
+  });
+
   it('résout sans scripts ni réseau étranger et garde les sources et workspaces inchangés', async () => {
     let foreignRequests = 0;
     const foreign = http.createServer((_request, response) => { foreignRequests++; response.end('forbidden'); });

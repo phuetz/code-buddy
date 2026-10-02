@@ -70,7 +70,7 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
           delete packageData.scripts;
           if (['view', 'pack'].includes(argv[0] ?? '')) delete packageData.workspaces;
           else assertWorkspacePatterns(packageData.workspaces);
-          if (!['audit', 'view', 'pack'].includes(argv[0] ?? '')) {
+          if (!['view', 'pack'].includes(argv[0] ?? '')) {
             assertNoLocalPackageSources(packageData);
             if (lockText) assertNoLocalPackageSources(JSON.parse(lockText));
           }

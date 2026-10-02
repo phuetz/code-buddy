@@ -25,7 +25,7 @@ export function assertOpaqueLockEntriesUnchanged(before: Lockfile, after: Lockfi
 export function assertNoLocalPackageSources(value: unknown): void {
   if (!value || typeof value !== 'object') return;
   const inspectSpecs = (spec: unknown): void => {
-    if (typeof spec === 'string' && /(?:^|\s)(?:file|link):/i.test(spec)) {
+    if (typeof spec === 'string' && /(?:^|\s)(?:file|link|git\+file):/i.test(spec)) {
       throw new Error('Registry lock resolution refuses file and link dependency specs');
     }
     if (spec && typeof spec === 'object') for (const nested of Object.values(spec)) inspectSpecs(nested);
@@ -42,10 +42,16 @@ export async function resolveNpmLockOffline(
   if (process.platform !== 'linux') throw new Error('Offline registry resolution requires the native Linux sandbox');
   const lockPath = path.join(scratch, 'package-lock.json');
   const before = fs.existsSync(lockPath) ? JSON.parse(fs.readFileSync(lockPath, 'utf8')) as Lockfile : {};
-  const nodePrefix = path.dirname(path.dirname(fs.realpathSync(process.execPath)));
-  if (nodePrefix === path.parse(nodePrefix).root) throw new Error('Node runtime prefix is too broad for offline resolution');
+  const nodeExecutable = fs.realpathSync(process.execPath);
+  const npmExecutable = fs.realpathSync(npmCli);
+  const npmRoot = path.dirname(path.dirname(npmExecutable));
+  if (npmRoot === path.parse(npmRoot).root
+    || JSON.parse(fs.readFileSync(path.join(npmRoot, 'package.json'), 'utf8')).name !== 'npm') {
+    throw new Error('Offline resolution requires the verified npm installation');
+  }
+  const runtimePaths = [nodeExecutable, npmRoot].filter(file => file !== '/usr' && !file.startsWith('/usr/'));
   const deadline = Date.now() + 120000;
-  const env = { PATH: path.dirname(process.execPath) + ':/usr/bin:/bin', HOME: scratch,
+  const env = { PATH: path.dirname(nodeExecutable) + ':/usr/bin:/bin', HOME: scratch,
     CI: 'true', NO_COLOR: '1', NPM_CONFIG_UPDATE_NOTIFIER: 'false' };
   const execute = (file: string, argv: string[], cwd = scratch) => new Promise<NpmCommandResult>((resolve, reject) => {
     execFile(file, argv, { cwd, env, encoding: 'utf8', timeout: Math.max(1, deadline - Date.now()),
@@ -58,9 +64,9 @@ export async function resolveNpmLockOffline(
   // handlers cannot reach credentials or a project script, even via file URLs.
   const sandbox = ['--die-with-parent', '--unshare-net', '--unshare-pid', '--ro-bind', '/usr', '/usr',
     '--ro-bind-try', '/lib', '/lib', '--ro-bind-try', '/lib64', '/lib64',
-    ...(nodePrefix === '/usr' ? [] : ['--ro-bind', nodePrefix, nodePrefix]),
-    '--symlink', 'usr/bin', '/bin', '--tmpfs', '/tmp', '--bind', scratch, scratch,
-    '--proc', '/proc', '--dev', '/dev', '--chdir', scratch, '--', process.execPath, npmCli];
+    '--symlink', 'usr/bin', '/bin', '--tmpfs', '/tmp',
+    ...runtimePaths.flatMap(file => ['--ro-bind', file, file]), '--bind', scratch, scratch,
+    '--proc', '/proc', '--dev', '/dev', '--chdir', scratch, '--', nodeExecutable, npmExecutable];
   const metadataDirectory = path.join(scratch, 'metadata'); fs.mkdirSync(metadataDirectory);
   const cache = path.join(scratch, 'cache'); const warmed = new Set<string>();
   while (Date.now() < deadline) {
