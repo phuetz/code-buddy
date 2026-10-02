@@ -46,7 +46,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `cli-session` — Saved sessions | Listez, recherchez et restaurez une session déjà enregistrée ; sa poursuite avec buddy --resume exige un fournisseur. | **Partiellement vérifiée** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/cli-session.md) ; [Raccordement](preuves/verification-statique.md#cli-session) |
 | `cli-user-model` — User preference model | Examinez un modèle structuré des préférences de travail. | **Testée localement** | [Trace réelle](preuves/p6-cli-user-model.log); [Maillons vérifiés](preuves/verification-statique.md#cli-user-model) |
 | `context-compaction` — Context compaction | Maintenez les longues conversations dans le budget de contexte du modèle. | **Testée localement** | [Trace réelle](preuves/p6-context-compaction.log); [Maillons vérifiés](preuves/verification-statique.md#context-compaction) |
-| `memory-ckg` — Collective knowledge graph | Rappelez des connaissances partagées par le graphe CKG. | **Testée localement** | [Trace réelle](preuves/p6-memory-ckg.log); [Maillons vérifiés](preuves/verification-statique.md#memory-ckg) |
+| `memory-ckg` — Collective knowledge graph | Mémorisez et rappelez des faits CKG ; sans embeddings opérationnels, rappel dégradé explicite par mots-clés. | **Testée localement** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/memory-ckg.md) ; [Raccordement](preuves/verification-statique.md#memory-ckg) |
 | `context-checkpoints` — Session checkpoints | Créez des points de contrôle et revenez sur les modifications de l’agent. | **Testée localement** | [Trace réelle](preuves/p7-context-checkpoints.log); [Maillons vérifiés](preuves/verification-statique.md#context-checkpoints) |
 
 ## Flotte
