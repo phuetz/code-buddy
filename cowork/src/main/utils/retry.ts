@@ -26,13 +26,15 @@ export async function withRetry<T>(
   let lastError: Error | undefined;
   let currentDelay = delayMs;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  const attempts = Math.max(1, maxRetries);
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       return await operation();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
-      if (attempt === maxRetries || !shouldRetry(lastError)) {
+      if (attempt === attempts || !shouldRetry(lastError)) {
         throw lastError;
       }
 
@@ -40,11 +42,11 @@ export async function withRetry<T>(
         onRetry(attempt, lastError);
       }
 
-      logWarn(`[Retry] Attempt ${attempt}/${maxRetries} failed, retrying in ${currentDelay}ms...`);
+      logWarn(`[Retry] Attempt ${attempt}/${attempts} failed, retrying in ${currentDelay}ms...`);
       await new Promise((resolve) => setTimeout(resolve, currentDelay));
       currentDelay = Math.min(currentDelay * backoffMultiplier, maxDelayMs);
     }
   }
 
-  throw lastError;
+  throw lastError || new Error('Operation failed to execute');
 }

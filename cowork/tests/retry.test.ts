@@ -85,4 +85,23 @@ describe('withRetry', () => {
     expect(delays).toEqual([100, 200]);
     vi.mocked(globalThis.setTimeout).mockRestore();
   });
+
+  it('executes operation exactly once when maxRetries is 0 and returns value', async () => {
+    const op = vi.fn().mockResolvedValue('ok');
+    const result = await withRetry(op, { maxRetries: 0 });
+    expect(result).toBe('ok');
+    expect(op).toHaveBeenCalledTimes(1);
+  });
+
+  it('executes operation exactly once when maxRetries is 0 and throws error', async () => {
+    const op = vi.fn().mockRejectedValue(new Error('boom'));
+    await expect(withRetry(op, { maxRetries: 0 })).rejects.toThrow('boom');
+    expect(op).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats negative maxRetries as 0', async () => {
+    const op = vi.fn().mockRejectedValue(new Error('boom'));
+    await expect(withRetry(op, { maxRetries: -2 })).rejects.toThrow('boom');
+    expect(op).toHaveBeenCalledTimes(1);
+  });
 });
