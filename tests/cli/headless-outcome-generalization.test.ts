@@ -286,3 +286,13 @@ it('keeps the outcome predicate out of the asserted executable object', () => {
   expect(evaluateHeadlessTaskOutcome('Explain', [shell('ls .'), answer(content)]).exitCode).toBe(4);
   expect(evaluateHeadlessTaskOutcome('Explain', [answer(content)]).exitCode).toBe(4);
 });
+
+it.each([
+  'Describe the code. Follow AGENTS.md and recalibrate it.',
+  'Describe the code. Use the reading layout and retool it.',
+  'Describe the code. Follow the formatting rule in output.js.',
+  'Describe the code. Follow the reading rule by retooling it.',
+])('does not let presentation instructions conceal an unfamiliar action: %s', prompt => {
+  expect(requestsRepositoryAction(prompt)).toBe(true);
+  expect(evaluateHeadlessTaskOutcome(prompt, [answer('Done.')]).exitCode).not.toBe(0);
+});

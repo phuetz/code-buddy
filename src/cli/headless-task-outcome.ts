@@ -34,9 +34,11 @@ function repositoryActionClauses(prompt: string): string[] {
   const boundaries = new RegExp('[?!;\\n]\\s*|\\.(?=\\s|$)\\s*|\\b(?:then|puis|ensuite|but|mais)\\s+|(?:,\\s*|\\b(?:and|et)\\s+)(?=(?:please\\s+)?' + operational + '\\b)', 'g');
   const clauses = unquoted.split(boundaries).map(clause => clause.trim().replace(/^(?:please|then|puis|ensuite|and|et)\s+/, '')).filter(Boolean);
   const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|show|list|what|where|which|count|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|montre|liste|quel|quelle|quels|quelles|ou|combien|comment|pourquoi|reponds|dis|traduis)\b/;
-  const outputConstraint = (clause: string) => {
-    if (/^(?:follow|respect|obey|applique|respecte|suis)\b/.test(clause)
-      && /\b(?:format|rules?|instructions?|agents|reading|lecture|consignes?)\b/.test(clause)) return true;
+  const outputConstraint = (clause: string): boolean => {
+    // An output rule cannot exempt an independent, unfamiliar operation.
+    const conjuncts = clause.split(/\s+\b(?:and|et)\b\s+/);
+    if (conjuncts.length > 1) return conjuncts.every(part => outputConstraint(part)
+      || informational.test(part) || /^(?:do not|don't|never|ne\b.*\bpas)\b/.test(part));
     if (/^(?:no|without)\s+(?:extra\s+)?(?:commentary|chatter|prose|explanation)(?:\s+(?:afterwards|afterward|please))?$/.test(clause)) return true;
     const outputVerb = /\b(?:write|use|output|return|ecris|utilise|renvoie|affiche)\b/.test(clause);
     const outputObject = /\b(?:answers?|repl(?:y|ies)|response|text|sentence|names?|values?|numerals?|numbers?|json|reponse|texte|phrase|nom|valeur|chiffre)\b/.test(clause);
@@ -46,6 +48,9 @@ function repositoryActionClauses(prompt: string): string[] {
     const presentation = /\b(?:format|layout|header|en-tete|presentation)\b/.test(clause);
     const presentationTarget = clause.replace(/\bagents\.md\b/g, 'agents');
     const writesTarget = /\b(?:file_target|files?|folders?|director(?:y|ies)|source|module|script|function|implementation|parameters?|code|fichiers?|dossiers?|parametres?)\b|[\w/-]+\.[a-z0-9]+\b/.test(presentationTarget);
+    if (/^(?:follow|respect|obey|applique|respecte|suis)\b/.test(clause)
+      && /\b(?:format|rules?|instructions?|agents|reading|lecture|consignes?)\b/.test(clause)
+      && !writesTarget && !/\bby\b/.test(clause)) return true;
     if (/^(?:use|utilise)\b/.test(clause) && presentation && !writesTarget) return true;
     return outputVerb && (outputObject || /\b(?:only|alone|just)\b/.test(clause)) && !physical;
   };
