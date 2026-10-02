@@ -6,6 +6,7 @@
  * to the formal ITool interface for use with the FormalToolRegistry.
  */
 
+import { BASH_TIMEOUT_DESCRIPTION } from '../bash/timeout-guidance.js';
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
 import { BashTool } from '../index.js';
@@ -77,7 +78,7 @@ export class BashExecuteTool implements ITool {
           },
           timeout: {
             type: 'number',
-            description: 'Command timeout in milliseconds (default: 30000)',
+            description: BASH_TIMEOUT_DESCRIPTION,
             default: 30000,
           },
         },

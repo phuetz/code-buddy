@@ -8,6 +8,7 @@
  * - Morph fast apply (conditional)
  */
 
+import { BASH_TIMEOUT_DESCRIPTION } from '../../tools/bash/timeout-guidance.js';
 import type { CodeBuddyTool } from './types.js';
 import {
   getShellCommandParamDescription,
@@ -215,6 +216,10 @@ export const BASH_TOOL: CodeBuddyTool = {
         command: {
           type: "string",
           description: getShellCommandParamDescription(),
+        },
+        timeout: {
+          type: 'number',
+          description: BASH_TIMEOUT_DESCRIPTION,
         },
       },
       required: ["command"],

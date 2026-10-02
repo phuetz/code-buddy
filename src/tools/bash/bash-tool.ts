@@ -13,6 +13,7 @@
  * Self-healing can be disabled via --no-self-heal flag.
  */
 
+import { formatCommandTimeout } from './timeout-guidance.js';
 import { spawn, SpawnOptions, ChildProcess } from 'child_process';
 import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -464,7 +465,7 @@ export class BashTool implements Disposable {
           if (sandboxed.result.timedOut) {
             return {
               success: false,
-              error: `Command timed out after ${timeout}ms\n[sandbox:${sandboxed.result.backend}]`,
+              error: formatCommandTimeout(timeout, sandboxed.result.backend),
               ...(sandboxed.result.stdout ? { output: sandboxed.result.stdout } : {}),
             };
           }

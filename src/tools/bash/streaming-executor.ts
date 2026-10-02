@@ -5,6 +5,8 @@
  * as they arrive from the spawned process.
  */
 
+import { formatCommandTimeout } from './timeout-guidance.js';
+import { bashToolSchemas, validateWithSchema } from '../../utils/input-validation/index.js';
 import { spawn } from 'child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { BoundedOutput } from '../../utils/bounded-output.js';
@@ -49,6 +51,10 @@ export async function* executeStreaming(
 ): AsyncGenerator<string, ToolResult, undefined> {
   if (signal?.aborted) {
     return { success: false, error: 'Command aborted by user' };
+  }
+  const schemaValidation = validateWithSchema(bashToolSchemas.execute, { command, timeout }, 'execute');
+  if (!schemaValidation.valid) {
+    return { success: false, error: `Invalid input: ${schemaValidation.error}` };
   }
   // Validate command (static checks)
   const validation = validateCommand(command);
@@ -106,7 +112,7 @@ export async function* executeStreaming(
       const { stdout, stderr, exitCode, backend, timedOut } = sandboxed.result;
       if (timedOut) {
         if (stdout) yield stdout;
-        return { success: false, error: `Command timed out after ${timeout}ms\n[sandbox:${backend}]`, output: stdout };
+        return { success: false, error: formatCommandTimeout(timeout, backend), output: stdout };
       }
       if (exitCode === 0 || !isSandboxBoundaryFailure(sandboxed.result)) {
         if (stdout) yield stdout;
@@ -230,7 +236,7 @@ export async function* executeStreaming(
     }, 250);
     notify();
   };
-  const timer = setTimeout(() => stop(`Command timed out after ${timeout}ms`), timeout);
+  const timer = setTimeout(() => stop(formatCommandTimeout(timeout)), timeout);
   const onAbort = (): void => stop('Command aborted by user');
   const onError = (error: Error): void => {
     failure ??= `Command failed to start: ${error.message}`;
