@@ -13,6 +13,7 @@
  * - Key Information Preservation
  */
 
+import { CompactionSafeguard, structuredCompactionSummary, type CompactionSafeguardState } from './compaction-safeguard.js';
 import { truncateOutput } from '../utils/bounded-output.js';
 import { createHash } from 'node:crypto';
 import * as fs from 'fs';
@@ -230,6 +231,7 @@ export interface ContextMemoryMetrics {
 
 /** Mutable, conversation-owned state needed when one host agent serves many sessions. */
 export interface ContextManagerConversationState {
+  compactionSafeguard?: CompactionSafeguardState;
   summaries: Array<{
     content: string;
     tokenCount: number;
@@ -259,6 +261,7 @@ export class ContextManagerV2 {
   private config: ContextManagerConfig;
   private tokenCounter: TokenCounter;
   private summaries: ConversationSummary[] = [];
+  private compactionSafeguard?: CompactionSafeguard;
   private systemMessage: CodeBuddyMessage | null = null;
   /** Track which warning thresholds have been triggered (to avoid duplicate warnings) */
   private triggeredWarnings: Set<number> = new Set();
@@ -416,11 +419,41 @@ export class ContextManagerV2 {
       this.config.workingDirectory ?? process.cwd(),
     ).runPreCompact(preCompact);
 
+    const compress = (source: CodeBuddyMessage[]): CodeBuddyMessage[] =>
+      this.config.enableEnhancedCompression && this.enhancedCompressor
+        ? this.prepareMessagesEnhanced(source, this.getStats(source))
+        : this.prepareMessagesLegacy(source, this.getStats(source));
     let compacted: CodeBuddyMessage[];
-    if (this.config.enableEnhancedCompression && this.enhancedCompressor) {
-      compacted = this.prepareMessagesEnhanced(messages, stats);
+    if (process.env.CODEBUDDY_COMPACTION_SAFEGUARD === 'true') {
+      if (!this.compactionSafeguard) {
+        const rawLimit = Number(process.env.CODEBUDDY_COMPACTION_FAILURE_LIMIT);
+        const limit = Number.isInteger(rawLimit) && rawLimit >= 1 && rawLimit <= 10 ? rawLimit : 2;
+        this.compactionSafeguard = new CompactionSafeguard(limit);
+      }
+      const beforeAttempts = this.exportConversationState();
+      compacted = this.compactionSafeguard.protect(messages,
+        (required, structured) => {
+          this.importConversationState(beforeAttempts, false);
+          if (!structured) return compress(messages);
+          // An extractive retry keeps exact facts; a paraphrase cannot prove that
+          // an identifier or a pending decision survived.
+          const source: CodeBuddyMessage[] = [
+            { role: 'system', content: structuredCompactionSummary(required) }, ...messages,
+          ];
+          return compress(source);
+        },
+        () => {
+          this.importConversationState(beforeAttempts, false);
+          const previous = this.config.enableSummarization;
+          this.config.enableSummarization = false;
+          try { return this.prepareMessagesLegacy(messages, stats); }
+          finally { this.config.enableSummarization = previous; }
+        },
+        candidate => this.countTokens(candidate) <= this.effectiveLimit,
+      );
+      logger.debug('Compaction safeguard', this.compactionSafeguard.getStats());
     } else {
-      compacted = this.prepareMessagesLegacy(messages, stats);
+      compacted = compress(messages);
     }
     compacted = this.injectPreservedContext(compacted, preservedContext);
 
@@ -1290,6 +1323,7 @@ export class ContextManagerV2 {
    */
   exportConversationState(): ContextManagerConversationState {
     return structuredClone({
+      ...(this.compactionSafeguard ? { compactionSafeguard: this.compactionSafeguard.exportState() } : {}),
       summaries: this.summaries,
       systemMessage: this.systemMessage,
       triggeredWarnings: [...this.triggeredWarnings],
@@ -1306,8 +1340,13 @@ export class ContextManagerV2 {
   }
 
   /** Restore a logical conversation and always invalidate derived token stats. */
-  importConversationState(state: ContextManagerConversationState): void {
+  importConversationState(state: ContextManagerConversationState, restoreSafeguard = true): void {
     const cloned = structuredClone(state);
+    if (restoreSafeguard) {
+      this.compactionSafeguard = cloned.compactionSafeguard
+        ? CompactionSafeguard.fromState(cloned.compactionSafeguard)
+        : undefined;
+    }
     this.summaries = cloned.summaries;
     this.systemMessage = cloned.systemMessage;
     this.triggeredWarnings = new Set(cloned.triggeredWarnings);
@@ -1392,15 +1431,19 @@ export class ContextManagerV2 {
     this.stopPeriodicSnapshot();
     this.tokenCounter.dispose();
     this.summaries = [];
+    this.compactionSafeguard = undefined;
     this.triggeredWarnings.clear();
     this.lastTokenCount = 0;
     this.lastEnhancedResult = null;
     this.enhancedCompressor?.clearArchives();
   }
 
-  /**
-   * Get last token count (useful for tracking auto-compact effectiveness)
-   */
+  /** Inspect opt-in rejection/retry/fallback counters without transcript content. */
+  getCompactionSafeguardStats(): ReturnType<CompactionSafeguard['getStats']> | null {
+    return this.compactionSafeguard?.getStats() ?? null;
+  }
+
+  /** Get last token count (useful for tracking auto-compact effectiveness). */
   getLastTokenCount(): number {
     return this.lastTokenCount;
   }
