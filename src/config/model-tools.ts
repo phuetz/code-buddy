@@ -1383,11 +1383,15 @@ function applyRuntimeContextWindow(
  * system-prompt budget alike). Read at call time, never cached, so a test or a
  * wrapper can set it after the first lookup.
  */
-function applyEnvContextOverride(config: ModelToolConfig): ModelToolConfig {
+function applyEnvContextOverride(config: ModelToolConfig, modelName: string): ModelToolConfig {
   const envMaxContext = Number(process.env.CODEBUDDY_MAX_CONTEXT);
-  if (!Number.isFinite(envMaxContext) || envMaxContext <= 0) return config;
-  const contextWindow = Math.floor(envMaxContext);
-  return contextWindow === config.contextWindow ? config : { ...config, contextWindow };
+  const contextWindow = Number.isFinite(envMaxContext) && envMaxContext > 0
+    ? Math.floor(envMaxContext) : config.contextWindow;
+  const local = _runtimeContextWindows.get(modelCacheKey(modelName))?.source === 'local' || (Number.isFinite(envMaxContext) && envMaxContext > 0);
+  const maxOutputTokens = contextWindow === undefined || config.maxOutputTokens === undefined
+    ? config.maxOutputTokens : Math.max(1, Math.min(config.maxOutputTokens, local ? Math.floor(contextWindow / 4) : contextWindow));
+  return contextWindow === config.contextWindow && maxOutputTokens === config.maxOutputTokens
+    ? config : { ...config, contextWindow, maxOutputTokens };
 }
 
 /**
@@ -1487,7 +1491,7 @@ export function getModelToolConfig(
 ): ModelToolConfig {
   // Use cache for default config lookups (hot path)
   if (!customConfigs && _configCache.has(modelName)) {
-    return applyEnvContextOverride(applyCatalogueOverlay(modelName, _configCache.get(modelName)!));
+    return applyEnvContextOverride(applyCatalogueOverlay(modelName, _configCache.get(modelName)!), modelName);
   }
 
   const configs = [...(customConfigs || []), ...DEFAULT_MODEL_CONFIGS];
@@ -1500,7 +1504,7 @@ export function getModelToolConfig(
     });
     const resolved = applyRuntimeContextWindow(modelName, match.config, match.byFamily);
     if (!customConfigs) _configCache.set(modelName, resolved);
-    return applyEnvContextOverride(applyCatalogueOverlay(modelName, resolved));
+    return applyEnvContextOverride(applyCatalogueOverlay(modelName, resolved), modelName);
   }
 
   // Permissive fallback
@@ -1515,7 +1519,7 @@ export function getModelToolConfig(
     patchFormat: 'search_replace',
   };
   if (!customConfigs) _configCache.set(modelName, fallback);
-  return applyEnvContextOverride(applyCatalogueOverlay(modelName, fallback));
+  return applyEnvContextOverride(applyCatalogueOverlay(modelName, fallback), modelName);
 }
 
 // ─── Model strengths (single source of truth) ───────────────────────

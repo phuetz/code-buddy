@@ -311,7 +311,10 @@ export function toOllamaNativeRequest(
 ): Record<string, unknown> {
   const options: Record<string, unknown> = {};
   if (numCtx !== undefined) options.num_ctx = numCtx;
-  if (typeof payload.max_tokens === 'number') options.num_predict = payload.max_tokens;
+  if (typeof payload.max_tokens === 'number') {
+    options.num_predict = numCtx === undefined ? payload.max_tokens
+      : Math.max(1, Math.min(payload.max_tokens, Math.floor(numCtx / 4)));
+  }
   if (typeof payload.temperature === 'number') options.temperature = payload.temperature;
   if (typeof payload.top_p === 'number') options.top_p = payload.top_p;
   if (payload.stop !== undefined) options.stop = Array.isArray(payload.stop) ? payload.stop : [payload.stop];

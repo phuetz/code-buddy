@@ -267,6 +267,7 @@ export class OpenAICompatProvider implements Provider {
   private _promptCacheHits: number = 0;
   private _promptCacheMisses: number = 0;
   private readonly payloadScopeId = randomUUID();
+  private lastResolvedProfile = '';
 
   /**
    * Models known to support function calling / tool use.
@@ -757,6 +758,14 @@ export class OpenAICompatProvider implements Provider {
       const budget = budgetFinalPayload(openAiPayload, window, scope ?? { workDir: process.cwd(), sessionId: this.payloadScopeId });
       openAiPayload = budget.payload;
       payload = openAiPayload as unknown as typeof payload;
+      const profile = { model: openAiPayload.model, contextWindow: window, outputReserveTokens: budget.outputTokens,
+        safetyReserveTokens: budget.safetyTokens, toolSchemaTokens: Math.ceil(Buffer.byteLength(JSON.stringify(openAiPayload.tools ?? [])) / 3),
+        inputBudgetTokens: window - budget.outputTokens - budget.safetyTokens };
+      const signature = JSON.stringify(profile);
+      if (this.lastResolvedProfile !== signature) {
+        logger.info('Resolved runtime profile', profile);
+        this.lastResolvedProfile = signature;
+      }
       logger.debug('Final payload budget', { model: openAiPayload.model, window, beforeTokens: budget.beforeTokens,
         inputTokens: budget.inputTokens, outputTokens: budget.outputTokens, safetyTokens: budget.safetyTokens,
         recoveryIdentifier: budget.identifier });

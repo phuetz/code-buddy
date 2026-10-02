@@ -475,7 +475,10 @@ export async function primeLocalRuntimeModelConfig(
     probeCache.set(cacheKey, pending);
   }
   const detected = await pending;
-  const cap = detected?.runtime === 'ollama' ? readDoctorLocalContextCap(options.model) : undefined;
+  const explicitWindow = Number(process.env.CODEBUDDY_MAX_CONTEXT);
+  const cap = detected?.runtime === 'ollama'
+    ? readDoctorLocalContextCap(options.model) ?? (Number.isFinite(explicitWindow) && explicitWindow > 0 ? undefined : 32768)
+    : undefined;
   const info = detected && cap !== undefined
     ? { ...detected, contextWindow: Math.min(detected.contextWindow, cap) }
     : detected;

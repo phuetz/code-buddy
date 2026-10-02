@@ -848,6 +848,10 @@ Look at the screenshot and find the element matching the user's intent. Output o
         apiKey,
       });
       if (!runtime) return;
+      const profile = getModelToolConfig(modelName);
+      logger.info('Resolved model profile before first turn', { model: modelName, runtime: runtime.runtime,
+        advertisedContextWindow: runtime.advertisedContextWindow, servedContextWindow: runtime.servedContextWindow,
+        contextWindow: profile.contextWindow, outputReserveTokens: profile.maxOutputTokens, safetyReserveTokens: 512 });
 
       // CODEBUDDY_MAX_CONTEXT is an explicit user override and therefore wins
       // over discovery. Otherwise, refresh the manager built synchronously in
@@ -862,7 +866,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
         autoCompactThreshold?: number;
       } = {
         maxContextTokens: contextWindow,
-        responseReserveTokens: Math.floor(contextWindow * 0.125),
+        responseReserveTokens: getModelToolConfig(modelName).maxOutputTokens ?? Math.floor(contextWindow / 4),
       };
       if (this.explicitAutoCompactTokens === undefined) {
         contextPatch.autoCompactThreshold = Math.min(200_000, contextWindow);

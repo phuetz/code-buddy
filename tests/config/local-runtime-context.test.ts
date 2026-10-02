@@ -220,7 +220,8 @@ describe('synchronous config cache priming', () => {
     await primeLocalRuntimeModelConfig(options);
     await primeLocalRuntimeModelConfig(options);
     expect(fetchImpl).toHaveBeenCalledTimes(2); // `/api/show` + `/api/ps`, once each
-    expect(getModelToolConfig(options.model).contextWindow).toBe(65536);
+    expect(getModelToolConfig(options.model).contextWindow).toBe(32768); // bounded automatic Ollama profile
+    expect(getModelToolConfig(options.model).maxOutputTokens).toBeLessThanOrEqual(8192);
   });
 });
 
