@@ -32,6 +32,8 @@ describe.sequential('capacité headless accordée par opérateur', () => {
     expect((await evaluateShellExecution('npm audit --json', cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('npm view undici@6.29.0 dependencies', cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('npm view undici dist-tags --json', cwd)).action).toBe('sandbox');
+    expect((await evaluateShellExecution('npm pack npm@11.21.0 --silent', cwd)).action).toBe('sandbox');
+    expect((await evaluateShellExecution('npm pack https://example.invalid/archive.tgz', cwd)).action).not.toBe('sandbox');
     expect((await evaluateShellExecution('npm ls undici --json', cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('node -e "console.log(1)"\necho metadata\nnpm ls undici', cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('npm audit --json\ncurl https://example.invalid', cwd)).action).not.toBe('sandbox');

@@ -23,6 +23,9 @@ export function capabilityAllowsSegment(argv: string[], capabilities = shellCapa
     || (operation === 'run' && /^(?:test|build|lint|typecheck|check|verify|audit)(?:[-:]|$)/.test(args[0] ?? '')))) return true;
   if (!capabilities.has('npm-registry')) return false;
   if (operation === 'audit') return args.every(arg => ['--json', '--omit=dev', '--production'].includes(arg));
+  if (operation === 'pack') return args.length >= 1 && args.length <= 3
+    && /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(args[0] ?? '')
+    && args.slice(1).every(arg => ['--json', '--silent'].includes(arg));
   if (operation === 'view') return args.length >= 1 && args.length <= 3
     && /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(args[0] ?? '')
     && args.slice(1).every(arg => arg === '--json' || /^[a-z][a-z0-9_.-]*$/i.test(arg));

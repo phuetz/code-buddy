@@ -17,7 +17,9 @@ Les refus explicites et les règles personnalisées restent prioritaires.
   sandbox garde les configurations, hooks et références distantes en lecture
   seule. Les commandes de publication et de réécriture restent contrôlées.
 - `npm-registry` donne accès à `npm audit`, `npm view` (versions et champs de métadonnées) et
-  `npm install|update --package-lock-only`. Une passerelle Unix lance le npm
+  `npm install|update --package-lock-only`. `npm pack <paquet-registre>` permet
+  d’inspecter un paquet embarquant ses dépendances : scripts désactivés, archive
+  unique de taille bornée dans `$TMPDIR`, sans écraser un fichier existant. Une passerelle Unix lance le npm
   de l’installation Node dans un répertoire privé, avec registre fixe,
   scripts désactivés, sans configuration utilisateur ni identifiants. Les
   résolutions de lock refusent les sources Git, fichiers et URL externes.

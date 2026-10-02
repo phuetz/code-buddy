@@ -58,7 +58,7 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
         }
         const argv: unknown = JSON.parse(Buffer.concat(parts).toString());
         if (!Array.isArray(argv) || argv.length > 32 || !argv.every(arg => typeof arg === 'string')
-          || !['audit', 'view', 'install', 'update'].includes(argv[0] ?? '')
+          || !['audit', 'view', 'pack', 'install', 'update'].includes(argv[0] ?? '')
           || !capabilityAllowsSegment(['npm', ...argv])) throw new Error('Registry operation not granted');
         const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-registry-'));
         try {
@@ -74,7 +74,7 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
           const packageData = JSON.parse(packageText) as Record<string, unknown>;
           // npm install is allowed to resolve metadata, never to execute scripts.
           delete packageData.scripts; delete packageData.workspaces;
-          if (argv[0] !== 'audit' && argv[0] !== 'view') {
+          if (!['audit', 'view', 'pack'].includes(argv[0] ?? '')) {
             assertRegistrySpecs(packageData);
             if (lockText) assertRegistrySpecs(JSON.parse(lockText));
           }
@@ -99,6 +99,16 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
             }
             fs.writeFileSync(lockPath, fs.readFileSync(path.join(scratch, 'package-lock.json')));
           }
+          if (result.exitCode === 0 && argv[0] === 'pack') {
+            const archives = fs.readdirSync(scratch).filter(file => file.endsWith('.tgz'));
+            if (archives.length !== 1) throw new Error('Registry pack must produce exactly one archive');
+            const filename = archives[0]!;
+            const archive = path.join(scratch, filename);
+            if (!/^[a-z0-9._-]+\.tgz$/i.test(filename) || !fs.lstatSync(archive).isFile()
+              || fs.statSync(archive).size > 64 * 1024 * 1024) throw new Error('Registry archive is invalid or too large');
+            // A downloaded artifact stays in the operator-granted session scratch.
+            fs.copyFileSync(archive, path.join(temporary, filename), fs.constants.COPYFILE_EXCL);
+          }
           response.setHeader('content-type', 'application/json'); response.end(JSON.stringify(result));
         } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
       } catch (error) {
@@ -114,16 +124,16 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
   fs.writeFileSync(client, `import http from 'node:http';
 import {spawn} from 'node:child_process';
 const argv=process.argv.slice(2);
-if (!['audit','view','install','update'].includes(argv[0] ?? '')) {
+if (!['audit','view','pack','install','update'].includes(argv[0] ?? '')) {
  const child=spawn(${JSON.stringify(process.execPath)},[${JSON.stringify(npmCli)},...argv],{stdio:'inherit'});
- child.on('exit',(code)=>process.exit(code??1));child.on('error',(error)=>{process.stderr.write(error.message);process.exit(1)});
+ child.on('close',(code)=>{process.exitCode=code??1});child.on('error',(error)=>{process.stderr.write(error.message);process.exitCode=1});
 } else {
  const request=http.request({socketPath:${JSON.stringify(socket)},path:'/npm',method:'POST'},response=>{
  let text='';response.on('data',part=>text+=part);response.on('end',()=>{
- try {const result=JSON.parse(text);process.stdout.write(result.stdout);process.stderr.write(result.stderr);process.exit(result.exitCode)}
- catch(error){process.stderr.write(error.message);process.exit(1)}
+ try {const result=JSON.parse(text);process.stdout.write(result.stdout);process.stderr.write(result.stderr);process.exitCode=result.exitCode}
+ catch(error){process.stderr.write(error.message);process.exitCode=1}
  });});
- request.on('error',error=>{process.stderr.write(error.message);process.exit(1)});request.end(JSON.stringify(argv));
+ request.on('error',error=>{process.stderr.write(error.message);process.exitCode=1});request.end(JSON.stringify(argv));
 }
 `);
   fs.writeFileSync(path.join(directory, 'npm'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(client)} "$@"\n`, { mode: 0o755 });
