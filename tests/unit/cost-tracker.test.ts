@@ -944,3 +944,19 @@ describe('CostTracker', () => {
     });
   });
 });
+
+
+describe('tarification du transport Ollama vérifié, indépendamment du nom', () => {
+  it('ne facture pas les tokens du modèle local non catalogué du replay B', () => {
+    const tracker = new CostTracker({ useSQLite: false, trackHistory: false });
+    try {
+      const local = { billing: 'local' as const };
+      expect(tracker.calculateCost(17057, 8192, 'ornith-1.5:35b', 0, undefined, local)).toBe(0);
+      expect(tracker.calculateCostExtended(17057, 8192, 'ornith-1.5:35b', 0, undefined, local)).toMatchObject({ total: 0, billing: 'local', pricing: 'local' });
+      expect(tracker.recordUsage(17057, 8192, 'ornith-1.5:35b', local).cost).toBe(0);
+      expect(tracker.getReport().sessionCost).toBe(0);
+      // Same name through an unverified/paid transport keeps its historical pricing.
+      expect(tracker.calculateCost(17057, 8192, 'ornith-1.5:35b')).toBeGreaterThan(0);
+    } finally { tracker.dispose(); }
+  });
+});

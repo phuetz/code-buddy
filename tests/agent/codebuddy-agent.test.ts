@@ -575,6 +575,38 @@ describe('CodeBuddyAgent', () => {
         .toBeGreaterThan(manager.updateConfig.mock.invocationCallOrder[0]);
     });
 
+    it('applique la facturation locale vérifiée au budget et retire cet accord au changement de cible', async () => {
+      const baseURL = 'http://127.0.0.1:11436/v1';
+      globalThis.fetch = jest.fn().mockImplementation(async (input: string | URL | Request) => ({
+        ok: true,
+        json: async () => String(input).endsWith('/api/show')
+          ? { model_info: { 'general.parameter_count': 35000000000, 'test.context_length': 32768 } }
+          : { models: [] },
+      })) as unknown as typeof fetch;
+      mockGetCurrentModel.mockReturnValue('ornith-1.5:35b');
+      agent = new CodeBuddyAgent('ollama', baseURL, 'ornith-1.5:35b');
+      await agent.systemPromptReady;
+      const internal = agent as unknown as {
+        codebuddyClient: { getCurrentBaseUrl: () => string };
+        costTracker: { calculateCost: jest.Mock; recordUsage: jest.Mock };
+        recordSessionCost: (input: number, output: number) => void;
+        estimateSessionCostAfter: (input: number, output: number) => number;
+      };
+      internal.codebuddyClient.getCurrentBaseUrl = () => baseURL;
+      internal.recordSessionCost(17057, 8192);
+      expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', 0, undefined, { billing: 'local' });
+      expect(internal.costTracker.recordUsage).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', { billing: 'local' });
+      internal.estimateSessionCostAfter(17057, 8192);
+      expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', 0, undefined, { billing: 'local' });
+      internal.codebuddyClient.getCurrentBaseUrl = () => 'https://paid.example/v1';
+      internal.recordSessionCost(17057, 8192);
+      expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', 0, undefined);
+      internal.codebuddyClient.getCurrentBaseUrl = () => baseURL;
+      mockGetCurrentModel.mockReturnValue('other-model');
+      internal.recordSessionCost(17057, 8192);
+      expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'other-model', 0, undefined);
+    });
+
     it('keeps agent startup fail-open when a local runtime is unreachable', async () => {
       globalThis.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED')) as typeof fetch;
       agent = new CodeBuddyAgent(

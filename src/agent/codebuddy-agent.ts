@@ -836,6 +836,17 @@ Look at the screenshot and find the element matching the user's intent. Output o
     }
   }
 
+  private verifiedLocalBillingTarget?: { model: string; baseURL: string };
+
+  private getVerifiedLocalBilling(): import('../utils/cost-tracker.js').VerifiedLocalBilling | undefined {
+    const target = this.verifiedLocalBillingTarget;
+    // Match the effective endpoint too: model changes and provider failover
+    // must never inherit free billing from an earlier local runtime.
+    return target && this.codebuddyClient.getCurrentModel() === target.model
+      && this.codebuddyClient.getCurrentBaseUrl?.() === target.baseURL
+      ? { billing: 'local' } : undefined;
+  }
+
   private async primeLocalRuntimeContext(
     modelName: string,
     baseURL: string | undefined,
@@ -847,6 +858,8 @@ Look at the screenshot and find the element matching the user's intent. Output o
         baseURL,
         apiKey,
       });
+      this.verifiedLocalBillingTarget = runtime?.noTokenBilling && baseURL
+        ? { model: modelName, baseURL } : undefined;
       if (!runtime) return;
       const profile = getModelToolConfig(modelName);
       logger.info('Resolved model profile before first turn', { model: modelName, runtime: runtime.runtime,
@@ -1818,7 +1831,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     const estimated = lastProviderUsage === null || lastProviderUsage === undefined;
 
     // Get billing and pricing status
-    const { billing, pricing } = getModelCostMetadata(model);
+    const { billing, pricing } = getModelCostMetadata(model, this.getVerifiedLocalBilling());
 
     return {
       total: this.sessionCost,
@@ -2305,14 +2318,18 @@ Look at the screenshot and find the element matching the user's intent. Output o
     providerUsage?: { promptTokens: number; completionTokens: number }
   ): void {
     const model = this.codebuddyClient.getCurrentModel();
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage);
+    const transport = this.getVerifiedLocalBilling();
+    const cost = transport
+      ? this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage, transport)
+      : this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage);
     this.sessionCost += cost;
     this.routingFacade?.addSessionCost(cost);
 
     // Record usage with effective tokens (provider if available, otherwise local estimate)
     const effectiveInput = providerUsage?.promptTokens ?? inputTokens;
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
-    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+    if (transport) this.costTracker.recordUsage(effectiveInput, effectiveOutput, model, transport);
+    else this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
 
     // Store provider usage for extended cost info retrieval
     if (providerUsage) {
@@ -2343,7 +2360,10 @@ Look at the screenshot and find the element matching the user's intent. Output o
    */
   protected override estimateSessionCostAfter(inputTokens: number, outputTokens: number): number {
     const model = this.codebuddyClient.getCurrentModel();
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model);
+    const transport = this.getVerifiedLocalBilling();
+    const cost = transport
+      ? this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, undefined, transport)
+      : this.costTracker.calculateCost(inputTokens, outputTokens, model);
     return this.sessionCost + cost;
   }
 

@@ -78,9 +78,11 @@ export interface ExtendedCostInfo {
   outputTokens: number;
 }
 
+export interface VerifiedLocalBilling { billing: 'local'; }
+
 /** Keep session and per-call metadata consistent without calling local inference a subscription. */
-export function getModelCostMetadata(model: string): Pick<ExtendedCostInfo, 'billing' | 'pricing'> {
-  if (isLocalNoCostModel(model)) return { billing: 'local', pricing: 'local' };
+export function getModelCostMetadata(model: string, transport?: VerifiedLocalBilling): Pick<ExtendedCostInfo, 'billing' | 'pricing'> {
+  if (transport?.billing === 'local' || isLocalNoCostModel(model)) return { billing: 'local', pricing: 'local' };
   if (isChatGptSubscriptionModel(model)) return { billing: 'subscription', pricing: 'subscription' };
   return { billing: 'pay-per-use', pricing: hasModelPricing(model) ? 'known' : 'unknown' };
 }
@@ -237,13 +239,14 @@ export class CostTracker extends EventEmitter {
     outputTokens: number,
     model: string,
     cachedTokens: number = 0,
-    providerUsage?: { promptTokens: number; completionTokens: number }
+    providerUsage?: { promptTokens: number; completionTokens: number },
+    transport?: VerifiedLocalBilling
   ): number {
     // Use provider-reported tokens when available
     const effectiveInput = providerUsage?.promptTokens ?? (inputTokens - cachedTokens + (cachedTokens * 0.5));
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
 
-    if (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
+    if (transport?.billing === 'local' || isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
       return 0;
     }
     const pricing = getPricingPer1k(model);
@@ -261,10 +264,10 @@ export class CostTracker extends EventEmitter {
     outputTokens: number,
     model: string,
     cachedTokens: number = 0,
-    providerUsage?: { promptTokens: number; completionTokens: number }
+    providerUsage?: { promptTokens: number; completionTokens: number },
+    transport?: VerifiedLocalBilling
   ): ExtendedCostInfo {
-    const billing = this.determineBillingType(model);
-    const pricingStatus = this.determinePricingStatus(model);
+    const { billing, pricing: pricingStatus } = getModelCostMetadata(model, transport);
     const estimated = providerUsage === undefined;
 
     // Use provider-reported tokens when available
@@ -293,14 +296,17 @@ export class CostTracker extends EventEmitter {
   /**
    * Record token usage
    */
-  recordUsage(inputTokens: number, outputTokens: number, model: string): TokenUsage {
-    const cost = this.calculateCost(inputTokens, outputTokens, model);
+  recordUsage(inputTokens: number, outputTokens: number, model: string, transport?: VerifiedLocalBilling): TokenUsage {
+    const cost = transport
+      ? this.calculateCost(inputTokens, outputTokens, model, 0, undefined, transport)
+      : this.calculateCost(inputTokens, outputTokens, model);
     const usage: TokenUsage = {
       inputTokens,
       outputTokens,
       model,
       timestamp: new Date(),
       cost,
+      ...(transport ? getModelCostMetadata(model, transport) : {}),
     };
 
     this.sessionUsage.push(usage);

@@ -367,3 +367,12 @@ describe('hosted OpenAI-compatible catalogue discovery', () => {
     expect(getModelToolConfig('acme/other').contextWindow).toBe(32768);
   });
 });
+
+
+it.each([{}, { remote_host: 'https://ollama.com' }, { remote_model: 'cloud-model' }])('identifie les poids locaux sans confondre le relais cloud : %j', async (remote) => {
+  const fetchImpl = routedFetch((url) => url.endsWith('/api/show')
+    ? response({ ...remote, model_info: { 'general.parameter_count': 35000000000, 'test.context_length': 32768 } })
+    : response({ models: [] }));
+  const result = await probeLocalRuntimeContext({ model: 'unknown-model', baseURL: 'http://127.0.0.1:11436/v1', fetchImpl });
+  expect(result?.noTokenBilling === true).toBe(Object.keys(remote).length === 0);
+});

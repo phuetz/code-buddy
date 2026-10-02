@@ -24,6 +24,8 @@ export type LocalRuntimeKind = 'ollama' | 'lmstudio' | 'vllm' | 'catalog';
 
 export interface LocalRuntimeContextInfo {
   runtime: LocalRuntimeKind;
+  /** Local weights verified in Ollama metadata; cloud relays are excluded. */
+  noTokenBilling?: true;
   /** Maximum encoded in model metadata, when the runtime exposes it. */
   advertisedContextWindow?: number;
   /** Lower load-time limit (KV cache / max_model_len), when observable. */
@@ -242,6 +244,9 @@ async function probeOllama(
   ]);
   return {
     runtime: 'ollama',
+    ...(positiveInteger(asRecord(showRecord?.model_info)?.['general.parameter_count']) !== null
+      && !showRecord?.remote_host && !showRecord?.remote_model && !/:cloud$/i.test(model)
+      ? { noTokenBilling: true as const } : {}),
     advertisedContextWindow,
     ...(servedContextWindow === null ? {} : { servedContextWindow }),
     contextWindow: Math.min(advertisedContextWindow, servedContextWindow ?? advertisedContextWindow),
