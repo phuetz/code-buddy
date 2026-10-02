@@ -53,7 +53,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `fleet-cli` — Commandes de la flotte | Inspectez et pilotez la flotte multi-agents dans le terminal. | **Testée localement** | [Trace réelle](preuves/p6-fleet-cli.log); [Maillons vérifiés](preuves/verification-statique.md#fleet-cli) |
+| `fleet-cli` — Commandes de la flotte | Inspectez profils et politique locaux ; status/describe exigent un serveur accessible via --server-url. | **Prérequis vérifiés** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/fleet-cli.md) ; [Raccordement](preuves/verification-statique.md#fleet-cli) |
 | `cli-ruche` — Signed coordination | Échangez des messages de coordination signés. | **Testée localement** | [Trace réelle](preuves/p7-cli-ruche.log); [Maillons vérifiés](preuves/verification-statique.md#cli-ruche) |
 | `cli-device` — Remote device nodes | Gérez des nœuds SSH, ADB et locaux. | **Testée localement** | [Trace réelle](preuves/p5-cli-device-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-device) |
 | `cli-nodes` — Companion app nodes | Gérez les nœuds de l’application compagnon sur ordinateur et mobile. | **Échec constaté** | [Trace de l’échec](preuves/p7-cli-nodes.log); [Maillons vérifiés](preuves/verification-statique.md#cli-nodes) |
