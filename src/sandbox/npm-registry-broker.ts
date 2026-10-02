@@ -16,6 +16,9 @@ import { capabilityAllowsSegment } from './shell-capabilities.js';
 import { assertNoLocalPackageSources, resolveNpmLockOffline } from './npm-offline-resolution.js';
 
 const MAX_BYTES = 24 * 1024 * 1024;
+// Only literal environment assignments followed by one Vitest invocation.
+// Never append runner options to a compound script or a shell expansion.
+const SIMPLE_VITEST_SCRIPT = /^(?:[a-z_][a-z0-9_]*=(?:'[^'\r\n]*'|"[^"$`\\\r\n]*"|[a-z0-9_./:+,=@%-]+)\s+)*vitest(?:\s+[a-z0-9_./:*=-]+)*$/i;
 const digest = (data: string) => createHash('sha256').update(data).digest('hex');
 const quote = (text: string) => `'${text.replace(/'/g, `'\\''`)}'`;
 
@@ -146,7 +149,7 @@ if (!['audit','view','pack','install','update'].includes(argv[0] ?? '')) {
  const task=argv[0]==='test'?'test':argv[0]==='run'?argv[1]:undefined;
  try {
   const script=JSON.parse(fs.readFileSync('package.json','utf8')).scripts?.[task];
-  if(typeof script==='string' && /^vitest(?:\\s+[a-z0-9_./:*=-]+)*$/i.test(script)
+  if(typeof script==='string' && new RegExp(${JSON.stringify(SIMPLE_VITEST_SCRIPT.source)},'i').test(script)
    && ![script,...argv].some(arg=>/--configLoader(?:=|\\s|$)/.test(arg))) {
    argv=[...argv,...(argv.includes('--')?[]:['--']),'--configLoader','runner'];
   }

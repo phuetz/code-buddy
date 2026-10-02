@@ -75,6 +75,23 @@ it.each(['tests', 'tests,npm-registry'])('npm test charge Vitest sans écrire da
   expect(fs.existsSync(path.join(workspace, 'node_modules/vitest/smuggled'))).toBe(false);
 }, 60000);
 
+it('npm run test reconnaît le préfixe NODE_OPTIONS cité de WorkflowBuilder', async context => {
+  if (!ready.ready) context.skip();
+  const { workspace } = lane('shared');
+  fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ type: 'module', scripts: { test: "NODE_OPTIONS='--max-old-space-size=8192' vitest" } }));
+  fs.writeFileSync(path.join(workspace, 'vitest.config.mjs'), "import { defineConfig } from 'vitest/config'; export default defineConfig({test:{include:['sample.test.js']}});\n");
+  fs.appendFileSync(path.join(workspace, 'sample.test.js'), "it('options preserved', () => expect(process.env.NODE_OPTIONS).toContain('--max-old-space-size=8192'));\n");
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'tests');
+  getPermissionModeManager().setMode('dontAsk');
+  const result = await executeInWorkspaceSandbox('npm run test -- sample.test.js --run --maxWorkers=1', workspace, 30000);
+  expect(result.result?.exitCode, result.result?.stderr).toBe(0);
+  expect(result.result?.stdout).toContain('2 passed');
+  expect(result.result?.stderr).not.toContain('EROFS');
+  const explicit = await executeInWorkspaceSandbox('npm run test -- sample.test.js --run --maxWorkers=1 --configLoader=bundle', workspace, 30000);
+  expect(explicit.result?.exitCode).not.toBe(0);
+  expect(explicit.result?.stderr).toContain('EROFS');
+}, 60000);
+
 // Recorded Ornith call XB7FNd5Jot9uqxT6YuZeCOLi3eiS2T49 used npx directly.
 it.each(['', '--configLoader runner'])('npx Vitest respecte les dépendances en lecture seule (%s)', async (loader) => {
   const { workspace } = lane('shared');
