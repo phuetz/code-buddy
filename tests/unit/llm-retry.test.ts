@@ -84,3 +84,10 @@ describe('Self-Healing JSON (llm-retry)', () => {
     });
   });
 });
+
+it('ne transforme pas une panne transport en trois réparations JSON', async () => {
+  const cause = Object.assign(new Error('no user query found in messages'), { status: 500 });
+  const generate = vi.fn().mockRejectedValue(cause);
+  await expect(generateJsonWithRetry(generate, 'mission')).rejects.toBe(cause);
+  expect(generate).toHaveBeenCalledTimes(1);
+});
