@@ -608,10 +608,14 @@ provider is selected.
 - **`CODEBUDDY_PEER_MAX_DEPTH`** (default `3`) — chain depth cap.
   When a `peer.invoke` chain (peer A calls B which calls C which
   calls...) reaches depth+1 = 4, the dispatcher returns
-  `MAX_DEPTH_EXCEEDED`.
+  `MAX_DEPTH_EXCEEDED`. Both `request()` and `requestStream()` inherit
+  the inbound trace and send `depth + 1` automatically, including calls
+  made by agent tools. Explicit options cannot reset an inbound chain.
 - **`CODEBUDDY_PEER_ROLE`** (default `main`) — one of `main`,
   `orchestrator`, `leaf`. Setting `leaf` makes the peer's `request()`
-  client refuse outgoing invokes (it can still answer incoming).
+  client refuse outgoing invokes. The receiver also rejects `peer.dispatch`
+  and blocks forwarding from any inbound handler. Local chat, sessions and
+  read-only tools remain available on a leaf.
   Useful for service-only peers (Ollama backend, no autonomous
   initiative).
 
@@ -763,14 +767,13 @@ as documented, your fleet is operational.
   prevent recursive call chains (peer A → B → C → A → infinite).
 - **Role refusal**: `CODEBUDDY_PEER_ROLE=leaf` for service-only peers
   that should answer but never initiate.
+- **Rate cap**: 30 peer RPC requests per minute per connection.
 - **Backpressure**: a stuck peer can't memory-bloat the server's
   ws send buffer (drop-on-overflow at 2 MiB per client).
 
 What's NOT yet enforced (V1.x roadmap):
 - Per-method permission gating (e.g. `peer:chat:invoke` sub-scope).
   Today `peer:invoke` lets the caller use any registered method.
-- Rate cap per peer (deferred to (d).16b — defer until burn-rate
-  problems observed live).
 - Audit logging of every peer.invoke for compliance.
 
 ---
@@ -1043,6 +1046,30 @@ append turns with `continue`, close with `end`.
   next `continue` prompt. Goal state persists with the session record and
   follows the same idle TTL. Verdict/status changes emit metadata-only
   `fleet:chat-session:goal` events (never goal text).
+
+#### Ownership and retry protection
+
+The hosting server stores the authenticated creator identity on each session.
+Only that principal or a caller holding the `admin` scope can continue, stream,
+change goals or end the session. Reconnecting with the same JWT subject or API
+key preserves ownership. Legacy records without a creator require admin recovery.
+Session metadata listing still contains no conversation content.
+
+All peer RPCs accept an optional `idempotencyKey` on the request frame (or in
+params). `FleetListener.request()` and `requestStream()` accept it in options.
+Reuse the same key, method and params when retrying after disconnect: the server
+shares an in-flight execution or replays its final response and stream chunks.
+Keys are scoped to the authenticated principal and bound to its scopes. Changed
+params/method/scopes return `IDEMPOTENCY_CONFLICT`. The in-memory cache keeps
+completed results for five minutes, caps at 1,000 entries, and refuses admission
+when full instead of evicting pending requests. It does not survive server restart.
+Requests without a key retain their existing execution semantics.
+
+Every inbound model call, including streams, dispatch and the session goal
+judge, uses the fleet token and cost gate. Interrupted model calls are charged
+conservatively when actual usage is unavailable. A denied model call never
+reaches the provider. The goal judge retains its usual failure outcome when its
+budget is denied; it cannot bypass the gate.
 
 #### Idle TTL
 

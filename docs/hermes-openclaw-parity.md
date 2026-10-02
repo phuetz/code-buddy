@@ -159,7 +159,7 @@ code→tools in subagents (closed-by-default for security), live mobile executio
 
 ## 3. Gaps vs OpenClaw
 
-Code Buddy absorbed OpenClaw patterns rather than forking it. AI-to-AI, it **exceeds** OpenClaw.
+Code Buddy absorbed OpenClaw patterns rather than forking it. Its peer fleet and OpenClaw’s gateway use different coordination and trust models; neither implies overall superiority.
 
 | Capability | Status | Module |
 |---|---|---|
@@ -171,15 +171,19 @@ Code Buddy absorbed OpenClaw patterns rather than forking it. AI-to-AI, it **exc
 | Per-skill `SKILL.md` Ed25519 signatures | **Covered** (2026-06-07) | `src/skills/hub-signing.ts` |
 | Signed registry **index** + seeded official publisher key | **Covered** (2026-06-09) — well-known indexes verify `signature`/`indexSignature` over canonical JSON; official key is seed-read-only | `src/skills/hub-signing.ts`, `src/skills/hub.ts` |
 
-AI-to-AI substrate Code Buddy has that OpenClaw lacks: `peer.chat` / `peer.chat-session.*` / `peer.tool.invoke` /
-`peer_delegate` / `route_peer`, plus A2A + ACP + MCP. OpenClaw routes via a gateway hub (ACP, human↔agent / agent↔node);
-it has **no shared peer task board**. OpenClaw "enterprise" modules (policy/hooks/compaction/retry/semantic-memory) are
+Code Buddy exposes cross-machine peer RPCs (`peer.chat`, `peer.chat-session.*`, `peer.tool.invoke`) and
+capability-based routing (`peer_delegate`, `route_peer`), alongside A2A, ACP and MCP. OpenClaw coordinates
+agents inside a gateway and offers **Workboard**, an optional shared task board with claims, leases,
+heartbeats, dependency links and worker-reported proof. Workboard is present in OpenClaw 2026.6.11;
+it does not provide independent verification of those reports. Code Buddy’s `colab-store` claims remain
+advisory/optimistic across machines, with git-based arbitration. OpenClaw "enterprise" modules
+(policy/hooks/compaction/retry/semantic-memory) are
 **deliberately deferred** in `src/config/toml-config.ts` — they conflict with active Code Buddy systems; do not enable globally.
 
 ### Multi-AI collaboration model, at a glance
 - **Hermes**: durable SQLite **kanban** shared across profiles — atomic claim+TTL, DAG `link`, swarm decompose. Agent↔agent board.
-- **OpenClaw**: central **gateway hub** — isolated agents behind one gateway, routing bindings, node pairing, ACP bridge, channels. Human↔agent / agent↔node routing.
-- **Code Buddy**: richer **peer.* fleet** (A2A/ACP/MCP) + `colab-store` queue **now with TTL/lease + DAG + swarm** + event-driven autonomous daemon + free-first model tier. Cross-machine arbitration via git.
+- **OpenClaw**: central **gateway hub** — isolated agents, routing bindings, node pairing, ACP bridge and channels; optional **Workboard** for shared tasks within that gateway.
+- **Code Buddy**: **peer.* fleet** (A2A/ACP/MCP) + `colab-store` queue **now with TTL/lease + DAG + swarm** + event-driven autonomous daemon + free-first model tier. Cross-machine arbitration via git.
 
 ## 4. OpenClaw migrator readers — CLOSED, flipped to `covered-partial` (2026-07-03)
 
