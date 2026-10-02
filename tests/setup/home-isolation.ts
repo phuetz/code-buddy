@@ -90,6 +90,15 @@ fs.writeFileSync(
 );
 Object.assign(process.env, isolatedHomeEnv(home));
 
+// Un TMPDIR privé évite les fichiers partagés ; une base POSIX courte permet à tsx
+// d'y ouvrir son socket IPC même si l'appelant travaille dans un partage profond.
+const inheritedTmpParent = process.env.CODEBUDDY_VITEST_TMP_PARENT;
+const tmpBase = inheritedTmpParent && fs.existsSync(inheritedTmpParent)
+  ? inheritedTmpParent
+  : process.platform === 'win32' ? os.tmpdir() : '/tmp';
+const temp = fs.mkdtempSync(path.join(tmpBase, 'cb-tmp-'));
+Object.assign(process.env, { TMPDIR: temp, TEMP: temp, TMP: temp });
+
 const callerProfile = process.env[OWNED_PROFILE_ENV] ? undefined : process.env.CODEBUDDY_HOME?.trim();
 if (callerProfile) {
   if (isSameOrInside(callerProfile, realProfile) || isSameOrInside(realProfile, callerProfile)) {

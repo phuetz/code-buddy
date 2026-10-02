@@ -7,7 +7,7 @@ import { expect, it } from 'vitest';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-it('isolates environment, cwd and HOME between files, and detects a disabled isolation', () => {
+it('isolates environment, cwd, HOME and TMPDIR between files, and detects a disabled isolation', () => {
   const root = mkdtempSync(join(tmpdir(), 'cb-file-isolation-'));
   try {
     symlinkSync(join(repoRoot, 'node_modules'), join(root, 'node_modules'), 'junction');
@@ -18,7 +18,7 @@ it('isolates environment, cwd and HOME between files, and detects a disabled iso
       "import { it } from 'vitest';",
       "import { writeFileSync } from 'node:fs';",
       "it('producer', () => {",
-      `  writeFileSync(${JSON.stringify(producerState)}, JSON.stringify({ pid: process.pid, home: process.env.HOME }));`,
+      `  writeFileSync(${JSON.stringify(producerState)}, JSON.stringify({ pid: process.pid, home: process.env.HOME, tmp: process.env.TMPDIR }));`,
       "  process.env.CODEBUDDY_TEST_ORDER_LEAK = 'producer';",
       `  process.chdir(${JSON.stringify(join(root, 'changed-cwd'))});`,
       '});',
@@ -32,6 +32,7 @@ it('isolates environment, cwd and HOME between files, and detects a disabled iso
       `  const producer = JSON.parse(readFileSync(${JSON.stringify(producerState)}, 'utf8'));`,
       '  expect(process.pid).not.toBe(producer.pid);',
       '  expect(process.env.HOME).not.toBe(producer.home);',
+      '  expect(process.env.TMPDIR).not.toBe(producer.tmp);',
       `  writeFileSync(${JSON.stringify(witness)}, 'ISOLATED');`,
       '});',
     ].join('\n'));

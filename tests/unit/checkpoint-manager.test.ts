@@ -99,12 +99,18 @@ describe('CheckpointManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Reset fs mocks to default behavior
-    mockPathExists.mockResolvedValue(false);
-    mockReadJSON.mockResolvedValue({ checkpoints: [], currentIndex: -1 });
-    mockReadFile.mockResolvedValue(Buffer.from('file content'));
-    mockStat.mockResolvedValue({ size: 100, mode: 0o644 });
-    mockReaddir.mockResolvedValue([]);
+    // Reset implementations and queued responses before constructing a new manager.
+    mockEnsureDir.mockReset().mockResolvedValue(undefined);
+    mockPathExists.mockReset().mockResolvedValue(false);
+    mockReadJSON.mockReset().mockResolvedValue({ checkpoints: [], currentIndex: -1 });
+    mockWriteJSON.mockReset().mockResolvedValue(undefined);
+    mockWriteFile.mockReset().mockResolvedValue(undefined);
+    mockReadFile.mockReset().mockResolvedValue(Buffer.from('file content'));
+    mockCopy.mockReset().mockResolvedValue(undefined);
+    mockChmod.mockReset().mockResolvedValue(undefined);
+    mockRemove.mockReset().mockResolvedValue(undefined);
+    mockStat.mockReset().mockResolvedValue({ size: 100, mode: 0o644 });
+    mockReaddir.mockReset().mockResolvedValue([]);
 
     manager = createCheckpointManager(workingDirectory, {
       autoCheckpoint: false,

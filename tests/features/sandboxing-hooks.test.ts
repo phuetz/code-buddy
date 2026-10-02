@@ -12,6 +12,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { EventEmitter } from 'events';
+import { vi, type MockInstance } from 'vitest';
+import { SmartHookRunner as HookRunner } from '../../src/hooks/smart-hooks.js';
 
 // ============================================================================
 // Mocks
@@ -24,6 +26,13 @@ jest.mock('../../src/utils/logger.js', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   },
+}));
+
+// Prompt hooks in this unit suite use the rendered-prompt fallback. Mock the
+// provider boundary so completion does not depend on an earlier hook warming it.
+jest.mock('../../src/codebuddy/client.js', () => ({ CodeBuddyClient: jest.fn() }));
+jest.mock('../../src/config/env-schema.js', () => ({
+  resolveActiveProviderApiKey: jest.fn(() => undefined),
 }));
 
 // Mock child_process for sandbox and hook tests
@@ -959,6 +968,13 @@ describe('EnvPersistence', () => {
 describe('AsyncHookManager', () => {
   let AsyncHookManager: typeof import('../../src/hooks/async-hooks').AsyncHookManager;
   type SmartHookConfig = import('../../src/hooks/smart-hooks').SmartHookConfig;
+  let runHook: MockInstance<HookRunner['runHook']>;
+
+  async function waitForSubmittedHooks(count?: number): Promise<void> {
+    const submitted = runHook.mock.results.filter(result => result.type === 'return');
+    await Promise.all(submitted.slice(0, count ?? submitted.length).map(result => result.value));
+    await Promise.resolve();
+  }
 
   beforeAll(async () => {
     const mod = await import('../../src/hooks/async-hooks.js');
@@ -967,6 +983,11 @@ describe('AsyncHookManager', () => {
 
   beforeEach(() => {
     mockSpawn.mockReset();
+    runHook = vi.spyOn(HookRunner.prototype, 'runHook');
+  });
+
+  afterEach(() => {
+    runHook.mockRestore();
   });
 
   describe('constructor', () => {
@@ -1053,7 +1074,7 @@ describe('AsyncHookManager', () => {
         { name: 'World' }
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForSubmittedHooks();
 
       const job = mgr.getJob(jobId);
       expect(job).not.toBeNull();
@@ -1084,7 +1105,7 @@ describe('AsyncHookManager', () => {
         {}
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForSubmittedHooks();
 
       const completed = mgr.getCompletedJobs();
       expect(completed).toHaveLength(2);
@@ -1095,7 +1116,7 @@ describe('AsyncHookManager', () => {
       const mgr = new AsyncHookManager();
       mgr.submit({ type: 'prompt', event: 'test', prompt: 'A' }, {});
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForSubmittedHooks();
 
       const first = mgr.getCompletedJobs();
       expect(first).toHaveLength(1);
@@ -1114,7 +1135,7 @@ describe('AsyncHookManager', () => {
         {}
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForSubmittedHooks();
 
       const messages = mgr.getSystemMessages();
       expect(messages).toHaveLength(1);
@@ -1130,7 +1151,7 @@ describe('AsyncHookManager', () => {
         {}
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForSubmittedHooks();
 
       const messages = mgr.getSystemMessages();
       expect(messages).toHaveLength(1);
@@ -1151,7 +1172,7 @@ describe('AsyncHookManager', () => {
       const mgr = new AsyncHookManager();
       mgr.submit({ type: 'prompt', event: 'test', prompt: 'A' }, {});
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForSubmittedHooks();
 
       expect(mgr.getTotalCount()).toBe(1);
       mgr.clearCompleted();
@@ -1209,7 +1230,7 @@ describe('AsyncHookManager', () => {
         {}
       );
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForSubmittedHooks();
 
       expect(mgr.cancel(jobId)).toBe(false);
       mgr.dispose();
@@ -1245,7 +1266,7 @@ describe('AsyncHookManager', () => {
       mockSpawn.mockReturnValue(child);
       mgr.submit({ type: 'command', event: 'test', command: 'sleep 1' }, {});
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForSubmittedHooks(1);
 
       expect(mgr.getTotalCount()).toBe(2);
       mgr.dispose();

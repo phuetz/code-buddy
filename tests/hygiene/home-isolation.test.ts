@@ -100,6 +100,33 @@ describe('HOME jetable posé avant les imports', () => {
   });
 });
 
+describe('TMPDIR jetable et court pour les processus CLI', () => {
+  it('lance tsx même lorsque le TMPDIR appelant est trop long pour un socket Unix', () => {
+    const callerTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-long-tmp-'));
+    const longTmp = path.join(callerTmp, 'temporary-directory-'.repeat(7));
+    fs.mkdirSync(longTmp);
+    try {
+      const { status, output, witness } = runWithIsolationSetup([
+        "import { expect, it } from 'vitest';",
+        "import fs from 'node:fs';",
+        "import os from 'node:os';",
+        "import { spawnSync } from 'node:child_process';",
+        "it('CLI socket', () => {",
+        `  const child = spawnSync(process.execPath, [${JSON.stringify(path.join(REPO_ROOT, 'node_modules/tsx/dist/cli.mjs'))}, '--eval', 'process.stdout.write("SOCKET_OK")'], { encoding: 'utf8' });`,
+        '  expect(child.status, child.stderr).toBe(0);',
+        "  expect(child.stdout).toBe('SOCKET_OK');",
+        `  expect(os.tmpdir()).not.toBe(${JSON.stringify(longTmp)});`,
+        "  fs.writeFileSync(new URL('./body-witness.txt', import.meta.url), 'SHORT_TMP_SOCKET_OK');",
+        '});',
+      ], { ...process.env, CODEBUDDY_VITEST_TMP_PARENT: '', TMPDIR: longTmp, TEMP: longTmp, TMP: longTmp });
+      expect(status, output).toBe(0);
+      expect(witness).toBe('SHORT_TMP_SOCKET_OK');
+    } finally {
+      fs.rmSync(callerTmp, { recursive: true, force: true });
+    }
+  }, 90_000);
+});
+
 describe('fonctions de comparaison et d’environnement', () => {
   it('isSameOrInside ne confond pas un préfixe de nom avec un parent', () => {
     expect(isSameOrInside('/a/b', '/a/b', 'linux')).toBe(true);
@@ -206,7 +233,7 @@ describe('dossier temporaire atteint par un lien (comme le TEMP 8.3 des runners 
           "import { expect, it } from 'vitest';",
           `import { isSameOrInside } from ${helpers};`,
           "it('xdg sous le home', () => {",
-          `  expect(os.tmpdir().startsWith(${JSON.stringify(link)})).toBe(true);`,
+          `  expect(os.homedir().startsWith(${JSON.stringify(link)})).toBe(true);`,
           "  for (const k of ['XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME']) {",
           '    expect(isSameOrInside(process.env[k] ?? "", os.homedir()), k).toBe(true);',
           '  }',

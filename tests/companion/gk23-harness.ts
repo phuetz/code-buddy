@@ -3,7 +3,7 @@
  * Never points at the operator's real ~/.codebuddy/reminders.json.
  */
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, chmodSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, chmodSync, copyFileSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -93,7 +93,7 @@ export interface IsolatedStores {
 /** Isolate every reminder store + HOME/TMPDIR. Paid TTS keys stripped. */
 export function isolateStores(workDir: string, opts: { pendingEnv?: boolean } = {}): IsolatedStores {
   const home = path.join(workDir, 'home');
-  const tmp = path.join(workDir, 'tmp');
+  const tmp = mkdtempSync(path.join(os.tmpdir(), 'gk23-cli-'));
   const artifacts = path.join(workDir, 'artifacts');
   const store = path.join(home, '.codebuddy');
   mkdirSync(path.join(store, 'companion'), { recursive: true });

@@ -15,11 +15,17 @@ export default function setup(): () => void {
   process.env.CODEBUDDY_VITEST_CALLER_HOME ||= os.homedir();
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-vitest-run-'));
   process.env.CODEBUDDY_VITEST_HOME_PARENT = parent;
+  // tsx ouvre un socket Unix sous TMPDIR : le chemin appelant peut dépasser sun_path.
+  const tmpBase = process.platform === 'win32' ? os.tmpdir() : '/tmp';
+  const tmpParent = fs.mkdtempSync(path.join(tmpBase, 'cb-vitest-tmp-'));
+  process.env.CODEBUDDY_VITEST_TMP_PARENT = tmpParent;
   return () => {
-    try {
-      fs.rmSync(parent, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-    } catch {
-      // Handle encore ouvert (Windows) : le dossier reste sous TMPDIR, sans effet sur le HOME appelant.
+    for (const directory of [parent, tmpParent]) {
+      try {
+        fs.rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch {
+        // Handle encore ouvert (Windows) : aucun retour vers le HOME appelant.
+      }
     }
   };
 }
