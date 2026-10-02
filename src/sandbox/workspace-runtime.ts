@@ -23,6 +23,42 @@ function readText(file: string): string {
   try { return fs.readFileSync(file, 'utf8').trim(); } catch { return ''; }
 }
 
+/** Resolve only installed npm links recorded by their owning dependency tree.
+ * Never grant the owner repository or arbitrary symlink targets.
+ */
+function linkedNpmPackages(nodeModules: string): string[] {
+  const owner = path.dirname(nodeModules);
+  const contained = (target: string): boolean => {
+    const relative = path.relative(owner, target);
+    return relative !== '' && relative !== '..'
+      && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+      && !relative.split(path.sep).some(part => part.startsWith('.'));
+  };
+  try {
+    const lock = JSON.parse(readText(path.join(owner, 'package-lock.json'))) as {
+      packages?: Record<string, { link?: boolean; resolved?: unknown }>;
+    };
+    const packages: string[] = [];
+    for (const [key, entry] of Object.entries(lock.packages ?? {})) {
+      if (!/^node_modules\/(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(key)
+        || entry?.link !== true || typeof entry.resolved !== 'string') continue;
+      const expected = path.resolve(owner, entry.resolved);
+      if (!contained(expected)) continue;
+      try {
+        const installed = path.join(owner, key);
+        if (!fs.lstatSync(installed).isSymbolicLink()) continue;
+        const real = fs.realpathSync(installed);
+        if (real !== fs.realpathSync(expected) || !contained(real)
+          || classifySecretPath(real).secret || !fs.statSync(real).isDirectory()) continue;
+        const manifest = JSON.parse(readText(path.join(real, 'package.json'))) as { name?: unknown };
+        if (manifest.name !== key.slice('node_modules/'.length)) continue;
+        packages.push(real);
+      } catch { /* Broken or mismatched link: do not extend the read grant. */ }
+    }
+    return packages;
+  } catch { return []; }
+}
+
 export interface WorkspaceRuntimePaths {
   readOnly: string[];
   gitDirectory?: string;
@@ -58,6 +94,15 @@ export function resolveWorkspaceRuntime(workspace: string): WorkspaceRuntimePath
   };
   if (commonDirectory) visitObjects(path.join(commonDirectory, 'objects'));
   const nodeModulesDirectory = add(path.join(workspace, 'node_modules'));
+  if (nodeModulesDirectory) {
+    const realWorkspace = fs.realpathSync(workspace);
+    for (const linked of linkedNpmPackages(nodeModulesDirectory)) {
+      const relative = path.relative(realWorkspace, linked);
+      // A local workspace package already inherits the workspace's access.
+      // Only external shared dependencies need an additional read-only grant.
+      if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) add(linked);
+    }
+  }
   // An nvm/Volta installation also needs npm's ../lib and Corepack's modules.
   // Grant this version's prefix, never the user's home or the version manager.
   const nodeDirectory = path.dirname(fs.realpathSync(process.execPath));
