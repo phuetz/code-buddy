@@ -18,6 +18,17 @@ const MAX_BYTES = 24 * 1024 * 1024;
 const digest = (data: string) => createHash('sha256').update(data).digest('hex');
 const quote = (text: string) => `'${text.replace(/'/g, `'\\''`)}'`;
 
+function assertWorkspacePatterns(value: unknown): void {
+  if (value === undefined) return;
+  const patterns = Array.isArray(value) ? value
+    : value && typeof value === 'object' && 'packages' in value ? value.packages : undefined;
+  if (!Array.isArray(patterns) || !patterns.every(pattern => typeof pattern === 'string'
+    && /^[a-z0-9_@./*?!-]+$/i.test(pattern) && !pattern.includes('..')
+    && !path.posix.isAbsolute(pattern.replace(/^!+/, '')))) {
+    throw new Error('Workspace patterns must stay inside the registry scratch directory');
+  }
+}
+
 function assertRegistrySpecs(value: unknown): void {
   if (!value || typeof value !== 'object') return;
   for (const [key, entry] of Object.entries(value)) {
@@ -75,6 +86,7 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
           // npm install is allowed to resolve metadata, never to execute scripts.
           delete packageData.scripts;
           if (argv[0] !== 'audit') delete packageData.workspaces;
+          else assertWorkspacePatterns(packageData.workspaces);
           if (!['audit', 'view', 'pack'].includes(argv[0] ?? '')) {
             assertRegistrySpecs(packageData);
             if (lockText) assertRegistrySpecs(JSON.parse(lockText));
@@ -90,6 +102,7 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
                 || classifySecretPath(manifest).secret) throw new Error('Workspace audit manifest is unavailable or outside the allowed workspace');
               const data = JSON.parse(fs.readFileSync(manifest, 'utf8')) as Record<string, unknown>;
               delete data.scripts;
+              delete data.workspaces;
               const destination = path.resolve(scratch, key, 'package.json');
               if (!isPathWithin(destination, scratch)) throw new Error('Workspace lock path escapes scratch');
               fs.mkdirSync(path.dirname(destination), { recursive: true });

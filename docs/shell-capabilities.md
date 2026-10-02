@@ -24,6 +24,8 @@ Les refus explicites et les règles personnalisées restent prioritaires.
   scripts désactivés, sans configuration utilisateur ni identifiants. Les
   résolutions de lock refusent les sources Git, fichiers et URL externes.
   L’audit conserve son JSON et son code de sortie, y compris les vulnérabilités.
+  Ses workspaces acceptent des chemins relatifs et glob simples locaux ; les
+  chemins absolus, traversées et expansions ambiguës sont refusés avant npm.
 
 Le shell conserve son réseau fermé. La passerelle et ses sous-processus sont
 fermés avant la fin de l’appel. Les temporaires entre appels se trouvent dans

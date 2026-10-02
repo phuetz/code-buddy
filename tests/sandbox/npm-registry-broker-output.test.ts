@@ -92,3 +92,24 @@ it.skipIf(process.platform === 'win32')('conserve les manifestes des workspaces 
     expect(JSON.parse(text)).toEqual({ workspaces: ['packages/*'], child: { name: 'fixture-child', version: '1.0.0', dependencies: { zod: '^3.25.0' } } });
   } finally { await broker.close(); vi.unstubAllEnvs(); fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+// Root workspace globs are also input to the trusted npm process.
+it.skipIf(process.platform === 'win32').each(['../outside', '/outside', 'packages/../../outside', 'packages\\..\\..\\outside'])('refuse le motif workspace extérieur %s avant le processus de registre', async (pattern) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'registry-pattern-'));
+  const workspace = path.join(root, 'workspace'); const temporary = path.join(root, 'tmp');
+  fs.mkdirSync(workspace); fs.mkdirSync(temporary);
+  fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0', workspaces: [pattern] }));
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'npm-registry');
+  const broker = await startNpmRegistryBroker(workspace, temporary);
+  try {
+    const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+    const mocked = await import('node:child_process');
+    const before = vi.mocked(mocked.execFile).mock.calls.length;
+    const result = await new Promise<{ error: ExecFileException | null; stderr: string }>(resolve => actual.execFile(process.execPath,
+      [path.join(broker.directory, 'npm-client.mjs'), 'audit', '--json'], { encoding: 'utf8' },
+      (error, _stdout, stderr) => resolve({ error, stderr })));
+    expect(result.error).toBeTruthy();
+    expect(result.stderr).toContain('Workspace patterns must stay inside');
+    expect(vi.mocked(mocked.execFile).mock.calls).toHaveLength(before);
+  } finally { await broker.close(); vi.unstubAllEnvs(); fs.rmSync(root, { recursive: true, force: true }); }
+});
