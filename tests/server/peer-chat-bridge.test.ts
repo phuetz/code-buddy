@@ -164,6 +164,7 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       );
       expect(r.ok).toBe(false);
       expect(r.error?.message).toContain('CLIENT_UNAVAILABLE');
+      expect(r.error?.message).toMatch(/buddy login.*Ollama.*API key/);
     });
 
     it('propagates an underlying client.chat throw as METHOD_ERROR', async () => {

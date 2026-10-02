@@ -19,6 +19,7 @@
  * Idempotent (mirrors compaction-bridge): a second wire call is a no-op.
  */
 
+import { PROVIDER_SETUP_MESSAGE } from '../utils/provider-prerequisites.js';
 import type { CodeBuddyClient, ChatOptions } from '../codebuddy/client.js';
 import { beginFleetWork, isFleetSaturated } from './fleet-load.js';
 import { executeCostCappedFleetCall } from './fleet-cost-cap.js';
@@ -138,7 +139,7 @@ function resolveClientForRequest(
     const client = cachedGetter?.() ?? null;
     if (!client) {
       throw new Error(
-        `CLIENT_UNAVAILABLE: no LLM client wired on this peer (${method} cannot answer)`,
+        `CLIENT_UNAVAILABLE: ${PROVIDER_SETUP_MESSAGE} Configure it on this peer (${method}).`,
       );
     }
     return {
