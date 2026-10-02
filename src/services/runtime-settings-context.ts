@@ -2,6 +2,7 @@ import { getThemeManager } from '../themes/theme-manager.js';
 import { getFleetRegistry } from '../fleet/fleet-registry.js';
 import { getPermissionModeManager } from '../security/permission-modes.js';
 import { CODE_EXEC_OFF_NOTICE, CODE_EXEC_PREFER_HINT, resolveCodeExecPolicy } from '../config/code-exec-policy.js';
+import { shellCapabilitySnapshot } from '../sandbox/shell-capabilities.js';
 
 export interface RuntimeSettingsEvidence {
   surface?: string;
@@ -38,6 +39,7 @@ export function getRuntimeSettingsSnapshot(evidence: RuntimeSettingsEvidence = {
       ? { maxToolRounds: evidence.maxToolRounds } : {}),
     programmaticToolCalling: programmaticToolCallingSnapshot(evidence.model),
     ...(cli ? { permissionMode: getPermissionModeManager().getMode() } : {}),
+    ...(cli ? { shellCapabilities: shellCapabilitySnapshot() } : {}),
     ...(manager ? {
       theme: {
         active: identifier(manager.getCurrentTheme().id) ?? 'custom',

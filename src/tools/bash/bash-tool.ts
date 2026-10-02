@@ -438,6 +438,7 @@ export class BashTool implements Disposable {
         return { success: false, error: 'Command aborted by user' };
       }
       const policy = await evaluateShellExecution(executionCommand, effectiveCwd);
+      if (policy.capabilityRefusal) return { success: false, error: policy.capabilityRefusal };
       if (policy.action === 'deny') {
         return {
           success: false,

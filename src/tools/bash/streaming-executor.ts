@@ -85,6 +85,7 @@ export async function* executeStreaming(
   // Freeze the transformed command before policy/approval. Buffered and
   // streaming execution now authorize exactly what they dispatch.
   const policy = await evaluateShellExecution(executionCommand, cwd);
+  if (policy.capabilityRefusal) return { success: false, error: policy.capabilityRefusal };
   if (signal?.aborted) {
     return { success: false, error: 'Command aborted by user' };
   }

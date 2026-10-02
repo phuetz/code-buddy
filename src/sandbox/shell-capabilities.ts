@@ -9,6 +9,21 @@ export function shellCapabilities(): Set<ShellCapability> {
   return new Set(values as ShellCapability[]);
 }
 
+export function shellCapabilitySnapshot() {
+  const capabilities = shellCapabilities();
+  return {
+    configured: [...capabilities],
+    scope: 'Native workspace sandbox only; explicit denials remain authoritative',
+    network: 'closed',
+    operations: [
+      ...(capabilities.has('tests') ? ['npm test', 'npm run test|build|lint|typecheck|check|verify|audit'] : []),
+      ...(capabilities.has('git-local') ? ['git add', 'git commit (initial cd to this workspace allowed)'] : []),
+      ...(capabilities.has('npm-registry') ? ['npm audit --json', 'npm view <package> <field> --json', 'npm pack <registry-package>', 'npm install --package-lock-only --ignore-scripts', 'npm update --package-lock-only --ignore-scripts'] : []),
+    ],
+    constraints: 'Full npm install requires approval. Registry lock resolution refuses external Git/file/URL sources. Do not alter HOME, trust or permissions to bypass a refusal.',
+  };
+}
+
 export function capabilityAllowsSegment(argv: string[], capabilities = shellCapabilities()): boolean {
   const [command, operation, ...args] = argv;
   if (command === 'git' && capabilities.has('git-local')) {

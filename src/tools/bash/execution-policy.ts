@@ -74,6 +74,7 @@ export interface ExecutableIdentity {
 
 export interface RuntimeShellPolicyEvaluation extends ShellPolicyEvaluation {
   executableIdentities: ExecutableIdentity[];
+  capabilityRefusal?: string;
 }
 
 function runtimeEnvironment(): Record<string, string> {
@@ -252,6 +253,13 @@ export async function evaluateShellExecution(
       action: 'sandbox',
       reason: 'Execution policy allowed the command; workspace sandbox remains enforced',
     };
+  }
+  if (evaluation.action === 'ask' && getPermissionModeManager().getMode() === 'dontAsk'
+    && shellCapabilities().has('npm-registry')
+    && evaluation.segmentEvaluations.some((segment, index) => segment.action === 'ask'
+      && segment.matchedRule?.id === 'builtin-pkg-managers'
+      && !capabilityAllowsSegment(evaluation.parsedSegments[index] ?? []))) {
+    return { ...evaluation, capabilityRefusal: 'CAPABILITY_DENIED: npm operation is outside the granted registry capability. Lock resolution: npm install --package-lock-only --ignore-scripts. Audit: npm audit --json. Full install and external sources require separate approval; do not change HOME or permissions.' };
   }
   return evaluation;
 }
