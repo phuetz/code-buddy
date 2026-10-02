@@ -2971,6 +2971,15 @@ describe('AgentExecutor', () => {
       expect(config.isSessionCostLimitReached).toHaveBeenCalled();
     });
 
+    it.each([true, false])('affiche le coût du transport vérifié, local=%s', async (local) => {
+      config.isLocalBilling = () => local;
+      (deps.client.getCurrentModel as jest.Mock).mockReturnValue('ornith-1.5:35b');
+      const chunks = await collectChunks(executor.processUserMessageStream('Hello', [], [], null));
+      const usage = chunks.find(c => c.content?.includes('[tokens:'))?.content ?? '';
+      if (local) expect(usage).toContain('cost: $0.0000');
+      else expect(Number(usage.match(/cost: \$(\d+(?:\.\d+)?)/)?.[1])).toBeGreaterThan(0);
+    });
+
     it('should record cost in streaming mode', async () => {
       const history: ChatEntry[] = [];
       const messages: CodeBuddyMessage[] = [];

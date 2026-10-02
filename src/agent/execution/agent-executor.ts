@@ -545,6 +545,8 @@ export interface ExecutorConfig {
   estimateSessionCostLimitReached: (input: number, output: number) => boolean;
   /** Returns current accumulated session cost in USD */
   getSessionCost: () => number;
+  /** True only for verified local billing at the effective transport target. */
+  isLocalBilling?: () => boolean;
   /** Returns maximum allowed session cost in USD */
   getSessionCostLimit: () => number;
   /** Enable auto-discovery hint when tool confidence is low */
@@ -2780,7 +2782,7 @@ export class AgentExecutor {
       // (e.g. gpt-5.5 via ChatGPT Codex backend) — flat-fee, not per token.
       // Optional call: the real client always implements this, but test doubles
       // may be partial mocks — fall through to estimateCost when it's absent.
-      const streamTurnCost = this.deps.client.isSubscriptionAuth?.()
+      const streamTurnCost = this.config.isLocalBilling?.() || this.deps.client.isSubscriptionAuth?.()
         ? 0
         : estimateCost(
             totalInputTokensForCost,

@@ -591,10 +591,12 @@ describe('CodeBuddyAgent', () => {
       const internal = agent as unknown as {
         codebuddyClient: { getCurrentBaseUrl: () => string };
         costTracker: { calculateCost: jest.Mock; recordUsage: jest.Mock };
+        executor: { config: { isLocalBilling: () => boolean } };
         recordSessionCost: (input: number, output: number) => void;
         estimateSessionCostAfter: (input: number, output: number) => number;
       };
       internal.codebuddyClient.getCurrentBaseUrl = () => baseURL;
+      expect(internal.executor.config.isLocalBilling()).toBe(true);
       internal.recordSessionCost(17057, 8192);
       expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', 0, undefined, { billing: 'local' });
       expect(internal.costTracker.recordUsage).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', { billing: 'local' });
@@ -602,6 +604,7 @@ describe('CodeBuddyAgent', () => {
       expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', 0, undefined, { billing: 'local' });
       // A fallback without an explicit URL may still report the primary URL.
       mockGetCurrentProvider.mockReturnValue('openai');
+      expect(internal.executor.config.isLocalBilling()).toBe(false);
       internal.recordSessionCost(17057, 8192);
       expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', 0, undefined);
       mockGetCurrentProvider.mockReturnValue('custom');

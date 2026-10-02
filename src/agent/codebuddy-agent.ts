@@ -462,6 +462,7 @@ export class CodeBuddyAgent extends BaseAgent {
       isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
       estimateSessionCostLimitReached: this.estimateSessionCostLimitReached.bind(this),
       getSessionCost: this.getSessionCost.bind(this),
+      isLocalBilling: () => Boolean(this.getVerifiedLocalBilling()),
       getSessionCostLimit: this.getSessionCostLimit.bind(this),
     });
 
