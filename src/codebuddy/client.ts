@@ -82,7 +82,10 @@ export const AGY_CLI_SENTINEL = 'agy-cli';
 /** Synthetic baseURL marker for the Antigravity CLI subprocess strategy. */
 export const AGY_CLI_BASE_URL = 'agy-cli://local';
 
-export type CodeBuddyMessage = ChatCompletionMessageParam;
+export type CodeBuddyMessage = ChatCompletionMessageParam & {
+  /** Native Ollama continuation state; never sent to non-native endpoints. */
+  ollama_thinking?: string;
+};
 
 /** JSON Schema property definition */
 export interface JsonSchemaProperty {

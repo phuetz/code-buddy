@@ -578,7 +578,9 @@ export class ContextManagerV2 {
       (total, message) => total + estimateImageUrlTokens(message.content),
       0,
     );
-    return this.tokenCounter.countMessageTokens(tokenMessages) + imageTokens;
+    const nativeThinkingTokens = messages.reduce((total, message) =>
+      total + (message.ollama_thinking ? this.tokenCounter.countTokens(message.ollama_thinking) : 0), 0);
+    return this.tokenCounter.countMessageTokens(tokenMessages) + imageTokens + nativeThinkingTokens;
   }
 
   /**

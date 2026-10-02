@@ -755,6 +755,13 @@ export class OpenAICompatProvider implements Provider {
     let openAiPayload = payload as unknown as OpenAiChatPayload;
     const hasParts = (openAiPayload.messages as Array<{ content?: unknown }>)?.some((m) => Array.isArray(m?.content));
     const nativeOllama = (await this.ensureOllamaEndpoint()) && isOllamaNativeChatEnabled();
+    if (!nativeOllama && openAiPayload.messages.some(message => 'ollama_thinking' in message)) {
+      openAiPayload = { ...openAiPayload, messages: openAiPayload.messages.map(message => {
+        const { ollama_thinking: _nativeState, ...rest } = message;
+        return rest;
+      }) };
+      payload = openAiPayload as unknown as typeof payload;
+    }
     if (!hasParts || nativeOllama) {
       const config = getModelToolConfig(openAiPayload.model);
       const window = config.contextWindow ?? 32768;

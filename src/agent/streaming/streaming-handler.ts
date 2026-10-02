@@ -162,6 +162,8 @@ export interface ExtractedToolCallsResult {
  * Accumulated message state during streaming.
  */
 export interface AccumulatedMessage {
+  /** Native protocol state, kept separate from visible assistant content. */
+  ollama_thinking?: string;
   /** Role of the message */
   role?: string;
 

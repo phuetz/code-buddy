@@ -1996,6 +1996,7 @@ export class AgentExecutor {
         messages.push({
           role: 'assistant',
           content: persistedAssistantContent,
+          ...(accumulatedMessage.ollama_thinking ? { ollama_thinking: accumulatedMessage.ollama_thinking } : {}),
           tool_calls: toolCalls,
         });
 

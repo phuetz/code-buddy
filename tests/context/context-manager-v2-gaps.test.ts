@@ -29,6 +29,17 @@ describe('ContextManagerV2 (gap coverage)', () => {
     });
   }
 
+  it('counts native thinking in the context budget without turning it into content', () => {
+    const manager = createManager();
+    try {
+      const ordinary: CodeBuddyMessage[] = [{ role: 'assistant', content: '' }];
+      const native: CodeBuddyMessage[] = [{ role: 'assistant', content: '', ollama_thinking: 'Retained observation. '.repeat(200) }];
+      expect(manager.countTokens(native)).toBeGreaterThan(manager.countTokens(ordinary) + 200);
+      expect(native[0]?.content).toBe('');
+      expect(manager.prepareMessages([...native, { role: 'user', content: 'Continue' }], 'System').some(message => message.ollama_thinking === native[0]?.ollama_thinking)).toBe(true);
+    } finally { manager.dispose(); }
+  });
+
   // Helper: create N messages totaling ~target tokens (rough: 1 token ≈ 4 chars)
   function makeMessages(count: number, charsPerMsg = 100): CodeBuddyMessage[] {
     const msgs: CodeBuddyMessage[] = [];

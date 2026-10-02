@@ -253,8 +253,9 @@ export function toOllamaNativeMessages(
   }
 
   return messages.map((message) => {
-    const { tool_call_id: toolCallId, tool_calls: toolCalls, ...rest } = message;
+    const { tool_call_id: toolCallId, tool_calls: toolCalls, ollama_thinking: thinking, ...rest } = message;
     const next: Record<string, unknown> = { ...rest };
+    if (message.role === 'assistant' && typeof thinking === 'string') next.thinking = thinking;
     if (Array.isArray(message.content)) {
       const text: string[] = [];
       const images: string[] = [];
@@ -394,6 +395,7 @@ export function fromOllamaNativeResponse(
       message: {
         role: data.message?.role || 'assistant',
         content: data.message?.content ?? '',
+        ...(data.message?.thinking ? { ollama_thinking: data.message.thinking } : {}),
         ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
       },
       finish_reason: toFinishReason(data, toolCalls.length > 0),
@@ -442,6 +444,7 @@ export function toOpenAiChunk(
   const delta: Record<string, unknown> = {};
   if (isFirst || data.message?.role) delta.role = data.message?.role || 'assistant';
   if (data.message?.content) delta.content = data.message.content;
+  if (data.message?.thinking) delta.ollama_thinking = data.message.thinking;
   if (toolCalls.length > 0) {
     delta.tool_calls = toolCalls;
   }

@@ -77,6 +77,17 @@ afterEach(() => {
 });
 
 describe('OpenAICompatProvider request payloads', () => {
+  it('does not send Ollama protocol state to a non-native SDK endpoint', async () => {
+    providerMocks.create.mockResolvedValue(successResponse());
+    const provider = createProvider();
+    const messages = [{ role: 'assistant' as const, content: 'A previous answer', ollama_thinking: 'Native local state' },
+      { role: 'user' as const, content: 'Continue' }];
+    await provider.chat(messages);
+    const sent = providerMocks.create.mock.calls[0][0].messages;
+    expect(sent.some((message: Record<string, unknown>) => 'ollama_thinking' in message || 'thinking' in message)).toBe(false);
+    expect(messages[0]).toHaveProperty('ollama_thinking');
+  });
+
   it('measures from request send to the first token-bearing chunk and complete message', async () => {
     const now = vi.fn()
       .mockReturnValueOnce(100)

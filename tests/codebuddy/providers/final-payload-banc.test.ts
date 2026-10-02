@@ -70,3 +70,14 @@ it('conserve une grande sortie cloud autorisée par le profil du modèle', async
   expect(budget.outputTokens).toBe(98304);
   expect(budget.inputTokens + budget.outputTokens + budget.safetyTokens).toBeLessThanOrEqual(131072);
 });
+
+it('transmet la pensée native récente dans le corps HTTP après budget', async () => {
+  const thinking = 'Inspect the failing test, then edit and verify. '.repeat(40);
+  const { seen } = await send([
+    { role: 'assistant', content: '', ollama_thinking: thinking, tool_calls: [{ id: 'thinking-call', type: 'function', function: { name: 'view_file', arguments: '{"path":"example.ts"}' } }] },
+    { role: 'tool', tool_call_id: 'thinking-call', content: 'source contents' },
+  ]);
+  const messages = seen.messages as Record<string, unknown>[];
+  expect(messages.findLast(message => message.role === 'assistant')?.thinking).toBe(thinking);
+  expect(messages.some(message => 'ollama_thinking' in message)).toBe(false);
+});

@@ -236,6 +236,20 @@ describe('AgentExecutor', () => {
     executor = new AgentExecutor(deps, config);
   });
 
+  it('retains native Ollama thinking beside a tool call for the next request', async () => {
+    const call = makeToolCall('view_file', { path: 'example.ts' });
+    setupLLMFlow(deps, [{ content: '', tool_calls: [call] }, { content: 'done' }]);
+    (deps.streamingHandler.getAccumulatedMessage as jest.Mock).mockReset()
+      .mockReturnValueOnce({ content: '', tool_calls: [call], ollama_thinking: 'Read the test, then implement the fix.' })
+      .mockReturnValue({ content: 'done' });
+    const messages: CodeBuddyMessage[] = [];
+    await executor.processUserMessage('Fix the implementation', [], messages);
+    expect(messages.find(message => message.role === 'assistant' && 'tool_calls' in message && message.tool_calls?.length))
+      .toMatchObject({ ollama_thinking: 'Read the test, then implement the fix.' });
+    const nextRequest = (deps.client.chatStream as jest.Mock).mock.calls[1][0] as CodeBuddyMessage[];
+    expect(nextRequest.some(message => message.ollama_thinking === 'Read the test, then implement the fix.')).toBe(true);
+  });
+
   it('keeps concurrent sequential and streaming memory work on each agent client', async () => {
     const globalClient = createMockDeps().client;
     setFactsMemorySessionClient(globalClient);
