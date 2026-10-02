@@ -19,8 +19,10 @@ Le tour n’expose aucun outil et n’apparaît pas dans la conversation. Son en
 est plafonnée à **2 048 jetons estimés**, sa sortie à **256 jetons**. La variable
 `CODEBUDDY_COMPACTION_MEMORY_MAX_TOKENS` accepte un entier de 64 à 512 pour la
 sortie. Une réponse tronquée ou invalide n’est pas persistée. L’appel a un délai
-de 30 secondes et ne change pas de fournisseur. Les usages auxiliaires sont
-comptabilisés séparément ; un compte estimé reste une estimation.
+de 30 secondes et ne change pas de fournisseur. Au plus un essai est payé par
+tour d’agent, même si plusieurs compactions ont lieu dans ce tour ou si le
+contexte reste au-dessus du seuil. Le tour suivant renouvelle cette possibilité.
+Les usages auxiliaires sont comptabilisés séparément ; un compte estimé reste une estimation.
 
 Aucun appel si la mémoire est désactivée, si l’élagage des résultats suffit, si
 un plugin possède la compaction ou si le tour utilise un hôte partagé isolé ou
@@ -78,9 +80,16 @@ Activer `CODEBUDDY_PRE_VERIFY=true`, puis configurer `.codebuddy/hooks.json` :
 ```
 
 Le middleware `PreVerifyMiddleware` a la priorité **154** et utilise la nouvelle
-phase `beforeComplete` du pipeline. Elle est exécutée sur une réponse naturelle
-sans appel d’outil, avant sa livraison et sa persistance. Le texte est tamponné
-pendant ce contrôle. Les phases `beforeTurn` et `afterTurn` conservent leurs
+phase `beforeComplete` du pipeline. Son enregistrement est attendu avant le
+premier appel modèle, y compris avec un pipeline initialement absent ou
+remplacé par un hôte. Elle est exécutée sur une réponse naturelle terminale
+sans appel d’outil, avant sa livraison et sa persistance. Une réponse tronquée
+reste soumise au même contrôle après épuisement des continuations, même vide.
+Les brouillons de continuation restent dans une entrée privée du fournisseur,
+hors de l’historique partagé ; le hook reçoit la proposition complète et ne
+tourne qu’une fois à sa finalisation. Un message de steering abandonne le
+brouillon interrompu avant de poursuivre vers une réponse vérifiée. Les phases
+`beforeTurn` et `afterTurn` conservent leurs
 contrats ; ce hook n’est pas une modification de leurs avertissements.
 
 Chaque commande tourne dans le workspace de l’agent et reçoit en entrée JSON
@@ -92,8 +101,10 @@ bloque également, même avec le code 0. Une exception du middleware bloque auss
 
 Seules les commandes sans filtre `if` sont acceptées. Leur délai est de 10 s
 par défaut, réglable de 1 à 60 000 ms. Une configuration illisible ou invalide
-bloque la finalisation quand l’option est activée. Une configuration absente
-n’ajoute aucune exigence. Un refus arrête le tour ; aucune relance modèle ni
+bloque la finalisation quand l’option est activée. Une configuration absente,
+une liste vide ou une clé mal nommée bloque avec un message explicite : au moins
+une commande `hooks.pre_verify` est requise (nom sensible à la casse). Un refus
+arrête le tour ; aucune relance modèle ni
 vérification en arrière-plan n’est créée. Désactiver l’option conserve le flux
 historique, même si une entrée `pre_verify` existe dans le fichier.
 
