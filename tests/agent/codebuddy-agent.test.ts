@@ -25,6 +25,7 @@ import { removeTestDirAsync } from '../helpers/tmp.js';
 const mockChat = jest.fn();
 const mockChatStream = jest.fn();
 const mockGetCurrentModel = jest.fn().mockReturnValue('grok-2-fast');
+const mockGetCurrentProvider = jest.fn().mockReturnValue('custom');
 const mockSetModel = jest.fn();
 const mockProbeToolSupport = jest.fn().mockResolvedValue(true);
 
@@ -33,6 +34,7 @@ jest.mock('../../src/codebuddy/client.js', () => ({
     chat: mockChat,
     chatStream: mockChatStream,
     getCurrentModel: mockGetCurrentModel,
+    getCurrentProvider: mockGetCurrentProvider,
     setModel: mockSetModel,
     probeToolSupport: mockProbeToolSupport,
   }; }),
@@ -598,6 +600,11 @@ describe('CodeBuddyAgent', () => {
       expect(internal.costTracker.recordUsage).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', { billing: 'local' });
       internal.estimateSessionCostAfter(17057, 8192);
       expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', 0, undefined, { billing: 'local' });
+      // A fallback without an explicit URL may still report the primary URL.
+      mockGetCurrentProvider.mockReturnValue('openai');
+      internal.recordSessionCost(17057, 8192);
+      expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', 0, undefined);
+      mockGetCurrentProvider.mockReturnValue('custom');
       internal.codebuddyClient.getCurrentBaseUrl = () => 'https://paid.example/v1';
       internal.recordSessionCost(17057, 8192);
       expect(internal.costTracker.calculateCost).toHaveBeenLastCalledWith(17057, 8192, 'ornith-1.5:35b', 0, undefined);

@@ -836,7 +836,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     }
   }
 
-  private verifiedLocalBillingTarget?: { model: string; baseURL: string };
+  private verifiedLocalBillingTarget?: { model: string; baseURL: string; provider: string };
 
   private getVerifiedLocalBilling(): import('../utils/cost-tracker.js').VerifiedLocalBilling | undefined {
     const target = this.verifiedLocalBillingTarget;
@@ -844,6 +844,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // must never inherit free billing from an earlier local runtime.
     return target && this.codebuddyClient.getCurrentModel() === target.model
       && this.codebuddyClient.getCurrentBaseUrl?.() === target.baseURL
+      && this.codebuddyClient.getCurrentProvider?.() === target.provider
       ? { billing: 'local' } : undefined;
   }
 
@@ -858,8 +859,9 @@ Look at the screenshot and find the element matching the user's intent. Output o
         baseURL,
         apiKey,
       });
-      this.verifiedLocalBillingTarget = runtime?.noTokenBilling && baseURL
-        ? { model: modelName, baseURL } : undefined;
+      const provider = this.codebuddyClient.getCurrentProvider?.();
+      this.verifiedLocalBillingTarget = runtime?.noTokenBilling && baseURL && provider
+        ? { model: modelName, baseURL, provider } : undefined;
       if (!runtime) return;
       const profile = getModelToolConfig(modelName);
       logger.info('Resolved model profile before first turn', { model: modelName, runtime: runtime.runtime,
