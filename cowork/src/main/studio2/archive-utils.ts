@@ -16,13 +16,17 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isBreakingOut(relative: string): boolean {
+  return relative === '..' || relative.startsWith('..' + path.sep);
+}
+
 export function safeResolve(root: string, relPath = '.'): string | null {
   if (!root || root.includes('\0') || relPath.includes('\0')) return null;
   const normalizedRoot = path.resolve(root);
   const target = path.resolve(normalizedRoot, relPath || '.');
   const relative = path.relative(normalizedRoot, target);
   if (relative === '') return target;
-  if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
+  if (isBreakingOut(relative) || path.isAbsolute(relative)) return null;
   return target;
 }
 
@@ -30,7 +34,7 @@ export function isInside(root: string, target: string): boolean {
   const normalizedRoot = path.resolve(root);
   const normalizedTarget = path.resolve(target);
   const relative = path.relative(normalizedRoot, normalizedTarget);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  return relative === '' || (!isBreakingOut(relative) && !path.isAbsolute(relative));
 }
 
 export async function zipDirectory(sourceDir: string, outputZip: string): Promise<void> {
