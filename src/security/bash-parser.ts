@@ -284,7 +284,7 @@ function fallbackParse(input: string, depth: number = 0): ParseResult {
       current = '';
       continue;
     }
-    if (ch === ';') {
+    if (ch === ';' || ch === '\n' || ch === '\r') {
       segments.push({ text: current.trim(), connector: ';' });
       current = '';
       continue;
@@ -376,7 +376,7 @@ function tokenizeSimple(input: string): string[] {
       continue;
     }
 
-    if (ch === ' ' && !inSingle && !inDouble) {
+    if (ch !== undefined && /\s/.test(ch) && !inSingle && !inDouble) {
       if (current) {
         tokens.push(current);
         current = '';
