@@ -1,4 +1,3 @@
-import { withCompactToolSurface } from '../../prompts/headless-compact.js';
 import { WritePolicy } from '../../security/write-policy.js';
 import type { OllamaNativeRequest } from './ollama-native-transport.js';
 
@@ -86,15 +85,6 @@ export function compactOllamaRequest(request: OllamaNativeRequest): OllamaNative
       // Parameter names/types/enums remain literal. The patch grammar is a
       // necessary protocol, so keep its description in full.
       else if (name !== 'patch') delete property.description;
-    }
-  }
-  // Progressive discovery may have removed schemas after agent selection.
-  // Describe the final wire surface, never tools absent from this request.
-  const exposed = (copy.tools ?? []).filter((tool): tool is { function: { name: string } } =>
-    typeof (tool as { function?: { name?: unknown } }).function?.name === 'string');
-  for (const message of copy.messages) {
-    if (message.role === 'system' && typeof message.content === 'string') {
-      message.content = withCompactToolSurface(message.content, exposed);
     }
   }
   return copy;

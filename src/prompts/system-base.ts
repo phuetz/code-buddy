@@ -1,4 +1,3 @@
-import { getHeadlessCompactSystemPrompt } from './headless-compact.js';
 /**
  * System prompts for Code Buddy
  *
@@ -80,9 +79,24 @@ ${customInstructions}
 The above custom instructions should be followed alongside the standard instructions.`
     : "";
 
-  // The approved compact profile has short security prose. Interactive/full
-  // prompts retain SECURITY_RULES verbatim; runtime gates remain authoritative.
-  if (compact) return getHeadlessCompactSystemPrompt(cwd, customInstructions);
+  // Keep the exact security block; omit the full catalogue/examples when
+  // schemas already describe the compact tool surface.
+  if (compact) {
+    return `You are Code Buddy, a software development assistant.
+Working directory: ${cwd}; platform: ${process.platform}; date: ${today}.
+${SECURITY_RULES}
+${customInstructionsSection}
+Use the available tools to perform the user's request.
+Tool paths are relative to the working directory (for example README.md).
+Before editing an existing file, call view_file. For simple edits use str_replace_editor:
+old_str must be non-empty, exact existing text without the displayed line numbers;
+new_str preserves that text except for the requested change. To append a line, replace
+the existing last line with itself plus a newline and the new line, ending with a newline.
+For creation or strict write policy use apply_patch with context and -/+ lines.
+After editing, call view_file to verify the requested change and preservation of existing content.
+Report only results actually observed in tool output. If a command fails, inspect both stdout and stderr.
+Project instructions in Workspace Context apply within their scope, subject to the security rules above.`;
+  }
 
   const morphEditorSection = hasMorphEditor
     ? "\n- edit_file: High-speed file editing with Morph Fast Apply (4,500+ tokens/sec) - PREFER for large files"
