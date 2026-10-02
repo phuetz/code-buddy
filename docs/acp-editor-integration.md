@@ -61,7 +61,9 @@ commands operate on the physical working directory, as in the interactive CLI.
 Sessions live under `~/.codebuddy/acp-sessions` (owner-only directory/files).
 Snapshots use `src/utils/atomic-write.ts`, and a completed prompt is persisted
 before its response is sent. Closing stdin aborts the turn and drains pending
-session writes before exit. Model conversation, tool results and displayed
+session writes, all accepted requests (including store loading), and their responses
+before exit. A prompt still queued at EOF returns `cancelled` without starting
+agent work. Model conversation, tool results and displayed
 history are retained; replaying history does not execute any tools.
 
 ## Reference-client validation
@@ -77,12 +79,18 @@ Tests cover:
 - Resuming the model conversation in a second process.
 - Cancelling a running command and proving its delayed write never happens;
   separately cancelling a stalled LLM request.
+- Closing stdin during a stalled LLM request and receiving the cancelled prompt
+  response before process exit. A raw NDJSON subprocess test also closes stdin
+  immediately after initialize/new/list/load and checks every response and the
+  durable new session.
 - Applying a patch to an unsaved buffer, isolating “always” grants between
   sessions, restrictive permission modes and stdio MCP tool invocation.
 
 The patch test fails against the previous runner: the file remains unchanged.
 Adapter tests also exercise disk fallback, unanswered/cancelled permissions,
 unsaved files, symlink escape refusal, thoughts, task plans and round limits.
+Legacy Morph edits also resolve relative paths against the session cwd, validate
+workspace containment, and preserve review gates.
 
 ```bash
 HOME="$PWD/_qa/acp/home" RUN_REAL_TESTS=1 npm test -- tests/protocols/acp*
@@ -101,7 +109,9 @@ includes the existing stdio transport suite whose filename contains `real`.
 - ACP text filesystem methods do not offer deletion or renaming. Editor-routed
   patches containing those operations fail before writing anything.
 - Opt-in diff-review/shadow transactions currently require physical disk
-  snapshots. When editor buffers are active, those gated writes fail closed;
+  snapshots. Advertising editor reads alone is sufficient for an unsaved buffer
+  to differ from the disk, even when writes fall back to disk. Those gated writes
+  fail closed;
   the adapter never disables the gate or commits behind the editor.
 - MCP passthrough supports stdio only; terminal delegation and non-text prompt
   blocks are not advertised. Arbitrary tools can still report ordinary policy
