@@ -14,6 +14,9 @@ describe("CLI max-tool-rounds option resolution", () => {
 
   it("\"30\" -> 30", () => {
     expect(resolveMaxToolRounds("30")).toBe(30);
+    expect(resolveMaxToolRounds("030")).toBe(30);
+    expect(resolveMaxToolRounds(" 30 ")).toBe(30);
+    expect(resolveMaxToolRounds("+30")).toBe(30);
   });
 
   it("\"abc\" ou \"0\" -> undefined", () => {
