@@ -46,10 +46,36 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
   if (!system) { system = { role: 'system', content: marker }; next.messages.unshift(system); }
   else system.content = (typeof system.content === 'string' ? system.content : '') + marker;
 
-  // Keep protocol envelopes/IDs intact; only summarize textual observations.
+  // A newly read/restored observation must not immediately lose its middle
+  // while old diagnostics occupy the window. Keep its whole call group.
+  const recentCall = next.messages.findLast(message => message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0);
+  const recentIds = new Set((Array.isArray(recentCall?.tool_calls) ? recentCall.tool_calls : []).map(call => call.id));
+  const recentMessages = new Set(next.messages.filter(message => message === recentCall
+    || (message.role === 'tool' && recentIds.has(message.tool_call_id))));
+
+  // Keep protocol envelopes/IDs intact; only summarize older observations.
   for (const message of next.messages) {
-    if (message.role === 'tool' && typeof message.content === 'string' && message.content.length > 2400) {
+    if (!recentMessages.has(message) && message.role === 'tool' && typeof message.content === 'string' && message.content.length > 2400) {
       message.content = message.content.slice(0, 1200) + marker + message.content.slice(-1200);
+    }
+  }
+  // Evict old assistant/tool groups before erasing instructions/capabilities.
+  // The current observation and last user query remain protected together.
+  while (estimateFinalPayloadTokens(next) > inputBudget) {
+    const index = next.messages.findIndex(message => message !== lastUser && message.role !== 'system' && !recentMessages.has(message));
+    if (index < 0) break;
+    const first = next.messages[index]!;
+    const callIds = new Set((Array.isArray(first.tool_calls) ? first.tool_calls : []).map(call => call.id));
+    next.messages = next.messages.filter((message, position) => position !== index && !(message.role === 'tool' && callIds.has(message.tool_call_id)));
+  }
+  // Only reduce the latest result when even user + tools + that group alone
+  // cannot fit. An oversized system injection must not cause this reduction.
+  const withoutSystems = { ...next, messages: next.messages.filter(message => message.role !== 'system') };
+  if (estimateFinalPayloadTokens(withoutSystems) > inputBudget) {
+    for (const message of recentMessages) {
+      if (message.role === 'tool' && typeof message.content === 'string' && message.content.length > 2400) {
+        message.content = message.content.slice(0, 1200) + marker + message.content.slice(-1200);
+      }
     }
   }
   // Prefer the recent observation over huge project trees/injections. Each
@@ -69,15 +95,6 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
       else high = middle - 1;
     }
     message.content = render(low);
-  }
-  // Remove an assistant/tool group together; never orphan a result or remove
-  // the last user query, even when later injections are system messages.
-  while (estimateFinalPayloadTokens(next) > inputBudget) {
-    const index = next.messages.findIndex(message => message !== lastUser && message.role !== 'system');
-    if (index < 0) break;
-    const first = next.messages[index]!;
-    const callIds = new Set((Array.isArray(first.tool_calls) ? first.tool_calls : []).map(call => call.id));
-    next.messages = next.messages.filter((message, position) => position !== index && !(message.role === 'tool' && callIds.has(message.tool_call_id)));
   }
   const inputTokens = estimateFinalPayloadTokens(next);
   if (inputTokens > inputBudget) throw new PayloadBudgetError(`Context payload exceeds ${contextWindow} tokens with the last user query preserved. Increase the runtime window or shorten the mission/schemas; no request sent.`);
