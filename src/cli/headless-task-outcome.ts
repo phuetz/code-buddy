@@ -34,19 +34,20 @@ function repositoryActionClauses(prompt: string): string[] {
   // verb's vocabulary. Otherwise an unfamiliar operation after "and" vanishes.
   const boundaries = /[?!;,\n]\s*|\.(?=\s|$)\s*|\b(?:then|puis|ensuite|but|mais|and|et)\s+/g;
   const clauses = unquoted.split(boundaries).map(clause => clause.trim().replace(/^(?:please|then|puis|ensuite|and|et)\s+/, '')).filter(Boolean);
-  const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|trace|cite|show|list|what|where|which|count|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|montre|liste|quel|quelle|quels|quelles|ou|combien|comment|pourquoi|reponds|dis|traduis)\b/;
+  const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|trace|cite|identify|locate|inspect|consult|report|outline|highlight|state|mention|show|list|what|where|which|count|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|recense|identifie|repere|consulte|indique|montre|liste|quel|quelle|quels|quelles|ou|combien|comment|pourquoi|reponds|dis|traduis)\b/;
   const outputConstraint = (clause: string): boolean => {
     // An output rule cannot exempt an independent, unfamiliar operation.
     const conjuncts = clause.split(/\s+\b(?:and|et)\b\s+/);
     if (conjuncts.length > 1) return conjuncts.every(part => outputConstraint(part)
       || informational.test(part) || /^(?:do not|don't|never|ne\b.*\bpas)\b/.test(part));
+    if (/^(?:nothing else|rien d'autre)[.!]?$/.test(clause)) return true;
     if (/^(?:with\s+)?(?:no|without)\s+(?:extra\s+)?(?:commentary|chatter|prose|explanation|text)(?:\s+(?:afterwards|afterward|please))?$/.test(clause)) return true;
     // Restitution is an answer unless it names a write destination or changes
     // a function's return behavior. Source locations are not destinations.
     if (/^(?:return|renvoie|affiche|present|presente|give\s+(?:me|us)|donne(?:-moi|\s+moi)?)\b/.test(clause)
       && !/\b(?:to|into|vers|dans)\s+(?:a\s+)?(?:file_target|file\b|[\w/-]+\.[a-z0-9]+\b)|\bfrom\s+(?:the\s+)?function\b/.test(clause)) return true;
-    const outputVerb = /\b(?:write|use|output|return|ecris|utilise|renvoie|affiche)\b/.test(clause);
-    const outputObject = /\b(?:answers?|repl(?:y|ies)|response|text|sentence|names?|values?|numerals?|numbers?|json|reponse|texte|phrase|nom|valeur|chiffre)\b/.test(clause);
+    const outputVerb = /\b(?:write|use|output|return|keep|put|give|ecris|utilise|renvoie|affiche|applique|garde)\b/.test(clause);
+    const outputObject = /\b(?:answers?|repl(?:y|ies)|response|text|sentence|names?|values?|outputs?|results?|summar(?:y|ies)|lists?|signatures?|numerals?|numbers?|json|reponse|texte|phrase|nom|valeur|chiffre)\b/.test(clause);
     const physical = /\b(?:file_target|files?|folders?|director(?:y|ies)|source|module|script|function|implementation|parameters?|code|fichiers?|dossiers?|parametres?)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause);
     // Applying a reading layout is presentation; an unrelated physical target
     // remains an action. AGENTS.md is the source of the rule, not a write target.
@@ -62,9 +63,13 @@ function repositoryActionClauses(prompt: string): string[] {
   return clauses.filter((clause, index) => {
     // Supplements constrain the preceding answer; they are not imperatives.
     // Splitting coordination must not turn a noun phrase into a write request.
-    const dependent = /^(?:with|without|including|preserving|keeping|retaining|according to|avec|sans|en incluant|en conservant|selon)\b/;
+    const dependent = /^(?:with|without|using|including|preserving|keeping|retaining|according to|avec|sans|en incluant|en conservant|selon)\b/;
     const nominal = /^(?:the|their|its|these|those|le|la|les|ses|leurs)\s+/;
-    if (dependent.test(clause) || index > 0 && nominal.test(clause)
+    // A supplementary clause can itself request a write. Its grammatical
+    // attachment is not permission to waive an explicit physical operation.
+    const modifierWrite = /\b(?:writing|saving|editing|creating|replacing|ecrivant|creant|modifiant)\b|\b(?:saved|written)\s+(?:to|into)\b/.test(clause)
+      && /\b(?:file_target|file|source|module|script|fichier)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause);
+    if (dependent.test(clause) && !modifierWrite || index > 0 && nominal.test(clause)
       && !/\b(?:must|shall|should|needs?|requires?|doit|doivent|is|are|be|etre|sont|est)\b/.test(clause)) return false;
     // Negation in French need not contain "pas" (aucun/rien/jamais/que).
     if (/^ne\b.*\b(?:aucun\w*|rien|jamais|que)\b/.test(clause)) return false;
@@ -77,14 +82,14 @@ function repositoryActionClauses(prompt: string): string[] {
     // translating prose. Do not exempt it just because "translate" is a
     // common informational verb.
     if (/^(?:translate|traduis)\b/.test(clause)
-      && /\b(?:to|into|en)\s+(?:python|typescript|javascript|rust|go|java|ruby|c\+\+|c#|sql|bash)\b/.test(clause)) return true;
+      && /\b(?:to|into|en)\s+(?:python|typescript|javascript|rust|go|java|ruby|c\+\+|c#|f#|c|sql|bash|lua|kotlin|swift|scala|php|perl|clojure|haskell|ocaml|cobol|fortran|elixir|dart|julia)(?=\s|[.!?,;]|$)/.test(clause)) return true;
     if (/^(?:after|before|apres|avant)\b/.test(clause) && clauses[index + 1] && outputConstraint(clauses[index + 1]!)) return false;
     if (/^(?:do not|don't|never|ne\b.*\bpas)\b/.test(clause)) return false;
     if (outputConstraint(clause)) return false;
     if (informational.test(clause)) return false;
     // A coordinated noun list is still the object of the preceding read.
     if (index > 0 && (informational.test(clauses[index - 1]!) || /^(?:follow|suis)\b/.test(clauses[index - 1]!))
-      && /^(?:files?|folders?|imports?|exports?|names?|values?|parameters?|calculations?|dependencies)$/.test(clause)) return false;
+      && /^(?:files?|folders?|imports?|exports?|names?|values?|parameters?|calculations?|dependencies|inputs?|outputs?|arguments?)$/.test(clause)) return false;
     if (/^(?:hi|hello|hey|bonjour|salut)$/.test(clause)) return false;
     if (/^write (?:a |an )?(?:poem|story|essay|email|sql query)\b/.test(clause)
       && !/\bfile_target\b/.test(clause)) return false;
@@ -295,7 +300,8 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
       const abstract = /^(?:overview|summary|outline|explanation|interpretation|understanding|hypothesis|comprehension|notes?|list|risk|scan|analysis|reading|search|reasoning|logic|flow|walk-through|resume|apercu|liste|analyse|lecture|recherche|raisonnement|interpretation|hypothese)\b/.test(head)
         // An unqualified index can assert a database operation. Only an index
         // explicitly describing its subject is an abstract reading artifact.
-        || /^index\s+(?:of|de)\b/.test(head);
+        || /^index\s+(?:of|de)\b/.test(head)
+        || /^map\b/.test(head) && /\bmental\b/.test(object);
       const physicalHead = /^[\w./-]+\.[a-z0-9]+\b|^[\w.-]+\//.test(head)
         || /\b(?:files?|folders?|director(?:y|ies)|documents?|scripts?|modules?|tools?|services?|servers?|apps?|components?|class(?:es)?|functions?|programs?|packages?|generators?|utilit(?:y|ies)|pipelines?|endpoints?|fichiers?|dossiers?)\b/.test(head.split(/\b(?:of|de|about|sur)\b/)[0]!);
       // In 'a list of imports in source.js', the path locates the subject of
@@ -304,7 +310,7 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
       const physicalDestination = /\b(?:in|to|as|dans|vers)\s+[`"']?(?:[\w-]+\/)*[\w-]+\.[a-z0-9]+\b/.test(abstract ? objectHead : object);
       const manualWalk = /^(?:ran|execute|executed)$/.test(verb)
         && (/^through\b/.test(object) || abstract)
-        && /\b(?:by hand|mentally|mentalement|de tete)\b/.test(object)
+        && /\b(?:by hand|mentally|in my head|mentalement|de tete|dans ma tete)\b/.test(object)
         && !physicalHead && !physicalDestination && paths.length === 0;
       if (manualWalk) continue;
       if (!physicalHead && !physicalDestination && (abstract || /^model\b/.test(head) && /\bmental(?:ly|ement)?\b/.test(object) || /^(?:into|across|out of)\b/.test(head)
