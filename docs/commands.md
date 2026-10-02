@@ -774,7 +774,7 @@ own local operator review draft.
 | `--model <model>` | `-m` | AI model | auto-detect |
 | `--prompt <prompt>` | `-p` | Single prompt (headless mode) | - |
 | `--profile <name>` | | Named config profile | - |
-| `--max-tool-rounds <n>` | | Max tool execution rounds | 400 |
+| `--max-tool-rounds <n>` | | Max tool execution rounds | 50 (400 in YOLO mode) |
 | `--max-price <dollars>` | | Session cost limit | $10 |
 | `--security-mode <mode>` | `-s` | `suggest`, `auto-edit`, or `full-auto` | `suggest` |
 | `--permission-mode <mode>` | | `default`, `plan`, `acceptEdits`, `dontAsk`, `bypassPermissions` | `default` |

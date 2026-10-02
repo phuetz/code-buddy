@@ -1640,7 +1640,7 @@ program
   )
   .option(
     "--max-tool-rounds <rounds>",
-    "maximum number of tool execution rounds (default: 50) (400 in YOLO mode)"
+    "maximum number of tool execution rounds (default: 50, 400 with --yolo)"
   )
   .option(
     "-s, --security-mode <mode>",
@@ -2122,9 +2122,8 @@ program
         ...(options.apiKey ? { apiKey: options.apiKey } : {}),
         ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
       }));
-      const maxToolRounds = options.maxToolRounds
-        ? parseInt(options.maxToolRounds, 10) || undefined
-        : undefined;
+      const { resolveMaxToolRounds } = await import("./cli/max-tool-rounds-resolver.js");
+      const maxToolRounds = resolveMaxToolRounds(options.maxToolRounds);
 
       if (!apiKey) {
         // The shortest first-run path is a direct ChatGPT OAuth login. Keep the
@@ -2770,7 +2769,7 @@ gitCommand
   )
   .option(
     "--max-tool-rounds <rounds>",
-    "maximum number of tool execution rounds (default: 50)"
+    "maximum number of tool execution rounds (default: 50, 400 with --yolo)"
   )
   .action(async (options) => {
     // Load environment before changing cwd so root .env values (API keys) remain available
@@ -2799,9 +2798,8 @@ gitCommand
       const apiKey = launched.apiKey;
       const baseURL = launched.baseURL;
       const model = launched.model;
-      const maxToolRounds = options.maxToolRounds
-        ? parseInt(options.maxToolRounds, 10) || undefined
-        : undefined;
+      const { resolveMaxToolRounds } = await import("./cli/max-tool-rounds-resolver.js");
+      const maxToolRounds = resolveMaxToolRounds(options.maxToolRounds);
 
       if (!apiKey) {
         const { NO_PROVIDER_GUIDANCE } = await import('./cli/first-run.js');
