@@ -4,6 +4,7 @@ import os from 'os';
 import { spawn, SpawnOptions } from 'child_process';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
+import { confirmHostEffect } from '../security/host-effect-confirmation.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type HookType =
@@ -151,10 +152,11 @@ export class HookSystem extends EventEmitter {
    * Execute a single hook
    */
   private async executeHook(hook: Hook, context: HookContext): Promise<HookResult> {
+    const command = this.interpolateCommand(hook.command, context);
+    if (!await confirmHostEffect('project_hook', `Hook system: ${hook.type}`, command)) {
+      return { success: false, error: 'Hook requires explicit human confirmation' };
+    }
     return new Promise((resolve) => {
-      // Replace placeholders in command
-      let command = this.interpolateCommand(hook.command, context);
-
       const timeout = hook.timeout || this.globalTimeout;
       let timedOut = false;
 

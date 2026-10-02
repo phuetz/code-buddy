@@ -1,3 +1,7 @@
+// Functional protocol fixtures use an approved gate; real refusals are covered
+// by tests/hooks/project-hook-human-guard.test.ts without mocking the guard.
+vi.mock('../../src/security/host-effect-confirmation.js', () => ({ confirmHostEffect: vi.fn().mockResolvedValue(true) }));
+
 /**
  * Tests for Hook Manager
  *
@@ -1214,13 +1218,16 @@ describe('HookManager', () => {
       mockSpawn.mockReturnValue(mockChild as ChildProcess);
 
       // Start the execution (don't await - we need to advance time)
-      void manager.executeHooks('PreToolUse', { toolName: 'bash' });
+      const pending = manager.executeHooks('PreToolUse', { toolName: 'bash' });
 
       // Advance past the timeout
-      jest.advanceTimersByTime(6000);
+      await vi.advanceTimersByTimeAsync(6000);
 
       // The kill should have been called
       expect(mockChild.kill).toHaveBeenCalledWith('SIGTERM');
+      const close = (mockChild.on as jest.Mock).mock.calls.find(([event]) => event === 'close')?.[1] as (code: number) => void;
+      expect(close).toBeDefined(); close(1);
+      expect((await pending).success).toBe(false);
     });
   });
 

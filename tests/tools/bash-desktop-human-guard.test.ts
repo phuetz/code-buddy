@@ -25,14 +25,15 @@ describe('Grok desktop shell before sandbox', () => {
       result: { stdout: 'desktop actuator reached', stderr: '', exitCode: 0, backend: 'fixture', timedOut: false } });
   });
   afterEach(() => { service.setInteractiveBridge(null); resetPermissionModeManager(); vi.unstubAllEnvs(); });
-  it('Grok buffered xdotool cannot reach sandbox after refusal', async () => {
-    const result = await new BashTool().execute('xdotool key Return');
+  const commands = ['xdotool key Return', "xdo'to'ol key Return", 'xdo"to"ol key Return', 'xte \'key Return\'', 'wtype -k Return', String.raw`xdo\tool key Return`, '/usr/bin/wtype -k Return'];
+  it.each(commands)('buffered desktop command %s cannot reach sandbox after refusal', async command => {
+    const result = await new BashTool().execute(command);
     expect({ success: result.success, sandboxDispatches: sandbox.mock.calls.length }).toEqual({ success: false, sandboxDispatches: 0 });
     expect(result.error).toMatch(/human confirmation/);
     expect(sandbox).not.toHaveBeenCalled(); expect(human.mock.calls[0]?.[0].forcePrompt).toBe(true);
   });
-  it('Grok streaming xdotool cannot reach sandbox after refusal', async () => {
-    const iterator = executeStreaming('xdotool key Return', 1000, {
+  it.each(commands)('streaming desktop command %s cannot reach sandbox after refusal', async command => {
+    const iterator = executeStreaming(command, 1000, {
       getCurrentDirectory: () => process.cwd(), getRunningProcesses: () => new Set(),
       getSandboxManager: () => ({ validateCommand: () => ({ valid: true }) }),
     });

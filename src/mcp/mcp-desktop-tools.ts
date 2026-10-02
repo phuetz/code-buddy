@@ -11,12 +11,14 @@
  *  - Control tools that actuate the real desktop (`desktop_click`, `desktop_type`,
  *    `desktop_move_mouse`, `desktop_key`) are GATED behind
  *    CODEBUDDY_MCP_DESKTOP_CONTROL=1 (fail-closed: not registered when unset).
+ *  - Every control call also requires a fresh, forced human decision before initialization.
  */
 
 import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { isConfinedTarget } from '../agent/workspace-confine.js';
+import { confirmHostEffect } from '../security/host-effect-confirmation.js';
 import { logger } from '../utils/logger.js';
 import type { DesktopAutomationManager } from '../desktop-automation/automation-manager.js';
 import type { MouseButton } from '../desktop-automation/types.js';
@@ -169,6 +171,9 @@ export function registerDesktopTools(
     },
     async (args) => {
       try {
+        if (!await confirmHostEffect('desktop_click', 'Desktop (target not verified)', JSON.stringify(args))) {
+          return fail('Desktop action requires explicit human confirmation');
+        }
         const mgr = await getManager();
         await mgr.click(args.x, args.y, {
           ...(args.button ? { button: args.button as MouseButton } : {}),
@@ -187,6 +192,9 @@ export function registerDesktopTools(
     { x: z.number().describe('X coordinate'), y: z.number().describe('Y coordinate') },
     async (args) => {
       try {
+        if (!await confirmHostEffect('desktop_move_mouse', 'Desktop (target not verified)', JSON.stringify(args))) {
+          return fail('Desktop action requires explicit human confirmation');
+        }
         const mgr = await getManager();
         await mgr.moveMouse(args.x, args.y);
         return ok(`Moved mouse to ${args.x},${args.y}.`);
@@ -202,6 +210,9 @@ export function registerDesktopTools(
     { text: z.string().describe('Text to type') },
     async (args) => {
       try {
+        if (!await confirmHostEffect('desktop_type', 'Desktop (target not verified)', JSON.stringify(args))) {
+          return fail('Desktop action requires explicit human confirmation');
+        }
         const mgr = await getManager();
         await mgr.type(args.text);
         return ok(`Typed ${args.text.length} character(s).`);
@@ -223,6 +234,9 @@ export function registerDesktopTools(
     },
     async (args) => {
       try {
+        if (!await confirmHostEffect('desktop_key', 'Desktop (target not verified)', JSON.stringify(args))) {
+          return fail('Desktop action requires explicit human confirmation');
+        }
         const mgr = await getManager();
         await mgr.keyPress(
           args.key,

@@ -20,6 +20,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { EventEmitter } from "events";
 import { logger } from "../utils/logger.js";
+import { confirmHostEffect } from '../security/host-effect-confirmation.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 /**
@@ -405,9 +406,20 @@ export class HooksManager extends EventEmitter {
 
     const results: HookResult[] = [];
 
-    for (const hook of enabledHooks) {
+    for (const registeredHook of enabledHooks) {
+      // Freeze the selected definition before awaiting the human decision.
+      const hook = { ...registeredHook };
       if (!this.matchesContext(hook, fullContext)) {
         continue;
+      }
+
+      if (!await confirmHostEffect('project_hook', `Lifecycle hook: ${hook.name}`, JSON.stringify({
+        type, command: hook.command, script: hook.script, customHandler: Boolean(hook.handler), context: fullContext,
+      }))) {
+        const result: HookResult = { success: false, abort: true, duration: 0, error: 'Hook requires explicit human confirmation' };
+        results.push(result);
+        this.emit('hook:aborted', { name: hook.name, type });
+        break; // Refusal is binding even when failOnError is false.
       }
 
       this.emit("hook:executing", { name: hook.name, type });

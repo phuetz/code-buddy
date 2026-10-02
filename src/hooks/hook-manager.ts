@@ -4,6 +4,7 @@ import os from "os";
 import { spawn } from "child_process";
 import { getErrorMessage } from "../types/index.js";
 import { logger } from "../utils/logger.js";
+import { confirmHostEffect } from '../security/host-effect-confirmation.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 export type HookEvent =
@@ -212,10 +213,14 @@ export class HookManager {
     hook: Hook,
     context: HookContext
   ): Promise<HookResult> {
+    const command = hook.command;
+    if (!await confirmHostEffect('project_hook', `Hook: ${context.event}`, command)) {
+      return { success: false, blocked: true, error: 'Hook requires explicit human confirmation' };
+    }
     return new Promise((resolve) => {
       const timeout = hook.timeout || 30000;
 
-      const child = spawn("sh", ["-c", hook.command], {
+      const child = spawn("sh", ["-c", command], {
         stdio: ["pipe", "pipe", "pipe"],
         env: {
           ...process.env,

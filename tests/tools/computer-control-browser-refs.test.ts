@@ -62,15 +62,25 @@ jest.mock('../../src/desktop-automation/index.js', () => ({
   }),
 }));
 
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
+import { resetPermissionModeManager } from '../../src/security/permission-modes.js';
+import { getDesktopAutomation } from '../../src/desktop-automation/index.js';
+
 import { ComputerControlTool } from '../../src/tools/computer-control-tool.js';
 
 describe('ComputerControlTool browser ref handling', () => {
   let tool: ComputerControlTool;
+  const service = ConfirmationService.getInstance();
+  const human = vi.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetPermissionModeManager(); service.resetSession();
+    human.mockResolvedValue({ confirmed: true }); service.setInteractiveBridge(human);
     tool = new ComputerControlTool();
   });
+
+  afterEach(() => { service.setInteractiveBridge(null); resetPermissionModeManager(); });
 
   it('should return descriptive error for browser-sourced element with zero coordinates', async () => {
     mockGetElement.mockReturnValue({
@@ -88,12 +98,22 @@ describe('ComputerControlTool browser ref handling', () => {
 
     // The error thrown in resolvePoint() is caught by execute()'s try/catch
     // and returned as { success: false, error: '...' }
-    const result = await tool.execute({ action: 'click', ref: 42 } as any);
+    const result = await tool.execute({ action: 'click', ref: 42 });
 
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
     expect(result.error).toContain('browser');
     expect(result.error).toContain('42');
+    expect(human).toHaveBeenCalledTimes(1); expect(human.mock.calls[0]?.[0].forcePrompt).toBe(true);
+    expect(getDesktopAutomation().click).not.toHaveBeenCalled();
+  });
+
+  it('refusal stops before browser ref resolution and never clicks', async () => {
+    human.mockResolvedValue({ confirmed: false });
+    const result = await tool.execute({ action: 'click', ref: 42 });
+    expect(result.success).toBe(false); expect(result.error).toMatch(/human confirmation/);
+    expect(mockGetElement).not.toHaveBeenCalled(); expect(getDesktopAutomation().click).not.toHaveBeenCalled();
+    expect(human.mock.calls[0]?.[0].forcePrompt).toBe(true);
   });
 
   it('should handle normal desktop elements normally', async () => {
@@ -113,9 +133,11 @@ describe('ComputerControlTool browser ref handling', () => {
     const result = await tool.execute({ action: 'click', ref: 1 });
 
     // Should not throw browser-related error
-    if (result.error) {
-      expect(result.error).not.toContain('browser element');
-    }
+    expect(result.success).toBe(true);
+    expect(getDesktopAutomation().click).toHaveBeenCalledTimes(1);
+    // The mandatory gate and the existing observed-target guard both remain active.
+    expect(human).toHaveBeenCalledTimes(2);
+    expect(human.mock.calls.every(([request]) => request.forcePrompt === true)).toBe(true);
   });
 
   it('should handle browser element with non-zero coordinates normally', async () => {
@@ -137,8 +159,10 @@ describe('ComputerControlTool browser ref handling', () => {
     const result = await tool.execute({ action: 'click', ref: 10 });
 
     // Should not throw browser-related error (coordinates are non-zero)
-    if (result.error) {
-      expect(result.error).not.toContain('browser element');
-    }
+    expect(result.success).toBe(true);
+    expect(getDesktopAutomation().click).toHaveBeenCalledTimes(1);
+    // The mandatory gate and the existing observed-target guard both remain active.
+    expect(human).toHaveBeenCalledTimes(2);
+    expect(human.mock.calls.every(([request]) => request.forcePrompt === true)).toBe(true);
   });
 });

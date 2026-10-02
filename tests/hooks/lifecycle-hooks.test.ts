@@ -1,3 +1,5 @@
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
+import { resetPermissionModeManager } from '../../src/security/permission-modes.js';
 /**
  * Tests for Lifecycle Hooks Module
  *
@@ -20,6 +22,9 @@ import {
 let manager: HooksManager;
 
 beforeEach(() => {
+  resetPermissionModeManager();
+  ConfirmationService.getInstance().resetSession();
+  ConfirmationService.getInstance().setInteractiveBridge(async () => ({ confirmed: true }));
   manager = new HooksManager(process.cwd());
 });
 
@@ -452,3 +457,5 @@ describe("Lifecycle Hooks", () => {
     });
   });
 });
+
+afterEach(() => { ConfirmationService.getInstance().setInteractiveBridge(null); resetPermissionModeManager(); });

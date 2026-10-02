@@ -17,7 +17,11 @@ export async function confirmHostEffect(toolName: string, application: string, c
 
 /** Recognized desktop command lines only; this is not a sandbox for arbitrary programs. */
 export async function confirmDesktopCommand(command: string): Promise<boolean> {
-  if (!/\b(?:xdotool|ydotool|dotool|wmctrl|cliclick|osascript)\b/i.test(command)) return true;
+  const desktopActor = /\b(?:xdotool|ydotool|dotool|wmctrl|cliclick|osascript|xte|wtype)\b/i;
+  // Conservative literal normalization, not shell evaluation. Preserve the raw
+  // match too so normalization cannot remove a previously guarded command.
+  const literal = command.replace(/\\\r?\n/g, '').replace(/['"\\]/g, '');
+  if (!desktopActor.test(command) && !desktopActor.test(literal)) return true;
   return confirmHostEffect('bash', 'Desktop command (target not verified)', command);
 }
 

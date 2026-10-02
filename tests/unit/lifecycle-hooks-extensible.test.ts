@@ -1,3 +1,5 @@
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
+import { resetPermissionModeManager } from '../../src/security/permission-modes.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { InfrastructureFacade } from '../../src/agent/facades/infrastructure-facade.js';
 import { HooksManager } from '../../src/hooks/lifecycle-hooks.js';
@@ -13,6 +15,9 @@ describe('Extensible Lifecycle Hooks (Axe 4)', () => {
   let facade: InfrastructureFacade;
 
   beforeEach(() => {
+    resetPermissionModeManager();
+    ConfirmationService.getInstance().resetSession();
+    ConfirmationService.getInstance().setInteractiveBridge(async () => ({ confirmed: true }));
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hooks-test-'));
     hooksManager = new HooksManager(tempDir);
     facade = new InfrastructureFacade({
@@ -25,6 +30,7 @@ describe('Extensible Lifecycle Hooks (Axe 4)', () => {
   });
 
   afterEach(() => {
+    ConfirmationService.getInstance().setInteractiveBridge(null); resetPermissionModeManager();
     fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     vi.restoreAllMocks();
   });
