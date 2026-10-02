@@ -817,7 +817,7 @@ export class OpenAICompatProvider implements Provider {
 
   private getOllamaReasoningEffort(_model: string): string | undefined {
     if (!this.isOllamaProvider()) return undefined;
-    return process.env.CODEBUDDY_OLLAMA_REASONING_EFFORT?.trim() || 'none';
+    return process.env.CODEBUDDY_OLLAMA_REASONING_EFFORT?.trim() || undefined;
   }
 
   private isAsyncIterableStream(value: unknown): value is AsyncIterable<ChatCompletionChunk> {

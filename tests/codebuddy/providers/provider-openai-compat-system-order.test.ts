@@ -136,6 +136,23 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
     { role: 'system', content: '<todo_context>none</todo_context>' },
   ];
 
+  it.each([['', undefined], ['none', false], ['high', 'high']])(
+    'Ollama agentic headless: effort opérateur %s conservé sans défaut none', async (effort, expected) => {
+      vi.stubEnv('CODEBUDDY_PROVIDER', 'ollama');
+      vi.stubEnv('CODEBUDDY_HEADLESS', 'true');
+      vi.stubEnv('CODEBUDDY_OLLAMA_REASONING_EFFORT', effort as string);
+      const provider = makeProvider('http://127.0.0.1:11434/v1', 'qwen3.6:35b-a3b-q4_K_M');
+      const { seen } = stubOllamaWire();
+      const tools = [{ type: 'function' as const, function: { name: 'bash', description: 'Shell', parameters: { type: 'object', properties: { command: { type: 'string' } } } } }];
+      try {
+        for await (const _ of provider.chatStream([{ role: 'user', content: 'Fix and test the regression' }], tools)) { /* consume */ }
+        const body = seen().find(request => Array.isArray(request.tools) && request.tools.length > 0);
+        expect(body).toBeDefined();
+        expect(body?.think).toBe(expected);
+      } finally { vi.unstubAllEnvs(); }
+    },
+  );
+
   it('LOCAL (Ollama): emits exactly one system message in position 0', async () => {
     process.env.CODEBUDDY_PROVIDER = 'ollama';
     const provider = makeProvider('http://127.0.0.1:11434/v1', 'qwen3.8:27b');
