@@ -327,8 +327,11 @@ export function toOllamaNativeRequest(
   const options: Record<string, unknown> = {};
   if (numCtx !== undefined) options.num_ctx = numCtx;
   if (typeof payload.max_tokens === 'number') {
-    options.num_predict = numCtx === undefined ? payload.max_tokens
-      : Math.max(1, Math.min(payload.max_tokens, Math.floor(numCtx / 4)));
+    const explicitOutput = Number(process.env.CODEBUDDY_MAX_TOKENS);
+    const outputCeiling = numCtx === undefined ? payload.max_tokens
+      : Number.isFinite(explicitOutput) && explicitOutput >= 1
+        ? numCtx : Math.floor(numCtx / 4);
+    options.num_predict = Math.max(1, Math.min(payload.max_tokens, outputCeiling));
   }
   if (typeof payload.temperature === 'number') options.temperature = payload.temperature;
   if (typeof payload.top_p === 'number') options.top_p = payload.top_p;

@@ -50,3 +50,34 @@ it('rend le profil et les réserves visibles avant la première requête', async
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   } finally { vi.unstubAllGlobals(); info.mockRestore(); }
 });
+
+
+it('respecte un plafond explicite local avant le premier fetch, sans dépasser la fenêtre', async () => {
+  const { OpenAICompatProvider } = await import('../../src/codebuddy/providers/provider-openai-compat.js');
+  vi.stubEnv('CODEBUDDY_PROVIDER', 'ollama');
+  vi.stubEnv('CODEBUDDY_MAX_TOKENS', '16384');
+  cacheRuntimeModelContextWindow('ornith-1.5:35b', 32768);
+  expect(getModelToolConfig('ornith-1.5:35b').maxOutputTokens).toBe(16384);
+  const fetchImpl = vi.fn(async (_url: unknown, init: RequestInit) => {
+    const payload = JSON.parse(String(init.body));
+    expect(payload.options).toMatchObject({ num_ctx: 32768, num_predict: 16384 });
+    return new Response(JSON.stringify({ message: { role: 'assistant', content: 'ok' }, done: true }), { status: 200 });
+  });
+  vi.stubGlobal('fetch', fetchImpl);
+  try {
+    const provider = new OpenAICompatProvider({ model: 'ornith-1.5:35b', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11436/v1', defaultMaxTokens: 16384, getCircuitBreakerConfig: () => undefined });
+    await provider.chat([{ role: 'user', content: 'mission' }]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    vi.stubEnv('CODEBUDDY_MAX_TOKENS', '999999');
+    expect(getModelToolConfig('ornith-1.5:35b').maxOutputTokens).toBe(32768);
+  } finally { vi.unstubAllGlobals(); }
+});
+
+
+it('ne relève pas un plafond cloud au seul motif des overrides opérateur', () => {
+  const original = getModelToolConfig('gpt-4o').maxOutputTokens;
+  vi.stubEnv('CODEBUDDY_MAX_CONTEXT', '131072');
+  vi.stubEnv('CODEBUDDY_MAX_TOKENS', '999999');
+  cacheRuntimeModelContextWindow('gpt-4o', 131072, 'catalog');
+  expect(getModelToolConfig('gpt-4o').maxOutputTokens).toBe(original);
+});

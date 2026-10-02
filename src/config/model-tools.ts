@@ -1402,8 +1402,15 @@ function applyEnvContextOverride(config: ModelToolConfig, modelName: string): Mo
   const contextWindow = Number.isFinite(envMaxContext) && envMaxContext > 0
     ? Math.floor(envMaxContext) : config.contextWindow;
   const local = _runtimeContextWindows.get(modelCacheKey(modelName))?.source === 'local' || (Number.isFinite(envMaxContext) && envMaxContext > 0);
-  const maxOutputTokens = contextWindow === undefined || config.maxOutputTokens === undefined
-    ? config.maxOutputTokens : Math.max(1, Math.min(config.maxOutputTokens, local ? Math.floor(contextWindow / 4) : contextWindow));
+  const envMaxOutput = Number(process.env.CODEBUDDY_MAX_TOKENS);
+  const explicitLocalOutput = _runtimeContextWindows.get(modelCacheKey(modelName))?.source === 'local'
+    && Number.isFinite(envMaxOutput) && envMaxOutput >= 1;
+  const requestedOutput = explicitLocalOutput ? Math.floor(envMaxOutput) : config.maxOutputTokens;
+  // The quarter-window reserve is a local default, not a ceiling on an
+  // operator's explicit response budget. The final payload still budgets input.
+  const maxOutputTokens = contextWindow === undefined || requestedOutput === undefined
+    ? requestedOutput : Math.max(1, Math.min(requestedOutput,
+      local && !explicitLocalOutput ? Math.floor(contextWindow / 4) : contextWindow));
   return contextWindow === config.contextWindow && maxOutputTokens === config.maxOutputTokens
     ? config : { ...config, contextWindow, maxOutputTokens };
 }
