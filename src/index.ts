@@ -1354,16 +1354,18 @@ async function processPromptHeadless(
       await agent.saveCurrentSession();
     }
 
-    // WS3-T1 — session-end flush (handoff + lesson candidates). Awaited with
-    // a hard cap so headless runs keep their continuity write without ever
-    // hanging the exit; trivial sessions no-op inside the module.
+    // Await cleanup even when its deadline expires: Promise.race leaves a
+    // live inference running after exit and can hide its unfinished response.
     try {
       const { runSessionEndFlush } = await import('./agent/session-end-flush.js');
-      const flushTimeoutMs = parseInt(process.env.CODEBUDDY_SESSION_END_FLUSH_TIMEOUT_MS || '15000', 10);
-      await Promise.race([
-        runSessionEndFlush({ chatHistory: chatEntries }),
-        new Promise<void>((resolve) => setTimeout(resolve, flushTimeoutMs).unref()),
-      ]);
+      const configuredTimeout = Number(process.env.CODEBUDDY_SESSION_END_FLUSH_TIMEOUT_MS ?? 15000);
+      const flushTimeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+        ? configuredTimeout : 15000;
+      await runSessionEndFlush({
+        chatHistory: chatEntries,
+        client: agent.getClient(),
+        signal: AbortSignal.timeout(Math.min(flushTimeoutMs, 2_147_483_647)),
+      });
     } catch (e) {
       logger.debug('Headless session-end flush skipped', { error: String(e) });
     }

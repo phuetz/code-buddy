@@ -75,8 +75,9 @@ export async function proposeLessonsFromSession(
   chatHistory: ChatEntry[],
   workDir: string = process.cwd(),
   client?: CodeBuddyClient,
+  signal?: AbortSignal,
 ): Promise<LessonCandidate[]> {
-  if (!chatHistory || chatHistory.length === 0) return [];
+  if (signal?.aborted || !chatHistory || chatHistory.length === 0) return [];
 
   let llm: CodeBuddyClient;
   if (client) {
@@ -95,7 +96,7 @@ export async function proposeLessonsFromSession(
     const res = await llm.chat([
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: `Session transcript:\n\n${formatTranscript(chatHistory)}` },
-    ]);
+    ], undefined, signal ? { signal } : undefined);
     reply = res.choices[0]?.message?.content || '';
   } catch (err) {
     logger.debug('[lesson-auto-proposer] LLM call failed', { err });

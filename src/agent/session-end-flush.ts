@@ -43,6 +43,8 @@ export interface SessionEndFlushInput {
   sessionId?: string;
   /** Session start (ms epoch) — used for the duration line of the handoff. */
   startedAt?: number;
+  /** Cancel and await inference when a headless shutdown deadline expires. */
+  signal?: AbortSignal;
 }
 
 export interface SessionEndFlushResult {
@@ -131,6 +133,8 @@ let handoffWrittenFor: ChatEntry[] | null = null;
 export interface HandoffOptions {
   sessionId?: string;
   startedAt?: number;
+  /** Cancel and await inference when a headless shutdown deadline expires. */
+  signal?: AbortSignal;
   /** Force a write even below the size threshold (used by tests). */
   force?: boolean;
 }
@@ -253,14 +257,16 @@ export async function runSessionEndFlush(
     let proposedLessons = 0;
     try {
       const { proposeLessonsFromSession } = await import('./lesson-auto-proposer.js');
-      const proposed = await proposeLessonsFromSession(history, workDir, input.client);
+      const proposed = input.signal?.aborted ? [] : await proposeLessonsFromSession(
+        history, workDir, input.client, ...(input.signal ? [input.signal] : []),
+      );
       proposedLessons = proposed.length;
     } catch (err) {
       logger.debug('[session-end-flush] lesson proposal failed', { err: String(err) });
     }
 
     let proposedMemories = 0;
-    if (process.env.CODEBUDDY_MEMORY_AUTO_PROPOSE !== 'false') {
+    if (!input.signal?.aborted && process.env.CODEBUDDY_MEMORY_AUTO_PROPOSE !== 'false') {
       try {
         const { proposeMemoryCandidatesFromSession } = await import('../memory/memory-auto-proposer.js');
         const proposed = await proposeMemoryCandidatesFromSession(
@@ -268,6 +274,7 @@ export async function runSessionEndFlush(
           workDir,
           input.client,
           input.sessionId,
+          ...(input.signal ? [input.signal] : []),
         );
         proposedMemories = proposed.length;
       } catch (err) {

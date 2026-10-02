@@ -197,10 +197,12 @@ export async function proposeMemoryCandidatesFromSession(
   workDir: string = process.cwd(),
   client?: CodeBuddyClient,
   sessionId?: string,
+  signal?: AbortSignal,
 ): Promise<MemoryCandidate[]> {
-  if (!chatHistory || chatHistory.length === 0) return [];
+  if (signal?.aborted || !chatHistory || chatHistory.length === 0) return [];
 
-  const rawCandidates = await extractWithLlm(chatHistory, client);
+  const rawCandidates = await extractWithLlm(chatHistory, client, signal);
+  if (signal?.aborted) return [];
   const normalized = rawCandidates.length > 0
     ? rawCandidates
     : extractHeuristicMemoryCandidates(chatHistory);
@@ -236,6 +238,7 @@ export async function proposeMemoryCandidatesFromSession(
 async function extractWithLlm(
   chatHistory: ChatEntry[],
   client?: CodeBuddyClient,
+  signal?: AbortSignal,
 ): Promise<NormalizedMemoryCandidate[]> {
   let llm: CodeBuddyClient | null = client ?? null;
   if (!llm) {
@@ -249,7 +252,7 @@ async function extractWithLlm(
     const res = await llm.chat([
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: `Session transcript:\n\n${formatTranscript(chatHistory)}` },
-    ]);
+    ], undefined, signal ? { signal } : undefined);
     const reply = res.choices[0]?.message?.content || '';
     return parseMemoryCandidates(reply);
   } catch (err) {

@@ -207,6 +207,25 @@ describe('session-end-flush (WS3-T1)', () => {
       expect(mockProposeMemories).toHaveBeenCalledWith(history, workDir, undefined, 'sess-1');
     });
 
+    it('transmet l’annulation de sortie et ne démarre pas une seconde inférence', async () => {
+      const controller = new AbortController();
+      mockProposeLessons.mockClear();
+      mockProposeMemories.mockClear();
+      const signals: unknown[] = [];
+      mockProposeLessons.mockImplementation(async (...args: unknown[]) => {
+        signals.push(args[3]);
+        if (args[3] === controller.signal) controller.abort();
+        return [];
+      });
+      const result = await runSessionEndFlush({
+        chatHistory: richSession(), workDir, signal: controller.signal,
+      } as Parameters<typeof runSessionEndFlush>[0] & { signal: AbortSignal });
+      expect(result.handoffPath).toBeDefined();
+      expect(signals).toEqual([controller.signal]);
+      expect(mockProposeLessons).toHaveBeenCalledTimes(1);
+      expect(mockProposeMemories).not.toHaveBeenCalled();
+    });
+
     it('survives a failing lesson proposer and still writes the handoff', async () => {
       mockProposeLessons.mockRejectedValue(new Error('no provider'));
       const result = await runSessionEndFlush({ chatHistory: richSession(), workDir });
