@@ -1640,7 +1640,7 @@ program
   )
   .option(
     "--max-tool-rounds <rounds>",
-    "maximum number of tool execution rounds (default: 50, 400 with --yolo)"
+    "maximum number of tool execution rounds (default: 50) (400 with --yolo)"
   )
   .option(
     "-s, --security-mode <mode>",
@@ -2769,7 +2769,7 @@ gitCommand
   )
   .option(
     "--max-tool-rounds <rounds>",
-    "maximum number of tool execution rounds (default: 50, 400 with --yolo)"
+    "maximum number of tool execution rounds (default: 50) (400 with --yolo)"
   )
   .action(async (options) => {
     // Load environment before changing cwd so root .env values (API keys) remain available
