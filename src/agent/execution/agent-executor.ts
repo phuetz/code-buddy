@@ -1,3 +1,4 @@
+import { withCompactToolSurface } from '../../prompts/headless-compact.js';
 import { randomUUID } from 'node:crypto';
 import { compactTurnObservations, compactObservation } from '../../context/compact-turn-observations.js';
 import { groundedEntryAnswer, exactProjectAnswer, isEntryExplanation } from '../../cli/headless-source-answer.js';
@@ -1685,6 +1686,11 @@ export class AgentExecutor {
             return;
           }
           throw error;
+        }
+        if (isHeadlessLocalPromptCompact()) {
+          preparedMessages = preparedMessages.map(message => message.role === 'system' && typeof message.content === 'string'
+            ? { ...message, content: withCompactToolSurface(message.content, tools) }
+            : message);
         }
         preparedMessages.push(...contextBlocks);
         if (codeResearch) {
