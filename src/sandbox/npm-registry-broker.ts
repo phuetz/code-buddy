@@ -126,7 +126,19 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
             if (!/^[a-z0-9._-]+\.tgz$/i.test(filename) || !fs.lstatSync(archive).isFile()
               || fs.statSync(archive).size > 64 * 1024 * 1024) throw new Error('Registry archive is invalid or too large');
             // A downloaded artifact stays in the operator-granted session scratch.
-            fs.copyFileSync(archive, path.join(temporary, filename), fs.constants.COPYFILE_EXCL);
+            const destination = path.join(temporary, filename);
+            fs.copyFileSync(archive, destination, fs.constants.COPYFILE_EXCL);
+            // The broker deliberately stores downloads outside the shell cwd.
+            // Report their actual location, including machine-readable output.
+            if (argv.includes('--json')) {
+              const metadata: unknown = JSON.parse(result.stdout);
+              if (!Array.isArray(metadata) || metadata.length !== 1
+                || !metadata[0] || typeof metadata[0] !== 'object'
+                || metadata[0].filename !== filename) throw new Error('Registry pack metadata does not match its archive');
+              result.stdout = JSON.stringify([{ ...metadata[0], filename: destination }], null, 2) + '\n';
+            } else {
+              result.stdout = destination + '\n';
+            }
           }
           response.setHeader('content-type', 'application/json'); response.end(JSON.stringify(result));
         } finally { fs.rmSync(scratch, { recursive: true, force: true }); }

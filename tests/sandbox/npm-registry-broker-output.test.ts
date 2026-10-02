@@ -16,7 +16,7 @@ vi.mock('node:child_process', async (importOriginal) => {
         ? ['-e', args.includes('audit')
           ? `const fs=require('node:fs');const root=JSON.parse(fs.readFileSync('package.json'));process.stdout.write(JSON.stringify({workspaces:root.workspaces,child:fs.existsSync('packages/child/package.json')?JSON.parse(fs.readFileSync('packages/child/package.json')):null}))`
           : args.includes('pack')
-          ? `require('node:fs').writeFileSync('fixture-1.0.0.tgz','archive-sentinel');process.stdout.write('fixture-1.0.0.tgz\\n')`
+          ? `require('node:fs').writeFileSync('fixture-1.0.0.tgz','archive-sentinel');process.stdout.write(${JSON.stringify(args.includes('--json') ? JSON.stringify([{id:'fixture@1.0.0',filename:'fixture-1.0.0.tgz',size:16}]) : 'fixture-1.0.0.tgz\n')})`
           : `process.stdout.write(JSON.stringify({metadata:'réponse'.repeat(200000)}))`]
         : args;
       return actual.execFile(file, command, options, callback);
@@ -50,7 +50,7 @@ describe('sortie de la passerelle npm révélée par le replay B', () => {
   });
 });
 
-it.skipIf(process.platform === 'win32')('garde le paquet du registre dans le temporaire sans écraser un fichier existant', async () => {
+it.skipIf(process.platform === 'win32').each([false, true])('annonce le chemin réel du paquet sans écraser un fichier existant (json=%s)', async (jsonOutput) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'registry-pack-'));
   const workspace = path.join(root, 'workspace'); const temporary = path.join(root, 'tmp');
   fs.mkdirSync(workspace); fs.mkdirSync(temporary);
@@ -60,13 +60,16 @@ it.skipIf(process.platform === 'win32')('garde le paquet du registre dans le tem
   try {
     const { execFile } = await vi.importActual<typeof import('node:child_process')>('node:child_process');
     const execute = () => new Promise<{ error: ExecFileException | null; stdout: string; stderr: string }>(resolve => {
-      execFile(process.execPath, [path.join(broker.directory, 'npm-client.mjs'), 'pack', 'fixture@1.0.0', '--silent'],
-        { encoding: 'utf8' }, (error, stdout, stderr) => resolve({ error, stdout, stderr }));
+      execFile(process.execPath, [path.join(broker.directory, 'npm-client.mjs'), 'pack', 'fixture@1.0.0', jsonOutput ? '--json' : '--silent'],
+        { encoding: 'utf8', cwd: workspace }, (error, stdout, stderr) => resolve({ error, stdout, stderr }));
     });
     const first = await execute();
     expect(first.error, first.stderr).toBeNull();
-    expect(first.stdout.trim()).toBe('fixture-1.0.0.tgz');
+    const reported = jsonOutput ? JSON.parse(first.stdout)[0].filename : first.stdout.trim();
     const archive = path.join(temporary, 'fixture-1.0.0.tgz');
+    expect(reported).toBe(archive);
+    expect(fs.readFileSync(reported, 'utf8')).toBe('archive-sentinel');
+    if (jsonOutput) expect(JSON.parse(first.stdout)[0]).toMatchObject({ id: 'fixture@1.0.0', size: 16 });
     expect(fs.readFileSync(archive, 'utf8')).toBe('archive-sentinel');
     fs.writeFileSync(archive, 'existing-file');
     expect((await execute()).error).toBeTruthy();
