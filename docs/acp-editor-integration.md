@@ -41,7 +41,7 @@ Use `--profile <name>` for a named Code Buddy profile. Permission modes such as
 | Client → `session/load` | Restores the saved model conversation, replays user/agent/tool updates and refreshes cwd/MCP configuration. Active sessions cannot be loaded. |
 | Client → `session/prompt` | Runs `CodeBuddyAgent.processUserMessageStream`, the same loop, tools, policy, confirmation service and security guards used by the interactive agent. |
 | Agent → `session/update` | Streams `user_message_chunk`, `agent_message_chunk`, available `agent_thought_chunk`, `tool_call`, `tool_call_update` (status, text output and structured edit diffs), and `plan` for task lists/progress. |
-| Agent → `session/request_permission` | Publishes the tool call first, then requests allow once, allow always for the current session, or reject. Refusal, cancellation, malformed outcomes and timeout never authorize the action. |
+| Agent → `session/request_permission` | Publishes the tool call first, then requests allow once, allow always with an explicit scope label, or reject. Refusal, cancellation, malformed outcomes and timeout never authorize the action. |
 | Agent → `fs/read_text_file` | Reads the editor's current buffer when `fs.readTextFile` is advertised, including files not yet saved. Otherwise reads from disk. |
 | Agent → `fs/write_text_file` | Writes text through the editor when `fs.writeTextFile` is advertised. Otherwise uses the normal disk write after the normal gates. |
 | Client → `session/cancel` | Aborts active LLM requests, tool execution and pending editor requests; the prompt resolves with `cancelled`. |
@@ -51,12 +51,28 @@ permission prompt merely because they use the editor. Actions requiring
 interactive approval still go through `ConfirmationService`; its policy and
 permission-mode denials precede the editor bridge. ACP itself does not switch on
 auto-confirm or headless auto-approval. “Always” grants are session-local and do
-not survive process restart.
+not survive process restart or a change of session cwd. Internal file approvals
+grant the file-operation category, as in the interactive CLI; the option label
+states this scope. Generic tool approvals instead grant the exact call, including
+its arguments and cwd.
+
+Shared tool instances resolve their confirmation service and working directory
+at each call through asynchronous context. Internal declarative permission rules
+are read from the session directory, including rules that deny edits. Search
+cache keys include the working directory, and dynamic permission grants belong
+to the calling session.
 
 Text tools (`view_file`, `create_file`, string/line editing, Morph and add/update
 `apply_patch`) use the normal VFS boundary. Paths resolve against the session cwd;
 workspace, credential and symlink protections run before editor IO. Shell
-commands operate on the physical working directory, as in the interactive CLI.
+commands operate on the session's physical working directory, as in the interactive CLI.
+Direct VFS calls and core filesystem operations resolve relative paths through
+the calling context too; a relative subprocess `cwd` resolves inside that session.
+Core disk mutations check cancellation immediately before the operation. Tool
+subprocesses inherit the turn's cancellation signal; on Linux their process group
+or captured descendants are terminated. The runner waits for outstanding operations and cancelled process
+closure before completing the prompt, so a new turn cannot overlap unfinished
+tool cleanup.
 
 Sessions live under `~/.codebuddy/acp-sessions` (owner-only directory/files).
 Snapshots use `src/utils/atomic-write.ts`, and a completed prompt is persisted
@@ -85,12 +101,23 @@ Tests cover:
   durable new session.
 - Applying a patch to an unsaved buffer, isolating “always” grants between
   sessions, restrictive permission modes and stdio MCP tool invocation.
+- Reusing `multi_edit` in two sessions with different directories and a third
+  launch directory: B receives its own diff permission after either a one-time or
+  persistent approval in A. Relative paths target the same file that was approved,
+  on disk and through editor IO.
 
 The patch test fails against the previous runner: the file remains unchanged.
 Adapter tests also exercise disk fallback, unanswered/cancelled permissions,
 unsaved files, symlink escape refusal, thoughts, task plans and round limits.
 Legacy Morph edits also resolve relative paths against the session cwd, validate
 workspace containment, and preserve review gates.
+Additional real-tool tests cover Git commits in separate repositories, internal
+deny rules, grant revocation when cwd changes, and cancellation between two disk
+operations. Docker and Kubernetes tests exercise reused tool instances with
+simulated binaries. Real subprocess tests cover `spawn`, `execFile` and shell
+`exec` cancellation before a delayed write. A separate Linux test cancels
+`execFile` from outside the tool context, keeps a descendant that ignores SIGTERM
+owned until SIGKILL, and proves its delayed write never happens.
 
 ```bash
 HOME="$PWD/_qa/acp/home" RUN_REAL_TESTS=1 npm test -- tests/protocols/acp*
@@ -116,6 +143,11 @@ includes the existing stdio transport suite whose filename contains `real`.
 - MCP passthrough supports stdio only; terminal delegation and non-text prompt
   blocks are not advertised. Arbitrary tools can still report ordinary policy
   or runtime failures through their normal result path.
+- A provider or external tool that ignores cancellation can delay prompt
+  completion; the runner keeps ownership until it terminates. Third-party MCP
+  servers and plugin implementations have not been exhaustively audited for
+  their own filesystem effects. Node synchronous operations cannot be interrupted
+  in the middle of a blocking call; cancellation is checked before starting them.
 
 Message ordering and filesystem routing were informed by Gemini CLI's
 [ACP implementation](https://github.com/google-gemini/gemini-cli/tree/main/packages/cli/src/acp)
