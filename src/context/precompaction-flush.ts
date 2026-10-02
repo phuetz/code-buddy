@@ -3,7 +3,7 @@
  *
  * Before the context manager compacts (summarises/drops) old messages,
  * this module runs a silent background LLM turn that asks the model to
- * extract and save important facts to MEMORY.md.
+ * extract and save important facts to private, workspace-scoped profile memory.
  *
  * The `NO_REPLY` sentinel at the start of the response suppresses
  * user-facing delivery, preventing notification spam. Only the extracted
@@ -18,7 +18,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'node:crypto';
 import { logger } from '../utils/logger.js';
+import { getCodeBuddyHome } from '../utils/codebuddy-home.js';
 
 // ============================================================================
 // Types
@@ -133,11 +135,11 @@ export class PrecompactionFlusher {
       return { flushed: false, factsCount: 0, writtenTo: null, suppressed: true };
     }
 
-    // Save facts to MEMORY.md
+    // Automatic memory is profile state, never a source file in a public repo.
     const writtenTo = await this.saveFacts(content, workDir);
     const factsCount = content.split('\n').filter(l => l.startsWith('-')).length;
 
-    return { flushed: true, factsCount, writtenTo, suppressed: false };
+    return { flushed: writtenTo !== null, factsCount: writtenTo ? factsCount : 0, writtenTo, suppressed: false };
   }
 
   /**
@@ -178,30 +180,46 @@ export class PrecompactionFlusher {
   }
 
   private async saveFacts(content: string, workDir: string): Promise<string | null> {
-    const memoryPath = path.join(workDir, 'MEMORY.md');
     const datestamp = new Date().toISOString().split('T')[0];
     const header = `\n\n## Facts extracted ${datestamp} (pre-compaction flush)\n\n`;
     const block = header + content + '\n';
 
     try {
-      fs.appendFileSync(memoryPath, block, 'utf-8');
+      let canonicalWorkspace = path.resolve(workDir);
+      try { canonicalWorkspace = fs.realpathSync(canonicalWorkspace); } catch { /* Workspace may not exist yet. */ }
+      const workspaceId = createHash('sha256').update(canonicalWorkspace).digest('hex');
+      const profile = path.resolve(getCodeBuddyHome());
+      fs.mkdirSync(profile, { recursive: true, mode: 0o700 });
+      // The configured profile itself may be an operator-selected symlink.
+      // Its memory descendants must be real directories, not repo-controlled redirects.
+      let directory = fs.realpathSync(profile);
+      for (const component of ['memory', 'precompaction', workspaceId]) {
+        directory = path.join(directory, component);
+        try { fs.mkdirSync(directory, { mode: 0o700 }); } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        }
+        const stat = fs.lstatSync(directory);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Unsafe memory directory');
+        if (process.platform !== 'win32') fs.chmodSync(directory, 0o700);
+      }
+      const memoryPath = path.join(directory, 'MEMORY.md');
+      try {
+        if (fs.lstatSync(memoryPath).isSymbolicLink()) throw new Error('Unsafe memory link');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      const descriptor = fs.openSync(memoryPath, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+      try {
+        const stat = fs.fstatSync(descriptor);
+        if (!stat.isFile() || stat.nlink !== 1) throw new Error('Unsafe memory file');
+        if (process.platform !== 'win32') fs.fchmodSync(descriptor, 0o600);
+        fs.writeFileSync(descriptor, block, 'utf-8');
+      } finally { fs.closeSync(descriptor); }
       logger.debug('PrecompactionFlusher: facts saved', { memoryPath });
       return memoryPath;
     } catch (_err) {
-      // Try global fallback
-      const globalPath = path.join(
-        process.env.HOME ?? process.env.USERPROFILE ?? '~',
-        '.codebuddy',
-        'MEMORY.md'
-      );
-      try {
-        fs.mkdirSync(path.dirname(globalPath), { recursive: true });
-        fs.appendFileSync(globalPath, block, 'utf-8');
-        return globalPath;
-      } catch {
-        logger.warn('PrecompactionFlusher: could not write facts to any location');
-        return null;
-      }
+      logger.warn('PrecompactionFlusher: could not write facts to the private profile');
+      return null;
     }
   }
 }

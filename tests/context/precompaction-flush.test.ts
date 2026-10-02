@@ -2,7 +2,7 @@
  * Tests for PrecompactionFlusher — silent background memory extraction
  *
  * Uses real fs in tmpDir for saveFacts tests.
- * Mocks chatFn (no real LLM calls) and os.homedir for global fallback.
+ * Mocks chatFn (no real LLM calls) and isolates the private profile.
  */
 
 import * as path from 'path';
@@ -17,6 +17,7 @@ import {
 // Redirect HOME/USERPROFILE for global fallback tests
 const originalHome = process.env.HOME;
 const originalUserProfile = process.env.USERPROFILE;
+const originalCodeBuddyHome = process.env.CODEBUDDY_HOME;
 
 describe('PrecompactionFlusher', () => {
   let tmpDir: string;
@@ -28,11 +29,14 @@ describe('PrecompactionFlusher', () => {
     // Point HOME to tmpDir for global fallback
     process.env.HOME = path.join(tmpDir, 'fake-home');
     process.env.USERPROFILE = path.join(tmpDir, 'fake-home');
+    process.env.CODEBUDDY_HOME = path.join(tmpDir, 'fake-home', '.codebuddy');
   });
 
   afterEach(async () => {
     process.env.HOME = originalHome;
     process.env.USERPROFILE = originalUserProfile;
+    if (originalCodeBuddyHome === undefined) delete process.env.CODEBUDDY_HOME;
+    else process.env.CODEBUDDY_HOME = originalCodeBuddyHome;
     await fs.remove(tmpDir);
   });
 
@@ -141,35 +145,36 @@ describe('PrecompactionFlusher', () => {
     const callSaveFacts = (f: PrecompactionFlusher, facts: string, workDir: string) =>
       (f as any).saveFacts(facts, workDir);
 
-    it('should write to workDir/MEMORY.md', async () => {
+    it('should write only to workspace-scoped profile memory', async () => {
       const result = await callSaveFacts(flusher, '- Fact 1', tmpDir);
-      expect(result).toBe(path.join(tmpDir, 'MEMORY.md'));
+      expect(result.startsWith(process.env.CODEBUDDY_HOME + path.sep)).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, 'MEMORY.md'))).toBe(false);
       const content = fs.readFileSync(result!, 'utf-8');
       expect(content).toContain('- Fact 1');
     });
 
     it('should append (not overwrite) to existing MEMORY.md', async () => {
-      fs.writeFileSync(path.join(tmpDir, 'MEMORY.md'), '# Existing\n');
+      const memoryPath = await callSaveFacts(flusher, '# Existing', tmpDir);
       await callSaveFacts(flusher, '- New fact', tmpDir);
-      const content = fs.readFileSync(path.join(tmpDir, 'MEMORY.md'), 'utf-8');
+      const content = fs.readFileSync(memoryPath, 'utf-8');
       expect(content).toContain('# Existing');
       expect(content).toContain('- New fact');
     });
 
     it('should include datestamp header', async () => {
-      await callSaveFacts(flusher, '- Fact', tmpDir);
-      const content = fs.readFileSync(path.join(tmpDir, 'MEMORY.md'), 'utf-8');
+      const memoryPath = await callSaveFacts(flusher, '- Fact', tmpDir);
+      const content = fs.readFileSync(memoryPath, 'utf-8');
       expect(content).toMatch(/## Facts extracted \d{4}-\d{2}-\d{2}/);
     });
 
-    it('should fallback to global when workDir write fails', async () => {
+    it('should use the private profile even when the workspace does not exist', async () => {
       const nonexistent = path.join(tmpDir, 'no', 'such', 'dir');
       const result = await callSaveFacts(flusher, '- Fallback fact', nonexistent);
       expect(result).toContain('.codebuddy');
       expect(result).toContain('MEMORY.md');
     });
 
-    it('should return null when both local and global writes fail', async () => {
+    it('should return null when the profile write fails', async () => {
       // Point HOME underneath a regular FILE: no mkdir can succeed below it on
       // any OS (`/dev/null/impossible` is a perfectly creatable `C:\dev\null\…`
       // on Windows).
@@ -177,6 +182,7 @@ describe('PrecompactionFlusher', () => {
       fs.writeFileSync(blocker, 'not a directory');
       process.env.HOME = path.join(blocker, 'impossible');
       process.env.USERPROFILE = path.join(blocker, 'impossible');
+      process.env.CODEBUDDY_HOME = path.join(blocker, 'impossible');
       const nonexistent = path.join(tmpDir, 'no', 'such', 'dir');
       const result = await callSaveFacts(flusher, '- Lost fact', nonexistent);
       expect(result).toBeNull();
