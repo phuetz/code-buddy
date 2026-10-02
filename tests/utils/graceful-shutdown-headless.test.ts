@@ -19,7 +19,11 @@ describe('headless interrupt shutdown', () => {
   it('keeps exit 0 for interactive runs and for non-TTY servers under a supervisor', () => {
     expect(signalExitCode('SIGINT', {})).toBe(0);
     expect(signalExitCode('SIGTERM', {})).toBe(0);
-    expect(signalExitCode('SIGTERM', { CODEBUDDY_HEADLESS: 'true' })).toBe(0);
+    expect(signalExitCode('SIGHUP', {})).toBe(0);
+  });
+
+  it.each([['SIGTERM', 143], ['SIGHUP', 129]] as const)('reports an interrupted headless task for %s', (signal, code) => {
+    expect(signalExitCode(signal, { CODEBUDDY_HEADLESS: 'true' })).toBe(code);
   });
 
   it('does not write shutdown progress or ANSI to a non-TTY stdout', async () => {

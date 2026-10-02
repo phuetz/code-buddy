@@ -17,14 +17,19 @@ import { EXIT_CODES } from './exit-codes.js';
 
 /**
  * Exit code after a shutdown signal. Only an explicit headless run (`-p`, loop,
- * try: CODEBUDDY_HEADLESS=true) reports SIGINT as 130 (USER_CANCELLED), so a
- * script can tell an interruption from success. Servers and daemons whose stdout
+ * try: CODEBUDDY_HEADLESS=true) reports signal interruptions as 128 + signal
+ * number, so a script cannot confuse a terminated task with success. Servers and daemons whose stdout
  * is merely not a TTY (systemd) keep exit 0: a normal SIGTERM stop must not be
  * reported as a failure and trigger Restart=on-failure.
  */
 export function signalExitCode(signal: string, env: NodeJS.ProcessEnv = process.env): number {
   if (env.CODEBUDDY_HEADLESS !== 'true') return 0;
-  return signal === 'SIGINT' ? EXIT_CODES.USER_CANCELLED : 0;
+  switch (signal) {
+    case 'SIGINT': return EXIT_CODES.USER_CANCELLED;
+    case 'SIGTERM': return 143;
+    case 'SIGHUP': return 129;
+    default: return EXIT_CODES.GENERAL_ERROR;
+  }
 }
 
 function shutdownProgressStream(): NodeJS.WriteStream {
