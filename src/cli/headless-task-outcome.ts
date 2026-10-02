@@ -30,8 +30,9 @@ function repositoryActionClauses(prompt: string): string[] {
   // marker for quoted paths so output formatting cannot hide a requested file.
   const unquoted = text.replace(/`[^`]*`|"[^"\n]*"|(?<![\w])'[^'\n]*'/g, quoted =>
     /[\w/-]+\.[a-z0-9]+\b/.test(quoted) ? 'file_target ' + (/agents\.md/.test(quoted) ? 'agents' : '') : 'quoted');
-  const operational = '(?:fix|repair|refactor|scaffold|resolve|build|write|delete|replace|edit|change|create|run|execute|implement|add|remove|update|make|ensure|correct|modify|prepare|deploy|install|configure|start|stop|set|patch|rewrite|use|synchronize|rework|return|corrige|repare|refactorise|remplace|ecris|execute|modifie|cree|lance|ajoute|supprime|mets|installe|demarre|rends|fais|reecris)';
-  const boundaries = new RegExp('[?!;\\n]\\s*|\\.(?=\\s|$)\\s*|\\b(?:then|puis|ensuite|but|mais)\\s+|(?:,\\s*|\\b(?:and|et)\\s+)(?=(?:please\\s+)?' + operational + '\\b)', 'g');
+  // Clause boundaries are grammatical separators, independent of the next
+  // verb's vocabulary. Otherwise an unfamiliar operation after "and" vanishes.
+  const boundaries = /[?!;,\n]\s*|\.(?=\s|$)\s*|\b(?:then|puis|ensuite|but|mais|and|et)\s+/g;
   const clauses = unquoted.split(boundaries).map(clause => clause.trim().replace(/^(?:please|then|puis|ensuite|and|et)\s+/, '')).filter(Boolean);
   const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|show|list|what|where|which|count|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|montre|liste|quel|quelle|quels|quelles|ou|combien|comment|pourquoi|reponds|dis|traduis)\b/;
   const outputConstraint = (clause: string): boolean => {
@@ -39,7 +40,11 @@ function repositoryActionClauses(prompt: string): string[] {
     const conjuncts = clause.split(/\s+\b(?:and|et)\b\s+/);
     if (conjuncts.length > 1) return conjuncts.every(part => outputConstraint(part)
       || informational.test(part) || /^(?:do not|don't|never|ne\b.*\bpas)\b/.test(part));
-    if (/^(?:no|without)\s+(?:extra\s+)?(?:commentary|chatter|prose|explanation)(?:\s+(?:afterwards|afterward|please))?$/.test(clause)) return true;
+    if (/^(?:with\s+)?(?:no|without)\s+(?:extra\s+)?(?:commentary|chatter|prose|explanation|text)(?:\s+(?:afterwards|afterward|please))?$/.test(clause)) return true;
+    // Restitution is an answer unless it names a write destination or changes
+    // a function's return behavior. Source locations are not destinations.
+    if (/^(?:return|renvoie|affiche|present|presente|give\s+(?:me|us)|donne(?:-moi|\s+moi))\b/.test(clause)
+      && !/\b(?:to|into|vers|dans)\s+(?:a\s+)?(?:file_target|file\b|[\w/-]+\.[a-z0-9]+\b)|\bfrom\s+(?:the\s+)?function\b/.test(clause)) return true;
     const outputVerb = /\b(?:write|use|output|return|ecris|utilise|renvoie|affiche)\b/.test(clause);
     const outputObject = /\b(?:answers?|repl(?:y|ies)|response|text|sentence|names?|values?|numerals?|numbers?|json|reponse|texte|phrase|nom|valeur|chiffre)\b/.test(clause);
     const physical = /\b(?:file_target|files?|folders?|director(?:y|ies)|source|module|script|function|implementation|parameters?|code|fichiers?|dossiers?|parametres?)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause);
@@ -59,6 +64,9 @@ function repositoryActionClauses(prompt: string): string[] {
     if (/^(?:do not|don't|never|ne\b.*\bpas)\b/.test(clause)) return false;
     if (outputConstraint(clause)) return false;
     if (informational.test(clause)) return false;
+    // A coordinated noun list is still the object of the preceding read.
+    if (index > 0 && informational.test(clauses[index - 1]!)
+      && /^(?:files?|folders?|imports?|exports?|names?|values?|parameters?)$/.test(clause)) return false;
     if (/^(?:hi|hello|hey|bonjour|salut)$/.test(clause)) return false;
     if (/^write (?:a |an )?(?:poem|story|essay|email|sql query)\b/.test(clause)
       && !/\bfile_target\b/.test(clause)) return false;
@@ -238,7 +246,7 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
     // sentences. A summary/interpretation can be composed in the answer;
     // an on-disk target or an operational completion always requires tools.
     // Independently written, inspired by Hermes' verification-stop boundary.
-    const assertions = [...sentence.matchAll(/(?:\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+|\b(?:and|then|et|puis)\s+(?:(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+)?|^\s*)(?:successfully\s+)?(edited|modified|changed|updated|fixed|created|written|ran|executed|launched|started|run|modifie|corrige|remplace|mis a jour|cree|ecrit|lance|execute|demarre)\b/g)];
+    const assertions = [...sentence.matchAll(/(?:\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+|\b(?:and|then|et|puis)\s+(?:(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+)?|^\s*)(?:successfully\s+)?(edited|modified|changed|updated|fixed|created|written|wrote|ran|executed|launched|started|run|modifie|corrige|remplace|mis a jour|cree|ecrit|lance|execute|demarre)\b/g)];
     for (const [index, assertion] of assertions.entries()) {
       const verb = assertion[1]!;
       // Bare imperative "Run ..." is advice, unlike past-tense "Ran ...".
@@ -265,15 +273,23 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
       const commandsObserved = literalCommands.every(command => [...commands].some(actual => actual === command));
       const head = object.replace(/^(?:(?:a|an|the|my|our|initial|brief|quick|mental|all|existing|project|tous|toutes|une?|les?|la|des|mon|ma|mes|notre|nos|premiere?)\s+)*/, '').replace(/^l'/, '').replace(/^through\s+(?:the\s+)?/, '');
       if (/^(?:into|across|out of)\b/.test(head) && !/^[\w./-]+\.[a-z0-9]+\b|^[\w.-]+\//.test(head)) continue;
-      const abstract = /^(?:overview|summary|outline|explanation|interpretation|understanding|hypothesis|notes?|list|risk|scan|analysis|reading|search|reasoning|logic|flow|walk-through|resume|apercu|liste|analyse|lecture|recherche|raisonnement|interpretation|hypothese)\b/.test(head);
+      const abstract = /^(?:overview|summary|outline|explanation|interpretation|understanding|hypothesis|index|comprehension|notes?|list|risk|scan|analysis|reading|search|reasoning|logic|flow|walk-through|resume|apercu|liste|analyse|lecture|recherche|raisonnement|interpretation|hypothese)\b/.test(head);
       const physicalHead = /^[\w./-]+\.[a-z0-9]+\b|^[\w.-]+\//.test(head)
         || /\b(?:files?|folders?|director(?:y|ies)|documents?|scripts?|modules?|tools?|services?|servers?|apps?|components?|class(?:es)?|functions?|programs?|packages?|generators?|utilit(?:y|ies)|pipelines?|endpoints?|fichiers?|dossiers?)\b/.test(head.split(/\b(?:of|de|about|sur)\b/)[0]!);
-      const physicalDestination = /\b(?:in|to|as|dans|vers)\s+[`"']?(?:[\w-]+\/)*[\w-]+\.[a-z0-9]+\b/.test(object);
+      // In 'a list of imports in source.js', the path locates the subject of
+      // thought. In 'a list in notes.md', it is the asserted write destination.
+      const objectHead = object.split(/\b(?:of|de|about|sur)\b/)[0]!;
+      const physicalDestination = /\b(?:in|to|as|dans|vers)\s+[`"']?(?:[\w-]+\/)*[\w-]+\.[a-z0-9]+\b/.test(abstract ? objectHead : object);
+      const manualWalk = /^(?:ran|execute|executed)$/.test(verb)
+        && (/^through\b/.test(object) || abstract)
+        && /\b(?:by hand|mentally|mentalement|de tete)\b/.test(object)
+        && !physicalHead && !physicalDestination && paths.length === 0;
+      if (manualWalk) continue;
       if (!physicalHead && !physicalDestination && (abstract || /^model\b/.test(head) && /\bmental(?:ly|ement)?\b/.test(object) || /^(?:into|across|out of)\b/.test(head)
         || /^instructions?\b/.test(head) && /\bmentalement\b/.test(object))) continue;
       if (/^(?:edited|modified|changed|updated|fixed|modifie|corrige|remplace|mis a jour)$/.test(verb)
         && (!observed.edit || !targetsObserved(editedPaths))) claims.add('edit');
-      if (/^(?:created|written|cree|ecrit)$/.test(verb)
+      if (/^(?:created|written|wrote|cree|ecrit)$/.test(verb)
         && (!observed.create || !targetsObserved(createdPaths))) claims.add('create');
       if (/^(?:ran|executed|launched|started|run|lance|execute|demarre)$/.test(verb)) {
         // No executable whitelist: even an unfamiliar validator or server
@@ -370,13 +386,20 @@ export function evaluateHeadlessTaskOutcome(
   if (requestsRepositoryAction(prompt) && actionTools.length === 0) reasons.push('no_action_executed');
   const actionRequested = requestsRepositoryAction(prompt);
   const actionClauses = repositoryActionClauses(prompt);
-  const normalizedPrompt = actionClauses.join(' ');
   const testRequest = actionClauses.some(clause => /\b(?:run|execute|lance|relance|lancer|make|ensure|fais|rends|check|verify|verifie|controle)\b.*\btests?\b/.test(clause));
-  const executionRequest = /\b(?:run|execute|lance|lancer|start|stop|launch|build|install|deploy|demarre|arrete|installe)\b/.test(normalizedPrompt);
-  const verificationRequest = /\b(?:lint|eslint|typecheck|checks?)\b/.test(normalizedPrompt);
   if (testRequest && (lastGreen < 0 || lastGreen < lastWrite)) reasons.push('verification_missing');
-  const editRequest = actionRequested && (!testRequest && !executionRequest && !verificationRequest || /\b(?:replace|edit|modify|change|update|set|implement|refactor|rewrite|delete|add|remove|remplace|modifie|ecris|cree|reecris|ajoute|supprime|create|write)\b/.test(normalizedPrompt)
-    || /\b(?:fix|repair|corrige|repare)\b/.test(normalizedPrompt) && !/\b(?:tests?|lint|eslint|typecheck|checks?)\b/.test(normalizedPrompt));
+  const editRequest = actionRequested && actionClauses.some(clause => {
+    // "Run tests and fix failures" is conditional on those failures existing.
+    // A genuinely green original suite needs no gratuitous implementation edit.
+    if (testRequest && /^(?:fix|repair|corrige|repare)\s+(?:(?:the|all|any|les|des)\s+)?(?:failures|errors|echecs|erreurs)$/.test(clause)) return false;
+    const runs = /\b(?:run|execute|lance|lancer|start|stop|launch|build|install|deploy|demarre|arrete|installe)\b/.test(clause);
+    const verifies = /\b(?:lint|eslint|typecheck|checks?)\b/.test(clause);
+    const tests = /\b(?:run|execute|lance|relance|lancer|make|ensure|fais|rends|check|verify|verifie|controle)\b.*\btests?\b/.test(clause);
+    // A check in a different clause cannot waive this clause's unknown edit.
+    return !tests && !runs && !verifies
+      || /\b(?:replace|edit|modify|change|update|set|implement|refactor|rewrite|delete|add|remove|remplace|modifie|ecris|cree|reecris|ajoute|supprime|create|write)\b/.test(clause)
+      || /\b(?:fix|repair|corrige|repare)\b/.test(clause) && !/\b(?:tests?|lint|eslint|typecheck|checks?)\b/.test(clause);
+  });
   if (editRequest && lastWrite < 0) reasons.push('requested_edit_not_executed');
   const status = reasons.some(reason => reason !== 'no_action_executed') ? 'failed'
     : reasons.length ? 'unverified' : 'success';
