@@ -34,7 +34,7 @@ Les nouveaux oracles ont échoué avant leurs correctifs : 3 assertions dev/sél
 - **Prérequis vérifiés** : le refus et les instructions ont été éprouvés ; le succès avec fournisseur ou matériel n’est pas revendiqué.
 - **Partiellement vérifiée** : les opérations locales indiquées sont prouvées, mais pas la chaîne complète.
 
-Les 24 lignes correspondent à 5 scénarios testés localement, 9 contrôles de prérequis et 10 validations partielles. Les descriptions ont été restreintes en conséquence ; cela ne signifie pas 24 succès complets.
+Après reprise de revue, les 24 lignes correspondent à 2 scénarios testés localement, 9 contrôles de prérequis et 13 validations partielles. Les deux fonctionnalités vidéo et memory-ckg ont perdu le statut « Testée localement » : les défauts signalés par Grok restent non reproduits, donc non résolus de façon démontrée. Les descriptions ont été restreintes en conséquence ; cela ne signifie pas 24 succès complets.
 
 ## Limites et écarts de protocole
 
@@ -62,7 +62,7 @@ Les paquets ont été construits avant les commits thématiques : leur manifeste
 - [tool-read-file](tool-read-file.md) — Partiellement vérifiée
 - [cli-curator](cli-curator.md) — Testée localement
 - [cli-session](cli-session.md) — Partiellement vérifiée
-- [memory-ckg](memory-ckg.md) — Testée localement
+- [memory-ckg](memory-ckg.md) — Partiellement vérifiée
 - [fleet-cli](fleet-cli.md) — Prérequis vérifiés
 - [cli-device](cli-device.md) — Partiellement vérifiée
 - [cli-proxy](cli-proxy.md) — Prérequis vérifiés
@@ -70,8 +70,8 @@ Les paquets ont été construits avant les commits thématiques : leur manifeste
 - [cli-evolve](cli-evolve.md) — Prérequis vérifiés
 - [dgm-authored-tools](dgm-authored-tools.md) — Partiellement vérifiée
 - [cli-companion](cli-companion.md) — Prérequis vérifiés
-- [media-film-assemble](media-film-assemble.md) — Testée localement
-- [media-video-stitch](media-video-stitch.md) — Testée localement
+- [media-film-assemble](media-film-assemble.md) — Partiellement vérifiée
+- [media-video-stitch](media-video-stitch.md) — Partiellement vérifiée
 - [cli-policy](cli-policy.md) — Partiellement vérifiée
 - [cli-daemon](cli-daemon.md) — Partiellement vérifiée
 - [cli-trigger](cli-trigger.md) — Partiellement vérifiée

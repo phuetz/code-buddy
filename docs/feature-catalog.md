@@ -2,6 +2,7 @@
 
 This catalogue covers **91 curated user-facing capabilities** in the current source checkout. “Wired” means the source files and declared entrypoint checks exist. “Tested locally” means a real command or agent turn ran under an isolated HOME and has a trace. No feature is claimed as deployed from this checkout. Benefits describe what the wired capability is intended to offer; live evidence covers only the scenario named in its trace.
 
+The [2 October audit](preuves/fonctions-reelles-2026-10-02/README.md) also distinguishes **Prerequisites verified** (an actionable refusal was exercised; success remains unproven) and **Partially verified** (only the operations named in the evidence were verified).
 Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue status trace](preuves/p5-catalog-status-2026-09-29.log).
 
 ## Agent and tools
@@ -11,8 +12,8 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 | `resource-catalog-tool` — Outil de sélection des ressources | Find available resources for an agent task. | **Tested locally** | [Run trace](preuves/p5-resource-catalog-tool-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#resource-catalog-tool) |
 | `cli-code-explorer` — Code Explorer integration | Inspect code relationships and session sync. | **Wired** | [Wiring checks](preuves/verification-statique.md#cli-code-explorer) |
 | `cli-tools` — Tool availability | Inspect effective tools and tool profiles. | **Tested locally** | [Run trace](preuves/p5-cli-tools-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-tools) |
-| `cli-autonomous-code` — Guarded coding cell | Run a guarded autonomous coding contract. | **Tested locally** | [Run trace](preuves/p7-cli-autonomous-code.log); [Wiring checks](preuves/verification-statique.md#cli-autonomous-code) |
-| `cli-dev` — Developer workflows | Run guided plan, implementation and verification flows. | **Tested locally** | [Run trace](preuves/p7-cli-dev.log); [Wiring checks](preuves/verification-statique.md#cli-dev) |
+| `cli-autonomous-code` — Guarded coding cell | Run a guarded contract with the required approvals and provider; blocked or failed verification exits nonzero. | **Prerequisites verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-autonomous-code.md); [Wiring checks](preuves/verification-statique.md#cli-autonomous-code) |
+| `cli-dev` — Developer workflows | Plan and explain a repository with a configured provider; without one, the command refuses and creates no PLAN.md. | **Prerequisites verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-dev.md); [Wiring checks](preuves/verification-statique.md#cli-dev) |
 | `cli-skills` — Installed skills | List installed skill packages and their origin. | **Tested locally** | [Run trace](preuves/p5-cli-skills-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-skills) |
 | `cli-bundles` — Skill bundles | Group skills under a named command. | **Tested locally** | [Run trace](preuves/p5-cli-bundles-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-bundles) |
 | `cli-lsp` — LSP diagnostics | Inspect language-server diagnostics. | **Failed live run** | [Failure trace](preuves/p5-cli-lsp-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-lsp) |
@@ -21,8 +22,8 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 | `tool-deep-research` — Deep research | Prepare a sourced multi-step research report. | **Wired** | [Wiring checks](preuves/verification-statique.md#tool-deep-research) |
 | `tool-verify` — Verification tool | Ask the agent to verify a concrete result. | **Wired** | [Wiring checks](preuves/verification-statique.md#tool-verify) |
 | `agent-loop` — Agent tool loop | Continue a request across model replies and tool results. | **Tested locally** | [Run trace](preuves/p5-agent-loop-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#agent-loop) |
-| `tool-read-file` — File reading | Let the agent read a workspace file before answering. | **Tested locally** | [Run trace](preuves/p5-tool-read-file-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#tool-read-file) |
-| `context-tool-selection` — Tool selection | Select task-relevant tools while retaining tool search. | **Tested locally** | [Run trace](preuves/p7-context-tool-selection.log); [Wiring checks](preuves/verification-statique.md#context-tool-selection) |
+| `tool-read-file` — File reading | Let the agent read a workspace file before answering. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/tool-read-file.md); [Wiring checks](preuves/verification-statique.md#tool-read-file) |
+| `context-tool-selection` — Tool selection | Through the public getRelevantTools API, select relevant tools while retaining tool_search by default when available; agent turns and lite/compact profiles are unverified. | **Tested locally** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/context-tool-selection.md); [Wiring checks](preuves/verification-statique.md#context-tool-selection) |
 
 ## Providers and failover
 
@@ -39,25 +40,25 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 
 | Feature | User benefit | State | Evidence |
 |---|---|---|---|
-| `cli-curator` — Local curator | Review proposed maintenance for memory, skills and costs. | **Tested locally** | [Run trace](preuves/p6-cli-curator.log); [Wiring checks](preuves/verification-statique.md#cli-curator) |
+| `cli-curator` — Local curator | Review memory, skills, CKG and lesson maintenance proposals; aggregate council ledger costs when present. | **Tested locally** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-curator.md); [Wiring checks](preuves/verification-statique.md#cli-curator) |
 | `cli-identity` — Agent identity files | Manage local agent identity and user files. | **Tested locally** | [Run trace](preuves/p5-cli-identity-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-identity) |
-| `cli-session` — Saved sessions | Manage stored conversations and resumes. | **Tested locally** | [Run trace](preuves/p5-cli-session-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-session) |
+| `cli-session` — Saved sessions | Manage stored conversations and resumes. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-session.md); [Wiring checks](preuves/verification-statique.md#cli-session) |
 | `cli-user-model` — User preference model | Review a structured model of work preferences. | **Tested locally** | [Run trace](preuves/p6-cli-user-model.log); [Wiring checks](preuves/verification-statique.md#cli-user-model) |
 | `context-compaction` — Context compaction | Keep long conversations within a model context budget. | **Tested locally** | [Run trace](preuves/p6-context-compaction.log); [Wiring checks](preuves/verification-statique.md#context-compaction) |
-| `memory-ckg` — Collective knowledge graph | Recall shared knowledge through the CKG. | **Tested locally** | [Run trace](preuves/p6-memory-ckg.log); [Wiring checks](preuves/verification-statique.md#memory-ckg) |
+| `memory-ckg` — Collective knowledge graph | Store and recall CKG facts with an explicit keyword fallback when embeddings are unavailable. Grok’s research recall sharp crash was not reproduced; resolution remains unproven. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/memory-ckg.md); [Wiring checks](preuves/verification-statique.md#memory-ckg) |
 | `context-checkpoints` — Session checkpoints | Create checkpoints and rewind agent changes. | **Tested locally** | [Run trace](preuves/p7-context-checkpoints.log); [Wiring checks](preuves/verification-statique.md#context-checkpoints) |
 
 ## Fleet
 
 | Feature | User benefit | State | Evidence |
 |---|---|---|---|
-| `fleet-cli` — Commandes de la flotte | Inspect and operate the multi-agent fleet from the terminal. | **Tested locally** | [Run trace](preuves/p6-fleet-cli.log); [Wiring checks](preuves/verification-statique.md#fleet-cli) |
+| `fleet-cli` — Commandes de la flotte | Inspect and operate the multi-agent fleet from the terminal. | **Prerequisites verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/fleet-cli.md); [Wiring checks](preuves/verification-statique.md#fleet-cli) |
 | `cli-ruche` — Signed coordination | Exchange signed coordination messages. | **Tested locally** | [Run trace](preuves/p7-cli-ruche.log); [Wiring checks](preuves/verification-statique.md#cli-ruche) |
-| `cli-device` — Remote device nodes | Manage SSH, ADB and local device nodes. | **Tested locally** | [Run trace](preuves/p5-cli-device-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-device) |
+| `cli-device` — Remote device nodes | Manage SSH, ADB and local device nodes. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-device.md); [Wiring checks](preuves/verification-statique.md#cli-device) |
 | `cli-nodes` — Companion app nodes | Manage connected desktop and mobile nodes. | **Failed live run** | [Failure trace](preuves/p7-cli-nodes.log); [Wiring checks](preuves/verification-statique.md#cli-nodes) |
-| `fleet-peer-chat` — Peer chat | Send a model request to a connected fleet peer. | **Tested locally** | [Run trace](preuves/p6-fleet-peer-chat.log); [Wiring checks](preuves/verification-statique.md#fleet-peer-chat) |
+| `fleet-peer-chat` — Peer chat | Send a model request to a connected fleet peer. | **Prerequisites verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/fleet-peer-chat.md); [Wiring checks](preuves/verification-statique.md#fleet-peer-chat) |
 | `fleet-peer-tools` — Peer read-only tools | Request an allowed read-only tool on a peer. | **Tested locally** | [Run trace](preuves/p6-fleet-peer-tools.log); [Wiring checks](preuves/verification-statique.md#fleet-peer-tools) |
-| `fleet-peer-sessions` — Multi-turn peer sessions | Continue a conversation with a fleet peer across turns. | **Tested locally** | [Run trace](preuves/p6-fleet-peer-sessions.log); [Wiring checks](preuves/verification-statique.md#fleet-peer-sessions) |
+| `fleet-peer-sessions` — Multi-turn peer sessions | Continue a conversation with a fleet peer across turns. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/fleet-peer-sessions.md); [Wiring checks](preuves/verification-statique.md#fleet-peer-sessions) |
 
 ## Server and API
 
@@ -66,14 +67,14 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 | `http-health` — Route HTTP de santé | Check the HTTP server health endpoint. | **Tested locally** | [Run trace](preuves/p5-http-health-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#http-health) |
 | `cli-gateway-pairing` — Gateway pairing approval | Approve or reject gateway device pairing. | **Tested locally** | [Run trace](preuves/p7-cli-gateway-pairing.log); [Wiring checks](preuves/verification-statique.md#cli-gateway-pairing) |
 | `cli-acp` — Editor agent protocol | Expose an agent over ACP stdio to an editor. | **Tested locally** | [Run trace](preuves/p7-cli-acp.log); [Wiring checks](preuves/verification-statique.md#cli-acp) |
-| `cli-proxy` — OpenAI-compatible proxy | Expose an OpenAI-compatible proxy to clients. | **Tested locally** | [Run trace](preuves/p7-cli-proxy.log); [Wiring checks](preuves/verification-statique.md#cli-proxy) |
+| `cli-proxy` — OpenAI-compatible proxy | Expose an OpenAI-compatible proxy to clients. | **Prerequisites verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-proxy.md); [Wiring checks](preuves/verification-statique.md#cli-proxy) |
 | `cli-token` — API token | Mint a signed API access token. | **Tested locally** | [Run trace](preuves/p5-cli-token-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-token) |
 | `cli-pair` — Android pairing | Pair an Android authenticator locally. | **Tested locally** | [Run trace](preuves/p7-cli-pair.log); [Wiring checks](preuves/verification-statique.md#cli-pair) |
 | `cli-devices` — Android devices | List and revoke paired authenticators. | **Tested locally** | [Run trace](preuves/p7-cli-devices.log); [Wiring checks](preuves/verification-statique.md#cli-devices) |
-| `http-chat` — Chat HTTP API | Send a chat request over HTTP. | **Tested locally** | [Run trace](preuves/p7-http-chat.log); [Wiring checks](preuves/verification-statique.md#http-chat) |
+| `http-chat` — Chat HTTP API | Send a chat request over HTTP. | **Prerequisites verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/http-chat.md); [Wiring checks](preuves/verification-statique.md#http-chat) |
 | `http-sessions` — Sessions HTTP API | Inspect and manage saved sessions over HTTP. | **Tested locally** | [Run trace](preuves/p7-http-sessions.log); [Wiring checks](preuves/verification-statique.md#http-sessions) |
 | `http-memory` — Memory HTTP API | Read and update agent memory over HTTP. | **Tested locally** | [Run trace](preuves/p7-http-memory.log); [Wiring checks](preuves/verification-statique.md#http-memory) |
-| `http-a2a` — A2A task API | Exchange agent tasks over the A2A endpoint. | **Tested locally** | [Run trace](preuves/p5-http-a2a-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#http-a2a) |
+| `http-a2a` — A2A task API | Exchange agent tasks over the A2A endpoint. | **Prerequisites verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/http-a2a.md); [Wiring checks](preuves/verification-statique.md#http-a2a) |
 
 ## Cowork
 
@@ -89,10 +90,10 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 
 | Feature | User benefit | State | Evidence |
 |---|---|---|---|
-| `cli-improve` — Empirical improvement | Run guarded learning experiments. | **Tested locally** | [Run trace](preuves/p6-cli-improve.log); [Wiring checks](preuves/verification-statique.md#cli-improve) |
-| `cli-evolve` — Evolution experiments | Propose and review code variants through explicit commands. | **Tested locally** | [Run trace](preuves/p7-cli-evolve.log); [Wiring checks](preuves/verification-statique.md#cli-evolve) |
+| `cli-improve` — Empirical improvement | Run guarded learning experiments. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-improve.md); [Wiring checks](preuves/verification-statique.md#cli-improve) |
+| `cli-evolve` — Evolution experiments | Propose and review code variants through explicit commands. | **Prerequisites verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-evolve.md); [Wiring checks](preuves/verification-statique.md#cli-evolve) |
 | `dgm-learning-cycle` — Learning cycle | Try a bounded learning cycle from the improve command. | **Tested locally** | [Run trace](preuves/p6-dgm-learning-cycle.log); [Wiring checks](preuves/verification-statique.md#dgm-learning-cycle) |
-| `dgm-authored-tools` — Authored tool experiments | Evaluate proposed agent tools with the improve command. | **Tested locally** | [Run trace](preuves/p6-dgm-authored-tools.log); [Wiring checks](preuves/verification-statique.md#dgm-authored-tools) |
+| `dgm-authored-tools` — Authored tool experiments | Evaluate proposed agent tools with the improve command. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/dgm-authored-tools.md); [Wiring checks](preuves/verification-statique.md#dgm-authored-tools) |
 | `dgm-evolve-propose` — Evolution proposals | Inspect a proposed code-evolution experiment. | **Wired** | [Wiring checks](preuves/verification-statique.md#dgm-evolve-propose) |
 | `dgm-capability-benchmark` — Capability benchmark | Measure a selected model on a curated capability scenario. | **Tested locally** | [Run trace](preuves/p7-dgm-capability-benchmark.log); [Wiring checks](preuves/verification-statique.md#dgm-capability-benchmark) |
 
@@ -105,7 +106,7 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 | `cli-assistant` — Voice assistant | Configure the Lisa voice assistant. | **Wired** | [Wiring checks](preuves/verification-statique.md#cli-assistant) |
 | `cli-heartbeat` — Heartbeat engine | Inspect and configure periodic agent wakeups. | **Failed live run** | [Failure trace](preuves/p7-cli-heartbeat.log); [Wiring checks](preuves/verification-statique.md#cli-heartbeat) |
 | `cli-screen` — Screen capture | Capture or watch desktop activity. | **Tested locally** | [Run trace](preuves/p7-cli-screen.log); [Wiring checks](preuves/verification-statique.md#cli-screen) |
-| `cli-companion` — Companion settings | Configure companion behaviour and voice. | **Tested locally** | [Run trace](preuves/p7-cli-companion.log); [Wiring checks](preuves/verification-statique.md#cli-companion) |
+| `cli-companion` — Companion settings | Configure companion behaviour and voice. | **Prerequisites verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-companion.md); [Wiring checks](preuves/verification-statique.md#cli-companion) |
 | `sensory-voice-loop` — Voice conversation loop | Turn heard speech into a spoken companion response. | **Wired** | [Wiring checks](preuves/verification-statique.md#sensory-voice-loop) |
 
 ## Video and media
@@ -116,8 +117,8 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 | `tool-image-generate` — Image generation | Request image generation through a configured provider. | **Wired** | [Wiring checks](preuves/verification-statique.md#tool-image-generate) |
 | `tool-video-generate` — Video generation | Request a video clip through a configured backend. | **Wired** | [Wiring checks](preuves/verification-statique.md#tool-video-generate) |
 | `tool-understand-video` — Video understanding | Extract information from video with configured media tools. | **Failed live run** | [Failure trace](preuves/p7-tool-understand-video.log); [Wiring checks](preuves/verification-statique.md#tool-understand-video) |
-| `media-film-assemble` — Film assembly | Assemble prepared clips with transitions and audio. | **Tested locally** | [Run trace](preuves/p6-media-film-assemble.log); [Wiring checks](preuves/verification-statique.md#media-film-assemble) |
-| `media-video-stitch` — Video clip stitching | Combine prepared clips with transitions. | **Tested locally** | [Run trace](preuves/p6-media-video-stitch.log); [Wiring checks](preuves/verification-statique.md#media-video-stitch) |
+| `media-film-assemble` — Film assembly | Assemble ready clips with ffmpeg; cut, fade and wipeleft passed on two synthetic 320×240, 25 fps clips with audio. Grok’s ffmpeg 234 fade failure was not reproduced; resolution remains unproven. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/media-film-assemble.md); [Wiring checks](preuves/verification-statique.md#media-film-assemble) |
+| `media-video-stitch` — Video clip stitching | Combine clips through video_stitch with ffmpeg; tested scope is two synthetic clips with audio and cut/fade/wipeleft transitions. Grok’s ffmpeg 234 fade failure was not reproduced; resolution remains unproven. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/media-video-stitch.md); [Wiring checks](preuves/verification-statique.md#media-video-stitch) |
 
 ## Security
 
@@ -125,7 +126,7 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 |---|---|---|---|
 | `cli-security` — Security audit | Audit the local project and profile security. | **Tested locally** | [Run trace](preuves/p6-cli-security.log); [Wiring checks](preuves/verification-statique.md#cli-security) |
 | `cli-groups` — Group chat security | Configure group chat access controls. | **Failed live run** | [Failure trace](preuves/p5-cli-groups-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-groups) |
-| `cli-policy` — Policy diagnostics | Inspect and repair policy findings by domain. | **Tested locally** | [Run trace](preuves/p6-cli-policy.log); [Wiring checks](preuves/verification-statique.md#cli-policy) |
+| `cli-policy` — Policy diagnostics | Inspect and repair policy findings by domain. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-policy.md); [Wiring checks](preuves/verification-statique.md#cli-policy) |
 | `cli-secrets` — Encrypted secrets vault | Manage credentials in the local encrypted vault. | **Tested locally** | [Run trace](preuves/p7-cli-secrets.log); [Wiring checks](preuves/verification-statique.md#cli-secrets) |
 | `cli-approvals` — Action approvals | Review pending tool and action approvals. | **Wired** | [Wiring checks](preuves/verification-statique.md#cli-approvals) |
 | `security-sandbox` — Native shell sandbox | Confine shell commands when native sandbox mode is enabled. | **Tested locally** | [Run trace](preuves/p6-security-sandbox.log); [Wiring checks](preuves/verification-statique.md#security-sandbox) |
@@ -136,14 +137,14 @@ Evidence: [static wiring audit](preuves/verification-statique.md) · [catalogue 
 | Feature | User benefit | State | Evidence |
 |---|---|---|---|
 | `catalog-status` — Catalogue des états et preuves | Inspect the evidence level of tracked features before presenting them. | **Tested locally** | [Run trace](preuves/p5-catalog-status-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#catalog-status) |
-| `cli-daemon` — Background daemon | Run Code Buddy as a managed background process. | **Tested locally** | [Run trace](preuves/p7-cli-daemon.log); [Wiring checks](preuves/verification-statique.md#cli-daemon) |
-| `cli-trigger` — Event triggers | Configure event-driven agent responses. | **Tested locally** | [Run trace](preuves/p5-cli-trigger-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-trigger) |
+| `cli-daemon` — Background daemon | Run Code Buddy as a managed background process. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-daemon.md); [Wiring checks](preuves/verification-statique.md#cli-daemon) |
+| `cli-trigger` — Event triggers | Configure event-driven agent responses. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-trigger.md); [Wiring checks](preuves/verification-statique.md#cli-trigger) |
 | `cli-widgets` — Conversation widgets | Manage inline conversation widgets. | **Tested locally** | [Run trace](preuves/p5-cli-widgets-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-widgets) |
 | `cli-hub` — Skills marketplace | Search and manage shared skills. | **Wired** | [Wiring checks](preuves/verification-statique.md#cli-hub) |
 | `cli-triage` — Support bundle | Create a redacted local diagnostic bundle. | **Tested locally** | [Run trace](preuves/p5-cli-triage-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-triage) |
 | `cli-hermes` — Hermes profile | Inspect the native Hermes-style agent profile. | **Tested locally** | [Run trace](preuves/p5-cli-hermes-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-hermes) |
 | `cli-config` — Configuration | Inspect effective configuration and missing settings. | **Tested locally** | [Run trace](preuves/p7-cli-config.log); [Wiring checks](preuves/verification-statique.md#cli-config) |
-| `cli-run` — Run observability | Inspect traces and replay agent runs. | **Tested locally** | [Run trace](preuves/p5-cli-run-2026-09-29.log); [Wiring checks](preuves/verification-statique.md#cli-run) |
+| `cli-run` — Run observability | Inspect traces and replay agent runs. | **Partially verified** | [Scoped run and limitations, 02 Oct](preuves/fonctions-reelles-2026-10-02/cli-run.md); [Wiring checks](preuves/verification-statique.md#cli-run) |
 | `cli-cron` — Scheduled jobs | Create and manage scheduled jobs. | **Tested locally** | [Run trace](preuves/p7-cli-cron.log); [Wiring checks](preuves/verification-statique.md#cli-cron) |
 | `cli-insights` — Usage insights | Inspect token, cost and activity metrics. | **Tested locally** | [Run trace](preuves/p7-cli-insights.log); [Wiring checks](preuves/verification-statique.md#cli-insights) |
 | `cli-deploy` — Web deployment workflow | Prepare a web deployment through a CLI workflow. | **Wired** | [Wiring checks](preuves/verification-statique.md#cli-deploy) |

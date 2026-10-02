@@ -1,6 +1,8 @@
 # media-video-stitch — recette du 2 octobre 2026
 
-État : **Testée localement**. Décision : **c** (a : défaut corrigé ; b : prérequis explicité ; c : promesse restreinte à la preuve).
+> Reprise de revue : **Partiellement vérifiée**. Erreur ffmpeg 234 signalée par Grok sur les fondus non reproduite ; résolution non démontrée. Les scénarios synthétiques ci-dessous ne permettent pas de clore le défaut initial.
+
+État : **Partiellement vérifiée**. Décision : **c** (a : défaut corrigé ; b : prérequis explicité ; c : promesse restreinte à la preuve).
 
 Le même moteur fonctionne ici pour les transitions testées ; les clips originaux ne sont pas fournis.
 

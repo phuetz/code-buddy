@@ -1,6 +1,8 @@
 # memory-ckg — recette du 2 octobre 2026
 
-État : **Testée localement**. Décision : **c** (a : défaut corrigé ; b : prérequis explicité ; c : promesse restreinte à la preuve).
+> Reprise de revue : **Partiellement vérifiée**. Crash sharp de research recall signalé par Grok non reproduit ; résolution non démontrée. Les scénarios synthétiques ci-dessous ne permettent pas de clore le défaut initial.
+
+État : **Partiellement vérifiée**. Décision : **c** (a : défaut corrigé ; b : prérequis explicité ; c : promesse restreinte à la preuve).
 
 Le repli lexical est déjà présent ; le crash du rapport ne se reproduit pas dans ce paquet installé.
 
