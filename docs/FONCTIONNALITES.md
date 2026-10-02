@@ -107,7 +107,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `cli-assistant` — Voice assistant | Configurez l’assistante vocale Lisa. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-assistant) |
 | `cli-heartbeat` — Heartbeat engine | Inspectez et configurez les réveils périodiques de l’agent. | **Échec constaté** | [Trace de l’échec](preuves/p7-cli-heartbeat.log); [Maillons vérifiés](preuves/verification-statique.md#cli-heartbeat) |
 | `cli-screen` — Screen capture | Capturez ou surveillez l’activité du bureau. | **Testée localement** | [Trace réelle](preuves/p7-cli-screen.log); [Maillons vérifiés](preuves/verification-statique.md#cli-screen) |
-| `cli-companion` — Companion settings | Configurez le comportement et la voix du compagnon. | **Testée localement** | [Trace réelle](preuves/p7-cli-companion.log); [Maillons vérifiés](preuves/verification-statique.md#cli-companion) |
+| `cli-companion` — Companion settings | Enregistrez identité et paramètres de voix ; status indique les identifiants et programmes audio manquants avant utilisation. | **Prérequis vérifiés** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/cli-companion.md) ; [Raccordement](preuves/verification-statique.md#cli-companion) |
 | `sensory-voice-loop` — Voice conversation loop | Transformez la parole entendue en réponse vocale du compagnon. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#sensory-voice-loop) |
 
 ## Vidéo et médias
