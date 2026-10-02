@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OpenAICompatProvider } from '../../../src/codebuddy/providers/provider-openai-compat.js';
@@ -47,8 +48,10 @@ describe('payload final enregistré de B, avec injections et schémas', () => {
     const wireEstimate = Math.ceil(Buffer.byteLength(JSON.stringify({ messages, tools: seen.tools })) / 3);
     expect(wireEstimate + options.num_predict + 512).toBeLessThanOrEqual(options.num_ctx);
     expect(messages.findLast(message => message.role === 'user')?.content).toBe(input.messages.findLast(message => message.role === 'user')?.content);
-    const key = JSON.stringify(messages).match(/payload-[a-f0-9]+/)?.[0];
-    expect(key).toBeTruthy();
+    const key = `payload-${createHash('sha256').update(JSON.stringify(input)).digest('hex').slice(0, 24)}`;
+    // The complete snapshot remains available for diagnostics, but is no
+    // longer offered as a replacement for one reduced observation.
+    expect(JSON.stringify(messages)).not.toContain(key);
     const restored = getRestorableCompressor().restore(key!, workspace, 'banc');
     expect(restored.found).toBe(true);
     expect(JSON.parse(restored.content)).toEqual(input);

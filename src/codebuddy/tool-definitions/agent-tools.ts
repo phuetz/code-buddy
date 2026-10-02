@@ -66,7 +66,7 @@ export const RESTORE_CONTEXT_TOOL: CodeBuddyTool = {
   type: 'function',
   function: {
     name: 'restore_context',
-    description: 'Restore context removed from the model-facing observation. Pass the exact originating tool call ID (call_… or toolu_…) to retrieve raw output previously captured in the active workspace and conversation session. Other identifiers work only for content already captured in that same workspace and session; this tool never performs a fresh file read.',
+    description: 'Restore context removed from the model-facing observation. Pass the exact originating tool call ID (call_… or toolu_…) to retrieve raw output previously captured in the active workspace and conversation session. Other identifiers work only for content already captured in that same workspace and session; this tool never performs a fresh file read. Large content is paged (12000 characters by default); use the returned offset to continue reading.',
     parameters: {
       type: 'object',
       properties: {
@@ -74,6 +74,8 @@ export const RESTORE_CONTEXT_TOOL: CodeBuddyTool = {
           type: 'string',
           description: 'Exact tool call ID (preferred), or an identifier whose content was already captured in the active workspace and session',
         },
+        offset: { type: 'number', description: 'Zero-based character offset; use the continuation offset returned by the previous page.' },
+        limit: { type: 'number', description: 'Maximum characters to return (default 12000, maximum 24000).' },
       },
       required: ['identifier'],
     },

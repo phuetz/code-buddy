@@ -189,14 +189,16 @@ export class RestoreContextTool implements ITool {
     'Restore context that was compacted out of the model-facing observation.',
     'For tool results, pass the exact originating tool call ID (for example call_abc123 or toolu_xyz) to retrieve raw output previously captured in the active workspace and conversation session.',
     'Other identifiers are restored only when their content was already captured in that same workspace and session; this tool never performs a fresh file read.',
+    'Large content is paged (12000 characters by default); use the returned offset to continue reading.',
   ].join(' ');
 
   async execute(
     input: Record<string, unknown>,
     context?: IToolExecutionContext,
   ): Promise<ToolResult> {
+    const validation = this.validate(input);
+    if (!validation.valid) return { success: false, error: validation.errors?.join('; ') ?? 'Invalid recovery arguments' };
     const identifier = input.identifier as string;
-    if (!identifier) return { success: false, error: 'identifier is required' };
 
     const compressor = getRestorableCompressor();
     const recoverySessionId =
@@ -211,9 +213,16 @@ export class RestoreContextTool implements ITool {
     );
 
     if (result.found) {
+      const offset = input.offset as number | undefined ?? 0;
+      const limit = input.limit as number | undefined ?? 12000;
+      if (offset > result.content.length) return { success: false, error: `offset exceeds content length ${result.content.length}` };
+      const end = Math.min(offset + limit, result.content.length);
+      const continuation = end < result.content.length
+        ? `\n\n[Characters ${offset}-${end} of ${result.content.length}. Continue with restore_context(${JSON.stringify({ identifier, offset: end, limit })}).]`
+        : '';
       return {
         success: true,
-        output: `Restored content for "${identifier}":\n\n${result.content}`,
+        output: `Restored content for "${identifier}":\n\n${result.content.slice(offset, end)}${continuation}`,
       };
     }
 
@@ -234,6 +243,8 @@ export class RestoreContextTool implements ITool {
             type: 'string',
             description: 'Exact tool call ID (preferred), or an identifier whose content was already captured in the active workspace and session',
           },
+          offset: { type: 'number', minimum: 0, description: 'Zero-based character offset; use the continuation offset returned by the previous page.' },
+          limit: { type: 'number', minimum: 1, maximum: 24000, description: 'Maximum characters to return (default 12000, maximum 24000).' },
         },
         required: ['identifier'],
       },
@@ -241,8 +252,14 @@ export class RestoreContextTool implements ITool {
   }
 
   validate(input: Record<string, unknown>): IValidationResult {
-    if (!input.identifier) {
+    if (typeof input.identifier !== 'string' || !input.identifier) {
       return { valid: false, errors: ['identifier is required'] };
+    }
+    if (input.offset !== undefined && (typeof input.offset !== 'number' || !Number.isSafeInteger(input.offset) || input.offset < 0)) {
+      return { valid: false, errors: ['offset must be a nonnegative safe integer'] };
+    }
+    if (input.limit !== undefined && (typeof input.limit !== 'number' || !Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 24000)) {
+      return { valid: false, errors: ['limit must be an integer between 1 and 24000'] };
     }
     return { valid: true, errors: [] };
   }

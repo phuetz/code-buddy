@@ -97,4 +97,30 @@ describe('restore_context public contract', () => {
       output: expect.stringContaining('private agent scope'),
     });
   });
+
+  it('pages a long single-line observation so its middle remains accessible', async () => {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'restore-pages-'));
+    temporaryDirectories.push(workspace);
+    const content = 'a'.repeat(12000) + 'MIDDLE_SENTINEL' + 'z'.repeat(12000);
+    getRestorableCompressor().capture('large-audit', content, workspace, 'banc');
+    const tool = new RestoreContextTool();
+    const first = await tool.execute({ identifier: 'large-audit' }, { cwd: workspace, sessionId: 'banc' });
+    expect(first.success).toBe(true);
+    expect(first.output!.length).toBeLessThan(13000);
+    expect(first.output).toContain('"offset":12000');
+    expect(first.output).not.toContain('MIDDLE_SENTINEL');
+    const middle = await tool.execute({ identifier: 'large-audit', offset: 12000, limit: 'MIDDLE_SENTINEL'.length }, { cwd: workspace, sessionId: 'banc' });
+    expect(middle.output).toContain('MIDDLE_SENTINEL');
+    expect(middle.output).not.toContain('aaa');
+    expect(middle.output).not.toContain('zzz');
+    expect(tool.getSchema().parameters.properties.offset).toBeDefined();
+    expect(RESTORE_CONTEXT_TOOL.function.parameters.properties?.offset).toBeDefined();
+    expect(getRestorableCompressor().restore('large-audit', workspace, 'banc').content).toBe(content);
+  });
+
+  it.each([{ offset: -1 }, { offset: 1.5 }, { limit: 0 }, { limit: 24001 }, { limit: '12' }])('rejects invalid recovery ranges %j', async (range) => {
+    const tool = new RestoreContextTool();
+    expect(tool.validate({ identifier: 'id', ...range }).valid).toBe(false);
+    expect(await tool.execute({ identifier: 'id', ...range })).toMatchObject({ success: false, error: expect.stringMatching(/offset|limit/) });
+  });
 });

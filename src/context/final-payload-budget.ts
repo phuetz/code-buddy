@@ -39,9 +39,16 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
 
   const original = JSON.stringify(payload);
   const identifier = `payload-${createHash('sha256').update(original).digest('hex').slice(0, 24)}`;
-  const marker = `\n[Payload reduced. Use restore_context(identifier="${identifier}") to recover the original messages and schemas.]`;
+  const marker = '\n[Older context reduced to fit the window. Reduced observations carry individual recovery references.]';
   const recovery = getRestorableCompressor();
+  // Keep the complete snapshot for diagnostics, but never suggest restoring a
+  // whole request into a tool result: that recursively duplicates the history.
   recovery.capture(identifier, original, scope.workDir, scope.sessionId);
+  const contentMarker = (content: string): string => {
+    const key = `payload-content-${createHash('sha256').update(content).digest('hex').slice(0, 24)}`;
+    recovery.capture(key, content, scope.workDir, scope.sessionId);
+    return `\n[Content reduced. Use restore_context(identifier="${key}") to recover this content only.]\n`;
+  };
   let system = next.messages.find(message => message.role === 'system');
   if (!system) { system = { role: 'system', content: marker }; next.messages.unshift(system); }
   else system.content = (typeof system.content === 'string' ? system.content : '') + marker;
@@ -56,7 +63,7 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
   // Keep protocol envelopes/IDs intact; only summarize older observations.
   for (const message of next.messages) {
     if (!recentMessages.has(message) && message.role === 'tool' && typeof message.content === 'string' && message.content.length > 2400) {
-      message.content = message.content.slice(0, 1200) + marker + message.content.slice(-1200);
+      message.content = message.content.slice(0, 1200) + contentMarker(message.content) + message.content.slice(-1200);
     }
   }
   // Evict old assistant/tool groups before erasing instructions/capabilities.
@@ -74,7 +81,7 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
   if (estimateFinalPayloadTokens(withoutSystems) > inputBudget) {
     for (const message of recentMessages) {
       if (message.role === 'tool' && typeof message.content === 'string' && message.content.length > 2400) {
-        message.content = message.content.slice(0, 1200) + marker + message.content.slice(-1200);
+        message.content = message.content.slice(0, 1200) + contentMarker(message.content) + message.content.slice(-1200);
       }
     }
   }
@@ -85,8 +92,9 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
   for (const message of systems) {
     if (estimateFinalPayloadTokens(next) <= inputBudget) break;
     const text = String(message.content);
+    const systemMarker = contentMarker(text);
     let low = 0; let high = text.length;
-    const render = (length: number) => text.slice(0, Math.ceil(length * 0.8)) + marker + (length > 0 ? text.slice(-Math.floor(length * 0.2)) : '');
+    const render = (length: number) => text.slice(0, Math.ceil(length * 0.8)) + systemMarker + (length > 0 ? text.slice(-Math.floor(length * 0.2)) : '');
     message.content = render(0);
     if (estimateFinalPayloadTokens(next) > inputBudget) continue;
     while (low < high) {
