@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { noteProjectEnv } from './automation-replay/model-trust.js';
 import { getOllamaBaseUrl, getOllamaV1BaseUrl } from './utils/ollama-url.js';
 // Record startup time as early as possible
 const STARTUP_TIME = Date.now();
@@ -178,11 +179,13 @@ async function ensureEnvLoaded(): Promise<void> {
     const dotenv = await lazyImport.dotenv();
     // Always load .env from the launch directory first so `--directory`
     // does not accidentally drop API keys from the caller workspace.
+    noteProjectEnv(join(launchCwd, '.env'));
     dotenv.config({ path: join(launchCwd, '.env') });
 
     // If cwd changed after launch and has its own .env, load it too
     // (without overriding already-populated environment variables).
     if (process.cwd() !== launchCwd) {
+      noteProjectEnv(join(process.cwd(), '.env'));
       dotenv.config();
     }
     envLoaded = true;

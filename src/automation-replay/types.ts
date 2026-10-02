@@ -4,7 +4,7 @@ export interface SemanticNode extends SemanticTarget {
   ref: number;
   enabled: boolean;
   protected: boolean;
-  /** Digest of non-protected input/ARIA state; no plaintext field value. */
+  /** Digest of structural control state; excludes field values, including hashes. */
   state?: string;
 }
 export interface Observation {

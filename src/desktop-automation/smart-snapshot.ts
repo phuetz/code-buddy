@@ -238,6 +238,11 @@ export class SmartSnapshotManager extends EventEmitter {
 
       // Filter elements
       const filtered = this.filterElements(elements, options);
+      if (elements.length > this.config.maxElements) {
+        for (const element of filtered) {
+          if (element.attributes) element.attributes.treeComplete = false;
+        }
+      }
 
       // Build element map
       const elementMap = new Map<number, UIElement>();
@@ -829,8 +834,9 @@ $automation = [System.Windows.Automation.AutomationElement]::RootElement
 $condition = [System.Windows.Automation.Condition]::TrueCondition
 $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
 
+$script:treeComplete = $true
 function Get-Elements($element, $depth) {
-    if ($depth -gt 5) { return @() }
+    if ($depth -gt 5) { $script:treeComplete = $false; return @() }
     $results = @()
 
     try {
@@ -858,7 +864,7 @@ function Get-Elements($element, $depth) {
             $results += Get-Elements $child ($depth + 1)
             $child = $walker.GetNextSibling($child)
         }
-    } catch [System.Exception] { $_ | Out-Null }
+    } catch [System.Exception] { $script:treeComplete = $false; $_ | Out-Null }
 
     return $results
 }
@@ -870,7 +876,14 @@ if ($focused) {
         $parent = $walker.GetParent($parent)
     }
     if ($parent) {
-        Get-Elements $parent 0 | ConvertTo-Json -Depth 10
+        $items = @(Get-Elements $parent 0)
+        foreach ($item in $items) {
+            $item.treeComplete = $script:treeComplete
+            $item.pid = $parent.Current.ProcessId
+            $item.windowHandle = [string]$parent.Current.NativeWindowHandle
+            $item.windowIdentity = (($parent.GetRuntimeId()) -join '.')
+        }
+        $items | ConvertTo-Json -Depth 10
     }
 }
         `;
@@ -899,8 +912,9 @@ if ($focused) {
           focused: Boolean(item.focused),
           enabled: item.enabled !== false,
           visible: item.width > 0 && item.height > 0,
-          attributes: { source: 'uia', protected: role === 'text-field' ? item.isPassword !== false : false,
-            windowTitle: items[0]?.role === 'ControlType.Window' ? items[0].name : undefined },
+          attributes: { source: 'uia', protected: item.isPassword === true || (role === 'text-field' && item.isPassword !== false),
+            windowTitle: items[0]?.role === 'ControlType.Window' ? items[0].name : undefined,
+            pid: item.pid, windowHandle: item.windowHandle, windowIdentity: item.windowIdentity, treeComplete: item.treeComplete === true && items.length <= this.config.maxElements },
           controlType: typeof item.role === 'string' ? item.role : undefined,
           automationId: item.automationId || undefined,
           runtimeId: item.runtimeId || undefined,
@@ -1001,9 +1015,12 @@ gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi
 import json
 
-def get_elements(obj, depth=0, max_depth=5, window_title=""):
+tree_complete = True
+def get_elements(obj, depth=0, max_depth=5, window_title="", window_identity="", path=""):
+    global tree_complete
     elements = []
     if depth > max_depth:
+        tree_complete = False
         return elements
 
     try:
@@ -1011,6 +1028,7 @@ def get_elements(obj, depth=0, max_depth=5, window_title=""):
         name = Atspi.Accessible.get_name(obj) or ""
         if role in ("frame", "dialog", "window"):
             window_title = name
+            window_identity = path
 
         try:
             component = obj.get_component()
@@ -1026,6 +1044,8 @@ def get_elements(obj, depth=0, max_depth=5, window_title=""):
             "role": role,
             "name": name,
             "windowTitle": window_title,
+            "windowIdentity": window_identity,
+            "pid": obj.get_process_id(),
             "focused": obj.get_state_set().contains(Atspi.StateType.FOCUSED),
             "enabled": obj.get_state_set().contains(Atspi.StateType.ENABLED),
             "showing": obj.get_state_set().contains(Atspi.StateType.SHOWING),
@@ -1034,9 +1054,9 @@ def get_elements(obj, depth=0, max_depth=5, window_title=""):
 
         for i in range(obj.get_child_count()):
             child = obj.get_child_at_index(i)
-            elements.extend(get_elements(child, depth + 1, max_depth, window_title))
+            elements.extend(get_elements(child, depth + 1, max_depth, window_title, window_identity, path + "/" + str(i)))
     except:
-        pass
+        tree_complete = False
 
     return elements
 
@@ -1044,8 +1064,10 @@ desktop = Atspi.get_desktop(0)
 all_elements = []
 for i in range(desktop.get_child_count()):
     app = desktop.get_child_at_index(i)
-    all_elements.extend(get_elements(app))
+    all_elements.extend(get_elements(app, path=str(i)))
 
+for element in all_elements:
+    element["treeComplete"] = tree_complete and len(all_elements) <= 100
 print(json.dumps(all_elements[:100]))
       `;
 
@@ -1067,7 +1089,7 @@ print(json.dumps(all_elements[:100]))
             ref: this.nextRef++,
             role,
             name: item.name || 'Unknown',
-            attributes: { source: 'at-spi', protected: /password/i.test(item.role), windowTitle: item.windowTitle },
+            attributes: { source: 'at-spi', protected: /password/i.test(item.role), windowTitle: item.windowTitle, pid: item.pid, windowIdentity: item.windowIdentity, treeComplete: item.treeComplete === true },
             bounds: item.bounds,
             center: {
               x: item.bounds.x + item.bounds.width / 2,
@@ -1118,8 +1140,9 @@ $automation = [System.Windows.Automation.AutomationElement]::RootElement
 $condition = [System.Windows.Automation.Condition]::TrueCondition
 $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
 
+$script:treeComplete = $true
 function Get-Elements($element, $depth) {
-    if ($depth -gt 5) { return @() }
+    if ($depth -gt 5) { $script:treeComplete = $false; return @() }
     $results = @()
 
     try {
@@ -1147,7 +1170,7 @@ function Get-Elements($element, $depth) {
             $results += Get-Elements $child ($depth + 1)
             $child = $walker.GetNextSibling($child)
         }
-    } catch [System.Exception] { $_ | Out-Null }
+    } catch [System.Exception] { $script:treeComplete = $false; $_ | Out-Null }
 
     return $results
 }
@@ -1159,7 +1182,14 @@ if ($focused) {
         $parent = $walker.GetParent($parent)
     }
     if ($parent) {
-        Get-Elements $parent 0 | ConvertTo-Json -Depth 10
+        $items = @(Get-Elements $parent 0)
+        foreach ($item in $items) {
+            $item.treeComplete = $script:treeComplete
+            $item.pid = $parent.Current.ProcessId
+            $item.windowHandle = [string]$parent.Current.NativeWindowHandle
+            $item.windowIdentity = (($parent.GetRuntimeId()) -join '.')
+        }
+        $items | ConvertTo-Json -Depth 10
     }
 }
         `;
@@ -1188,8 +1218,9 @@ if ($focused) {
           focused: Boolean(item.focused),
           enabled: item.enabled !== false,
           visible: item.width > 0 && item.height > 0,
-          attributes: { source: 'uia', protected: role === 'text-field' ? item.isPassword !== false : false,
-            windowTitle: items[0]?.role === 'ControlType.Window' ? items[0].name : undefined },
+          attributes: { source: 'uia', protected: item.isPassword === true || (role === 'text-field' && item.isPassword !== false),
+            windowTitle: items[0]?.role === 'ControlType.Window' ? items[0].name : undefined,
+            pid: item.pid, windowHandle: item.windowHandle, windowIdentity: item.windowIdentity, treeComplete: item.treeComplete === true && items.length <= this.config.maxElements },
           controlType: typeof item.role === 'string' ? item.role : undefined,
           automationId: item.automationId || undefined,
           runtimeId: item.runtimeId || undefined,

@@ -1,12 +1,14 @@
+import { assertUiModelTrust } from './model-trust.js';
 import type { ReplayModel } from './types.js';
 
-/** Explicit host configuration; a cloned project cannot select a provider or endpoint. */
+/** UI credentials are dedicated; never forward general provider API keys. */
 export const defaultReplayModel: ReplayModel = async (system, input) => {
+  assertUiModelTrust();
   const model = process.env.CODEBUDDY_UI_MODEL;
   if (!model) throw new Error('Set CODEBUDDY_UI_MODEL on the host to enable natural-language UI actions/assertions');
   const { CodeBuddyClient } = await import('../codebuddy/client.js');
   const client = new CodeBuddyClient(
-    process.env.CODEBUDDY_UI_API_KEY ?? process.env.OPENAI_API_KEY ?? process.env.GROK_API_KEY ?? 'ollama',
+    process.env.CODEBUDDY_UI_API_KEY ?? 'ollama',
     model,
     process.env.CODEBUDDY_UI_BASE_URL ?? 'http://127.0.0.1:11434/v1',
   );

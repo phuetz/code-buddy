@@ -174,8 +174,8 @@ public class CodeBuddyDesktopBridge {
         return w;
     }
 
-    private static void WalkTree(AutomationElement element, int depth, int maxDepth, List<Dictionary<string, object>> results) {
-        if (depth > maxDepth) return;
+    private static void WalkTree(AutomationElement element, int depth, int maxDepth, List<Dictionary<string, object>> results, ref bool complete) {
+        if (depth > maxDepth) { complete = false; return; }
         try {
             var current = element.Current;
             var info = new Dictionary<string, object>();
@@ -205,11 +205,11 @@ public class CodeBuddyDesktopBridge {
             var walker = TreeWalker.RawViewWalker;
             var child = walker.GetFirstChild(element);
             while (child != null) {
-                WalkTree(child, depth + 1, maxDepth, results);
+                WalkTree(child, depth + 1, maxDepth, results, ref complete);
                 child = walker.GetNextSibling(child);
             }
         } catch {
-            // Element might be dead/disposed
+            complete = false; // Element might be dead/disposed
         }
     }
 
@@ -653,7 +653,14 @@ public class CodeBuddyDesktopBridge {
 
                 var results = new List<Dictionary<string, object>>();
                 if (root != null) {
-                    WalkTree(root, 0, maxDepth, results);
+                    bool complete = true;
+                    WalkTree(root, 0, maxDepth, results, ref complete);
+                    foreach (var item in results) {
+                        item["treeComplete"] = complete;
+                        item["pid"] = root.Current.ProcessId;
+                        item["windowHandle"] = root.Current.NativeWindowHandle.ToString();
+                        item["windowIdentity"] = string.Join(".", root.GetRuntimeId());
+                    }
                 }
                 res["elements"] = results;
                 break;

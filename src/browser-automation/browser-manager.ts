@@ -610,6 +610,7 @@ export class BrowserManager extends EventEmitter {
         interactive: isInteractive,
         focused: node.focused || false,
         disabled: node.disabled || false,
+        inputType: node.role === 'textbox' ? (await page.getByRole(node.role, { name: node.name, exact: true }).getAttribute('type').catch(() => null))?.toLowerCase() : undefined,
         value: node.valuetext || node.value,
         ariaAttributes: {},
       };
@@ -651,11 +652,13 @@ export class BrowserManager extends EventEmitter {
           el.setAttribute('data-agent-ref', String(ref));
         } catch (_) { /* ignore */ }
 
-        const name = (el.getAttribute('aria-label') || (htmlEl as any).placeholder || el.textContent?.trim().slice(0, 100) || '').trim();
+        const editable = el.matches('input, textarea, select, [contenteditable="true"]');
+        const name = (el.getAttribute('aria-label') || (htmlEl as any).placeholder || (editable ? '' : el.textContent?.trim().slice(0, 100)) || '').trim();
         const value = (htmlEl as HTMLInputElement).value || el.getAttribute('aria-valuetext') || '';
 
         return {
           ref,
+          inputType: el.getAttribute('type')?.toLowerCase() || undefined,
           tagName: el.tagName.toLowerCase(),
           role: el.getAttribute('role') || '',
           name,
@@ -694,6 +697,7 @@ export class BrowserManager extends EventEmitter {
         interactive: isInteractive,
         focused: node.focused,
         disabled: node.disabled,
+        inputType: node.inputType,
         value: node.value || undefined,
         ariaAttributes: {},
       });
@@ -1538,12 +1542,14 @@ export class BrowserManager extends EventEmitter {
   async performSemanticAction(
     action: import('../automation-replay/types.js').SemanticAction,
     values: Record<string, string>,
+    expectedUrl?: string,
   ): Promise<void> {
     const locator = this.getCurrentPage().getByRole(action.target.role, { name: action.target.name, exact: true });
     if (await locator.count() !== 1 || !await locator.isVisible() || !await locator.isEnabled()) {
       throw new Error('Semantic target missing, ambiguous or disabled');
     }
-    if (await locator.getAttribute('type') === 'password') throw new Error('Password replay refused');
+    if ((await locator.getAttribute('type'))?.toLowerCase() === 'password') throw new Error('Password replay refused');
+    if (expectedUrl !== undefined && this.getCurrentPage().url() !== expectedUrl) throw new Error('Browser URL changed before activation');
     if (action.kind === 'click') await locator.click({ timeout: 3000 });
     else if (action.kind === 'type') await locator.fill(values[action.valueKey!], { timeout: 3000 });
     else await locator.press(action.key, { timeout: 3000 });

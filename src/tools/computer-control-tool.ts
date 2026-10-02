@@ -365,7 +365,7 @@ export class ComputerControlTool {
   /**
    * Execute a computer control action
    */
-  async execute(input: ComputerControlInput): Promise<ToolResult> {
+  async execute(input: ComputerControlInput, beforeActivation?: () => Promise<void>): Promise<ToolResult> {
     let enrichedInput = input;
     const { action } = enrichedInput;
     this.lastWindowMatchError = null;
@@ -509,7 +509,7 @@ export class ComputerControlTool {
 
         // Mouse actions
         case 'click':
-          return run(() => this.click(enrichedInput));
+          return run(() => this.click(enrichedInput, undefined, beforeActivation));
         case 'left_click':
           return run(() => this.click({ ...enrichedInput, button: 'left' }));
         case 'middle_click':
@@ -531,9 +531,9 @@ export class ComputerControlTool {
 
         // Keyboard actions
         case 'type':
-          return run(() => this.typeText(enrichedInput));
+          return run(() => this.typeText(enrichedInput, beforeActivation));
         case 'key':
-          return run(() => this.pressKey(enrichedInput));
+          return run(() => this.pressKey(enrichedInput, beforeActivation));
         case 'key_down':
           return run(() => this.keyDown(enrichedInput));
         case 'key_up':
@@ -637,8 +637,10 @@ export class ComputerControlTool {
    */
   private async semanticAct(input: ComputerControlInput): Promise<ToolResult> {
     const { runSemanticAct } = await import('../automation-replay/engine.js');
+    const { assertUiModelTrust } = await import('../automation-replay/model-trust.js');
+    assertUiModelTrust();
     const { desktopReplayHost } = await import('../automation-replay/desktop-host.js');
-    const host = desktopReplayHost(this.snapshotManager, () => this.automation.getActiveWindow(), step => this.execute(step));
+    const host = desktopReplayHost(this.snapshotManager, () => this.automation.getActiveWindow(), (step, verify) => this.execute(step, verify));
     const result = await runSemanticAct(host, {
       instruction: input.instruction ?? '', expectedText: input.expectedText ?? '', values: input.values,
     });
@@ -2377,7 +2379,7 @@ if ($clickButtonName) {
     return error ? { success: false, error, data: { approvalDenied: true, selectedButton: button } } : null;
   }
 
-  private async click(input: ComputerControlInput, approvedButton?: DialogButtonEvidence): Promise<ToolResult> {
+  private async click(input: ComputerControlInput, approvedButton?: DialogButtonEvidence, beforeActivation?: () => Promise<void>): Promise<ToolResult> {
     const point = await this.resolvePoint(input);
     if (!point) {
       return { success: false, error: 'Position required (x,y or element ref)' };
@@ -2394,6 +2396,7 @@ if ($clickButtonName) {
       bufferBefore = await this.captureScreenBuffer();
     }
 
+    await beforeActivation?.();
     await this.automation.click(point.x, point.y, { button: input.button || 'left' });
 
     let changeNotice = '';
@@ -2562,7 +2565,7 @@ if ($clickButtonName) {
   // Keyboard Actions
   // ============================================================================
 
-  private async typeText(input: ComputerControlInput): Promise<ToolResult> {
+  private async typeText(input: ComputerControlInput, beforeActivation?: () => Promise<void>): Promise<ToolResult> {
     if (!input.text) {
       return { success: false, error: 'Text is required' };
     }
@@ -2572,6 +2575,7 @@ if ($clickButtonName) {
       if (focusError) return focusError;
     }
 
+    await beforeActivation?.();
     await this.automation.type(input.text, { delay: 30 });
 
     return {
@@ -2581,7 +2585,7 @@ if ($clickButtonName) {
     };
   }
 
-  private async pressKey(input: ComputerControlInput): Promise<ToolResult> {
+  private async pressKey(input: ComputerControlInput, beforeActivation?: () => Promise<void>): Promise<ToolResult> {
     if (!input.key) {
       return { success: false, error: 'Key is required' };
     }
@@ -2594,6 +2598,7 @@ if ($clickButtonName) {
     const denied = await this.authorizeKeyboardActivation(input);
     if (denied) return denied;
 
+    await beforeActivation?.();
     await this.automation.keyPress(input.key, {
       modifiers: input.modifiers as ModifierKey[] | undefined,
     });
@@ -6511,8 +6516,11 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     const cachedNames = cached?.elements.filter(element => element.visible && element.interactive)
       .map(element => element.name).filter(Boolean).join(', ').slice(0, 500);
     // Advisory evidence only: neither a benign label nor a fresh snapshot grants approval.
-    const choice = button ? `; button "${button.name}" (${button.risk})`
+    const semanticTarget = cached?.elements.find(element => element.ref === input.ref);
+    const targetChoice = semanticTarget ? `; target "${semanticTarget.name}" (${semanticTarget.role})` : '';
+    const riskChoice = button ? `; button "${button.name}" (${button.risk})`
       : cachedNames ? `; cached controls (not verified): ${cachedNames}` : '';
+    const choice = targetChoice + riskChoice;
 
     const decision = await ConfirmationService.getInstance().requestConfirmation({
       operation: `Computer control: ${input.action}${choice} — risk: ${riskLevel}`,

@@ -142,3 +142,16 @@ describe('semantic action recording', () => {
     await expect(assertNaturalLanguage(f.host, 'Done', async () => ({ content: 'not json' }))).rejects.toThrow();
   });
 });
+
+it('keeps separate recordings for identical intentions on different URL contexts', async () => {
+  const f = fixture(); let context = 'https://first.test/';
+  const observe = f.host.observe;
+  f.host.observe = async () => ({ ...await observe(), context });
+  const model = vi.fn(async () => ({ content: JSON.stringify(action) }));
+  await runSemanticAct(f.host, request, { store, model });
+  f.reset(); context = 'https://second.test/';
+  await runSemanticAct(f.host, request, { store, model });
+  f.reset(); context = 'https://first.test/'; model.mockClear();
+  expect(await runSemanticAct(f.host, request, { store, model })).toMatchObject({ replayed: 1, modelCalls: 0 });
+  expect(model).not.toHaveBeenCalled();
+});

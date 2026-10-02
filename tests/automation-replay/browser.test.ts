@@ -16,11 +16,14 @@ it('semantic browser execution uses strict role/name locators, never coordinates
   await manager.performSemanticAction(action, {});
   expect(page.getByRole).toHaveBeenCalledWith('button', { name: 'Continue', exact: true });
   expect(locator.click).toHaveBeenCalledOnce(); expect(page.mouse.click).not.toHaveBeenCalled();
+  Object.assign(page, { url: () => 'https://other.test/' });
+  await expect(manager.performSemanticAction(action, {}, 'https://example.test/')).rejects.toThrow('URL changed');
+  expect(locator.click).toHaveBeenCalledOnce();
   locator.count = async () => 2;
   await expect(manager.performSemanticAction(action, {})).rejects.toThrow('ambiguous');
   expect(locator.click).toHaveBeenCalledOnce();
   locator.count = async () => 1;
-  locator.getAttribute = async () => 'password' as never;
+  locator.getAttribute = async () => 'PASSWORD' as never;
   await expect(manager.performSemanticAction({ ...action, kind: 'type', valueKey: 'p' }, { p: 'secret' })).rejects.toThrow('Password replay');
   expect(locator.fill).not.toHaveBeenCalled();
 });
@@ -54,4 +57,31 @@ describe('web_test natural assertion integration', () => {
     expect(browser).toHaveBeenCalledWith({ action: 'assert', instruction: 'A control is available' });
     expect((result.data as { passed: boolean }).passed).toBe(passed);
   });
+});
+
+it('refuses a URL changed during browser approval even with identical controls', async () => {
+  const manager = new BrowserManager(); let url = 'https://example.test/original';
+  vi.spyOn(manager, 'takeSnapshot').mockImplementation(async () => ({ url, elements: [{
+    ref: 1, ...action.target, visible: true, interactive: true,
+  }] }) as never);
+  vi.spyOn(manager, 'evaluate').mockResolvedValue({ success: true, value: 'Continue' });
+  const effect = vi.spyOn(manager, 'performSemanticAction').mockResolvedValue();
+  vi.spyOn(ConfirmationService.getInstance(), 'requestConfirmation').mockImplementation(async () => {
+    url = 'https://other.test/same-controls'; return { confirmed: true };
+  });
+  await expect(browserReplayHost(manager).perform(action, {})).rejects.toThrow('URL changed');
+  expect(effect).not.toHaveBeenCalled();
+});
+
+it('does not fingerprint field or ARIA values, including protected low-entropy values', async () => {
+  const manager = new BrowserManager(); let value = '1234';
+  vi.spyOn(manager, 'takeSnapshot').mockImplementation(async () => ({ url: 'https://example.test', elements: [{
+    ref: 1, role: 'textbox', name: 'OTP', visible: true, interactive: true,
+    value, ariaAttributes: { 'aria-valuetext': value, 'aria-valuenow': value },
+  }] }) as never);
+  vi.spyOn(manager, 'evaluate').mockResolvedValue({ success: true, value: 'OTP' });
+  const host = browserReplayHost(manager);
+  const first = await host.observe(); value = '5678';
+  expect(await host.observe()).toEqual(first);
+  expect(first.nodes[0]?.protected).toBe(true);
 });

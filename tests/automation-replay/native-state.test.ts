@@ -30,3 +30,21 @@ describe('native AT-SPI state used by replay', () => {
     expect(script).toContain('obj.get_state_set().contains(Atspi.StateType.SHOWING)');
   });
 });
+
+it.each([true, false, undefined])('maps UIA IsPassword=%s from native output, with complete window identity', async isPassword => {
+  const manager = new SmartSnapshotManager() as unknown as {
+    ensureBridgeCompiled(wsl: boolean): string | null;
+    runPowerShellEncoded(script: string, options: object): Promise<string>;
+    detectWindowsElements(options: object): Promise<UIElement[]>;
+  };
+  vi.spyOn(manager, 'ensureBridgeCompiled').mockReturnValue(null);
+  const run = vi.spyOn(manager, 'runPowerShellEncoded').mockResolvedValue(JSON.stringify([
+    { role: 'ControlType.Window', name: 'Demo', x: 0, y: 0, width: 100, height: 100, pid: 123, windowHandle: '42', windowIdentity: 'root', treeComplete: true },
+    { role: 'ControlType.Edit', name: 'Credential', isPassword, x: 10, y: 10, width: 30, height: 20, pid: 123, windowHandle: '42', windowIdentity: 'root', treeComplete: true },
+  ]));
+  const elements = await manager.detectWindowsElements({});
+  expect(elements[1]?.attributes).toMatchObject({ source: 'uia', protected: isPassword !== false,
+    pid: 123, windowHandle: '42', windowIdentity: 'root', treeComplete: true });
+  expect(run.mock.calls[0]?.[0]).toContain('isPassword = $element.Current.IsPassword');
+  expect(run.mock.calls[0]?.[0]).toContain('$script:treeComplete = $false');
+});
