@@ -81,6 +81,44 @@ export interface ParseResult {
   warnings: string[];
   /** Whether the selected shell parser found output/input redirection. */
   hasRedirection?: boolean;
+  /** AST-verified shell syntax with literal here-document data removed. Never execute this text. */
+  policyInput?: string;
+}
+
+interface HeredocSyntaxNode {
+  type: string;
+  text: string;
+  startIndex: number;
+  endIndex: number;
+  hasError: boolean;
+  children: HeredocSyntaxNode[];
+}
+
+/** Only the complete native AST can prove where quoted heredoc data ends. */
+function literalHeredocPolicyInput(root: HeredocSyntaxNode, input: string): string | undefined {
+  if (root.hasError) return undefined;
+  const ranges: Array<{ start: number; end: number }> = [];
+  const visit = (node: HeredocSyntaxNode): void => {
+    if (node.type === 'heredoc_redirect') {
+      const start = node.children.find(child => child.type === 'heredoc_start');
+      const end = node.children.find(child => child.type === 'heredoc_end');
+      const literal = start?.text.match(/^(['"])([A-Za-z0-9_]+)\1$/);
+      if (literal && end?.text === literal[2]
+        && input.slice(node.startIndex, node.endIndex) === node.text) {
+        ranges.push({ start: node.startIndex, end: node.endIndex });
+      }
+      // Data in the heredoc is not a nested shell redirection.
+      return;
+    }
+    for (const child of node.children) visit(child);
+  };
+  visit(root);
+  if (!ranges.length) return undefined;
+  let result = input;
+  for (const range of ranges.sort((a, b) => b.start - a.start)) {
+    result = result.slice(0, range.start) + '< /dev/null\n' + result.slice(range.end);
+  }
+  return result;
 }
 
 export type ShellKind = 'posix' | 'powershell' | 'cmd' | 'unknown';
@@ -429,7 +467,8 @@ export function parseBashCommand(input: string): ParseResult {
       const commands = extractCommandsFromTree(tree.rootNode, input);
       logger.debug('Parsed bash with tree-sitter', { commandCount: commands.length });
 
-      return { commands, usedTreeSitter: true, warnings: [] };
+      const policyInput = literalHeredocPolicyInput(tree.rootNode, input);
+      return { commands, usedTreeSitter: true, warnings: [], ...(policyInput ? { policyInput } : {}) };
     } catch {
       // tree-sitter parse failed — use fallback
     }

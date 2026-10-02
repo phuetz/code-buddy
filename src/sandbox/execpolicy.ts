@@ -738,8 +738,9 @@ export class ExecPolicy extends EventEmitter {
       };
     }
 
-    const complex = parsed.warnings.length > 0 || this.hasComplexShellSyntax(shellCommand);
-    const hasWriteRedirection = this.hasUnquotedWriteRedirection(shellCommand);
+    const policyInput = parsed.policyInput ?? shellCommand;
+    const complex = parsed.warnings.length > 0 || this.hasComplexShellSyntax(policyInput);
+    const hasWriteRedirection = this.hasUnquotedWriteRedirection(policyInput);
 
     const ordered = [...segmentEvaluations].sort(
       (a, b) => this.actionRank(b.action) - this.actionRank(a.action),
@@ -767,7 +768,7 @@ export class ExecPolicy extends EventEmitter {
       parsedSegments,
       segmentEvaluations,
       complex,
-      simpleSequence: parsed.warnings.length === 0 && !this.hasComplexShellSyntax(shellCommand, true),
+      simpleSequence: parsed.warnings.length === 0 && !this.hasComplexShellSyntax(policyInput, true),
       approvalKey: this.buildApprovalKey(shellCommand, workDir, parsedSegments),
     };
     this.recordAudit(result);
