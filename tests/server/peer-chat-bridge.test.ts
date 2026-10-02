@@ -167,6 +167,16 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       expect(r.error?.message).toMatch(/buddy login.*Ollama.*API key/);
     });
 
+    it('does not misdiagnose a configured provider whose client is unavailable', async () => {
+      wirePeerChatBridge(() => null, { provider: 'ollama', model: 'local-model', isLocal: true });
+      const response = await dispatchPeerRequest(
+        { id: 'configured-unavailable', method: 'peer.chat', params: { prompt: 'hi' } }, baseCtx,
+      );
+      expect(response.ok).toBe(false);
+      expect(response.error?.message).toContain('LLM client unavailable on this peer. Check the server startup logs and provider connection.');
+      expect(response.error?.message).not.toContain('No LLM provider configured');
+    });
+
     it('propagates an underlying client.chat throw as METHOD_ERROR', async () => {
       const chat = vi.fn(async () => {
         throw new Error('upstream rate-limited');

@@ -493,7 +493,17 @@ describe('peer.chat-session.continue', () => {
     const response = await dispatch('peer.chat-session.continue', { sessionId, prompt: 'hi' });
     expect(response.ok).toBe(false);
     expect(response.error?.message).toContain('CLIENT_UNAVAILABLE');
-      expect(response.error?.message).toMatch(/buddy login.*Ollama.*API key/);
+    expect(response.error?.message).toMatch(/buddy login.*Ollama.*API key/);
+  });
+
+  it('does not misdiagnose a configured provider whose client is unavailable', async () => {
+    await wirePeerSessionBridge(() => null, { provider: 'ollama', model: 'local-model', isLocal: true });
+    const start = await dispatch('peer.chat-session.start', {});
+    const { sessionId } = start.payload as { sessionId: string };
+    const response = await dispatch('peer.chat-session.continue', { sessionId, prompt: 'hi' });
+    expect(response.ok).toBe(false);
+    expect(response.error?.message).toContain('LLM client unavailable on this peer. Check the server startup logs and provider connection.');
+    expect(response.error?.message).not.toContain('No LLM provider configured');
   });
 
   it('rejects missing sessionId or prompt', async () => {
