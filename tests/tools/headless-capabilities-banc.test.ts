@@ -29,6 +29,9 @@ describe.sequential('capacité headless accordée par opérateur', () => {
     const cwd = fixture();
     expect((await evaluateShellExecution('npm --version', cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('npm audit --json', cwd)).action).toBe('sandbox');
+    const recordedAnalysis = `npm audit --json > "$TMPDIR/audit.json"; python3 -c "\nimport json\nprint('audit')\n"`;
+    expect((await evaluateShellExecution(recordedAnalysis, cwd)).action).toBe('sandbox');
+    expect((await evaluateShellExecution('npm audit --json; node -e "$(cat forbidden)"', cwd)).action).not.toBe('sandbox');
     expect((await evaluateShellExecution('git add package.json', cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('git push origin main', cwd)).action).not.toBe('sandbox');
     expect((await evaluateShellExecution('npm publish', cwd)).action).not.toBe('sandbox');

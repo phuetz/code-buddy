@@ -1028,7 +1028,8 @@ export class ExecPolicy extends EventEmitter {
       if (char === '$' && next === '(') return true;
       if ((char === '<' || char === '>') && next === '(') return true;
       if (char === '<' && next === '<') return true;
-      if (char === '\n' || char === '\r') return true;
+      // A quoted newline is an interpreter argument, not shell control syntax.
+      if (quote === 'none' && (char === '\n' || char === '\r')) return true;
     }
     return quote !== 'none';
   }
