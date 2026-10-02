@@ -44,6 +44,8 @@ Un premier essai avait conservé le PATH de l’hôte : un `peer.chat` a alors r
 
 ## Archives npm — SHA-256
 
+Les paquets ont été construits avant les commits thématiques : leur manifeste indique la base `70bcab004` et `sourceDirtyAtBuild:true`. Les onze modules JavaScript modifiés installés ont été comparés octet par octet au build final ; ils sont identiques. Les commits documentaires suivants ne changent pas ces modules.
+
 - `package` : `8958cae2f7ed8319c1a844eb14fa3dac06835cabd84098ca7d19406219e31c25`
 - `package-after` : `cabcd8ace2821c19573d9ae8ed684754f6c0bcda20bfaaa903f6d9fcc2e8ae9f`
 - `package-final` : `af8a33e2d0ead94e4e6f34794b8c3a321f0b231b6993925c7373b1a321ef41c8`
