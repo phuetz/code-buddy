@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { playWavFile, tryPlayWavFile } from '../../src/utils/audio-player.js';
 import { execFile } from 'child_process';
 import * as os from 'os';
@@ -9,6 +9,12 @@ vi.mock('child_process', () => {
       callback(null); // Success
     })
   };
+});
+
+beforeEach(() => {
+  vi.mocked(execFile).mockReset().mockImplementation((_command, _args, callback) => {
+    callback(null);
+  });
 });
 
 describe('playWavFile', () => {

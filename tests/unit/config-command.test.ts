@@ -182,18 +182,64 @@ jest.mock('../../src/utils/interactive-setup', () => ({
   formatLogInfo: jest.fn(() => 'Log file info'),
 }));
 
-describe('Theme Handler', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetAvailableThemes.mockReturnValue([
-      { id: 'default', name: 'Default', description: 'Default theme', isBuiltin: true },
-      { id: 'dark', name: 'Dark', description: 'Dark theme', isBuiltin: true },
-      { id: 'neon', name: 'Neon', description: 'Neon theme', isBuiltin: true },
-    ]);
-    mockGetCurrentTheme.mockReturnValue({ id: 'default', name: 'Default' });
-    mockGetPreferenceSaveStatus.mockReturnValue(true);
-    mockGetOverrideKeys.mockReturnValue({ colors: [], avatars: [] });
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockGetAvailableThemes.mockReturnValue([
+    { id: 'default', name: 'Default', description: 'Default theme', isBuiltin: true },
+    { id: 'dark', name: 'Dark', description: 'Dark theme', isBuiltin: true },
+    { id: 'neon', name: 'Neon', description: 'Neon theme', isBuiltin: true },
+  ]);
+  mockGetCurrentTheme.mockReturnValue({ id: 'default', name: 'Default' });
+  mockGetPreferenceSaveStatus.mockReturnValue(true);
+  mockGetOverrideKeys.mockReturnValue({ colors: [], avatars: [] });
+  mockGetAvatarPresets.mockReturnValue([
+    {
+      id: 'default',
+      name: 'Default',
+      description: 'Default avatars',
+      avatars: { user: 'U', assistant: 'A', tool: 'T' },
+    },
+    {
+      id: 'emoji',
+      name: 'Emoji',
+      description: 'Emoji avatars',
+      avatars: { user: '👤', assistant: '🤖', tool: '🔧' },
+    },
+  ]);
+  mockGetAvatars.mockReturnValue({ user: 'U', assistant: 'A', tool: 'T' });
+  mockFormatDashboard.mockReturnValue('Cost Dashboard Content');
+  mockGetReport.mockReturnValue({ totalCost: 0.50, requests: 10 });
+  mockGetSummary.mockReturnValue({
+    lazyLoader: { loadedModules: 5, totalModules: 10, averageLoadTime: 50 },
+    toolCache: { hitRate: 0.75, savedCalls: 100 },
+    requestOptimizer: { totalRequests: 50, deduplicatedRequests: 5 },
+    apiCache: { entries: 20, hitRate: 0.60 },
+    overall: { totalOperations: 200, cacheHitRate: 0.65, estimatedTimeSaved: 5000 },
   });
+  mockFormatStatus.mockReturnValue('Cache Status Content');
+  mockCacheGetStats.mockReturnValue({
+    totalEntries: 50,
+    cacheSize: '2.5 MB',
+    totalHits: 200,
+    totalMisses: 50,
+    oldestEntry: new Date('2024-01-01'),
+    newestEntry: new Date('2024-01-15'),
+  });
+  mockGetOptions.mockReturnValue({
+    enabled: true,
+    maxRetries: 3,
+    autoFix: true,
+    verbose: false,
+  });
+  mockGetHealingStats.mockReturnValue({
+    totalAttempts: 10,
+    successfulHeals: 8,
+    failedHeals: 2,
+    successRate: '80%',
+  });
+});
+
+describe('Theme Handler', () => {
 
   describe('handleTheme', () => {
     it('warns when the theme preference could not be saved', () => {
@@ -303,24 +349,6 @@ describe('Theme Handler', () => {
 });
 
 describe('Avatar Handler', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetAvatarPresets.mockReturnValue([
-      {
-        id: 'default',
-        name: 'Default',
-        description: 'Default avatars',
-        avatars: { user: 'U', assistant: 'A', tool: 'T' },
-      },
-      {
-        id: 'emoji',
-        name: 'Emoji',
-        description: 'Emoji avatars',
-        avatars: { user: '👤', assistant: '🤖', tool: '🔧' },
-      },
-    ]);
-    mockGetAvatars.mockReturnValue({ user: 'U', assistant: 'A', tool: 'T' });
-  });
 
   describe('handleAvatar', () => {
     it('should list presets when no action provided', () => {
@@ -401,11 +429,6 @@ describe('Avatar Handler', () => {
 });
 
 describe('Cost Handler', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockFormatDashboard.mockReturnValue('Cost Dashboard Content');
-    mockGetReport.mockReturnValue({ totalCost: 0.50, requests: 10 });
-  });
 
   describe('handleCost', () => {
     it('should show status when no action provided', () => {
@@ -468,16 +491,6 @@ describe('Cost Handler', () => {
 });
 
 describe('Stats Handler', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetSummary.mockReturnValue({
-      lazyLoader: { loadedModules: 5, totalModules: 10, averageLoadTime: 50 },
-      toolCache: { hitRate: 0.75, savedCalls: 100 },
-      requestOptimizer: { totalRequests: 50, deduplicatedRequests: 5 },
-      apiCache: { entries: 20, hitRate: 0.60 },
-      overall: { totalOperations: 200, cacheHitRate: 0.65, estimatedTimeSaved: 5000 },
-    });
-  });
 
   describe('handleStats', () => {
     it('should show summary when no action provided', () => {
@@ -568,18 +581,6 @@ describe('Stats Handler', () => {
 });
 
 describe('Cache Handler', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockFormatStatus.mockReturnValue('Cache Status Content');
-    mockCacheGetStats.mockReturnValue({
-      totalEntries: 50,
-      cacheSize: '2.5 MB',
-      totalHits: 200,
-      totalMisses: 50,
-      oldestEntry: new Date('2024-01-01'),
-      newestEntry: new Date('2024-01-15'),
-    });
-  });
 
   describe('handleCache', () => {
     it('should show status when no action provided', () => {
@@ -645,21 +646,6 @@ describe('Cache Handler', () => {
 });
 
 describe('Self-Healing Handler', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetOptions.mockReturnValue({
-      enabled: true,
-      maxRetries: 3,
-      autoFix: true,
-      verbose: false,
-    });
-    mockGetHealingStats.mockReturnValue({
-      totalAttempts: 10,
-      successfulHeals: 8,
-      failedHeals: 2,
-      successRate: '80%',
-    });
-  });
 
   describe('handleSelfHealing', () => {
     it('should show status when no action provided', () => {

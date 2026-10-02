@@ -188,6 +188,7 @@ jest.mock("../../src/tools/tool-selector.js", () => ({
   recordToolRequest: jest.fn(),
   formatToolSelectionMetrics: jest.fn().mockReturnValue("Tool Selection Metrics: OK"),
   getToolSelector: jest.fn().mockReturnValue({
+    clearAllCaches: jest.fn(),
     getMetrics: jest.fn().mockReturnValue({ totalSelections: 100 }),
     getMostMissedTools: jest.fn().mockReturnValue([]),
     getCacheStats: jest.fn().mockReturnValue({ classificationCache: { size: 50 }, selectionCache: { size: 10 } }),
@@ -455,11 +456,14 @@ jest.mock("../../src/optimization/model-routing.js", () => ({
 
 // Now import after all mocks are set up
 
+import { resetToolSelectionStrategy } from '../../src/agent/execution/tool-selection-strategy.js';
+
 describe("CodeBuddyAgent", () => {
   let agent: CodeBuddyAgent;
   const originalEnv = process.env;
 
   beforeEach(() => {
+    resetToolSelectionStrategy();
     jest.clearAllMocks();
     process.env = { ...originalEnv };
     delete process.env.YOLO_MODE;

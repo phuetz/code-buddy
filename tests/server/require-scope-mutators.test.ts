@@ -112,7 +112,11 @@ describe('inline mutator scope enforcement', () => {
     expect(response.status).not.toBe(403);
   });
 
-  it('persists the admin auth-profile reset inside the isolated home', () => {
+  it('persists the admin auth-profile reset inside the isolated home', async () => {
+    const { getAuthProfileManager } = await import('../../src/auth/profile-manager.js');
+    getAuthProfileManager();
+    const response = await request({ method: 'POST', path: '/api/auth-profiles/reset', body: {} }, adminKey);
+    expect(response.status).toBe(200);
     expect(existsSync(join(home.path, '.codebuddy', 'auth-profiles.json'))).toBe(true);
   });
 });

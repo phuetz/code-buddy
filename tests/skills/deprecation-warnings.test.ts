@@ -15,19 +15,22 @@ jest.mock('../../src/utils/logger.js', () => ({
   },
 }));
 
-import { SkillManager } from '../../src/skills/skill-manager.js';
-import { SkillLoader } from '../../src/skills/skill-loader.js';
+import { vi } from 'vitest';
+
+let SkillManager: typeof import('../../src/skills/skill-manager.js').SkillManager;
+let SkillLoader: typeof import('../../src/skills/skill-loader.js').SkillLoader;
 
 describe('Legacy Skill System Deprecation', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ SkillManager } = await import('../../src/skills/skill-manager.js'));
+    ({ SkillLoader } = await import('../../src/skills/skill-loader.js'));
     mockLoggerWarn.mockClear();
     mockLoggerDebug.mockClear();
   });
 
   describe('SkillManager deprecation', () => {
     it('should emit deprecation warning on construction', () => {
-      // Reset the one-time flag by creating a fresh module scope
-      // Note: the warning is only emitted once per process due to the flag
       new SkillManager('/tmp/test');
       // SkillManager deprecation uses logger.debug (not logger.warn) with [DEPRECATED] prefix
       expect(mockLoggerDebug).toHaveBeenCalledWith(

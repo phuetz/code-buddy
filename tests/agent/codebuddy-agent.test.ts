@@ -445,6 +445,10 @@ describe('CodeBuddyAgent', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockChat.mockReset();
+    mockChatStream.mockReset();
+    mockGetCurrentModel.mockReset().mockReturnValue('grok-2-fast');
+    mockSetModel.mockReset();
     process.env = { ...originalEnv };
     // originalEnv was captured before the isolated home existed: re-apply it.
     process.env.HOME = isolatedHome.path;

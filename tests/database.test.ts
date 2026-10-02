@@ -92,7 +92,17 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     SessionStore = sessionStore.SessionStore;
     resetSessionStore = sessionStore.resetSessionStore;
 
-    // Initialize in-memory database for tests
+
+  });
+
+  beforeEach(async () => {
+    resetMemoryRepository();
+    resetSessionRepository();
+    resetAnalyticsRepository();
+    resetEmbeddingRepository();
+    resetCacheRepository();
+    resetSessionStore();
+    resetDatabaseManager();
     await initializeDatabase({ inMemory: true });
   });
 
@@ -197,18 +207,23 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
   describe('MemoryRepository', () => {
     let repo: MemoryRepository;
 
+    function seedMemory(id = 'test-memory-1') {
+      return repo.create({
+        id,
+        type: 'fact',
+        scope: 'user',
+        content: 'Test memory content',
+        importance: 0.8,
+      });
+    }
+
+
     beforeEach(() => {
       repo = getMemoryRepository();
     });
 
     it('should create a memory', () => {
-      const memory = repo.create({
-        id: 'test-memory-1',
-        type: 'fact' as any,
-        scope: 'user',
-        content: 'Test memory content',
-        importance: 0.8,
-      });
+      const memory = seedMemory();
 
       expect(memory.id).toBe('test-memory-1');
       expect(memory.type).toBe('fact');
@@ -217,6 +232,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should get memory by ID', () => {
+      seedMemory();
       const memory = repo.getById('test-memory-1');
 
       expect(memory).not.toBeNull();
@@ -224,6 +240,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should find memories by filter', () => {
+      seedMemory();
       // Create additional memories
       repo.create({
         id: 'test-memory-2',
@@ -239,17 +256,20 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should find memories by scope', () => {
+      seedMemory();
       const memories = repo.find({ scope: 'user' });
       expect(memories.length).toBeGreaterThanOrEqual(1);
       expect(memories.every(m => m.scope === 'user')).toBe(true);
     });
 
     it('should find memories by minimum importance', () => {
+      seedMemory();
       const memories = repo.find({ minImportance: 0.7 });
       expect(memories.every(m => m.importance >= 0.7)).toBe(true);
     });
 
     it('should update memory', () => {
+      seedMemory();
       const updated = repo.update('test-memory-1', { importance: 0.9 });
       expect(updated).toBe(true);
 
@@ -287,6 +307,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should get stats', () => {
+      seedMemory();
       const stats = repo.getStats();
 
       expect(stats).toHaveProperty('total');
@@ -308,6 +329,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should delete memory', () => {
+      seedMemory('test-memory-2');
       const deleted = repo.delete('test-memory-2');
       expect(deleted).toBe(true);
 
@@ -323,17 +345,28 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
   describe('SessionRepository', () => {
     let repo: SessionRepository;
 
-    beforeEach(() => {
-      repo = getSessionRepository();
-    });
+    function seedSessionMessages() {
+      seedSession();
+      repo.addMessage({ session_id: 'test-session-1', role: 'user', content: 'Hello, AI!', tokens: 10 });
+      repo.addMessage({ session_id: 'test-session-1', role: 'assistant', content: 'Hello! How can I help you?', tokens: 15 });
+    }
 
-    it('should create a session', () => {
-      const session = repo.createSession({
+    function seedSession() {
+      return repo.createSession({
         id: 'test-session-1',
         project_id: 'test-project',
         name: 'Test Session',
         model: 'grok-beta',
       });
+    }
+
+
+    beforeEach(() => {
+      repo = getSessionRepository();
+    });
+
+    it('should create a session', () => {
+      const session = seedSession();
 
       expect(session.id).toBe('test-session-1');
       expect(session.name).toBe('Test Session');
@@ -342,6 +375,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should get session by ID', () => {
+      seedSession();
       const session = repo.getSessionById('test-session-1');
 
       expect(session).not.toBeNull();
@@ -349,6 +383,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should add messages to session', () => {
+      seedSession();
       const message1 = repo.addMessage({
         session_id: 'test-session-1',
         role: 'user',
@@ -374,6 +409,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should get messages for session', () => {
+      seedSessionMessages();
       const messages = repo.getMessages('test-session-1');
 
       expect(messages.length).toBe(2);
@@ -382,11 +418,13 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should get recent messages', () => {
+      seedSessionMessages();
       const messages = repo.getRecentMessages('test-session-1', 1);
       expect(messages.length).toBe(1);
     });
 
     it('should search session messages through SQLite FTS', () => {
+      seedSessionMessages();
       const results = repo.searchMessages('Hello AI');
 
       expect(results.length).toBeGreaterThanOrEqual(1);
@@ -396,6 +434,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should sanitize punctuation-heavy search queries', () => {
+      seedSessionMessages();
       const results = repo.searchMessages('"Hello?!" AI');
 
       expect(results.length).toBeGreaterThanOrEqual(1);
@@ -435,6 +474,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should let SessionStore search SQLite sessions before JSON fallback', async () => {
+      seedSessionMessages();
       const store = new SessionStore({ useSQLite: true });
       const results = await store.searchSessions('Hello AI');
 
@@ -447,6 +487,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should update session stats', () => {
+      seedSession();
       const updated = repo.updateSessionStats('test-session-1', {
         tokensIn: 100,
         tokensOut: 200,
@@ -464,6 +505,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should find sessions by filter', () => {
+      seedSession();
       const sessions = repo.findSessions({ projectId: 'test-project' });
 
       expect(sessions.length).toBeGreaterThanOrEqual(1);
@@ -471,6 +513,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should persist parent session lineage', () => {
+      seedSession();
       const child = repo.createSession({
         id: 'test-session-child',
         parent_session_id: 'test-session-1',
@@ -486,6 +529,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should get session with messages', () => {
+      seedSessionMessages();
       const sessionWithMessages = repo.getSessionWithMessages('test-session-1');
 
       expect(sessionWithMessages).not.toBeNull();
@@ -493,6 +537,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should archive session', () => {
+      seedSession();
       const archived = repo.setArchived('test-session-1', true);
       expect(archived).toBe(true);
 
@@ -501,6 +546,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should get stats', () => {
+      seedSession();
       const stats = repo.getStats();
 
       expect(stats).toHaveProperty('totalSessions');
@@ -620,6 +666,9 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should get tool stats', () => {
+      repo.recordToolUsage('search', true, 150, false, 'test-project');
+      repo.recordToolUsage('search', true, 120, true, 'test-project');
+      repo.recordToolUsage('search', false, 200, false, 'test-project');
       const stats = repo.getToolStats('test-project');
 
       expect(Array.isArray(stats)).toBe(true);
@@ -670,14 +719,9 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
   describe('EmbeddingRepository', () => {
     let repo: EmbeddingRepository;
 
-    beforeEach(() => {
-      repo = getEmbeddingRepository();
-    });
-
-    it('should upsert embedding', () => {
+    function seedEmbedding() {
       const embedding = new Float32Array([0.1, 0.2, 0.3, 0.4, 0.5]);
-
-      const result = repo.upsert({
+      return repo.upsert({
         project_id: 'test-project',
         file_path: 'src/test.ts',
         chunk_index: 0,
@@ -690,6 +734,15 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
         end_line: 3,
         language: 'typescript',
       });
+    }
+
+
+    beforeEach(() => {
+      repo = getEmbeddingRepository();
+    });
+
+    it('should upsert embedding', () => {
+      const result = seedEmbedding();
 
       expect(result.file_path).toBe('src/test.ts');
       expect(result.symbol_name).toBe('hello');
@@ -723,6 +776,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should find embeddings by filter', () => {
+      seedEmbedding();
       const results = repo.find({ projectId: 'test-project' });
 
       expect(results.length).toBeGreaterThanOrEqual(1);
@@ -741,6 +795,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should search by symbol name', () => {
+      seedEmbedding();
       const results = repo.searchBySymbol('hello', { projectId: 'test-project' });
 
       expect(results.length).toBeGreaterThanOrEqual(1);
@@ -748,6 +803,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
     });
 
     it('should check if file needs reindex', () => {
+      seedEmbedding();
       const needsReindex = repo.needsReindex('test-project', 'src/test.ts', 'different-hash');
       expect(needsReindex).toBe(true);
 

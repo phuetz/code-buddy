@@ -73,6 +73,14 @@ function createMockProcess(stdout: string, stderr: string, exitCode: number): Ch
   return mockProcess;
 }
 
+beforeEach(() => {
+  mockSpawn.mockReset();
+  (ConfirmationService.getInstance as jest.Mock).mockReset().mockImplementation(() => ({
+    getSessionFlags: jest.fn(() => ({ bashCommands: true, allOperations: false })),
+    requestConfirmation: jest.fn(async () => ({ confirmed: true })),
+  }));
+});
+
 describe('GitTool', () => {
   let gitTool: GitTool;
 
@@ -863,11 +871,11 @@ mno7890 Fifth commit`;
   });
 
   describe('Constructor', () => {
-    it('should use provided cwd', () => {
+    it('should use provided cwd', async () => {
       const tool = new GitTool('/custom/path');
       mockSpawn.mockReturnValueOnce(createMockProcess('.git', '', 0));
 
-      tool.isGitRepo();
+      await tool.isGitRepo();
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'git',
@@ -876,11 +884,11 @@ mno7890 Fifth commit`;
       );
     });
 
-    it('should default to process.cwd when no cwd provided', () => {
+    it('should default to process.cwd when no cwd provided', async () => {
       const tool = new GitTool();
       mockSpawn.mockReturnValueOnce(createMockProcess('.git', '', 0));
 
-      tool.isGitRepo();
+      await tool.isGitRepo();
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'git',

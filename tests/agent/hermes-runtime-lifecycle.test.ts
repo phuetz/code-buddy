@@ -45,6 +45,7 @@ const frozenEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin' };
 describe('Hermes runtime lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedSpawnSync.mockReset();
   });
 
   // -----------------------------------------------------------------------

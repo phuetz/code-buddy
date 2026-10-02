@@ -1120,7 +1120,12 @@ describe('Edge Cases', () => {
   });
 });
 
+
 describe('Configuration Options', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPDFAgent.initialize.mockReset().mockResolvedValue(undefined);
+  });
   it('should respect autoInitialize: false', async () => {
     const registry = new AgentRegistry({ autoInitialize: false });
     registry.register(mockPDFAgent as unknown as any);

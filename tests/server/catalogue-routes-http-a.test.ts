@@ -3,7 +3,7 @@
  * Serveur réel en processus, 127.0.0.1, port éphémère.
  */
 import { readFileSync } from 'node:fs';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   type CatalogueServer,
@@ -32,6 +32,17 @@ beforeAll(async () => {
 afterAll(async () => {
   if (ctx) await ctx.restore();
 }, 60_000);
+
+beforeEach(async () => {
+  const response = await httpCall(ctx.baseUrl, ctx.token, 'GET', '/api/sessions');
+  expect(response.status).toBe(200);
+  const sessions = asArray(asObject(parseJson(response.text, 'sessions fixture'), 'sessions fixture').sessions, 'sessions');
+  for (const session of sessions) {
+    const id = String(asObject(session, 'session fixture').id);
+    const removed = await httpCall(ctx.baseUrl, ctx.token, 'DELETE', `/api/sessions/${id}`);
+    expect(removed.status).toBe(204);
+  }
+});
 
 afterEach(() => vi.unstubAllEnvs());
 

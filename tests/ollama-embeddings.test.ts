@@ -28,7 +28,7 @@ global.fetch = mockFetch as unknown as typeof fetch;
 describe('OllamaEmbeddingProvider', () => {
   beforeEach(() => {
     resetOllamaEmbeddings();
-    mockFetch.mockClear();
+    mockFetch.mockReset();
   });
 
   describe('constructor', () => {
@@ -169,10 +169,6 @@ describe('OllamaEmbeddingProvider', () => {
         ok: true,
         json: async () => ({ models: [{ name: 'nomic-embed-text:latest' }] }),
       });
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ embedding: new Array(768).fill(0.1) }),
-      });
 
       const provider = new OllamaEmbeddingProvider();
       await provider.initialize();
@@ -195,10 +191,6 @@ describe('OllamaEmbeddingProvider', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ models: [{ name: 'nomic-embed-text:latest' }] }),
-      });
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ embedding: new Array(768).fill(0.1) }),
       });
 
       const provider = new OllamaEmbeddingProvider({
@@ -227,10 +219,6 @@ describe('OllamaEmbeddingProvider', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ models: [{ name: 'nomic-embed-text:latest' }] }),
-      });
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ embedding: new Array(768).fill(0.1) }),
       });
 
       const provider = new OllamaEmbeddingProvider({
@@ -474,7 +462,7 @@ describe('OllamaEmbeddingProvider', () => {
 describe('Ollama Embeddings Singleton', () => {
   beforeEach(() => {
     resetOllamaEmbeddings();
-    mockFetch.mockClear();
+    mockFetch.mockReset();
   });
 
   describe('getOllamaEmbeddings', () => {

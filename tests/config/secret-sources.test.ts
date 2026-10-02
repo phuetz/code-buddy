@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   getSecretSourceIds,
@@ -67,11 +67,14 @@ describe.skipIf(opSkipped)('1Password op:// notation', () => {
 });
 
 describe('pluggable sources', () => {
-  it('a registered custom source resolves its own scheme', async () => {
+  beforeEach(() => {
     registerSecretSource({
       id: 'vault-test',
       resolve: async (ref) => `from-vault:${ref}`,
     });
+  });
+
+  it('a registered custom source resolves its own scheme', async () => {
     expect(await resolveSecretRef('pwd=${vault-test:db/main}')).toBe('pwd=from-vault:db/main');
   });
 

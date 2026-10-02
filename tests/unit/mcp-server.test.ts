@@ -60,6 +60,12 @@ jest.mock('../../src/mcp/config', () => ({
 import { loadMCPConfig } from '../../src/mcp/config';
 
 
+beforeEach(() => {
+  (loadMCPConfig as jest.Mock).mockReset().mockReturnValue({ servers: [] });
+  for (const mock of [mockClientClose, mockClientConnect, mockClientListTools, mockClientCallTool,
+    mockTransportConnect, mockTransportDisconnect, mockTransportGetType]) mock.mockReset();
+});
+
 describe('MCPManager', () => {
   let manager: MCPManager;
 

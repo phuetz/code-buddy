@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { StrategyStore } from '../../src/agent/self-improvement/strategy-store.js';
 import { BASELINE_STRATEGY } from '../../src/agent/self-improvement/strategy-types.js';
@@ -162,6 +162,9 @@ beforeAll(async () => {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('port attendu');
   port = address.port;
+});
+
+beforeEach(() => {
   homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mw-resume-project-'));
   dirA = path.join(homeDir, 'projet-a');
   dirB = path.join(homeDir, 'projet-b');
@@ -173,6 +176,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (server) await new Promise<void>((resolve) => server?.close(() => resolve()));
+});
+
+afterEach(() => {
   if (homeDir) fs.rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
@@ -184,16 +190,22 @@ describe('--resume / --continue depuis un autre projet', () => {
   }, 180_000);
 
   it('--resume depuis A garde les 3 tours de B, pas les 8 de A', async () => {
+    const first = await run(dirB, []);
+    expect(first.hits, first.stderr).toBe(3);
     const resumed = await run(dirA, ['--resume', sessionId()]);
     expect(resumed.hits, resumed.stderr).toBe(3);
   }, 180_000);
 
   it('--continue depuis A garde les 3 tours de B, pas les 8 de A', async () => {
+    const first = await run(dirB, []);
+    expect(first.hits, first.stderr).toBe(3);
     const continued = await run(dirA, ['--continue']);
     expect(continued.hits, continued.stderr).toBe(3);
   }, 180_000);
 
   it('--max-tool-rounds reste prioritaire sur le fichier de B', async () => {
+    const first = await run(dirB, []);
+    expect(first.hits, first.stderr).toBe(3);
     const forced = await run(dirA, ['--resume', sessionId(), '--max-tool-rounds', '2']);
     expect(forced.hits, forced.stderr).toBe(2);
   }, 180_000);

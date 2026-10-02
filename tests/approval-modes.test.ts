@@ -24,6 +24,7 @@ describe('ApprovalModeManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetApprovalModeManager();
+    mockFs.writeFileSync.mockReset();
     mockFs.existsSync.mockReturnValue(false);
     manager = new ApprovalModeManager('/tmp/test-approval.json');
   });
@@ -483,6 +484,7 @@ describe('Edge Cases', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetApprovalModeManager();
+    mockFs.writeFileSync.mockReset();
     mockFs.existsSync.mockReturnValue(false);
     manager = new ApprovalModeManager('/tmp/test.json');
   });

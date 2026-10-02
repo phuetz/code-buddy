@@ -96,6 +96,13 @@ describe('Agent Pipelines (src/agent/pipelines.ts)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetPipelineRunner();
+    (getSubagentManager().spawn as jest.Mock).mockReset().mockResolvedValue({
+      success: true,
+      output: 'Test output from subagent',
+      toolsUsed: ['bash', 'view_file'],
+      duration: 1000,
+      rounds: 1,
+    });
     runner = new PipelineRunner('test-api-key');
   });
 

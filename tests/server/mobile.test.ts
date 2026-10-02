@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { vi, describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import { Server } from 'http';
 import http from 'http';
@@ -27,14 +27,22 @@ vi.mock('../../src/observability/run-store.js', () => ({
   }),
 }));
 
+beforeEach(async () => {
+  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-router-'));
+  activeTokens.clear();
+});
+
+afterEach(async () => {
+  await fs.remove(tempDir);
+});
+
 describe('mobileRouter', () => {
   let app: express.Express;
   let server: Server;
   let baseUrl: string;
 
   beforeAll(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-router-'));
-    
+
     app = express();
     app.use(express.json());
     app.use('/api/mobile', mobileRouter);
@@ -47,8 +55,7 @@ describe('mobileRouter', () => {
   });
 
   afterAll(async () => {
-    server.close();
-    await fs.remove(tempDir);
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   });
 
   it('should return pairing-status', async () => {
@@ -222,8 +229,8 @@ describe('mobileRouter follow-up review queue (GAP-5 P2)', () => {
     }
   });
 
-  afterAll(() => {
-    server.close();
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   });
 
   async function deviceToken(): Promise<string> {
@@ -325,6 +332,13 @@ describe('mobileRouter follow-up review queue (GAP-5 P2)', () => {
   });
 
   it('lists the review queue for the local operator', async () => {
+    const token = await deviceToken();
+    const submitted = await fetch(`${baseUrl}/submit-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ prompt: 'Queue listing fixture' }),
+    });
+    expect(submitted.status).toBe(200);
     const res = await fetch(`${baseUrl}/followup-drafts`);
     expect(res.status).toBe(200);
     const data = await res.json() as any;

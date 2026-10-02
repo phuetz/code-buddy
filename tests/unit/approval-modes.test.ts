@@ -51,6 +51,7 @@ describe('ApprovalModeManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (fs.writeFileSync as jest.Mock).mockReset();
     (fs.existsSync as jest.Mock).mockReturnValue(false);
     manager = new ApprovalModeManager();
   });

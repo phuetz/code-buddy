@@ -325,18 +325,104 @@ import {
 // MEMORY HANDLERS TESTS
 // ============================================================================
 
-describe('Memory Handlers', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockMemoryManager.formatMemories.mockReturnValue('No memories stored');
-    mockMemoryManager.recall.mockReturnValue(null);
-    mockMemoryManager.initialize.mockResolvedValue(undefined);
-    mockMemoryManager.remember.mockImplementation(async (key: string) => ({
-      status: 'stored', key, scope: 'project', usage: { used: 1, limit: 100, percent: 1 },
-      message: `Stored "${key}" in project memory.`, reconciliation: { status: 'applied' },
-    }));
-    mockMemoryManager.forget.mockResolvedValue(undefined);
+import { getContextLoader } from '../../src/context/context-loader.js';
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  (getContextLoader as jest.Mock).mockReset().mockReturnValue(mockContextLoader);
+  mockPerformanceManager.getToolCache.mockReset().mockReturnValue(mockToolCache);
+  mockPerformanceManager.getRequestOptimizer.mockReset().mockReturnValue(mockRequestOptimizer);
+  mockEnhancedMemory.store.mockReset().mockResolvedValue({ id: 'test-id' });
+  mockEnhancedMemory.recall.mockReset().mockResolvedValue([]);
+  mockEnhancedMemory.forget.mockReset().mockResolvedValue(undefined);
+  mockEnhancedMemory.buildContext.mockReset().mockResolvedValue('Mock context');
+  mockEnhancedMemory.formatStatus.mockReset().mockReturnValue('Memory Status: OK');
+  mockCodeGuardianAgent.execute.mockReset();
+  mockMemoryManager.formatMemories.mockReturnValue('No memories stored');
+  mockMemoryManager.recall.mockReturnValue(null);
+  mockMemoryManager.initialize.mockResolvedValue(undefined);
+  mockMemoryManager.remember.mockImplementation(async (key: string) => ({
+    status: 'stored', key, scope: 'project', usage: { used: 1, limit: 100, percent: 1 },
+    message: `Stored "${key}" in project memory.`, reconciliation: { status: 'applied' },
+  }));
+  mockMemoryManager.forget.mockResolvedValue(undefined);
+  mockCostTracker.formatDashboard.mockReturnValue('Cost Dashboard');
+  mockCostTracker.getReport.mockReturnValue({ total: 0.50 });
+  mockToolCache.getStats.mockReturnValue({
+    hits: 100,
+    misses: 20,
+    hitRate: 0.83,
+    savedCalls: 50,
+    savedTime: 5000,
   });
+  mockRequestOptimizer.getStats.mockReturnValue({
+    totalRequests: 100,
+    successfulRequests: 95,
+    failedRequests: 5,
+    retriedRequests: 3,
+    deduplicatedRequests: 10,
+    averageLatency: 250,
+    currentConcurrency: 2,
+  });
+  mockPerformanceManager.getSummary.mockReturnValue({
+    lazyLoader: { loadedModules: 5, totalModules: 10, averageLoadTime: 50 },
+    toolCache: { hitRate: 0.8, savedCalls: 100 },
+    requestOptimizer: { totalRequests: 200, deduplicatedRequests: 20 },
+    apiCache: { entries: 50, hitRate: 0.7 },
+    overall: { totalOperations: 500, cacheHitRate: 0.75, estimatedTimeSaved: 10000 },
+  });
+  mockContextLoader.loadFiles.mockResolvedValue([]);
+  mockContextLoader.getSummary.mockReturnValue('Context summary');
+  mockWorkspaceDetector.formatDetectionResults.mockReturnValue('Workspace detected');
+  mockInteractionLogger.listSessions.mockReturnValue({ sessions: [], total: 0 });
+  mockInteractionLogger.loadSession.mockReturnValue(null);
+  mockInteractionLogger.deleteSession.mockReturnValue(false);
+  mockInteractionLogger.getLatestSession.mockReturnValue(null);
+  mockInteractionLogger.searchSessions.mockReturnValue([]);
+  mockInteractionLogger.formatSession.mockReturnValue('Session details');
+  mockSecurityManager.formatDashboard.mockReturnValue('Security Dashboard');
+  mockSecurityManager.getEvents.mockReturnValue([]);
+  mockConfirmationService.isDryRunMode.mockReturnValue(false);
+  mockConfirmationService.getDryRunLog.mockReturnValue([]);
+  mockConfirmationService.formatDryRunLog.mockReturnValue('No operations logged');
+  mockCodeGuardianAgent.isReady.mockReturnValue(true);
+  mockCodeGuardianAgent.getMode.mockReturnValue('ANALYZE_ONLY');
+  mockExportManager.exportSession.mockResolvedValue({
+    success: true,
+    filePath: '/home/user/.codebuddy/exports/session-2025-01-15.md',
+  });
+  mockExportManager.exportConversationData.mockResolvedValue({
+    success: true,
+    filePath: '/home/user/.codebuddy/exports/conversation-2025-01-15.md',
+  });
+  mockExportManager.listExports.mockResolvedValue([]);
+  mockInitializeDatabase.mockResolvedValue(undefined);
+  mockSettingsManager.loadUserSettings.mockReturnValue(undefined);
+  mockSlashCommandManager.reload.mockReturnValue(undefined);
+  mockResponseCache.formatStatus.mockReturnValue('Cache is enabled');
+  mockResponseCache.getStats.mockReturnValue({
+    totalEntries: 100,
+    cacheSize: '2.5 MB',
+    totalHits: 500,
+    totalMisses: 50,
+    oldestEntry: new Date('2025-01-01'),
+    newestEntry: new Date('2025-01-15'),
+  });
+  mockSelfHealingEngine.getOptions.mockReturnValue({
+    enabled: true,
+    maxRetries: 3,
+    autoFix: true,
+    verbose: false,
+  });
+  mockSelfHealingEngine.getStats.mockReturnValue({
+    totalAttempts: 10,
+    successfulHeals: 8,
+    failedHeals: 2,
+    successRate: '80%',
+  });
+});
+
+describe('Memory Handlers', () => {
 
   describe('handleMemory', () => {
     test('should list memories by default', async () => {
@@ -570,34 +656,6 @@ describe('Memory Handlers', () => {
 // ============================================================================
 
 describe('Stats Handlers', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockCostTracker.formatDashboard.mockReturnValue('Cost Dashboard');
-    mockCostTracker.getReport.mockReturnValue({ total: 0.50 });
-    mockToolCache.getStats.mockReturnValue({
-      hits: 100,
-      misses: 20,
-      hitRate: 0.83,
-      savedCalls: 50,
-      savedTime: 5000,
-    });
-    mockRequestOptimizer.getStats.mockReturnValue({
-      totalRequests: 100,
-      successfulRequests: 95,
-      failedRequests: 5,
-      retriedRequests: 3,
-      deduplicatedRequests: 10,
-      averageLatency: 250,
-      currentConcurrency: 2,
-    });
-    mockPerformanceManager.getSummary.mockReturnValue({
-      lazyLoader: { loadedModules: 5, totalModules: 10, averageLoadTime: 50 },
-      toolCache: { hitRate: 0.8, savedCalls: 100 },
-      requestOptimizer: { totalRequests: 200, deduplicatedRequests: 20 },
-      apiCache: { entries: 50, hitRate: 0.7 },
-      overall: { totalOperations: 500, cacheHitRate: 0.75, estimatedTimeSaved: 10000 },
-    });
-  });
 
   describe('handleCost', () => {
     test('should show cost dashboard by default', () => {
@@ -718,17 +776,6 @@ describe('Stats Handlers', () => {
   });
 
   describe('handleCache', () => {
-    beforeEach(() => {
-      mockResponseCache.formatStatus.mockReturnValue('Cache is enabled');
-      mockResponseCache.getStats.mockReturnValue({
-        totalEntries: 100,
-        cacheSize: '2.5 MB',
-        totalHits: 500,
-        totalMisses: 50,
-        oldestEntry: new Date('2025-01-01'),
-        newestEntry: new Date('2025-01-15'),
-      });
-    });
 
     test('should show cache status by default', () => {
       const result = handleCache([]);
@@ -770,20 +817,6 @@ describe('Stats Handlers', () => {
   });
 
   describe('handleSelfHealing', () => {
-    beforeEach(() => {
-      mockSelfHealingEngine.getOptions.mockReturnValue({
-        enabled: true,
-        maxRetries: 3,
-        autoFix: true,
-        verbose: false,
-      });
-      mockSelfHealingEngine.getStats.mockReturnValue({
-        totalAttempts: 10,
-        successfulHeals: 8,
-        failedHeals: 2,
-        successRate: '80%',
-      });
-    });
 
     test('should show status by default', () => {
       const result = handleSelfHealing([]);
@@ -824,12 +857,6 @@ describe('Stats Handlers', () => {
 // ============================================================================
 
 describe('Context Handlers', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockContextLoader.loadFiles.mockResolvedValue([]);
-    mockContextLoader.getSummary.mockReturnValue('Context summary');
-    mockWorkspaceDetector.formatDetectionResults.mockReturnValue('Workspace detected');
-  });
 
   describe('handleAddContext', () => {
     test('should show usage when no pattern provided', async () => {
@@ -969,15 +996,6 @@ describe('Session Handlers', () => {
     ],
   };
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockInteractionLogger.listSessions.mockReturnValue({ sessions: [], total: 0 });
-    mockInteractionLogger.loadSession.mockReturnValue(null);
-    mockInteractionLogger.deleteSession.mockReturnValue(false);
-    mockInteractionLogger.getLatestSession.mockReturnValue(null);
-    mockInteractionLogger.searchSessions.mockReturnValue([]);
-    mockInteractionLogger.formatSession.mockReturnValue('Session details');
-  });
 
   describe('handleSessions', () => {
     test('should list sessions by default', () => {
@@ -1111,16 +1129,6 @@ describe('Session Handlers', () => {
 // ============================================================================
 
 describe('Security Handlers', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockSecurityManager.formatDashboard.mockReturnValue('Security Dashboard');
-    mockSecurityManager.getEvents.mockReturnValue([]);
-    mockConfirmationService.isDryRunMode.mockReturnValue(false);
-    mockConfirmationService.getDryRunLog.mockReturnValue([]);
-    mockConfirmationService.formatDryRunLog.mockReturnValue('No operations logged');
-    mockCodeGuardianAgent.isReady.mockReturnValue(true);
-    mockCodeGuardianAgent.getMode.mockReturnValue('ANALYZE_ONLY');
-  });
 
   describe('handleSecurity', () => {
     test('should show dashboard by default', () => {
@@ -1284,19 +1292,6 @@ describe('Security Handlers', () => {
 // ============================================================================
 
 describe('Export Handlers', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockExportManager.exportSession.mockResolvedValue({
-      success: true,
-      filePath: '/home/user/.codebuddy/exports/session-2025-01-15.md',
-    });
-    mockExportManager.exportConversationData.mockResolvedValue({
-      success: true,
-      filePath: '/home/user/.codebuddy/exports/conversation-2025-01-15.md',
-    });
-    mockExportManager.listExports.mockResolvedValue([]);
-    mockInitializeDatabase.mockResolvedValue(undefined);
-  });
 
   const conversation = [
     { type: 'user' as const, content: 'hello', timestamp: new Date('2025-01-15T10:00:00Z') },
@@ -1499,11 +1494,6 @@ describe('Test Handlers', () => {
 // ============================================================================
 
 describe('Vibe Handlers', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockSettingsManager.loadUserSettings.mockReturnValue(undefined);
-    mockSlashCommandManager.reload.mockReturnValue(undefined);
-  });
 
   describe('handleReload', () => {
     test('should reload configuration', async () => {

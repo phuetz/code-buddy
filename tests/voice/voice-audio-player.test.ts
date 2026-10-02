@@ -71,7 +71,7 @@ describe('voice loop — one audio player per turn', () => {
       }
       return child;
     });
-    commandExists.mockClear();
+    commandExists.mockReset().mockImplementation(async (command: string) => command === 'ffplay');
     cacheLookup.mockReset();
     cacheLookup.mockImplementation((text: string) =>
       text === 'Alors…' ? '/tmp/codebuddy-cached-backchannel.wav' : null

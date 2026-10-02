@@ -23,17 +23,18 @@ function createMockProcess(exitCode: number, stdout: string, stderr: string) {
   proc.stderr = new EventEmitter();
 
   // Schedule data emission and close after listeners are attached
-  setTimeout(() => {
+  setImmediate(() => {
     if (stdout) proc.stdout.emit('data', Buffer.from(stdout));
     if (stderr) proc.stderr.emit('data', Buffer.from(stderr));
     proc.emit('close', exitCode);
-  }, 10);
+  });
 
   return proc;
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSpawn.mockReset();
 });
 
 describe('LocalTransport', () => {
@@ -55,7 +56,7 @@ describe('LocalTransport', () => {
   });
 
   it('should execute commands', async () => {
-    mockSpawn.mockReturnValue(createMockProcess(0, 'hello world', ''));
+    mockSpawn.mockImplementation(() => createMockProcess(0, 'hello world', ''));
 
     const { LocalTransport } = await import('../../src/nodes/transports/local-transport.js');
     const transport = new LocalTransport();
@@ -68,7 +69,7 @@ describe('LocalTransport', () => {
   });
 
   it('should handle command failure', async () => {
-    mockSpawn.mockReturnValue(createMockProcess(1, '', 'command not found'));
+    mockSpawn.mockImplementation(() => createMockProcess(1, '', 'command not found'));
 
     const { LocalTransport } = await import('../../src/nodes/transports/local-transport.js');
     const transport = new LocalTransport();
@@ -86,8 +87,10 @@ describe('LocalTransport', () => {
     };
     proc.stdout = new EventEmitter();
     proc.stderr = new EventEmitter();
-    setTimeout(() => proc.emit('error', new Error('spawn failed')), 5);
-    mockSpawn.mockReturnValue(proc);
+    mockSpawn.mockImplementation(() => {
+      setImmediate(() => proc.emit('error', new Error('spawn failed')));
+      return proc;
+    });
 
     const { LocalTransport } = await import('../../src/nodes/transports/local-transport.js');
     const transport = new LocalTransport();
@@ -153,7 +156,7 @@ describe('SSHTransport', () => {
   });
 
   it('should fail to connect on SSH error', async () => {
-    mockSpawn.mockReturnValue(createMockProcess(255, '', 'Connection refused'));
+    mockSpawn.mockImplementation(() => createMockProcess(255, '', 'Connection refused'));
 
     const { SSHTransport } = await import('../../src/nodes/transports/ssh-transport.js');
     const transport = new SSHTransport({
@@ -250,7 +253,7 @@ describe('ADBTransport', () => {
   });
 
   it('should fail to connect if device not accessible', async () => {
-    mockSpawn.mockReturnValue(createMockProcess(1, '', 'device not found'));
+    mockSpawn.mockImplementation(() => createMockProcess(1, '', 'device not found'));
 
     const { ADBTransport } = await import('../../src/nodes/transports/adb-transport.js');
     const transport = new ADBTransport({ deviceId: 'bad-device' });
@@ -276,7 +279,7 @@ describe('ADBTransport', () => {
   });
 
   it('should use adb push for file upload', async () => {
-    mockSpawn.mockReturnValue(createMockProcess(0, '', ''));
+    mockSpawn.mockImplementation(() => createMockProcess(0, '', ''));
 
     const { ADBTransport } = await import('../../src/nodes/transports/adb-transport.js');
     const transport = new ADBTransport({ deviceId: 'pixel-7' });

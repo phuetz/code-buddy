@@ -69,6 +69,10 @@ jest.mock('../../src/ui/context/theme-context', () => ({
 describe('FileAutocomplete Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (path.extname as jest.Mock).mockReset().mockImplementation((filename: string) => {
+      const idx = filename.lastIndexOf('.');
+      return idx > 0 ? filename.slice(idx) : '';
+    });
   });
 
   // ==========================================================================

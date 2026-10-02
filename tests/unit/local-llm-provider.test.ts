@@ -143,6 +143,18 @@ function encodeChunk(content: string): Uint8Array {
 // NodeLlamaCppProvider Tests
 // ============================================================================
 
+beforeEach(() => {
+  mockFetch.mockReset();
+  mockRetry.mockReset().mockImplementation(async (fn) => fn());
+  mockSafeStreamRead.mockReset().mockImplementation(async (reader) => {
+    const result = await reader.read();
+    return { success: true, done: result.done, value: result.value };
+  });
+  mockHandleStreamError.mockReset().mockReturnValue({
+    message: 'mock error', category: 'unknown', isRetryable: false,
+  });
+});
+
 describe('NodeLlamaCppProvider', () => {
   let provider: NodeLlamaCppProvider;
 
@@ -1491,6 +1503,7 @@ describe('autoConfigureLocalProvider', () => {
     // Auto-detect should find ollama
     mockFetch
       .mockResolvedValueOnce({ ok: true }) // Auto-detect Ollama
+      .mockResolvedValueOnce({ ok: true }) // Initialize the detected provider
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ models: [{ name: 'llama3.1' }] }),

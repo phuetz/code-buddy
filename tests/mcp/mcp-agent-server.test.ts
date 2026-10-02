@@ -235,6 +235,9 @@ describe('MCP Agent Intelligence Layer', () => {
     registeredResources.clear();
     registeredPrompts.clear();
     jest.clearAllMocks();
+    mockProcessUserMessage.mockReset().mockResolvedValue([
+      { type: 'assistant', content: 'Hello from agent', timestamp: new Date() },
+    ]);
 
     // Set env for agent init
     process.env.GROK_API_KEY = 'test-key-123';

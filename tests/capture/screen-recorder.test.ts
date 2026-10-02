@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { EventEmitter } from 'events';
 import {
   buildFrameArgs,
@@ -75,6 +78,17 @@ function mockProc() {
 }
 
 describe('ScreenRecorder', () => {
+  let workDir: string;
+  beforeEach(() => {
+    workDir = mkdtempSync(join(tmpdir(), 'screen-recorder-'));
+    vi.stubEnv('XDG_SESSION_TYPE', 'x11');
+    vi.stubEnv('WAYLAND_DISPLAY', undefined);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
   it('start() spawns ffmpeg with the record args and tracks state', () => {
     let captured: { cmd: string; args: string[] } | null = null;
     const proc = mockProc();
@@ -84,7 +98,7 @@ describe('ScreenRecorder', () => {
     };
     const rec = new ScreenRecorder({ spawnImpl, platform: 'linux' });
     expect(rec.isRecording()).toBe(false);
-    rec.start('/tmp/x/out.mp4', { display: ':5', fps: 20, screenSize: { width: 640, height: 480 } });
+    rec.start(join(workDir, 'out.mp4'), { display: ':5', fps: 20, screenSize: { width: 640, height: 480 } });
     expect(rec.isRecording()).toBe(true);
     expect(captured!.cmd).toBe('ffmpeg');
     expect(captured!.args).toEqual(expect.arrayContaining(['x11grab', '-framerate', '20', ':5', '640x480']));
@@ -92,8 +106,8 @@ describe('ScreenRecorder', () => {
 
   it('stop() resolves and clears state', async () => {
     const proc = mockProc();
-    const rec = new ScreenRecorder({ spawnImpl: () => proc as never });
-    rec.start('/tmp/x/out.mp4', { display: ':5', screenSize: { width: 10, height: 10 } });
+    const rec = new ScreenRecorder({ spawnImpl: () => proc as never, platform: 'linux' });
+    rec.start(join(workDir, 'out.mp4'), { display: ':5', screenSize: { width: 10, height: 10 } });
     const done = rec.stop();
     proc.emit('exit', 0); // ffmpeg finished
     await done;
@@ -102,9 +116,9 @@ describe('ScreenRecorder', () => {
 
   it('captureFrame() resolves to the output path on exit 0', async () => {
     const proc = mockProc();
-    const rec = new ScreenRecorder({ spawnImpl: () => proc as never });
-    const p = rec.captureFrame('/tmp/x/f.png', { display: ':5', screenSize: { width: 10, height: 10 } });
+    const rec = new ScreenRecorder({ spawnImpl: () => proc as never, platform: 'linux' });
+    const p = rec.captureFrame(join(workDir, 'f.png'), { display: ':5', screenSize: { width: 10, height: 10 } });
     proc.emit('exit', 0);
-    await expect(p).resolves.toBe('/tmp/x/f.png');
+    await expect(p).resolves.toBe(join(workDir, 'f.png'));
   });
 });

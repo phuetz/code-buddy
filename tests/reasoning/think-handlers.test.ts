@@ -4,11 +4,11 @@
  * Covers help text, mode toggling, status display, and problem-solving paths.
  */
 
-import {
-  handleThink,
-  getActiveThinkingMode,
-  setActiveThinkingMode,
-} from '../../src/commands/handlers/think-handlers.js';
+import { vi } from 'vitest';
+
+let handleThink: typeof import('../../src/commands/handlers/think-handlers.js').handleThink;
+let getActiveThinkingMode: typeof import('../../src/commands/handlers/think-handlers.js').getActiveThinkingMode;
+let setActiveThinkingMode: typeof import('../../src/commands/handlers/think-handlers.js').setActiveThinkingMode;
 import { getTreeOfThoughtReasoner } from '../../src/agent/reasoning/tree-of-thought.js';
 
 // Mock the tree-of-thought reasoner so tests never make real API calls
@@ -28,7 +28,13 @@ jest.mock('../../src/agent/reasoning/tree-of-thought.js', () => ({
 }));
 
 describe('think-handlers', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ handleThink, getActiveThinkingMode, setActiveThinkingMode } = await import('../../src/commands/handlers/think-handlers.js'));
+    mockSolve.mockReset();
+    mockChainOfThought.mockReset();
+    mockSetMode.mockReset();
+    mockFormatResult.mockReset();
     jest.clearAllMocks();
     // Reset thinking mode before each test
     setActiveThinkingMode(null);

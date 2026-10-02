@@ -38,6 +38,7 @@ describe('config-loader', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    for (const mock of Object.values(mockManager)) mock.mockReset();
     // Reset environment
     process.env = { ...originalEnv };
     delete process.env.GROK_API_KEY;

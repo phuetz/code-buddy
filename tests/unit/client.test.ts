@@ -82,6 +82,10 @@ describe('CodeBuddyClient', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCreate.mockReset();
+    mockedGetModelInfo.mockReset().mockReturnValue({
+      maxTokens: 8192, provider: 'xai', isSupported: true,
+    });
 
     // Reset environment variables
     delete process.env.GROK_BASE_URL;

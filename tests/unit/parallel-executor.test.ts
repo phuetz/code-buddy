@@ -74,6 +74,25 @@ function createMockConfig(overrides: Partial<ParallelConfig> = {}): ParallelConf
   };
 }
 
+beforeEach(() => {
+  CodeBuddyClient.mockReset().mockImplementation(function() { return {
+    chat: jest.fn().mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: "Test response from model",
+          },
+        },
+      ],
+      usage: {
+        total_tokens: 150,
+        prompt_tokens: 100,
+        completion_tokens: 50,
+      },
+    }),
+  }; });
+});
+
 describe("ParallelExecutor", () => {
   let executor: ParallelExecutor;
 

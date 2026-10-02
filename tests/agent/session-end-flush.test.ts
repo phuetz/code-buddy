@@ -72,9 +72,9 @@ describe('session-end-flush (WS3-T1)', () => {
   beforeEach(() => {
     workDir = mkdtempSync(join(tmpdir(), 'flush-'));
     resetSessionEndFlushState();
-    mockIsFeatureEnabled.mockReturnValue(true);
-    mockProposeLessons.mockResolvedValue([]);
-    mockProposeMemories.mockResolvedValue([]);
+    mockIsFeatureEnabled.mockReset().mockReturnValue(true);
+    mockProposeLessons.mockReset().mockResolvedValue([]);
+    mockProposeMemories.mockReset().mockResolvedValue([]);
   });
 
   afterEach(() => {

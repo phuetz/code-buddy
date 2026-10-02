@@ -92,6 +92,7 @@ describe('CheckpointVersioning', () => {
     jest.clearAllMocks();
     resetCheckpointVersioning();
 
+    mockWriteFile.mockReset().mockResolvedValue(undefined);
     // Reset mock implementations
     mockPathExists.mockResolvedValue(false);
     mockWriteJson.mockResolvedValue(undefined);

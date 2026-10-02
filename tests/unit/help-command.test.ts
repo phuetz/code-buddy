@@ -112,28 +112,35 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockGetAllCommands.mockReset().mockReturnValue([
+    { name: 'help', description: 'Show available commands', isBuiltin: true },
+    { name: 'clear', description: 'Clear the chat history', isBuiltin: true },
+    { name: 'model', description: 'Change the AI model', isBuiltin: true, arguments: [{ name: 'model', required: false, description: 'Model name' }] },
+    { name: 'mode', description: 'Change agent mode', isBuiltin: true, arguments: [{ name: 'mode', required: true, description: 'Mode to switch to' }] },
+    { name: 'commit', description: 'Generate commit message', isBuiltin: true },
+    { name: 'review', description: 'Review code changes', isBuiltin: true },
+    { name: 'test', description: 'Run tests', isBuiltin: true },
+    { name: 'lint', description: 'Run linter', isBuiltin: true },
+    { name: 'memory', description: 'Manage persistent memory', isBuiltin: true },
+    { name: 'context', description: 'View loaded context', isBuiltin: true },
+    { name: 'checkpoints', description: 'List checkpoints', isBuiltin: true },
+    { name: 'restore', description: 'Restore checkpoint', isBuiltin: true },
+    { name: 'save', description: 'Save conversation', isBuiltin: true },
+    { name: 'theme', description: 'Change UI theme', isBuiltin: true },
+    { name: 'voice', description: 'Voice input control', isBuiltin: true },
+    { name: 'yolo', description: 'Toggle YOLO mode', isBuiltin: true },
+  ]);
+  mockFormatYOLOStatus.mockReset().mockReturnValue('YOLO Status: DISABLED');
+  mockGetLevel.mockReset().mockReturnValue('confirm');
+  mockGetAvailableSkills.mockReset().mockReturnValue([]);
+  mockGetActiveSkill.mockReset().mockReturnValue(null);
+  mockGetSkill.mockReset().mockReturnValue(null);
+});
+
 describe('Help Command Handler', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetAllCommands.mockReturnValue([
-      { name: 'help', description: 'Show available commands', isBuiltin: true },
-      { name: 'clear', description: 'Clear the chat history', isBuiltin: true },
-      { name: 'model', description: 'Change the AI model', isBuiltin: true, arguments: [{ name: 'model', required: false, description: 'Model name' }] },
-      { name: 'mode', description: 'Change agent mode', isBuiltin: true, arguments: [{ name: 'mode', required: true, description: 'Mode to switch to' }] },
-      { name: 'commit', description: 'Generate commit message', isBuiltin: true },
-      { name: 'review', description: 'Review code changes', isBuiltin: true },
-      { name: 'test', description: 'Run tests', isBuiltin: true },
-      { name: 'lint', description: 'Run linter', isBuiltin: true },
-      { name: 'memory', description: 'Manage persistent memory', isBuiltin: true },
-      { name: 'context', description: 'View loaded context', isBuiltin: true },
-      { name: 'checkpoints', description: 'List checkpoints', isBuiltin: true },
-      { name: 'restore', description: 'Restore checkpoint', isBuiltin: true },
-      { name: 'save', description: 'Save conversation', isBuiltin: true },
-      { name: 'theme', description: 'Change UI theme', isBuiltin: true },
-      { name: 'voice', description: 'Voice input control', isBuiltin: true },
-      { name: 'yolo', description: 'Toggle YOLO mode', isBuiltin: true },
-    ]);
-  });
+
 
   describe('handleHelp', () => {
     it('should return a handled result', async () => {

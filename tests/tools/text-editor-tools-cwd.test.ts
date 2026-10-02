@@ -8,7 +8,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import {
   CreateFileTool,
@@ -19,12 +19,12 @@ import {
 
 let sessionCwd: string;
 
-beforeAll(() => {
+beforeEach(() => {
   ConfirmationService.getInstance().setSessionFlag('fileOperations', true);
   sessionCwd = mkdtempSync(join(tmpdir(), 'tools-cwd-test-'));
 });
 
-afterAll(() => {
+afterEach(() => {
   rmSync(sessionCwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   resetTextEditorInstance();
 });
@@ -85,6 +85,7 @@ describe('registry file tools honor context.cwd for relative paths', () => {
   });
 
   it('str_replace_editor edits the file in the session cwd', async () => {
+    writeFileSync(join(sessionCwd, PROBE), '<h1>Météo Cristal</h1>');
     const tool = new StrReplaceEditorTool();
     const result = await tool.execute(
       { path: PROBE, old_str: 'Météo Cristal', new_str: 'Météo Cristal v2' },
@@ -95,6 +96,7 @@ describe('registry file tools honor context.cwd for relative paths', () => {
   });
 
   it('view_file reads through the session cwd', async () => {
+    writeFileSync(join(sessionCwd, PROBE), '<h1>Météo Cristal v2</h1>');
     const tool = new ViewFileTool();
     const result = await tool.execute({ path: PROBE }, { cwd: sessionCwd });
     expect(result.success).toBe(true);

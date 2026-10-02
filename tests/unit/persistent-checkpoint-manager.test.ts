@@ -128,10 +128,14 @@ describe('PersistentCheckpointManager', () => {
     resetPersistentCheckpointManager();
 
     // Reset mock implementations
-    mockExistsSync.mockReturnValue(false);
-    mockReadFileSync.mockReturnValue('file content');
-    mockStatSync.mockReturnValue({ isFile: () => true, size: 100 });
-    mockReaddirSync.mockReturnValue([]);
+    mockExistsSync.mockReset().mockReturnValue(false);
+    mockReadFileSync.mockReset().mockReturnValue('file content');
+    mockStatSync.mockReset().mockReturnValue({ isFile: () => true, size: 100 });
+    mockReaddirSync.mockReset().mockReturnValue([]);
+
+    mockMkdirSync.mockReset();
+    mockWriteFileSync.mockReset();
+    mockUnlinkSync.mockReset();
 
     // Create manager with test options
     manager = new PersistentCheckpointManager({
@@ -321,6 +325,7 @@ describe('PersistentCheckpointManager', () => {
         return 'file content';
       });
 
+      mockWriteFileSync.mockClear();
       const checkpoint = manager.createCheckpoint('Index test');
 
       // Index should be updated with new checkpoint ID

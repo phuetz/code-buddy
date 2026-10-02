@@ -50,6 +50,8 @@ const mockConsole = {
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockOs = os as jest.Mocked<typeof os>;
 
+beforeEach(() => jest.clearAllMocks());
+
 describe('BenchmarkRunner', () => {
   let runner: BenchmarkRunner;
 
