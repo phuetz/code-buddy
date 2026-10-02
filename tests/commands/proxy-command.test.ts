@@ -10,6 +10,8 @@ vi.mock('../../src/server/index.js', () => ({
   getServerBaseUrl: (...args: unknown[]) => getServerBaseUrlMock(...args),
 }));
 
+import { logger } from '../../src/utils/logger.js';
+
 import { registerProxyCommands } from '../../src/commands/cli/proxy-command.js';
 
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
@@ -80,11 +82,11 @@ describe('proxy CLI command', () => {
     expect(output).toContain('http://127.0.0.1:8787/api/chat/completions');
   });
 
-  it('honours --port, --host and --no-auth', async () => {
+  it('allows network access without authentication only with explicit opt-in', async () => {
     const program = createProgram();
     registerProxyCommands(program);
 
-    await program.parseAsync(['node', 'test', 'proxy', '--port', '9099', '--host', '0.0.0.0', '--no-auth']);
+    await program.parseAsync(['node', 'test', 'proxy', '--port', '9099', '--host', '0.0.0.0', '--no-auth', '--allow-unauthenticated-network-access']);
 
     const arg = startServerMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(arg).toMatchObject({
@@ -92,6 +94,39 @@ describe('proxy CLI command', () => {
       host: '0.0.0.0',
       authEnabled: false,
     });
+  });
+
+  it.each(['0.0.0.0', '192.168.1.20', '::', 'example.test', '127.0.0.1.example.test'])(
+    'refuses unauthenticated network binding to %s before starting the server', async (host) => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      try {
+        const program = createProgram();
+        registerProxyCommands(program);
+        await expect(program.parseAsync(['node', 'test', 'proxy', '--host', host, '--no-auth']))
+          .rejects.toThrow('process.exit called');
+        expect(startServerMock).not.toHaveBeenCalled();
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--allow-unauthenticated-network-access'));
+      } finally {
+        errorSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each(['127.0.0.1', '127.0.0.2', '::1', 'localhost'])(
+    'allows local development without authentication on %s', async (host) => {
+      const program = createProgram();
+      registerProxyCommands(program);
+      await program.parseAsync(['node', 'test', 'proxy', '--host', host, '--no-auth']);
+      expect(startServerMock).toHaveBeenCalledWith(expect.objectContaining({ host, authEnabled: false }));
+    },
+  );
+
+  it('keeps authentication enabled on a network address by default', async () => {
+    const program = createProgram();
+    registerProxyCommands(program);
+    await program.parseAsync(['node', 'test', 'proxy', '--host', '0.0.0.0']);
+    expect(startServerMock).toHaveBeenCalledWith(expect.objectContaining({ authEnabled: true }));
   });
 
   it('emits machine-readable JSON with --json', async () => {

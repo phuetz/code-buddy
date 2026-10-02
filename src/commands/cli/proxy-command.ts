@@ -17,6 +17,7 @@
  *   buddy proxy --json
  */
 
+import { isIP } from 'node:net';
 import type { Command } from 'commander';
 import { logger } from '../../utils/logger.js';
 
@@ -26,7 +27,7 @@ const DEFAULT_PROXY_HOST = '127.0.0.1';
 interface ProxyCommandOptions {
   port: string;
   host: string;
-  noAuth?: boolean;
+  allowUnauthenticatedNetworkAccess?: boolean;
   auth?: boolean;
   json?: boolean;
 }
@@ -75,6 +76,7 @@ export function registerProxyCommands(program: Command): void {
     .option('--port <port>', 'proxy port', String(DEFAULT_PROXY_PORT))
     .option('--host <host>', 'proxy host', DEFAULT_PROXY_HOST)
     .option('--no-auth', 'disable JWT authentication (loopback dev only)')
+    .option('--allow-unauthenticated-network-access', 'explicitly allow network clients without JWT authentication (unsafe)')
     .option('--json', 'print startup info as JSON')
     .action(async (options: ProxyCommandOptions) => {
       const port = Number.parseInt(options.port, 10);
@@ -85,6 +87,16 @@ export function registerProxyCommands(program: Command): void {
       }
       const host = options.host || DEFAULT_PROXY_HOST;
       const authEnabled = options.auth !== false;
+      const loopback = host === 'localhost' || host === '::1'
+        || (isIP(host) === 4 && host.startsWith('127.'));
+      if (!authEnabled && !loopback && !options.allowUnauthenticatedNetworkAccess) {
+        logger.error(
+          `Refusing proxy --no-auth on non-loopback host ${host}. ` +
+          'Use a loopback address, enable authentication, or explicitly pass --allow-unauthenticated-network-access.',
+        );
+        process.exit(1);
+        return;
+      }
 
       const { startServer } = await import('../../server/index.js');
       try {
