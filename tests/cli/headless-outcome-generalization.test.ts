@@ -269,7 +269,7 @@ it.each(['Read the exports. Use the format in output.js.', 'Read the exports. Us
 );
 
 
-it.each(['I created an analysis tool.', 'I created an overview service.'])(
+it.each(['I created an analysis tool.', 'I created an overview service.', 'I created an analysis class.', 'I created an overview utility.'])(
   'does not hide a software artifact behind a cognitive modifier: %s', content => {
     expect(evaluateHeadlessTaskOutcome('Explain', [answer(content)]).exitCode).toBe(4);
   },
@@ -279,3 +279,10 @@ it.each(['I created an analysis of the tool.', 'I created an overview of the ser
     expect(evaluateHeadlessTaskOutcome('Explain', [answer(content)]).exitCode).toBe(0);
   },
 );
+
+it('keeps the outcome predicate out of the asserted executable object', () => {
+  const content = 'I ran the build and it succeeded.';
+  expect(evaluateHeadlessTaskOutcome('Explain', [shell('npm run build'), answer(content)]).exitCode).toBe(0);
+  expect(evaluateHeadlessTaskOutcome('Explain', [shell('ls .'), answer(content)]).exitCode).toBe(4);
+  expect(evaluateHeadlessTaskOutcome('Explain', [answer(content)]).exitCode).toBe(4);
+});

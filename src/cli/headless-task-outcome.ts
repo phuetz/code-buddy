@@ -262,7 +262,7 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
       if (/^(?:into|across|out of)\b/.test(head) && !/^[\w./-]+\.[a-z0-9]+\b|^[\w.-]+\//.test(head)) continue;
       const abstract = /^(?:overview|summary|outline|explanation|interpretation|understanding|hypothesis|notes?|list|risk|scan|analysis|reading|search|reasoning|logic|flow|walk-through|resume|apercu|liste|analyse|lecture|recherche|raisonnement|interpretation|hypothese)\b/.test(head);
       const physicalHead = /^[\w./-]+\.[a-z0-9]+\b|^[\w.-]+\//.test(head)
-        || /\b(?:files?|folders?|director(?:y|ies)|documents?|scripts?|modules?|tools?|services?|servers?|apps?|components?|classes?|functions?|programs?|packages?|generators?|utilities|pipelines?|endpoints?|fichiers?|dossiers?)\b/.test(head.split(/\b(?:of|de|about|sur)\b/)[0]!);
+        || /\b(?:files?|folders?|director(?:y|ies)|documents?|scripts?|modules?|tools?|services?|servers?|apps?|components?|class(?:es)?|functions?|programs?|packages?|generators?|utilit(?:y|ies)|pipelines?|endpoints?|fichiers?|dossiers?)\b/.test(head.split(/\b(?:of|de|about|sur)\b/)[0]!);
       const physicalDestination = /\b(?:in|to|as|dans|vers)\s+[`"']?(?:[\w-]+\/)*[\w-]+\.[a-z0-9]+\b/.test(object);
       if (!physicalHead && !physicalDestination && (abstract || /^model\b/.test(head) && /\bmental(?:ly|ement)?\b/.test(object) || /^(?:into|across|out of)\b/.test(head)
         || /^instructions?\b/.test(head) && /\bmentalement\b/.test(object))) continue;
@@ -273,7 +273,7 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
       if (/^(?:ran|executed|launched|started|run|lance|execute|demarre)$/.test(verb)) {
         // No executable whitelist: even an unfamiliar validator or server
         // counts as an operational claim. Evidence for `ls` cannot attest it.
-        const operation = head.replace(/[`"']/g, '').replace(/\s+(?:successfully|avec succes).*$/, '').replace(/[.!?]+$/, '').trim();
+        const operation = head.replace(/[`"']/g, '').replace(/\s+\b(?:and|et)\s+(?:it|they|cela|il|elle)\s+(?:succeeded|completed|worked|finished|a reussi|ont reussi|a termine)\b.*$/, '').replace(/\s+(?:successfully|avec succes).*$/, '').replace(/[.!?]+$/, '').trim();
         const stem = (word: string) => ['linter', 'eslint'].includes(word) ? 'lint' : word.replace(/s$/, '');
         const words = operation.split(/[^\w-]+/).filter(Boolean).map(stem);
         const generic = /^(?:commands?|commandes?|scripts?)$/.test(operation);
