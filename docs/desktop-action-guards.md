@@ -136,3 +136,34 @@ Les inventaires sont comparés aux schémas exposés dans les tests. Les modes
 flags de session ne retirent pas les gardes internes. Les tests de règles de
 projet chargent un véritable `.codebuddy/settings.json` temporaire et montrent
 que l’invite générique peut être autoacceptée tandis que l’invite interne refuse.
+
+
+## Serveur MCP desktop — 6 outils
+
+Fichier de preuve des mutations : `tests/mcp/mcp-desktop-human-guard.test.ts`.
+Chaque mutation est testée en `default`, `dontAsk` et `bypassPermissions`, avec
+un vrai fichier de projet `permissions.allow`, puis sans pont, en plan, et avec
+une approbation suivie d’un refus. Zéro initialisation native avant l’approbation.
+
+| Action | Garde | Test |
+|---|---|---|
+| `desktop_click` | Interne `confirmHostEffect`, `forcePrompt:true`, avant `getManager` | `desktop_click in default refuses before initialization despite opt-in/project allow` |
+| `desktop_type` | Interne `confirmHostEffect`, `forcePrompt:true`, avant `getManager` | `desktop_type in default refuses before initialization despite opt-in/project allow` |
+| `desktop_key` | Interne `confirmHostEffect`, `forcePrompt:true`, avant `getManager` | `desktop_key in default refuses before initialization despite opt-in/project allow` |
+| `desktop_move_mouse` | Interne `confirmHostEffect`, `forcePrompt:true`, avant `getManager` | `desktop_move_mouse in default refuses before initialization despite opt-in/project allow` |
+| `desktop_screenshot` | Observation ; chemin de sortie confiné au workspace | `tests/mcp/mcp-desktop-screenshot-guard.test.ts` |
+| `desktop_snapshot` | Observation ; aucune entrée de souris/clavier | `desktop_snapshot handler — formatting` dans `tests/mcp/mcp-desktop-tools.test.ts` |
+
+## Hooks et lancement indirect
+
+| Entrée | Garde | Test |
+|---|---|---|
+| `UserHooksManager`, événements nommés | Interne `confirmHostEffect`, `forcePrompt` ; compactage synchrone ignoré | `Grok cloned hooks PreToolUse cannot launch before approval`, `tests/security/project-host-effect-guard.test.ts` |
+| `HooksManager`, tableau `hooks`, commands/scripts/handlers | Interne `confirmHostEffect` par handler ; refus `abort:true` malgré `failOnError:false` | `HooksManager array-format project hooks in default stop before shell despite allow and failOnError=false`, tests script/handler et `production ToolHandler aborts a tool when an array-format project hook is refused`, `tests/hooks/project-hook-human-guard.test.ts` |
+| Ancien `HookManager` | Interne `confirmHostEffect` avant shell ; refus `blocked:true` | `HookManager array-format project hooks in default stop before shell despite allow and failOnError=false`, même fichier |
+| Ancien `HookSystem` | Interne `confirmHostEffect` avant shell | `HookSystem array-format project hooks in default stop before shell despite allow and failOnError=false`, même fichier |
+| Bash tamponné / streaming, acteurs reconnus | Interne `confirmDesktopCommand` puis `confirmHostEffect`, avant sandbox ; normalisation littérale conservatrice | `buffered desktop command %s cannot reach sandbox after refusal`, `streaming desktop command %s cannot reach sandbox after refusal`, `tests/tools/bash-desktop-human-guard.test.ts` |
+
+La reconnaissance Bash n’est pas un confinement de scripts arbitraires. Les
+tests utilisent des canaris bornés pour les hooks et des acteurs remplacés pour
+le bureau ; ils ne prouvent pas un geste physique ni l’isolation X11/Wayland.

@@ -2,6 +2,7 @@
 
 ### Sécurité
 
+- Le gestionnaire de hooks de cycle de vie utilisé par l’agent exige aussi une confirmation humaine forcée pour les hooks au format tableau, commandes, scripts et handlers ; un refus arrête les hooks même avec `failOnError:false`. Les anciens lanceurs de hooks sont également gardés. Les quatre commandes MCP de contrôle du bureau demandent une confirmation par appel avant initialisation native ; leur drapeau d’exposition ne les autorise pas. Bash reconnaît aussi `xte`, `wtype` et les noms littéraux avec guillemets ou échappements. Les programmes arbitraires restent hors de cette reconnaissance.
 - Les mutations de `computer_control` demandent désormais un humain dans l’exécuteur, y compris glisser, frapper, relâcher une touche, focaliser, annuler et exécuter une macro ; les lectures ciblant une fenêtre sont également gardées. Les règles de projet, modes automatiques et préautorisations utilisateur ne retirent plus cette confirmation. Les observations et simulations restent disponibles, les refus restent contraignants.
 - Les hooks de projet, connexions MCP des deux clients, macros Office et commandes de bureau reconnues par Bash passent par une confirmation humaine forcée avant lancement. Les hooks synchrones de compactage sont ignorés faute de pouvoir attendre cette confirmation. Le fournisseur Linux utilise des arguments séparés, nut.js refuse les touches inconnues et le schéma utilisateur conserve les politiques de bureau valides. Cette protection ne confine pas les effets de tout programme arbitraire.
 

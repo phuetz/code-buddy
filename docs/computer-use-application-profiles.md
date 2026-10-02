@@ -23,8 +23,8 @@ Profiles live in `src/tools/application-profiles.ts`.
 ## Safety Model
 
 Read-only actions can run autonomously. Mutating desktop actions create harness
-metadata and proof artifacts. Sensitive actions and high-risk profile actions
-require a fresh human decision through `ConfirmationService`, or
+metadata and proof artifacts. Every live mutation
+requires a fresh human decision through `ConfirmationService`, or
 `simulateOnly: true` for a dry-run. The confirmation names the application and
 the action's risk level. Without an interactive terminal or approval bridge,
 the action fails closed. Session approvals, YOLO, `dontAsk`,
@@ -39,8 +39,8 @@ Human decisions are audited by `ConfirmationService`.
 Optional per-action policies come only from host settings:
 `.codebuddy/settings.json` (project) or `~/.codebuddy/user-settings.json`
 (user). Project entries can tighten policy with `block` or `confirm`;
-project `allow` entries are ignored with a warning. Only user-level settings
-can preauthorize an action:
+project `allow` entries are ignored with a warning. Neither user nor project
+settings can waive the mandatory mutation confirmation:
 
 ```json
 {
@@ -50,14 +50,15 @@ can preauthorize an action:
 }
 ```
 
-Values are `confirm`, `block`, or `allow`. An explicit user-level `allow`
-preauthorizes that action; use it only when the user intends to waive its action
-gate. Project restrictions take precedence over user authorization.
+Values are `confirm`, `block`, or `allow`. A user-level `allow` can remove
+an optional policy prompt for an observation, but never the mandatory mutation
+gate or the gate for an observation that targets a window. A user or project
+`block` remains binding; a project entry cannot replace a user `block`.
 Unrecognized configured values require confirmation. Tool arguments never
 change these policies. These settings files must be maintained by the user;
 this change does not protect them from other tools that can edit files.
-The classification covers recognized dangerous actions, keystrokes and observed
-controls; it cannot infer every application's behavior from its accessible label.
+The catalogue covers every exposed action; observed labels are advisory and
+never authorize a mutation. It cannot infer every application's behavior from its accessible label.
 Dry-run exports and macro writes skip their filesystem effects as well as their
 actuators. Proof/audit metadata can still be recorded during simulation.
 
@@ -110,18 +111,32 @@ inventory and proof tests are listed in [desktop-action-guards.md](desktop-actio
 
 Other entry points covered by this guard:
 
-- Project hook handlers require human approval before execution. Hook variables
-  travel through the process environment rather than shell-source substitution;
-  quote them in POSIX commands (for example, `"$FILE"`). Windows commands use
-  their native environment syntax (`%FILE%`). Synchronous `pre_compact` commands
-  are skipped because that boundary cannot await a fresh human decision.
+- Project hook handlers require forced human approval before execution: both
+  the event-keyed `UserHooksManager` format (`{"hooks":{"PreToolUse":[…]}}`)
+  and the array format used by the production `HooksManager`
+  (`{"hooks":[{"type":"before-tool-call","command":"…"}]}`). Commands, scripts,
+  and custom lifecycle handlers are guarded; a refusal aborts even with
+  `failOnError:false`. The older `HookManager` and `HookSystem` shell launchers
+  also require approval. `UserHooksManager` passes variables through the process
+  environment; quote them in POSIX commands (for example, `"$FILE"`). Other
+  managers retain their existing command-template conventions. Synchronous
+  `pre_compact` commands are skipped because they cannot await approval.
 - Both MCP clients require human approval before connecting, including stdio
   process startup and reconnects. Without an approval channel, connection fails.
+- MCP server `desktop_click`, `desktop_type`, `desktop_key`, and
+  `desktop_move_mouse` require a forced human decision before native initialization
+  on each call, even when `CODEBUDDY_MCP_DESKTOP_CONTROL=1` exposes them. That flag
+  controls registration and does not grant approval. `desktop_screenshot` and
+  `desktop_snapshot` remain observations. Project permissions cannot grant the
+  internal approval; no approval channel means no actuation.
 - Windows `office_macro_execute` requires approval before writing/running its
   script. The application/type are validated and PowerShell uses separate argv.
 - Buffered and streaming Bash require approval before dispatching recognized
   desktop commands (`xdotool`, `ydotool`, `dotool`, `wmctrl`, `cliclick`,
-  `osascript`), including before the sandbox path.
+  `osascript`, `xte`, `wtype`), including before the sandbox path. Literal quote
+  concatenation and backslash escaping are checked conservatively as well as the
+  raw command (for example, `xdo'to'ol`). This is not shell evaluation; dynamic
+  executable names and opaque scripts remain outside this recognition guarantee.
 
 These are entry-point guards, not a confinement guarantee for arbitrary programs:
 an opaque shell/Python script, a trusted extension or another tool can have desktop
@@ -141,7 +156,7 @@ Generic desktop controls now cover more than buttons and fields:
 
 Notepad no longer relies on `Ctrl+S` for the proof test. `save_app_document`
 reads the targeted Notepad editor through UIAutomation and writes the explicit
-`filePath` after human confirmation or explicit host authorization. This avoids
+`filePath` after human confirmation. This avoids
 sending a global save hotkey into whichever app the user happens to be using.
 
 Excel write/save operations are treated as high risk:
