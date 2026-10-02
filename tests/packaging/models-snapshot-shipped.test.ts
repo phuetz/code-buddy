@@ -1,17 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-
-const root = resolve(import.meta.dirname, '../..');
+import { copyBundledAssets } from '../../scripts/copy-bundled-skills.mjs';
 import { writeRuntimeManifest, verifyRuntimeManifest } from '../../scripts/write-runtime-manifest.mjs';
 
+const root = resolve(import.meta.dirname, '../..');
+
 describe('models snapshot packaging', () => {
-  it('ships the same model snapshot in dist as in src', () => {
-    const source = join(root, 'src/config/models-snapshot.json');
-    const shipped = join(root, 'dist/config/models-snapshot.json');
-    expect(existsSync(shipped)).toBe(true);
-    expect(readFileSync(shipped)).toEqual(readFileSync(source));
+  it('copies the snapshot for a fresh package build without requiring a prebuilt dist', () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'codebuddy-snapshot-copy-'));
+    try {
+      mkdirSync(join(fixture, 'src/skills/bundled'), { recursive: true });
+      mkdirSync(join(fixture, 'src/config'), { recursive: true });
+      writeFileSync(join(fixture, 'src/skills/bundled/example.skill.md'), '# example\n');
+      const source = readFileSync(join(root, 'src/config/models-snapshot.json'));
+      writeFileSync(join(fixture, 'src/config/models-snapshot.json'), source);
+      copyBundledAssets(fixture);
+      expect(readFileSync(join(fixture, 'dist/config/models-snapshot.json'))).toEqual(source);
+      expect(readFileSync(join(fixture, 'dist/skills/bundled/example.skill.md'), 'utf8')).toBe('# example\n');
+      const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+        files: string[];
+        scripts: { build: string };
+      };
+      expect(packageJson.scripts.build).toContain('node scripts/copy-bundled-skills.mjs');
+      expect(packageJson.files).toContain('dist');
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it('fails the build copy when the source snapshot is missing', () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'codebuddy-snapshot-missing-'));
+    try {
+      mkdirSync(join(fixture, 'src/skills/bundled'), { recursive: true });
+      expect(() => copyBundledAssets(fixture)).toThrow();
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
   });
 
   it('rejects an attested package when its snapshot is absent', () => {

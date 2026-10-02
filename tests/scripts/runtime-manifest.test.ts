@@ -193,10 +193,12 @@ describe('npm runtime self-attestation', () => {
       description: 'identity fixture',
     }));
     fs.mkdirSync(path.join(root, 'dist', 'desktop'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'dist', 'config'), { recursive: true });
     fs.writeFileSync(
       path.join(root, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
       'export const identity = true;\n',
     );
+    fs.writeFileSync(path.join(root, 'dist', 'config', 'models-snapshot.json'), '{}');
     execFileSync(process.execPath, [script, '--root', root], { stdio: 'pipe' });
     fs.writeFileSync(packagePath, JSON.stringify({
       name: '@phuetz/code-buddy',
