@@ -212,6 +212,24 @@ export async function evaluateShellExecution(
     return { ...evaluation, action: 'ask', reason: policyResult.reason };
   }
 
+  const grants = shellCapabilities();
+  const withoutPrompt = getPermissionModeManager().getMode() === 'dontAsk';
+  // A routine's builtin sandbox classification must not bypass the narrower
+  // explicit test grant (for example npm --prefix or --script-shell).
+  if (withoutPrompt && grants.has('tests')
+    && evaluation.segmentEvaluations.some((segment, index) =>
+      segment.matchedRule?.id === 'builtin-pkg-routines'
+      && evaluation.parsedSegments[index]?.[0] === 'npm'
+      && !capabilityAllowsSegment(evaluation.parsedSegments[index] ?? [], grants))) {
+    return { ...evaluation, action: 'ask', capabilityRefusal: 'CAPABILITY_DENIED: npm configuration flags are outside the test capability. Use npm test -- <runner arguments> or npm run <approved script> -- <runner arguments>; changing npm scope or script shell requires separate approval.' };
+  }
+  if (evaluation.action === 'ask' && withoutPrompt && grants.has('tests')
+    && evaluation.segmentEvaluations.some((segment, index) => segment.action === 'ask'
+      && segment.matchedRule?.id === 'builtin-system-boundary'
+      && ['kill', 'killall', 'pkill'].includes(evaluation.parsedSegments[index]?.[0] ?? ''))) {
+    return { ...evaluation, capabilityRefusal: 'CAPABILITY_DENIED: signalling processes is outside the test capability. Run tests in the foreground and inspect their actual output; do not assume a background test exists. No process was signalled.' };
+  }
+
   if (evaluation.action === 'ask' && scopedCapabilityAllows(evaluation)) {
     return { ...evaluation, action: 'sandbox', reason: 'Explicit mission capability; workspace confinement remains enforced' };
   }
@@ -255,11 +273,14 @@ export async function evaluateShellExecution(
     };
   }
   if (evaluation.action === 'ask' && getPermissionModeManager().getMode() === 'dontAsk'
-    && shellCapabilities().has('npm-registry')
+    && (grants.has('npm-registry') || grants.has('tests'))
     && evaluation.segmentEvaluations.some((segment, index) => segment.action === 'ask'
       && segment.matchedRule?.id === 'builtin-pkg-managers'
       && !capabilityAllowsSegment(evaluation.parsedSegments[index] ?? []))) {
-    return { ...evaluation, capabilityRefusal: 'CAPABILITY_DENIED: npm operation is outside the granted registry capability. Lock resolution: npm install --package-lock-only --ignore-scripts. Audit: npm audit --json. Full install and new external sources require separate approval; do not change HOME or permissions.' };
+    const alternatives = grants.has('npm-registry')
+      ? 'Lock resolution: npm install --package-lock-only --ignore-scripts. Audit: npm audit --json.'
+      : 'Tests: npm test -- <runner arguments> or npm run <approved script> -- <runner arguments>.';
+    return { ...evaluation, capabilityRefusal: `CAPABILITY_DENIED: npm operation is outside the granted capability. ${alternatives} Full install and new external sources require separate approval; do not change HOME or permissions.` };
   }
   if (evaluation.action === 'ask' && getPermissionModeManager().getMode() === 'dontAsk'
     && shellCapabilities().has('git-local')

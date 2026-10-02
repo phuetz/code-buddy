@@ -33,3 +33,22 @@ it('classe le checkout refusé du replay B sans demander de terminal', async () 
   expect(decision.capabilityRefusal).toContain('git add');
   expect(decision.capabilityRefusal).toContain('git show');
 });
+
+it('refuse le pkill imaginé dans B-35b-5 sans accorder un signal global ni arrêter la mission', async () => {
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'tests,git-local,npm-registry');
+  getPermissionModeManager().setMode('dontAsk');
+  const decision = await evaluateShellExecution('pkill -f "vitest.*slash-exit-handler" 2>/dev/null; sleep 1; echo "killed"', process.cwd());
+  expect(decision.action).toBe('ask');
+  expect(decision.capabilityRefusal).toContain('CAPABILITY_DENIED');
+  expect(decision.capabilityRefusal).toContain('foreground');
+  expect(decision.capabilityRefusal).not.toContain('interactive terminal');
+});
+
+it('les tests seuls refusent une option npm de portée avec les arguments autorisés du script', async () => {
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'tests');
+  getPermissionModeManager().setMode('dontAsk');
+  const decision = await evaluateShellExecution('npm test --prefix=/other/project', process.cwd());
+  expect(decision.action).toBe('ask');
+  expect(decision.capabilityRefusal).toContain('CAPABILITY_DENIED');
+  expect(decision.capabilityRefusal).toContain('npm test --');
+});
