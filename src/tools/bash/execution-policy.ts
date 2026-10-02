@@ -261,6 +261,13 @@ export async function evaluateShellExecution(
       && !capabilityAllowsSegment(evaluation.parsedSegments[index] ?? []))) {
     return { ...evaluation, capabilityRefusal: 'CAPABILITY_DENIED: npm operation is outside the granted registry capability. Lock resolution: npm install --package-lock-only --ignore-scripts. Audit: npm audit --json. Full install and new external sources require separate approval; do not change HOME or permissions.' };
   }
+  if (evaluation.action === 'ask' && getPermissionModeManager().getMode() === 'dontAsk'
+    && shellCapabilities().has('git-local')
+    && evaluation.segmentEvaluations.some((segment, index) => segment.action === 'ask'
+      && segment.matchedRule?.id === 'builtin-git-boundary'
+      && !capabilityAllowsSegment(evaluation.parsedSegments[index] ?? []))) {
+    return { ...evaluation, capabilityRefusal: 'CAPABILITY_DENIED: Git operation is outside the granted git-local capability (git add and git commit only). Read existing content with git show and apply workspace edits through the granted file tools. Checkout, restore, reset and publication require separate approval.' };
+  }
   return evaluation;
 }
 

@@ -23,3 +23,13 @@ it('explique le npm install du replay 35B comme capacité refusée avec une alte
   expect(decision.capabilityRefusal).toContain('CAPABILITY_DENIED');
   expect(decision.capabilityRefusal).toContain('npm install --package-lock-only --ignore-scripts');
 });
+
+it('classe le checkout refusé du replay B sans demander de terminal', async () => {
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'tests,git-local,npm-registry');
+  getPermissionModeManager().setMode('dontAsk');
+  const decision = await evaluateShellExecution('git checkout package-lock.json', process.cwd());
+  expect(decision.action).toBe('ask');
+  expect(decision.capabilityRefusal).toContain('CAPABILITY_DENIED');
+  expect(decision.capabilityRefusal).toContain('git add');
+  expect(decision.capabilityRefusal).toContain('git show');
+});
