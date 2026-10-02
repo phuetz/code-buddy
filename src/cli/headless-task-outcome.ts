@@ -22,20 +22,50 @@ export interface HeadlessTaskOutcome {
   checks: Array<{ tool: string; command?: string; success: boolean; required?: boolean }>;
 }
 
-/** The CLI reports evidence of completion, never infers execution from prose. */
-export function requestsRepositoryAction(prompt: string): boolean {
+/** Independent clauses carry independent obligations; unknown imperatives stay closed. */
+function repositoryActionClauses(prompt: string): string[] {
   const text = prompt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
     .replace(/^(?:please|can you|could you|peux-tu|pourrais-tu|s'il te plait)\s+/, '');
+  // Apostrophes inside words are not quote delimiters. Keep a physical-target
+  // marker for quoted paths so output formatting cannot hide a requested file.
+  const unquoted = text.replace(/`[^`]*`|"[^"\n]*"|(?<![\w])'[^'\n]*'/g, quoted =>
+    /[\w/-]+\.[a-z0-9]+\b/.test(quoted) ? 'file_target ' + (/agents\.md/.test(quoted) ? 'agents' : '') : 'quoted');
+  const operational = '(?:fix|repair|refactor|scaffold|resolve|build|write|delete|replace|edit|change|create|run|execute|implement|add|remove|update|make|ensure|correct|modify|prepare|deploy|install|configure|start|stop|set|patch|rewrite|use|synchronize|rework|return|corrige|repare|refactorise|remplace|ecris|execute|modifie|cree|lance|ajoute|supprime|mets|installe|demarre|rends|fais|reecris)';
+  const boundaries = new RegExp('[?!;\\n]\\s*|\\.(?=\\s|$)\\s*|\\b(?:then|puis|ensuite|but|mais)\\s+|(?:,\\s*|\\b(?:and|et)\\s+)(?=(?:please\\s+)?' + operational + '\\b)', 'g');
+  const clauses = unquoted.split(boundaries).map(clause => clause.trim().replace(/^(?:please|then|puis|ensuite|and|et)\s+/, '')).filter(Boolean);
   const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|show|list|what|where|which|count|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|montre|liste|quel|quelle|quels|quelles|ou|combien|comment|pourquoi|reponds|dis|traduis)\b/;
-  const compoundAction = /\b(?:and|et|puis|then|ensuite)\s+(?:please\s+)?(?:fix|repair|refactor|scaffold|resolve|build|write|delete|replace|edit|change|create|run|execute|implement|add|remove|update|make|ensure|correct|modify|prepare|deploy|install|configure|start|stop|corrige|repare|refactorise|remplace|ecris|execute|modifie|cree|lance|ajoute|supprime|mets|installe|demarre|rends|fais)\b/.test(text)
-    || [...text.matchAll(/\b(?:then|puis|ensuite)\s+(?:please\s+)?(\S+)/g)].some(match => !informational.test(match[1]!));
-  if (!compoundAction && informational.test(text)) return false;
-  if (/^(?:hi|hello|hey|bonjour|salut)[!.?]*$/.test(text)) return false;
-  if (/^write (?:a |an )?(?:poem|story|essay|email|sql query)\b/.test(text) && !compoundAction) return false;
-  // An ambiguous request is not evidence that this is merely a conversation.
-  // Fail closed: only an explicit informational request can succeed without
-  // an action. This also covers imperative languages not in the verb list.
-  return true;
+  const outputConstraint = (clause: string) => {
+    if (/^(?:follow|respect|obey|applique|respecte|suis)\b/.test(clause)
+      && /\b(?:format|rules?|instructions?|agents|reading|lecture|consignes?)\b/.test(clause)) return true;
+    if (/^(?:no|without)\s+(?:extra\s+)?(?:commentary|chatter|prose|explanation)(?:\s+(?:afterwards|afterward|please))?$/.test(clause)) return true;
+    const outputVerb = /\b(?:write|use|output|return|ecris|utilise|renvoie|affiche)\b/.test(clause);
+    const outputObject = /\b(?:answers?|repl(?:y|ies)|response|text|sentence|names?|values?|numerals?|numbers?|json|reponse|texte|phrase|nom|valeur|chiffre)\b/.test(clause);
+    const physical = /\b(?:file_target|files?|folders?|director(?:y|ies)|source|module|script|function|implementation|parameters?|code|fichiers?|dossiers?|parametres?)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause);
+    // Applying a reading layout is presentation; an unrelated physical target
+    // remains an action. AGENTS.md is the source of the rule, not a write target.
+    const presentation = /\b(?:format|layout|header|en-tete|presentation)\b/.test(clause);
+    const presentationTarget = clause.replace(/\bagents\.md\b/g, 'agents');
+    const writesTarget = /\b(?:file_target|files?|folders?|director(?:y|ies)|source|module|script|function|implementation|parameters?|code|fichiers?|dossiers?|parametres?)\b|[\w/-]+\.[a-z0-9]+\b/.test(presentationTarget);
+    if (/^(?:use|utilise)\b/.test(clause) && presentation && !writesTarget) return true;
+    return outputVerb && (outputObject || /\b(?:only|alone|just)\b/.test(clause)) && !physical;
+  };
+  return clauses.filter((clause, index) => {
+    if (/^(?:after|before|apres|avant)\b/.test(clause) && clauses[index + 1] && outputConstraint(clauses[index + 1]!)) return false;
+    if (/^(?:do not|don't|never|ne\b.*\bpas)\b/.test(clause)) return false;
+    if (outputConstraint(clause)) return false;
+    if (informational.test(clause)) return false;
+    if (/^(?:hi|hello|hey|bonjour|salut)$/.test(clause)) return false;
+    if (/^write (?:a |an )?(?:poem|story|essay|email|sql query)\b/.test(clause)
+      && !/\bfile_target\b/.test(clause)) return false;
+    // Fail closed for every other independent clause, without looking up the
+    // unfamiliar verb in an imperative whitelist or a benchmark prompt.
+    return true;
+  });
+}
+
+/** The CLI reports evidence of completion, never infers execution from prose. */
+export function requestsRepositoryAction(prompt: string): boolean {
+  return repositoryActionClauses(prompt).length > 0;
 }
 
 function argumentsOf(entry: TaskEvidenceEntry): Record<string, unknown> {
@@ -136,12 +166,22 @@ function inspection(command: string): boolean {
     && (part.connector === null || part.connector === '&&'));
 }
 
+/** A runner must actually be the executable, not a word in a read/echo. */
+function executesCheck(command: string, testsOnly = false): boolean {
+  const parsed = parseBashCommand(shellCheckScope(command).body);
+  const first = parsed.commands[0];
+  if (parsed.warnings.length || !first || first.isSubshell) return false;
+  if (!['npm', 'pnpm', 'yarn', 'bun', 'npx', 'node', 'vitest', 'jest', 'eslint', 'tsc', 'pytest', 'cargo', 'go', 'dotnet', 'just'].includes(first.command)) return false;
+  if (['node', 'bun'].includes(first.command) && first.args.some(arg => ['-e', '--eval', '-p', '--print'].includes(arg))) return false;
+  return (testsOnly ? /\b(?:test|tests|vitest|jest|pytest)\b/ : /\b(?:test|tests|lint|eslint|vitest|jest|tsc|pytest|check|typecheck|validate)\b/).test(first.raw);
+}
+
 /** Hermes agent/verification_stop.py inspired this independently written evidence check. */
 export function unsupportedActionClaims(response: string, entries: readonly TaskEvidenceEntry[]): string[] {
   const editedPaths = new Set<string>();
   const createdPaths = new Set<string>();
   const commands = new Set<string>();
-  const observed = { edit: false, create: false, run: false, tests: false, testRun: false };
+  const observed = { edit: false, create: false, run: false, tests: false, testRun: false, verification: false, lint: false };
   for (const entry of entries) {
     if (entry.type !== 'tool_result' || !entry.toolCall || !entry.toolResult?.success) continue;
     const name = TOOL_ALIASES[entry.toolCall.function.name] ?? entry.toolCall.function.name;
@@ -168,8 +208,13 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
       if (name === 'apply_patch') for (const match of String(args.patch ?? args.input ?? '').matchAll(/\*\*\* Add File: ([^\n]+)/g)) createdPaths.add(match[1]!.trim());
     }
     observed.run ||= ['bash', 'test_runner', 'lint_project'].includes(name);
-    observed.testRun ||= (name === 'test_runner' || name === 'bash' && /\b(?:test|tests|vitest|jest|pytest)\b/.test(command)) && !hasRedVerification(entry, name, command);
-    observed.tests ||= (name === 'test_runner' || name === 'bash' && /\b(?:test|tests|vitest|jest|pytest)\b/.test(command))
+    observed.lint ||= (name === 'lint_project' || name === 'bash' && executesCheck(command)
+      && /\b(?:lint|eslint)\b/.test(command)) && !hasRedVerification(entry, name, command);
+    observed.verification ||= (['test_runner', 'lint_project'].includes(name)
+      || name === 'bash' && executesCheck(command))
+      && !inspection(command) && !hasRedVerification(entry, name, command);
+    observed.testRun ||= (name === 'test_runner' || name === 'bash' && executesCheck(command, true)) && !hasRedVerification(entry, name, command);
+    observed.tests ||= (name === 'test_runner' || name === 'bash' && executesCheck(command, true))
       && !hasRedVerification(entry, name, command) && completedGreen(entry);
   }
   // Quoted examples, fenced code, explicit negation and future advice are not
@@ -179,25 +224,78 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
   for (const rawSentence of text.split(/(?<=[.!?])\s+|[;\n]|,\s*(?=i\b|j'ai\b|nous avons\b|we\b)|\b(?:but|and|mais|et)\s+(?=i\b|j'ai\b|nous avons\b|we\b)/i)) {
     const sentence = rawSentence.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     if (/^\s*(?:the documentation says|documentation says|example|exemple)\s*:/.test(sentence)) continue;
-    // A cognitive act or a reading attempt is not an execution claim. Match
-    // objects, not just past-tense verbs (Hermes verification-stop inspiration).
-    const cognitive = /\b(?:ran (?:into|the risk|a quick scan)|created (?:a |the )?mental model|modified (?:my |our )?understanding|lance (?:une analyse du code|la lecture de)|execute les instructions mentalement)\b/.test(sentence);
-    if (cognitive) continue;
-    const paths = [...rawSentence.matchAll(/(?:[\w-]+\/)*[\w-]+\.(?:[cm]?[jt]sx?|py|rs|go|json|md|txt|ya?ml|toml)\b/g)].map(match => match[0]);
-    const targetsObserved = (observedPaths: Set<string>) => paths.every(file => [...observedPaths].some(actual => actual === file || actual.endsWith('/' + file)));
-    const executionObject = /\b(?:npm|pnpm|yarn|bun|node|pytest|vitest|jest|cargo|go test|tests?|command|commande|script|ls|pwd|bash)\b/.test(sentence) || /`[^`]+`/.test(sentence);
-    const literalCommands = [...rawSentence.matchAll(/`([^`]+)`/g)].map(match => match[1]!.trim());
-    literalCommands.push(...[...rawSentence.matchAll(/\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+[\w:-]+|test|build|install)\b/g)].map(match => match[0]));
-    const commandsObserved = literalCommands.every(command => [...commands].some(actual => actual === command));
     // Negation/advice frames the asserted action only when it precedes it.
-    // A later 'not documented' must not erase a concrete past-tense claim.
     const assertionStart = sentence.search(/\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+|\b(?:all |les |tous les )?tests?\s+/);
     const framing = assertionStart < 0 ? sentence : sentence.slice(0, assertionStart);
     if (/\b(?:not|never|cannot|can't|didn't|haven't|will|would|should|could|if|ne|pas|jamais|vais|devrais|pourrais|si)\b/.test(framing)
       || /\bthe command i ran earlier was not executed by me\b/.test(sentence)) continue;
-    if (/\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+(?:successfully\s+)?(?:edited|modified|changed|updated|fixed|modifie|corrige|remplace|mis a jour)\b/.test(sentence) && (!observed.edit || !targetsObserved(editedPaths))) claims.add('edit');
-    if (/\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+(?:successfully\s+)?(?:created|written|cree|ecrit)\b/.test(sentence) && (!observed.create || !targetsObserved(createdPaths))) claims.add('create');
-    if (/\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+(?:successfully\s+)?(?:ran|executed|launched|run|lance|execute)\b/.test(sentence) && executionObject && (!observed.run || !commandsObserved || /\b(?:test|tests|vitest|jest|pytest)\b/.test(sentence) && !observed.testRun)) claims.add('run');
+    // Classify the grammatical object, not a list of complete benchmark
+    // sentences. A summary/interpretation can be composed in the answer;
+    // an on-disk target or an operational completion always requires tools.
+    // Independently written, inspired by Hermes' verification-stop boundary.
+    const assertions = [...sentence.matchAll(/(?:\b(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+|\b(?:and|then|et|puis)\s+(?:(?:i(?:'ve| have)?|we(?:'ve| have)?|j'ai|nous avons)\s+)?|^\s*)(?:successfully\s+)?(edited|modified|changed|updated|fixed|created|written|ran|executed|launched|started|run|modifie|corrige|remplace|mis a jour|cree|ecrit|lance|execute|demarre)\b/g)];
+    for (const [index, assertion] of assertions.entries()) {
+      const verb = assertion[1]!;
+      // Bare imperative "Run ..." is advice, unlike past-tense "Ran ...".
+      if (verb === 'run' && !/\b(?:i|we)\b/.test(assertion[0])) continue;
+      const objectStart = assertion.index! + assertion[0].length;
+      const objectEnd = assertions[index + 1]?.index ?? sentence.length;
+      const object = sentence.slice(objectStart, objectEnd)
+        .split(/\s+\b(?:but|mais|after|while|when|apres|pendant)\b|\b(?:and|et)\s+(?=(?:reading|read|checked|inspected|lecture|lu)\b)/)[0]!.trim();
+      // Map normalized offsets back to the original spelling (including case).
+      // Incidental reading after an assertion is not an edit/run target.
+      const offsets: number[] = [];
+      let rawOffset = 0;
+      for (const character of rawSentence) {
+        const normalized = character.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        for (let i = 0; i < normalized.length; i++) offsets.push(rawOffset);
+        rawOffset += character.length;
+      }
+      const rawObject = rawSentence.slice(offsets[objectStart] ?? rawSentence.length, offsets[objectEnd] ?? rawSentence.length)
+        .split(/\s+\b(?:but|mais|after|while|when|après|pendant)\b|\b(?:and|et)\s+(?=(?:reading|read|checked|inspected|lecture|lu)\b)/i)[0]!;
+      const paths = [...rawObject.matchAll(/(?:[\w-]+\/)*[\w-]+\.(?:[cm]?[jt]sx?|py|rs|go|json|md|txt|ya?ml|toml)\b/g)].map(match => match[0]);
+      const targetsObserved = (observedPaths: Set<string>) => paths.every(file => [...observedPaths].some(actual => actual === file || actual.endsWith('/' + file)));
+      const literalCommands = [...rawObject.matchAll(/`([^`]+)`/g)].map(match => match[1]!.trim());
+      literalCommands.push(...[...rawObject.matchAll(/\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+[\w:-]+|test|build|install)\b/g)].map(match => match[0]));
+      const commandsObserved = literalCommands.every(command => [...commands].some(actual => actual === command));
+      const head = object.replace(/^(?:(?:a|an|the|my|our|initial|brief|quick|mental|all|existing|project|tous|toutes|une?|les?|la|des|mon|ma|mes|notre|nos|premiere?)\s+)*/, '').replace(/^l'/, '').replace(/^through\s+(?:the\s+)?/, '');
+      if (/^(?:into|across|out of)\b/.test(head) && !/^[\w./-]+\.[a-z0-9]+\b|^[\w.-]+\//.test(head)) continue;
+      const abstract = /^(?:overview|summary|outline|explanation|interpretation|understanding|hypothesis|notes?|list|risk|scan|analysis|reading|search|reasoning|logic|flow|walk-through|resume|apercu|liste|analyse|lecture|recherche|raisonnement|interpretation|hypothese)\b/.test(head);
+      const physicalHead = /^[\w./-]+\.[a-z0-9]+\b|^[\w.-]+\//.test(head)
+        || /\b(?:files?|folders?|director(?:y|ies)|documents?|scripts?|modules?|tools?|services?|servers?|apps?|components?|classes?|functions?|programs?|packages?|generators?|utilities|pipelines?|endpoints?|fichiers?|dossiers?)\b/.test(head.split(/\b(?:of|de|about|sur)\b/)[0]!);
+      const physicalDestination = /\b(?:in|to|as|dans|vers)\s+[`"']?(?:[\w-]+\/)*[\w-]+\.[a-z0-9]+\b/.test(object);
+      if (!physicalHead && !physicalDestination && (abstract || /^model\b/.test(head) && /\bmental(?:ly|ement)?\b/.test(object) || /^(?:into|across|out of)\b/.test(head)
+        || /^instructions?\b/.test(head) && /\bmentalement\b/.test(object))) continue;
+      if (/^(?:edited|modified|changed|updated|fixed|modifie|corrige|remplace|mis a jour)$/.test(verb)
+        && (!observed.edit || !targetsObserved(editedPaths))) claims.add('edit');
+      if (/^(?:created|written|cree|ecrit)$/.test(verb)
+        && (!observed.create || !targetsObserved(createdPaths))) claims.add('create');
+      if (/^(?:ran|executed|launched|started|run|lance|execute|demarre)$/.test(verb)) {
+        // No executable whitelist: even an unfamiliar validator or server
+        // counts as an operational claim. Evidence for `ls` cannot attest it.
+        const operation = head.replace(/[`"']/g, '').replace(/\s+(?:successfully|avec succes).*$/, '').replace(/[.!?]+$/, '').trim();
+        const stem = (word: string) => ['linter', 'eslint'].includes(word) ? 'lint' : word.replace(/s$/, '');
+        const words = operation.split(/[^\w-]+/).filter(Boolean).map(stem);
+        const generic = /^(?:commands?|commandes?|scripts?)$/.test(operation);
+        const test = /\btests?\b|\btest suite\b/.test(operation);
+        const verification = /\b(?:checks?|validation|controles?|verifications?)\b/.test(operation);
+        const linter = /^(?:lint|linter|eslint)$/.test(operation);
+        const corresponding = generic || linter && observed.lint || test && observed.testRun || verification && observed.verification || [...commands].some(command => {
+          const parsed = parseBashCommand(shellCheckScope(command).body);
+          if (parsed.warnings.length || parsed.commands.some(part => part.isSubshell)) return false;
+          return parsed.commands.some(part => {
+            // An inspection or an echo can mention a build/server without
+            // executing it. A syntax-only node check cannot start a server.
+            if (['cat', 'ls', 'pwd', 'echo', 'head', 'tail', 'grep', 'rg', 'sed'].includes(part.command)
+              && stem(part.command) !== words[0]) return false;
+            if (/^(?:started|demarre)$/.test(verb) && /(?:^|\s)(?:--check|-c)(?:\s|$)/.test(part.raw)) return false;
+            const actual = part.raw.split(/[^\w-]+/).filter(Boolean).map(stem);
+            return words.length > 0 && words.every(word => actual.includes(word));
+          });
+        });
+        if (!observed.run || !commandsObserved || !corresponding || test && !observed.testRun) claims.add('run');
+      }
+    }
     if (/\b(?:tests? (?:all )?(?:pass(?:ed)?|passent|reussis|verts)|(?:all|les|tous les) tests? (?:have )?(?:pass(?:ed)?|passent|reussi)|test suite (?:passed|is green))\b/.test(sentence) && !observed.tests) claims.add('tests');
   }
   return [...claims];
@@ -223,9 +321,12 @@ export function evaluateHeadlessTaskOutcome(
     const execution = name === 'bash' || name === 'lint_project' || name === 'test_runner';
     const write = metadata?.category === 'file_write'
       && !(name === 'str_replace_editor' && /^(?:view|read)$/.test(String(args.command)));
-    if (entry.toolResult.success && (write || execution || name === 'scaffold_app')) actionTools.push(name);
     const hostShell = name === 'bash' ? runtimeShell(entry) : undefined;
     const rawCommand = hostShell?.command ?? (typeof (args.command ?? args.cmd) === 'string' ? String(args.command ?? args.cmd).trim() : undefined);
+    const inspected = name === 'bash' && rawCommand && inspection(rawCommand);
+    const inspectionName = inspected ? parseBashCommand(shellCheckScope(rawCommand).body).commands[0]?.command : undefined;
+    const explicitlyRequestedInspection = inspectionName && new RegExp('\\b(?:run|execute|lance|lancer)\\b[^.!?;\\n]*\\b' + inspectionName + '\\b', 'i').test(prompt);
+    if (entry.toolResult.success && (write || execution && (!inspected || explicitlyRequestedInspection) || name === 'scaffold_app')) actionTools.push(name);
     if (entry.toolResult.success && (write || name === 'bash' && !!hostShell?.changedFiles?.length)) lastWrite = sequence;
     if (execution) {
       const command = rawCommand;
@@ -238,8 +339,7 @@ export function evaluateHeadlessTaskOutcome(
       const checkBody = shellCheckScope(observedEcho?.command ?? command ?? '').body.replace(/\s*2>&1\s*$/, '').trim();
       const unfilteredStatus = !/[;&|<>$`\n]/.test(checkBody) && (!observedEcho || observedEcho.code === 0);
       if (success && (completedGreen(entry) || unfilteredStatus) && (name === 'test_runner' || name === 'bash'
-        && /\b(?:npm|pnpm|yarn|bun|npx|node|vitest|jest|pytest|cargo|go)\b/.test(command ?? '')
-        && /\b(?:test|tests|vitest|jest|pytest)\b/.test(command ?? ''))) lastGreen = sequence;
+        && executesCheck(command ?? '', true))) lastGreen = sequence;
       const identity = name === 'bash' ? checkIdentity(entry, command, success, prompt) : { command };
       const directory = identity.directory ?? hostShell?.cwd ?? (name === 'bash' ? shellDirectoryGeneration : args.cwd ?? args.root ?? args.directory ?? '');
       if (success && completedGreen(entry)) {
@@ -264,10 +364,13 @@ export function evaluateHeadlessTaskOutcome(
   if ([...checks.values()].some(check => !check.success && !(check.optionalRead && lastWrite > check.sequence))) reasons.push('verification_failed');
   if (requestsRepositoryAction(prompt) && actionTools.length === 0) reasons.push('no_action_executed');
   const actionRequested = requestsRepositoryAction(prompt);
-  const normalizedPrompt = prompt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const testRequest = actionRequested && /\b(?:run|execute|lance|relance|lancer)\b.*\btests?\b/.test(normalizedPrompt);
+  const actionClauses = repositoryActionClauses(prompt);
+  const normalizedPrompt = actionClauses.join(' ');
+  const testRequest = actionClauses.some(clause => /\b(?:run|execute|lance|relance|lancer|make|ensure|fais|rends|check|verify|verifie|controle)\b.*\btests?\b/.test(clause));
+  const executionRequest = /\b(?:run|execute|lance|lancer|start|stop|launch|build|install|deploy|demarre|arrete|installe)\b/.test(normalizedPrompt);
+  const verificationRequest = /\b(?:lint|eslint|typecheck|checks?)\b/.test(normalizedPrompt);
   if (testRequest && (lastGreen < 0 || lastGreen < lastWrite)) reasons.push('verification_missing');
-  const editRequest = actionRequested && !testRequest && (/\b(?:replace|edit|modify|change|refactor|remplace|modifie|ecris|cree|create|write)\b/.test(normalizedPrompt)
+  const editRequest = actionRequested && (!testRequest && !executionRequest && !verificationRequest || /\b(?:replace|edit|modify|change|update|set|implement|refactor|rewrite|delete|add|remove|remplace|modifie|ecris|cree|reecris|ajoute|supprime|create|write)\b/.test(normalizedPrompt)
     || /\b(?:fix|repair|corrige|repare)\b/.test(normalizedPrompt) && !/\b(?:tests?|lint|eslint|typecheck|checks?)\b/.test(normalizedPrompt));
   if (editRequest && lastWrite < 0) reasons.push('requested_edit_not_executed');
   const status = reasons.some(reason => reason !== 'no_action_executed') ? 'failed'
