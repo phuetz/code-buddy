@@ -133,6 +133,7 @@
     "electron-builder": "^26.8.1",
     "eslint": "^8.56.0",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "happy-dom": "20.14.5",
     "husky": "^9.1.7",
     "lint-staged": "16.4.0",
     "png-to-ico": "3.0.1",
