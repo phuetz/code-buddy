@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 /**
  * Text Editor Tool Adapters
  *
@@ -36,8 +37,16 @@ function resolveAgainstCwd(p: string, context?: IToolExecutionContext): string {
 
 // Lazy-loaded singleton for TextEditorTool
 let textEditorInstance: TextEditorTool | null = null;
+const editorContext = new AsyncLocalStorage<TextEditorTool>();
+
+export function withTextEditorAsync<T>(editor: TextEditorTool, fn: () => Promise<T>): Promise<T> {
+  return editorContext.run(editor, fn);
+}
+
 
 function getTextEditor(): TextEditorTool {
+  const scoped = editorContext.getStore();
+  if (scoped) return scoped;
   if (!textEditorInstance) {
     textEditorInstance = new TextEditorTool();
   }

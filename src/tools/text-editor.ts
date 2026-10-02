@@ -30,7 +30,9 @@ import { createHash } from 'crypto';
  */
 export class TextEditorTool implements Disposable {
   private editHistory: EditorCommand[] = [];
-  private confirmationService = ConfirmationService.getInstance();
+  private get confirmationService(): ConfirmationService {
+    return ConfirmationService.getInstance();
+  }
   private baseDirectory: string = process.cwd();
   private vfs = UnifiedVfsRouter.Instance;
 
@@ -263,6 +265,7 @@ export class TextEditorTool implements Disposable {
               filename: filePath,
               showVSCodeOpen: false,
               content: diffContent,
+              fileChange: { path: resolvedPath, oldText: content, newText: previewContent },
             },
             "file"
           );
@@ -386,6 +389,7 @@ export class TextEditorTool implements Disposable {
               filename: filePath,
               showVSCodeOpen: false,
               content: diffContent,
+              fileChange: { path: resolvedPath, oldText: null, newText: content },
             },
             "file"
           );
@@ -513,6 +517,7 @@ export class TextEditorTool implements Disposable {
               filename: filePath,
               showVSCodeOpen: false,
               content: diffContent,
+              fileChange: { path: resolvedPath, oldText: fileContent, newText: newLines.join('\n') },
             },
             "file"
           );
@@ -623,6 +628,7 @@ export class TextEditorTool implements Disposable {
               filename: filePath,
               showVSCodeOpen: false,
               content: diffContent,
+              fileChange: { path: resolvedPath, oldText: fileContent, newText: previewLines.join('\n') },
             },
             "file"
           );

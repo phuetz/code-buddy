@@ -84,7 +84,9 @@ export function isBareChangeDirectory(command: string): boolean {
 
 export class BashTool implements Disposable {
   private currentDirectory: string = process.cwd();
-  private confirmationService = ConfirmationService.getInstance();
+  private get confirmationService(): ConfirmationService {
+    return ConfirmationService.getInstance();
+  }
   private sandboxManager = getSandboxManager();
   private selfHealingEngine: SelfHealingEngine = getSelfHealingEngine();
   private selfHealingEnabled: boolean = true;

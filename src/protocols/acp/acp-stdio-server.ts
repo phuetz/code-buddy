@@ -10,9 +10,9 @@
  * Implemented methods (grounded in the published spec):
  * - `initialize`        → capability negotiation (integer protocolVersion).
  * - `session/new`       → `{ sessionId }`.
- * - `session/list`      → discovers in-process sessions, optionally filtered
+ * - `session/list`      → discovers durable sessions, optionally filtered
  *                         by `cwd`.
- * - `session/load`      → resumes an in-process session and replays streamed
+ * - `session/load`      → resumes a durable session and replays streamed
  *                         history (`session/update` notifications).
  * - `session/prompt`    → runs the injected prompt runner, streaming
  *                         `session/update` (`agent_message_chunk`) notifications,
@@ -25,9 +25,9 @@
  *                         unknown methods fail closed.
  *
  * The transport + protocol layer is deliberate-and-tested; the `promptRunner`
- * is injected so the CLI wires the real agent while tests drive a deterministic
- * runner. Out of scope for v1 (documented, not stubbed): full tool-using turns
- * backed by client `fs/*` + `session/request_permission`, and MCP passthrough.
+ * is injected so the CLI wires the interactive agent loop while protocol tests
+ * can drive a deterministic runner. The ACP adapter supplies file/permission
+ * bridges and stdio MCP passthrough.
  */
 
 import { randomUUID } from 'crypto';
@@ -69,6 +69,8 @@ export interface AcpPromptContext {
   cwd: string;
   clientCapabilities: AcpClientCapabilities;
   mcpServers?: unknown;
+  conversation?: unknown;
+  saveConversation: (state: unknown) => void;
   canRequestClient: (method: string) => boolean;
   prompt: AcpContentBlock[];
   signal: AbortSignal;
@@ -113,6 +115,7 @@ interface AcpSession {
   title?: string;
   updatedAt: string;
   mcpServers?: unknown;
+  conversation?: unknown;
 }
 
 interface PendingClientRequest {
@@ -151,7 +154,9 @@ export class AcpStdioServer {
   private readonly pendingClientRequests = new Map<string, PendingClientRequest>();
   private readonly store: AcpSessionStore;
   private storeLoaded = false;
+  private storeLoading: Promise<void> | null = null;
   /** In-flight fire-and-forget persistSession() writes (see whenIdle()). */
+  private readonly pendingPrompts = new Set<Promise<unknown>>();
   private readonly pendingPersists = new Set<Promise<void>>();
   private clientCapabilities: AcpClientCapabilities = {};
   private nextClientRequestId = 0;
@@ -208,37 +213,38 @@ export class AcpStdioServer {
 
   private ensureStoreLoaded(): void | Promise<void> {
     if (this.storeLoaded) return;
-    this.storeLoaded = true;
-    return this.store.listAll().then((loaded) => {
+    if (this.storeLoading) return this.storeLoading;
+    this.storeLoading = this.store.listAll().then((loaded) => {
       for (const s of loaded) {
         if (!this.sessions.has(s.sessionId)) {
           this.sessions.set(s.sessionId, {
             cwd: s.cwd,
             active: null,
             history: s.history as AcpSessionUpdate[],
+            conversation: s.conversation,
             mcpServers: s.mcpServers,
             title: s.title,
             updatedAt: s.updatedAt,
           });
         }
       }
-    }).catch((err) => {
-      this.storeLoaded = false;
-      throw err;
-    });
+      this.storeLoaded = true;
+    }).finally(() => { this.storeLoading = null; });
+    return this.storeLoading;
   }
 
   /**
    * Fire-and-forget persistence (`void this.persistSession(...)`): a failed
    * write must be logged, never surface as an unhandled rejection.
    */
-  private persistSession(sessionId: string): Promise<void> {
+  private persistSession(sessionId: string, critical = false): Promise<void> {
     const s = this.sessions.get(sessionId);
     if (!s) return Promise.resolve();
     const snapshot = {
       sessionId,
       cwd: s.cwd,
-      history: s.history,
+      history: structuredClone(s.history),
+      conversation: s.conversation,
       mcpServers: s.mcpServers,
       title: s.title,
       updatedAt: s.updatedAt,
@@ -248,9 +254,10 @@ export class AcpStdioServer {
         sessionId,
         error: err instanceof Error ? err.message : String(err),
       });
+      if (critical) throw err;
     });
     this.pendingPersists.add(write);
-    void write.finally(() => this.pendingPersists.delete(write));
+    void write.then(() => this.pendingPersists.delete(write), () => this.pendingPersists.delete(write));
     return write;
   }
 
@@ -261,8 +268,8 @@ export class AcpStdioServer {
    * `<id>.json.tmp` open makes the directory removal fail with ENOTEMPTY.
    */
   async whenIdle(): Promise<void> {
-    while (this.pendingPersists.size > 0) {
-      await Promise.allSettled([...this.pendingPersists]);
+    while (this.pendingPersists.size > 0 || (!this.started && this.pendingPrompts.size > 0)) {
+      await Promise.allSettled([...this.pendingPersists, ...(!this.started ? this.pendingPrompts : [])]);
     }
   }
 
@@ -426,8 +433,12 @@ export class AcpStdioServer {
           return this.handleListSessions(params);
         case 'session/load':
           return this.handleLoadSession(params);
-        case 'session/prompt':
-          return this.handlePrompt(params);
+        case 'session/prompt': {
+          const prompt = this.handlePrompt(params);
+          this.pendingPrompts.add(prompt);
+          void prompt.then(() => this.pendingPrompts.delete(prompt), () => this.pendingPrompts.delete(prompt));
+          return prompt;
+        }
         default: {
           const error = new Error(`Method not found: ${method}`) as Error & { code?: number };
           error.code = -32601;
@@ -560,6 +571,8 @@ export class AcpStdioServer {
         cwd: session.cwd,
         clientCapabilities,
         mcpServers: session.mcpServers,
+        conversation: session.conversation,
+        saveConversation: (state) => { session.conversation = state; },
         canRequestClient: (method) => canRequestClientWithCapabilities(method, clientCapabilities),
         prompt,
         signal: controller.signal,
@@ -570,13 +583,13 @@ export class AcpStdioServer {
         sendUpdate: (update) => this.sendUpdate(sessionId, update),
       });
       session.updatedAt = new Date().toISOString();
-      void this.persistSession(sessionId);
       return { stopReason: controller.signal.aborted ? 'cancelled' : stopReason };
     } catch (err) {
       if (controller.signal.aborted) return { stopReason: 'cancelled' };
       throw err;
     } finally {
-      session.active = null;
+      try { await this.persistSession(sessionId, true); }
+      finally { session.active = null; }
     }
   }
 

@@ -21,6 +21,8 @@ export interface ConfirmationOptions {
   content?: string; // Content to show in confirmation dialog
   /** Unified diff preview of changes (shown to user before approval) */
   diffPreview?: string;
+  /** Full proposed file contents, for editor approval surfaces. */
+  fileChange?: { path: string; oldText: string | null; newText: string };
   /** Number of lines changed (triggers enhanced confirmation if > threshold) */
   linesChanged?: number;
   /**
@@ -92,6 +94,13 @@ function sanitizeFilename(filename: string): string {
 
 export class ConfirmationService extends EventEmitter {
   private static instance: ConfirmationService;
+  private static readonly instanceContext = new AsyncLocalStorage<ConfirmationService>();
+
+  /** Embedded transports keep grants and approval surfaces local to one session. */
+  static withInstanceAsync<T>(service: ConfirmationService, fn: () => Promise<T>): Promise<T> {
+    return this.instanceContext.run(service, fn);
+  }
+
   private pendingConfirmation: Promise<ConfirmationResult> | null = null;
   private resolveConfirmation: ((result: ConfirmationResult) => void) | null = null;
 
@@ -115,6 +124,8 @@ export class ConfirmationService extends EventEmitter {
   private wsApprovalBridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult | null>) | null = null;
 
   static getInstance(): ConfirmationService {
+    const scoped = this.instanceContext.getStore();
+    if (scoped) return scoped;
     if (!ConfirmationService.instance) {
       ConfirmationService.instance = new ConfirmationService();
     }

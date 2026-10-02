@@ -10,32 +10,13 @@ export interface AcpPersistedSession {
   cwd: string;
   title?: string;
   history: unknown[];
+  conversation?: unknown;
   mcpServers?: unknown;
   updatedAt: string;
 }
 
 export interface AcpSessionStoreConfig {
   storeDir?: string;
-}
-
-/**
- * Atomic replace with a short retry: on Windows a rename onto a file that
- * another handle still has open (a concurrent `load`, an indexer) fails with
- * EPERM/EBUSY for a few milliseconds instead of succeeding as on POSIX.
- */
-async function renameWithRetry(from: string, to: string): Promise<void> {
-  const delaysMs = [10, 25, 50, 100, 200];
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await fs.promises.rename(from, to);
-      return;
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      const delay = delaysMs[attempt];
-      if ((code !== 'EPERM' && code !== 'EBUSY') || delay === undefined) throw err;
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
 }
 
 export class AcpSessionStore {
@@ -61,7 +42,10 @@ export class AcpSessionStore {
         mode: 0o600,
         isValid: (value): value is AcpPersistedSession => Boolean(
           value && typeof value === 'object' && !Array.isArray(value) &&
-          typeof (value as AcpPersistedSession).sessionId === 'string',
+          (value as AcpPersistedSession).sessionId === sessionId &&
+          typeof (value as AcpPersistedSession).cwd === 'string' &&
+          Array.isArray((value as AcpPersistedSession).history) &&
+          typeof (value as AcpPersistedSession).updatedAt === 'string',
         ),
       });
     } catch (err) {
@@ -107,7 +91,7 @@ export class AcpSessionStore {
 
   private ensureDir(): void {
     if (!fs.existsSync(this.dir)) {
-      fs.mkdirSync(this.dir, { recursive: true });
+      fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     }
   }
 

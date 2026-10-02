@@ -4,7 +4,7 @@
  *
  * Zed config example (`~/.config/zed/settings.json`):
  *   "agent_servers": {
- *     "Code Buddy": { "command": "buddy", "args": ["acp"] }
+ *     "Code Buddy": { "type": "custom", "command": "buddy", "args": ["acp"] }
  *   }
  *
  * stdout is reserved for the newline-delimited JSON-RPC protocol channel; all
@@ -27,22 +27,11 @@ export function registerAcpCommand(program: Command): void {
       logger.setLevel('error'); // keep stdout clean for the protocol channel
 
       const { detectProviderFromEnv } = await import('../../utils/provider-detector.js');
-      const { CodeBuddyClient } = await import('../../codebuddy/client.js');
       const { createAcpAgenticRunner } = await import('../../protocols/acp/acp-agentic-runner.js');
 
       const detected = detectProviderFromEnv();
-      const client = detected
-        ? new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL)
-        : null;
-
-      // The agentic runner drives a real tool-using turn (view_file /
-      // list_directory / search) routed through the client's fs/* +
-      // session/request_permission primitives when the editor advertises them.
-      const agenticRunner = client
-        ? createAcpAgenticRunner({
-            chat: (messages, tools) => client.chat(messages, tools),
-            model: detected?.defaultModel,
-          })
+      const agenticRunner = detected
+        ? createAcpAgenticRunner({ apiKey: detected.apiKey, baseURL: detected.baseURL, model: detected.defaultModel })
         : null;
 
       const promptRunner: AcpPromptRunner = async (ctx) => {
@@ -62,8 +51,13 @@ export function registerAcpCommand(program: Command): void {
       const server = new AcpStdioServer({ promptRunner });
       server.start();
 
-      // Stay alive on stdin until the editor closes the pipe.
-      process.stdin.on('end', () => process.exit(0));
-      process.stdin.on('close', () => process.exit(0));
+      // Drain atomic session writes before exiting when the editor closes stdio.
+      const shutdown = async (): Promise<void> => {
+        server.stop();
+        await server.whenIdle();
+        await agenticRunner?.dispose();
+        process.exit(0);
+      };
+      process.stdin.once('end', () => { void shutdown(); });
     });
 }

@@ -15,6 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { getVfsTextTransport } from '../services/vfs/unified-vfs-router.js';
 
 /**
  * Canonical form of a path whose leaf may not exist yet: realpath the nearest
@@ -69,6 +70,12 @@ export async function maybeReviewGatedWrite(req: GatedWriteRequest): Promise<Gat
   const reviewEnabled = mode === 'static' || mode === 'full';
   const shadowEnabled = process.env.CODEBUDDY_SHADOW_WORKSPACE === 'true';
   if (!reviewEnabled && !shadowEnabled) return { gated: false };
+  const editorTransport = getVfsTextTransport();
+  if (editorTransport?.readTextFile || editorTransport?.writeTextFile) {
+    // The transactional review engine snapshots the disk. It cannot safely review
+    // an unsaved editor buffer yet; never bypass that gate or commit behind the editor.
+    return { gated: true, ok: false, error: 'The enabled review/shadow transaction requires disk snapshots and cannot commit editor buffers. No change applied.' };
+  }
 
   const changes = 'changes' in req
     ? req.changes

@@ -1489,6 +1489,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
   async *processUserMessageStream(
     message: string,
     options: {
+      signal?: AbortSignal;
       transientContext?: string;
       relationshipSafety?: boolean;
       surface?: string;
@@ -1517,6 +1518,10 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
     // Create new abort controller for this request
     this.abortController = new AbortController();
+    const turnController = this.abortController;
+    const onExternalAbort = (): void => turnController.abort();
+    options.signal?.addEventListener('abort', onExternalAbort, { once: true });
+    if (options.signal?.aborted) turnController.abort();
 
     if (!readOnlySelfInspection) this.toolSelectionStrategy.clearCache();
 
@@ -1624,6 +1629,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
       }
 
       // Clean up abort controller
+      options.signal?.removeEventListener('abort', onExternalAbort);
       this.abortController = null;
     }
 

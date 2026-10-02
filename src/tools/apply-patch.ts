@@ -1,3 +1,5 @@
+import { UnifiedVfsRouter, getVfsTextTransport } from '../services/vfs/unified-vfs-router.js';
+import { ConfirmationService } from '../utils/confirmation-service.js';
 /**
  * apply_patch Tool — Codex-style patch format
  *
@@ -331,7 +333,7 @@ function preflightPatchPaths(ops: FileOp[], cwd: string): PatchPathPreflight {
  * gated path fails closed instead of applying the hunks that happened to
  * match). Legacy ungated behavior is unchanged.
  */
-export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd()): ComputedPatch {
+export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd(), buffers?: ReadonlyMap<string, string>): ComputedPatch {
   const changes: ComputedPatch['changes'] = [];
   const errors: string[] = [];
 
@@ -353,15 +355,15 @@ export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd()):
     }
     if (op.type === 'delete') {
       // Legacy skips missing deletes silently — same here.
-      if (fs.existsSync(fullPath)) changes.push({ path: op.path, newContent: null });
+      if ((buffers ? buffers.has(fullPath) : fs.existsSync(fullPath))) changes.push({ path: op.path, newContent: null });
       continue;
     }
     // update
-    if (!fs.existsSync(fullPath)) {
+    if (!(buffers ? buffers.has(fullPath) : fs.existsSync(fullPath))) {
       errors.push(`File not found: ${op.path}`);
       continue;
     }
-    const fileLines = fs.readFileSync(fullPath, 'utf-8').split('\n');
+    const fileLines = (buffers ? buffers.get(fullPath)! : fs.readFileSync(fullPath, 'utf-8')).split('\n');
     let lineIndex = 0;
     let failed = false;
     for (const hunk of op.hunks ?? []) {
@@ -507,6 +509,11 @@ export class ApplyPatchTool extends BaseTool {
         return this.error('No valid operations found in patch.');
       }
 
+      const editorTransport = getVfsTextTransport();
+      if (editorTransport?.readTextFile || editorTransport?.writeTextFile) {
+        return await this.executeEditor(ops, cwd ?? process.cwd());
+      }
+
       // Shared write gates. Their heavy module graphs remain dynamically
       // loaded by review-gate-helper; both env vars off keeps this legacy path.
       const rawMode = (process.env.CODEBUDDY_DIFF_REVIEW ?? 'off').toLowerCase();
@@ -522,6 +529,35 @@ export class ApplyPatchTool extends BaseTool {
     } catch (err) {
       return this.error(`Patch failed: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  /** Apply add/update text patches to the editor's current buffers. */
+  private async executeEditor(ops: FileOp[], cwd: string): Promise<ToolResult> {
+    const preflight = preflightPatchPaths(ops, cwd);
+    if (preflight.errors.length) return this.error(preflight.errors.join('\n'));
+    if (ops.some((op) => op.type === 'delete' || op.moveTo)) {
+      return this.error('ACP text filesystem does not provide delete/rename operations. No patch applied.');
+    }
+    const vfs = UnifiedVfsRouter.Instance;
+    const buffers = new Map<string, string>();
+    for (const [index, op] of ops.entries()) {
+      const resolved = preflight.paths[index]!.source;
+      if (op.type !== 'add' || await vfs.exists(resolved)) buffers.set(resolved, await vfs.readFile(resolved));
+    }
+    const computed = computePatchedFiles(ops, cwd, buffers);
+    if (computed.errors.length) return this.error(computed.errors.join('\n'));
+    const result = await ConfirmationService.getInstance().requestConfirmation({
+      operation: 'Apply patch', filename: cwd,
+      content: JSON.stringify(computed.changes),
+      detail: { cwd },
+    }, 'file');
+    if (!result.confirmed) return this.error(result.feedback ?? 'Patch refused by user.');
+    const gate = await maybeReviewGatedWrite({ changes: computed.changes, baseDirectory: cwd, intent: 'apply_patch', originLabel: 'apply_patch' });
+    if (gate.gated) return gate.ok ? this.success(gate.summary) : this.error(gate.error);
+    for (const change of computed.changes) {
+      await vfs.writeFile(path.resolve(cwd, change.path), change.newContent!);
+    }
+    return this.success(`Updated via editor: ${computed.changes.map((change) => change.path).join(', ')}`);
   }
 
   /**

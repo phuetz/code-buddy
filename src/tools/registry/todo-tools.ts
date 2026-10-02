@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 /**
  * Todo Tool Adapters
  *
@@ -16,8 +17,16 @@ import type { TodoItem } from '../todo-tool.js';
 // ============================================================================
 
 let todoInstance: TodoTool | null = null;
+const todoContext = new AsyncLocalStorage<TodoTool>();
+
+export function withTodoToolAsync<T>(todo: TodoTool, fn: () => Promise<T>): Promise<T> {
+  return todoContext.run(todo, fn);
+}
+
 
 function getTodo(): TodoTool {
+  const scoped = todoContext.getStore();
+  if (scoped) return scoped;
   if (!todoInstance) {
     todoInstance = new TodoTool();
   }

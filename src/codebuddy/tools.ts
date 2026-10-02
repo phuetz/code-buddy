@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { A2A_CALL_TOOL_DEF } from './a2a-call-tool-defs.js';
 import { RESOURCE_CATALOG_TOOL_DEF } from './resource-catalog-tool-defs.js';
 import { RAGCHAT_TOOL_DEF } from './ragchat-tool-defs.js';
@@ -439,8 +440,15 @@ export function initializeToolRegistry(): void {
 
 // Global MCP manager instance
 let mcpManager: MCPManager | null = null;
+const mcpManagerContext = new AsyncLocalStorage<MCPManager>();
+
+export function withMCPManagerAsync<T>(manager: MCPManager, fn: () => Promise<T>): Promise<T> {
+  return mcpManagerContext.run(manager, fn);
+}
 
 export function getMCPManager(): MCPManager {
+  const scoped = mcpManagerContext.getStore();
+  if (scoped) return scoped;
   if (!mcpManager) {
     mcpManager = new MCPManager();
   }
@@ -586,11 +594,9 @@ export {
 } from '../tools/deferred-schema-state.js';
 
 export function addMCPToolsToCodeBuddyTools(baseTools: CodeBuddyTool[]): CodeBuddyTool[] {
-  if (!mcpManager) {
-    return baseTools;
-  }
-
-  const mcpTools = mcpManager.getTools();
+  const current = mcpManagerContext.getStore() ?? mcpManager;
+  if (!current) return baseTools;
+  const mcpTools = current.getTools();
 
   // If below threshold, include full schemas as before
   if (mcpTools.length <= DEFERRED_SCHEMA_THRESHOLD) {

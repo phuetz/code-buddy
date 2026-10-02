@@ -43,6 +43,8 @@ class AcpHarness {
   /** Let queued async dispatch flush. */
   async flush(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 15));
+    await this.server.whenIdle();
+    await new Promise((resolve) => setImmediate(resolve));
   }
 
   responseFor(id: number): Record<string, any> | undefined {

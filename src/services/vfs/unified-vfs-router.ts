@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from "fs-extra";
 import * as path from "path";
 import { measureLatency } from "../../optimization/latency-optimizer.js";
@@ -7,6 +8,22 @@ import {
   formatSecretRefusal,
   type SecretFileAccess,
 } from "../../security/secret-files.js";
+
+export interface VfsTextTransport {
+  root: string;
+  readTextFile?: (path: string) => Promise<string>;
+  writeTextFile?: (path: string, content: string) => Promise<void>;
+  signal: AbortSignal;
+  onRead?: (path: string, content: string) => void;
+  onWrite?: (path: string, content: string) => void;
+}
+
+const textTransportContext = new AsyncLocalStorage<VfsTextTransport>();
+
+/** Tools still validate paths and obtain confirmation before reaching this IO boundary. */
+export function withVfsTextTransportAsync<T>(transport: VfsTextTransport, fn: () => Promise<T>): Promise<T> {
+  return textTransportContext.run(transport, fn);
+}
 
 export interface IFileStat {
   isDirectory(): boolean;
@@ -41,6 +58,10 @@ export interface IVfsProvider {
   ): { valid: boolean; resolved: string; error?: string };
 }
 
+export function getVfsTextTransport(): VfsTextTransport | undefined {
+  return textTransportContext.getStore();
+}
+
 /**
  * Unified Virtual File System Router
  * Centralizes all file operations to prevent "Split Brain" scenarios and enable
@@ -66,9 +87,13 @@ export class UnifiedVfsRouter implements IVfsProvider {
   async readFile(filePath: string, encoding: string = "utf-8"): Promise<string> {
     const verdict = checkSecretFileAccess(filePath, 'read');
     if (verdict.secret) throw new Error(formatSecretRefusal(filePath, verdict));
-    return measureLatency('file_read', () =>
-      fs.readFile(filePath, encoding as BufferEncoding)
-    );
+    const transport = textTransportContext.getStore();
+    transport?.signal.throwIfAborted();
+    const content = transport?.readTextFile
+      ? await transport.readTextFile(filePath)
+      : await measureLatency('file_read', () => fs.readFile(filePath, encoding as BufferEncoding));
+    transport?.onRead?.(filePath, content);
+    return content;
   }
 
   async readFileBuffer(filePath: string): Promise<Buffer> {
@@ -80,9 +105,11 @@ export class UnifiedVfsRouter implements IVfsProvider {
   }
 
   async writeFile(filePath: string, content: string, encoding: string = "utf-8"): Promise<void> {
-    await measureLatency('file_write', () =>
-      fs.writeFile(filePath, content, encoding as BufferEncoding)
-    );
+    const transport = textTransportContext.getStore();
+    transport?.signal.throwIfAborted();
+    if (transport?.writeTextFile) await transport.writeTextFile(filePath, content);
+    else await measureLatency('file_write', () => fs.writeFile(filePath, content, encoding as BufferEncoding));
+    transport?.onWrite?.(filePath, content);
   }
 
   async writeFileBuffer(filePath: string, content: Buffer): Promise<void> {
@@ -92,11 +119,26 @@ export class UnifiedVfsRouter implements IVfsProvider {
   }
 
   async exists(filePath: string): Promise<boolean> {
-    return fs.pathExists(filePath);
+    const transport = textTransportContext.getStore();
+    transport?.signal.throwIfAborted();
+    if (!transport?.readTextFile) return fs.pathExists(filePath);
+    // Directories have no editor text buffer. For files the editor is authoritative,
+    // including buffers that have not yet been saved to disk.
+    if (await fs.pathExists(filePath) && (await fs.stat(filePath)).isDirectory()) return true;
+    try { await this.readFile(filePath); return true; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
   }
 
   async stat(filePath: string): Promise<IFileStat> {
-    return fs.stat(filePath);
+    try { return await fs.stat(filePath); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || !textTransportContext.getStore()?.readTextFile) throw error;
+      const content = await this.readFile(filePath);
+      return { isDirectory: () => false, isFile: () => true, size: Buffer.byteLength(content), mtime: new Date() };
+    }
   }
 
   async readdir(dirPath: string): Promise<string[]> {
@@ -138,6 +180,11 @@ export class UnifiedVfsRouter implements IVfsProvider {
     baseDir: string,
     access: SecretFileAccess = 'read'
   ): { valid: boolean; resolved: string; error?: string } {
+    const transport = textTransportContext.getStore();
+    if (transport) {
+      const scoped = this.basicResolvePath(filePath, transport.root, access);
+      if (!scoped.valid) return scoped;
+    }
     const isolation = getWorkspaceIsolation();
 
     // If isolation is disabled, fall back to basic path validation (which
@@ -165,7 +212,7 @@ export class UnifiedVfsRouter implements IVfsProvider {
     baseDir: string,
     access: SecretFileAccess = 'read'
   ): { valid: boolean; resolved: string; error?: string } {
-    const resolved = path.resolve(filePath);
+    const resolved = path.resolve(baseDir, filePath);
 
     const secret = checkSecretFileAccess(resolved, access);
     if (secret.secret) {

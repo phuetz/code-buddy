@@ -39,6 +39,10 @@ const STATUS_ORDER: Record<string, number> = {
 
 export class TodoTool {
   private todos: TodoItem[] = [];
+
+  getItems(): TodoItem[] {
+    return structuredClone(this.todos);
+  }
   private maxItems: number = 100; // Match mistral-vibe's limit
 
   /**

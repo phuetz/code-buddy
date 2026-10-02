@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const boundaryMocks = vi.hoisted(() => ({
@@ -10,6 +12,10 @@ vi.mock('../../src/codebuddy/client.js', () => ({
   CodeBuddyClient: vi.fn(function MockCodeBuddyClient() {
     return { chat: boundaryMocks.chat };
   }),
+}));
+
+vi.mock('../../src/context/tool-observation-optimizer.js', () => ({
+  optimizeToolObservation: boundaryMocks.prepare,
 }));
 
 vi.mock('../../src/agent/prompt-tool-observation.js', () => ({
@@ -417,10 +423,14 @@ describe('secondary LLM tool-observation boundaries', () => {
     });
     const updates: Array<Record<string, unknown>> = [];
     const controller = new AbortController();
+    const acpHome = path.resolve('_qa/acp/home');
+    fs.mkdirSync(acpHome, { recursive: true });
+    const workspace = fs.mkdtempSync(path.join(acpHome, 'observation-'));
     const ctx = {
       sessionId: 'session-1',
-      cwd: process.cwd(),
+      cwd: workspace,
       clientCapabilities: {},
+      saveConversation: vi.fn(),
       prompt: [{ type: 'text', text: 'Read big.ts' }],
       signal: controller.signal,
       canRequestClient: (method: string) => method === 'fs/read_text_file',
@@ -428,11 +438,24 @@ describe('secondary LLM tool-observation boundaries', () => {
       sendUpdate: (update: Record<string, unknown>) => updates.push(update),
     } as unknown as AcpPromptContext;
 
-    const result = await createAcpAgenticRunner({
-      chat,
-      model: 'model-acp',
-      maxToolOutputBytes: 80,
-    })(ctx);
+    const runner = createAcpAgenticRunner({
+      apiKey: '', model: 'model-acp',
+      modelClient: {
+        getCurrentModel: () => 'model-acp',
+        probeToolSupport: async () => true,
+        chatStream: async function* (messages) {
+          const response = await chat(messages as CodeBuddyMessage[]);
+          const message = response.choices[0]!.message;
+          yield { choices: [{ index: 0, delta: {
+            content: message.content,
+            tool_calls: message.tool_calls.map((call, index) => ({ ...call, index })),
+          }, finish_reason: message.tool_calls.length ? 'tool_calls' : 'stop' }] };
+        },
+      },
+    });
+    let result;
+    try { result = await runner(ctx); }
+    finally { await runner.dispose(); fs.rmSync(workspace, { recursive: true, force: true }); }
 
     expect(result.stopReason).toBe('end_turn');
     const rawUpdate = updates.find((update) => update.sessionUpdate === 'tool_call_update') as {
@@ -440,19 +463,15 @@ describe('secondary LLM tool-observation boundaries', () => {
     } | undefined;
     const publicText = rawUpdate?.content?.[0]?.content?.text ?? '';
     expect(publicText).not.toContain('compact:');
-    expect(publicText).toContain('[truncated]');
-    expect(publicText.length).toBeLessThan(fullFile.length);
+    expect(publicText).toContain('export const value29 = 29;');
     expect(seen[1]?.find((message) => message.role === 'tool')?.content)
-      .toBe(`compact:${fullFile}`);
+      .toContain(`compact:${publicText}`);
     expect(boundaryMocks.prepare).toHaveBeenCalledWith(expect.objectContaining({
       toolCallId: 'call_acp',
-      content: fullFile,
-      fallbackContent: expect.stringContaining('restore_context(identifier="call_acp")'),
+      content: publicText,
       query: 'Read big.ts',
-      workspaceRoot: process.cwd(),
-      sessionId: 'session-1',
-      model: 'model-acp',
-      signal: controller.signal,
+      workspaceRoot: workspace,
+      signal: expect.any(AbortSignal),
     }));
   });
 });

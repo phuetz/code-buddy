@@ -1,3 +1,4 @@
+import { toolCallContext } from './tool-call-context.js';
 import { bindFactsMemorySession } from '../../memory/facts-memory.js';
 /**
  * Agent Executor Module
@@ -782,7 +783,7 @@ export class AgentExecutor {
 
     if (!signal) {
       try {
-        return await execute();
+        return await toolCallContext.run(toolCall, execute);
       } catch (error) {
         return {
           result: { success: false, error: `Tool execution failed: ${getErrorMessage(error)}` },
@@ -810,7 +811,7 @@ export class AgentExecutor {
         return;
       }
 
-      void execute().then(
+      void toolCallContext.run(toolCall, execute).then(
         finish,
         (error: unknown) => finish({
           result: { success: false, error: `Tool execution failed: ${getErrorMessage(error)}` },
