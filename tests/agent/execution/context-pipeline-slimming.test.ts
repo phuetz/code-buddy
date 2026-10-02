@@ -115,4 +115,19 @@ describe('prepareTurnMessages tool-output slimming', () => {
       expect.objectContaining({ role: 'tool', tool_call_id: 'missing' }),
     ]);
   });
+
+  it('ne remplace pas la dernière lecture de C par un stub quand les anciens messages saturent le contexte', () => {
+    const manager = thresholdManager(1000);
+    const observation = 'export class LicenseGate { /* recent source needed for the edit */ }\n'.repeat(20);
+    const messages: CodeBuddyMessage[] = [
+      { role: 'system', content: 'Large project context. '.repeat(100) },
+      { role: 'user', content: 'Implement and verify signed licenses.' },
+      call('old'), result('old', 'Old diagnostic. '.repeat(100)),
+      call('recent'), result('recent', observation),
+    ];
+    const prepared = prepareTurnMessages(manager, messages);
+    expect(prepared.find(message => message.role === 'tool' && message.tool_call_id === 'recent')?.content).toBe(observation);
+    expect(manager.prepareMessages).toHaveBeenCalled();
+    expect(messages.at(-1)?.content).toBe(observation);
+  });
 });

@@ -111,11 +111,19 @@ export function slimToolResultsToFit(
 ): CodeBuddyMessage[] {
   if (!contextThresholdExceeded(contextManager, messages)) return messages;
   let result: CodeBuddyMessage[] | null = null;
+  // The just-executed call group is the observation the model needs next.
+  // If old-output slimming cannot fit it, let normal compaction evict older
+  // history instead of making every fresh read return the same empty stub.
+  const latestCall = messages.findLast(message => message.role === 'assistant'
+    && 'tool_calls' in message && Array.isArray(message.tool_calls) && message.tool_calls.length > 0);
+  const latestIds = new Set(latestCall && 'tool_calls' in latestCall
+    ? latestCall.tool_calls?.map(call => call.id) ?? [] : []);
 
   for (let index = 0; index < messages.length; index++) {
     const source = (result ?? messages)[index];
     if (
       source?.role !== 'tool' ||
+      latestIds.has(source.tool_call_id) ||
       typeof source.content !== 'string' ||
       source.content.length < MIN_SLIMMABLE_TOOL_OUTPUT_CHARS ||
       source.content === TRUNCATED_TOOL_OUTPUT_STUB
