@@ -42,3 +42,9 @@ it('does not confuse giving a function a parameter with giving the user an answe
   expect(requestsRepositoryAction('Read source.js and give the function a second parameter.')).toBe(true);
   expect(requestsRepositoryAction('Read source.js and give me the parameter names.')).toBe(false);
 });
+it('distinguishes French restrictive ne…que from a prohibition', () => {
+  expect(requestsRepositoryAction('Ne modifie que config.json.')).toBe(true);
+  expect(requestsRepositoryAction('Ne lis que config.json.')).toBe(false);
+  expect(requestsRepositoryAction('Ne modifie aucun fichier.')).toBe(false);
+  expect(requestsRepositoryAction('Ne modifie jamais config.json.')).toBe(false);
+});

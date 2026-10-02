@@ -61,6 +61,8 @@ function repositoryActionClauses(prompt: string): string[] {
     return outputVerb && (outputObject || /\b(?:only|alone|just)\b/.test(clause)) && !physical;
   };
   return clauses.filter((clause, index) => {
+    // French ne…que restricts a positive request; it does not prohibit it.
+    clause = clause.replace(/^ne\s+(\S+)\s+que\s+/, '$1 ');
     // Supplements constrain the preceding answer; they are not imperatives.
     // Splitting coordination must not turn a noun phrase into a write request.
     const dependent = /^(?:with|without|using|including|preserving|keeping|retaining|according to|avec|sans|en incluant|en conservant|selon)\b/;
@@ -71,8 +73,8 @@ function repositoryActionClauses(prompt: string): string[] {
       && /\b(?:file_target|file|source|module|script|fichier)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause);
     if (dependent.test(clause) && !modifierWrite || index > 0 && nominal.test(clause)
       && !/\b(?:must|shall|should|needs?|requires?|doit|doivent|is|are|be|etre|sont|est)\b/.test(clause)) return false;
-    // Negation in French need not contain "pas" (aucun/rien/jamais/que).
-    if (/^ne\b.*\b(?:aucun\w*|rien|jamais|que)\b/.test(clause)) return false;
+    // Negation in French need not contain "pas" (aucun/rien/jamais).
+    if (/^ne\b.*\b(?:aucun\w*|rien|jamais)\b/.test(clause)) return false;
     // Following a source means tracing it or obeying its reading rules. A
     // physical change introduced by "by" remains an operation.
     if (/^(?:follow|respect|obey|respecte|suis)(?:\b|-)/.test(clause)
