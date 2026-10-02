@@ -76,7 +76,7 @@ export class WakeWordDetector extends EventEmitter implements IWakeWordDetector 
 
   constructor(config: Partial<WakeWordConfig> = {}) {
     super();
-    this.config = { ...DEFAULT_WAKE_WORD_CONFIG, ...config };
+    this.config = structuredClone({ ...DEFAULT_WAKE_WORD_CONFIG, ...config });
   }
 
   async start(): Promise<void> {

@@ -23,6 +23,21 @@ afterEach(() => {
 });
 
 describe('PolicyManager.setToolOverride', () => {
+  it('keeps default rules and overrides private to each instance and reset', () => {
+    const first = new PolicyManager(path.join(dir, 'first'));
+    first.setToolOverride('bash', 'deny');
+    first.addGlobalRule({ group: 'group:web', action: 'deny' });
+
+    const second = new PolicyManager(path.join(dir, 'second'));
+    expect(second.getToolOverrides()).toEqual({});
+    expect(second.getGlobalRules()).toEqual([]);
+    expect(second.checkTool('web_search').action).not.toBe('deny');
+
+    first.resetConfig();
+    expect(first.getToolOverrides()).toEqual({});
+    expect(first.getGlobalRules()).toEqual([]);
+  });
+
   it('denies a tool the profile would allow, persists across instances, clears cleanly', () => {
     const manager = new PolicyManager(dir);
     expect(manager.checkTool('web_search').action).not.toBe('deny');

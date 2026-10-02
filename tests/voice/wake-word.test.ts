@@ -36,6 +36,7 @@ describe('WakeWordDetector', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockProcess.mockReset().mockReturnValue(-1);
     delete process.env.PICOVOICE_ACCESS_KEY;
     detector = new WakeWordDetector();
   });
@@ -45,6 +46,15 @@ describe('WakeWordDetector', () => {
   });
 
   describe('constructor', () => {
+    it('keeps wake words private to each detector and its defaults', () => {
+      const expected = [...DEFAULT_WAKE_WORD_CONFIG.wakeWords];
+      detector.removeWakeWord('hey buddy');
+      detector.addWakeWord('only-this-detector');
+      const other = new WakeWordDetector();
+      expect(other.getWakeWords()).toEqual(expected);
+      expect(DEFAULT_WAKE_WORD_CONFIG.wakeWords).toEqual(expected);
+    });
+
     it('should create detector with default config', () => {
       expect(detector.getConfig()).toEqual(DEFAULT_WAKE_WORD_CONFIG);
     });

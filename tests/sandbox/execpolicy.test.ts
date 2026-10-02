@@ -31,6 +31,17 @@ describe("ExecPolicy", () => {
   });
 
   describe("Initialization", () => {
+    it('keeps built-in rules private to each initialized policy', async () => {
+      const rule = policy.getRules().find(candidate => candidate.id === 'builtin-read-safe')!;
+      rule.constraints = { allowedDirs: ['/only-this-policy'] };
+      rule.tags!.push('only-this-policy');
+
+      const other = new ExecPolicy();
+      await other.initialize();
+      expect(other.evaluate('ls', [], '/another-workspace').action).toBe('allow');
+      expect(other.getRules().find(candidate => candidate.id === rule.id)?.tags).not.toContain('only-this-policy');
+    });
+
     it("should initialize with built-in rules", async () => {
       const rules = policy.getRules();
 

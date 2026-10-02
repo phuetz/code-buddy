@@ -341,7 +341,7 @@ export class PolicyManager extends EventEmitter {
    * Reset to default configuration
    */
   resetConfig(): void {
-    this.config = { ...DEFAULT_POLICY_CONFIG };
+    this.config = structuredClone(DEFAULT_POLICY_CONFIG);
     this.resolver = new PolicyResolver(this.config);
     this.clearCache();
     this.saveConfig();
@@ -392,7 +392,7 @@ export class PolicyManager extends EventEmitter {
 
         // Validate and merge with defaults
         return {
-          ...DEFAULT_POLICY_CONFIG,
+          ...structuredClone(DEFAULT_POLICY_CONFIG),
           ...loaded,
           // Ensure arrays are not undefined
           globalRules: loaded.globalRules || [],
@@ -405,7 +405,7 @@ export class PolicyManager extends EventEmitter {
       this.emit('policy:error', { error: error as Error });
     }
 
-    return { ...DEFAULT_POLICY_CONFIG };
+    return structuredClone(DEFAULT_POLICY_CONFIG);
   }
 
   /**

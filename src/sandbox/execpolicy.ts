@@ -510,7 +510,7 @@ export class ExecPolicy extends EventEmitter {
     if (this.initialized) return;
 
     // Load built-in rules
-    this.rules = [...BUILTIN_RULES];
+    this.rules = structuredClone(BUILTIN_RULES);
 
     // Load custom rules from file
     if (this.config.rulesPath) {
