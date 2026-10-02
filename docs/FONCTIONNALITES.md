@@ -23,7 +23,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `tool-deep-research` — Deep research | Préparez un rapport de recherche étayé en plusieurs étapes. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-deep-research) |
 | `tool-verify` — Verification tool | Demandez à l’agent de vérifier un résultat concret. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-verify) |
 | `agent-loop` — Agent tool loop | Poursuivez une demande sur plusieurs réponses du modèle et résultats d’outils. | **Testée localement** | [Trace réelle](preuves/p5-agent-loop-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#agent-loop) |
-| `tool-read-file` — File reading | Laissez l’agent lire un fichier du projet avant de répondre. | **Testée localement** | [Trace réelle](preuves/p5-tool-read-file-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#tool-read-file) |
+| `tool-read-file` — File reading | Lisez un fichier avec view_file/read_file ; la lecture choisie par l’agent pendant une conversation exige un fournisseur. | **Partiellement vérifiée** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/tool-read-file.md) ; [Raccordement](preuves/verification-statique.md#tool-read-file) |
 | `context-tool-selection` — Tool selection | Sélectionnez les outils pertinents en conservant tool_search dans la sélection par défaut lorsqu’il est disponible. | **Testée localement** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/context-tool-selection.md) ; [Raccordement](preuves/verification-statique.md#context-tool-selection) |
 
 ## Fournisseurs et bascule
