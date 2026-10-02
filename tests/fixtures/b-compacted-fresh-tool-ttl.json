@@ -1,0 +1,10 @@
+{
+  "replay": "B-35b-8",
+  "requestId": 98,
+  "toolCallId": "call_wc87u7zq",
+  "retainedAssistantTurns": 5,
+  "currentTurn": 95,
+  "clockProvenance": "95th assistant tool-call group in captured NDJSON, independently matching recorded age 90 + 5 retained turns",
+  "observedBeforeExpiry": "Command executed successfully (no output)",
+  "sentAfterExpiry": "[Tool result expired: age 90 turns > 20 limit]"
+}

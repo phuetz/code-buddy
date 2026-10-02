@@ -217,7 +217,12 @@ export function expireOldToolResults(
     if (!msg || msg.role !== 'tool' || typeof msg.content !== 'string') continue;
     if (msg.content.includes(MASKING_TAG)) continue; // Already masked
 
-    const msgTurn = turnMap.get(i) ?? 0;
+    // Compaction removes early turns: retained array positions are not the
+    // absolute round clock. Anchor its last assistant/tool group to now so a
+    // result just produced cannot expire because earlier messages were removed.
+    // Tool-only diagnostic callers retain their absolute-clock fallback.
+    const retainedTurnOffset = turnEstimate > 0 ? Math.max(0, currentTurn - turnEstimate) : 0;
+    const msgTurn = (turnMap.get(i) ?? 0) + retainedTurnOffset;
     const age = currentTurn - msgTurn;
 
     if (age <= maxAgeTurns * 0.5) continue; // Fresh enough
