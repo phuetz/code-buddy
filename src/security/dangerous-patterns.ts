@@ -83,8 +83,8 @@ export const DANGEROUS_BASH_PATTERNS: DangerousPattern[] = [
   { pattern: /sudo\s+(rm|dd|mkfs)/i, severity: 'critical', description: 'Sudo with dangerous command', name: 'sudo-dangerous', category: 'privilege_escalation', appliesTo: ['bash', 'command'] },
 
   // --- Command injection via substitution ---
-  { pattern: /\$\([^)]*(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)/i, severity: 'high', description: 'Dangerous command in $() substitution', name: 'subst-dangerous', category: 'command_injection', appliesTo: ['bash'] },
-  { pattern: /`[^`]*(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)/i, severity: 'high', description: 'Dangerous command in backtick substitution', name: 'backtick-dangerous', category: 'command_injection', appliesTo: ['bash'] },
+  { pattern: /\$\([^)]*\b(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)\b/i, severity: 'high', description: 'Dangerous command in $() substitution', name: 'subst-dangerous', category: 'command_injection', appliesTo: ['bash'] },
+  { pattern: /`[^`]*\b(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)\b/i, severity: 'high', description: 'Dangerous command in backtick substitution', name: 'backtick-dangerous', category: 'command_injection', appliesTo: ['bash'] },
 
   // --- Secret variable expansion ---
   { pattern: /\$\{?(?:GROK_API_KEY|AWS_SECRET|AWS_ACCESS_KEY|AWS_SESSION_TOKEN|GITHUB_TOKEN|NPM_TOKEN|MORPH_API_KEY|DATABASE_URL|DB_PASSWORD|SECRET_KEY|PRIVATE_KEY|API_KEY|API_SECRET|AUTH_TOKEN|ACCESS_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|SLACK_TOKEN|DISCORD_TOKEN)\}?/i, severity: 'high', description: 'Secret variable expansion', name: 'secret-var-expand', category: 'secret_exposure', appliesTo: ['bash'] },

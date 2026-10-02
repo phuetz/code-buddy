@@ -34,8 +34,8 @@ const DANGEROUS_PATTERNS: RegExp[] = [
   /sudo\s+(rm|dd|mkfs)/i,
 
   // Command injection via command substitution
-  /\$\([^)]*(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)/i,  // $(dangerous_cmd)
-  /`[^`]*(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)/i,     // `dangerous_cmd`
+  /\$\([^)]*\b(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)\b/i,  // $(dangerous_cmd)
+  /`[^`]*\b(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)\b/i,     // `dangerous_cmd`
 
   // Dangerous variable expansion that could leak secrets
   /\$\{?(?:GROK_API_KEY|AWS_SECRET|AWS_ACCESS_KEY|GITHUB_TOKEN|NPM_TOKEN|MORPH_API_KEY|DATABASE_URL|DB_PASSWORD|SECRET_KEY|PRIVATE_KEY|API_KEY|API_SECRET|AUTH_TOKEN|ACCESS_TOKEN)\}?/i,
