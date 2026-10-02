@@ -18,7 +18,6 @@ async function createAgent() {
   const dotenv = await import('dotenv');
   dotenv.config();
 
-  const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
   const { resolveCommandProvider } = await import('../llm-provider-resolution.js');
   const provider = resolveCommandProvider();
 
@@ -27,6 +26,7 @@ async function createAgent() {
     process.exit(1);
   }
 
+  const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
   return new CodeBuddyAgent(provider.apiKey, provider.baseURL, provider.model);
 }
 
@@ -413,7 +413,7 @@ Repo context: ${profile.contextPack}`;
       const { getRepoProfiler } = await import('../../agent/repo-profiler.js');
 
       const profiler = getRepoProfiler();
-      const profile = await profiler.refresh(); // Force fresh profile
+      const profile = await profiler.refresh({ backgroundIndexing: false });
 
       console.log('\nRepo Profile:');
       console.log(`  Languages:       ${profile.languages.join(', ') || 'unknown'}`);

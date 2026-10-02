@@ -162,8 +162,8 @@ export class RepoProfiler {
   /**
    * Force recompute (ignores cache).
    */
-  async refresh(): Promise<RepoProfile> {
-    const profile = await this.computeProfile();
+  async refresh(options: ComputeProfileOptions = {}): Promise<RepoProfile> {
+    const profile = await this.computeProfile(options);
     if (this.shouldWriteRuntimeCaches()) {
       this.saveCache(profile);
     }

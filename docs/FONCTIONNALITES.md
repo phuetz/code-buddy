@@ -2,6 +2,8 @@
 
 Ce catalogue couvre **91 capacités visibles par l’utilisateur** dans le code source actuel. « Raccordée » signifie que les fichiers et les maillons déclarés du point d’entrée existent. « Testée localement » exige une vraie commande ou un tour agent sous HOME isolé avec trace. Aucune entrée n’est présentée comme déployée depuis ce checkout. Le bénéfice décrit la capacité visée par le raccordement ; la preuve d’exécution ne couvre que le scénario nommé dans sa trace.
 
+La [recette du 2 octobre 2026](preuves/fonctions-reelles-2026-10-02/README.md) distingue aussi **Prérequis vérifiés** (refus explicite éprouvé, succès non démontré) et **Partiellement vérifiée** (seules les opérations indiquées sont prouvées).
+
 Preuves : [audit statique des raccordements](preuves/verification-statique.md) · [trace de la commande catalogue](preuves/p5-catalog-status-2026-09-29.log).
 
 ## Agent et outils
@@ -12,7 +14,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `cli-code-explorer` — Code Explorer integration | Inspectez les relations du code et la synchronisation de session. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-code-explorer) |
 | `cli-tools` — Tool availability | Inspectez les outils disponibles et leurs profils. | **Testée localement** | [Trace réelle](preuves/p5-cli-tools-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-tools) |
 | `cli-autonomous-code` — Guarded coding cell | Exécutez un contrat de codage autonome encadré. | **Testée localement** | [Trace réelle](preuves/p7-cli-autonomous-code.log); [Maillons vérifiés](preuves/verification-statique.md#cli-autonomous-code) |
-| `cli-dev` — Developer workflows | Lancez des parcours guidés de planification, réalisation et vérification. | **Testée localement** | [Trace réelle](preuves/p7-cli-dev.log); [Maillons vérifiés](preuves/verification-statique.md#cli-dev) |
+| `cli-dev` — Developer workflows | Planifiez et expliquez un dépôt avec un fournisseur configuré ; sans fournisseur, refus explicite et aucun PLAN.md. | **Prérequis vérifiés** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/cli-dev.md) ; [Raccordement](preuves/verification-statique.md#cli-dev) |
 | `cli-skills` — Installed skills | Listez les packs de skills installés et leur origine. | **Testée localement** | [Trace réelle](preuves/p5-cli-skills-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-skills) |
 | `cli-bundles` — Skill bundles | Regroupez des skills sous une commande nommée. | **Testée localement** | [Trace réelle](preuves/p5-cli-bundles-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-bundles) |
 | `cli-lsp` — LSP diagnostics | Inspectez les diagnostics du serveur de langage. | **Échec constaté** | [Trace de l’échec](preuves/p5-cli-lsp-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-lsp) |
