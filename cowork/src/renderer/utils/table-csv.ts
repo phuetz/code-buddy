@@ -25,8 +25,32 @@ export function tableToCsv(headers: string[], rows: string[][]): string {
 
 /** Parse a cell into a number when it looks numeric (tolerates %, currency, thousands separators). */
 function parseNumeric(value: string): number | null {
-  const cleaned = (value ?? '').trim().replace(/[\s%$€£]/g, '').replace(/,/g, '');
-  if (cleaned === '' || cleaned === '-' || cleaned === '+') return null;
+  const raw = (value ?? '').trim().replace(/[\s%$€£]/g, '');
+  if (raw === '' || raw === '-' || raw === '+') return null;
+
+  const match = /^[-+]?(?:\d{1,3}(?:[ \u202f.,]\d{3})+|\d*)(?:[.,]\d+)?$/.test(raw);
+  if (!match) return null;
+
+  const lastSepIndex = Math.max(raw.lastIndexOf('.'), raw.lastIndexOf(','));
+  let cleaned = raw;
+
+  if (lastSepIndex !== -1) {
+    const afterSep = raw.slice(lastSepIndex + 1);
+    const beforeSep = raw.slice(0, lastSepIndex);
+
+    // With mixed separators, the last one marks the decimal part even when
+    // it has three digits (for example 1,234.567).
+    const hasMixedSeparators = beforeSep.includes('.') && raw.includes(',')
+      || beforeSep.includes(',') && raw.includes('.');
+    if (afterSep.length === 3 && !hasMixedSeparators) {
+      cleaned = raw.replace(/[.,]/g, '');
+    } else {
+      cleaned = beforeSep.replace(/[.,]/g, '') + '.' + afterSep;
+    }
+  } else {
+    cleaned = raw.replace(/[.,]/g, '');
+  }
+
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
 }
