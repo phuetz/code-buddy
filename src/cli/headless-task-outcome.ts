@@ -273,7 +273,10 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
       const commandsObserved = literalCommands.every(command => [...commands].some(actual => actual === command));
       const head = object.replace(/^(?:(?:a|an|the|my|our|initial|brief|quick|mental|all|existing|project|tous|toutes|une?|les?|la|des|mon|ma|mes|notre|nos|premiere?)\s+)*/, '').replace(/^l'/, '').replace(/^through\s+(?:the\s+)?/, '');
       if (/^(?:into|across|out of)\b/.test(head) && !/^[\w./-]+\.[a-z0-9]+\b|^[\w.-]+\//.test(head)) continue;
-      const abstract = /^(?:overview|summary|outline|explanation|interpretation|understanding|hypothesis|index|comprehension|notes?|list|risk|scan|analysis|reading|search|reasoning|logic|flow|walk-through|resume|apercu|liste|analyse|lecture|recherche|raisonnement|interpretation|hypothese)\b/.test(head);
+      const abstract = /^(?:overview|summary|outline|explanation|interpretation|understanding|hypothesis|comprehension|notes?|list|risk|scan|analysis|reading|search|reasoning|logic|flow|walk-through|resume|apercu|liste|analyse|lecture|recherche|raisonnement|interpretation|hypothese)\b/.test(head)
+        // An unqualified index can assert a database operation. Only an index
+        // explicitly describing its subject is an abstract reading artifact.
+        || /^index\s+(?:of|de)\b/.test(head);
       const physicalHead = /^[\w./-]+\.[a-z0-9]+\b|^[\w.-]+\//.test(head)
         || /\b(?:files?|folders?|director(?:y|ies)|documents?|scripts?|modules?|tools?|services?|servers?|apps?|components?|class(?:es)?|functions?|programs?|packages?|generators?|utilit(?:y|ies)|pipelines?|endpoints?|fichiers?|dossiers?)\b/.test(head.split(/\b(?:of|de|about|sur)\b/)[0]!);
       // In 'a list of imports in source.js', the path locates the subject of

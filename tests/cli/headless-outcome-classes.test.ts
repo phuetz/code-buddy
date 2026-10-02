@@ -46,3 +46,13 @@ it('keeps an unfamiliar mutation obligatory even when a different requested chec
   const edited: TaskEvidenceEntry = { type: 'tool_result', content: 'updated', toolCall: { id: 'edit', function: { name: 'str_replace_editor', arguments: '{"path":"parser.js"}' } }, toolResult: { success: true } };
   expect(evaluateHeadlessTaskOutcome(prompt, [edited, checked, reply('Done.')]).exitCode).toBe(0);
 });
+it.each(['I created an index on users.', 'I created an index for the orders table.', 'I created an index.'])(
+  'keeps ambiguous or operational index claims closed without a successful tool: %s', content => {
+    expect(evaluateHeadlessTaskOutcome('Explain the module.', [reply(content)]).exitCode).toBe(4);
+  },
+);
+it.each(['I created an index of the exported symbols.', 'I created an index of configuration keys.', 'I created an index of functions in lib/api.mjs.'])(
+  'accepts an index describing its cognitive subject rather than asserting an operation: %s', content => {
+    expect(evaluateHeadlessTaskOutcome('Explain the module.', [reply(content)]).exitCode).toBe(0);
+  },
+);
