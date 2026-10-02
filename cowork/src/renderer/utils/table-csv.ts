@@ -42,7 +42,12 @@ function parseNumeric(value: string): number | null {
     // it has three digits (for example 1,234.567).
     const hasMixedSeparators = beforeSep.includes('.') && raw.includes(',')
       || beforeSep.includes(',') && raw.includes('.');
-    if (afterSep.length === 3 && !hasMixedSeparators) {
+    // Keep a lone dot decimal (1.234), as before this parser changed.
+    // A comma with three trailing digits, or repeated dots, denotes grouping.
+    const groupedThousands = !hasMixedSeparators && (
+      raw[lastSepIndex] === ',' || beforeSep.includes('.')
+    );
+    if (afterSep.length === 3 && groupedThousands) {
       cleaned = raw.replace(/[.,]/g, '');
     } else {
       cleaned = beforeSep.replace(/[.,]/g, '') + '.' + afterSep;

@@ -37,13 +37,22 @@ describe('compareTableCells', () => {
   it('rejects non-standard numeric formats (hex, exp, etc) and treats them as text', () => {
     expect(compareTableCells('0x10', '9')).toBeGreaterThan(0);
     expect(compareTableCells('1e3', '999')).toBeGreaterThan(0);
+    expect(compareTableCells('0x10', '20')).toBeGreaterThan(0);
+    expect(compareTableCells('1e3', '1001')).toBeGreaterThan(0);
   });
 
   it('correctly handles French decimal commas vs thousands separators', () => {
     expect(compareTableCells('1,5', '2')).toBeLessThan(0);
     expect(compareTableCells('12,50 %', '12,4 %')).toBeGreaterThan(0);
     expect(compareTableCells('1,234.567', '1,235')).toBeLessThan(0);
-    expect(compareTableCells('1.234,567', '1.235')).toBeLessThan(0);
+    expect(compareTableCells('1.234,567', '1,235')).toBeLessThan(0);
+  });
+
+  it('keeps a lone dot as a decimal separator', () => {
+    expect(compareTableCells('1.234', '2')).toBeLessThan(0);
+    expect(compareTableCells('1.234', '1.2')).toBeGreaterThan(0);
+    expect(compareTableCells('1,235', '2')).toBeGreaterThan(0);
+    expect(compareTableCells('1.234.567', '1000000')).toBeGreaterThan(0);
   });
 });
 
