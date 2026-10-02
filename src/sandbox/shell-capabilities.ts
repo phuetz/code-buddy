@@ -15,6 +15,7 @@ export function shellCapabilitySnapshot() {
     configured: [...capabilities],
     scope: 'Native workspace sandbox only; explicit denials remain authoritative',
     network: 'closed',
+    scratch: 'For files needed between shell calls, use the runtime-provided $TMPDIR or an authorized workspace path. Hard-coded /tmp may be recreated for each sandbox invocation; do not rely on its contents surviving the next call.',
     operations: [
       ...(capabilities.has('tests') ? ['npm test', 'npm run test|build|lint|typecheck|check|verify|audit'] : []),
       ...(capabilities.has('git-local') ? ['git add', 'git commit (initial cd to this workspace allowed)'] : []),

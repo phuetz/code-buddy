@@ -7,6 +7,7 @@ import { createSandboxConfigForMode, OSSandbox } from '../../src/sandbox/os-sand
 import { probeNativeSandbox } from './native-sandbox-ready.js';
 import { executeInWorkspaceSandbox } from '../../src/tools/bash/execution-policy.js';
 import { getPermissionModeManager } from '../../src/security/permission-modes.js';
+import { formatRuntimeSettingsContext } from '../../src/services/runtime-settings-context.js';
 
 const ready = await probeNativeSandbox();
 const roots: string[] = [];
@@ -39,6 +40,12 @@ describe.sequential('banc shell : clone partagé et worktree', () => {
       expect(config.readOnlyPaths).toContain(path.join(source, '.git', kind === 'shared' ? 'objects' : ''));
       expect(config.env?.PATH?.split(path.delimiter)[0]).toBe(path.dirname(process.execPath));
       expect(config.env?.TMPDIR).toBeTruthy();
+      // The native runtime already offers persistent scratch. The model must
+      // know to use it rather than hard-code the per-invocation /tmp mount.
+      const guidance = formatRuntimeSettingsContext({ surface: 'cli' });
+      expect(guidance).toContain('$TMPDIR');
+      expect(guidance).toContain('/tmp');
+      expect(guidance).toContain('between shell calls');
       if (!ready.ready) return;
       const sandbox = new OSSandbox({ ...config, backend: ready.landlock.ok ? 'landlock' : 'bubblewrap', timeout: 30000 });
       const result = await sandbox.execShellTracked('git status --short && git cat-file -t HEAD && node --version && node node_modules/vitest/vitest.mjs run --configLoader runner --maxWorkers=1');
