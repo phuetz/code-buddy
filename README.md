@@ -114,8 +114,23 @@ cd code-buddy && npm install
 npm run build && npm link
 ```
 
-If the `@vscode/ripgrep` install script receives a GitHub 403, see the
-[source-install workaround](docs/install.md#ripgrep-download-blocked-during-npm-ci).
+Ripgrep binaries are installed from npm packages for your platform; installation
+does not need the GitHub releases API. Native add-ons (`sharp`, `better-sqlite3`
+and local embedding runtimes) are optional: a failed native build disables only
+the features that need it. Check the result with `buddy --version` and `buddy doctor`.
+
+For a minimal installation, install system `rg` first (Debian/Ubuntu:
+`sudo apt-get install ripgrep`) and check `rg --version`, then run:
+
+```bash
+# Published package (already compiled)
+npm install -g --omit=optional @phuetz/code-buddy
+```
+
+For source builds, use the normal `npm install` procedure above: removing all
+optional packages also removes types needed by the TypeScript build.
+Keep dependency scripts enabled; `--ignore-scripts` skips every native build.
+See the [installation details](docs/install.md#ripgrep-download-blocked-during-npm-ci).
 
 The **Cowork** desktop app is a separate step needing Node.js ≥ 22: `buddy install-gui`, then
 `buddy gui`. Details in [Getting started](docs/getting-started.md).

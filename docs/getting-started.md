@@ -50,10 +50,31 @@ npm install -g @phuetz/code-buddy@latest
 npx @phuetz/code-buddy@latest
 ```
 
-If a source installation fails because `@vscode/ripgrep` receives HTTP 403
-from GitHub, see the [system-ripgrep workaround](install.md#ripgrep-download-blocked-during-npm-ci).
-Its `--ignore-scripts` option also skips native add-on installation. Follow the
-full workaround, including `npm link` (or run `node dist/index.js` directly).
+Ripgrep 1.18 and later ships its platform binaries through npm, without a
+GitHub download script. If its binary is absent or not executable, Code Buddy
+uses an executable system `rg` on `PATH`. Native image, SQLite and local
+embedding add-ons are optional, including their transitive native dependencies.
+A failed native build does not prevent installation or text-only CLI commands.
+SQLite sessions can use JSON storage; image tools and local embeddings may be
+unavailable until their add-ons are installed successfully.
+
+Check the installed CLI with `buddy --version` and `buddy doctor`. If you want
+to skip all optional packages in the already compiled npm release, first install
+system ripgrep using the commands above, check `rg --version`, then run exactly:
+
+```bash
+# Published package, minimal installation
+npm install -g --omit=optional @phuetz/code-buddy@latest
+buddy --version
+```
+
+`--omit=optional` also omits the npm ripgrep platform binary, so system `rg` is
+required for search in this minimal setup. For source builds, use normal
+`npm install`: omitting all optional packages also removes types that the
+TypeScript build still requires. Avoid `--ignore-scripts`: it skips
+all dependency install scripts and can leave native packages present but unusable.
+For older releases still using ripgrep 1.17, see the
+[legacy 403 workaround](install.md#ripgrep-download-blocked-during-npm-ci).
 
 For an install from source, configure npm's `allowScripts` policy in the project's
 `package.json` or `.npmrc`; the command-line `--allow-scripts` option is for

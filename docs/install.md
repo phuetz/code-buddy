@@ -184,8 +184,18 @@ buddy try                            # coding demonstration; duration depends on
 
 ### Ripgrep download blocked during `npm ci`
 
-The `@vscode/ripgrep` install script downloads a platform binary from GitHub.
-If that request returns HTTP 403, install `rg` through your operating system
+Current source uses ripgrep 1.18 platform packages from npm, with no GitHub
+download script. Run `npm install` normally (or `npm ci` for the locked tree),
+then `npm run build` and `npm link`. Optional native add-on failures do not
+block the CLI. To skip optional packages in the already compiled npm release,
+install system ripgrep first, then use
+`npm install -g --omit=optional @phuetz/code-buddy@latest`. The system `rg` is
+required for search when the optional npm platform binary is omitted. Source
+builds should use normal `npm install`: omitting every optional package also
+removes types still required by the TypeScript build.
+
+**Legacy releases using ripgrep 1.17:** their install script downloads a platform
+binary from GitHub. If that request returns HTTP 403, install `rg` through your operating system
 (for example `sudo apt-get install ripgrep` or `brew install ripgrep`) and check
 that `rg --version` works on `PATH`. Then, from the source checkout, run:
 
