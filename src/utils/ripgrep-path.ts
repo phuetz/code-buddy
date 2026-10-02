@@ -2,10 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-interface RipgrepModule {
-  rgPath: string;
-}
-
 interface RipgrepResolutionOptions {
   loadBundledPath?: () => string;
   pathValue?: string;
@@ -17,7 +13,10 @@ interface RipgrepResolutionOptions {
 const requireModule = createRequire(import.meta.url);
 
 function loadBundledRipgrepPath(): string {
-  return (requireModule('@vscode/ripgrep') as RipgrepModule).rgPath;
+  // Resolve the npm-distributed binary directly: the 1.18 wrapper is ESM,
+  // which older supported Node 20 releases cannot load with require().
+  const binary = process.platform === 'win32' ? 'rg.exe' : 'rg';
+  return requireModule.resolve(`@vscode/ripgrep-${process.platform}-${process.arch}/bin/${binary}`);
 }
 
 function isExecutableFile(candidate: string): boolean {
@@ -31,9 +30,10 @@ function isExecutableFile(candidate: string): boolean {
 
 export function resolveRipgrepPath(options: RipgrepResolutionOptions = {}): string | null {
   const loadBundledPath = options.loadBundledPath ?? loadBundledRipgrepPath;
+  const isExecutable = options.isExecutable ?? isExecutableFile;
   try {
     const bundledPath = loadBundledPath();
-    if (bundledPath) {
+    if (bundledPath && isExecutable(bundledPath)) {
       return bundledPath;
     }
   } catch {
@@ -43,7 +43,6 @@ export function resolveRipgrepPath(options: RipgrepResolutionOptions = {}): stri
 
   const platform = options.platform ?? process.platform;
   const pathValue = options.pathValue ?? process.env.PATH ?? '';
-  const isExecutable = options.isExecutable ?? isExecutableFile;
   const extensions = platform === 'win32'
     ? (options.pathExtValue ?? process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM')
       .split(';')

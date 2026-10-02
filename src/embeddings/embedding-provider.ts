@@ -134,7 +134,13 @@ export class EmbeddingProvider extends EventEmitter {
 
     try {
       // Dynamic import of transformers.js
-      const transformers = await import('@xenova/transformers');
+      // Keep this optional at build time too: npm removes the whole package
+      // when its native sharp dependency fails to install.
+      const transformersSpecifier = '@xenova/transformers';
+      const transformers = await import(transformersSpecifier) as {
+        pipeline: (task: string, model: string | undefined, options: { quantized: boolean }) => Promise<unknown>;
+        env?: { backends?: { onnx?: { wasm?: { numThreads?: number } } } };
+      };
       pinSingleThreadWasmFallback(transformers);
       const { pipeline } = transformers;
 

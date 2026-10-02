@@ -64,7 +64,6 @@
   },
   "allowScripts": {
     "@google/genai@1.52.0": true,
-    "@vscode/ripgrep@1.17.0": true,
     "@whiskeysockets/baileys@6.7.23": true,
     "better-sqlite3@11.10.0": true,
     "bufferutil@4.1.0": true,
@@ -180,7 +179,6 @@
   "license": "BUSL-1.1",
   "dependencies": {
     "@browserbasehq/stagehand": "^3.6.0",
-    "@huggingface/transformers": "^4.2.0",
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@ngrok/ngrok": "^1.7.0",
@@ -193,7 +191,7 @@
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@resvg/resvg-js": "^2.6.2",
     "@sentry/node": "^10.40.0",
-    "@vscode/ripgrep": "^1.17.0",
+    "@vscode/ripgrep": "^1.18.0",
     "axios": "^1.18.1",
     "chalk": "^5.6.2",
     "cli-highlight": "^2.1.11",
@@ -236,6 +234,7 @@
   "optionalDependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@google/generative-ai": "^0.21.0",
+    "@huggingface/transformers": "^4.2.0",
     "@mlc-ai/web-llm": "^0.2.80",
     "@nut-tree-fork/nut-js": "^4.2.6",
     "@picovoice/porcupine-node": "^4.0.1",

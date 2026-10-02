@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 const expectedAllowScripts = {
   '@google/genai@1.52.0': true,
-  '@vscode/ripgrep@1.17.0': true,
   '@whiskeysockets/baileys@6.7.23': true,
   'better-sqlite3@11.10.0': true,
   'bufferutil@4.1.0': true,
@@ -32,6 +31,6 @@ describe('npm install-script policy', () => {
     };
 
     expect(packageJson.allowScripts).toEqual(expectedAllowScripts);
-    expect(Object.keys(packageJson.allowScripts ?? {})).toHaveLength(19);
+    expect(Object.keys(packageJson.allowScripts ?? {})).toHaveLength(18);
   });
 });
