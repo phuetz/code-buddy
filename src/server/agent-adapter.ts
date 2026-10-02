@@ -3,6 +3,8 @@ import type { CodeBuddyMessage } from '../codebuddy/client.js';
 import type { ContextManagerConversationState } from '../context/context-manager-v2.js';
 import type { ToolResult } from '../types/index.js';
 import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { PROVIDER_SETUP_MESSAGE } from '../utils/provider-prerequisites.js';
+import { ApiServerError } from './middleware/error-handler.js';
 
 export interface ServerAgentConfig {
   apiKey: string;
@@ -183,8 +185,11 @@ export function listServerModels(): ServerModelInfo[] {
 }
 
 export async function createServerAgent(): Promise<ServerAgent> {
-  const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
   const config = resolveServerAgentConfig();
+  if (!config.apiKey.trim()) {
+    throw new ApiServerError(PROVIDER_SETUP_MESSAGE, 'PROVIDER_NOT_CONFIGURED', 503);
+  }
+  const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
   const agent = new CodeBuddyAgent(
     config.apiKey,
     config.baseURL,
