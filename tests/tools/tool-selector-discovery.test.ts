@@ -10,7 +10,8 @@ const tool = (name: string, description: string): CodeBuddyTool => ({
 describe('default tool discovery', () => {
   it('preserves discovery through the public getRelevantTools entry point', async () => {
     const result = await getRelevantTools('Read package.json and search for the version string', { maxTools: 12 });
-    expect(result.selectedTools.map(t => t.function.name)).toContain('tool_search');
+    expect(result.selectedTools.map(t => t.function.name)).toEqual(expect.arrayContaining(['view_file', 'bash', 'tool_search']));
+    expect(result.selectedTools.length).toBeLessThanOrEqual(12);
   });
 
   it('keeps tool_search available when relevance scores would discard it', () => {
@@ -20,6 +21,13 @@ describe('default tool discovery', () => {
     ], { maxTools: 3, minScore: 0.95 });
     expect(result.selectedTools.map(t => t.function.name)).toContain('tool_search');
   });
+  it('treats an explicit alwaysInclude as mandatory tools, not an exclusion list', () => {
+    const result = new ToolSelector().selectTools('search tools', [
+      tool('view_file', 'Read files'), tool('tool_search', 'Search tools'),
+    ], { alwaysInclude: ['view_file'], minScore: 0 });
+    expect(result.selectedTools.map(t => t.function.name)).toContain('tool_search');
+  });
+
   it('never invents an unavailable discovery tool', () => {
     const selector = new ToolSelector();
     const tools = [tool('view_file', 'Read files')];

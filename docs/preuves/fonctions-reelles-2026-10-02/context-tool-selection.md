@@ -30,3 +30,9 @@ $ node tools.mjs selection
 
 EXIT=0
 ```
+
+## Portée précisée après contre-revue
+
+La preuve concerne l’API publique `getRelevantTools`, pas un tour complet de l’agent. Pour cette requête et `maxTools:12`, la sélection garde 12 outils : `tool_search` prend la place de `git`. C’est le coût du maintien de la découverte dans ce budget ; `view_file` et `bash` restent présents. Le test de régression vérifie ces invariants. Les profils lite et compact du harnais restent hors périmètre et inchangés.
+
+`alwaysInclude` désigne des outils obligatoires, pas une liste d’exclusion : un outil absent de cette liste peut être retenu par son score. Les outils indisponibles dans la liste d’entrée ne sont jamais inventés. Le test explicite distingue ces deux contrats.
