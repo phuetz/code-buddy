@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Persistent Memory Tools
  *
@@ -37,7 +38,7 @@ export class RememberTool implements ITool {
     let category = (input.category as MemoryCategory) ?? 'custom';
 
     try {
-      const hookResult = await executeHermesLifecycleHook(context?.cwd ?? process.cwd(), 'before_memory_write', {
+      const hookResult = await executeHermesLifecycleHook(context?.cwd ?? getToolWorkingDirectory(), 'before_memory_write', {
         toolName: this.name,
         toolInput: { key, value, scope, category },
         memoryKey: key,
@@ -162,7 +163,7 @@ export class ReplaceMemoryTool implements ITool {
     let category = input.category as MemoryCategory | undefined;
 
     try {
-      const hookResult = await executeHermesLifecycleHook(context?.cwd ?? process.cwd(), 'before_memory_write', {
+      const hookResult = await executeHermesLifecycleHook(context?.cwd ?? getToolWorkingDirectory(), 'before_memory_write', {
         toolName: this.name,
         toolInput: { key, value, scope, category },
         memoryKey: key,
@@ -290,7 +291,7 @@ export class MemoryProposeTool implements ITool {
     const rationale = typeof input.rationale === 'string' ? input.rationale : undefined;
 
     try {
-      const { candidate, deduped } = getMemoryCandidateQueue(context?.cwd ?? process.cwd(), context?.botId).propose({
+      const { candidate, deduped } = getMemoryCandidateQueue(context?.cwd ?? getToolWorkingDirectory(), context?.botId).propose({
         key,
         value,
         scope,

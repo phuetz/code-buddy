@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * Scene render — turns one planned scene into a premium 1080p clip: a framed
  * visual (rounded corners + drop shadow on a gradient) or an animated text card,
@@ -9,7 +10,7 @@
  * @module tools/video/scene-render
  */
 
-import { spawn as realSpawn } from 'child_process';
+import { spawn as realSpawn } from '../../utils/tool-process.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
@@ -301,7 +302,7 @@ async function verifyVideoArtifact(
   file: string,
 ): Promise<boolean> {
   try {
-    const metadata = await fs.lstat(file);
+    const metadata = await fs.lstat(resolveToolPath(file));
     if (!metadata.isFile() || metadata.size <= 0) return false;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -360,7 +361,7 @@ async function composeFramedStill(
   const bg = `${stillPath}.bg.png`;
   const cleanup = async (): Promise<void> => {
     await Promise.all(
-      [resized, rounded, bg].map((f) => fs.rm(f, { force: true }).catch(() => undefined))
+      [resized, rounded, bg].map((f) => guardToolMutation(() => fs.rm(resolveToolPath(f), { force: true })).catch(() => undefined))
     );
   };
   try {
@@ -506,7 +507,7 @@ async function composeStill(
   }
   // ffmpeg fallback: gradient + title (via textfile to dodge drawtext escaping)
   const titleFile = `${stillPath}.txt`;
-  await fs.writeFile(titleFile, input.title).catch(() => undefined);
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(titleFile), input.title)).catch(() => undefined);
   const ok =
     (
       await run(
@@ -523,7 +524,7 @@ async function composeStill(
         })
       ).catch(() => ({ code: 1 }) as never)
     ).code === 0;
-  await fs.rm(titleFile, { force: true }).catch(() => undefined);
+  await guardToolMutation(() => fs.rm(resolveToolPath(titleFile), { force: true })).catch(() => undefined);
   return ok;
 }
 
@@ -547,7 +548,7 @@ export async function renderScene(
   const h = input.height ?? 1080;
   const lead = input.lead ?? 0.6;
   const workDir = deps.workDir ?? path.dirname(input.outPath);
-  await fs.mkdir(workDir, { recursive: true }).catch(() => undefined);
+  await guardToolMutation(() => fs.mkdir(resolveToolPath(workDir), { recursive: true })).catch(() => undefined);
 
   const useIM = !deps.noImageMagick && (await hasBinary(spawn, deps.convertBin ?? 'convert'));
   const stillPath = path.join(workDir, `${input.id}.still.png`);
@@ -559,17 +560,18 @@ export async function renderScene(
   let subtitleError: string | undefined;
   const wantSubs = input.subtitles ?? !!input.narrationText;
   if (wantSubs && input.narrationText && input.narrationWav) {
-    assPath = path.join(workDir, `${input.id}.ass`);
+    const subtitlePath = path.join(workDir, `${input.id}.ass`);
+    assPath = subtitlePath;
     // Captions are timed to the narration span; leave LEAD of silence before them.
     const narrSpan = round2(input.duration - lead - 0.9);
-    await fs
+    await guardToolMutation(() => fs
       .writeFile(
-        assPath,
-        buildKaraokeAss(input.narrationText, Math.max(1, narrSpan), lead, {
+        resolveToolPath(subtitlePath),
+        buildKaraokeAss(input.narrationText!, Math.max(1, narrSpan), lead, {
           playResX: w,
           playResY: h,
         })
-      )
+      ))
       .catch((error: unknown) => {
         assPath = undefined;
         subtitleError = error instanceof Error ? error.message : String(error);
@@ -577,7 +579,7 @@ export async function renderScene(
   }
 
   if (subtitleError) {
-    await fs.rm(stillPath, { force: true }).catch(() => undefined);
+    await guardToolMutation(() => fs.rm(resolveToolPath(stillPath), { force: true })).catch(() => undefined);
     logger.warn(`[scene-render] ${input.id} subtitles could not be written: ${subtitleError}`);
     return {
       ok: false,
@@ -598,7 +600,7 @@ export async function renderScene(
     lead,
   });
   const { code, stderr } = await run(spawn, ffmpegBin, args, 10 * 60 * 1000);
-  await fs.rm(stillPath, { force: true }).catch(() => undefined);
+  await guardToolMutation(() => fs.rm(resolveToolPath(stillPath), { force: true })).catch(() => undefined);
   if (code !== 0) {
     logger.warn(
       `[scene-render] ${input.id} ffmpeg failed: ${stderr.trim().split('\n').slice(-3).join(' ')}`

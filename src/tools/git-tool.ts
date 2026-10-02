@@ -1,4 +1,5 @@
-import { spawn } from "child_process";
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
+import { spawn } from '../utils/tool-process.js';
 import * as path from "path";
 import { ToolResult, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
@@ -88,12 +89,13 @@ export interface CherryPickOptions {
 const BISECT_DONE_PATTERN = /\bis the first '?[\w-]+'? commit\b/;
 
 export class GitTool {
-  private confirmationService = ConfirmationService.getInstance();
+  private get confirmationService(): ConfirmationService { return ConfirmationService.getInstance(); }
   private attributionManager: AttributionManager;
-  private cwd: string;
+  private configuredCwd: string | undefined;
+  private get cwd(): string { return getToolWorkingDirectory(this.configuredCwd); }
 
   constructor(cwd?: string) {
-    this.cwd = cwd || process.cwd();
+    this.configuredCwd = cwd;
     this.attributionManager = new AttributionManager();
   }
 

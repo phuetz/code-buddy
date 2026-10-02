@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * BlenderProc render wrapper — the "simulate" leg of the simulate→perceive loop.
  *
@@ -21,7 +22,7 @@
  * @module tools/vision/blender-render
  */
 
-import { spawn as realSpawn, type SpawnOptions } from 'child_process';
+import { spawn as realSpawn, type SpawnOptions } from '../../utils/tool-process.js';
 import { mkdir, access } from 'fs/promises';
 import { join } from 'path';
 import { logger } from '../../utils/logger.js';
@@ -96,7 +97,7 @@ export function buildBlenderProcArgs(o: BlenderRenderOptions): string[] {
 
 async function defaultExists(p: string): Promise<boolean> {
   try {
-    await access(p);
+    await access(resolveToolPath(p));
     return true;
   } catch {
     return false;
@@ -149,7 +150,7 @@ export async function renderScenes(
   const bin = deps.blenderprocBin ?? 'blenderproc';
   const exists = deps.exists ?? defaultExists;
   const mkdirFn = deps.mkdir ?? (async (dir: string) => {
-    await mkdir(dir, { recursive: true });
+    await guardToolMutation(() => mkdir(resolveToolPath(dir), { recursive: true }));
   });
   const timeoutMs = deps.timeoutMs ?? 30 * 60 * 1000;
   const imagesDir = join(o.outDir, 'images');

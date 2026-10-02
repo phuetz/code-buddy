@@ -1,6 +1,7 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn } from '../utils/tool-process.js';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import * as fs from 'node:fs';
 import { checkSecretFileAccess, formatSecretRefusal, getHomeCredentialRoots, isSecretFileReadAllowedByOperator } from '../security/secret-files.js';
@@ -11,13 +12,13 @@ function isWithin(candidate: string, root: string): boolean {
 }
 
 function canonicalPath(candidate: string): string {
-  let ancestor = path.resolve(candidate);
-  while (!fs.existsSync(ancestor)) {
+  let ancestor = path.resolve(getToolWorkingDirectory(), candidate);
+  while (!fs.existsSync(resolveToolPath(ancestor))) {
     const parent = path.dirname(ancestor);
-    if (parent === ancestor) return path.resolve(candidate);
+    if (parent === ancestor) return path.resolve(getToolWorkingDirectory(), candidate);
     ancestor = parent;
   }
-  return path.resolve(fs.realpathSync(ancestor), path.relative(ancestor, candidate));
+  return path.resolve(fs.realpathSync(resolveToolPath(ancestor)), path.relative(ancestor, candidate));
 }
 
 function archiveSourceRefusal(source: string): string | null {
@@ -34,11 +35,11 @@ function archiveSourceRefusal(source: string): string | null {
 function findSecretSource(source: string, seen = new Set<string>()): string | null {
   const verdict = checkSecretFileAccess(source, 'read');
   if (verdict.secret) return formatSecretRefusal(source, verdict);
-  const canonical = fs.realpathSync(source);
+  const canonical = fs.realpathSync(resolveToolPath(source));
   if (seen.has(canonical)) return null;
   seen.add(canonical);
-  if (!fs.statSync(source).isDirectory()) return null;
-  for (const entry of fs.readdirSync(source)) {
+  if (!fs.statSync(resolveToolPath(source)).isDirectory()) return null;
+  for (const entry of fs.readdirSync(resolveToolPath(source))) {
     const refused = findSecretSource(path.join(source, entry), seen);
     if (refused) return refused;
   }
@@ -105,7 +106,7 @@ function getArchivePassword(optionPassword?: string): string | undefined {
  */
 export class ArchiveTool {
   private readonly supportedFormats = ['.zip', '.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.tar.xz', '.txz', '.7z', '.rar', '.gz', '.bz2', '.xz'];
-  private readonly outputDir = path.join(process.cwd(), '.codebuddy', 'extracted');
+  private get outputDir(): string { return path.join(getToolWorkingDirectory(), '.codebuddy', 'extracted'); }
   private vfs = UnifiedVfsRouter.Instance;
 
   /**
@@ -127,8 +128,8 @@ export class ArchiveTool {
     }
     // Check for path traversal attempts
     if (archivePath.includes('..') && !path.isAbsolute(archivePath)) {
-      const resolved = path.resolve(process.cwd(), archivePath);
-      if (!resolved.startsWith(process.cwd())) {
+      const resolved = path.resolve(getToolWorkingDirectory(), archivePath);
+      if (!resolved.startsWith(getToolWorkingDirectory())) {
         return {
           success: false,
           error: 'Path traversal detected: archive path must be within working directory'
@@ -137,7 +138,7 @@ export class ArchiveTool {
     }
 
     try {
-      const resolvedPath = path.resolve(process.cwd(), archivePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), archivePath);
       const refusal = archiveSourceRefusal(resolvedPath);
       if (refusal) return { success: false, error: refusal };
 
@@ -267,7 +268,7 @@ export class ArchiveTool {
     }
 
     try {
-      const resolvedPath = path.resolve(process.cwd(), archivePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), archivePath);
       const refusal = archiveSourceRefusal(resolvedPath);
       if (refusal) return { success: false, error: refusal };
 
@@ -286,12 +287,12 @@ export class ArchiveTool {
         };
       }
 
-      const outputDir = path.resolve(options.outputDir || path.join(
+      const outputDir = path.resolve(getToolWorkingDirectory(), options.outputDir || path.join(
         this.outputDir,
         path.basename(resolvedPath, path.extname(resolvedPath))
       ));
       const canonicalOutput = canonicalPath(outputDir);
-      if (!isWithin(canonicalOutput, canonicalPath(process.cwd()))) {
+      if (!isWithin(canonicalOutput, canonicalPath(getToolWorkingDirectory()))) {
         return { success: false, error: 'Extraction destination must be within the working directory' };
       }
 
@@ -439,7 +440,7 @@ export class ArchiveTool {
     }
 
     try {
-      const resolvedPaths = sourcePaths.map(p => path.resolve(process.cwd(), p));
+      const resolvedPaths = sourcePaths.map(p => path.resolve(getToolWorkingDirectory(), p));
 
       // Verify all source paths exist
       for (const p of resolvedPaths) {
@@ -457,7 +458,7 @@ export class ArchiveTool {
       const ext = format === 'tar.gz' ? '.tar.gz' : format === 'tar.bz2' ? '.tar.bz2' : format === 'tar.xz' ? '.tar.xz' : `.${format}`;
       const timestamp = Date.now();
       const archiveName = `archive_${timestamp}${ext}`;
-      const outputPath = options.outputPath || path.join(process.cwd(), archiveName);
+      const outputPath = options.outputPath || path.join(getToolWorkingDirectory(), archiveName);
 
       let success: boolean;
 
@@ -959,7 +960,7 @@ export class ArchiveTool {
    */
   async listArchives(dirPath: string = '.'): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), dirPath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), dirPath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {

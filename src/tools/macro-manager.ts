@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import * as path from 'path';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import type { ComputerControlInput } from './computer-control-tool.js';
@@ -11,7 +12,7 @@ export interface MacroDefinition {
 
 export class MacroManager {
   private static instance: MacroManager | null = null;
-  private readonly macrosDir = path.join(process.cwd(), '.codebuddy', 'macros');
+  private get macrosDir(): string { return path.join(getToolWorkingDirectory(), '.codebuddy', 'macros'); }
   private vfs = UnifiedVfsRouter.Instance;
 
   private constructor() {}

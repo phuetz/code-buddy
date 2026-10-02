@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Batch Processing Mode
  *
@@ -121,7 +122,7 @@ export class BatchProcessor {
     } = {}
   ): Promise<number> {
     const files = await fg(pattern, {
-      cwd: options.cwd || process.cwd(),
+      cwd: options.cwd || getToolWorkingDirectory(),
       absolute: true,
     });
 

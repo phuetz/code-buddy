@@ -1,4 +1,5 @@
-import { exec } from 'node:child_process';
+import { resolveToolPath, guardToolMutation } from '../utils/tool-execution-context.js';
+import { exec } from '../utils/tool-process.js';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -85,7 +86,7 @@ ${macroCode}
       // Save to a temporary file
       const tempDir = os.tmpdir();
       const psFilePath = path.join(tempDir, `office_macro_${Date.now()}.ps1`);
-      await fs.writeFile(psFilePath, psScript, 'utf8');
+      await guardToolMutation(() => fs.writeFile(resolveToolPath(psFilePath), psScript, 'utf8'));
 
       // Execute via Powershell
       const { stdout, stderr } = await execAsync(`powershell.exe -ExecutionPolicy Bypass -File "${psFilePath}"`, {
@@ -93,7 +94,7 @@ ${macroCode}
       });
 
       // Cleanup
-      await fs.unlink(psFilePath).catch(() => {});
+      await guardToolMutation(() => fs.unlink(resolveToolPath(psFilePath))).catch(() => {});
 
       if (stderr) {
         return { success: false, error: stderr.trim() };

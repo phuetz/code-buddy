@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 /**
  * Git Merge Conflict Resolver Tool
  *
@@ -5,7 +6,7 @@
  * (ours, theirs, both, ai), and exposes a tool for the agent to use.
  */
 
-import { spawnSync } from 'child_process';
+import { spawnSync } from '../utils/tool-process.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
@@ -135,9 +136,9 @@ export async function resolveAllConflicts(
   strategy: ConflictStrategy = 'ours',
   llmCall?: (prompt: string) => Promise<string>,
 ): Promise<{ resolved: number; content: string }> {
-  const absolutePath = path.resolve(filePath);
+  const absolutePath = path.resolve(getToolWorkingDirectory(), filePath);
   assertNotSecretConflictFile(absolutePath);
-  const fileContent = fs.readFileSync(absolutePath, 'utf-8');
+  const fileContent = fs.readFileSync(resolveToolPath(absolutePath), 'utf-8');
   const conflicts = parseConflicts(fileContent, absolutePath);
 
   if (conflicts.length === 0) {
@@ -216,7 +217,7 @@ export async function executeResolveConflicts(args: {
   scan_only?: boolean;
 }): Promise<ToolResult> {
   try {
-    const cwd = process.cwd();
+    const cwd = getToolWorkingDirectory();
 
     // If no file specified, scan for all conflicted files
     if (!args.file_path || args.scan_only) {
@@ -226,11 +227,11 @@ export async function executeResolveConflicts(args: {
     const filePath = path.resolve(cwd, args.file_path);
     assertNotSecretConflictFile(filePath);
 
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(resolveToolPath(filePath))) {
       return { success: false, error: `File not found: ${filePath}` };
     }
 
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const fileContent = fs.readFileSync(resolveToolPath(filePath), 'utf-8');
     const conflicts = parseConflicts(fileContent, filePath);
 
     if (conflicts.length === 0) {
@@ -258,7 +259,7 @@ export async function executeResolveConflicts(args: {
 
     const result = await resolveAllConflicts(filePath, strategy);
     assertNotSecretConflictFile(filePath);
-    fs.writeFileSync(filePath, result.content, 'utf-8');
+    guardToolMutation(() => fs.writeFileSync(resolveToolPath(filePath), result.content, 'utf-8'));
 
     return {
       success: true,
@@ -332,7 +333,7 @@ function scanForConflicts(cwd: string): ToolResult {
     const fullPath = path.join(root, file);
     if (checkSecretFileAccess(fullPath, 'read').secret) continue;
     try {
-      const content = fs.readFileSync(fullPath, 'utf-8');
+      const content = fs.readFileSync(resolveToolPath(fullPath), 'utf-8');
       const conflicts = parseConflicts(content, fullPath);
       summaries.push(`  ${file}: ${conflicts.length} conflict(s)`);
     } catch {

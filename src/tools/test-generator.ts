@@ -1,6 +1,7 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from "path";
-import { exec } from "child_process";
+import { exec } from '../utils/tool-process.js';
 import { promisify } from "util";
 import { ToolResult } from "../types/index.js";
 
@@ -143,10 +144,12 @@ class Test{{className}}:
  * Test Generator Tool - Generate and run tests
  */
 export class TestGeneratorTool {
-  private projectRoot: string;
+  private configuredRoot: string | undefined;
+  private get projectRoot(): string { return getToolWorkingDirectory(this.configuredRoot); }
+  private set projectRoot(value: string) { this.configuredRoot = value; }
 
-  constructor(projectRoot: string = process.cwd()) {
-    this.projectRoot = projectRoot;
+  constructor(projectRoot?: string) {
+    this.configuredRoot = projectRoot;
   }
 
   /**

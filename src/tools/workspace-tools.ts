@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { constants as fsConstants, promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { ToolResult } from '../types/index.js';
@@ -156,12 +157,12 @@ export class WorkspaceSearchTool implements ITool {
         for (const match of matches) {
           if (lines.length >= maxResults) break;
           const lexical = path.isAbsolute(match.file)
-            ? path.resolve(match.file)
+            ? path.resolve(getToolWorkingDirectory(), match.file)
             : path.resolve(repo.path, match.file);
           if (!isInside(repo.path, lexical)) {
             throw new Error(`Search match escaped repository root: ${repo.name}`);
           }
-          const canonical = await fs.realpath(lexical);
+          const canonical = await fs.realpath(resolveToolPath(lexical));
           if (!isInside(repo.path, canonical)) {
             throw new Error(`Search match resolved outside repository root: ${repo.name}`);
           }
@@ -306,7 +307,7 @@ export class WorkspaceReadTool implements ITool {
       if (!isInside(repo.path, lexical)) {
         return { success: false, error: 'workspace_read path resolves outside the repository root' };
       }
-      const canonical = await fs.realpath(lexical);
+      const canonical = await fs.realpath(resolveToolPath(lexical));
       if (!isInside(repo.path, canonical)) {
         return { success: false, error: 'workspace_read path resolves through a symlink outside the repository root' };
       }
@@ -317,7 +318,7 @@ export class WorkspaceReadTool implements ITool {
         DEFAULT_MAX_FILE_KB,
       );
       const maxBytes = maxFileKb * 1024;
-      const handle = await fs.open(canonical, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+      const handle = await fs.open(resolveToolPath(canonical), fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
       let content: string;
       try {
         const info = await handle.stat();

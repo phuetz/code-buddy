@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Search Tool Adapters
  *
@@ -26,7 +27,7 @@ const searchInstances = new Map<string, SearchTool>();
 const MAX_WORKSPACE_SEARCH_INSTANCES = 32;
 
 function getSearch(cwd?: string): SearchTool {
-  const workspace = path.resolve(cwd ?? process.cwd());
+  const workspace = path.resolve(getToolWorkingDirectory(), cwd ?? getToolWorkingDirectory());
   let search = searchInstances.get(workspace);
   if (!search) {
     if (searchInstances.size >= MAX_WORKSPACE_SEARCH_INSTANCES) {

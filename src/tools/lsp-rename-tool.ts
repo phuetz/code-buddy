@@ -1,3 +1,5 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
+
 /**
  * LSP Rename Tool
  *
@@ -174,10 +176,10 @@ export async function executeLspRename(params: LspRenameParams): Promise<ToolRes
   }
 
   // Resolve the file path
-  const resolvedPath = path.resolve(filePath);
+  const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
   const initialSecret = checkSecretFileAccess(resolvedPath, 'read');
   if (initialSecret.secret) return { success: false, error: formatSecretRefusal(resolvedPath, initialSecret) };
-  if (!fs.existsSync(resolvedPath)) {
+  if (!fs.existsSync(resolveToolPath(resolvedPath))) {
     return { success: false, error: `File not found: ${resolvedPath}` };
   }
 
@@ -233,11 +235,11 @@ export async function executeLspRename(params: LspRenameParams): Promise<ToolRes
       const verdict = checkSecretFileAccess(editFilePath, 'read');
       if (verdict.secret) return { success: false, error: formatSecretRefusal(editFilePath, verdict) };
       try {
-        const content = fs.readFileSync(editFilePath, 'utf-8');
+        const content = fs.readFileSync(resolveToolPath(editFilePath), 'utf-8');
         const modified = applyEditsToContent(content, edits);
         const beforeWrite = checkSecretFileAccess(editFilePath, 'read');
         if (beforeWrite.secret) return { success: false, error: formatSecretRefusal(editFilePath, beforeWrite) };
-        fs.writeFileSync(editFilePath, modified, 'utf-8');
+        guardToolMutation(() => fs.writeFileSync(resolveToolPath(editFilePath), modified, 'utf-8'));
 
         summaries.push({
           file: editFilePath,

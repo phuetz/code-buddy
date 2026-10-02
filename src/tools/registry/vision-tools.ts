@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * Vision and Image Tool Adapters
  *
@@ -40,7 +41,7 @@ import {
 function secretImagePathError(input: Record<string, unknown>, cwd?: string): ToolResult | null {
   const raw = input.image_path;
   if (typeof raw !== 'string' || !raw.trim()) return null;
-  const verdict = checkSecretFileAccess(raw, 'read', { baseDir: cwd ?? process.cwd() });
+  const verdict = checkSecretFileAccess(raw, 'read', { baseDir: cwd ?? getToolWorkingDirectory() });
   return verdict.secret ? { success: false, error: formatSecretRefusal(raw, verdict) } : null;
 }
 
@@ -139,7 +140,7 @@ export class BrowserVisionTool implements ITool {
 
   async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
     try {
-      const rootDir = path.resolve(this.options.rootDir ?? context?.cwd ?? process.cwd());
+      const rootDir = path.resolve(getToolWorkingDirectory(), this.options.rootDir ?? context?.cwd ?? getToolWorkingDirectory());
       const url = optionalString(input, 'url');
       const launched = await this.browser.execute({
         action: 'launch',
@@ -158,7 +159,7 @@ export class BrowserVisionTool implements ITool {
       }
 
       const screenshotDir = path.join(rootDir, '.codebuddy', 'browser-vision');
-      await fs.mkdir(screenshotDir, { recursive: true });
+      await guardToolMutation(() => fs.mkdir(resolveToolPath(screenshotDir), { recursive: true }));
       const screenshotPath = path.join(
         screenshotDir,
         `browser-vision-${sanitizeFilename(this.options.createId?.() ?? String(Date.now()))}.png`,
@@ -775,10 +776,10 @@ export class CameraAnalyzeTool implements ITool {
       const secretError = secretImagePathError(input, cwd);
       if (secretError) return secretError;
       imagePath = path.isAbsolute(providedPath)
-        ? path.resolve(providedPath)
-        : path.resolve(cwd ?? process.cwd(), providedPath);
+        ? path.resolve(getToolWorkingDirectory(), providedPath)
+        : path.resolve(cwd ?? getToolWorkingDirectory(), providedPath);
       try {
-        const stat = await fs.stat(imagePath);
+        const stat = await fs.stat(resolveToolPath(imagePath));
         if (!stat.isFile()) {
           return { success: false, error: `image_path is not a file: ${imagePath}` };
         }
@@ -807,7 +808,7 @@ export class CameraAnalyzeTool implements ITool {
 
     let bytes: Buffer;
     try {
-      bytes = await fs.readFile(imagePath);
+      bytes = await fs.readFile(resolveToolPath(imagePath));
     } catch (error) {
       return {
         success: false,

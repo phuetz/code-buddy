@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
@@ -50,7 +51,7 @@ export async function analyzeVideoWithModel(
   }
 
   const fetchImpl = runtime.fetch ?? fetch;
-  const rootDir = path.resolve(runtime.rootDir ?? process.cwd());
+  const rootDir = path.resolve(getToolWorkingDirectory(), runtime.rootDir ?? getToolWorkingDirectory());
   const prepared = await prepareVideo(videoSource, {
     rootDir,
     fetchImpl,
@@ -106,16 +107,16 @@ async function prepareVideo(
     const mimeType = detectMimeFromContentType(response.headers.get('content-type')) ?? 'video/mp4';
     const ext = extensionForMime(mimeType);
     const cacheDir = path.join(options.rootDir, '.codebuddy', 'video-analysis');
-    await fs.mkdir(cacheDir, { recursive: true });
+    await guardToolMutation(() => fs.mkdir(resolveToolPath(cacheDir), { recursive: true }));
     const localPath = path.join(cacheDir, `video-${sanitizeId(options.createId?.() ?? randomUUID())}.${ext}`);
-    await fs.writeFile(localPath, bytes);
+    await guardToolMutation(() => fs.writeFile(resolveToolPath(localPath), bytes));
     return { path: localPath, mimeType, sizeBytes: bytes.length };
   }
 
   const stripped = videoSource.startsWith('file://') ? videoSource.slice('file://'.length) : videoSource;
-  const localPath = path.isAbsolute(stripped) ? path.resolve(stripped) : path.resolve(options.rootDir, stripped);
+  const localPath = path.isAbsolute(stripped) ? path.resolve(getToolWorkingDirectory(), stripped) : path.resolve(options.rootDir, stripped);
   refuseSecretVideo(localPath);
-  const stat = await fs.stat(localPath);
+  const stat = await fs.stat(resolveToolPath(localPath));
   const mimeType = detectVideoMimeType(localPath);
   if (!mimeType) {
     throw new Error(`Unsupported video format: ${path.extname(localPath)}. Supported: ${Object.keys(VIDEO_MIME_TYPES).join(', ')}`);
@@ -132,7 +133,7 @@ function detectVideoMimeType(videoPath: string): string | undefined {
 
 async function videoToBase64DataUrl(videoPath: string, mimeType: string): Promise<string> {
   refuseSecretVideo(videoPath);
-  const bytes = await fs.readFile(videoPath);
+  const bytes = await fs.readFile(resolveToolPath(videoPath));
   return `data:${mimeType};base64,${bytes.toString('base64')}`;
 }
 

@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * SQL Tool
  *
@@ -107,10 +108,10 @@ export class SQLTool {
    * Validate that the database path is safe (no path traversal attacks)
    */
   private validateDatabasePath(dbPath: string): { valid: boolean; error?: string } {
-    const resolvedPath = path.resolve(dbPath);
+    const resolvedPath = path.resolve(getToolWorkingDirectory(), dbPath);
     const secret = checkSecretFileAccess(resolvedPath, 'read');
     if (secret.secret) return { valid: false, error: formatSecretRefusal(resolvedPath, secret) };
-    const cwd = process.cwd();
+    const cwd = getToolWorkingDirectory();
     const homeDir = os.homedir();
 
     // Check for path traversal (resolved path should be within cwd or explicitly allowed)
@@ -155,7 +156,7 @@ export class SQLTool {
       const { action, database } = params;
 
       // Validate database path for path traversal attacks
-      const dbPath = path.resolve(database);
+      const dbPath = path.resolve(getToolWorkingDirectory(), database);
       const pathValidation = this.validateDatabasePath(database);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };

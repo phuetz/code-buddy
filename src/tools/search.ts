@@ -1,4 +1,5 @@
-import { spawn } from "child_process";
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
+import { spawn } from '../utils/tool-process.js';
 import { getRipgrepPath } from '../utils/ripgrep-path.js';
 import { classifySecretPath, isSecretFileReadAllowedByOperator, SECRET_SEARCH_EXCLUDE_GLOBS } from '../security/secret-files.js';
 import { ToolResult } from "../types/index.js";
@@ -48,8 +49,10 @@ export interface UnifiedSearchResult {
 }
 
 export class SearchTool {
-  private _confirmationService = ConfirmationService.getInstance();
-  private currentDirectory: string = process.cwd();
+  private get _confirmationService(): ConfirmationService { return ConfirmationService.getInstance(); }
+  private configuredDirectory: string | undefined;
+  private get currentDirectory(): string { return getToolWorkingDirectory(this.configuredDirectory); }
+  private set currentDirectory(value: string) { this.configuredDirectory = value; }
   private searchCache = new Cache<UnifiedSearchResult[]>(SEARCH_CONFIG.CACHE_TTL);
   private vfs = UnifiedVfsRouter.Instance;
 
@@ -77,6 +80,7 @@ export class SearchTool {
       // Create cache key from search parameters
       const cacheKey = createCacheKey(
         'search',
+        this.currentDirectory,
         query,
         searchType,
         options.includePattern,

@@ -1,3 +1,4 @@
+import { withToolExecutionContext, withToolGenerator, waitForToolOperations } from '../utils/tool-execution-context.js';
 /**
  * Tool Handler Module
  *
@@ -596,6 +597,17 @@ export class ToolHandler {
   }
 
   public async executeTool(
+    toolCall: CodeBuddyToolCall,
+    executionExtra?: Record<string, unknown>,
+  ): Promise<ToolResult> {
+    return withToolExecutionContext({ cwd: this.getWorkingDirectory(), signal: abortSignalFromExecutionExtra(executionExtra) },
+      async () => {
+        try { return await this.executeToolInContext(toolCall, executionExtra); }
+        finally { await waitForToolOperations(); }
+      });
+  }
+
+  private async executeToolInContext(
     toolCall: CodeBuddyToolCall,
     executionExtra?: Record<string, unknown>,
   ): Promise<ToolResult> {
@@ -1775,6 +1787,14 @@ export class ToolHandler {
    * Yields string deltas for real-time output.
    */
   public async *executeToolStreaming(
+    toolCall: CodeBuddyToolCall,
+    executionExtra?: Record<string, unknown>,
+  ): AsyncGenerator<string, ToolResult, undefined> {
+    return yield* withToolGenerator({ cwd: this.getWorkingDirectory(), signal: abortSignalFromExecutionExtra(executionExtra) },
+      () => this.executeToolStreamingInContext(toolCall, executionExtra));
+  }
+
+  private async *executeToolStreamingInContext(
     toolCall: CodeBuddyToolCall,
     executionExtra?: Record<string, unknown>,
   ): AsyncGenerator<string, ToolResult, undefined> {

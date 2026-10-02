@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /** Deterministic, local-only extraction of book manuscript material for trailers. */
 
 import fs from 'fs/promises';
@@ -58,9 +59,9 @@ export interface ExtractCandidateExcerptsOptions {
 }
 
 const defaultFileSystem: BookManuscriptFileSystem = {
-  readdir: (directory, options) => fs.readdir(directory, options),
-  lstat: (filename) => fs.lstat(filename),
-  readFile: (filename, encoding) => fs.readFile(filename, encoding),
+  readdir: (directory, options) => fs.readdir(resolveToolPath(directory), options),
+  lstat: (filename) => fs.lstat(resolveToolPath(filename)),
+  readFile: (filename, encoding) => fs.readFile(resolveToolPath(filename), encoding),
 };
 
 function naturalCompare(left: string, right: string): number {
@@ -112,7 +113,7 @@ export async function loadBookManuscript(
   options: LoadBookManuscriptOptions = {},
 ): Promise<BookManuscript> {
   if (!bookDir.trim()) throw new Error('Book directory is required');
-  const directory = path.resolve(bookDir);
+  const directory = path.resolve(getToolWorkingDirectory(), bookDir);
   const io = options.fileSystem ?? defaultFileSystem;
   const maxBytes = resolveReadLimit(options.maxBytesPerFile);
   const entries = await io.readdir(directory, { withFileTypes: true });

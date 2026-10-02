@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Environment Tool
  *
@@ -183,7 +184,7 @@ export class EnvTool {
    * Load .env file
    */
   private async loadEnvFile(filePath: string): Promise<ToolResult> {
-    const resolvedPath = path.resolve(filePath);
+    const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
     if (!await this.vfs.exists(resolvedPath)) {
       return { success: false, error: `File not found: ${resolvedPath}` };
@@ -221,7 +222,7 @@ export class EnvTool {
    * Save current env to file
    */
   private async saveEnvFile(filePath: string): Promise<ToolResult> {
-    const resolvedPath = path.resolve(filePath);
+    const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
     const lines: string[] = [
       '# Environment variables',
@@ -272,7 +273,7 @@ export class EnvTool {
    * Validate .env file
    */
   private async validateEnv(filePath: string): Promise<ToolResult> {
-    const resolvedPath = path.resolve(filePath);
+    const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
     if (!await this.vfs.exists(resolvedPath)) {
       return { success: false, error: `File not found: ${resolvedPath}` };

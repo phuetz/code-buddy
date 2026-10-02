@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Dependency Analyzer Tool
  *
@@ -11,7 +12,7 @@
 
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execSync } from '../utils/tool-process.js';
 
 export interface PackageDependency {
   name: string;
@@ -58,7 +59,7 @@ export interface AnalysisOptions {
 }
 
 const DEFAULT_OPTIONS: AnalysisOptions = {
-  rootDir: process.cwd(),
+  get rootDir() { return getToolWorkingDirectory(); },
   checkOutdated: true,
   checkUnused: true,
   checkCircular: true,
@@ -73,7 +74,7 @@ export async function analyzeDependencies(
 ): Promise<DependencyAnalysis> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const startTime = Date.now();
-  const rootDir = opts.rootDir || process.cwd();
+  const rootDir = opts.rootDir || getToolWorkingDirectory();
 
   // Read package.json
   const packageJsonPath = path.join(rootDir, 'package.json');

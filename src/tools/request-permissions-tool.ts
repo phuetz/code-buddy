@@ -33,14 +33,21 @@ export interface PermissionGrant {
 }
 
 /** Active grants for this session */
-const grants: PermissionGrant[] = [];
-let currentTurn = 0;
+const states = new WeakMap<ConfirmationService, { grants: PermissionGrant[]; currentTurn: number }>();
+function grantState() {
+  const service = ConfirmationService.getInstance();
+  let state = states.get(service);
+  if (!state) { state = { grants: [], currentTurn: 0 }; states.set(service, state); }
+  return state;
+}
 
 /**
  * Set the current turn number (called from agent executor).
  */
 export function setCurrentTurn(turn: number): void {
-  currentTurn = turn;
+  const state = grantState();
+  state.currentTurn = turn;
+  const { grants } = state;
   // Expire turn-scoped grants from previous turns
   for (let i = grants.length - 1; i >= 0; i--) {
     const g = grants[i];
@@ -55,7 +62,7 @@ export function setCurrentTurn(turn: number): void {
  * Check if a permission has been granted.
  */
 export function hasPermission(type: PermissionGrant['type'], target: string): boolean {
-  return grants.some(g => {
+  return grantState().grants.some(g => {
     if (g.type !== type) return false;
     // Simple glob match
     if (g.target === '*') return true;
@@ -69,14 +76,14 @@ export function hasPermission(type: PermissionGrant['type'], target: string): bo
  * List all active grants.
  */
 export function listGrants(): PermissionGrant[] {
-  return [...grants];
+  return [...grantState().grants];
 }
 
 /**
  * Clear all grants (for testing or session reset).
  */
 export function clearGrants(): void {
-  grants.length = 0;
+  grantState().grants.length = 0;
 }
 
 // ============================================================================
@@ -87,7 +94,7 @@ export class RequestPermissionsTool extends BaseTool {
   readonly name = 'request_permissions';
   readonly description = 'Request additional filesystem, network, or execution permissions from the user. Use when you need access beyond the current project directory.';
 
-  private confirmationService = ConfirmationService.getInstance();
+  private get confirmationService(): ConfirmationService { return ConfirmationService.getInstance(); }
 
   protected getParameters(): Record<string, ParameterDefinition> {
     return {
@@ -160,9 +167,9 @@ export class RequestPermissionsTool extends BaseTool {
       target,
       scope,
       grantedAt: new Date(),
-      turnNumber: scope === 'turn' ? currentTurn : undefined,
+      turnNumber: scope === 'turn' ? grantState().currentTurn : undefined,
     };
-    grants.push(grant);
+    grantState().grants.push(grant);
 
     logger.info(`Permission granted: ${type} access to ${target} (scope: ${scope})`);
     return this.success(`Permission granted: ${type} access to ${target} (scope: ${scope})`);

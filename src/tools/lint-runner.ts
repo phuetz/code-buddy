@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Multi-Language Lint Runner
  *
@@ -13,7 +14,7 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { spawnSync } from 'child_process';
+import { spawnSync } from '../utils/tool-process.js';
 import { logger } from '../utils/logger.js';
 
 // ============================================================================
@@ -99,13 +100,13 @@ const LINTER_DETECTORS: Array<{
         'eslint.config.ts', 'eslint.config.mts',
       ];
       for (const file of candidates) {
-        if (existsSync(join(root, file))) return file;
+        if (existsSync(resolveToolPath(join(root, file)))) return file;
       }
       // Also check package.json for eslintConfig key
       const pkgPath = join(root, 'package.json');
-      if (existsSync(pkgPath)) {
+      if (existsSync(resolveToolPath(pkgPath))) {
         try {
-          const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+          const pkg = JSON.parse(readFileSync(resolveToolPath(pkgPath), 'utf-8'));
           if (pkg.eslintConfig) return 'package.json (eslintConfig)';
         } catch {
           // ignore
@@ -119,13 +120,13 @@ const LINTER_DETECTORS: Array<{
     command: 'ruff',
     filePatterns: ['*.py', '*.pyi'],
     detect: (root) => {
-      if (existsSync(join(root, 'ruff.toml'))) return 'ruff.toml';
-      if (existsSync(join(root, '.ruff.toml'))) return '.ruff.toml';
+      if (existsSync(resolveToolPath(join(root, 'ruff.toml')))) return 'ruff.toml';
+      if (existsSync(resolveToolPath(join(root, '.ruff.toml')))) return '.ruff.toml';
       // Check pyproject.toml for [tool.ruff]
       const pyproject = join(root, 'pyproject.toml');
-      if (existsSync(pyproject)) {
+      if (existsSync(resolveToolPath(pyproject))) {
         try {
-          const content = readFileSync(pyproject, 'utf-8');
+          const content = readFileSync(resolveToolPath(pyproject), 'utf-8');
           if (content.includes('[tool.ruff]')) return 'pyproject.toml [tool.ruff]';
         } catch {
           // ignore
@@ -139,7 +140,7 @@ const LINTER_DETECTORS: Array<{
     command: 'cargo',
     filePatterns: ['*.rs'],
     detect: (root) => {
-      if (existsSync(join(root, 'Cargo.toml'))) return 'Cargo.toml';
+      if (existsSync(resolveToolPath(join(root, 'Cargo.toml')))) return 'Cargo.toml';
       return null;
     },
   },
@@ -148,7 +149,7 @@ const LINTER_DETECTORS: Array<{
     command: 'golangci-lint',
     filePatterns: ['*.go'],
     detect: (root) => {
-      if (existsSync(join(root, 'go.mod'))) return 'go.mod';
+      if (existsSync(resolveToolPath(join(root, 'go.mod')))) return 'go.mod';
       return null;
     },
   },
@@ -157,8 +158,8 @@ const LINTER_DETECTORS: Array<{
     command: 'rubocop',
     filePatterns: ['*.rb', '*.rake', 'Gemfile', 'Rakefile'],
     detect: (root) => {
-      if (existsSync(join(root, '.rubocop.yml'))) return '.rubocop.yml';
-      if (existsSync(join(root, '.rubocop.yaml'))) return '.rubocop.yaml';
+      if (existsSync(resolveToolPath(join(root, '.rubocop.yml')))) return '.rubocop.yml';
+      if (existsSync(resolveToolPath(join(root, '.rubocop.yaml')))) return '.rubocop.yaml';
       return null;
     },
   },
@@ -167,8 +168,8 @@ const LINTER_DETECTORS: Array<{
     command: 'phpstan',
     filePatterns: ['*.php'],
     detect: (root) => {
-      if (existsSync(join(root, 'phpstan.neon'))) return 'phpstan.neon';
-      if (existsSync(join(root, 'phpstan.neon.dist'))) return 'phpstan.neon.dist';
+      if (existsSync(resolveToolPath(join(root, 'phpstan.neon')))) return 'phpstan.neon';
+      if (existsSync(resolveToolPath(join(root, 'phpstan.neon.dist')))) return 'phpstan.neon.dist';
       return null;
     },
   },
@@ -241,7 +242,7 @@ async function runLinter(config: LinterConfig, files?: string[]): Promise<LintRe
   const { command, args } = buildLintCommand(config, files, false);
 
   const result = spawnSync(command, args, {
-    cwd: process.cwd(),
+    cwd: getToolWorkingDirectory(),
     encoding: 'utf-8',
     timeout: 60000,
     maxBuffer: 5 * 1024 * 1024,
@@ -283,7 +284,7 @@ async function fixLinter(config: LinterConfig, files?: string[]): Promise<LintRe
   const { command, args } = buildLintCommand(config, files, true);
 
   const result = spawnSync(command, args, {
-    cwd: process.cwd(),
+    cwd: getToolWorkingDirectory(),
     encoding: 'utf-8',
     timeout: 60000,
     maxBuffer: 5 * 1024 * 1024,

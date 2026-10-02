@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from './tool-execution-context.js';
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
@@ -122,6 +123,8 @@ export class ConfirmationService extends EventEmitter {
   private interactiveBridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult>) | null = null;
   private mcpApprovalBridge: ((options: ConfirmationOptions, operationType?: ConfirmationOperationType) => Promise<ConfirmationResult>) | null = null;
   private wsApprovalBridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult | null>) | null = null;
+
+  static getScopedInstance(): ConfirmationService | undefined { return this.instanceContext.getStore(); }
 
   static getInstance(): ConfirmationService {
     const scoped = this.instanceContext.getStore();
@@ -409,7 +412,7 @@ export class ConfirmationService extends EventEmitter {
         : { file_path: options.filename };
     const declarativeRoot = typeof options.detail?.cwd === 'string'
       ? options.detail.cwd
-      : process.cwd();
+      : getToolWorkingDirectory();
     const declarativeDecision = checkDeclarativePermission(toolName, toolArgs, declarativeRoot);
     if (declarativeDecision === 'deny') {
       return this.auditGate('declarative-rule', true, options, {

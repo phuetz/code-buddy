@@ -14,7 +14,8 @@ globalThis.fetch = async (url, init) => {
   fs.appendFileSync(path.join(workspace, 'provider.jsonl'), JSON.stringify({ messages, tools: body.tools?.map((tool) => tool.function.name) }) + '\n');
   let call;
   let content = 'done';
-  if (prompt.includes('mcp') && results.length === 0) call = ['mcp__fixture__echo', { text: 'mcp-reference-ok' }];
+  if (prompt.includes('multi edit') && results.length === 0) call = ['multi_edit', { file_path: 'sample.txt', edits: [{ old_string: 'buffer-original', new_string: 'buffer-multi-edited' }] }];
+  else if (prompt.includes('mcp') && results.length === 0) call = ['mcp__fixture__echo', { text: 'mcp-reference-ok' }];
   else if (prompt.includes('patch') && results.length === 0) call = ['apply_patch', { patch: '*** Begin Patch\n*** Update File: sample.txt\n@@\n-buffer-original\n+buffer-patched\n*** End Patch' }];
   else if (prompt.includes('edit') && results.length === 0) call = ['view_file', { path: 'sample.txt' }];
   else if (prompt.includes('edit') && results.length === 1) call = ['str_replace_editor', { path: 'sample.txt', old_str: 'buffer-original', new_str: 'buffer-edited' }];

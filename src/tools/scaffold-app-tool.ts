@@ -1,3 +1,5 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
+
 import { constants as fsConstants } from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -25,7 +27,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
-    await fs.access(filePath, fsConstants.F_OK);
+    await fs.access(resolveToolPath(filePath), fsConstants.F_OK);
     return true;
   } catch {
     return false;
@@ -37,14 +39,14 @@ async function assertSafeTargetDir(targetDir: string): Promise<string> {
     throw new Error('targetDir must be an absolute path');
   }
 
-  const resolved = path.resolve(targetDir);
+  const resolved = path.resolve(getToolWorkingDirectory(), targetDir);
   const parsed = path.parse(resolved);
   const forbidden = new Set([parsed.root, '/etc', '/bin', '/sbin', '/usr', '/var', '/dev', '/proc', '/sys', '/run', '/boot']);
   if (forbidden.has(resolved)) {
     throw new Error(`Refusing to scaffold into system path: ${resolved}`);
   }
 
-  const home = process.env.HOME ? path.resolve(process.env.HOME) : undefined;
+  const home = process.env.HOME ? path.resolve(getToolWorkingDirectory(), process.env.HOME) : undefined;
   if (home) {
     const relativeToHome = path.relative(home, resolved);
     if (relativeToHome === '.ssh' || relativeToHome.startsWith(`.ssh${path.sep}`)) {
@@ -58,11 +60,11 @@ async function assertSafeTargetDir(targetDir: string): Promise<string> {
   }
 
   if (await pathExists(resolved)) {
-    const stat = await fs.lstat(resolved);
+    const stat = await fs.lstat(resolveToolPath(resolved));
     if (!stat.isDirectory()) {
       throw new Error(`targetDir exists and is not a directory: ${resolved}`);
     }
-    const entries = await fs.readdir(resolved);
+    const entries = await fs.readdir(resolveToolPath(resolved));
     if (entries.length > 0) {
       throw new Error(`targetDir already exists and is not empty: ${resolved}`);
     }
@@ -121,9 +123,9 @@ export class ScaffoldAppTool {
         }
       }
 
-      await fs.mkdir(resolvedTarget, { recursive: true });
+      await guardToolMutation(() => fs.mkdir(resolveToolPath(resolvedTarget), { recursive: true }));
       for (const directory of projectTemplate.directories) {
-        await fs.mkdir(path.join(resolvedTarget, interpolate(directory, variables)), { recursive: true });
+        await guardToolMutation(() => fs.mkdir(resolveToolPath(path.join(resolvedTarget, interpolate(directory, variables))), { recursive: true }));
       }
 
       const filesCreated: string[] = [];
@@ -133,10 +135,10 @@ export class ScaffoldAppTool {
         if (!absolutePath.startsWith(`${resolvedTarget}${path.sep}`)) {
           throw new Error(`Template attempted to write outside targetDir: ${relativePath}`);
         }
-        await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-        await fs.writeFile(absolutePath, interpolate(file.content, variables));
+        await guardToolMutation(() => fs.mkdir(resolveToolPath(path.dirname(absolutePath)), { recursive: true }));
+        await guardToolMutation(() => fs.writeFile(resolveToolPath(absolutePath), interpolate(file.content, variables)));
         if (file.executable) {
-          await fs.chmod(absolutePath, 0o755);
+          await fs.chmod(resolveToolPath(absolutePath), 0o755);
         }
         filesCreated.push(relativePath);
       }

@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Paper QA tool adapter (`paper_qa`).
  *
@@ -135,7 +136,7 @@ export async function resolvePdfPaths(
   let visited = 0;
 
   const addFile = (p: string): void => {
-    const abs = path.resolve(p);
+    const abs = path.resolve(getToolWorkingDirectory(), p);
     if (!seen.has(abs) && isPdf(abs) && !checkSecretFileAccess(abs, 'read').secret) {
       seen.add(abs);
       out.push(abs);
@@ -147,7 +148,7 @@ export async function resolvePdfPaths(
     if (checkSecretFileAccess(dir, 'read').secret) return;
     let entries: string[];
     try {
-      entries = await fsReaddir(dir);
+      entries = await fsReaddir(resolveToolPath(dir));
     } catch {
       return; // unreadable dir → skip
     }
@@ -158,7 +159,7 @@ export async function resolvePdfPaths(
       const full = path.join(dir, name);
       let st: Awaited<ReturnType<typeof fsStat>>;
       try {
-        st = await fsStat(full);
+        st = await fsStat(resolveToolPath(full));
       } catch {
         continue;
       }
@@ -172,7 +173,7 @@ export async function resolvePdfPaths(
     if (typeof input !== 'string' || input.length === 0) continue;
     let st: Awaited<ReturnType<typeof fsStat>>;
     try {
-      st = await fsStat(input);
+      st = await fsStat(resolveToolPath(input));
     } catch {
       continue; // absent path → skip
     }

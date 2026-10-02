@@ -792,33 +792,19 @@ export class AgentExecutor {
       }
     }
 
-    return await new Promise((resolve) => {
-      let settled = false;
-      const finish = (value: { result: ToolResult; streamChunks: string[] }): void => {
-        if (settled) return;
-        settled = true;
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      };
-      const onAbort = (): void => finish({
-        result: abortedToolResult(startedAt),
+    // Cancellation must not detach a still-running writer. The signal reaches
+    // the tool; keep the turn/lane occupied until its execution has settled.
+    if (signal.aborted) return { result: abortedToolResult(startedAt), streamChunks };
+    try {
+      const value = await toolCallContext.run(toolCall, execute);
+      return signal.aborted ? { result: abortedToolResult(startedAt), streamChunks } : value;
+    } catch (error) {
+      return {
+        result: signal.aborted ? abortedToolResult(startedAt)
+          : { success: false, error: `Tool execution failed: ${getErrorMessage(error)}` },
         streamChunks,
-      });
-
-      signal.addEventListener('abort', onAbort, { once: true });
-      if (signal.aborted) {
-        onAbort();
-        return;
-      }
-
-      void toolCallContext.run(toolCall, execute).then(
-        finish,
-        (error: unknown) => finish({
-          result: { success: false, error: `Tool execution failed: ${getErrorMessage(error)}` },
-          streamChunks,
-        }),
-      );
-    });
+      };
+    }
   }
 
   /**

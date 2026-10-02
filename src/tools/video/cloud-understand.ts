@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Phase 3 — cloud video understanding via Gemini (OPT-IN, never default).
  *
@@ -169,7 +170,7 @@ async function buildMediaPart(
 
   // Local file → inline base64 (never re-encode; bounded so we stay within the request limit).
   const existsSync = deps.existsSync ?? realExistsSync;
-  const localPath = isAbsolute(source) ? source : resolvePath(deps.cwd ?? process.cwd(), source);
+  const localPath = isAbsolute(source) ? source : resolvePath(deps.cwd ?? getToolWorkingDirectory(), source);
   if (existsSync(source) || existsSync(localPath)) {
     const filePath = existsSync(source) ? source : localPath;
     const secret = checkSecretFileAccess(filePath, 'read');

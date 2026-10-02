@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 /**
  * TOOLS.md Generator
  *
@@ -247,13 +248,13 @@ export async function generateToolsMd(): Promise<void> {
     const hash = computeHash(tools);
 
     // Resolve output path
-    const dir = join(process.cwd(), '.codebuddy');
+    const dir = join(getToolWorkingDirectory(), '.codebuddy');
     const filePath = join(dir, 'TOOLS.md');
 
     // Check if regeneration is needed
-    if (existsSync(filePath)) {
+    if (existsSync(resolveToolPath(filePath))) {
       try {
-        const existing = await readFile(filePath, 'utf-8');
+        const existing = await readFile(resolveToolPath(filePath), 'utf-8');
         const storedHash = extractStoredHash(existing);
         if (storedHash === hash) {
           logger.debug('TOOLS.md is up to date, skipping regeneration');
@@ -276,11 +277,11 @@ export async function generateToolsMd(): Promise<void> {
     const content = markdown + `<!-- hash:${hash} -->\n`;
 
     // Ensure directory exists
-    if (!existsSync(dir)) {
-      await mkdir(dir, { recursive: true });
+    if (!existsSync(resolveToolPath(dir))) {
+      await guardToolMutation(() => mkdir(resolveToolPath(dir), { recursive: true }));
     }
 
-    await writeFile(filePath, content, 'utf-8');
+    await guardToolMutation(() => writeFile(resolveToolPath(filePath), content, 'utf-8'));
     logger.debug(`TOOLS.md generated with ${tools.length} tools`);
   } catch (err) {
     // Never let TOOLS.md generation break startup

@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -67,7 +68,7 @@ export class DocumentTool {
    */
   async readDocument(filePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
       const secret = checkSecretFileAccess(resolvedPath, 'read');
       if (secret.secret) return { success: false, error: formatSecretRefusal(resolvedPath, secret) };
 
@@ -140,7 +141,7 @@ export class DocumentTool {
    */
   async extractEmbeddedImages(filePath: string, outputDir?: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
       const secret = checkSecretFileAccess(resolvedPath, 'read');
       if (secret.secret) return { success: false, error: formatSecretRefusal(resolvedPath, secret) };
 
@@ -173,7 +174,7 @@ export class DocumentTool {
       const zip = new AdmZip(buffer);
       const selectedImages = this.selectDocxImagesForExtraction(zip);
       const resolvedOutputDir = outputDir
-        ? path.resolve(process.cwd(), outputDir)
+        ? path.resolve(getToolWorkingDirectory(), outputDir)
         : path.join(path.dirname(resolvedPath), `${path.basename(resolvedPath, ext)}-images`);
 
       if (selectedImages.length === 0) {
@@ -936,7 +937,7 @@ export class DocumentTool {
    */
   async listDocuments(dirPath: string = '.'): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), dirPath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), dirPath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {

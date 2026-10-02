@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /** Strict schema-V1 parser and fail-closed evaluator for measured visual gates. */
 
 import { createHash } from 'crypto';
@@ -488,8 +489,8 @@ export function evaluateVisualGates(
 }
 
 async function readRegularReport(filename: string): Promise<Buffer> {
-  const resolved = path.resolve(filename);
-  const handle = await open(resolved, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  const resolved = path.resolve(getToolWorkingDirectory(), filename);
+  const handle = await open(resolveToolPath(resolved), fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const info = await handle.stat();
     if (!info.isFile() || info.size <= 0 || info.size > 10 * 1024 * 1024) {

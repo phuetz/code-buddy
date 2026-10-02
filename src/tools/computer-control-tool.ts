@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Computer Control Tool
  *
@@ -11,7 +12,7 @@
  */
 
 import { ToolResult } from '../types/index.js';
-import { execFile } from 'child_process';
+import { execFile } from '../utils/tool-process.js';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
@@ -2088,8 +2089,9 @@ if ($clickButtonName) {
     const textResult = await this.readWindowsEditableText(targetInput);
     if (!this.isAppTextReadResult(textResult)) return textResult;
 
-    await mkdir(path.dirname(input.filePath), { recursive: true });
-    await writeFile(input.filePath, textResult.text, 'utf8');
+    const outputPath = input.filePath;
+    await guardToolMutation(() => mkdir(resolveToolPath(path.dirname(outputPath)), { recursive: true }));
+    await guardToolMutation(() => writeFile(resolveToolPath(outputPath), textResult.text, 'utf8'));
 
     return {
       success: true,
@@ -2989,12 +2991,12 @@ if ($clickButtonName) {
     const now = new Date();
     const fileName = `computer-control-audit-${now.toISOString().replace(/[:.]/g, '-')}.json`;
     const outputPath = input.exportAuditPath
-      ? path.resolve(input.exportAuditPath)
+      ? path.resolve(getToolWorkingDirectory(), input.exportAuditPath)
       : path.resolve('.codebuddy', 'audit', fileName);
 
-    await mkdir(path.dirname(outputPath), { recursive: true });
-    await writeFile(
-      outputPath,
+    await guardToolMutation(() => mkdir(resolveToolPath(path.dirname(outputPath)), { recursive: true }));
+    await guardToolMutation(() => writeFile(
+      resolveToolPath(outputPath),
       JSON.stringify(
         {
           exportedAt: now.toISOString(),
@@ -3005,7 +3007,7 @@ if ($clickButtonName) {
         2
       ),
       'utf-8'
-    );
+    ));
 
     return {
       success: true,
@@ -3354,7 +3356,7 @@ if ($clickButtonName) {
       if (captureResult.success && captureData?.path) {
         const filePath = captureData.path as string;
         const fs = await import('fs/promises');
-        return await fs.readFile(filePath);
+        return await fs.readFile(resolveToolPath(filePath));
       }
     } catch (err) {
       logger.debug('Failed to capture screen buffer', { error: err });
@@ -5539,7 +5541,7 @@ $value.SetValue($targetText)
       try {
         const { UnifiedVfsRouter } = await import('../services/vfs/unified-vfs-router.js');
         const path = await import('path');
-        const tempDir = path.join(process.cwd(), '.codebuddy', 'temp');
+        const tempDir = path.join(getToolWorkingDirectory(), '.codebuddy', 'temp');
         try { await UnifiedVfsRouter.Instance.ensureDir(tempDir); } catch { /* best-effort */ }
         const snapshotPath = path.join(tempDir, `ocr_snapshot_${Date.now()}.png`);
         
@@ -5584,7 +5586,7 @@ $value.SetValue($targetText)
     }
     
     try {
-      const { exec } = await import('child_process');
+      const { exec } = await import('../utils/tool-process.js');
       const script = `Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak("${input.text.replace(/"/g, '""')}")`;
       
       await new Promise<void>((resolve, reject) => {
@@ -5631,7 +5633,7 @@ $value.SetValue($targetText)
     // 1. Take snapshot
     const { UnifiedVfsRouter } = await import('../services/vfs/unified-vfs-router.js');
     const path = await import('path');
-    const tempDir = path.join(process.cwd(), '.codebuddy', 'temp');
+    const tempDir = path.join(getToolWorkingDirectory(), '.codebuddy', 'temp');
     try { await UnifiedVfsRouter.Instance.ensureDir(tempDir); } catch { /* best-effort */ }
     const snapshotPath = path.join(tempDir, `ocr_snapshot_${Date.now()}.png`);
     const { ScreenshotTool } = await import('./screenshot-tool.js');

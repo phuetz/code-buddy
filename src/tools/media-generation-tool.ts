@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 import { randomUUID } from 'crypto';
 import { constants as fsConstants } from 'fs';
 import fs from 'fs/promises';
@@ -880,8 +881,8 @@ export function detectInstalledLisaLoraSync(
     );
     for (const root of roots) {
       const dir = pathMod.join(root, 'models', 'loras');
-      if (!fsSync.existsSync(dir)) continue;
-      const names = fsSync.readdirSync(dir).filter((n: string) => n.endsWith('.safetensors'));
+      if (!fsSync.existsSync(resolveToolPath(dir))) continue;
+      const names = fsSync.readdirSync(resolveToolPath(dir)).filter((n: string) => n.endsWith('.safetensors'));
       const exact = names.find((n: string) => n.toLowerCase() === 'lisa.safetensors');
       if (exact) return exact;
       const fuzzy = names.find((n: string) => /lisa/i.test(n));
@@ -1293,14 +1294,14 @@ async function loadComfyInpaintTemplate(runtime: MediaGenerationRuntime): Promis
   } else {
     const requested = configuredPath!;
     if (requested.includes('\0')) throw new Error('ComfyUI inpaint workflow path is invalid');
-    const workflowPath = path.resolve(runtime.rootDir ?? process.cwd(), requested);
+    const workflowPath = path.resolve(runtime.rootDir ?? getToolWorkingDirectory(), requested);
     const verdict = checkSecretFileAccess(workflowPath, 'read');
     if (verdict.secret) throw new Error(formatSecretRefusal(workflowPath, verdict));
-    const metadata = await fs.lstat(workflowPath);
+    const metadata = await fs.lstat(resolveToolPath(workflowPath));
     if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > MAX_COMFY_WORKFLOW_BYTES) {
       throw new Error('ComfyUI inpaint workflow must be a regular JSON file smaller than 1 MB');
     }
-    raw = await fs.readFile(workflowPath, 'utf8');
+    raw = await fs.readFile(resolveToolPath(workflowPath), 'utf8');
   }
 
   let parsed: unknown;
@@ -2355,10 +2356,10 @@ async function uploadComfyH3Reference(
     if (!response.ok) throw new Error(`Reference image fetch returned ${response.status} for ${trimmed}`);
     bytes = Buffer.from(await response.arrayBuffer());
   } else {
-    const localPath = path.resolve(trimmed);
+    const localPath = path.resolve(getToolWorkingDirectory(), trimmed);
     const verdict = checkSecretFileAccess(localPath, 'read');
     if (verdict.secret) throw new Error(formatSecretRefusal(localPath, verdict));
-    bytes = await fs.readFile(localPath);
+    bytes = await fs.readFile(resolveToolPath(localPath));
     filename = `codebuddy-h3-ref-${index}${path.extname(trimmed) || '.png'}`;
   }
   if (bytes.length === 0 || bytes.length > MAX_EDIT_REFERENCE_BYTES) {
@@ -2836,7 +2837,7 @@ export async function writeMediaSidecar(
 ): Promise<void> {
   if (!outputPath) return;
   try {
-    await fs.writeFile(`${outputPath}.meta.json`, JSON.stringify(meta, null, 1));
+    await guardToolMutation(() => fs.writeFile(resolveToolPath(`${outputPath}.meta.json`), JSON.stringify(meta, null, 1)));
   } catch {
     /* sidecar is best-effort */
   }
@@ -2852,8 +2853,8 @@ async function saveGeneratedAsset(
     createId?: () => string;
   },
 ): Promise<string> {
-  const rootDir = path.resolve(options.rootDir ?? process.cwd());
-  const rootReal = await fs.realpath(rootDir);
+  const rootDir = path.resolve(getToolWorkingDirectory(), options.rootDir ?? getToolWorkingDirectory());
+  const rootReal = await fs.realpath(resolveToolPath(rootDir));
   const id = sanitizeId(options.createId?.() ?? `${Date.now()}-${randomUUID()}`);
   if (!/^[A-Za-z0-9_.-]{1,64}$/.test(options.dirName)
     || !/^[A-Za-z0-9_.-]{1,64}$/.test(options.prefix)
@@ -2867,7 +2868,7 @@ async function saveGeneratedAsset(
   ]);
   const outputPath = path.join(outputDir, `${options.prefix}-${id}.${options.extension}`);
   const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW ?? 0);
-  const handle = await fs.open(outputPath, flags, 0o600);
+  const handle = await fs.open(resolveToolPath(outputPath), flags, 0o600);
   try {
     await handle.writeFile(bytes);
     await handle.sync();
@@ -2886,21 +2887,21 @@ export async function ensureConfinedMediaDirectory(
   for (const segment of segments) {
     cursor = path.join(cursor, segment);
     try {
-      await fs.mkdir(cursor, { mode: 0o700 });
+      await guardToolMutation(() => fs.mkdir(resolveToolPath(cursor), { mode: 0o700 }));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
-    const metadata = await fs.lstat(cursor);
+    const metadata = await fs.lstat(resolveToolPath(cursor));
     if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
       throw new Error('Generated media output directory contains a symbolic link');
     }
-    const cursorReal = await fs.realpath(cursor);
+    const cursorReal = await fs.realpath(resolveToolPath(cursor));
     const child = path.relative(rootReal, cursorReal);
     if (child === '..' || child.startsWith(`..${path.sep}`) || path.isAbsolute(child)) {
       throw new Error('Generated media output directory escapes its workspace');
     }
   }
-  return fs.realpath(cursor);
+  return fs.realpath(resolveToolPath(cursor));
 }
 
 async function fetchWithTimeout(

@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * Video understanding orchestrator (Phase 1: transcript-first, local-first).
  *
@@ -309,7 +310,7 @@ async function resolveSegments(
   }
 
   // --- Local file: ffmpeg audio extract + local STT ---
-  const localPath = isAbsolute(source) ? source : resolvePath(deps.cwd ?? process.cwd(), source);
+  const localPath = isAbsolute(source) ? source : resolvePath(deps.cwd ?? getToolWorkingDirectory(), source);
   if (existsSync(source) || existsSync(localPath)) {
     const filePath = existsSync(source) ? source : localPath;
     const secret = checkSecretFileAccess(filePath, 'read');
@@ -597,12 +598,12 @@ export async function understandVideo(
   const source = input.source?.trim();
   if (!source) return { error: 'source is required' };
 
-  const cwd = deps.cwd ?? process.cwd();
+  const cwd = deps.cwd ?? getToolWorkingDirectory();
   const outDir = deps.outDir ?? join(cwd, '.codebuddy', 'video');
   const maxChars = deps.maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS;
 
   try {
-    await mkdir(outDir, { recursive: true });
+    await guardToolMutation(() => mkdir(resolveToolPath(outDir), { recursive: true }));
   } catch (err) {
     return { error: `could not create output dir ${outDir}: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -648,7 +649,7 @@ export async function understandVideo(
   try {
     const visualBody = visualRendered ? `${rendered}\n\n## Visuel (ce qui est montré)\n${visualRendered}\n` : `${rendered}\n`;
     const body = cloudRendered ? `${cloudRendered}\n\n${visualBody}` : visualBody;
-    await writeFile(transcriptPath, `${header}\n${body}`, 'utf8');
+    await guardToolMutation(() => writeFile(resolveToolPath(transcriptPath), `${header}\n${body}`, 'utf8'));
   } catch (err) {
     logger.warn(`[video] could not persist transcript to ${transcriptPath}: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -674,10 +675,10 @@ export async function understandVideo(
     const researchCard = buildVideoResearchCard(researchCardInput);
     experimentBacklog = buildVideoExperimentBacklog(researchCardInput);
     researchCardPreview = buildVideoResearchCardPreview(researchCardInput);
-    await writeFile(researchCardCandidate, researchCard, 'utf8');
+    await guardToolMutation(() => writeFile(resolveToolPath(researchCardCandidate), researchCard, 'utf8'));
     researchCardPath = researchCardCandidate;
     const backlogCandidate = join(outDir, `experiments-${safeSlug(source)}.json`);
-    await writeFile(backlogCandidate, `${JSON.stringify(experimentBacklog, null, 2)}\n`, 'utf8');
+    await guardToolMutation(() => writeFile(resolveToolPath(backlogCandidate), `${JSON.stringify(experimentBacklog, null, 2)}\n`, 'utf8'));
     experimentBacklogPath = backlogCandidate;
   } catch (err) {
     logger.warn(`[video] could not persist research card to ${researchCardCandidate}: ${err instanceof Error ? err.message : String(err)}`);

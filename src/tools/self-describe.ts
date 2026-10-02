@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Self-description — the robot's model of the bricks it is made of.
  *
@@ -118,8 +119,8 @@ export function findRepoRoot(startDir: string): string {
 
 function isConfinedPath(boundary: string, candidate: string): boolean {
   try {
-    const root = fs.realpathSync(boundary);
-    const target = fs.realpathSync(candidate);
+    const root = fs.realpathSync(resolveToolPath(boundary));
+    const target = fs.realpathSync(resolveToolPath(candidate));
     const relative = path.relative(root, target);
     return relative === '' || (
       relative !== '..' &&
@@ -133,7 +134,7 @@ function isConfinedPath(boundary: string, candidate: string): boolean {
 
 function safeExists(p: string, boundary?: string): boolean {
   try {
-    return fs.existsSync(p) && (!boundary || isConfinedPath(boundary, p));
+    return fs.existsSync(resolveToolPath(p)) && (!boundary || isConfinedPath(boundary, p));
   } catch {
     return false;
   }
@@ -141,7 +142,7 @@ function safeExists(p: string, boundary?: string): boolean {
 
 function safeIsFile(p: string, boundary?: string): boolean {
   try {
-    return (!boundary || isConfinedPath(boundary, p)) && fs.statSync(p).isFile();
+    return (!boundary || isConfinedPath(boundary, p)) && fs.statSync(resolveToolPath(p)).isFile();
   } catch {
     return false;
   }
@@ -259,7 +260,7 @@ export function buildSelfDescription(opts: BuildSelfDescriptionOptions = {}): Se
     try {
       return path.dirname(fileURLToPath(import.meta.url));
     } catch {
-      return process.cwd();
+      return getToolWorkingDirectory();
     }
   })();
   const core =

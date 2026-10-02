@@ -9,7 +9,7 @@
  * - HTML/CSS
  */
 
-import { execSync, spawnSync } from 'child_process';
+import { execSync, spawnSync } from '../utils/tool-process.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 

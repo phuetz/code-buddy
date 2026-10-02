@@ -1,4 +1,5 @@
-import { spawn } from 'child_process';
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
+import { spawn } from '../utils/tool-process.js';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -96,7 +97,7 @@ export class WebScrapeTool {
         ...normalized,
         pythonPath: await resolveScraplingPython(env),
         scriptPath: resolveScriptPath(),
-        cwd: process.cwd(),
+        cwd: getToolWorkingDirectory(),
         timeoutMs: normalized.timeout,
         env,
       };
@@ -177,7 +178,7 @@ export async function resolveScraplingPython(env: NodeJS.ProcessEnv = process.en
     process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
   );
   try {
-    await fs.access(venvPython);
+    await fs.access(resolveToolPath(venvPython));
     return venvPython;
   } catch {
     return process.platform === 'win32' ? 'python' : 'python3';

@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /** Operator-attached Google Flow browser driver. Never launches Chrome or handles login. */
 
 import { mkdir } from 'fs/promises';
@@ -199,7 +200,7 @@ export class FlowDriver {
     await this.throwIfUiError();
     await this.visible(FLOW_SELECTORS.resultReady, 'completed Flow result');
     const button = await this.clickable(FLOW_SELECTORS.downloadButton, 'Flow download button');
-    await mkdir(path.dirname(destPath), { recursive: true, mode: 0o700 });
+    await guardToolMutation(() => mkdir(resolveToolPath(path.dirname(destPath)), { recursive: true, mode: 0o700 }));
     const [download] = await Promise.all([
       this.page.waitForEvent('download', { timeout: this.actionTimeoutMs }),
       button.click({ timeout: this.actionTimeoutMs }),

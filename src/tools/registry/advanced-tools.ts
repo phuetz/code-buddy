@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Advanced Tool Adapters
  *
@@ -190,7 +191,7 @@ export class CodebaseMapExecuteTool implements ITool {
     }
 
     const requestedRoot = typeof input.root === 'string' ? input.root.trim() : '';
-    const rootDir = requestedRoot !== '' ? path.resolve(requestedRoot) : process.cwd();
+    const rootDir = requestedRoot !== '' ? path.resolve(getToolWorkingDirectory(), requestedRoot) : getToolWorkingDirectory();
     // Un root explicite est cartographié en entier. Le plafond 5000 ne s'applique
     // qu'au balayage implicite du répertoire courant, pour ne pas lire tout un disque.
     const maxFiles = requestedRoot !== '' ? Number.POSITIVE_INFINITY : 5000;
@@ -240,8 +241,8 @@ export class CodebaseMapExecuteTool implements ITool {
     if (graph.getStats().tripleCount === 0) {
       // Try lazy-loading from disk
       const { loadCodeGraph, codeGraphExists } = await import('../../knowledge/code-graph-persistence.js');
-      if (codeGraphExists(process.cwd())) {
-        loadCodeGraph(graph, process.cwd());
+      if (codeGraphExists(getToolWorkingDirectory())) {
+        loadCodeGraph(graph, getToolWorkingDirectory());
       }
       if (graph.getStats().tripleCount === 0) {
         return { success: false, error: 'Code graph is empty. Run `buddy onboard` or profile the repo first to build the code graph.' };
@@ -254,11 +255,11 @@ export class CodebaseMapExecuteTool implements ITool {
       if (!hasCalls) {
         try {
           const { populateDeepCodeGraph } = await import('../../knowledge/code-graph-deep-populator.js');
-          const added = populateDeepCodeGraph(graph, process.cwd());
+          const added = populateDeepCodeGraph(graph, getToolWorkingDirectory());
           if (added > 0) {
             // Persist enriched graph
             const { saveCodeGraph } = await import('../../knowledge/code-graph-persistence.js');
-            saveCodeGraph(graph, process.cwd());
+            saveCodeGraph(graph, getToolWorkingDirectory());
           }
         } catch (_err) {
           // Deep population optional — continue with existing graph

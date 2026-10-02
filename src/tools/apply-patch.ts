@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter, getVfsTextTransport } from '../services/vfs/unified-vfs-router.js';
 import { ConfirmationService } from '../utils/confirmation-service.js';
 /**
@@ -269,11 +270,11 @@ interface PatchPathPreflight {
  * surface: apply_patch may only mutate descendants of its supplied cwd.
  */
 function preflightPatchPaths(ops: FileOp[], cwd: string): PatchPathPreflight {
-  const lexicalRoot = path.resolve(cwd);
+  const lexicalRoot = path.resolve(getToolWorkingDirectory(), cwd);
   let workspaceRoot: string;
   try {
-    workspaceRoot = fs.realpathSync(lexicalRoot);
-    if (!fs.statSync(workspaceRoot).isDirectory()) {
+    workspaceRoot = fs.realpathSync(resolveToolPath(lexicalRoot));
+    if (!fs.statSync(resolveToolPath(workspaceRoot)).isDirectory()) {
       return { paths: [], errors: [`Patch workspace is not a directory: ${cwd}`] };
     }
   } catch (error) {
@@ -333,7 +334,7 @@ function preflightPatchPaths(ops: FileOp[], cwd: string): PatchPathPreflight {
  * gated path fails closed instead of applying the hunks that happened to
  * match). Legacy ungated behavior is unchanged.
  */
-export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd(), buffers?: ReadonlyMap<string, string>): ComputedPatch {
+export function computePatchedFiles(ops: FileOp[], cwd: string = getToolWorkingDirectory(), buffers?: ReadonlyMap<string, string>): ComputedPatch {
   const changes: ComputedPatch['changes'] = [];
   const errors: string[] = [];
 
@@ -355,15 +356,15 @@ export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd(), 
     }
     if (op.type === 'delete') {
       // Legacy skips missing deletes silently — same here.
-      if ((buffers ? buffers.has(fullPath) : fs.existsSync(fullPath))) changes.push({ path: op.path, newContent: null });
+      if ((buffers ? buffers.has(fullPath) : fs.existsSync(resolveToolPath(fullPath)))) changes.push({ path: op.path, newContent: null });
       continue;
     }
     // update
-    if (!(buffers ? buffers.has(fullPath) : fs.existsSync(fullPath))) {
+    if (!(buffers ? buffers.has(fullPath) : fs.existsSync(resolveToolPath(fullPath)))) {
       errors.push(`File not found: ${op.path}`);
       continue;
     }
-    const fileLines = (buffers ? buffers.get(fullPath)! : fs.readFileSync(fullPath, 'utf-8')).split('\n');
+    const fileLines = (buffers ? buffers.get(fullPath)! : fs.readFileSync(resolveToolPath(fullPath), 'utf-8')).split('\n');
     let lineIndex = 0;
     let failed = false;
     for (const hunk of op.hunks ?? []) {
@@ -397,7 +398,7 @@ export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd(), 
 // Applier
 // ============================================================================
 
-export function applyPatchOps(ops: FileOp[], cwd: string = process.cwd()): PatchResult {
+export function applyPatchOps(ops: FileOp[], cwd: string = getToolWorkingDirectory()): PatchResult {
   const result: PatchResult = { filesAdded: [], filesDeleted: [], filesUpdated: [], errors: [] };
 
   const preflight = preflightPatchPaths(ops, cwd);
@@ -416,22 +417,22 @@ export function applyPatchOps(ops: FileOp[], cwd: string = process.cwd()): Patch
     try {
       if (op.type === 'add') {
         const dir = path.dirname(fullPath);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(fullPath, op.content ?? '');
+        if (!fs.existsSync(resolveToolPath(dir))) guardToolMutation(() => fs.mkdirSync(resolveToolPath(dir), { recursive: true }));
+        guardToolMutation(() => fs.writeFileSync(resolveToolPath(fullPath), op.content ?? ''));
         result.filesAdded.push(op.path);
 
       } else if (op.type === 'delete') {
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath);
+        if (fs.existsSync(resolveToolPath(fullPath))) {
+          guardToolMutation(() => fs.unlinkSync(resolveToolPath(fullPath)));
           result.filesDeleted.push(op.path);
         }
 
       } else if (op.type === 'update') {
-        if (!fs.existsSync(fullPath)) {
+        if (!fs.existsSync(resolveToolPath(fullPath))) {
           result.errors.push(`File not found: ${op.path}`);
           continue;
         }
-        const fileLines = fs.readFileSync(fullPath, 'utf-8').split('\n');
+        const fileLines = fs.readFileSync(resolveToolPath(fullPath), 'utf-8').split('\n');
         let lineIndex = 0;
 
         for (const hunk of op.hunks ?? []) {
@@ -456,12 +457,12 @@ export function applyPatchOps(ops: FileOp[], cwd: string = process.cwd()): Patch
             continue;
           }
           const newDir = path.dirname(newPath);
-          if (!fs.existsSync(newDir)) fs.mkdirSync(newDir, { recursive: true });
-          fs.writeFileSync(newPath, fileLines.join('\n'));
-          fs.unlinkSync(fullPath);
+          if (!fs.existsSync(resolveToolPath(newDir))) guardToolMutation(() => fs.mkdirSync(resolveToolPath(newDir), { recursive: true }));
+          guardToolMutation(() => fs.writeFileSync(resolveToolPath(newPath), fileLines.join('\n')));
+          guardToolMutation(() => fs.unlinkSync(resolveToolPath(fullPath)));
           result.filesUpdated.push(`${op.path} → ${op.moveTo}`);
         } else {
-          fs.writeFileSync(fullPath, fileLines.join('\n'));
+          guardToolMutation(() => fs.writeFileSync(resolveToolPath(fullPath), fileLines.join('\n')));
           result.filesUpdated.push(op.path);
         }
       }
@@ -511,7 +512,7 @@ export class ApplyPatchTool extends BaseTool {
 
       const editorTransport = getVfsTextTransport();
       if (editorTransport?.readTextFile || editorTransport?.writeTextFile) {
-        return await this.executeEditor(ops, cwd ?? process.cwd());
+        return await this.executeEditor(ops, cwd ?? getToolWorkingDirectory());
       }
 
       // Shared write gates. Their heavy module graphs remain dynamically
@@ -568,7 +569,7 @@ export class ApplyPatchTool extends BaseTool {
    * revise the patch instead of silently losing the edit.
    */
   private async executeGated(ops: FileOp[], intent?: string, baseCwd?: string): Promise<ToolResult> {
-    const cwd = baseCwd ?? process.cwd();
+    const cwd = baseCwd ?? getToolWorkingDirectory();
     const { changes, errors } = computePatchedFiles(ops, cwd);
     const gateLabel = process.env.CODEBUDDY_SHADOW_WORKSPACE === 'true' ? 'write gate' : 'review gate';
     if (errors.length > 0) {
@@ -595,7 +596,7 @@ export class ApplyPatchTool extends BaseTool {
   }
 
   private executeLegacy(ops: FileOp[], cwd?: string): ToolResult {
-    const patchResult = applyPatchOps(ops, cwd ?? process.cwd());
+    const patchResult = applyPatchOps(ops, cwd ?? getToolWorkingDirectory());
     const lines: string[] = [];
     if (patchResult.filesAdded.length > 0) lines.push(`Added: ${patchResult.filesAdded.join(', ')}`);
     if (patchResult.filesDeleted.length > 0) lines.push(`Deleted: ${patchResult.filesDeleted.join(', ')}`);

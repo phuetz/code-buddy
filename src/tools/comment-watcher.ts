@@ -1,6 +1,7 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from "path";
-import { execFile } from "child_process";
+import { execFile } from '../utils/tool-process.js';
 import { EventEmitter } from "events";
 
 const RIPGREP_TIMEOUT_MS = 30_000;
@@ -102,13 +103,15 @@ const DEFAULT_CONFIG: CommentWatcherConfig = {
  */
 export class CommentWatcher extends EventEmitter {
   private config: CommentWatcherConfig;
-  private projectRoot: string;
+  private configuredRoot: string | undefined;
+  private get projectRoot(): string { return getToolWorkingDirectory(this.configuredRoot); }
+  private set projectRoot(value: string) { this.configuredRoot = value; }
   private detectedComments: DetectedComment[] = [];
   private vfs = UnifiedVfsRouter.Instance;
 
-  constructor(projectRoot: string = process.cwd(), config: Partial<CommentWatcherConfig> = {}) {
+  constructor(projectRoot?: string, config: Partial<CommentWatcherConfig> = {}) {
     super();
-    this.projectRoot = projectRoot;
+    this.configuredRoot = projectRoot;
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 

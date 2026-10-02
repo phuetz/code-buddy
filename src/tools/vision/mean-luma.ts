@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../../utils/tool-execution-context.js';
 /**
  * Mean Rec. 601 luma of a still image (0..255).
  *
@@ -21,7 +22,7 @@ export async function meanLumaOfImage(imagePath: string): Promise<number | undef
   if (checkSecretFileAccess(imagePath, 'read').secret) return undefined;
   let bytes: Buffer;
   try {
-    bytes = await fs.readFile(imagePath);
+    bytes = await fs.readFile(resolveToolPath(imagePath));
   } catch {
     return undefined;
   }

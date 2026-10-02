@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Multimodal Tool Adapters
  *
@@ -418,7 +419,7 @@ export class ImageEditTool implements ITool {
 
   async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
     try {
-      const cwd = path.resolve(context?.cwd ?? this.options.rootDir ?? process.cwd());
+      const cwd = path.resolve(getToolWorkingDirectory(), context?.cwd ?? this.options.rootDir ?? getToolWorkingDirectory());
       const imageUrl = await loadBoundedWorkspaceImage(requiredString(input, 'image_path'), cwd, false);
       const maskPath = optionalString(input, 'mask_path');
       const maskUrl = maskPath ? await loadBoundedWorkspaceImage(maskPath, cwd, true) : undefined;
@@ -497,7 +498,7 @@ async function loadBoundedWorkspaceImage(value: string, workspace: string, requi
   const resolved = path.resolve(workspace, value);
   const verdict = checkSecretFileAccess(resolved, 'read');
   if (verdict.secret) throw new Error(formatSecretRefusal(resolved, verdict));
-  const [root, realPath] = await Promise.all([fs.realpath(workspace), fs.realpath(resolved)]);
+  const [root, realPath] = await Promise.all([fs.realpath(resolveToolPath(workspace)), fs.realpath(resolveToolPath(resolved))]);
   // The canonical path is the one read below; check it as well as the lexical path.
   const realVerdict = checkSecretFileAccess(realPath, 'read');
   if (realVerdict.secret) throw new Error(formatSecretRefusal(realPath, realVerdict));
@@ -511,11 +512,11 @@ async function loadBoundedWorkspaceImage(value: string, workspace: string, requi
   if (!mime || (requirePng && mime !== 'image/png')) {
     throw new Error(requirePng ? 'mask_path must be a PNG file' : 'image_path must be PNG, JPEG, or WebP');
   }
-  const metadata = await fs.stat(realPath);
+  const metadata = await fs.stat(resolveToolPath(realPath));
   if (!metadata.isFile() || metadata.size <= 0 || metadata.size > 50 * 1024 * 1024) {
     throw new Error('image must be a file smaller than 50 MB');
   }
-  return `data:${mime};base64,${(await fs.readFile(realPath)).toString('base64')}`;
+  return `data:${mime};base64,${(await fs.readFile(resolveToolPath(realPath))).toString('base64')}`;
 }
 
 function parseImageEditSelections(input: unknown[]): Array<{ x: number; y: number; width: number; height: number }> {
@@ -1741,7 +1742,7 @@ export class LisaSelfieTool implements ITool {
         sendTelegram,
         contentTier,
         aspectRatio: (optionalString(input, 'aspect_ratio') as 'portrait') || 'portrait',
-        rootDir: this.options.rootDir ?? context?.cwd ?? process.cwd(),
+        rootDir: this.options.rootDir ?? context?.cwd ?? getToolWorkingDirectory(),
         force: input.force === true,
       });
       return {

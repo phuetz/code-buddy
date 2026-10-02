@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../../utils/tool-execution-context.js';
 /** Read an immutable, digest-pinned image from an explicitly approved root. */
 
 import { createHash } from 'crypto';
@@ -48,17 +49,17 @@ export async function loadApprovedImageSource(
   if (!/^[a-f0-9]{64}$/u.test(expectedSha256)) {
     throw new Error('Approved image source requires a lowercase SHA-256 digest');
   }
-  const root = await fs.realpath(approvedRoot);
-  const sourceLstat = await fs.lstat(filename);
+  const root = await fs.realpath(resolveToolPath(approvedRoot));
+  const sourceLstat = await fs.lstat(resolveToolPath(filename));
   if (sourceLstat.isSymbolicLink() || !sourceLstat.isFile()) {
     throw new Error('Approved image source must be a regular non-symlink file');
   }
-  const realPath = await fs.realpath(filename);
+  const realPath = await fs.realpath(resolveToolPath(filename));
   if (!isInsideRoot(root, realPath)) {
     throw new Error('Approved image source escapes the configured asset root');
   }
 
-  const handle = await fs.open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const handle = await fs.open(resolveToolPath(filename), constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || stat.size <= 0 || stat.size > maximumBytes) {

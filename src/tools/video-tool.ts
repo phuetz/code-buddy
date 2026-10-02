@@ -1,6 +1,7 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn } from '../utils/tool-process.js';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
 interface FFProbeStream {
@@ -57,7 +58,7 @@ export class VideoTool {
    */
   async getInfo(filePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -189,7 +190,7 @@ export class VideoTool {
     } = {}
   ): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -215,7 +216,7 @@ export class VideoTool {
         };
       }
 
-      const outputDir = options.outputDir || path.join(process.cwd(), '.codebuddy', 'frames', path.basename(filePath, ext));
+      const outputDir = options.outputDir || path.join(getToolWorkingDirectory(), '.codebuddy', 'frames', path.basename(filePath, ext));
       await this.vfs.ensureDir(outputDir);
 
       const format = options.format || 'jpg';
@@ -314,7 +315,7 @@ export class VideoTool {
    */
   async createThumbnail(filePath: string, timestamp: number = 1, outputPath?: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -354,7 +355,7 @@ export class VideoTool {
    */
   async extractAudio(filePath: string, outputPath?: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -458,7 +459,7 @@ export class VideoTool {
    */
   async listVideos(dirPath: string = '.'): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), dirPath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), dirPath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {

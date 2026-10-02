@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Shared speculative-validation and diff-review hook for file-editing tools.
  * Both feature module graphs are lazy: with their env gates off this helper
@@ -25,12 +26,12 @@ import { getVfsTextTransport } from '../services/vfs/unified-vfs-router.js';
  * the lexical `/var/...` symlink (same on any symlinked workspace).
  */
 function canonicalize(target: string): string {
-  const resolved = path.resolve(target);
+  const resolved = path.resolve(getToolWorkingDirectory(), target);
   const pending: string[] = [];
   let cursor = resolved;
   for (;;) {
     try {
-      const real = fs.realpathSync(cursor);
+      const real = fs.realpathSync(resolveToolPath(cursor));
       return pending.length ? path.join(real, ...pending.reverse()) : real;
     } catch {
       const parent = path.dirname(cursor);

@@ -1,3 +1,4 @@
+import { withToolExecutionContext } from '../../utils/tool-execution-context.js';
 /** ACP adapts the interactive agent loop; it never executes tools itself. */
 import path from 'node:path';
 import type { CodeBuddyAgent, AgentModelClient } from '../../agent/codebuddy-agent.js';
@@ -34,6 +35,7 @@ interface AcpRuntime {
   mcp: MCPManager;
   mcpKey: string;
   todo: TodoTool;
+  cwd: string;
 }
 
 function withSessionContext<T>(session: AcpRuntime, ctx: AcpPromptContext, transport: VfsTextTransport, fn: () => Promise<T>): Promise<T> {
@@ -41,7 +43,8 @@ function withSessionContext<T>(session: AcpRuntime, ctx: AcpPromptContext, trans
     withMCPManagerAsync(session.mcp, () =>
       getWorkspaceIsolation().withWorkspaceRootAsync(ctx.cwd, () =>
         withTextEditorAsync(session.editor, () =>
-          withTodoToolAsync(session.todo, () => withVfsTextTransportAsync(transport, fn))))));
+          withTodoToolAsync(session.todo, () => withVfsTextTransportAsync(transport, () =>
+            withToolExecutionContext({ cwd: ctx.cwd, signal: ctx.signal }, fn)))))));
 }
 
 export interface AcpAgenticRunner extends AcpPromptRunner {
@@ -99,8 +102,12 @@ export function createAcpAgenticRunner(options: AcpRunnerOptions): AcpAgenticRun
           agent.importConversationState(state);
           if (state.acpTodos) await todo.createTodoList(state.acpTodos);
         }
-        session = { agent, confirmation, editor, mcp, mcpKey: '', todo };
+        session = { agent, confirmation, editor, mcp, mcpKey: '', todo, cwd: ctx.cwd };
         agents.set(ctx.sessionId, session);
+      }
+      if (session.cwd !== ctx.cwd) {
+        session.confirmation = new ConfirmationService();
+        session.cwd = ctx.cwd;
       }
       const { agent, confirmation, editor, mcp, todo } = session;
       agent.setWorkingDirectory(ctx.cwd);
@@ -138,7 +145,7 @@ export function createAcpAgenticRunner(options: AcpRunnerOptions): AcpAgenticRun
             sessionId: ctx.sessionId, toolCall: { ...pending, sessionUpdate: undefined },
             options: [
               { optionId: 'allow_once', name: 'Autoriser une fois', kind: 'allow_once' },
-              { optionId: 'allow_always', name: 'Toujours autoriser pour cette session', kind: 'allow_always' },
+              { optionId: 'allow_always', name: !request.approvalKey ? 'Toujours autoriser cette catégorie dans ce dossier de session' : 'Toujours autoriser cet appel dans ce dossier de session', kind: 'allow_always' },
               { optionId: 'reject_once', name: 'Refuser', kind: 'reject_once' },
             ],
           }) as { outcome?: { outcome?: string; optionId?: string } };
@@ -182,7 +189,7 @@ export function createAcpAgenticRunner(options: AcpRunnerOptions): AcpAgenticRun
         } : {}),
       };
       return await withSessionContext(session, ctx, transport, async () => {
-        const mcpKey = JSON.stringify(ctx.mcpServers ?? []);
+        const mcpKey = JSON.stringify({ cwd: ctx.cwd, servers: ctx.mcpServers ?? [] });
         if (session.mcpKey !== mcpKey) {
           await mcp.shutdown();
           for (const server of parseMcpServers(ctx.mcpServers, ctx.cwd)) {

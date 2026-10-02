@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Auto-Commit Tool
  *
@@ -9,7 +10,7 @@
  *   feat(scope): AI-assisted: <description>
  */
 
-import { execFile } from 'child_process';
+import { execFile } from '../utils/tool-process.js';
 import { promisify } from 'util';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
@@ -54,7 +55,7 @@ const DEFAULT_CONFIG: AutoCommitConfig = {
 async function git(args: string[], cwd?: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync('git', args, {
-      cwd: cwd || process.cwd(),
+      cwd: cwd || getToolWorkingDirectory(),
       timeout: 15000,
     });
     return stdout.trim();

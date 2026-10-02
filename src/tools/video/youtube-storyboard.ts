@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * YouTube storyboard fallback for local visual understanding.
  *
@@ -10,7 +11,7 @@
  * @module tools/video/youtube-storyboard
  */
 
-import { spawn as realSpawn } from 'child_process';
+import { spawn as realSpawn } from '../../utils/tool-process.js';
 import { mkdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import { logger } from '../../utils/logger.js';
@@ -193,7 +194,7 @@ export async function sampleYoutubeStoryboardFrames(
   }
 
   try {
-    const [mhtml, rawInfo] = await Promise.all([readFile(storyboardPath), readFile(infoPath, 'utf8')]);
+    const [mhtml, rawInfo] = await Promise.all([readFile(resolveToolPath(storyboardPath)), readFile(resolveToolPath(infoPath), 'utf8')]);
     const info = JSON.parse(rawInfo) as YtdlpInfo;
     const format = info.formats?.find((candidate) => candidate.format_id === 'sb0');
     const width = Math.floor(format?.width ?? 0);
@@ -214,7 +215,7 @@ export async function sampleYoutubeStoryboardFrames(
     const total = Math.min(available, Math.max(1, Math.ceil(duration * fps)));
     const indices = storyboardFrameIndices(total, deps.budget ?? 100);
     const framesDir = join(outDir, `${base}-frames`);
-    await mkdir(framesDir, { recursive: true });
+    await guardToolMutation(() => mkdir(resolveToolPath(framesDir), { recursive: true }));
     const sharp = (await import('sharp')).default;
 
     const produced = await Promise.all(

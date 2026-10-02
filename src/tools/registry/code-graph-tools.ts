@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Code Graph Tool — Dedicated tool for code structure queries
  *
@@ -52,7 +53,7 @@ export class CodeGraphTool implements ITool {
       if (!hasCallData) {
         try {
           const { populateDeepCodeGraph } = await import('../../knowledge/code-graph-deep-populator.js');
-          const added = populateDeepCodeGraph(graph, process.cwd());
+          const added = populateDeepCodeGraph(graph, getToolWorkingDirectory());
           if (added === 0) {
             return {
               success: true,
@@ -533,7 +534,7 @@ export class CodeGraphTool implements ITool {
 
   private async drift(graph: import('../../knowledge/knowledge-graph.js').KnowledgeGraph): Promise<ToolResult> {
     const { detectDrift, formatDrift, getSnapshotInfo } = await import('../../knowledge/graph-drift.js');
-    const cwd = process.cwd();
+    const cwd = getToolWorkingDirectory();
 
     const info = getSnapshotInfo(cwd);
     if (!info) {
@@ -550,14 +551,14 @@ export class CodeGraphTool implements ITool {
 
   private async saveSnapshot(graph: import('../../knowledge/knowledge-graph.js').KnowledgeGraph): Promise<ToolResult> {
     const { saveSnapshot } = await import('../../knowledge/graph-drift.js');
-    const cwd = process.cwd();
+    const cwd = getToolWorkingDirectory();
     saveSnapshot(graph, cwd);
     return { success: true, output: `Snapshot saved (${graph.getStats().tripleCount} triples). Use \`code_graph drift\` later to detect architecture changes.` };
   }
 
   private async visualize(graph: import('../../knowledge/knowledge-graph.js').KnowledgeGraph): Promise<ToolResult> {
     const { generateVisualization } = await import('../../knowledge/graph-visualizer.js');
-    const cwd = process.cwd();
+    const cwd = getToolWorkingDirectory();
 
     let communities: import('../../knowledge/community-detection.js').CommunityResult | undefined;
     try {
@@ -575,11 +576,11 @@ export class CodeGraphTool implements ITool {
 
   private async impactPreview(graph: import('../../knowledge/knowledge-graph.js').KnowledgeGraph): Promise<ToolResult> {
     // Get changed files from git diff
-    const { execSync } = await import('child_process');
+    const { execSync } = await import('../../utils/tool-process.js');
     let changedFiles: string[];
     try {
-      const diff = execSync('git diff --name-only HEAD', { encoding: 'utf-8', cwd: process.cwd() });
-      const staged = execSync('git diff --name-only --cached', { encoding: 'utf-8', cwd: process.cwd() });
+      const diff = execSync('git diff --name-only HEAD', { encoding: 'utf-8', cwd: getToolWorkingDirectory() });
+      const staged = execSync('git diff --name-only --cached', { encoding: 'utf-8', cwd: getToolWorkingDirectory() });
       changedFiles = [...new Set([...diff.trim().split('\n'), ...staged.trim().split('\n')])]
         .filter(f => f.length > 0);
     } catch {

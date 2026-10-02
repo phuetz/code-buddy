@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../utils/tool-execution-context.js';
 import fs from 'fs/promises';
 
 import type { ToolResult } from '../types/index.js';
@@ -658,7 +659,7 @@ function groupCodeFromChatId(chatId: string | undefined): string | undefined {
 }
 
 async function assertReadableFile(mediaPath: string): Promise<void> {
-  const stat = await fs.stat(mediaPath);
+  const stat = await fs.stat(resolveToolPath(mediaPath));
   if (!stat.isFile()) {
     throw new Error(`media file is not a file: ${mediaPath}`);
   }

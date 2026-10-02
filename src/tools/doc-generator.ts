@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Documentation Generator Tool
  *
@@ -68,7 +69,7 @@ export interface GeneratorOptions {
 }
 
 const DEFAULT_OPTIONS: GeneratorOptions = {
-  rootDir: process.cwd(),
+  get rootDir() { return getToolWorkingDirectory(); },
   include: ['src/**/*.ts', 'src/**/*.tsx'],
   exclude: ['**/*.test.ts', '**/*.spec.ts', '**/node_modules/**'],
   exportedOnly: true,
@@ -82,7 +83,7 @@ export async function generateDocs(
   options: GeneratorOptions = {}
 ): Promise<GeneratedDocs> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
-  const rootDir = opts.rootDir || process.cwd();
+  const rootDir = opts.rootDir || getToolWorkingDirectory();
 
   // Find all source files
   const files = await fg(opts.include || [], {

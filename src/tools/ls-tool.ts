@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Dedicated directory listing tool.
  * Auto-approved (read-only operation, no bash needed).
@@ -65,14 +66,14 @@ const DEFAULT_IGNORE_PATTERNS = [
  */
 export function loadGitignorePatterns(directory: string): string[] {
   const patterns: string[] = [];
-  let current = path.resolve(directory);
+  let current = path.resolve(getToolWorkingDirectory(), directory);
 
   // Walk up to find .gitignore files (closest first)
   for (let depth = 0; depth < 20; depth++) {
     const gitignorePath = path.join(current, '.gitignore');
-    if (existsSync(gitignorePath)) {
+    if (existsSync(resolveToolPath(gitignorePath))) {
       try {
-        const content = readFileSync(gitignorePath, 'utf-8');
+        const content = readFileSync(resolveToolPath(gitignorePath), 'utf-8');
         const lines = content.split('\n')
           .map(line => line.trim())
           .filter(line => line && !line.startsWith('#'));
@@ -147,10 +148,10 @@ export class LsTool {
 
     try {
       // Resolve to absolute path
-      const resolvedPath = path.resolve(directory);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), directory);
 
       // Check existence
-      if (!existsSync(resolvedPath)) {
+      if (!existsSync(resolveToolPath(resolvedPath))) {
         return {
           success: false,
           error: `Path does not exist: ${resolvedPath}`,
@@ -158,7 +159,7 @@ export class LsTool {
       }
 
       // Check that it is a directory
-      const stat = await fs.stat(resolvedPath);
+      const stat = await fs.stat(resolveToolPath(resolvedPath));
       if (!stat.isDirectory()) {
         return {
           success: false,
@@ -173,7 +174,7 @@ export class LsTool {
       }
 
       // Read directory entries
-      const dirents = await fs.readdir(resolvedPath, { withFileTypes: true });
+      const dirents = await fs.readdir(resolveToolPath(resolvedPath), { withFileTypes: true });
 
       // Collect entry details
       const entries: DirEntry[] = [];
@@ -188,7 +189,7 @@ export class LsTool {
 
         const entryPath = path.join(resolvedPath, dirent.name);
         try {
-          const entryStat = await fs.stat(entryPath);
+          const entryStat = await fs.stat(resolveToolPath(entryPath));
           let type: DirEntry['type'] = 'file';
           if (dirent.isDirectory()) {
             type = 'dir';

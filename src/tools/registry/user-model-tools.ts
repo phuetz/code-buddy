@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * User Model Tool Adapters
  *
@@ -48,7 +49,7 @@ export class UserModelObserveTool implements ITool {
     }
 
     try {
-      const model = getUserModel(context?.cwd ?? process.cwd());
+      const model = getUserModel(context?.cwd ?? getToolWorkingDirectory());
 
       let runId: string | undefined;
       try {
@@ -168,7 +169,7 @@ export class UserModelRecallTool implements ITool {
     }
 
     try {
-      const model = getUserModel(context?.cwd ?? process.cwd());
+      const model = getUserModel(context?.cwd ?? getToolWorkingDirectory());
 
       if (!query) {
         const summary = model.summarize();

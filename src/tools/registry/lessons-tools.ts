@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Lessons Tool Adapters
  *
@@ -9,7 +10,7 @@
  * - TaskVerifyTool    (`task_verify`)    — run tsc/tests/lint verification contract
  */
 
-import { spawnSync } from 'child_process';
+import { spawnSync } from '../../utils/tool-process.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { ToolResult } from '../../types/index.js';
@@ -50,7 +51,7 @@ export class LessonsAddTool implements ITool {
     }
 
     try {
-      const tracker = getLessonsTracker(execContext?.cwd ?? process.cwd());
+      const tracker = getLessonsTracker(execContext?.cwd ?? getToolWorkingDirectory());
       const item = tracker.add(category, content, source, context);
 
       // Emit lesson_added event to active RunStore if one is running (non-fatal)
@@ -162,7 +163,7 @@ export class LessonsProposeTool implements ITool {
 
     try {
       const { getLessonCandidateQueue } = await import('../../agent/lesson-candidate-queue.js');
-      const queue = getLessonCandidateQueue(execContext?.cwd ?? process.cwd());
+      const queue = getLessonCandidateQueue(execContext?.cwd ?? getToolWorkingDirectory());
 
       // Tag provenance with the active run id when one is available.
       let runId: string | undefined;
@@ -289,7 +290,7 @@ export class LessonsSearchTool implements ITool {
     if (!query) return { success: false, error: 'query is required' };
 
     try {
-      const tracker = getLessonsTracker(execContext?.cwd ?? process.cwd());
+      const tracker = getLessonsTracker(execContext?.cwd ?? getToolWorkingDirectory());
       const results = tracker.search(query, category).slice(0, limit);
       if (results.length === 0) {
         return { success: true, output: `No lessons found matching "${query}".` };
@@ -368,7 +369,7 @@ export class LessonsListTool implements ITool {
     const category = input.category as LessonCategory | undefined;
 
     try {
-      const tracker = getLessonsTracker(execContext?.cwd ?? process.cwd());
+      const tracker = getLessonsTracker(execContext?.cwd ?? getToolWorkingDirectory());
       const items = tracker.list(category);
       if (items.length === 0) {
         return { success: true, output: 'No lessons recorded yet.' };
@@ -445,7 +446,7 @@ export class LessonsGraphTool implements ITool {
     const format = (input.format as LessonGraphRenderFormat | undefined) ?? 'summary';
 
     try {
-      const tracker = getLessonsTracker(execContext?.cwd ?? process.cwd());
+      const tracker = getLessonsTracker(execContext?.cwd ?? getToolWorkingDirectory());
       const graph = tracker.buildConceptGraph({ query, concept, category, includeKeywords, limit });
       return { success: true, output: renderLessonConceptGraph(graph, format) };
     } catch (err) {
@@ -553,11 +554,11 @@ function runCheck(cmd: string, args: string[], cwd: string, timeoutMs = 60_000):
  */
 export function resolveProjectBin(name: string, cwd: string): string | null {
   const candidates = process.platform === 'win32' ? [`${name}.cmd`, name] : [name];
-  let dir = path.resolve(cwd);
+  let dir = path.resolve(getToolWorkingDirectory(), cwd);
   for (;;) {
     for (const candidate of candidates) {
       const full = path.join(dir, 'node_modules', '.bin', candidate);
-      if (fs.existsSync(full)) return full;
+      if (fs.existsSync(resolveToolPath(full))) return full;
     }
     const parent = path.dirname(dir);
     if (parent === dir) return null;
@@ -594,7 +595,7 @@ export class TaskVerifyTool implements ITool {
 
   async execute(input: Record<string, unknown>, execContext?: IToolExecutionContext): Promise<ToolResult> {
     const checksInput = input.checks as VerifyCheck[] | undefined;
-    const workDir = (input.workDir as string) ?? execContext?.cwd ?? process.cwd();
+    const workDir = (input.workDir as string) ?? execContext?.cwd ?? getToolWorkingDirectory();
 
     const checks: VerifyCheck[] = checksInput ?? ['typescript', 'tests'];
     const validChecks: VerifyCheck[] = ['typescript', 'tests', 'lint'];

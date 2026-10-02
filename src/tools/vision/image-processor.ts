@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../../utils/tool-execution-context.js';
 /**
  * Image Processor Tool
  *
@@ -58,7 +59,7 @@ export class ImageProcessorTool {
     try {
       const sharp = await this.sharp();
       const metadata = await sharp(imagePath).metadata();
-      const stat = fs.statSync(imagePath);
+      const stat = fs.statSync(resolveToolPath(imagePath));
       
       const labels = ['image', metadata.format || 'unknown'];
       if (metadata.hasAlpha) labels.push('transparent');

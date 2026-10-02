@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * MultiEdit Tool -- Apply multiple edits to a single file atomically.
  *
@@ -29,16 +30,18 @@ export interface SingleFileEdit {
  * in one atomic operation. All edits succeed or none are applied.
  */
 export class MultiEditTool {
-  private confirmationService = ConfirmationService.getInstance();
+  private get confirmationService(): ConfirmationService { return ConfirmationService.getInstance(); }
   private checkpointManager = getCheckpointManager();
   private vfs = UnifiedVfsRouter.Instance;
-  private baseDirectory: string = process.cwd();
+  private configuredDirectory: string | undefined;
+  private get baseDirectory(): string { return getToolWorkingDirectory(this.configuredDirectory); }
+  private set baseDirectory(value: string) { this.configuredDirectory = value; }
 
   /**
    * Set the base directory for path resolution.
    */
   setBaseDirectory(dir: string): void {
-    this.baseDirectory = path.resolve(dir);
+    this.baseDirectory = path.resolve(getToolWorkingDirectory(), dir);
   }
 
   /**
@@ -137,6 +140,7 @@ export class MultiEditTool {
           filename: filePath,
           showVSCodeOpen: false,
           content: diffResult.diff,
+          fileChange: { path: resolvedPath, oldText: originalContent, newText: content },
         },
         'file'
       );

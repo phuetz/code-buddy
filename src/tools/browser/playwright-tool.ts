@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Browser Automation Tool using Playwright
  *
@@ -221,7 +222,7 @@ export class BrowserTool {
 
   async screenshot(options?: { path?: string; fullPage?: boolean }): Promise<string> {
     const page = this.getActivePage();
-    const screenshotPath = options?.path || path.join(process.cwd(), `.codebuddy/screenshots/screenshot-${Date.now()}.png`);
+    const screenshotPath = options?.path || path.join(getToolWorkingDirectory(), `.codebuddy/screenshots/screenshot-${Date.now()}.png`);
     
     try {
       await page.screenshot({ path: screenshotPath, fullPage: options?.fullPage });
@@ -234,7 +235,7 @@ export class BrowserTool {
 
   async pdf(options?: { path?: string }): Promise<string> {
     const page = this.getActivePage();
-    const pdfPath = options?.path || path.join(process.cwd(), `.codebuddy/screenshots/page-${Date.now()}.pdf`);
+    const pdfPath = options?.path || path.join(getToolWorkingDirectory(), `.codebuddy/screenshots/page-${Date.now()}.pdf`);
     
     try {
       await page.pdf({ path: pdfPath });

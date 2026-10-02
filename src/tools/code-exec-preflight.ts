@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * TypeScript preflight validation for Code Mode (`code_exec`).
  *
@@ -13,7 +14,7 @@
  * 6. Fail-closed: invalid code or compiler/global errors are rejected before child process spawn or tool dispatch.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from '../utils/tool-process.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -377,7 +378,7 @@ function resolvePreflightRunnerPath(): string {
   try {
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const distPath = path.join(currentDir, 'code-exec-preflight-runner.js');
-    if (fs.existsSync(distPath)) return distPath;
+    if (fs.existsSync(resolveToolPath(distPath))) return distPath;
     const builtFromSourcePath = path.resolve(
       currentDir,
       '..',
@@ -386,9 +387,9 @@ function resolvePreflightRunnerPath(): string {
       'tools',
       'code-exec-preflight-runner.js',
     );
-    if (fs.existsSync(builtFromSourcePath)) return builtFromSourcePath;
+    if (fs.existsSync(resolveToolPath(builtFromSourcePath))) return builtFromSourcePath;
     const srcPath = path.join(currentDir, 'code-exec-preflight-runner.ts');
-    if (fs.existsSync(srcPath)) return srcPath;
+    if (fs.existsSync(resolveToolPath(srcPath))) return srcPath;
     throw new Error('Bundled preflight compiler is missing');
   } catch (error) {
     throw new Error(`Cannot resolve bundled preflight compiler: ${String(error)}`);
@@ -461,7 +462,7 @@ export async function runCodeExecPreflight(
     let stderr = '';
 
     const child = spawn(process.execPath, getRunnerSpawnArgs(runnerPath), {
-      cwd: runtime.cwd || process.cwd(),
+      cwd: runtime.cwd || getToolWorkingDirectory(),
       env: {
         HOME: '/nonexistent',
         LANG: 'C.UTF-8',

@@ -1,6 +1,7 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
-import { spawn as defaultSpawn, execSync as defaultExecSync } from 'child_process';
+import { spawn as defaultSpawn, execSync as defaultExecSync } from '../utils/tool-process.js';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
@@ -93,7 +94,7 @@ export class OCRTool {
    */
   async extractText(filePath: string, options: OCROptions = {}): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -463,7 +464,7 @@ export class OCRTool {
       };
     }
 
-    const resolvedPath = path.resolve(process.cwd(), filePath);
+    const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
     if (!await this.vfs.exists(resolvedPath)) {
       return {
         success: false,
@@ -471,7 +472,7 @@ export class OCRTool {
       };
     }
 
-    const tempPath = path.join(process.cwd(), '.codebuddy', 'temp', `ocr_region_${Date.now()}.png`);
+    const tempPath = path.join(getToolWorkingDirectory(), '.codebuddy', 'temp', `ocr_region_${Date.now()}.png`);
     await this.vfs.ensureDir(path.dirname(tempPath));
 
     try {
@@ -530,7 +531,7 @@ export class OCRTool {
   private async runWindowsNativeOCR(imagePath: string): Promise<ToolResult> {
     const startTime = Date.now();
     try {
-      const { exec } = await import('child_process');
+      const { exec } = await import('../utils/tool-process.js');
       const { promisify } = await import('util');
       const execAsync = promisify(exec);
 

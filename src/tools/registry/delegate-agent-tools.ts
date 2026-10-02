@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Delegate Agent Tool Adapter
  *
@@ -157,7 +158,7 @@ export class DelegateAgentTool implements ITool {
     // apply the same credential deny list as view_file before handing it over.
     if (filePath) {
       const { checkSecretFileAccess, formatSecretRefusal } = await import('../../security/secret-files.js');
-      const secret = checkSecretFileAccess(filePath, 'read', { baseDir: context?.cwd ?? process.cwd() });
+      const secret = checkSecretFileAccess(filePath, 'read', { baseDir: context?.cwd ?? getToolWorkingDirectory() });
       if (secret.secret) {
         return { success: false, error: formatSecretRefusal(filePath, secret) };
       }

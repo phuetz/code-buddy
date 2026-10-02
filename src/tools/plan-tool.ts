@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 
 import { BaseTool, ParameterDefinition } from './base-tool.js';
 import { ToolResult } from '../types/index.js';
@@ -26,12 +27,13 @@ export class PlanTool extends BaseTool {
   readonly name = 'plan';
   readonly description = 'Manage a persistent execution plan (PLAN.md). Use this to track progress on complex tasks.';
 
-  private planPath: string;
+  private configuredCwd: string | undefined;
+  private get planPath(): string { return path.join(getToolWorkingDirectory(this.configuredCwd), 'PLAN.md'); }
   private graph: KnowledgeGraph | null = null;
 
-  constructor(cwd: string = process.cwd()) {
+  constructor(cwd?: string) {
     super();
-    this.planPath = path.join(cwd, 'PLAN.md');
+    this.configuredCwd = cwd;
   }
 
   /**
@@ -109,22 +111,22 @@ export class PlanTool extends BaseTool {
 ${contextSection}
 ## Steps
 `;
-    await fs.writeFile(this.planPath, content);
+    await guardToolMutation(() => fs.writeFile(resolveToolPath(this.planPath), content));
 
     return this.success(`Created new plan at ${this.planPath}`, { content });
   }
 
   private async readPlan(): Promise<ToolResult> {
-    if (!await fs.pathExists(this.planPath)) {
+    if (!await fs.pathExists(resolveToolPath(this.planPath))) {
       return this.error('No PLAN.md found. Initialize one first.');
     }
-    const content = await fs.readFile(this.planPath, 'utf-8');
+    const content = await fs.readFile(resolveToolPath(this.planPath), 'utf-8');
     return this.success(content);
   }
 
   private async appendStep(step: string): Promise<ToolResult> {
     if (!step) return this.error('Step description is required for append');
-    if (!await fs.pathExists(this.planPath)) return this.error('No PLAN.md found.');
+    if (!await fs.pathExists(resolveToolPath(this.planPath))) return this.error('No PLAN.md found.');
 
     // Enrich step with graph file metadata
     const fileMeta = this.resolveStepFiles(step);
@@ -132,16 +134,16 @@ ${contextSection}
     if (fileMeta) {
       line = `- [ ] ${step}\n${fileMeta}\n`;
     }
-    await fs.appendFile(this.planPath, line);
+    await guardToolMutation(() => fs.appendFile(resolveToolPath(this.planPath), line));
 
     return this.readPlan();
   }
 
   private async updateStep(stepMatch: string, status: string): Promise<ToolResult> {
     if (!stepMatch) return this.error('Step match text is required for update');
-    if (!await fs.pathExists(this.planPath)) return this.error('No PLAN.md found.');
+    if (!await fs.pathExists(resolveToolPath(this.planPath))) return this.error('No PLAN.md found.');
 
-    const content = await fs.readFile(this.planPath, 'utf-8');
+    const content = await fs.readFile(resolveToolPath(this.planPath), 'utf-8');
     const lines = content.split('\n');
     let updated = false;
 
@@ -162,7 +164,7 @@ ${contextSection}
     }
 
     const newContent = newLines.join('\n');
-    await fs.writeFile(this.planPath, newContent);
+    await guardToolMutation(() => fs.writeFile(resolveToolPath(this.planPath), newContent));
     return this.success(`Updated task status to ${status}\n\n${newContent}`);
   }
 
@@ -170,12 +172,12 @@ ${contextSection}
    * Reorder pending plan steps by dependency graph (dependencies first).
    */
   private async suggestOrder(): Promise<ToolResult> {
-    if (!await fs.pathExists(this.planPath)) return this.error('No PLAN.md found.');
+    if (!await fs.pathExists(resolveToolPath(this.planPath))) return this.error('No PLAN.md found.');
     if (!this.graph || this.graph.getStats().tripleCount === 0) {
       return this.error('No code graph available for dependency ordering.');
     }
 
-    const content = await fs.readFile(this.planPath, 'utf-8');
+    const content = await fs.readFile(resolveToolPath(this.planPath), 'utf-8');
     const lines = content.split('\n');
 
     // Extract pending step lines with their entities
@@ -231,7 +233,7 @@ ${contextSection}
     }
 
     const newContent = newLines.join('\n');
-    await fs.writeFile(this.planPath, newContent);
+    await guardToolMutation(() => fs.writeFile(resolveToolPath(this.planPath), newContent));
     return this.success(`Reordered ${stepLines.length} steps by dependency graph.\n\n${newContent}`);
   }
 

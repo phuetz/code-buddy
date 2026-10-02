@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Dead Code Detector Tool
  *
@@ -51,7 +52,7 @@ export interface DeadCodeOptions {
 }
 
 const DEFAULT_OPTIONS: DeadCodeOptions = {
-  rootDir: process.cwd(),
+  get rootDir() { return getToolWorkingDirectory(); },
   include: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
   exclude: ['**/node_modules/**', '**/dist/**', '**/*.test.ts', '**/*.spec.ts'],
   minConfidence: 'medium',
@@ -448,7 +449,7 @@ export function formatDeadCodeReport(report: DeadCodeReport): string {
 
   lines.push('Issues:');
   for (const [file, fileIssues] of byFile) {
-    const relPath = path.relative(process.cwd(), file);
+    const relPath = path.relative(getToolWorkingDirectory(), file);
     lines.push(`\n  ${relPath}:`);
     for (const issue of fileIssues) {
       const conf = issue.confidence === 'high' ? '!!' : issue.confidence === 'medium' ? '!' : '?';

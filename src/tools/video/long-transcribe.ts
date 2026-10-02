@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * Long-format STT — wraps the short-utterance `transcribeWav()` for arbitrarily long
  * audio. The daemon's STT is calibrated for short utterances (20 s worker timeout,
@@ -22,7 +23,7 @@
  * @module tools/video/long-transcribe
  */
 
-import { spawn as realSpawn } from 'child_process';
+import { spawn as realSpawn } from '../../utils/tool-process.js';
 import { mkdtemp, readdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -205,7 +206,7 @@ export async function transcribeLong(
   let workDir = options.workDir;
   let ownWorkDir = false;
   if (!workDir) {
-    workDir = await mkdtemp(join(tmpdir(), 'buddy-longtx-'));
+    workDir = await guardToolMutation(() => mkdtemp(resolveToolPath(join(tmpdir(), 'buddy-longtx-'))));
     ownWorkDir = true;
   }
 
@@ -224,7 +225,7 @@ export async function transcribeLong(
       return [];
     }
 
-    const chunks = (await readdir(workDir))
+    const chunks = (await readdir(resolveToolPath(workDir)))
       .filter((f) => /^chunk_\d+\.wav$/.test(f))
       .sort();
     if (chunks.length === 0) {
@@ -269,7 +270,7 @@ export async function transcribeLong(
     return segments;
   } finally {
     if (ownWorkDir && workDir) {
-      await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      await guardToolMutation(() => rm(resolveToolPath(workDir), { recursive: true, force: true })).catch(() => {});
     }
     await closeDefaultWorker?.();
   }

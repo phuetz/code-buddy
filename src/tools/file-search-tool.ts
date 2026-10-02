@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
@@ -10,7 +11,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Launch-folder default: session cwd if the registry passed one, else process.cwd(). */
 export function defaultFileSearchCwd(cwd?: string): string {
   const given = typeof cwd === 'string' ? cwd.trim() : '';
-  return path.resolve(given || process.cwd());
+  return path.resolve(getToolWorkingDirectory(), given || getToolWorkingDirectory());
 }
 
 /**
@@ -25,8 +26,8 @@ export async function resolveFileSearchRoot(raw: unknown, cwd?: string): Promise
     : path.isAbsolute(given)
       ? given
       : path.resolve(base, given);
-  const resolved = path.resolve(candidate);
-  if (!(await fs.lstat(resolved)).isDirectory()) {
+  const resolved = path.resolve(getToolWorkingDirectory(), candidate);
+  if (!(await fs.lstat(resolveToolPath(resolved))).isDirectory()) {
     throw new Error('root is not a directory');
   }
   return resolved;
@@ -44,14 +45,14 @@ async function walk(
   out: Array<{ file: string; line: number; excerpt: string }>,
 ): Promise<void> {
   if (out.length >= max) return;
-  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+  for (const entry of await fs.readdir(resolveToolPath(dir), { withFileTypes: true })) {
     if (out.length >= max) return;
     if (entry.name === 'node_modules' || entry.name === '.git') continue;
     const full = path.join(dir, entry.name);
     if (checkSecretFileAccess(full, 'read').secret) continue;
     if (entry.isDirectory()) await walk(full, root, regex, max, out);
     else if (entry.isFile()) {
-      const buf = await fs.readFile(full);
+      const buf = await fs.readFile(resolveToolPath(full));
       if (binary(buf)) continue;
       const lines = buf.toString('utf8').split(/\r?\n/);
       for (let i = 0; i < lines.length && out.length < max; i++) {

@@ -1,4 +1,5 @@
-import { execFile } from 'child_process';
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
+import { execFile } from '../utils/tool-process.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
@@ -25,10 +26,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function safeRoot(root: string): Promise<string> {
   if (!path.isAbsolute(root)) throw new Error('root must be an absolute path');
-  const resolved = path.resolve(root);
+  const resolved = path.resolve(getToolWorkingDirectory(), root);
   const parsed = path.parse(resolved);
   if (resolved === parsed.root || ['/etc', '/dev', '/proc', '/sys', '/run'].includes(resolved)) throw new Error(`Refusing unsafe root: ${resolved}`);
-  const stat = await fs.lstat(resolved);
+  const stat = await fs.lstat(resolveToolPath(resolved));
   if (!stat.isDirectory()) throw new Error(`root is not a directory: ${resolved}`);
   return resolved;
 }
@@ -76,7 +77,7 @@ export class TestRunnerTool {
       if (!isRecord(input)) return { success: false, error: 'Input must be an object' };
       if (typeof input.root !== 'string' || input.root.trim() === '') return { success: false, error: 'root must be a non-empty absolute path' };
       const root = await safeRoot(input.root);
-      const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8')) as unknown;
+      const pkg = JSON.parse(await fs.readFile(resolveToolPath(path.join(root, 'package.json')), 'utf8')) as unknown;
       if (!isRecord(pkg) || !isRecord(pkg.scripts) || typeof pkg.scripts.test !== 'string') return { success: false, error: 'package.json must declare scripts.test' };
       const timeoutMs = Math.min(Math.max(Number(input.timeoutMs) || DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS);
       const runner = detectRunner(pkg);

@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../../utils/tool-execution-context.js';
 /** Fail-closed commercial voice rights registry shared by CLI and Cowork. */
 
 import { createHash } from 'crypto';
@@ -28,7 +29,7 @@ export async function loadVoiceRightsRegistry(
   now = new Date(),
 ): Promise<Map<string, VerifiedVoiceProfile>> {
   const registryPath = await regularSecureFile(filename, 'Voice rights registry');
-  const registryBytes = await fs.readFile(registryPath);
+  const registryBytes = await fs.readFile(resolveToolPath(registryPath));
   const registryRevision = createHash('sha256').update(registryBytes).digest('hex');
   const raw = JSON.parse(registryBytes.toString('utf8')) as Partial<RegistryFile>;
   if (raw.schemaVersion !== 2 || !Array.isArray(raw.profiles)) {
@@ -127,14 +128,14 @@ export function voiceProfileRevision(profile: ResolvedVoiceProfile): string {
 
 async function regularSecureFile(filename: string, label: string): Promise<string> {
   if (!path.isAbsolute(filename) || filename.includes('\0')) throw new Error(`${label} path must be absolute`);
-  const info = await fs.lstat(filename);
+  const info = await fs.lstat(resolveToolPath(filename));
   if (info.isSymbolicLink() || !info.isFile()) throw new Error(`${label} must be a regular non-symlink file`);
   if (process.platform !== 'win32' && (info.mode & 0o077) !== 0) throw new Error(`${label} permissions must not grant group or other access`);
-  return fs.realpath(filename);
+  return fs.realpath(resolveToolPath(filename));
 }
 
 async function sha256File(filename: string): Promise<string> {
-  return createHash('sha256').update(await fs.readFile(filename)).digest('hex');
+  return createHash('sha256').update(await fs.readFile(resolveToolPath(filename))).digest('hex');
 }
 
 function boundedText(value: unknown, label: string, maximum: number): string {

@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import * as path from "path";
 import { ToolResult, EditorCommand, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
@@ -33,7 +34,9 @@ export class TextEditorTool implements Disposable {
   private get confirmationService(): ConfirmationService {
     return ConfirmationService.getInstance();
   }
-  private baseDirectory: string = process.cwd();
+  private configuredDirectory: string | undefined;
+  private get baseDirectory(): string { return getToolWorkingDirectory(this.configuredDirectory); }
+  private set baseDirectory(value: string) { this.configuredDirectory = value; }
   private vfs = UnifiedVfsRouter.Instance;
 
   constructor() {
@@ -51,7 +54,7 @@ export class TextEditorTool implements Disposable {
    * Set the base directory for path validation
    */
   setBaseDirectory(dir: string): void {
-    this.baseDirectory = path.resolve(dir);
+    this.baseDirectory = path.resolve(getToolWorkingDirectory(), dir);
   }
 
   /**

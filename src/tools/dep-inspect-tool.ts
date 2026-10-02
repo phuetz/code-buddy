@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
@@ -23,9 +24,9 @@ function stringRecord(value: unknown): Record<string, string> {
 
 async function assertRoot(root: string): Promise<string> {
   if (!path.isAbsolute(root)) throw new Error('root must be an absolute path');
-  const resolved = path.resolve(root);
+  const resolved = path.resolve(getToolWorkingDirectory(), root);
   if ([path.parse(resolved).root, '/etc', '/dev', '/proc', '/sys', '/run'].includes(resolved)) throw new Error(`Refusing unsafe root: ${resolved}`);
-  const stat = await fs.lstat(resolved);
+  const stat = await fs.lstat(resolveToolPath(resolved));
   if (!stat.isDirectory()) throw new Error(`root is not a directory: ${resolved}`);
   return resolved;
 }
@@ -33,7 +34,7 @@ async function assertRoot(root: string): Promise<string> {
 async function firstExisting(root: string, names: string[]): Promise<string | undefined> {
   for (const name of names) {
     try {
-      await fs.access(path.join(root, name));
+      await fs.access(resolveToolPath(path.join(root, name)));
       return name;
     } catch {
       // continue
@@ -52,7 +53,7 @@ export class DepInspectTool {
       if (typeof input.root !== 'string' || input.root.trim() === '') return { success: false, error: 'root must be a non-empty absolute path' };
       const root = await assertRoot(input.root);
       const packagePath = path.join(root, 'package.json');
-      const pkg = JSON.parse(await fs.readFile(packagePath, 'utf8')) as Record<string, unknown>;
+      const pkg = JSON.parse(await fs.readFile(resolveToolPath(packagePath), 'utf8')) as Record<string, unknown>;
       const dependencies = stringRecord(pkg.dependencies);
       const devDependencies = stringRecord(pkg.devDependencies);
       const scripts = stringRecord(pkg.scripts);

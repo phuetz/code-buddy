@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolExecutionContext, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 
 import { BaseTool } from './base-tool.js';
 import { DockerSandbox } from '../sandbox/docker-sandbox.js';
@@ -13,12 +14,16 @@ export class RunScriptTool extends BaseTool {
   readonly name = 'run_script';
   readonly description = 'Execute a Python, TypeScript, or JavaScript script in a secure sandboxed environment (Docker). Supports external dependencies.';
   
-  private workspacePath: string;
+  private configuredWorkspace: string | undefined;
+  private get workspacePath(): string {
+    return getToolExecutionContext() ? path.join(getToolWorkingDirectory(), '.codebuddy', 'workspace')
+      : this.configuredWorkspace ?? path.join(getToolWorkingDirectory(), '.codebuddy', 'workspace');
+  }
 
   constructor(workspacePath?: string) {
     super();
     // Default to a temporary workspace if not provided
-    this.workspacePath = workspacePath || path.join(process.cwd(), '.codebuddy', 'workspace');
+    this.configuredWorkspace = workspacePath;
   }
 
   protected getParameters(): Record<string, ParameterDefinition> {
@@ -84,8 +89,8 @@ export class RunScriptTool extends BaseTool {
 
     try {
       // 1. Write script to host workspace
-      fs.ensureDirSync(this.workspacePath);
-      await fs.writeFile(hostFilePath, script);
+      guardToolMutation(() => fs.ensureDirSync(resolveToolPath(this.workspacePath)));
+      await guardToolMutation(() => fs.writeFile(resolveToolPath(hostFilePath), script));
 
       // 2. Select Docker Image
       const image = this.getDockerImage(language);

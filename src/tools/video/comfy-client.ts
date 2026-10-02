@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /** Polling-only headless ComfyUI client for exported API workflows. */
 
 import { promises as fs } from 'fs';
@@ -256,8 +257,8 @@ export async function submitAndAwait(
     await sleep(options.pollMs);
   }
 
-  const workDir = options.workDir ?? await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-comfy-'));
-  await fs.mkdir(workDir, { recursive: true });
+  const workDir = options.workDir ?? await guardToolMutation(() => fs.mkdtemp(resolveToolPath(path.join(os.tmpdir(), 'codebuddy-comfy-'))));
+  await guardToolMutation(() => fs.mkdir(resolveToolPath(workDir), { recursive: true }));
   const refs = outputReferences(completedOutputs);
   const outputs: ComfyOutput[] = [];
   for (const [index, output] of refs.entries()) {
@@ -278,7 +279,7 @@ export async function submitAndAwait(
     if (!response.ok) throw new Error(`ComfyUI /view failed (${response.status}) for ${output.ref.filename}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     const outputPath = path.join(workDir, safeOutputName(output.ref.filename, output.nodeId, index));
-    await fs.writeFile(outputPath, bytes, { flag: 'wx' });
+    await guardToolMutation(() => fs.writeFile(resolveToolPath(outputPath), bytes, { flag: 'wx' }));
     outputs.push({
       nodeId: output.nodeId,
       kind: output.kind,

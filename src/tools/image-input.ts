@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Image Input Support - Vision Models (Inspired by Codex CLI, Copilot CLI, Aider)
  *
@@ -86,7 +87,7 @@ export function isBase64(input: string): boolean {
  * Load image from file path
  */
 export async function loadImageFromFile(filePath: string): Promise<ImageInput> {
-  const absolutePath = path.resolve(filePath);
+  const absolutePath = path.resolve(getToolWorkingDirectory(), filePath);
 
   if (!(await UnifiedVfsRouter.Instance.exists(absolutePath))) {
     throw new Error(`Image file not found: ${filePath}`);

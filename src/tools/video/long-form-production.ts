@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /** Compile and assemble human-reviewed long-form episode plans without publishing them. */
 
 import { createHash } from 'crypto';
@@ -65,11 +66,11 @@ export async function assembleLongFormMaster(input: {
   const clips: string[] = [];
   for (const scene of packet.scenes) {
     const candidate = path.join(clipsRoot, scene.expectedFilename);
-    const info = await fs.lstat(candidate);
+    const info = await fs.lstat(resolveToolPath(candidate));
     if (info.isSymbolicLink() || !info.isFile() || info.size <= 1024) {
       throw new Error(`Long-form scene ${scene.sceneId} must be a regular non-empty MP4`);
     }
-    const canonical = await fs.realpath(candidate);
+    const canonical = await fs.realpath(resolveToolPath(candidate));
     if (!within(canonical, clipsRoot)) throw new Error(`Long-form scene ${scene.sceneId} escapes the clips root`);
     clips.push(canonical);
   }
@@ -96,12 +97,12 @@ export async function assembleLongFormMaster(input: {
     projectRoot, '.codebuddy', 'media-generation', 'films', 'long-form', input.plan.episodeId, `${packet.planSha256}.mp4`,
   );
   if (outputPath !== expectedOutput) throw new Error('Long-form assembler returned an unexpected output path');
-  const outputSha256 = createHash('sha256').update(await fs.readFile(outputPath)).digest('hex');
+  const outputSha256 = createHash('sha256').update(await fs.readFile(resolveToolPath(outputPath))).digest('hex');
   const captionPath = `${outputPath}.${input.plan.locale}.vtt`;
-  await fs.writeFile(captionPath, buildLongFormWebVtt(input.plan), { flag: 'wx', mode: 0o600 });
-  const captionSha256 = createHash('sha256').update(await fs.readFile(captionPath)).digest('hex');
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(captionPath), buildLongFormWebVtt(input.plan), { flag: 'wx', mode: 0o600 }));
+  const captionSha256 = createHash('sha256').update(await fs.readFile(resolveToolPath(captionPath))).digest('hex');
   const metadataPath = `${outputPath}.youtube.json`;
-  await fs.writeFile(metadataPath, `${JSON.stringify({
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(metadataPath), `${JSON.stringify({
     schemaVersion: 1,
     episodeId: input.plan.episodeId,
     planSha256: packet.planSha256,
@@ -119,7 +120,7 @@ export async function assembleLongFormMaster(input: {
     reviewStatus: 'pending-human-review',
     technical: { width: 1920, height: 1080, fps: 30, hasAudio: true, durationSeconds: result.probedDuration ?? result.estimatedDuration },
     autoPublish: false,
-  }, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  }, null, 2)}\n`, { flag: 'wx', mode: 0o600 }));
   return { outputPath, metadataPath, result };
 }
 
@@ -132,8 +133,8 @@ export async function reviewLongFormMaster(input: {
 }): Promise<Record<string, unknown>> {
   const videoPath = await regularFile(input.videoPath, 'Long-form master');
   const metadataPath = await regularFile(`${videoPath}.youtube.json`, 'Long-form metadata');
-  const metadata = JSON.parse(await fs.readFile(metadataPath, 'utf8')) as Record<string, unknown>;
-  const videoSha256 = createHash('sha256').update(await fs.readFile(videoPath)).digest('hex');
+  const metadata = JSON.parse(await fs.readFile(resolveToolPath(metadataPath), 'utf8')) as Record<string, unknown>;
+  const videoSha256 = createHash('sha256').update(await fs.readFile(resolveToolPath(videoPath))).digest('hex');
   const caption = metadata.caption as Record<string, unknown> | undefined;
   if (
     metadata.schemaVersion !== 1 || metadata.videoSha256 !== videoSha256 || metadata.visibility !== 'private' ||
@@ -141,7 +142,7 @@ export async function reviewLongFormMaster(input: {
     !caption || typeof caption.file !== 'string' || path.basename(caption.file) !== caption.file
   ) throw new Error('Long-form metadata is incomplete, stale or unsafe');
   const captionPath = await regularFile(path.join(path.dirname(videoPath), caption.file), 'Long-form captions');
-  const captionSha256 = createHash('sha256').update(await fs.readFile(captionPath)).digest('hex');
+  const captionSha256 = createHash('sha256').update(await fs.readFile(resolveToolPath(captionPath))).digest('hex');
   if (caption.sha256 !== captionSha256) throw new Error('Long-form caption digest is stale');
   if (Object.values(input.checks).some((value) => value !== true)) throw new Error('Every long-form human-review check must pass');
   if (input.reviewer.trim().length < 2 || input.reason.trim().length < 3) throw new Error('Reviewer and reason are required');
@@ -150,7 +151,7 @@ export async function reviewLongFormMaster(input: {
     status: 'ready-for-private-upload',
     episodeId: metadata.episodeId,
     videoSha256,
-    metadataSha256: createHash('sha256').update(await fs.readFile(metadataPath)).digest('hex'),
+    metadataSha256: createHash('sha256').update(await fs.readFile(resolveToolPath(metadataPath))).digest('hex'),
     captionSha256,
     reviewer: input.reviewer.trim(),
     reason: input.reason.trim(),
@@ -185,15 +186,15 @@ function vttTime(seconds: number): string {
 
 async function regularDirectory(value: string, label: string): Promise<string> {
   if (!path.isAbsolute(value) || value.includes('\0')) throw new Error(`${label} must be absolute`);
-  const info = await fs.lstat(value);
+  const info = await fs.lstat(resolveToolPath(value));
   if (info.isSymbolicLink() || !info.isDirectory()) throw new Error(`${label} must be a regular directory`);
-  return fs.realpath(value);
+  return fs.realpath(resolveToolPath(value));
 }
 
 async function regularFile(value: string, label: string): Promise<string> {
-  const info = await fs.lstat(value);
+  const info = await fs.lstat(resolveToolPath(value));
   if (info.isSymbolicLink() || !info.isFile()) throw new Error(`${label} must be a regular file`);
-  return fs.realpath(value);
+  return fs.realpath(resolveToolPath(value));
 }
 
 function within(candidate: string, root: string): boolean {

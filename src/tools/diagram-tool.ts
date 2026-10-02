@@ -1,6 +1,7 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync } from '../utils/tool-process.js';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
 export type DiagramType = 'flowchart' | 'sequence' | 'class' | 'state' | 'er' | 'gantt' | 'pie' | 'mindmap' | 'timeline' | 'git' | 'ascii';
@@ -27,7 +28,7 @@ export interface DiagramResult {
  * Supports Mermaid syntax for rich diagrams and ASCII art for terminal display
  */
 export class DiagramTool {
-  private readonly outputDir = path.join(process.cwd(), '.codebuddy', 'diagrams');
+  private get outputDir(): string { return path.join(getToolWorkingDirectory(), '.codebuddy', 'diagrams'); }
   private vfs = UnifiedVfsRouter.Instance;
 
   /**

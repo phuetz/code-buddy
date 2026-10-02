@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * Film assembly — chain multiple video clips into ONE longer film with
  * transitions, then optionally lay a background-music track (with ducking)
@@ -31,7 +32,7 @@
  * @module tools/video/film-assemble
  */
 
-import { spawn as realSpawn } from 'child_process';
+import { spawn as realSpawn } from '../../utils/tool-process.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
@@ -956,7 +957,7 @@ async function verifyRenderedFilm(
   file: string,
 ): Promise<ClipProbe | null> {
   try {
-    const metadata = await fs.lstat(file);
+    const metadata = await fs.lstat(resolveToolPath(file));
     if (!metadata.isFile() || metadata.size <= 0) return null;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -1029,13 +1030,13 @@ export async function assembleFilm(
     if (path.extname(input.lut.path).toLowerCase() !== '.cube') {
       return fail('Film LUT must be an existing regular .cube file.');
     }
-    const candidate = path.resolve(input.rootDir ?? process.cwd(), input.lut.path);
+    const candidate = path.resolve(input.rootDir ?? getToolWorkingDirectory(), input.lut.path);
     try {
-      const info = await fs.lstat(candidate);
+      const info = await fs.lstat(resolveToolPath(candidate));
       if (info.isSymbolicLink() || !info.isFile()) {
         return fail('Film LUT must be an existing regular .cube file.');
       }
-      lutPath = await fs.realpath(candidate);
+      lutPath = await fs.realpath(resolveToolPath(candidate));
     } catch {
       return fail('Film LUT must be an existing regular .cube file.');
     }
@@ -1087,8 +1088,8 @@ export async function assembleFilm(
   }
 
   // 4. Resolve output path.
-  const rootDir = path.resolve(input.rootDir ?? process.cwd());
-  const rootReal = await fs.realpath(rootDir);
+  const rootDir = path.resolve(getToolWorkingDirectory(), input.rootDir ?? getToolWorkingDirectory());
+  const rootReal = await fs.realpath(resolveToolPath(rootDir));
   const id = deps.createId?.() ?? `${Date.now()}-${randomUUID()}`;
   const safeName = (input.name ?? 'film').replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60) || 'film';
   const outputSegments = input.output?.split(/[\\/]+/).filter((segment) => segment !== '.') ?? [];
@@ -1103,7 +1104,7 @@ export async function assembleFilm(
     ]);
     outputPath = path.join(outputDir, outputFileName);
     try {
-      const outputMetadata = await fs.lstat(outputPath);
+      const outputMetadata = await fs.lstat(resolveToolPath(outputPath));
       if (outputMetadata.isSymbolicLink() || !outputMetadata.isFile()) {
         return fail('Film output path must be a regular file and must not be a symbolic link.');
       }
@@ -1124,7 +1125,7 @@ export async function assembleFilm(
   );
   const cleanupRender = async (): Promise<void> => {
     try {
-      await fs.rm(renderPath, { force: true });
+      await guardToolMutation(() => fs.rm(resolveToolPath(renderPath), { force: true }));
     } catch (error) {
       logger.warn(`[film-assemble] could not clean temporary render: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -1219,21 +1220,21 @@ export async function assembleFilm(
     }
     const finish = await runProcess(spawn, ffmpegBin, finishArgs, deps.timeoutMs ?? 30 * 60 * 1000);
     if (finish.code !== 0) {
-      await fs.rm(finishedPath, { force: true });
+      await guardToolMutation(() => fs.rm(resolveToolPath(finishedPath), { force: true }));
       await cleanupRender();
       const tail = finish.stderr.trim().split('\n').slice(-6).join('\n');
       return fail(`ffmpeg film finishing failed (exit ${finish.code}).\n${tail}`);
     }
     if (!(await verifyRenderedFilm(spawn, ffprobeBin, finishedPath))) {
-      await fs.rm(finishedPath, { force: true });
+      await guardToolMutation(() => fs.rm(resolveToolPath(finishedPath), { force: true }));
       await cleanupRender();
       return fail('ffmpeg film finishing reported success but produced no valid non-empty video artifact.');
     }
     try {
-      await fs.rm(renderPath, { force: true });
-      await fs.rename(finishedPath, renderPath);
+      await guardToolMutation(() => fs.rm(resolveToolPath(renderPath), { force: true }));
+      await guardToolMutation(() => fs.rename(resolveToolPath(finishedPath), resolveToolPath(renderPath)));
     } catch (error) {
-      await fs.rm(finishedPath, { force: true });
+      await guardToolMutation(() => fs.rm(resolveToolPath(finishedPath), { force: true }));
       await cleanupRender();
       return fail(`Film finishing output could not be installed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -1293,8 +1294,8 @@ export async function assembleFilm(
     return fail('Final film artifact is missing, empty, or not a valid video.');
   }
   try {
-    await fs.rename(renderPath, outputPath);
-    const installed = await fs.lstat(outputPath);
+    await guardToolMutation(() => fs.rename(resolveToolPath(renderPath), resolveToolPath(outputPath)));
+    const installed = await fs.lstat(resolveToolPath(outputPath));
     if (!installed.isFile() || installed.size <= 0) {
       return fail('Final film artifact could not be installed as a non-empty regular file.');
     }

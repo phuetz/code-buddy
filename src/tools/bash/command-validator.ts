@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Command validation and environment filtering for BashTool.
  *
@@ -451,7 +452,7 @@ function findCredentialPathInExpandedCommand(
 
   // `cd <credential root>` then a RELATIVE name: resolve relative tokens
   // against the last `cd` target seen in the command text.
-  let cdTarget = platform === process.platform ? process.cwd() : getHomeDirectories(platform)[0] ?? paths.sep;
+  let cdTarget = platform === process.platform ? getToolWorkingDirectory() : getHomeDirectories(platform)[0] ?? paths.sep;
   for (let i = 0; i < tokens.length; i += 1) {
     const raw = tokens[i] ?? '';
     const token = raw.replace(/^--?[A-Za-z0-9-]+=/, '');
@@ -473,7 +474,7 @@ function findCredentialPathInExpandedCommand(
     if (classifySecretPath(normalized, undefined, { platform }).secret) return raw;
     let canonical = normalized;
     if (platform === process.platform) {
-      try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
+      try { canonical = fs.realpathSync(resolveToolPath(normalized)); } catch { /* missing path */ }
     }
     const underRoot = roots.find((root) => isPathInside(canonical, root, platform));
     if (!underRoot) continue;
@@ -483,7 +484,7 @@ function findCredentialPathInExpandedCommand(
     let exists = false;
     if (platform === process.platform) {
       try {
-        isDirectory = fs.statSync(normalized).isDirectory();
+        isDirectory = fs.statSync(resolveToolPath(normalized)).isDirectory();
         exists = true;
       } catch { /* missing path */ }
     }

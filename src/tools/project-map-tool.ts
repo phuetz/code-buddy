@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
@@ -35,19 +36,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function assertSafeRoot(root: string): Promise<string> {
   if (!path.isAbsolute(root)) throw new Error('root must be an absolute path');
-  const resolved = path.resolve(root);
+  const resolved = path.resolve(getToolWorkingDirectory(), root);
   const parsed = path.parse(resolved);
   if (resolved === parsed.root || ['/etc', '/dev', '/proc', '/sys', '/run'].includes(resolved)) {
     throw new Error(`Refusing to inspect unsafe root: ${resolved}`);
   }
-  const stat = await fs.lstat(resolved);
+  const stat = await fs.lstat(resolveToolPath(resolved));
   if (!stat.isDirectory()) throw new Error(`root is not a directory: ${resolved}`);
   return resolved;
 }
 
 async function exists(filePath: string): Promise<boolean> {
   try {
-    await fs.access(filePath);
+    await fs.access(resolveToolPath(filePath));
     return true;
   } catch {
     return false;
@@ -59,7 +60,7 @@ async function findEntrypoints(root: string): Promise<string[]> {
   const packagePath = path.join(root, 'package.json');
   if (await exists(packagePath)) {
     try {
-      const pkg = JSON.parse(await fs.readFile(packagePath, 'utf8')) as { main?: unknown; bin?: unknown };
+      const pkg = JSON.parse(await fs.readFile(resolveToolPath(packagePath), 'utf8')) as { main?: unknown; bin?: unknown };
       if (typeof pkg.main === 'string') entrypoints.push(pkg.main);
       if (typeof pkg.bin === 'string') entrypoints.push(pkg.bin);
       if (isRecord(pkg.bin)) {
@@ -94,7 +95,7 @@ export class ProjectMapTool {
 
       const walk = async (dir: string, depth: number, prefix: string): Promise<void> => {
         if (depth >= maxDepth) return;
-        const entries = (await fs.readdir(dir, { withFileTypes: true }))
+        const entries = (await fs.readdir(resolveToolPath(dir), { withFileTypes: true }))
           .filter((entry) => !DEFAULT_IGNORES.has(entry.name))
           .sort((a, b) => a.name.localeCompare(b.name));
         for (const entry of entries) {

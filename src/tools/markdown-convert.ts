@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Convert documents to Markdown for LLM consumption, via Microsoft's MarkItDown.
  *
@@ -18,7 +19,7 @@
  *
  * @module tools/markdown-convert
  */
-import { spawn } from 'child_process';
+import { spawn } from '../utils/tool-process.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
@@ -93,19 +94,19 @@ export class MarkdownConvertTool {
     // A local path that does not exist must be refused BEFORE spawning: letting
     // the sidecar fail would surface a Python traceback instead of a clear cause.
     if (!isRemote(source)) {
-      const resolved = path.resolve(source);
+      const resolved = path.resolve(getToolWorkingDirectory(), source);
       const verdict = checkSecretFileAccess(resolved, 'read');
       if (verdict.secret) return { success: false, error: formatSecretRefusal(resolved, verdict) };
-      if (!fs.existsSync(resolved)) {
+      if (!fs.existsSync(resolveToolPath(resolved))) {
         return { success: false, error: `Fichier introuvable : ${resolved}` };
       }
-      if (fs.statSync(resolved).isDirectory()) {
+      if (fs.statSync(resolveToolPath(resolved)).isDirectory()) {
         return { success: false, error: `${resolved} est un dossier, pas un document.` };
       }
     }
 
     if (opts.outputPath) {
-      const destination = path.resolve(opts.outputPath);
+      const destination = path.resolve(getToolWorkingDirectory(), opts.outputPath);
       const verdict = checkSecretFileAccess(destination, 'write');
       if (verdict.secret) return { success: false, error: formatSecretRefusal(destination, verdict) };
     }
@@ -115,7 +116,7 @@ export class MarkdownConvertTool {
     const args = buildMarkitdownArgs(source, opts.outputPath);
 
     if (!isRemote(source)) {
-      const verdict = checkSecretFileAccess(path.resolve(source), 'read');
+      const verdict = checkSecretFileAccess(path.resolve(getToolWorkingDirectory(), source), 'read');
       if (verdict.secret) return { success: false, error: formatSecretRefusal(source, verdict) };
     }
 
@@ -174,7 +175,7 @@ export class MarkdownConvertTool {
           // trusting the exit code — an empty output announced as a success is
           // exactly the false success we hunt everywhere else.
           try {
-            const size = fs.statSync(opts.outputPath).size;
+            const size = fs.statSync(resolveToolPath(opts.outputPath)).size;
             if (size <= 0) {
               finish({ success: false, error: `MarkItDown a produit un fichier vide : ${opts.outputPath}` });
               return;

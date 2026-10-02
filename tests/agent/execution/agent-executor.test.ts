@@ -1735,7 +1735,13 @@ describe('AgentExecutor', () => {
       (deps.toolHandler.executeTool as jest.Mock).mockImplementation(
         (_toolCall: unknown, extra?: Record<string, unknown>) => {
           receivedSignals.push(extra?.abortSignal as AbortSignal);
-          return new Promise(() => {});
+          // A real cancellable tool settles after its cleanup; never detach it.
+          return new Promise((resolve) => {
+            const signal = extra?.abortSignal as AbortSignal;
+            signal.addEventListener('abort', () => {
+              setTimeout(() => resolve({ success: false, error: 'Cancelled after cleanup' }), 20);
+            }, { once: true });
+          });
         },
       );
 

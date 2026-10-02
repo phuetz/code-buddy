@@ -6,7 +6,7 @@
  * disabled, times out, or proposes no rewrite, the original command is used.
  */
 
-import { spawn } from 'child_process';
+import { spawn } from '../../utils/tool-process.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { getFilteredEnv } from './command-validator.js';
 import { CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';

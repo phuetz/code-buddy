@@ -1,5 +1,6 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { EventEmitter } from "events";
-import { spawn } from "child_process";
+import { spawn } from '../utils/tool-process.js';
 import { existsSync } from "fs";
 import { basename, delimiter, isAbsolute, join } from "path";
 import { ToolResult, getErrorMessage } from "../types/index.js";
@@ -119,7 +120,7 @@ export function resolveBashExecutable(): string {
     }
   }
 
-  const shell = candidates.find((candidate) => existsSync(candidate));
+  const shell = candidates.find((candidate) => existsSync(resolveToolPath(candidate)));
   if (!shell) {
     throw new Error(
       "Bash executable not found. Install Bash or add it to PATH (Git for Windows includes bash.exe)."
@@ -230,7 +231,7 @@ export class InteractiveBashTool extends EventEmitter {
             name: "xterm-256color",
             cols,
             rows,
-            cwd: options.cwd || process.cwd(),
+            cwd: options.cwd || getToolWorkingDirectory(),
             env: buildInteractiveEnv(options.env),
           },
         );
@@ -327,7 +328,7 @@ export class InteractiveBashTool extends EventEmitter {
         {
           shell: false,
           timeout: 60000,
-          cwd: options.cwd || process.cwd(),
+          cwd: options.cwd || getToolWorkingDirectory(),
           env: {
             ...buildInteractiveEnv(options.env),
             // Disable shell history for security

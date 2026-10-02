@@ -1,3 +1,5 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
+
 /**
  * Jupyter Notebook Tool
  *
@@ -6,7 +8,7 @@
  */
 
 import * as path from 'path';
-import { execFile } from 'child_process';
+import { execFile } from '../utils/tool-process.js';
 import { promisify } from 'util';
 import type { ToolResult } from '../types/index.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
@@ -448,7 +450,7 @@ export class NotebookTool {
       cells: [{ ...cell, outputs: [], execution_count: null }],
     };
 
-    const resolvedPath = path.resolve(filePath);
+    const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
     const tempPath = resolvedPath.replace(/\.ipynb$/, `.exec_cell_${cellIndex}.tmp.ipynb`);
 
     try {
@@ -505,8 +507,8 @@ export class NotebookTool {
       // Clean up temp file
       try {
         const tempFs = await import('fs');
-        if (tempFs.existsSync(tempPath)) {
-          tempFs.unlinkSync(tempPath);
+        if (tempFs.existsSync(resolveToolPath(tempPath))) {
+          guardToolMutation(() => tempFs.unlinkSync(resolveToolPath(tempPath)));
         }
       } catch { /* ignore cleanup errors */ }
     }
@@ -524,7 +526,7 @@ export class NotebookTool {
       return { success: false, error: 'jupyter is not installed or not in PATH. Install with: pip install jupyter' };
     }
 
-    const resolvedPath = path.resolve(filePath);
+    const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
     const outputName = path.basename(resolvedPath);
 
     try {
@@ -603,7 +605,7 @@ export class NotebookTool {
     }
 
     try {
-      const { spawn } = await import('child_process');
+      const { spawn } = await import('../utils/tool-process.js');
       const kernel = kernelName || 'python3';
 
       this.kernelProcess = spawn('jupyter', ['kernel', `--KernelManager.kernel_name=${kernel}`], {

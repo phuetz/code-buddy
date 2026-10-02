@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { Readable } from 'stream';
@@ -40,7 +41,7 @@ export class AudioTool {
    */
   async getInfo(filePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -169,7 +170,7 @@ export class AudioTool {
    */
   async transcribe(filePath: string, options: { language?: string; prompt?: string } = {}): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -294,7 +295,7 @@ export class AudioTool {
    */
   async toBase64(filePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -340,7 +341,7 @@ export class AudioTool {
    */
   async listAudioFiles(dirPath: string = '.'): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), dirPath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), dirPath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {

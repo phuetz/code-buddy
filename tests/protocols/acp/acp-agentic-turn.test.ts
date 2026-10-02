@@ -96,6 +96,7 @@ describe('ACP adapter around the interactive agent', () => {
       return { outcome: { outcome: 'cancelled' } };
     });
     await create('create_file', { path: 'denied.txt', content: 'never' })(context());
+    expect(client).toHaveBeenCalledWith('session/request_permission', expect.objectContaining({ sessionId: 'test-session' }));
     expect(fs.existsSync(path.join(dir, 'denied.txt'))).toBe(false);
     expect(updates.some((update) => update.sessionUpdate === 'tool_call_update' && update.status === 'failed')).toBe(true);
   });

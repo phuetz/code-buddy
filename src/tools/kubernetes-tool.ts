@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Kubernetes Tool
  *
@@ -5,7 +6,7 @@
  * Supports common kubectl operations with proper confirmation for destructive actions.
  */
 
-import { spawn } from 'child_process';
+import { spawn } from '../utils/tool-process.js';
 import { ToolResult } from '../types/index.js';
 import { ConfirmationService } from '../utils/confirmation-service.js';
 
@@ -27,6 +28,7 @@ function execKubectlSafe(
       shell: false,
       env: { ...process.env, NO_COLOR: '1' },
     });
+
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -125,13 +127,14 @@ export interface K8sScaleOptions {
 }
 
 export class KubernetesTool {
-  private confirmationService = ConfirmationService.getInstance();
-  private cwd: string;
+  private get confirmationService(): ConfirmationService { return ConfirmationService.getInstance(); }
+  private configuredCwd: string | undefined;
+  private get cwd(): string { return getToolWorkingDirectory(this.configuredCwd); }
   private currentContext: string | null = null;
   private currentNamespace: string = 'default';
 
   constructor(cwd?: string) {
-    this.cwd = cwd || process.cwd();
+    this.configuredCwd = cwd;
   }
 
   /**

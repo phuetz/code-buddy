@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * Narration — text-to-speech voiceover for the film producer.
  *
@@ -14,7 +15,7 @@
  * @module tools/video/narration
  */
 
-import { spawn as realSpawn } from 'child_process';
+import { spawn as realSpawn } from '../../utils/tool-process.js';
 import { randomUUID } from 'node:crypto';
 import { lstat, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -232,7 +233,7 @@ async function probeDuration(
 
 async function isRegularNonEmptyFile(file: string): Promise<boolean> {
   try {
-    const metadata = await lstat(file);
+    const metadata = await lstat(resolveToolPath(file));
     return metadata.isFile() && metadata.size > 0;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -244,7 +245,7 @@ async function isRegularNonEmptyFile(file: string): Promise<boolean> {
 
 async function removeTemporaryFile(file: string): Promise<void> {
   try {
-    await rm(file, { force: true });
+    await guardToolMutation(() => rm(resolveToolPath(file), { force: true }));
   } catch (error) {
     logger.warn(`[narration] could not clean temporary artifact ${file}: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -285,7 +286,7 @@ async function synthesizePiperOutput(
       return null;
     }
     try {
-      await rename(temporaryPath, outPath);
+      await guardToolMutation(() => rename(resolveToolPath(temporaryPath), resolveToolPath(outPath)));
     } catch (error) {
       logger.warn(
         `[narration] could not install ${label} narration: ${error instanceof Error ? error.message : String(error)}`,
@@ -347,7 +348,7 @@ async function resolveElevenLabsApiKey(
 
   let contents: string;
   try {
-    contents = await readFile(mediaEnvPath, 'utf8');
+    contents = await readFile(resolveToolPath(mediaEnvPath), 'utf8');
   } catch {
     return null;
   }
@@ -418,14 +419,14 @@ async function synthesizeElevenLabsNarration(
     }
 
     if (extname(outPath).toLowerCase() !== '.wav') {
-      await writeFile(outPath, audio);
+      await guardToolMutation(() => writeFile(resolveToolPath(outPath), audio));
       return true;
     }
 
     const temporaryBase = `${outPath}.${randomUUID()}`;
     const mp3Path = `${temporaryBase}.elevenlabs.mp3`;
     const temporaryPath = `${temporaryBase}.tmp.wav`;
-    await writeFile(mp3Path, audio);
+    await guardToolMutation(() => writeFile(resolveToolPath(mp3Path), audio));
     try {
       const ffmpegBin = deps.ffmpegBin ?? env.CODEBUDDY_FFMPEG_BIN ?? 'ffmpeg';
       const { code, stderr } = await run(
@@ -449,7 +450,7 @@ async function synthesizeElevenLabsNarration(
         return false;
       }
       try {
-        await rename(temporaryPath, outPath);
+        await guardToolMutation(() => rename(resolveToolPath(temporaryPath), resolveToolPath(outPath)));
       } catch (error) {
         logger.warn(
           `[narration] could not install ElevenLabs narration: ${error instanceof Error ? error.message : String(error)}`,
@@ -458,7 +459,7 @@ async function synthesizeElevenLabsNarration(
       }
       return true;
     } finally {
-      await unlink(mp3Path).catch(() => undefined);
+      await guardToolMutation(() => unlink(resolveToolPath(mp3Path))).catch(() => undefined);
       await removeTemporaryFile(temporaryPath);
     }
   } catch (error) {
@@ -602,7 +603,7 @@ export async function synthesizeLocalizedNarration(
       }
       if (!audio.length) return null;
       const { writeFile } = await import('node:fs/promises');
-      await writeFile(request.outputPath, audio);
+      await guardToolMutation(() => writeFile(resolveToolPath(request.outputPath), audio));
     } catch (error) {
       logger.warn(
         `[narration] Pocket profile ${request.voiceProfileId} failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -671,7 +672,7 @@ async function synthesizePocketNarration(
     const res = await provider.synthesize(text);
     if (!res?.audio?.length) return false;
     const { writeFileSync } = await import('node:fs');
-    writeFileSync(outPath, res.audio);
+    guardToolMutation(() => writeFileSync(resolveToolPath(outPath), res.audio));
     return true;
   } catch {
     return false;

@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../utils/tool-execution-context.js';
 /**
  * Bug Finder Tool
  *
@@ -386,7 +387,7 @@ export function scanFile(filePath: string, severityFilter?: BugSeverity): BugRep
 
   let content: string;
   try {
-    content = fs.readFileSync(filePath, 'utf-8');
+    content = fs.readFileSync(resolveToolPath(filePath), 'utf-8');
   } catch (err) {
     logger.debug(`Bug finder: could not read ${filePath}`, {
       error: err instanceof Error ? err.message : String(err),
@@ -473,7 +474,7 @@ export function scanDirectory(
 
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = fs.readdirSync(resolveToolPath(dir), { withFileTypes: true });
     } catch {
       return;
     }
@@ -584,7 +585,7 @@ export async function executeFindBugs(args: {
   try {
     let bugs: BugReport[];
 
-    const stat = fs.statSync(targetPath);
+    const stat = fs.statSync(resolveToolPath(targetPath));
     if (stat.isDirectory()) {
       bugs = scanDirectory(targetPath, severityFilter);
     } else if (stat.isFile()) {

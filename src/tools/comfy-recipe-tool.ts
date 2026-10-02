@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { constants as fsConstants, type Stats } from 'node:fs';
 import { lstat, mkdir, open, realpath, rmdir, stat, unlink } from 'node:fs/promises';
@@ -136,7 +137,7 @@ export class ComfyRecipeTool implements ITool {
       const selector = selectorFromInput(input);
       const recipe = registry.get(selector);
       assertSupportedAgentInputs(recipe);
-      const workspaceRoot = await resolveWorkspaceRoot(context?.cwd ?? process.cwd());
+      const workspaceRoot = await resolveWorkspaceRoot(context?.cwd ?? getToolWorkingDirectory());
       const referenceImages = input.action === 'run'
         ? await prepareReferenceImages(
           recipe,
@@ -338,7 +339,7 @@ export class ComfyRecipeTool implements ITool {
     const directory = configured || path.join(this.homeDirectory, '.codebuddy', 'comfy-recipes');
     if (!path.isAbsolute(directory) || directory.includes('\0')) throw new Error('ComfyUI recipe directory must be an absolute local path');
     const registry = new ComfyUIRecipeRegistry();
-    await registry.loadDirectory(path.resolve(directory));
+    await registry.loadDirectory(path.resolve(getToolWorkingDirectory(), directory));
     return registry;
   }
 
@@ -349,7 +350,7 @@ export class ComfyRecipeTool implements ITool {
       baseUrl: this.environment.CODEBUDDY_COMFYUI_URL?.trim()
         || this.environment.COMFYUI_URL?.trim()
         || 'http://127.0.0.1:8188',
-      modelsRoot: path.join(path.resolve(comfyRoot), 'models'),
+      modelsRoot: path.join(path.resolve(getToolWorkingDirectory(), comfyRoot), 'models'),
       outputRoot: path.join(workspaceRoot, OUTPUT_RELATIVE_ROOT),
       commercialUse,
     });
@@ -360,13 +361,13 @@ export class ComfyRecipeTool implements ITool {
     if (!comfyRoot || !path.isAbsolute(comfyRoot) || comfyRoot.includes('\0')) {
       throw new Error('COMFYUI_ROOT must be configured as an absolute local ComfyUI installation path');
     }
-    return path.resolve(comfyRoot);
+    return path.resolve(getToolWorkingDirectory(), comfyRoot);
   }
 }
 
 async function resolveWorkspaceRoot(cwd: string): Promise<string> {
-  const root = await realpath(path.resolve(cwd));
-  const info = await stat(root);
+  const root = await realpath(resolveToolPath(path.resolve(getToolWorkingDirectory(), cwd)));
+  const info = await stat(resolveToolPath(root));
   if (!info.isDirectory()) throw new Error('Active ComfyUI workspace is not a directory');
   return root;
 }
@@ -497,7 +498,7 @@ async function readWorkspaceReferenceImage(
     let current = workspaceRoot;
     for (const [index, segment] of segments.entries()) {
       current = path.join(current, segment);
-      const info = await lstat(current);
+      const info = await lstat(resolveToolPath(current));
       if (info.isSymbolicLink()) {
         throw new ReferenceImageError(`Reference image ${JSON.stringify(reference.path)} contains a symbolic link`);
       }
@@ -514,7 +515,7 @@ async function readWorkspaceReferenceImage(
     }
 
     const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0);
-    const handle = await open(candidate, flags);
+    const handle = await open(resolveToolPath(candidate), flags);
     let bytes: Buffer;
     try {
       const opened = await handle.stat();
@@ -530,10 +531,10 @@ async function readWorkspaceReferenceImage(
       await handle.close();
     }
 
-    const canonical = await realpath(candidate);
+    const canonical = await realpath(resolveToolPath(candidate));
     assertContained(workspaceRoot, canonical);
     for (const snapshot of snapshots) {
-      const currentInfo = await lstat(snapshot.absolutePath);
+      const currentInfo = await lstat(resolveToolPath(snapshot.absolutePath));
       if (!sameSnapshot(currentInfo, snapshot.stats)) {
         throw new ReferenceImageError(`Reference image ${JSON.stringify(reference.path)} changed during validation`);
       }
@@ -674,28 +675,28 @@ async function createUploadCleanupLease(
   if (!needed) return lease;
 
   try {
-    const comfyInfo = await lstat(comfyRoot);
-    const inputInfo = await lstat(inputRoot);
+    const comfyInfo = await lstat(resolveToolPath(comfyRoot));
+    const inputInfo = await lstat(resolveToolPath(inputRoot));
     if (!comfyInfo.isDirectory() || comfyInfo.isSymbolicLink()
       || !inputInfo.isDirectory() || inputInfo.isSymbolicLink()
-      || await realpath(comfyRoot) !== comfyRoot
-      || await realpath(inputRoot) !== inputRoot) {
+      || await realpath(resolveToolPath(comfyRoot)) !== comfyRoot
+      || await realpath(resolveToolPath(inputRoot)) !== inputRoot) {
       return lease;
     }
     const parent = path.join(inputRoot, REFERENCE_UPLOAD_SUBFOLDER);
     try {
-      await mkdir(parent, { mode: 0o700 });
+      await guardToolMutation(() => mkdir(resolveToolPath(parent), { mode: 0o700 }));
     } catch (error) {
       if (!isErrno(error, 'EEXIST')) return lease;
     }
-    const parentInfo = await lstat(parent);
-    if (!parentInfo.isDirectory() || parentInfo.isSymbolicLink() || await realpath(parent) !== parent) {
+    const parentInfo = await lstat(resolveToolPath(parent));
+    if (!parentInfo.isDirectory() || parentInfo.isSymbolicLink() || await realpath(resolveToolPath(parent)) !== parent) {
       return lease;
     }
     const namespace = path.join(parent, token);
-    await mkdir(namespace, { mode: 0o700 });
-    const namespaceInfo = await lstat(namespace);
-    if (!namespaceInfo.isDirectory() || namespaceInfo.isSymbolicLink() || await realpath(namespace) !== namespace) {
+    await guardToolMutation(() => mkdir(resolveToolPath(namespace), { mode: 0o700 }));
+    const namespaceInfo = await lstat(resolveToolPath(namespace));
+    if (!namespaceInfo.isDirectory() || namespaceInfo.isSymbolicLink() || await realpath(resolveToolPath(namespace)) !== namespace) {
       return lease;
     }
     lease.inputRootSnapshot = inputInfo;
@@ -726,7 +727,7 @@ async function cleanupOwnedUploads(lease: UploadCleanupLease): Promise<UploadCle
 
   if (lease.namespaceOwned) {
     try {
-      await rmdir(path.join(lease.inputRoot, ...lease.subfolder.split('/')));
+      await guardToolMutation(() => rmdir(resolveToolPath(path.join(lease.inputRoot, ...lease.subfolder.split('/')))));
     } catch {
       // The namespace is kept if it is non-empty or its identity is uncertain.
     }
@@ -740,10 +741,10 @@ async function cleanupOwnedUpload(lease: UploadCleanupLease, upload: OwnedUpload
     || upload.uploaded.workflowPath !== `${upload.uploaded.subfolder}/${upload.uploaded.filename}`) {
     throw new ReferenceImageError('Uploaded reference is outside its owned namespace');
   }
-  const rootInfo = await lstat(lease.inputRoot);
+  const rootInfo = await lstat(resolveToolPath(lease.inputRoot));
   if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()
     || !sameIdentity(rootInfo, lease.inputRootSnapshot!)
-    || await realpath(lease.inputRoot) !== lease.inputRoot) {
+    || await realpath(resolveToolPath(lease.inputRoot)) !== lease.inputRoot) {
     throw new ReferenceImageError('ComfyUI input root changed before cleanup');
   }
 
@@ -754,7 +755,7 @@ async function cleanupOwnedUpload(lease: UploadCleanupLease, upload: OwnedUpload
   let current = lease.inputRoot;
   for (const [index, segment] of segments.entries()) {
     current = path.join(current, segment);
-    const info = await lstat(current);
+    const info = await lstat(resolveToolPath(current));
     if (info.isSymbolicLink()) throw new ReferenceImageError('Owned upload path contains a symbolic link');
     const last = index === segments.length - 1;
     if (last ? !info.isFile() : !info.isDirectory()) {
@@ -767,9 +768,9 @@ async function cleanupOwnedUpload(lease: UploadCleanupLease, upload: OwnedUpload
   if (!uploadedSnapshot || uploadedSnapshot.size !== upload.reference.bytes.byteLength) {
     throw new ReferenceImageError('Owned upload size does not match its source');
   }
-  const canonical = await realpath(candidate);
+  const canonical = await realpath(resolveToolPath(candidate));
   assertContained(lease.inputRoot, canonical);
-  const handle = await open(candidate, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+  const handle = await open(resolveToolPath(candidate), fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
   try {
     const opened = await handle.stat();
     if (!opened.isFile() || !sameIdentity(opened, uploadedSnapshot)) {
@@ -786,16 +787,16 @@ async function cleanupOwnedUpload(lease: UploadCleanupLease, upload: OwnedUpload
   }
 
   for (const snapshot of snapshots) {
-    const currentInfo = await lstat(snapshot.absolutePath);
+    const currentInfo = await lstat(resolveToolPath(snapshot.absolutePath));
     if (!sameSnapshot(currentInfo, snapshot.stats)) {
       throw new ReferenceImageError('Owned upload path changed before cleanup');
     }
   }
-  const finalRoot = await lstat(lease.inputRoot);
+  const finalRoot = await lstat(resolveToolPath(lease.inputRoot));
   if (!sameIdentity(finalRoot, lease.inputRootSnapshot!)) {
     throw new ReferenceImageError('ComfyUI input root changed before deletion');
   }
-  await unlink(candidate);
+  await guardToolMutation(() => unlink(resolveToolPath(candidate)));
 }
 
 function isErrno(error: unknown, code: string): boolean {

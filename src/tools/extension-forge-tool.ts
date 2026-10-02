@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * extension_forge - one safe conversational entry point for authoring runtime
  * widgets, executable tools, and reusable skills.
@@ -195,7 +196,7 @@ export class ExtensionForgeTool implements ITool {
       targetScenarioId: scenario.id,
       spec,
     };
-    const cwd = context?.cwd ?? process.cwd();
+    const cwd = context?.cwd ?? getToolWorkingDirectory();
     const mutator = new LiveToolMutator({ store: new AuthoredToolStore({ workDir: cwd }) });
     const verdict = await validateToolProposal(proposal, scenario, mutator, { keepOnAccept: true });
     if (!verdict.accepted) {
@@ -242,7 +243,7 @@ export class ExtensionForgeTool implements ITool {
     }
 
     const authoredName = toAuthoredSkillName(name);
-    const cwd = context?.cwd ?? process.cwd();
+    const cwd = context?.cwd ?? getToolWorkingDirectory();
     const skillsRoot = path.join(cwd, '.codebuddy', 'skills');
     const mutator = new LiveSkillMutator(skillsRoot);
     const spec: SkillSpec = { name: authoredName, description, content };

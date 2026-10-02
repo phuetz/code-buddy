@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Approval Flow
  *
@@ -29,7 +30,10 @@ import { ConfirmationService } from '../../utils/confirmation-service.js';
  */
 export class ApprovalFlowManager extends EventEmitter {
   private store: AllowlistStore;
-  private confirmationService: ConfirmationService;
+  private configuredConfirmation: ConfirmationService | undefined;
+  private get confirmationService(): ConfirmationService {
+    return ConfirmationService.getScopedInstance() ?? this.configuredConfirmation ?? ConfirmationService.getInstance();
+  }
   private initialized: boolean = false;
 
   constructor(
@@ -38,7 +42,7 @@ export class ApprovalFlowManager extends EventEmitter {
   ) {
     super();
     this.store = store || getAllowlistStore();
-    this.confirmationService = confirmationService || ConfirmationService.getInstance();
+    this.configuredConfirmation = confirmationService;
   }
 
   /**
@@ -65,7 +69,7 @@ export class ApprovalFlowManager extends EventEmitter {
     options?: Partial<ApprovalPromptOptions>
   ): Promise<{ approved: boolean; reason: string; pattern?: ApprovalPattern }> {
     await this.initialize();
-    const cwd = options?.cwd || process.cwd();
+    const cwd = options?.cwd || getToolWorkingDirectory();
 
     // First check stored patterns
     const checkResult = this.store.checkCommand(command, cwd);
@@ -171,7 +175,7 @@ export class ApprovalFlowManager extends EventEmitter {
 
     const promptOptions: ApprovalPromptOptions = {
       command,
-      cwd: options?.cwd || process.cwd(),
+      cwd: options?.cwd || getToolWorkingDirectory(),
       timeout: options?.timeout || config.defaults.timeout,
       showAlwaysAllow: options?.showAlwaysAllow ?? config.defaults.showAlwaysAllow,
       showAlwaysDeny: options?.showAlwaysDeny ?? config.defaults.showAlwaysDeny,

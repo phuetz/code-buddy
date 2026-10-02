@@ -1,3 +1,4 @@
+import { getToolExecutionContext, throwIfToolCancelled } from '../../utils/tool-execution-context.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from "fs-extra";
 import * as path from "path";
@@ -73,6 +74,11 @@ export class UnifiedVfsRouter implements IVfsProvider {
 
   private constructor() {}
 
+  private resolveIoPath(filePath: string): string {
+    const root = getToolExecutionContext()?.cwd ?? textTransportContext.getStore()?.root;
+    return root ? path.resolve(root, filePath) : filePath;
+  }
+
   static get Instance(): UnifiedVfsRouter {
     if (!UnifiedVfsRouter.instance) {
       UnifiedVfsRouter.instance = new UnifiedVfsRouter();
@@ -85,6 +91,7 @@ export class UnifiedVfsRouter implements IVfsProvider {
    * File operations are wrapped with latency measurement for performance tracking.
    */
   async readFile(filePath: string, encoding: string = "utf-8"): Promise<string> {
+    filePath = this.resolveIoPath(filePath);
     const verdict = checkSecretFileAccess(filePath, 'read');
     if (verdict.secret) throw new Error(formatSecretRefusal(filePath, verdict));
     const transport = textTransportContext.getStore();
@@ -97,6 +104,7 @@ export class UnifiedVfsRouter implements IVfsProvider {
   }
 
   async readFileBuffer(filePath: string): Promise<Buffer> {
+    filePath = this.resolveIoPath(filePath);
     const verdict = checkSecretFileAccess(filePath, 'read');
     if (verdict.secret) throw new Error(formatSecretRefusal(filePath, verdict));
     return measureLatency('file_read_buffer', () =>
@@ -105,6 +113,8 @@ export class UnifiedVfsRouter implements IVfsProvider {
   }
 
   async writeFile(filePath: string, content: string, encoding: string = "utf-8"): Promise<void> {
+    filePath = this.resolveIoPath(filePath);
+    throwIfToolCancelled();
     const transport = textTransportContext.getStore();
     transport?.signal.throwIfAborted();
     if (transport?.writeTextFile) await transport.writeTextFile(filePath, content);
@@ -113,12 +123,15 @@ export class UnifiedVfsRouter implements IVfsProvider {
   }
 
   async writeFileBuffer(filePath: string, content: Buffer): Promise<void> {
+    filePath = this.resolveIoPath(filePath);
+    throwIfToolCancelled();
     await measureLatency('file_write_buffer', () =>
       fs.writeFile(filePath, content)
     );
   }
 
   async exists(filePath: string): Promise<boolean> {
+    filePath = this.resolveIoPath(filePath);
     const transport = textTransportContext.getStore();
     transport?.signal.throwIfAborted();
     if (!transport?.readTextFile) return fs.pathExists(filePath);
@@ -133,6 +146,7 @@ export class UnifiedVfsRouter implements IVfsProvider {
   }
 
   async stat(filePath: string): Promise<IFileStat> {
+    filePath = this.resolveIoPath(filePath);
     try { return await fs.stat(filePath); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || !textTransportContext.getStore()?.readTextFile) throw error;
@@ -142,10 +156,12 @@ export class UnifiedVfsRouter implements IVfsProvider {
   }
 
   async readdir(dirPath: string): Promise<string[]> {
+    dirPath = this.resolveIoPath(dirPath);
     return fs.readdir(dirPath);
   }
 
   async readDirectory(dirPath: string): Promise<VfsEntry[]> {
+    dirPath = this.resolveIoPath(dirPath);
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     return entries.map(entry => ({
       name: entry.name,
@@ -155,14 +171,21 @@ export class UnifiedVfsRouter implements IVfsProvider {
   }
 
   async ensureDir(dirPath: string): Promise<void> {
+    dirPath = this.resolveIoPath(dirPath);
+    throwIfToolCancelled();
     return fs.ensureDir(dirPath);
   }
 
   async remove(filePath: string): Promise<void> {
+    filePath = this.resolveIoPath(filePath);
+    throwIfToolCancelled();
     return fs.remove(filePath);
   }
 
   async rename(oldPath: string, newPath: string): Promise<void> {
+    oldPath = this.resolveIoPath(oldPath);
+    newPath = this.resolveIoPath(newPath);
+    throwIfToolCancelled();
     return fs.rename(oldPath, newPath);
   }
 
@@ -181,8 +204,11 @@ export class UnifiedVfsRouter implements IVfsProvider {
     access: SecretFileAccess = 'read'
   ): { valid: boolean; resolved: string; error?: string } {
     const transport = textTransportContext.getStore();
+    // Resolve ONCE. Every gate and the returned path must refer to the same file.
+    const effectiveBase = getToolExecutionContext()?.cwd ?? transport?.root ?? baseDir;
+    const resolvedPath = path.resolve(effectiveBase, filePath);
     if (transport) {
-      const scoped = this.basicResolvePath(filePath, transport.root, access);
+      const scoped = this.basicResolvePath(resolvedPath, transport.root, access);
       if (!scoped.valid) return scoped;
     }
     const isolation = getWorkspaceIsolation();
@@ -190,11 +216,11 @@ export class UnifiedVfsRouter implements IVfsProvider {
     // If isolation is disabled, fall back to basic path validation (which
     // still refuses credential files).
     if (!isolation.getConfig().enabled) {
-      return this.basicResolvePath(filePath, baseDir, access);
+      return this.basicResolvePath(resolvedPath, effectiveBase, access);
     }
 
     // Use workspace isolation for comprehensive validation
-    const result = isolation.validatePath(filePath, 'vfs_resolve', access);
+    const result = isolation.validatePath(resolvedPath, 'vfs_resolve', access);
 
     return {
       valid: result.valid,

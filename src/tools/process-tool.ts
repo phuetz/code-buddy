@@ -5,7 +5,7 @@
  * Manages both OS processes (via ps) and tracked managed processes (from BashTool).
  */
 
-import { execSync } from 'child_process';
+import { execSync } from '../utils/tool-process.js';
 import type { ChildProcess } from 'child_process';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';

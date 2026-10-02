@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Read-only LSP navigation tools.
  *
@@ -167,7 +168,7 @@ abstract class LspReadOnlyTool implements ITool {
     }
 
     const requestedFile = input.file as string;
-    const workspaceRoot = path.resolve(context?.cwd ?? process.cwd());
+    const workspaceRoot = path.resolve(getToolWorkingDirectory(), context?.cwd ?? getToolWorkingDirectory());
     const resolvedFile = path.resolve(workspaceRoot, requestedFile);
     if (!isPathInside(workspaceRoot, resolvedFile)) {
       return { success: false, error: `LSP target is outside the active workspace: ${requestedFile}` };
@@ -176,14 +177,14 @@ abstract class LspReadOnlyTool implements ITool {
     if (secret.secret) return { success: false, error: formatSecretRefusal(resolvedFile, secret) };
 
     try {
-      const stat = await fs.stat(resolvedFile);
+      const stat = await fs.stat(resolveToolPath(resolvedFile));
       if (!stat.isFile()) {
         return { success: false, error: `LSP target is not a regular file: ${resolvedFile}` };
       }
       // Symlinks inside the workspace must not point at files outside it.
       const [realFile, realRoot] = await Promise.all([
-        fs.realpath(resolvedFile),
-        fs.realpath(workspaceRoot),
+        fs.realpath(resolveToolPath(resolvedFile)),
+        fs.realpath(resolveToolPath(workspaceRoot)),
       ]);
       if (!isPathInside(realRoot, realFile)) {
         return {
@@ -357,7 +358,7 @@ abstract class LspReadOnlyTool implements ITool {
     if (isPositiveInteger(input.line) && isPositiveInteger(getColumn(input))) {
       const line = input.line;
       const column = getColumn(input) as number;
-      const text = await fs.readFile(file, 'utf8');
+      const text = await fs.readFile(resolveToolPath(file), 'utf8');
       const lines = text.split('\n');
       const lineText = lines[line - 1]?.replace(/\r$/, '');
       if (lineText === undefined || column > lineText.length + 1) {
@@ -375,7 +376,7 @@ abstract class LspReadOnlyTool implements ITool {
       };
     }
 
-    const text = await fs.readFile(file, 'utf8');
+    const text = await fs.readFile(resolveToolPath(file), 'utf8');
     const textPosition = findTextPosition(text, symbol);
     if (!textPosition) {
       throw new Error(`Symbol "${symbol}" was not found in ${file}.`);

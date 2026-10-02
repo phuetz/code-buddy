@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Deploy Tool
  *
@@ -5,7 +6,7 @@
  * Supports Fly.io, Railway, Render, Hetzner, Northflank, GCP.
  */
 
-import { execFile } from 'child_process';
+import { execFile } from '../utils/tool-process.js';
 import { promisify } from 'util';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
@@ -136,7 +137,7 @@ export class DeployTool {
 
     try {
       const { stdout, stderr } = await execFileAsync(cmd.binary, cmd.deploy, {
-        cwd: process.cwd(),
+        cwd: getToolWorkingDirectory(),
         timeout: 300_000, // 5 min timeout for deploys
       });
       logger.info(`Deploy to ${platform} completed`);
@@ -161,7 +162,7 @@ export class DeployTool {
 
     try {
       const { stdout } = await execFileAsync(cmd.binary, cmd.status, {
-        cwd: process.cwd(),
+        cwd: getToolWorkingDirectory(),
         timeout: 30_000,
       });
       return { success: true, output: stdout };
@@ -182,7 +183,7 @@ export class DeployTool {
 
     try {
       const { stdout } = await execFileAsync(cmd.binary, cmd.logs(lines), {
-        cwd: process.cwd(),
+        cwd: getToolWorkingDirectory(),
         timeout: 30_000,
       });
       return { success: true, output: stdout };

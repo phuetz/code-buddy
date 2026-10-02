@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 import { BaseTool, ParameterDefinition } from './base-tool.js';
 import { ToolResult } from '../types/index.js';
 import { setAgentMode, AgentMode } from '../agent/plan-mode.js';
@@ -33,9 +34,9 @@ export class SubmitPlanTool extends BaseTool {
     
     // Write plan to .codebuddy/plans/current.md for persistence
     try {
-      const planDir = path.join(process.cwd(), '.codebuddy', 'plans');
-      await fs.ensureDir(planDir);
-      await fs.writeFile(path.join(planDir, 'current.md'), planContent);
+      const planDir = path.join(getToolWorkingDirectory(), '.codebuddy', 'plans');
+      await guardToolMutation(() => fs.ensureDir(resolveToolPath(planDir)));
+      await guardToolMutation(() => fs.writeFile(resolveToolPath(path.join(planDir, 'current.md')), planContent));
     } catch (_e) {
       logger.warn('Failed to write plan file to disk');
     }

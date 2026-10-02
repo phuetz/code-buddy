@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../../utils/tool-execution-context.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -175,7 +176,7 @@ function recordSkillManageMutationOutcome(input: {
         rollbackableCount: history?.rollbackableCount,
       },
       success: input.success,
-    }, process.cwd());
+    }, getToolWorkingDirectory());
   } catch {
     // Learning telemetry must never make an approved skill mutation fail.
   }
@@ -219,16 +220,16 @@ function declaredSkillName(content: string): string | null {
 /** Supprime un SKILL.md d'espace de travail qui n'est pas dans le lockfile du hub. */
 async function deleteUnregisteredWorkspaceSkill(name: string): Promise<boolean> {
   if (!/^[a-zA-Z0-9_-]+$/.test(name)) return false;
-  const root = path.resolve(process.cwd(), '.codebuddy', 'skills');
+  const root = path.resolve(getToolWorkingDirectory(), '.codebuddy', 'skills');
   let realRoot: string;
   try {
-    realRoot = await fs.realpath(root);
+    realRoot = await fs.realpath(resolveToolPath(root));
   } catch {
     return false;
   }
   let entries;
   try {
-    entries = await fs.readdir(root, { withFileTypes: true });
+    entries = await fs.readdir(resolveToolPath(root), { withFileTypes: true });
   } catch {
     return false;
   }
@@ -238,10 +239,10 @@ async function deleteUnregisteredWorkspaceSkill(name: string): Promise<boolean> 
     let realFile: string;
     let content: string;
     try {
-      const stat = await fs.lstat(skillFile);
+      const stat = await fs.lstat(resolveToolPath(skillFile));
       if (!stat.isFile() || stat.isSymbolicLink()) continue;
-      realFile = await fs.realpath(skillFile);
-      content = await fs.readFile(realFile, 'utf8');
+      realFile = await fs.realpath(resolveToolPath(skillFile));
+      content = await fs.readFile(resolveToolPath(realFile), 'utf8');
     } catch {
       continue;
     }
@@ -251,7 +252,7 @@ async function deleteUnregisteredWorkspaceSkill(name: string): Promise<boolean> 
     const skillDir = path.dirname(realFile);
     const dirRelative = path.relative(realRoot, skillDir);
     if (dirRelative.startsWith('..') || path.isAbsolute(dirRelative) || dirRelative === '') continue;
-    await fs.rm(skillDir, { recursive: true, force: true });
+    await guardToolMutation(() => fs.rm(resolveToolPath(skillDir), { recursive: true, force: true }));
     return true;
   }
   return false;
@@ -777,7 +778,7 @@ export class SkillManageExecuteTool implements ITool {
 
     if (action === 'candidate_list') {
       const candidates = await listMaterializedResearchScriptSkillCandidatesWithInstallState({
-        rootDir: process.cwd(),
+        rootDir: getToolWorkingDirectory(),
         skillRoot: readString(input.skill_root) || undefined,
       });
       const shown = input.eligible_only === true
@@ -798,7 +799,7 @@ export class SkillManageExecuteTool implements ITool {
         return { success: false, error: 'skill_manage candidate_view: candidate_path is required' };
       }
       const candidate = await readMaterializedResearchScriptSkillCandidateWithInstallState(candidatePath, {
-        rootDir: process.cwd(),
+        rootDir: getToolWorkingDirectory(),
       });
 
       return serializePayload({
@@ -820,13 +821,13 @@ export class SkillManageExecuteTool implements ITool {
       }
 
       const candidate = await readMaterializedResearchScriptSkillCandidate(candidatePath, {
-        rootDir: process.cwd(),
+        rootDir: getToolWorkingDirectory(),
       });
       const installed = await installResearchScriptSkillCandidate(candidate, {
         approvedAt: readString(input.approved_at) || undefined,
         approvedBy,
         overwrite: input.overwrite === true,
-        rootDir: process.cwd(),
+        rootDir: getToolWorkingDirectory(),
         workspaceSkillRoot: readString(input.workspace_skill_root) || undefined,
       });
       recordSkillManageMutationOutcome({

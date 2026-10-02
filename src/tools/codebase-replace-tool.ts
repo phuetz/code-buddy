@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 /**
  * Codebase-wide Find & Replace Tool
  *
@@ -5,7 +6,7 @@
  * Supports text and regex patterns, dry-run preview, and safety limits.
  */
 
-import { execFile } from 'child_process';
+import { execFile } from '../utils/tool-process.js';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -87,7 +88,7 @@ export async function codebaseReplace(
 
   let matchingFiles: string[];
   try {
-    const cwd = process.cwd();
+    const cwd = getToolWorkingDirectory();
     const rg = getRipgrepPath();
     const { stdout: fileList } = await execFileAsync(rg, ['--files', '-0', '--no-messages', ...rgGlobs, '.'], {
       cwd,
@@ -149,12 +150,12 @@ export async function codebaseReplace(
   }
 
   for (const file of matchingFiles) {
-    const filePath = path.resolve(process.cwd(), file);
+    const filePath = path.resolve(getToolWorkingDirectory(), file);
     if (checkSecretFileAccess(filePath, 'read').secret) continue;
 
     // Skip binary files
     try {
-      const stat = fs.statSync(filePath);
+      const stat = fs.statSync(resolveToolPath(filePath));
       if (stat.size > 5 * 1024 * 1024) {
         logger.debug(`Skipping large file: ${file} (${Math.round(stat.size / 1024)}KB)`);
         continue;
@@ -165,7 +166,7 @@ export async function codebaseReplace(
 
     let content: string;
     try {
-      content = fs.readFileSync(filePath, 'utf-8');
+      content = fs.readFileSync(resolveToolPath(filePath), 'utf-8');
     } catch {
       continue; // Skip files that can't be read (binary, permissions, etc.)
     }
@@ -210,7 +211,7 @@ export async function codebaseReplace(
       // Actually perform replacement
       if (checkSecretFileAccess(filePath, 'read').secret) continue;
       const newContent = content.replace(regex, replacement);
-      fs.writeFileSync(filePath, newContent, 'utf-8');
+      guardToolMutation(() => fs.writeFileSync(resolveToolPath(filePath), newContent, 'utf-8'));
     }
 
     changes.push({ file, count });

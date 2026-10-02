@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * Frame sampling — the visual leg (Phase 2) of the video-understanding cascade.
  *
@@ -21,7 +22,7 @@
  * @module tools/video/frame-sample
  */
 
-import { spawn as realSpawn } from 'child_process';
+import { spawn as realSpawn } from '../../utils/tool-process.js';
 import { mkdir, mkdtemp, readdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -257,13 +258,13 @@ export async function sampleFrames(
   const ffmpegBin = deps.ffmpegBin ?? 'ffmpeg';
   const ffprobeBin = deps.ffprobeBin ?? 'ffprobe';
   const sceneThreshold = deps.sceneThreshold ?? 0.4;
-  const readdirFn = deps.readdir ?? ((dir: string) => readdir(dir));
+  const readdirFn = deps.readdir ?? ((dir: string) => readdir(resolveToolPath(dir)));
   const minSceneFrames = deps.minSceneFrames ?? 3;
 
   let outDir = deps.outDir;
   if (!outDir) {
     try {
-      outDir = await mkdtemp(join(tmpdir(), 'buddy-frames-'));
+      outDir = await guardToolMutation(() => mkdtemp(resolveToolPath(join(tmpdir(), 'buddy-frames-'))));
     } catch (err) {
       logger.warn(`[video] could not create frame dir: ${err instanceof Error ? err.message : String(err)}`);
       return [];
@@ -280,7 +281,7 @@ export async function sampleFrames(
     // 1) Scene detection — into its OWN subdir so a later interval pass can't collide
     //    with (or leave stale) its files (both passes use the same frame_%04d template).
     const sceneDir = join(outDir, 'scene');
-    await mkdir(sceneDir, { recursive: true });
+    await guardToolMutation(() => mkdir(resolveToolPath(sceneDir), { recursive: true }));
     const sceneTemplate = join(sceneDir, 'frame_%04d.jpg');
     let frames = await extractWithArgs(
       spawn,
@@ -296,7 +297,7 @@ export async function sampleFrames(
     //    against residual scene frames (and scene frames are never overwritten in place).
     if (frames.length < minSceneFrames && duration > 0) {
       const intervalDir = join(outDir, 'interval');
-      await mkdir(intervalDir, { recursive: true });
+      await guardToolMutation(() => mkdir(resolveToolPath(intervalDir), { recursive: true }));
       const intervalTemplate = join(intervalDir, 'frame_%04d.jpg');
       const rate = `${budget}/${Math.max(1, Math.ceil(duration))}`;
       const intervalFrames = await extractWithArgs(

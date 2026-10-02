@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /**
  * Mermaid render — turn a Mermaid diagram source into a PNG via the
  * `mmdc` (mermaid-cli) binary, wired to run headless (a generated Puppeteer
@@ -8,7 +9,7 @@
  * @module tools/video/mermaid-render
  */
 
-import { spawn as realSpawn } from 'child_process';
+import { spawn as realSpawn } from '../../utils/tool-process.js';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -94,14 +95,14 @@ async function resolveChromium(env: NodeJS.ProcessEnv, explicit?: string): Promi
   if (fromEnv) return fromEnv;
   const base = path.join(os.homedir(), '.cache', 'ms-playwright');
   try {
-    const dirs = (await fs.readdir(base))
+    const dirs = (await fs.readdir(resolveToolPath(base)))
       .filter((d) => d.startsWith('chromium-'))
       .sort()
       .reverse();
     for (const d of dirs) {
       const p = path.join(base, d, 'chrome-linux64', 'chrome');
       try {
-        await fs.access(p);
+        await fs.access(resolveToolPath(p));
         return p;
       } catch {
         /* next */
@@ -132,8 +133,8 @@ export async function renderMermaidPng(
   const inPath = `${outPath}.mmd`;
   const cfgPath = `${outPath}.pptr.json`;
   try {
-    await fs.writeFile(inPath, mermaid.trim());
-    await fs.writeFile(cfgPath, buildPuppeteerConfig(chromium ?? undefined));
+    await guardToolMutation(() => fs.writeFile(resolveToolPath(inPath), mermaid.trim()));
+    await guardToolMutation(() => fs.writeFile(resolveToolPath(cfgPath), buildPuppeteerConfig(chromium ?? undefined)));
   } catch {
     return null;
   }
@@ -143,10 +144,10 @@ export async function renderMermaidPng(
     buildMmdcArgs(inPath, outPath, cfgPath, deps.theme ?? 'dark', deps.background ?? '#0e1626'),
     timeoutMs
   );
-  await Promise.all([inPath, cfgPath].map((f) => fs.rm(f, { force: true }).catch(() => undefined)));
+  await Promise.all([inPath, cfgPath].map((f) => guardToolMutation(() => fs.rm(resolveToolPath(f), { force: true })).catch(() => undefined)));
   if (code !== 0) return null;
   try {
-    await fs.access(outPath);
+    await fs.access(resolveToolPath(outPath));
     return outPath;
   } catch {
     return null;

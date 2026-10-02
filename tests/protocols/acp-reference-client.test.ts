@@ -23,7 +23,7 @@ async function until(predicate: () => boolean, timeout = 20_000): Promise<void> 
   }
 }
 
-function spawnAgent(workspace: string, permissionMode = 'default') {
+function spawnAgent(workspace: string, permissionMode = 'default', nodeEnv = 'test') {
   let testHome = homes.get(workspace);
   if (!testHome) {
     testHome = fs.mkdtempSync(path.join(home, 'client-'));
@@ -32,7 +32,7 @@ function spawnAgent(workspace: string, permissionMode = 'default') {
   }
   const child = spawn(process.execPath, ['--import', 'tsx', '--import', path.join(root, 'tests/fixtures/acp/deterministic-provider.mjs'), entrypoint, 'acp', '--permission-mode', permissionMode], {
     cwd: workspace,
-    env: { PATH: process.env.PATH, HOME: testHome, USERPROFILE: testHome, NODE_ENV: 'test',
+    env: { PATH: process.env.PATH, HOME: testHome, USERPROFILE: testHome, NODE_ENV: nodeEnv,
       CODEBUDDY_PROVIDER: 'grok', GROK_API_KEY: 'synthetic-test-value', GROK_MODEL: 'grok-code-fast-1',
       GROK_BASE_URL: 'http://acp-fixture.invalid/v1', CODEBUDDY_DISABLE_MCP: 'true',
       ACP_FIXTURE_WORKSPACE: workspace },
@@ -50,6 +50,7 @@ function launch(workspace: string, capabilities = true, permissionMode = 'defaul
   const permissions: RequestPermissionRequest[] = [];
   const reads: string[] = [];
   const writes: string[] = [];
+  let rejectEditDiff = false;
   let decision: 'allow_once' | 'reject_once' | 'allow_always' | 'cancelled' = 'reject_once';
   let buffer = 'buffer-original\n';
   const connection = new ClientSideConnection(() => ({
@@ -58,6 +59,8 @@ function launch(workspace: string, capabilities = true, permissionMode = 'defaul
       permissions.push(params);
       // This assertion executes at the moment of the request, not after the turn.
       expect(updates.some(({ update }) => update.sessionUpdate === 'tool_call' && update.toolCallId === params.toolCall.toolCallId)).toBe(true);
+      const shownDiff = params.toolCall.content?.some((item) => item.type === 'diff') || JSON.stringify(params.toolCall.content).includes('---');
+      if (rejectEditDiff && shownDiff) return { outcome: { outcome: 'selected', optionId: 'reject_once' } };
       return decision === 'cancelled' ? { outcome: { outcome: 'cancelled' } }
         : { outcome: { outcome: 'selected', optionId: decision } };
     },
@@ -66,6 +69,7 @@ function launch(workspace: string, capabilities = true, permissionMode = 'defaul
   }), ndJsonStream(Writable.toWeb(child.stdin), Readable.toWeb(child.stdout)));
   return { child, connection, updates, permissions, reads, writes,
     allow: (value: typeof decision) => { decision = value; },
+    rejectDiff: () => { rejectEditDiff = true; },
     resetBuffer: () => { buffer = 'buffer-original\n'; },
     stderr,
     initialize: () => connection.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: capabilities ? { fs: { readTextFile: true, writeTextFile: true } } : {} }),
@@ -90,6 +94,23 @@ afterEach(async () => {
 });
 
 describe('real buddy acp process shutdown', () => {
+  it('closes cleanly with a nonzero status when the client closes stdout', async () => {
+    const dir = workspace();
+    const { child, stderr } = spawnAgent(dir, 'default', 'development');
+    let stdout = '';
+    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: PROTOCOL_VERSION } }) + '\n');
+    await until(() => stdout.includes('"id":1'));
+    child.stdout.destroy();
+    child.stdin.end(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'session/new', params: { cwd: dir, mcpServers: [] } }) + '\n');
+    await closed;
+    expect(child.exitCode).toBe(1);
+    expect(stderr()).toContain('ACP transport shutdown failed');
+    expect(stderr()).not.toMatch(/unhandled|Unhandled/);
+    expect(stderr()).not.toContain('Unexpected error occurred');
+  }, 30_000);
+
   it('answers every accepted request and saves the session when stdin closes before the first response', async () => {
     const dir = workspace();
     const { child, stderr } = spawnAgent(dir);
@@ -195,6 +216,31 @@ describe('official ACP reference client → real buddy acp process', () => {
     expect(editor.writes).toHaveLength(1);
     await editor.close();
   }, 45_000);
+
+  it.each([false, true])('isolates shared multi-edit diff approvals across session workspaces (editor IO=%s)', async (caps) => {
+    const dir = workspace();
+    fs.writeFileSync(path.join(dir, 'sample.txt'), 'buffer-original\n');
+    const firstCwd = path.join(dir, 'A'); const secondCwd = path.join(dir, 'B');
+    for (const cwd of [firstCwd, secondCwd]) {
+      fs.mkdirSync(cwd); fs.writeFileSync(path.join(cwd, 'sample.txt'), 'buffer-original\n');
+    }
+    const editor = launch(dir, caps);
+    await editor.initialize();
+    const first = await editor.connection.newSession({ cwd: firstCwd, mcpServers: [] });
+    editor.allow('allow_always');
+    await editor.connection.prompt({ sessionId: first.sessionId, prompt: [{ type: 'text', text: 'multi edit sample.txt' }] });
+    expect(fs.readFileSync(path.join(firstCwd, 'sample.txt'), 'utf8')).toBe('buffer-multi-edited\n');
+    const offset = editor.permissions.length;
+    editor.resetBuffer(); editor.allow('allow_once'); editor.rejectDiff();
+    const second = await editor.connection.newSession({ cwd: secondCwd, mcpServers: [] });
+    await editor.connection.prompt({ sessionId: second.sessionId, prompt: [{ type: 'text', text: 'multi edit sample.txt' }] });
+    const requests = editor.permissions.slice(offset);
+    expect(requests.some((request) => request.toolCall.content?.some((item) => item.type === 'diff'))).toBe(true);
+    expect(requests.every((request) => request.sessionId === second.sessionId)).toBe(true);
+    expect(fs.readFileSync(path.join(secondCwd, 'sample.txt'), 'utf8')).toBe('buffer-original\n');
+    expect(fs.readFileSync(path.join(dir, 'sample.txt'), 'utf8')).toBe('buffer-original\n');
+    await editor.close();
+  }, 60_000);
 
   it('keeps always grants local to the ACP session', async () => {
     const dir = workspace();

@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../../utils/tool-execution-context.js';
 /** Blocking-gate defect classification and append-only retry receipts. */
 
 import { constants as fsConstants } from 'fs';
@@ -93,7 +94,7 @@ function assertRetryReceipt(receipt: RetryReceipt): void {
 export async function appendRetryReceipt(journalPath: string, receipt: RetryReceipt): Promise<void> {
   assertRetryReceipt(receipt);
   const handle = await open(
-    journalPath,
+    resolveToolPath(journalPath),
     fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
     0o600,
   );

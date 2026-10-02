@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * register_tool — lets Code Buddy author a NEW tool for itself at runtime.
  *
@@ -71,7 +72,7 @@ export class RegisterToolTool implements ITool {
     };
 
     try {
-      const store = new AuthoredToolStore({ workDir: context?.cwd ?? process.cwd() });
+      const store = new AuthoredToolStore({ workDir: context?.cwd ?? getToolWorkingDirectory() });
       new LiveToolMutator({ store }).register(spec);
     } catch (err) {
       return {

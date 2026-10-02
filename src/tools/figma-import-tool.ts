@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import path from 'node:path';
 
 import { importFigma } from '../figma/import-figma.js';
@@ -21,7 +22,7 @@ export class FigmaImportTool {
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     try {
       const args = parseArgs(input);
-      const cwd = process.cwd();
+      const cwd = getToolWorkingDirectory();
       const result = await importFigma({
         jsonPath: args.jsonPath,
         fileKey: args.fileKey,

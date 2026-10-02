@@ -1,6 +1,8 @@
+import { resolveToolPath, guardToolMutation, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
+
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
-import { spawn, execSync, exec } from 'child_process';
+import { spawn, execSync, exec } from '../utils/tool-process.js';
 import { promisify } from 'util';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { logger } from '../utils/logger.js';
@@ -55,7 +57,7 @@ export function setScreenshotSensor(sensor: ScreenshotSensor | null): void {
  * Works on Linux (with scrot/gnome-screenshot), macOS (screencapture), and Windows (PowerShell)
  */
 export class ScreenshotTool {
-  private readonly defaultOutputDir = path.join(process.cwd(), '.codebuddy', 'screenshots');
+  private get defaultOutputDir(): string { return path.join(getToolWorkingDirectory(), '.codebuddy', 'screenshots'); }
   private vfs = UnifiedVfsRouter.Instance;
 
   /**
@@ -368,8 +370,8 @@ Write-Output 'ok'
         try {
           // Copy from Windows temp to target path
           const { existsSync, copyFileSync } = await import('fs');
-          if (existsSync(wslTempFile)) {
-            copyFileSync(wslTempFile, outputPath);
+          if (existsSync(resolveToolPath(wslTempFile))) {
+            guardToolMutation(() => copyFileSync(resolveToolPath(wslTempFile), resolveToolPath(outputPath)));
           }
         } catch (_e) { /* ignore copy errors */ }
 
@@ -465,7 +467,7 @@ Write-Output 'ok'
     // Fallback: ffmpeg
     const { mkdtempSync, readFileSync, unlinkSync } = await import('fs');
     const os = await import('os');
-    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'cb-norm-'));
+    const tmpDir = guardToolMutation(() => mkdtempSync(resolveToolPath(path.join(os.tmpdir(), 'cb-norm-'))));
 
     for (const targetWidth of sizes) {
       for (const quality of qualities) {
@@ -475,8 +477,8 @@ Write-Output 'ok'
             `ffmpeg -y -i "${imagePath}" -vf "scale=${targetWidth}:-1" -q:v ${Math.round((100 - quality) / 3 + 1)} "${outPath}"`,
             { timeout: 10000 }
           );
-          const buf = readFileSync(outPath);
-          try { unlinkSync(outPath); } catch (_e) { /* ignore */ }
+          const buf = readFileSync(resolveToolPath(outPath));
+          try { guardToolMutation(() => unlinkSync(resolveToolPath(outPath))); } catch (_e) { /* ignore */ }
 
           if (buf.length <= maxBytes) {
             // Get dimensions from ffmpeg probe
@@ -512,7 +514,7 @@ Write-Output 'ok'
 
     // Last resort: read original as-is
     const { readFileSync: readFs } = await import('fs');
-    const origBuf = readFs(imagePath);
+    const origBuf = readFs(resolveToolPath(imagePath));
     const ext = path.extname(imagePath).toLowerCase();
 
     return {
@@ -592,7 +594,7 @@ Write-Output 'ok'
    */
   async toBase64(filePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {

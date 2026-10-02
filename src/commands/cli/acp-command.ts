@@ -52,12 +52,28 @@ export function registerAcpCommand(program: Command): void {
       server.start();
 
       // Drain accepted requests, responses and atomic session writes at EOF.
+      let shuttingDown = false;
       const shutdown = async (): Promise<void> => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        let exitCode = 0;
         server.stop();
-        await server.whenIdle();
-        await agenticRunner?.dispose();
-        process.exit(0);
+        try {
+          await server.whenIdle();
+        } catch (error) {
+          exitCode = 1;
+          logger.error('ACP transport shutdown failed', error instanceof Error ? error : new Error(String(error)));
+        } finally {
+          try {
+            await agenticRunner?.dispose();
+          } catch (error) {
+            exitCode = 1;
+            logger.error('ACP agent cleanup failed', error instanceof Error ? error : new Error(String(error)));
+          }
+        }
+        process.exit(exitCode);
       };
+      process.stdout.on('error', () => { void shutdown(); });
       process.stdin.once('end', () => { void shutdown(); });
     });
 }

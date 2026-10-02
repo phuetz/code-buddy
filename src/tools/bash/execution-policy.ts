@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../../utils/tool-execution-context.js';
 /**
  * Runtime bridge between ExecPolicy and the native workspace sandbox.
  *
@@ -37,9 +38,9 @@ const LOCAL_WORKSPACE_SANDBOX_IMAGE = 'codebuddy-workspace-sandbox:1';
 function resolveReadOnlyNodeModulesMount(cwd: string): DockerReadOnlyMount[] {
   const nodeModulesPath = path.join(cwd, 'node_modules');
   try {
-    if (!fs.lstatSync(nodeModulesPath).isSymbolicLink()) return [];
-    const source = fs.realpathSync(nodeModulesPath);
-    if (path.basename(source) !== 'node_modules' || !fs.statSync(source).isDirectory()) return [];
+    if (!fs.lstatSync(resolveToolPath(nodeModulesPath)).isSymbolicLink()) return [];
+    const source = fs.realpathSync(resolveToolPath(nodeModulesPath));
+    if (path.basename(source) !== 'node_modules' || !fs.statSync(resolveToolPath(source)).isDirectory()) return [];
     return [{ source, target: source }];
   } catch {
     return [];
@@ -90,8 +91,8 @@ function resolveExecutableIdentity(
   }
   for (const candidate of executableCandidates(token, cwd, env)) {
     try {
-      const resolvedPath = fs.realpathSync(candidate);
-      const stat = fs.statSync(resolvedPath);
+      const resolvedPath = fs.realpathSync(resolveToolPath(candidate));
+      const stat = fs.statSync(resolveToolPath(resolvedPath));
       if (!stat.isFile()) continue;
       return {
         token,

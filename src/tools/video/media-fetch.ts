@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../../utils/tool-execution-context.js';
 /**
  * Media fetch — the yt-dlp fallback leg of the video-understanding cascade. Downloads
  * a source's audio track as a 16 kHz mono WAV (exactly what the local Whisper STT
@@ -14,10 +15,10 @@
  * @module tools/video/media-fetch
  */
 
-import { spawn as realSpawn } from 'child_process';
+import { spawn as realSpawn } from '../../utils/tool-process.js';
 import { existsSync as realExistsSync } from 'fs';
 import { lstat } from 'node:fs/promises';
-import { execFileSync } from 'child_process';
+import { execFileSync } from '../../utils/tool-process.js';
 import { homedir } from 'os';
 import { join } from 'path';
 import { logger } from '../../utils/logger.js';
@@ -196,7 +197,7 @@ interface AttemptOutcome {
 
 async function isRegularNonEmptyFile(file: string): Promise<boolean> {
   try {
-    const metadata = await lstat(file);
+    const metadata = await lstat(resolveToolPath(file));
     return metadata.isFile() && metadata.size > 0;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {

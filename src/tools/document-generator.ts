@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
 /**
  * Document Generator Tool — Pure TypeScript
  *
@@ -228,11 +229,11 @@ function resolveLocalImagePath(imagePath: string, outputPath: string): string | 
     ? [unquoted]
     : [
         path.resolve(path.dirname(outputPath), unquoted),
-        path.resolve(process.cwd(), unquoted),
+        path.resolve(getToolWorkingDirectory(), unquoted),
       ];
 
   return candidates.find(candidate =>
-    !checkSecretFileAccess(candidate, 'read').secret && fs.existsSync(candidate) && fs.statSync(candidate).isFile(),
+    !checkSecretFileAccess(candidate, 'read').secret && fs.existsSync(resolveToolPath(candidate)) && fs.statSync(resolveToolPath(candidate)).isFile(),
   ) ?? null;
 }
 
@@ -495,7 +496,7 @@ async function generateDocx(
       const imageType = resolvedImagePath ? getDocxImageType(resolvedImagePath) : null;
       if (resolvedImagePath && imageType && !checkSecretFileAccess(resolvedImagePath, 'read').secret) {
         const imageName = sanitizeDocxText(imageReference.altText || path.basename(resolvedImagePath));
-        const imageData = fs.readFileSync(resolvedImagePath);
+        const imageData = fs.readFileSync(resolveToolPath(resolvedImagePath));
         const transformation = fitImageToDocxBox(readImageDimensions(imageData, imageType));
         embeddedImages.push({
           path: resolvedImagePath,
@@ -641,7 +642,7 @@ async function generateDocx(
 
   const doc = new Document({ sections: [{ children }] });
   const buffer = await Packer.toBuffer(doc);
-  fs.writeFileSync(outputPath, buffer);
+  guardToolMutation(() => fs.writeFileSync(resolveToolPath(outputPath), buffer));
   return embeddedImages;
 }
 
@@ -683,7 +684,7 @@ async function generatePdf(title: string, sections: MarkdownSection[], outputPat
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
-    const stream = fs.createWriteStream(outputPath);
+    const stream = guardToolMutation(() => fs.createWriteStream(resolveToolPath(outputPath)));
     doc.pipe(stream);
 
     // Title
@@ -737,8 +738,8 @@ export async function generateDocument(input: DocumentGeneratorInput): Promise<D
     if (outputVerdict.secret) return { success: false, error: formatSecretRefusal(outputPath, outputVerdict) };
 
     // Ensure output directory exists
-    const outDir = path.dirname(path.resolve(outputPath));
-    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const outDir = path.dirname(path.resolve(getToolWorkingDirectory(), outputPath));
+    if (!fs.existsSync(resolveToolPath(outDir))) guardToolMutation(() => fs.mkdirSync(resolveToolPath(outDir), { recursive: true }));
 
     const sections = parseMarkdownSections(content);
 
@@ -862,8 +863,8 @@ export async function* executeGenerateDocumentStreaming(args: {
     if (outputVerdict.secret) return { success: false, error: formatSecretRefusal(outputPath, outputVerdict) };
 
     yield `📄 Preparing ${label} "${title}"…\n`;
-    const outDir = path.dirname(path.resolve(outputPath));
-    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    const outDir = path.dirname(path.resolve(getToolWorkingDirectory(), outputPath));
+    if (!fs.existsSync(resolveToolPath(outDir))) guardToolMutation(() => fs.mkdirSync(resolveToolPath(outDir), { recursive: true }));
 
     yield `📑 Parsing content…\n`;
     const sections = parseMarkdownSections(content);
@@ -890,8 +891,8 @@ export async function* executeGenerateDocumentStreaming(args: {
 
     yield `✅ Verifying…\n`;
     const docxValidation = type === 'docx' ? await validateDocxPackage(outputPath) : undefined;
-    const sizeKb = fs.existsSync(outputPath)
-      ? Math.max(1, Math.round(fs.statSync(outputPath).size / 1024))
+    const sizeKb = fs.existsSync(resolveToolPath(outputPath))
+      ? Math.max(1, Math.round(fs.statSync(resolveToolPath(outputPath)).size / 1024))
       : 0;
     logger.info(`Document generated (streaming): ${outputPath} (${type})`);
     yield `✓ Created ${file} (${sizeKb} KB)\n`;

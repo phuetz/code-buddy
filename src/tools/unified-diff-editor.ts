@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Unified Diff Editor - Aider-inspired code editing system
  *
@@ -83,7 +84,7 @@ export class UnifiedDiffEditor {
     try {
       // Read or create file
       let content: string;
-      const absolutePath = path.resolve(operation.filePath);
+      const absolutePath = path.resolve(getToolWorkingDirectory(), operation.filePath);
 
       const exists = await this.vfs.exists(absolutePath);
       if (exists) {

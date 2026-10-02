@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * BashTool - Main coordinator class for shell command execution.
  *
@@ -13,7 +14,7 @@
  * Self-healing can be disabled via --no-self-heal flag.
  */
 
-import { spawn, SpawnOptions, ChildProcess } from 'child_process';
+import { spawn, SpawnOptions, ChildProcess } from '../../utils/tool-process.js';
 import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ToolResult } from '../../types/index.js';
@@ -83,7 +84,9 @@ export function isBareChangeDirectory(command: string): boolean {
 }
 
 export class BashTool implements Disposable {
-  private currentDirectory: string = process.cwd();
+  private configuredDirectory: string | undefined;
+  private get currentDirectory(): string { return getToolWorkingDirectory(this.configuredDirectory); }
+  private set currentDirectory(value: string) { this.configuredDirectory = value; }
   private get confirmationService(): ConfirmationService {
     return ConfirmationService.getInstance();
   }
@@ -412,16 +415,17 @@ export class BashTool implements Disposable {
         const cleanDir = newDir.replace(/^["']|["']$/g, '');
         try {
           const candidate = resolve(effectiveCwd, cleanDir);
-          if (!statSync(candidate).isDirectory()) {
+          if (!statSync(resolveToolPath(candidate)).isDirectory()) {
             return {
               success: false,
               error: `Cannot change directory: not a directory: ${candidate}`,
             };
           }
-          this.currentDirectory = realpathSync(candidate);
+          const changedDirectory = realpathSync(resolveToolPath(candidate));
+          this.currentDirectory = changedDirectory;
           return {
             success: true,
-            output: `Changed directory to: ${this.currentDirectory}`,
+            output: `Changed directory to: ${changedDirectory}`,
           };
         } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';

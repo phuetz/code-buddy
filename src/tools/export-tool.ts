@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -38,7 +39,7 @@ export interface ExportOptions {
  * Supports JSON, Markdown, HTML, plain text, and PDF exports
  */
 export class ExportTool {
-  private readonly outputDir = path.join(process.cwd(), '.codebuddy', 'exports');
+  private get outputDir(): string { return path.join(getToolWorkingDirectory(), '.codebuddy', 'exports'); }
   private vfs = UnifiedVfsRouter.Instance;
 
   /**
@@ -411,7 +412,7 @@ export class ExportTool {
 
     // Try to use wkhtmltopdf or puppeteer
     try {
-      const { execSync } = await import('child_process');
+      const { execSync } = await import('../utils/tool-process.js');
 
       // Try wkhtmltopdf first
       try {

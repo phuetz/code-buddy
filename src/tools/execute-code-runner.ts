@@ -1,4 +1,5 @@
-import { spawn } from 'child_process';
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
+import { spawn } from '../utils/tool-process.js';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
@@ -128,7 +129,7 @@ export async function executeCode(
   const startedAtDate = (options.now ?? (() => new Date()))();
   const startedAt = startedAtDate.toISOString();
   const startTime = Date.now();
-  const rootDir = path.resolve(options.rootDir ?? process.cwd());
+  const rootDir = path.resolve(getToolWorkingDirectory(), options.rootDir ?? getToolWorkingDirectory());
   const runId = sanitizeRunId(options.createId?.() ?? `exec-${randomUUID()}`);
   const runDir = path.join(rootDir, '.codebuddy', 'execute-code', runId);
   const stdoutPath = path.join(runDir, 'stdout.log');
@@ -149,10 +150,10 @@ export async function executeCode(
   const rpcMaxCalls = Math.max(1, options.rpcMaxCalls ?? RPC_DEFAULT_MAX_CALLS);
   const rpcCallTimeoutMs = Math.max(1_000, options.rpcCallTimeoutMs ?? RPC_DEFAULT_CALL_TIMEOUT_MS);
 
-  await fs.mkdir(runDir, { recursive: true });
+  await guardToolMutation(() => fs.mkdir(resolveToolPath(runDir), { recursive: true }));
   let scriptCode = code;
   if (rpcSupported) {
-    await fs.mkdir(rpcDir, { recursive: true });
+    await guardToolMutation(() => fs.mkdir(resolveToolPath(rpcDir), { recursive: true }));
     const helper = buildRpcHelper(language);
     // Python: `from __future__ import …` MUST stay at the top of the file
     // (after the docstring/comments only). Prepending the helper used to
@@ -161,9 +162,9 @@ export async function executeCode(
     scriptCode =
       language === 'python' ? injectAfterPythonPreamble(code, helper) : `${helper}\n${code}`;
   }
-  await fs.writeFile(scriptPath, scriptCode, 'utf8');
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(scriptPath), scriptCode, 'utf8'));
   if (language === 'shell' && process.platform !== 'win32') {
-    await fs.chmod(scriptPath, 0o700);
+    await fs.chmod(resolveToolPath(scriptPath), 0o700);
   }
 
   let stdout = '';
@@ -228,8 +229,8 @@ export async function executeCode(
 
   const completedAt = (options.now ?? (() => new Date()))().toISOString();
   const durationMs = Math.max(0, Date.now() - startTime);
-  await fs.writeFile(stdoutPath, stdout, 'utf8');
-  await fs.writeFile(stderrPath, stderr, 'utf8');
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(stdoutPath), stdout, 'utf8'));
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(stderrPath), stderr, 'utf8'));
 
   const error = buildError(spawnError, timedOut, completed.exitCode, timeoutMs);
   const filesBeforeResult = await listRunFiles(runDir);
@@ -255,7 +256,7 @@ export async function executeCode(
     files: [...new Set([...filesBeforeResult, 'result.json'])].sort(),
     ...(error ? { error } : {}),
   };
-  await fs.writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(resultPath), `${JSON.stringify(result, null, 2)}\n`, 'utf8'));
   return result;
 }
 
@@ -375,7 +376,7 @@ function sanitizeRunId(runId: string): string {
 }
 
 async function listRunFiles(runDir: string): Promise<string[]> {
-  const entries = await fs.readdir(runDir, { withFileTypes: true });
+  const entries = await fs.readdir(resolveToolPath(runDir), { withFileTypes: true });
   return entries
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
@@ -423,15 +424,15 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
     if (stopped) return;
     const finalPath = path.join(options.rpcDir, `${id}.res.json`);
     const tmpPath = path.join(options.rpcDir, `${id}.res.json.tmp`);
-    await fs.writeFile(tmpPath, JSON.stringify(payload), 'utf8');
-    if (stopped) { await fs.rm(tmpPath, { force: true }); return; }
-    await fs.rename(tmpPath, finalPath);
+    await guardToolMutation(() => fs.writeFile(resolveToolPath(tmpPath), JSON.stringify(payload), 'utf8'));
+    if (stopped) { await guardToolMutation(() => fs.rm(resolveToolPath(tmpPath), { force: true })); return; }
+    await guardToolMutation(() => fs.rename(resolveToolPath(tmpPath), resolveToolPath(finalPath)));
   };
 
   const handleRequest = async (id: string, reqPath: string): Promise<void> => {
     let request: { tool?: unknown; args?: unknown };
     try {
-      request = JSON.parse(await fs.readFile(reqPath, 'utf8')) as typeof request;
+      request = JSON.parse(await fs.readFile(resolveToolPath(reqPath), 'utf8')) as typeof request;
     } catch {
       await writeResponse(id, { ok: false, error: 'RPC_BAD_REQUEST: could not parse request JSON' });
       return;
@@ -490,7 +491,7 @@ function startRpcResponder(options: RpcResponderOptions): RpcResponder {
     if (scanning || stopped) return;
     scanning = true;
     try {
-      const entries = await fs.readdir(options.rpcDir).catch(() => [] as string[]);
+      const entries = await fs.readdir(resolveToolPath(options.rpcDir)).catch(() => [] as string[]);
       for (const entry of entries) {
         if (stopped) break;
         if (!entry.endsWith('.req.json')) continue;

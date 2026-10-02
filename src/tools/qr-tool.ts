@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -23,7 +24,7 @@ export interface QRDecodeResult {
  * Generates QR codes in multiple formats including ASCII for terminal display
  */
 export class QRTool {
-  private readonly outputDir = path.join(process.cwd(), '.codebuddy', 'qrcodes');
+  private get outputDir(): string { return path.join(getToolWorkingDirectory(), '.codebuddy', 'qrcodes'); }
   private vfs = UnifiedVfsRouter.Instance;
 
   /**
@@ -269,7 +270,7 @@ export class QRTool {
    */
   async decode(imagePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), imagePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), imagePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -279,7 +280,7 @@ export class QRTool {
       }
 
       // Try using zbarimg (common QR reader tool) - use spawnSync for safety
-      const { spawnSync } = await import('child_process');
+      const { spawnSync } = await import('../utils/tool-process.js');
 
       try {
         // Use spawnSync with array args to prevent command injection

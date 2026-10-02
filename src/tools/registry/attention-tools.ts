@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 /**
  * Attention Tool Adapters
  *
@@ -39,7 +40,7 @@ export class TodoAttentionTool implements ITool {
     context?: IToolExecutionContext,
   ): Promise<ToolResult> {
     const action = input.action as string;
-    const tracker = getTodoTracker(context?.cwd ?? process.cwd());
+    const tracker = getTodoTracker(context?.cwd ?? getToolWorkingDirectory());
 
     try {
       switch (action) {
@@ -206,7 +207,7 @@ export class RestoreContextTool implements ITool {
         : context?.sessionId;
     const result = compressor.restore(
       identifier,
-      context?.cwd ?? process.cwd(),
+      context?.cwd ?? getToolWorkingDirectory(),
       recoverySessionId,
     );
 

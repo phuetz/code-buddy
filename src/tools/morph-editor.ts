@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import * as path from "path";
 import axios from "axios";
 import { ToolResult, getErrorMessage } from "../types/index.js";
@@ -47,7 +48,7 @@ export class MorphEditorTool {
     targetFile: string,
     instructions: string,
     codeEdit: string,
-    baseDirectory: string = process.cwd()
+    baseDirectory: string = getToolWorkingDirectory()
   ): Promise<ToolResult> {
     try {
       const resolved = this.vfs.resolvePath(path.resolve(baseDirectory, targetFile), baseDirectory, 'write');
@@ -186,7 +187,7 @@ export class MorphEditorTool {
     viewRange?: [number, number]
   ): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (await this.vfs.exists(resolvedPath)) {
         const stats = await this.vfs.stat(resolvedPath);

@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../utils/tool-execution-context.js';
 /**
  * Shell-free launch plans for npm and project-local CLIs (eslint, prettier).
  *
@@ -24,7 +25,7 @@ const isWindows = process.platform === 'win32';
 function existingFile(candidate: string | undefined): string | null {
   if (!candidate) return null;
   try {
-    return fs.statSync(candidate).isFile() ? candidate : null;
+    return fs.statSync(resolveToolPath(candidate)).isFile() ? candidate : null;
   } catch {
     return null;
   }

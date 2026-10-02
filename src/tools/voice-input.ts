@@ -8,7 +8,7 @@
  * - System speech recognition (macOS)
  */
 
-import { exec, spawn } from 'child_process';
+import { exec, spawn } from '../utils/tool-process.js';
 import { promisify } from 'util';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';

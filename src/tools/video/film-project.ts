@@ -1,3 +1,5 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../../utils/tool-execution-context.js';
+
 /**
  * Film project — the resumable state layer behind the end-to-end producer.
  *
@@ -16,7 +18,7 @@
  * @module tools/video/film-project
  */
 
-import { spawn as realSpawn } from 'child_process';
+import { spawn as realSpawn } from '../../utils/tool-process.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
@@ -109,7 +111,7 @@ export function filmSlug(name: string): string {
 
 export function filmProjectDir(rootDir: string, name: string): string {
   return path.join(
-    path.resolve(rootDir),
+    path.resolve(getToolWorkingDirectory(), rootDir),
     '.codebuddy',
     'media-generation',
     'films',
@@ -197,7 +199,7 @@ export function filmProgress(project: FilmProject): FilmProgress {
 
 export async function loadFilmProject(rootDir: string, name: string): Promise<FilmProject | null> {
   try {
-    const raw = await fs.readFile(filmProjectPath(rootDir, name), 'utf8');
+    const raw = await fs.readFile(resolveToolPath(filmProjectPath(rootDir, name)), 'utf8');
     const parsed = JSON.parse(raw) as FilmProject;
     if (parsed && parsed.version === 1 && Array.isArray(parsed.scenes)) return parsed;
     return null;
@@ -213,12 +215,12 @@ export async function saveFilmProject(
 ): Promise<void> {
   project.updatedAt = now().toISOString();
   const dir = filmProjectDir(rootDir, project.name);
-  await fs.mkdir(dir, { recursive: true });
+  await guardToolMutation(() => fs.mkdir(resolveToolPath(dir), { recursive: true }));
   const file = filmProjectPath(rootDir, project.name);
   // Write-then-rename for atomicity (never leave a half-written manifest).
   const tmp = `${file}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(project, null, 2));
-  await fs.rename(tmp, file);
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(tmp), JSON.stringify(project, null, 2)));
+  await guardToolMutation(() => fs.rename(resolveToolPath(tmp), resolveToolPath(file)));
 }
 
 // ============================================================================

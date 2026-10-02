@@ -1,3 +1,4 @@
+import { resolveToolPath, guardToolMutation } from '../utils/tool-execution-context.js';
 /**
  * GUI Control Tool
  *
@@ -9,7 +10,7 @@
  * (PowerShell/screencapture/ImageMagick) for screenshots.
  */
 
-import { execSync, execFileSync } from 'child_process';
+import { execSync, execFileSync } from '../utils/tool-process.js';
 import { readFileSync, unlinkSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -174,11 +175,11 @@ export function captureScreenshotNative(region?: GuiToolInput['region']): string
       }
     }
 
-    if (!existsSync(outPath)) {
+    if (!existsSync(resolveToolPath(outPath))) {
       throw new Error('Screenshot file not created');
     }
 
-    const data = readFileSync(outPath);
+    const data = readFileSync(resolveToolPath(outPath));
 
     // Region crop is a no-op in the sync path when sharp is unavailable.
     // Async callers can crop after decoding the base64 if needed.
@@ -186,7 +187,7 @@ export function captureScreenshotNative(region?: GuiToolInput['region']): string
 
     return data.toString('base64');
   } finally {
-    try { if (existsSync(outPath)) unlinkSync(outPath); } catch { /* ignore cleanup errors */ }
+    try { if (existsSync(resolveToolPath(outPath))) guardToolMutation(() => unlinkSync(resolveToolPath(outPath))); } catch { /* ignore cleanup errors */ }
   }
 }
 

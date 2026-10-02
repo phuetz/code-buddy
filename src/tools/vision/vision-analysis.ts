@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../../utils/tool-execution-context.js';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
@@ -60,14 +61,14 @@ export async function analyzeVisionImage(
     throw new Error('image_path is required');
   }
 
-  const rootDir = path.resolve(options.rootDir ?? process.cwd());
+  const rootDir = path.resolve(getToolWorkingDirectory(), options.rootDir ?? getToolWorkingDirectory());
   const imagePath = path.resolve(rootDir, imagePathInput);
   const ext = path.extname(imagePath).toLowerCase().replace('.', '');
   if (!SUPPORTED_FORMATS.has(ext)) {
     throw new Error(`Unsupported image format: ${path.extname(imagePath)}`);
   }
 
-  const stat = await fs.stat(imagePath);
+  const stat = await fs.stat(resolveToolPath(imagePath));
   const sharp = await loadSharp();
   const metadata = await sharp(imagePath).metadata();
   const stats = await sharp(imagePath).stats();
@@ -109,8 +110,8 @@ export async function analyzeVisionImage(
     result.ocr = await runOptionalOcr(imagePath, options.ocrLanguage ?? 'eng');
   }
 
-  await fs.mkdir(reportDir, { recursive: true });
-  await fs.writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  await guardToolMutation(() => fs.mkdir(resolveToolPath(reportDir), { recursive: true }));
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(reportPath), `${JSON.stringify(result, null, 2)}\n`, 'utf8'));
   return result;
 }
 

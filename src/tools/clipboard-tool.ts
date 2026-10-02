@@ -1,6 +1,7 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
-import { spawn, execSync, spawnSync } from 'child_process';
+import { spawn, execSync, spawnSync } from '../utils/tool-process.js';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 
 /**
@@ -26,7 +27,7 @@ export interface ClipboardContent {
  * Works on Linux (xclip/xsel), macOS (pbcopy/pbpaste), and Windows (PowerShell)
  */
 export class ClipboardTool {
-  private readonly imageOutputDir = path.join(process.cwd(), '.codebuddy', 'clipboard');
+  private get imageOutputDir(): string { return path.join(getToolWorkingDirectory(), '.codebuddy', 'clipboard'); }
   private vfs = UnifiedVfsRouter.Instance;
 
   /**
@@ -210,7 +211,7 @@ end try`;
    */
   async writeImage(imagePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), imagePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), imagePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -309,7 +310,7 @@ end try`;
    */
   async copyFilePath(filePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -332,7 +333,7 @@ end try`;
    */
   async copyFileContent(filePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {

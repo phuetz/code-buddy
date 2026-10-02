@@ -10,11 +10,7 @@ export interface ConfirmationRequest {
 }
 
 export class ConfirmationTool {
-  private confirmationService: ConfirmationService;
-
-  constructor() {
-    this.confirmationService = ConfirmationService.getInstance();
-  }
+  private get confirmationService(): ConfirmationService { return ConfirmationService.getInstance(); }
 
   async requestConfirmation(request: ConfirmationRequest): Promise<ToolResult> {
     try {

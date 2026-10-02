@@ -1,4 +1,5 @@
-import { execFile } from 'child_process';
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
+import { execFile } from '../utils/tool-process.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
@@ -8,8 +9,8 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 120_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
-async function safeRoot(root: string): Promise<string> { if (!path.isAbsolute(root)) throw new Error('root must be an absolute path'); const resolved = path.resolve(root); if (resolved === path.parse(resolved).root || ['/etc', '/dev', '/proc', '/sys', '/run'].includes(resolved)) throw new Error(`Refusing unsafe root: ${resolved}`); if (!(await fs.lstat(resolved)).isDirectory()) throw new Error(`root is not a directory: ${resolved}`); return resolved; }
-async function exists(filePath: string): Promise<boolean> { try { await fs.access(filePath); return true; } catch { return false; } }
+async function safeRoot(root: string): Promise<string> { if (!path.isAbsolute(root)) throw new Error('root must be an absolute path'); const resolved = path.resolve(getToolWorkingDirectory(), root); if (resolved === path.parse(resolved).root || ['/etc', '/dev', '/proc', '/sys', '/run'].includes(resolved)) throw new Error(`Refusing unsafe root: ${resolved}`); if (!(await fs.lstat(resolveToolPath(resolved))).isDirectory()) throw new Error(`root is not a directory: ${resolved}`); return resolved; }
+async function exists(filePath: string): Promise<boolean> { try { await fs.access(resolveToolPath(filePath)); return true; } catch { return false; } }
 // On win32 the `.bin/prettier.cmd` shim is not spawnable without a shell: run prettier's JS entry through process.execPath (cmd.exe verbatim fallback) — see local-binary-launch.ts.
 const PRETTIER_JS_ENTRIES = ['node_modules/prettier/bin/prettier.cjs', 'node_modules/prettier/bin-prettier.js'];
 function run(root: string, file: string, args: string[], cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; code: number; timedOut: boolean }> { const launch = resolveLocalBinaryLaunch(root, file, PRETTIER_JS_ENTRIES, args); return new Promise((resolve) => execFile(launch.file, launch.args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024, windowsVerbatimArguments: launch.windowsVerbatimArguments }, (error, stdout, stderr) => resolve({ stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), code: error ? 1 : 0, timedOut: Boolean(error && 'killed' in error && error.killed) }))); }

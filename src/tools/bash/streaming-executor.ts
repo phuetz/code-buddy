@@ -5,7 +5,7 @@
  * as they arrive from the spawned process.
  */
 
-import { spawn } from 'child_process';
+import { spawn } from '../../utils/tool-process.js';
 import { StringDecoder } from 'node:string_decoder';
 import { BoundedOutput } from '../../utils/bounded-output.js';
 import { ToolResult } from '../../types/index.js';

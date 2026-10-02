@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * App Server Tool — managed dev-server lifecycle for the develop → launch →
  * browse → verify loop (the agent testing the app it just built).
@@ -17,7 +18,7 @@
  * - `stop`/`logs` only accept PIDs of servers this tool started.
  */
 
-import { spawn } from 'child_process';
+import { spawn } from '../utils/tool-process.js';
 import net from 'net';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
@@ -141,7 +142,7 @@ export class AppServerTool {
       };
     }
 
-    const cwd = input.cwd ?? process.cwd();
+    const cwd = input.cwd ?? getToolWorkingDirectory();
     const timeoutMs = Math.max(1_000, input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
     const childEnv: NodeJS.ProcessEnv = { ...process.env, ...input.env };

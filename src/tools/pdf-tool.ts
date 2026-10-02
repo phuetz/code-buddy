@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -37,7 +38,7 @@ export class PDFTool {
    */
   async extractText(filePath: string, options: { pages?: number[]; maxPages?: number } = {}): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       // Check file existence asynchronously
       if (!await this.vfs.exists(resolvedPath)) {
@@ -274,7 +275,7 @@ export class PDFTool {
    */
   async getInfo(filePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -317,7 +318,7 @@ export class PDFTool {
    */
   async listPDFs(dirPath: string = '.'): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), dirPath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), dirPath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {
@@ -367,7 +368,7 @@ export class PDFTool {
    */
   async toBase64(filePath: string): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {

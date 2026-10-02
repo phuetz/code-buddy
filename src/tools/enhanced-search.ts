@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Enhanced Search Module
  *
@@ -12,7 +13,7 @@
  * Uses @vscode/ripgrep for bundled binary (no system dependency)
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess } from '../utils/tool-process.js';
 import { EventEmitter } from 'events';
 import { getRipgrepPath } from '../utils/ripgrep-path.js';
 import { logger } from '../utils/logger.js';
@@ -204,14 +205,16 @@ class LRUCache<T> {
 // ============================================================================
 
 export class EnhancedSearch extends EventEmitter {
-  private workdir: string;
+  private configuredRoot: string | undefined;
+  private get workdir(): string { return getToolWorkingDirectory(this.configuredRoot); }
+  private set workdir(value: string) { this.configuredRoot = value; }
   private cache: LRUCache<SearchMatch[]>;
   private symbolCache: LRUCache<SymbolMatch[]>;
   private activeProcesses: Set<ChildProcess> = new Set();
 
-  constructor(workdir: string = process.cwd()) {
+  constructor(workdir?: string) {
     super();
-    this.workdir = path.resolve(workdir);
+    this.configuredRoot = workdir ? path.resolve(getToolWorkingDirectory(), workdir) : undefined;
     this.cache = new LRUCache(100, 60000); // 100 entries, 1 min TTL
     this.symbolCache = new LRUCache(50, 120000); // 50 entries, 2 min TTL
   }
@@ -220,7 +223,7 @@ export class EnhancedSearch extends EventEmitter {
    * Set working directory
    */
   setWorkdir(dir: string): void {
-    const next = path.resolve(dir);
+    const next = path.resolve(getToolWorkingDirectory(), dir);
     if (next === this.workdir) return;
     this.cancelAll();
     this.clearCache();
@@ -390,7 +393,7 @@ export class EnhancedSearch extends EventEmitter {
    * Uses simple keyword search + post-processing for reliability
    */
   async findSymbols(name: string, options: SymbolSearchOptions = {}): Promise<SymbolMatch[]> {
-    const cacheKey = `symbols:${name}:${JSON.stringify(options)}`;
+    const cacheKey = `symbols:${this.workdir}:${name}:${JSON.stringify(options)}`;
     const cached = this.symbolCache.get(cacheKey);
     if (cached) return cached;
 
@@ -881,7 +884,7 @@ const enhancedSearchInstances = new Map<string, EnhancedSearch>();
 const MAX_WORKSPACE_SEARCH_INSTANCES = 32;
 
 export function getEnhancedSearch(workdir?: string): EnhancedSearch {
-  const resolvedWorkdir = path.resolve(workdir ?? process.cwd());
+  const resolvedWorkdir = path.resolve(getToolWorkingDirectory(), workdir ?? getToolWorkingDirectory());
   let instance = enhancedSearchInstances.get(resolvedWorkdir);
   if (!instance) {
     if (enhancedSearchInstances.size >= MAX_WORKSPACE_SEARCH_INSTANCES) {

@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../../utils/tool-execution-context.js';
 /**
  * Optical Character Recognition (OCR) Tool
  *
@@ -22,7 +23,7 @@ export class OcrTool {
   }
 
   async extractText(imagePath: string, language: string = 'eng'): Promise<string> {
-    if (!fs.existsSync(imagePath)) {
+    if (!fs.existsSync(resolveToolPath(imagePath))) {
       throw new Error(`Image file not found: ${imagePath}`);
     }
 

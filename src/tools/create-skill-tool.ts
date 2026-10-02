@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * CreateSkill Tool (Native Engine self-authoring inspired)
  *
@@ -42,7 +43,7 @@ export interface CreateSkillInput {
 }
 
 export class CreateSkillTool {
-  async execute(input: CreateSkillInput, cwd = process.cwd()): Promise<ToolResult> {
+  async execute(input: CreateSkillInput, cwd = getToolWorkingDirectory()): Promise<ToolResult> {
     try {
       for (const field of ['name', 'description', 'body'] as const) {
         if (typeof input[field] !== 'string' || !input[field].trim()) return { success: false, error: `${field} is required` };

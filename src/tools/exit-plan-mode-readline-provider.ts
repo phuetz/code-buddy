@@ -1,3 +1,4 @@
+import { resolveToolPath } from '../utils/tool-execution-context.js';
 /**
  * ExitPlanMode Readline Provider — default CLI implementation
  *
@@ -28,10 +29,10 @@ const MAX_PLAN_RENDER_BYTES = 32 * 1024;
 
 function readPlanFile(planPath: string): { content: string; truncated: boolean } | null {
   try {
-    const stat = fs.statSync(planPath);
+    const stat = fs.statSync(resolveToolPath(planPath));
     if (!stat.isFile()) return null;
     const truncated = stat.size > MAX_PLAN_RENDER_BYTES;
-    const buf = fs.readFileSync(planPath, { encoding: 'utf-8' });
+    const buf = fs.readFileSync(resolveToolPath(planPath), { encoding: 'utf-8' });
     if (truncated) {
       return { content: buf.slice(0, MAX_PLAN_RENDER_BYTES), truncated: true };
     }

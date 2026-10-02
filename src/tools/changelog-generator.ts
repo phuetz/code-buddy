@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Changelog Generator
  *
@@ -8,7 +9,7 @@
  * - Multiple output formats
  */
 
-import { execSync } from 'child_process';
+import { execSync } from '../utils/tool-process.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
 
@@ -66,7 +67,7 @@ export interface ChangelogOptions {
 }
 
 const DEFAULT_OPTIONS: Required<ChangelogOptions> = {
-  repoPath: process.cwd(),
+  get repoPath() { return getToolWorkingDirectory(); },
   releaseCount: 10,
   includeUnreleased: true,
   groupByType: true,
@@ -185,7 +186,7 @@ export class ChangelogGenerator {
     try {
       const output = execSync(
         'git tag --sort=-creatordate --format="%(refname:short)|%(creatordate:iso)"',
-        { cwd: this.options.repoPath, encoding: 'utf-8' }
+        { cwd: getToolWorkingDirectory(this.options.repoPath), encoding: 'utf-8' }
       );
 
       const tags: Array<{ name: string; date: Date }> = [];
@@ -212,7 +213,7 @@ export class ChangelogGenerator {
       const format = '%H|%h|%s|%b|%an|%aI';
       const output = execSync(
         `git log --format="${format}" --no-merges`,
-        { cwd: this.options.repoPath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+        { cwd: getToolWorkingDirectory(this.options.repoPath), encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
       );
 
       const commits: ConventionalCommit[] = [];
@@ -493,7 +494,7 @@ export class ChangelogGenerator {
    */
   async updateChangelog(changelogPath: string = 'CHANGELOG.md'): Promise<void> {
     const content = await this.generate();
-    const fullPath = path.join(this.options.repoPath, changelogPath);
+    const fullPath = path.join(getToolWorkingDirectory(this.options.repoPath), changelogPath);
     await UnifiedVfsRouter.Instance.writeFile(fullPath, content, 'utf-8');
   }
 }

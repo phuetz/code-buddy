@@ -1,5 +1,6 @@
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../../utils/tool-execution-context.js';
 import { randomUUID } from 'crypto';
-import { spawn } from 'child_process';
+import { spawn } from '../../utils/tool-process.js';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -117,9 +118,9 @@ export async function detectObjectsInImage(
   }
 
   const env = runtime.env ?? process.env;
-  const rootDir = path.resolve(options.rootDir ?? process.cwd());
+  const rootDir = path.resolve(getToolWorkingDirectory(), options.rootDir ?? getToolWorkingDirectory());
   const imagePath = path.isAbsolute(input.imagePath)
-    ? path.resolve(input.imagePath)
+    ? path.resolve(getToolWorkingDirectory(), input.imagePath)
     : path.resolve(rootDir, input.imagePath);
   await assertReadableFile(imagePath, 'image_path');
 
@@ -129,7 +130,7 @@ export async function detectObjectsInImage(
   const timeoutMs = Math.round(normalizeNumber(input.timeoutMs, Number(env.CODEBUDDY_YOLO_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS, 1000, 600_000, 'timeout_ms'));
 
   const reportDir = path.join(rootDir, '.codebuddy', 'object-detections');
-  await fs.mkdir(reportDir, { recursive: true });
+  await guardToolMutation(() => fs.mkdir(resolveToolPath(reportDir), { recursive: true }));
 
   const generatedAt = (options.now ?? (() => new Date()))().toISOString();
   const reportId = sanitizeId(options.createId?.() ?? randomUUID());
@@ -140,7 +141,7 @@ export async function detectObjectsInImage(
     : undefined;
 
   if (annotatedImagePath) {
-    await fs.mkdir(path.dirname(annotatedImagePath), { recursive: true });
+    await guardToolMutation(() => fs.mkdir(resolveToolPath(path.dirname(annotatedImagePath)), { recursive: true }));
   }
 
   const request: YoloDetectionRequest = {
@@ -191,7 +192,7 @@ export async function detectObjectsInImage(
     detections,
   };
 
-  await fs.writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  await guardToolMutation(() => fs.writeFile(resolveToolPath(reportPath), `${JSON.stringify(result, null, 2)}\n`, 'utf8'));
   return result;
 }
 
@@ -320,12 +321,12 @@ function resolveOptionalOutputPath(rootDir: string, outputPath: string | undefin
 
 function resolvePathMaybeRelative(rootDir: string, value: string): string {
   if (!value.includes('/') && !value.includes('\\')) return value;
-  return path.isAbsolute(value) ? path.resolve(value) : path.resolve(rootDir, value);
+  return path.isAbsolute(value) ? path.resolve(getToolWorkingDirectory(), value) : path.resolve(rootDir, value);
 }
 
 async function assertReadableFile(filePath: string, name: string): Promise<void> {
   try {
-    const stat = await fs.stat(filePath);
+    const stat = await fs.stat(resolveToolPath(filePath));
     if (!stat.isFile()) {
       throw new Error(`${name} is not a file: ${filePath}`);
     }
@@ -337,7 +338,7 @@ async function assertReadableFile(filePath: string, name: string): Promise<void>
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
-    await fs.access(filePath);
+    await fs.access(resolveToolPath(filePath));
     return true;
   } catch {
     return false;

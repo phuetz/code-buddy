@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * Code Mode — bounded JavaScript orchestration with a ToolHandler bridge.
  *
@@ -13,7 +14,7 @@
  * child, and recent Node versions add the permission model as defense in depth.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from '../utils/tool-process.js';
 import { randomUUID } from 'node:crypto';
 import { BaseTool, type ParameterDefinition } from './base-tool.js';
 import type { IToolExecutionContext, IValidationResult } from './registry/types.js';
@@ -572,7 +573,7 @@ async function runInChild(
     let toolCallCount = 0;
     let emittedChars = 0;
     const child = spawn(process.execPath, childExecArgs(), {
-      cwd: runtime.cwd || process.cwd(),
+      cwd: runtime.cwd || getToolWorkingDirectory(),
       env: {
         HOME: '/nonexistent',
         LANG: 'C.UTF-8',
@@ -839,7 +840,7 @@ export class CodeExecTool extends BaseTool {
       scopeId: legacyScopeId(),
       resultFormat: 'legacy',
       sessionId: legacySessionId,
-      cwd: context?.cwd ?? process.cwd(),
+      cwd: context?.cwd ?? getToolWorkingDirectory(),
       availableTools: legacyAvailableTools,
       executor: legacyExecutor ?? (async (toolName) => ({
         success: false,

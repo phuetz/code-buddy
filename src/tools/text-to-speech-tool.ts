@@ -1,4 +1,5 @@
-import { spawn } from 'child_process';
+import { resolveToolPath, getToolWorkingDirectory, guardToolMutation } from '../utils/tool-execution-context.js';
+import { spawn } from '../utils/tool-process.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -78,9 +79,9 @@ export async function synthesizeTextToSpeech(
   const provider = await resolveProvider(input.provider ?? 'auto', options);
   const format = resolveOutputFormat(input.format, provider, input.outputPath);
   validateProviderFormat(provider, format);
-  const rootDir = path.resolve(options.rootDir ?? process.cwd());
+  const rootDir = path.resolve(getToolWorkingDirectory(), options.rootDir ?? getToolWorkingDirectory());
   const outputPath = resolveOutputPath(rootDir, input.outputPath, format, options);
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await guardToolMutation(() => fs.mkdir(resolveToolPath(path.dirname(outputPath)), { recursive: true }));
 
   const command = buildProviderCommand(provider, {
     ...input,
@@ -100,7 +101,7 @@ export async function synthesizeTextToSpeech(
     });
   }
 
-  const stat = await fs.stat(outputPath);
+  const stat = await fs.stat(resolveToolPath(outputPath));
   if (stat.size <= 0) {
     throw new Error(`TTS provider ${provider} produced empty output at ${outputPath}`);
   }
@@ -236,7 +237,7 @@ function resolveOutputPath(
     if (hasTraversal(outputPath)) {
       throw new Error(`output_path contains '..' traversal component: ${outputPath}`);
     }
-    return path.isAbsolute(outputPath) ? path.resolve(outputPath) : path.resolve(rootDir, outputPath);
+    return path.isAbsolute(outputPath) ? path.resolve(getToolWorkingDirectory(), outputPath) : path.resolve(rootDir, outputPath);
   }
   const id = sanitizeId(options.createId?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
   return path.join(rootDir, '.codebuddy', 'tts', `tts-${id}.${format}`);
@@ -314,7 +315,8 @@ function buildProviderCommand(
           if (!response.ok) {
             throw new Error(`AudioReader TTS error: ${response.status} ${await response.text()}`);
           }
-          await fs.writeFile(input.outputPath, Buffer.from(await response.arrayBuffer()));
+          const audio = Buffer.from(await response.arrayBuffer());
+          await guardToolMutation(() => fs.writeFile(resolveToolPath(input.outputPath), audio));
         },
       };
   }

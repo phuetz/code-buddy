@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
@@ -65,7 +66,7 @@ export class ImageTool {
    * Process an image from a file path
    */
   private async processFileImage(filePath: string): Promise<ProcessedImage> {
-    const resolvedPath = path.resolve(process.cwd(), filePath);
+    const resolvedPath = path.resolve(getToolWorkingDirectory(), filePath);
 
     // Check file existence asynchronously
     if (!await this.vfs.exists(resolvedPath)) {
@@ -178,7 +179,7 @@ export class ImageTool {
    */
   async listImages(dirPath: string = '.'): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(process.cwd(), dirPath);
+      const resolvedPath = path.resolve(getToolWorkingDirectory(), dirPath);
 
       if (!await this.vfs.exists(resolvedPath)) {
         return {

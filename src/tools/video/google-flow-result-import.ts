@@ -1,6 +1,7 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /** Verify operator-provided Google Flow outputs and create auditable local receipts. */
 
-import { execFile as realExecFile } from 'child_process';
+import { execFile as realExecFile } from '../../utils/tool-process.js';
 import { createHash } from 'crypto';
 import { constants as fsConstants } from 'fs';
 import {
@@ -136,7 +137,7 @@ export async function importGoogleFlowResults(input: {
       batchDirectory,
       `.${job.id}-${nonce}-${preserveAudio ? 'audio' : 'silent'}.mp4`,
     );
-    await writeFile(capturedSource, sourceBytes, { flag: 'wx', mode: 0o600 });
+    await guardToolMutation(() => writeFile(resolveToolPath(capturedSource), sourceBytes, { flag: 'wx', mode: 0o600 }));
     try {
       // Probe the immutable captured bytes, never the operator-controlled path
       // again, so a concurrent replacement cannot change what gets imported.
@@ -176,8 +177,8 @@ export async function importGoogleFlowResults(input: {
       jobs.push(importedJob);
     } finally {
       await Promise.all([
-        unlink(capturedSource).catch(() => undefined),
-        unlink(normalizedTemporary).catch(() => undefined),
+        guardToolMutation(() => unlink(resolveToolPath(capturedSource))).catch(() => undefined),
+        guardToolMutation(() => unlink(resolveToolPath(normalizedTemporary))).catch(() => undefined),
       ]);
     }
   }
@@ -269,7 +270,7 @@ function assertHandoffBytes(handoff: GoogleFlowHandoff, bytes: Uint8Array): void
 }
 
 async function assertExactResultSet(root: string, expectedNames: string[]): Promise<void> {
-  const actual = (await readdir(root, { withFileTypes: true }))
+  const actual = (await readdir(resolveToolPath(root), { withFileTypes: true }))
     .filter((entry) => entry.isFile() || entry.isSymbolicLink())
     .map((entry) => entry.name)
     .filter((name) => name.toLowerCase().endsWith('.mp4'))
@@ -283,13 +284,13 @@ async function assertExactResultSet(root: string, expectedNames: string[]): Prom
 async function createConfinedBatchDirectory(outputRoot: string, batchId: string): Promise<string> {
   const batchDirectory = path.join(outputRoot, batchId);
   try {
-    await mkdir(batchDirectory, { mode: 0o700 });
+    await guardToolMutation(() => mkdir(resolveToolPath(batchDirectory), { mode: 0o700 }));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
   }
-  const existing = await lstat(batchDirectory);
+  const existing = await lstat(resolveToolPath(batchDirectory));
   if (existing.isSymbolicLink() || !existing.isDirectory()) throw new Error('Flow import batch destination is unsafe');
-  const canonical = await realpath(batchDirectory);
+  const canonical = await realpath(resolveToolPath(batchDirectory));
   if (!isWithin(canonical, outputRoot)) throw new Error('Flow import destination escapes its output root');
   return canonical;
 }
@@ -306,21 +307,21 @@ async function installImmutableFile(temporary: string, destination: string, expe
 
 async function writeImmutableJson(filename: string, value: unknown): Promise<void> {
   const temporary = `${filename}.${process.pid}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  await guardToolMutation(() => writeFile(resolveToolPath(temporary), `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 }));
   try {
     await link(temporary, filename);
   } finally {
-    await unlink(temporary).catch(() => undefined);
+    await guardToolMutation(() => unlink(resolveToolPath(temporary))).catch(() => undefined);
   }
 }
 
 async function confinedRoot(value: string, create: boolean): Promise<string> {
   if (!path.isAbsolute(value) || value.includes('\0')) throw new Error('Flow import root must be absolute');
-  if (create) await mkdir(value, { recursive: true, mode: 0o700 });
-  const lexical = await lstat(value);
+  if (create) await guardToolMutation(() => mkdir(resolveToolPath(value), { recursive: true, mode: 0o700 }));
+  const lexical = await lstat(resolveToolPath(value));
   if (lexical.isSymbolicLink() || !lexical.isDirectory()) throw new Error('Flow import root must be a regular directory');
-  const canonical = await realpath(value);
-  if (!(await stat(canonical)).isDirectory()) throw new Error('Flow import root is invalid');
+  const canonical = await realpath(resolveToolPath(value));
+  if (!(await stat(resolveToolPath(canonical))).isDirectory()) throw new Error('Flow import root is invalid');
   return canonical;
 }
 
@@ -330,7 +331,7 @@ function isWithin(candidate: string, root: string): boolean {
 }
 
 async function readRegularNoFollow(filename: string, label: string): Promise<Buffer> {
-  const handle = await open(filename, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  const handle = await open(resolveToolPath(filename), fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const info = await handle.stat();
     if (!info.isFile() || info.size <= 0 || info.size > MAX_VIDEO_BYTES) {

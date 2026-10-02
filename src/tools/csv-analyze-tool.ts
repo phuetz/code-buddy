@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
@@ -23,7 +24,7 @@ export class CsvAnalyzeTool {
       const filePath = await resolveReadableCsvPath(args.path);
       const delimiter = args.delimiter ?? ',';
       const maxPreview = clampPreview(args.maxPreview);
-      const buffer = await fs.readFile(filePath);
+      const buffer = await fs.readFile(resolveToolPath(filePath));
 
       if (buffer.includes(0)) {
         return { success: false, error: 'Refusing to analyze binary-looking file containing NUL bytes' };
@@ -54,7 +55,7 @@ async function resolveReadableCsvPath(inputPath: string): Promise<string> {
     throw new Error('path must not contain NUL bytes');
   }
 
-  const resolved = path.resolve(inputPath);
+  const resolved = path.resolve(getToolWorkingDirectory(), inputPath);
   const verdict = checkSecretFileAccess(resolved, 'read');
   if (verdict.secret) throw new Error(formatSecretRefusal(resolved, verdict));
   const root = path.parse(resolved).root;
@@ -62,7 +63,7 @@ async function resolveReadableCsvPath(inputPath: string): Promise<string> {
     throw new Error(`Refusing unsafe path: ${resolved}`);
   }
 
-  const stat = await fs.stat(resolved);
+  const stat = await fs.stat(resolveToolPath(resolved));
   if (!stat.isFile()) {
     throw new Error(`path is not a file: ${resolved}`);
   }

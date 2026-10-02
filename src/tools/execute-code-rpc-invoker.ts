@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /**
  * execute_code → Code Buddy tool RPC invoker (opt-in, OFF by default).
  *
@@ -30,7 +31,7 @@
  * `peer-tool-bridge.ts` pattern.
  */
 
-import { spawn } from 'child_process';
+import { spawn } from '../utils/tool-process.js';
 import { constants } from 'node:fs';
 import { getRipgrepPath } from '../utils/ripgrep-path.js';
 import * as fs from 'fs/promises';
@@ -134,7 +135,7 @@ export function createExecuteCodeRpcInvoker(options: InvokerOptions): ExecuteCod
   const extraTools = options.extraTools ?? getExecuteCodeRpcExtraTools();
   const combinedAllowlist = new Set([...baseAllowlist, ...extraTools]);
   const isFleetSafe = options.isFleetSafe ?? ((name: string) => getToolRegistry().isFleetSafe(name));
-  const workspaceRoot = path.resolve(options.workspaceRoot);
+  const workspaceRoot = path.resolve(getToolWorkingDirectory(), options.workspaceRoot);
 
   return async (request, signal) => {
     const tool = request.tool;
@@ -180,7 +181,7 @@ type Executor = (
 ) => Promise<{ output: string; truncated: boolean }>;
 
 function assertInsideWorkspace(target: string, workspaceRoot: string): string {
-  const absolute = path.isAbsolute(target) ? path.resolve(target) : path.resolve(workspaceRoot, target);
+  const absolute = path.isAbsolute(target) ? path.resolve(getToolWorkingDirectory(), target) : path.resolve(workspaceRoot, target);
   const rootWithSep = workspaceRoot.endsWith(path.sep) ? workspaceRoot : workspaceRoot + path.sep;
   if (absolute !== workspaceRoot && !absolute.startsWith(rootWithSep)) {
     throw new Error(`PATH_OUTSIDE_WORKSPACE: ${target} resolves outside the execute_code workspace`);
@@ -191,8 +192,8 @@ function assertInsideWorkspace(target: string, workspaceRoot: string): string {
 /** Resolve both sides physically; lexical containment alone follows escaping links. */
 async function resolveWorkspacePath(target: string, workspaceRoot: string): Promise<string> {
   const lexical = assertInsideWorkspace(target, workspaceRoot);
-  const root = await fs.realpath(workspaceRoot);
-  const resolved = await fs.realpath(lexical);
+  const root = await fs.realpath(resolveToolPath(workspaceRoot));
+  const resolved = await fs.realpath(resolveToolPath(lexical));
   return assertInsideWorkspace(resolved, root);
 }
 
@@ -203,11 +204,11 @@ const execViewFile: Executor = async (args, workspaceRoot, signal) => {
   }
   const resolved = await resolveWorkspacePath(filePath, workspaceRoot);
   signal?.throwIfAborted();
-  const handle = await fs.open(resolved, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  const handle = await fs.open(resolveToolPath(resolved), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     // On Linux verify the opened descriptor too, before reading, against path swaps.
     if (process.platform === 'linux') {
-      assertInsideWorkspace(await fs.realpath(`/proc/self/fd/${handle.fd}`), await fs.realpath(workspaceRoot));
+      assertInsideWorkspace(await fs.realpath(resolveToolPath(`/proc/self/fd/${handle.fd}`)), await fs.realpath(resolveToolPath(workspaceRoot)));
     }
     const stat = await handle.stat();
     if (!stat.isFile()) throw new Error(`view_file: ${filePath} is not a regular file`);
@@ -230,7 +231,7 @@ const execListDirectory: Executor = async (args, workspaceRoot, signal) => {
   }
   const resolved = await resolveWorkspacePath(dirPath, workspaceRoot);
   signal?.throwIfAborted();
-  const entries = await fs.readdir(resolved, { withFileTypes: true });
+  const entries = await fs.readdir(resolveToolPath(resolved), { withFileTypes: true });
   const lines = entries
     .map((entry) => {
       const tag = entry.isDirectory() ? 'DIR ' : entry.isSymbolicLink() ? 'LINK' : 'FILE';

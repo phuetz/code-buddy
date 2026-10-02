@@ -1,3 +1,4 @@
+import { resolveToolPath, getToolWorkingDirectory } from '../utils/tool-execution-context.js';
 /** Agent-callable adapter for the shared local-first Meeting Notes pipeline. */
 
 import { realpath, stat } from 'fs/promises';
@@ -54,8 +55,8 @@ function cleanPath(raw: unknown, label: string): string {
 }
 
 async function realWorkspaceRoot(cwd: string): Promise<string> {
-  const root = await realpath(path.resolve(cwd));
-  const info = await stat(root);
+  const root = await realpath(resolveToolPath(path.resolve(getToolWorkingDirectory(), cwd)));
+  const info = await stat(resolveToolPath(root));
   if (!info.isDirectory()) throw new Error('Meeting Notes workspace root is not a directory');
   return root;
 }
@@ -64,11 +65,11 @@ async function realWorkspaceRoot(cwd: string): Promise<string> {
 export async function resolveMeetingInputPath(inputPath: string, cwd: string): Promise<string> {
   const value = cleanPath(inputPath, 'input_path');
   const root = await realWorkspaceRoot(cwd);
-  const lexical = path.isAbsolute(value) ? path.resolve(value) : path.resolve(root, value);
+  const lexical = path.isAbsolute(value) ? path.resolve(getToolWorkingDirectory(), value) : path.resolve(root, value);
   if (!isInside(root, lexical)) throw new Error('input_path resolves outside the active workspace');
-  const actual = await realpath(lexical);
+  const actual = await realpath(resolveToolPath(lexical));
   if (!isInside(root, actual)) throw new Error('input_path resolves through a symlink outside the active workspace');
-  const info = await stat(actual);
+  const info = await stat(resolveToolPath(actual));
   if (!info.isFile()) throw new Error('input_path must point to a file');
   assertSupportedMeetingFilePath(actual);
   return actual;
@@ -78,7 +79,7 @@ async function closestExistingRealPath(candidate: string): Promise<string> {
   let cursor = candidate;
   while (true) {
     try {
-      return await realpath(cursor);
+      return await realpath(resolveToolPath(cursor));
     } catch (error) {
       const code = error && typeof error === 'object' && 'code' in error
         ? String((error as { code?: unknown }).code)
@@ -94,7 +95,7 @@ async function closestExistingRealPath(candidate: string): Promise<string> {
 /** Validate a report target, including its closest existing (possibly symlinked) parent. */
 export async function assertMeetingOutputPath(target: string, cwd: string): Promise<void> {
   const root = await realWorkspaceRoot(cwd);
-  const lexical = path.resolve(target);
+  const lexical = path.resolve(getToolWorkingDirectory(), target);
   if (!isInside(root, lexical)) throw new Error('output_prefix resolves outside the active workspace');
   const actualAncestor = await closestExistingRealPath(lexical);
   if (!isInside(root, actualAncestor)) {
@@ -106,7 +107,7 @@ export async function assertMeetingOutputPath(target: string, cwd: string): Prom
 export async function resolveMeetingOutputCandidate(outputPrefix: string, cwd: string): Promise<string> {
   const value = cleanPath(outputPrefix, 'output_prefix');
   const root = await realWorkspaceRoot(cwd);
-  const lexical = path.isAbsolute(value) ? path.resolve(value) : path.resolve(root, value);
+  const lexical = path.isAbsolute(value) ? path.resolve(getToolWorkingDirectory(), value) : path.resolve(root, value);
   if (!isInside(root, lexical)) throw new Error('output_prefix resolves outside the active workspace');
   assertSafeAgentReportLocation(root, lexical);
   return lexical;
@@ -136,7 +137,7 @@ export class MeetingNotesTool implements ITool {
       if (!validation.valid) {
         return { success: false, error: `meeting_notes validation failed: ${validation.errors?.join(', ')}` };
       }
-      const cwd = context?.cwd || process.cwd();
+      const cwd = context?.cwd || getToolWorkingDirectory();
       const inputPath = await resolveMeetingInputPath(input.input_path as string, cwd);
       const language = typeof input.language === 'string' && input.language.trim()
         ? input.language.trim()

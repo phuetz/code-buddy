@@ -1,3 +1,4 @@
+import { getToolWorkingDirectory } from '../../utils/tool-execution-context.js';
 import type { ToolResult } from '../../types/index.js';
 import { EXECUTE_CODE_TOOL } from '../../codebuddy/tool-definitions/advanced-tools.js';
 import {
@@ -23,7 +24,7 @@ export class ExecuteCodeTool implements ITool {
 
   async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
     try {
-      const rootDir = this.options.rootDir ?? context?.cwd ?? process.cwd();
+      const rootDir = this.options.rootDir ?? context?.cwd ?? getToolWorkingDirectory();
       const result = await executeCode(parseInput(input), {
         ...this.options,
         rootDir,

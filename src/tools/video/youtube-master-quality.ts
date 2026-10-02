@@ -1,6 +1,7 @@
+import { resolveToolPath, guardToolMutation } from '../../utils/tool-execution-context.js';
 /** Technical, human-review and private-bundle gates for YouTube masters. */
 
-import { execFile as realExecFile } from 'child_process';
+import { execFile as realExecFile } from '../../utils/tool-process.js';
 import { createHash } from 'crypto';
 import { constants as fsConstants } from 'fs';
 import {
@@ -388,7 +389,7 @@ export async function createPrivateYouTubeBundle(input: {
   const bundleName = `private-${input.report.videoSha256.slice(0, 20)}`;
   const destination = path.join(outputRoot, bundleName);
   const temporary = path.join(outputRoot, `.${bundleName}-${process.pid}-${Date.now()}.tmp`);
-  await mkdir(temporary, { mode: 0o700 });
+  await guardToolMutation(() => mkdir(resolveToolPath(temporary), { mode: 0o700 }));
   try {
     const fileInputs = [
       { role: 'video' as const, source: videoPath, file: input.report.videoFile, sha256: input.report.videoSha256 },
@@ -396,7 +397,7 @@ export async function createPrivateYouTubeBundle(input: {
       { role: 'youtube-sidecar' as const, source: sidecarPath, file: input.report.sidecarFile, sha256: input.report.sidecarSha256 },
     ];
     for (const item of fileInputs) {
-      await copyFile(item.source, path.join(temporary, item.file), fsConstants.COPYFILE_EXCL);
+      await guardToolMutation(() => copyFile(resolveToolPath(item.source), resolveToolPath(path.join(temporary, item.file)), fsConstants.COPYFILE_EXCL));
       if (await sha256NoFollow(path.join(temporary, item.file), `Bundled ${item.role}`) !== item.sha256) {
         throw new Error(`Bundled ${item.role} changed while it was copied`);
       }
@@ -404,8 +405,8 @@ export async function createPrivateYouTubeBundle(input: {
     const technicalBytes = Buffer.from(`${JSON.stringify(input.report, null, 2)}\n`);
     const reviewBytes = Buffer.from(`${JSON.stringify(input.review, null, 2)}\n`);
     await Promise.all([
-      writeFile(path.join(temporary, 'technical-report.json'), technicalBytes, { flag: 'wx', mode: 0o600 }),
-      writeFile(path.join(temporary, 'human-review.json'), reviewBytes, { flag: 'wx', mode: 0o600 }),
+      guardToolMutation(() => writeFile(resolveToolPath(path.join(temporary, 'technical-report.json')), technicalBytes, { flag: 'wx', mode: 0o600 })),
+      guardToolMutation(() => writeFile(resolveToolPath(path.join(temporary, 'human-review.json')), reviewBytes, { flag: 'wx', mode: 0o600 })),
     ]);
     const unsigned = {
       schemaVersion: 1 as const,
@@ -431,11 +432,11 @@ export async function createPrivateYouTubeBundle(input: {
       ],
     };
     const manifest: YouTubePrivateBundleManifest = { ...unsigned, bundleSha256: canonicalSha256(unsigned) };
-    await writeFile(path.join(temporary, 'bundle.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
-    await rename(temporary, destination);
+    await guardToolMutation(() => writeFile(resolveToolPath(path.join(temporary, 'bundle.json')), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx', mode: 0o600 }));
+    await guardToolMutation(() => rename(resolveToolPath(temporary), resolveToolPath(destination)));
     return { directory: destination, manifest };
   } catch (error) {
-    await rm(temporary, { recursive: true, force: true });
+    await guardToolMutation(() => rm(resolveToolPath(temporary), { recursive: true, force: true }));
     throw error;
   }
 }
@@ -511,13 +512,13 @@ function timestampMs(value: string): number {
 
 async function regularFile(filename: string, label: string): Promise<string> {
   if (!path.isAbsolute(filename) || filename.includes('\0')) throw new Error(`${label} path must be absolute`);
-  const info = await lstat(filename);
+  const info = await lstat(resolveToolPath(filename));
   if (info.isSymbolicLink() || !info.isFile()) throw new Error(`${label} must be a regular non-symlink file`);
-  return realpath(filename);
+  return realpath(resolveToolPath(filename));
 }
 
 async function readRegularNoFollow(filename: string, label: string): Promise<Buffer> {
-  const handle = await open(filename, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  const handle = await open(resolveToolPath(filename), fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
     const info = await handle.stat();
     if (!info.isFile() || info.size <= 0) throw new Error(`${label} must be a non-empty regular file`);
@@ -533,8 +534,8 @@ async function sha256NoFollow(filename: string, label: string): Promise<string> 
 
 async function confinedOutputRoot(value: string): Promise<string> {
   if (!path.isAbsolute(value) || value.includes('\0')) throw new Error('Private bundle output root must be absolute');
-  await mkdir(value, { recursive: true, mode: 0o700 });
-  const info = await lstat(value);
+  await guardToolMutation(() => mkdir(resolveToolPath(value), { recursive: true, mode: 0o700 }));
+  const info = await lstat(resolveToolPath(value));
   if (info.isSymbolicLink() || !info.isDirectory()) throw new Error('Private bundle output root must be a regular directory');
-  return realpath(value);
+  return realpath(resolveToolPath(value));
 }
