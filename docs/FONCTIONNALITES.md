@@ -24,7 +24,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `tool-verify` — Verification tool | Demandez à l’agent de vérifier un résultat concret. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-verify) |
 | `agent-loop` — Agent tool loop | Poursuivez une demande sur plusieurs réponses du modèle et résultats d’outils. | **Testée localement** | [Trace réelle](preuves/p5-agent-loop-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#agent-loop) |
 | `tool-read-file` — File reading | Laissez l’agent lire un fichier du projet avant de répondre. | **Testée localement** | [Trace réelle](preuves/p5-tool-read-file-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#tool-read-file) |
-| `context-tool-selection` — Tool selection | Sélectionnez les outils pertinents tout en gardant leur recherche. | **Testée localement** | [Trace réelle](preuves/p7-context-tool-selection.log); [Maillons vérifiés](preuves/verification-statique.md#context-tool-selection) |
+| `context-tool-selection` — Tool selection | Sélectionnez les outils pertinents en conservant tool_search dans la sélection par défaut lorsqu’il est disponible. | **Testée localement** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/context-tool-selection.md) ; [Raccordement](preuves/verification-statique.md#context-tool-selection) |
 
 ## Fournisseurs et bascule
 

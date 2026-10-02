@@ -312,7 +312,7 @@ export class ToolSelector {
       minScore = this.baseMinScore,
       includeCategories,
       excludeCategories,
-      alwaysInclude = ['view_file', 'bash'], // Core tools always included
+      alwaysInclude = ['view_file', 'bash', 'tool_search'], // Keep discovery available after filtering.
       useAdaptiveThreshold = true
     } = options;
 

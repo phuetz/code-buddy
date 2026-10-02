@@ -838,7 +838,7 @@ export async function getRelevantTools(
 
   const preferred = integrationToolHints(query, allTools.map(tool => tool.function.name));
   const selection = selectRelevantTools(query, allTools, maxTools, [
-    ...(options.alwaysInclude ?? ['view_file', 'bash']), ...preferred,
+    ...(options.alwaysInclude ?? ['view_file', 'bash', 'tool_search']), ...preferred,
   ]);
   // Once selected, a deferred MCP tool must expose its argument schema.
   // Empty stubs otherwise force valid models to emit {} for required inputs.
