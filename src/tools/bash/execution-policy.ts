@@ -289,6 +289,12 @@ export async function evaluateShellExecution(
       && !capabilityAllowsSegment(evaluation.parsedSegments[index] ?? []))) {
     return { ...evaluation, capabilityRefusal: 'CAPABILITY_DENIED: Git operation is outside the granted git-local capability (git add and git commit only). Read existing content with git show and apply workspace edits through the granted file tools. Checkout, restore, reset and publication require separate approval.' };
   }
+  if (evaluation.action === 'ask' && withoutPrompt) {
+    // An unparseable/unsupported command still stays refused. In dontAsk,
+    // requesting a nonexistent terminal is not a recovery path: give the
+    // agent an ordinary tool error so it can simplify its next command.
+    return { ...evaluation, capabilityRefusal: `CAPABILITY_DENIED: ${evaluation.reason}. No command was executed. Use simpler commands within the explicitly granted capabilities; do not change HOME, trust or permissions to bypass this refusal.` };
+  }
   return evaluation;
 }
 

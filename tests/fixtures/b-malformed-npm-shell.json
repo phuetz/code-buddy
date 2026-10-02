@@ -1,0 +1,3 @@
+{
+  "command": "cd WORKSPACE_PLACEHOLDER && npm view undici versions --json 2>&1 | grep -E '\"minimum':|\"maximum\"' || echo \"No output\""
+}
