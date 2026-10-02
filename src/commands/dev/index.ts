@@ -11,6 +11,7 @@
 
 import type { Command } from 'commander';
 import type { CodeBuddyAgent } from '../../agent/codebuddy-agent.js';
+import { PROVIDER_SETUP_MESSAGE } from '../../utils/provider-prerequisites.js';
 import { logger } from '../../utils/logger.js';
 
 /** Create an agent through the shared OAuth/local/API provider resolver. */
@@ -22,7 +23,7 @@ async function createAgent() {
   const provider = resolveCommandProvider();
 
   if (!provider) {
-    logger.error('No provider found. Run `buddy login` (recommended) or start local Ollama.');
+    logger.error(PROVIDER_SETUP_MESSAGE);
     process.exit(1);
   }
 

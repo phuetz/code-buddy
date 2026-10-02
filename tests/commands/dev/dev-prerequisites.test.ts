@@ -35,7 +35,7 @@ describe('dev without a configured provider', () => {
     registerDevCommands(program);
     await expect(program.parseAsync(['node', 'buddy', 'dev', ...args])).rejects.toThrow('exit requested');
     expect(state.agentImports).toBe(0);
-    expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/buddy login.*Ollama/));
+    expect(logger.error).toHaveBeenCalledWith(expect.stringMatching(/buddy login.*Ollama.*API key/));
     if (args[0] === 'explain') expect(state.refresh).toHaveBeenCalledWith({ backgroundIndexing: false });
   });
 });
