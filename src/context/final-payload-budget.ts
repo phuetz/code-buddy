@@ -23,8 +23,8 @@ export function estimateFinalPayloadTokens(payload: Pick<OpenAiChatPayload, 'mes
     + payload.messages.length * 16;
 }
 
-export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: number, scope: PayloadRecoveryScope) {
-  const outputTokens = Math.max(1, Math.min(payload.max_tokens ?? payload.max_completion_tokens ?? 4096, Math.floor(contextWindow / 4)));
+export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: number, scope: PayloadRecoveryScope, maxOutputTokens = contextWindow) {
+  const outputTokens = Math.max(1, Math.min(payload.max_tokens ?? payload.max_completion_tokens ?? 4096, maxOutputTokens, contextWindow));
   const safetyTokens = 512;
   const inputBudget = contextWindow - outputTokens - safetyTokens;
   const next = structuredClone(payload);

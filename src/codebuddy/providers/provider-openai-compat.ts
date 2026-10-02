@@ -744,8 +744,8 @@ export class OpenAICompatProvider implements Provider {
    * and then loads the model at its full declared window (262 144 tokens for
    * qwen3), so `CODEBUDDY_MAX_CONTEXT` never reached the server. For Ollama the
    * already-built payload is sent to the native `/api/chat` instead, carrying
-   * the resolved context window; every other provider keeps the SDK call, byte
-   * for byte. The caller sees the same OpenAI shapes either way.
+   * the resolved context window. Text payloads are bounded after the hooks;
+   * other providers use the SDK with the same response shapes.
    */
   private async createChatCompletion(
     payload: ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming,
@@ -755,8 +755,9 @@ export class OpenAICompatProvider implements Provider {
     let openAiPayload = payload as unknown as OpenAiChatPayload;
     const hasParts = (openAiPayload.messages as Array<{ content?: unknown }>)?.some((m) => Array.isArray(m?.content));
     if (!hasParts) {
-      const window = getModelToolConfig(openAiPayload.model).contextWindow ?? 32768;
-      const budget = budgetFinalPayload(openAiPayload, window, scope ?? { workDir: process.cwd(), sessionId: this.payloadScopeId });
+      const config = getModelToolConfig(openAiPayload.model);
+      const window = config.contextWindow ?? 32768;
+      const budget = budgetFinalPayload(openAiPayload, window, scope ?? { workDir: process.cwd(), sessionId: this.payloadScopeId }, config.maxOutputTokens);
       openAiPayload = budget.payload;
       payload = openAiPayload as unknown as typeof payload;
       const profile = { model: openAiPayload.model, contextWindow: window, outputReserveTokens: budget.outputTokens,

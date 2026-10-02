@@ -62,3 +62,11 @@ describe('payload final enregistré de B, avec injections et schémas', () => {
     expect((seen.messages as Record<string, unknown>[]).findLast(message => message.role === 'user')?.content).toBe(input.messages.findLast(message => message.role === 'user')?.content);
   });
 });
+
+it('conserve une grande sortie cloud autorisée par le profil du modèle', async () => {
+  const { budgetFinalPayload } = await import('../../../src/context/final-payload-budget.js');
+  const payload = { model: 'fixture-cloud', messages: [{ role: 'user', content: 'mission' }], max_tokens: 98304 };
+  const budget = budgetFinalPayload(payload, 131072, { workDir: process.cwd(), sessionId: 'cloud-output' }, 98304);
+  expect(budget.outputTokens).toBe(98304);
+  expect(budget.inputTokens + budget.outputTokens + budget.safetyTokens).toBeLessThanOrEqual(131072);
+});
