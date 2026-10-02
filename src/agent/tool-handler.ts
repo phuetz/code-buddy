@@ -1487,7 +1487,8 @@ export class ToolHandler {
       for (const file of affected) {
         await this.executeLifecycleHooks('post-edit', { file, content: '', output: result.output });
       }
-      return result;
+      const { appendEditSyntaxDiagnostics } = await import('../tools/edit-syntax-diagnostics.js');
+      return appendEditSyntaxDiagnostics(result, affected);
     }
 
     // Handle file-modifying tools with checkpoints and hooks
@@ -1518,7 +1519,8 @@ export class ToolHandler {
         output: result.output,
       });
 
-      return result;
+      const { appendEditSyntaxDiagnostics } = await import('../tools/edit-syntax-diagnostics.js');
+      return appendEditSyntaxDiagnostics(result, [filePath]);
     }
 
     // Non-file-modifying tools execute directly through registry
