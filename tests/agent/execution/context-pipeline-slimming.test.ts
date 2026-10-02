@@ -62,6 +62,23 @@ describe('prepareTurnMessages tool-output slimming', () => {
     vi.clearAllMocks();
   });
 
+  it('compresse la pensée ancienne avant les observations et conserve la pensée du tour courant', () => {
+    const manager = thresholdManager(2500);
+    // Count native thinking as the real ContextManager does.
+    manager.shouldAutoCompact = messages => messages.reduce((total, message) =>
+      total + String(message.content ?? '').length + (message.ollama_thinking?.length ?? 0), 0) > 2500;
+    const observation = 'Verified dependency finding. '.repeat(30);
+    const messages = [
+      { ...call('old'), ollama_thinking: 'Old deliberation. '.repeat(1000) }, result('old', observation),
+      { ...call('recent'), ollama_thinking: 'Current reasoning must reach Ollama unchanged.' }, result('recent', 'next read'),
+    ];
+    const prepared = prepareTurnMessages(manager, messages);
+    expect(prepared.find(message => message.tool_call_id === 'old')?.content).toBe(observation);
+    expect(prepared.find(message => message.role === 'assistant')?.ollama_thinking).toBeUndefined();
+    expect(prepared.at(-2)?.ollama_thinking).toBe(messages.at(-2)?.ollama_thinking);
+    expect(messages[0]?.ollama_thinking).toContain('Old deliberation.');
+  });
+
   it('slims oldest large results until under threshold without changing pair ids', () => {
     const manager = thresholdManager(250);
     const messages = [

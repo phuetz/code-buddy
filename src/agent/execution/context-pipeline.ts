@@ -119,6 +119,19 @@ export function slimToolResultsToFit(
   const latestIds = new Set(latestCall && 'tool_calls' in latestCall
     ? latestCall.tool_calls?.map(call => call.id) ?? [] : []);
 
+  // Completed reasoning can dwarf the evidence it produced. Under pressure,
+  // compact that reasoning before destroying tool observations. The current
+  // call group still needs its exact native thinking on the next Ollama turn.
+  for (let index = 0; index < messages.length; index++) {
+    const source = messages[index];
+    if (source?.role !== 'assistant' || source === latestCall || !source.ollama_thinking) continue;
+    if (!result) result = [...messages];
+    const compacted = { ...source };
+    delete compacted.ollama_thinking;
+    result[index] = compacted;
+    if (!contextThresholdExceeded(contextManager, result)) return result;
+  }
+
   for (let index = 0; index < messages.length; index++) {
     const source = (result ?? messages)[index];
     if (

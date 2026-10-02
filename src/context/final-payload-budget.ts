@@ -60,6 +60,21 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
   const recentMessages = new Set(next.messages.filter(message => message === recentCall
     || (message.role === 'tool' && recentIds.has(message.tool_call_id))));
 
+  // Schemas and transport framing can trigger pressure even when the earlier
+  // context pass fitted. Retire completed native reasoning before evicting
+  // its findings; preserve the current tool round's thinking byte for byte.
+  let afterThinkingTokens = estimateFinalPayloadTokens(next);
+  for (const message of next.messages) {
+    if (afterThinkingTokens <= inputBudget) break;
+    if (message.role === 'assistant' && !recentMessages.has(message) && message.ollama_thinking) {
+      delete message.ollama_thinking;
+      afterThinkingTokens = estimateFinalPayloadTokens(next);
+    }
+  }
+  if (afterThinkingTokens <= inputBudget) {
+    return { payload: next, beforeTokens, inputTokens: afterThinkingTokens, outputTokens, safetyTokens, identifier };
+  }
+
   // Keep protocol envelopes/IDs intact; only summarize older observations.
   for (const message of next.messages) {
     if (!recentMessages.has(message) && message.role === 'tool' && typeof message.content === 'string' && message.content.length > 2400) {
