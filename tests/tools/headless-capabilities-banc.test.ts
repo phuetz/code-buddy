@@ -31,6 +31,9 @@ describe.sequential('capacité headless accordée par opérateur', () => {
     expect((await evaluateShellExecution('npm --version', cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('npm audit --json', cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('npm view undici@6.29.0 dependencies', cwd)).action).toBe('sandbox');
+    expect((await evaluateShellExecution('npm ls undici --json', cwd)).action).toBe('sandbox');
+    expect((await evaluateShellExecution('node -e "console.log(1)"\necho metadata\nnpm ls undici', cwd)).action).toBe('sandbox');
+    expect((await evaluateShellExecution('npm audit --json\ncurl https://example.invalid', cwd)).action).not.toBe('sandbox');
     expect((await evaluateShellExecution('npm view undici --registry=https://example.invalid', cwd)).action).not.toBe('sandbox');
     const recordedAnalysis = `npm audit --json > "$TMPDIR/audit.json"; python3 -c "\nimport json\nprint('audit')\n"`;
     expect((await evaluateShellExecution(recordedAnalysis, cwd)).action).toBe('sandbox');

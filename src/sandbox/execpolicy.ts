@@ -111,6 +111,8 @@ export interface ShellPolicyEvaluation extends PolicyEvaluation {
   parsedSegments: string[][];
   segmentEvaluations: PolicyEvaluation[];
   complex: boolean;
+  /** Parsed command sequence with no substitution or uncertain syntax. */
+  simpleSequence?: boolean;
   approvalKey: string;
 }
 
@@ -765,6 +767,7 @@ export class ExecPolicy extends EventEmitter {
       parsedSegments,
       segmentEvaluations,
       complex,
+      simpleSequence: parsed.warnings.length === 0 && !this.hasComplexShellSyntax(shellCommand, true),
       approvalKey: this.buildApprovalKey(shellCommand, workDir, parsedSegments),
     };
     this.recordAudit(result);
@@ -1001,7 +1004,7 @@ export class ExecPolicy extends EventEmitter {
   }
 
   /** Detect substitutions/control structures that must never inherit a broad allow. */
-  private hasComplexShellSyntax(command: string): boolean {
+  private hasComplexShellSyntax(command: string, ignoreLineSeparators = false): boolean {
     let quote: 'none' | 'single' | 'double' = 'none';
     let escaped = false;
     for (let i = 0; i < command.length; i += 1) {
@@ -1029,7 +1032,7 @@ export class ExecPolicy extends EventEmitter {
       if ((char === '<' || char === '>') && next === '(') return true;
       if (char === '<' && next === '<') return true;
       // A quoted newline is an interpreter argument, not shell control syntax.
-      if (quote === 'none' && (char === '\n' || char === '\r')) return true;
+      if (!ignoreLineSeparators && quote === 'none' && (char === '\n' || char === '\r')) return true;
     }
     return quote !== 'none';
   }

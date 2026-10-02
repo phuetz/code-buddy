@@ -29,9 +29,9 @@ const powershellConfiguration: ShellConfiguration = {
 };
 
 describe('getShellToolDescription', () => {
-  it('garde le texte bash historique identique à l’octet sur un hôte POSIX', () => {
+  it('décrit bash et les temporaires persistants de session sur un hôte POSIX', () => {
     expect(getShellToolDescription(bashConfiguration)).toBe(
-      'Execute a bash command. Prefer it to check facts and state you can verify (git status, test output, file existence, exit codes) rather than assuming.',
+      'Execute a bash command. Prefer it to check facts and state you can verify (git status, test output, file existence, exit codes) rather than assuming. Use "$TMPDIR" for files shared between calls; /tmp may be reset by the sandbox.',
     );
   });
 

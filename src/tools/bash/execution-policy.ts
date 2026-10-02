@@ -404,7 +404,7 @@ export async function executeInWorkspaceSandbox(
 
   const grants = shellCapabilities();
   const evaluation = await evaluateShellExecution(command, cwd);
-  if (grants.has('git-local') && evaluation.action === 'sandbox' && !evaluation.complex
+  if (grants.has('git-local') && evaluation.action === 'sandbox' && (!evaluation.complex || evaluation.simpleSequence)
     && evaluation.parsedSegments.length > 0
     && evaluation.parsedSegments.every(argv => argv[0] === 'git' && capabilityAllowsSegment(argv, grants))) {
     const runtime = resolveWorkspaceRuntime(await getWorkspaceRoot(cwd));

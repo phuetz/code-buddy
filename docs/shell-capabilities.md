@@ -11,7 +11,8 @@ La variable opérateur `CODEBUDDY_SHELL_CAPABILITIES` accepte les mêmes noms.
 Les refus explicites et les règles personnalisées restent prioritaires.
 
 - `tests` autorise les routines npm de tests, compilation et audit, ainsi que
-  la consultation de sa version. Le code du projet s’exécute dans le sandbox.
+  la consultation de sa version et `npm ls|list|explain`. Chaque segment des
+  séquences ordinaires est vérifié, y compris quand une ligne les sépare. Le code du projet s’exécute dans le sandbox.
 - `git-local` autorise `git add` et `git commit` dans le dépôt courant. Le
   sandbox garde les configurations, hooks et références distantes en lecture
   seule. Les commandes de publication et de réécriture restent contrôlées.

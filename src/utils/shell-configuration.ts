@@ -65,7 +65,7 @@ const SHELL_DISPLAY_NAMES: Record<ShellType, string> = {
  * Model-facing description for the `bash` tool, derived from the shell that
  * actually executes commands. The model picks its command syntax from this
  * text, so a PowerShell host must not advertise bash (gemini-cli pattern).
- * The bash wording is the historical text, kept byte-identical on POSIX.
+ * The POSIX description also states the session temporary-file contract.
  */
 export function getShellToolDescription(
   configuration: ShellConfiguration = getShellConfiguration(),
@@ -73,7 +73,7 @@ export function getShellToolDescription(
   const factsSentence =
     'Prefer it to check facts and state you can verify (git status, test output, file existence, exit codes) rather than assuming.';
   if (configuration.shell === 'bash') {
-    return `Execute a bash command. ${factsSentence}`;
+    return `Execute a bash command. ${factsSentence} Use "$TMPDIR" for files shared between calls; /tmp may be reset by the sandbox.`;
   }
   const executableName =
     configuration.executable.split(/[\\/]/).pop() || configuration.executable;

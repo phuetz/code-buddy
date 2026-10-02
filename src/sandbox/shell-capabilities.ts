@@ -16,6 +16,9 @@ export function capabilityAllowsSegment(argv: string[], capabilities = shellCapa
     return ['add', 'commit'].includes(operation ?? '') && !args.some(arg => /^(?:--amend|--config-env|--exec-path|--git-dir|--work-tree|--output)(?:=|$)/.test(arg));
   }
   if (command !== 'npm') return false;
+  if (capabilities.has('tests') && ['ls', 'list', 'explain'].includes(operation ?? '')
+    && args.every(arg => ['--json', '--all'].includes(arg) || /^--depth=\d+$/.test(arg)
+      || /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(arg))) return true;
   if (capabilities.has('tests') && (['--version', '-v', 'test'].includes(operation ?? '')
     || (operation === 'run' && /^(?:test|build|lint|typecheck|check|verify|audit)(?:[-:]|$)/.test(args[0] ?? '')))) return true;
   if (!capabilities.has('npm-registry')) return false;
@@ -28,7 +31,7 @@ export function capabilityAllowsSegment(argv: string[], capabilities = shellCapa
 }
 
 export function scopedCapabilityAllows(evaluation: ShellPolicyEvaluation): boolean {
-  if (evaluation.action === 'deny' || evaluation.complex) return false;
+  if (evaluation.action === 'deny' || (evaluation.complex && !evaluation.simpleSequence)) return false;
   const capabilities = shellCapabilities();
   return evaluation.segmentEvaluations.length > 0 && evaluation.segmentEvaluations.every((segment, index) =>
     segment.action === 'allow' || segment.action === 'sandbox'
