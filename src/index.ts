@@ -2235,17 +2235,11 @@ program
         cli.error(`Confined shell capabilities: ${options.shellCapabilities}`);
       }
 
-      // Handle --add-dir: grant additional writable directories to sandbox
+      // Explicit directory grants apply to both file tools and the shell.
       if (options.addDir && options.addDir.length > 0) {
-        try {
-          const { getSandboxManager } = await import("./security/sandbox.js");
-          const sandboxManager = getSandboxManager();
-          for (const dir of options.addDir) {
-            sandboxManager.allowPath(dir);
-          }
-        } catch (_err) {
-          // Sandbox manager may not be initialized; dirs already passed to workspace isolation
-        }
+        const { grantAdditionalDirectories } = await import('./cli/additional-directories.js');
+        const release = grantAdditionalDirectories(options.addDir);
+        process.once('exit', release);
         cli.error(`Writable directories added: ${options.addDir.join(', ')}`);
       }
 

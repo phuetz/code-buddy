@@ -33,6 +33,8 @@ vi.mock('os', async (importOriginal) => {
   return { ...actual, homedir: () => isolatedHome };
 });
 
+import { initializeWorkspaceIsolation, resetWorkspaceIsolation } from '../../src/workspace/workspace-isolation.js';
+import { grantAdditionalDirectories } from '../../src/cli/additional-directories.js';
 import { ToolHandler } from '../../src/agent/tool-handler.js';
 import {
   getTrustFolderManager,
@@ -116,6 +118,25 @@ describe('ToolHandler trust gate — read-only skills exception', () => {
     expect(result.error ?? '').not.toContain(TRUST_ERROR);
     expect(result.success).toBe(true);
     expect(result.output ?? '').toContain('Trust test skill');
+  });
+
+  it('reads a mission document granted by --add-dir and blocks it after release', async () => {
+    const documents = path.join(isolatedHome, 'mission-documents');
+    fs.mkdirSync(documents, { recursive: true });
+    const report = path.join(documents, 'RAPPORT.md');
+    fs.writeFileSync(report, 'Mission document supplied by the operator');
+    const handler = makeHandler();
+    const call = { id: 'mission-document', type: 'function' as const,
+      function: { name: 'view_file', arguments: JSON.stringify({ path: report }) } };
+    expect((await handler.executeTool(call)).error).toContain(TRUST_ERROR);
+    initializeWorkspaceIsolation({ directory: process.cwd(), additionalPaths: [documents] });
+    const release = grantAdditionalDirectories([documents]);
+    try {
+      const result = await handler.executeTool(call);
+      expect(result.success, result.error).toBe(true);
+      expect(result.output).toContain('Mission document supplied by the operator');
+    } finally { release(); resetWorkspaceIsolation(); }
+    expect((await handler.executeTool(call)).error).toContain(TRUST_ERROR);
   });
 
   it('STILL BLOCKS a write tool (create_file) targeting the skills dir', async () => {
