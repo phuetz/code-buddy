@@ -15,7 +15,7 @@ Les refus explicites et les règles personnalisées restent prioritaires.
 - `git-local` autorise `git add` et `git commit` dans le dépôt courant. Le
   sandbox garde les configurations, hooks et références distantes en lecture
   seule. Les commandes de publication et de réécriture restent contrôlées.
-- `npm-registry` donne accès à `npm audit`, `npm view` (versions) et
+- `npm-registry` donne accès à `npm audit`, `npm view` (versions et champs de métadonnées) et
   `npm install|update --package-lock-only`. Une passerelle Unix lance le npm
   de l’installation Node dans un répertoire privé, avec registre fixe,
   scripts désactivés, sans configuration utilisateur ni identifiants. Les

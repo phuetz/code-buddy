@@ -22,7 +22,7 @@ export function capabilityAllowsSegment(argv: string[], capabilities = shellCapa
   if (operation === 'audit') return args.every(arg => ['--json', '--omit=dev', '--production'].includes(arg));
   if (operation === 'view') return args.length >= 1 && args.length <= 3
     && /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(args[0] ?? '')
-    && args.slice(1).every(arg => ['version', 'versions', '--json'].includes(arg));
+    && args.slice(1).every(arg => arg === '--json' || /^[a-z][a-z0-9_.]*$/i.test(arg));
   return ['install', 'update'].includes(operation ?? '') && args.includes('--package-lock-only')
     && args.every(arg => ['--package-lock-only', '--ignore-scripts', '--no-fund', '--no-audit'].includes(arg));
 }

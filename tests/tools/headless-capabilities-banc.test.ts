@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { evaluateShellExecution, executeInWorkspaceSandbox } from '../../src/tools/bash/execution-policy.js';
@@ -29,6 +30,8 @@ describe.sequential('capacité headless accordée par opérateur', () => {
     const cwd = fixture();
     expect((await evaluateShellExecution('npm --version', cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('npm audit --json', cwd)).action).toBe('sandbox');
+    expect((await evaluateShellExecution('npm view undici@6.29.0 dependencies', cwd)).action).toBe('sandbox');
+    expect((await evaluateShellExecution('npm view undici --registry=https://example.invalid', cwd)).action).not.toBe('sandbox');
     const recordedAnalysis = `npm audit --json > "$TMPDIR/audit.json"; python3 -c "\nimport json\nprint('audit')\n"`;
     expect((await evaluateShellExecution(recordedAnalysis, cwd)).action).toBe('sandbox');
     expect((await evaluateShellExecution('npm audit --json; node -e "$(cat forbidden)"', cwd)).action).not.toBe('sandbox');
@@ -48,8 +51,14 @@ describe.sequential('capacité headless accordée par opérateur', () => {
       expect(result.result?.exitCode, result.result?.stderr + '\n' + result.result?.stdout).toBe(0);
     }
     expect(execFileSync('git', ['log', '-1', '--format=%s'], { cwd, encoding: 'utf8' }).trim()).toBe('fixture');
-    const network = await executeInWorkspaceSandbox('node -e "fetch(\'https://example.invalid\').catch(() => process.exit(42))"', cwd, 5000);
-    expect(network.result?.exitCode).toBe(42);
+    const server = http.createServer((_request, response) => response.end('host-network'));
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const endpoint = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+      expect(await (await fetch(endpoint)).text()).toBe('host-network');
+      const network = await executeInWorkspaceSandbox(`node -e "fetch('${endpoint}').then(() => process.exit(0)).catch(() => process.exit(42))"`, cwd, 5000);
+      expect(network.result?.exitCode).toBe(42);
+    } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
   }, 120000);
 });
 
