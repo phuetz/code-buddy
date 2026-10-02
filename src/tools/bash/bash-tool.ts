@@ -285,20 +285,20 @@ export class BashTool implements Disposable {
         }
         if (aborted) {
           resolve({
-            stdout: stdout.trim(),
+            stdout,
             stderr: 'Command aborted by user',
             exitCode: 130,
           });
         } else if (timedOut) {
           resolve({
-            stdout: stdout.trim(),
+            stdout,
             stderr: 'Command timed out (graceful termination attempted)',
             exitCode: 124
           });
         } else {
           resolve({
-            stdout: stdout.trim(),
-            stderr: stderr.trim(),
+            stdout,
+            stderr,
             exitCode: exitCode ?? 1
           });
         }
@@ -595,11 +595,11 @@ export class BashTool implements Disposable {
       }
 
       const output = result.stdout + (result.stderr ? `\nSTDERR: ${result.stderr}` : '');
-      const trimmedOutput = output.trim() || 'Command executed successfully (no output)';
+      const toolOutput = output || 'Command executed successfully (no output)';
 
       // Check if this looks like test output and enrich it
-      if (isLikelyTestOutput(trimmedOutput)) {
-        const parsed = parseTestOutput(trimmedOutput);
+      if (isLikelyTestOutput(toolOutput)) {
+        const parsed = parseTestOutput(toolOutput);
         if (parsed.isTestOutput && parsed.data) {
           // Return structured test data as JSON for the renderer
           return {
@@ -612,7 +612,7 @@ export class BashTool implements Disposable {
 
       return {
         success: true,
-        output: trimmedOutput,
+        output: toolOutput,
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -653,7 +653,7 @@ export class BashTool implements Disposable {
     }
 
     const combined = stdout + (stderr ? `\nSTDERR: ${stderr}` : '');
-    const output = combined.trim() || 'Command executed successfully (no output)';
+    const output = combined || 'Command executed successfully (no output)';
     if (isLikelyTestOutput(output)) {
       const parsed = parseTestOutput(output);
       if (parsed.isTestOutput && parsed.data) {
@@ -777,11 +777,11 @@ export class BashTool implements Disposable {
       proc.on('close', (code) => {
         clearTimeout(timer);
         if (timedOut) {
-          resolve({ success: false, error: 'Command timed out', output: stdout.trim() });
+          resolve({ success: false, error: 'Command timed out', output: stdout });
         } else if (code === 0) {
-          resolve({ success: true, output: stdout.trim() || 'Done' });
+          resolve({ success: true, output: stdout || 'Done' });
         } else {
-          resolve({ success: false, error: stderr.trim() || `Exit code ${code}`, output: stdout.trim() });
+          resolve({ success: false, error: stderr.trim() || `Exit code ${code}`, output: stdout });
         }
       });
 

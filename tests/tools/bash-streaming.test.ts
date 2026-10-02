@@ -61,6 +61,43 @@ describe('BashTool - Streaming Execution', () => {
     expect(result.value.error).toContain('STREAM_STDERR');
   });
 
+  it.each(['buffered', 'streaming'] as const)('preserves exact sandbox stdout in %s observations', async mode => {
+    for (const stdout of ['  sample \t\n', ' \t\n', '\nline\n\n']) {
+      vi.spyOn(executionPolicy, 'executeInWorkspaceSandbox').mockResolvedValue({
+        available: true,
+        result: { stdout, stderr: '', exitCode: 0, duration: 1, timedOut: false,
+          backend: 'landlock', sandboxed: true },
+      });
+      if (mode === 'buffered') {
+        const result = await bash.execute('echo fixture');
+        expect(result.success).toBe(true);
+        expect(result.output).toBe(stdout);
+      } else {
+        const gen = bash.executeStreaming('echo fixture');
+        let result = await gen.next();
+        while (!result.done) result = await gen.next();
+        expect(result.value.success).toBe(true);
+        expect(result.value.output).toBe(stdout);
+      }
+    }
+  });
+
+  (process.platform === 'win32' ? it.skip : it)('preserves whitespace from a real direct buffered process', async () => {
+    vi.spyOn(executionPolicy, 'executeInWorkspaceSandbox').mockResolvedValue({
+      available: false, reason: 'Workspace sandbox unavailable (direct output test)',
+    });
+    const result = await bash.execute("printf '  sample \\t\\n'");
+    expect(result.success).toBe(true);
+    expect(result.output).toBe('  sample \t\n');
+  });
+
+  it.each([0, 1])('preserves stdout from shell-free execution with exit %s', async code => {
+    const result = await bash.shellFreeExec([process.execPath, '-e',
+      `process.stdout.write('  sample \\t\\n'); process.exitCode = ${code}`]);
+    expect(result.success).toBe(code === 0);
+    expect(result.output).toBe('  sample \t\n');
+  });
+
   it('should return error result for blocked commands', async () => {
     const gen = bash.executeStreaming('rm -rf /', 10000);
     const result = await gen.next();

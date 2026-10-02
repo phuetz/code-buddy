@@ -110,7 +110,7 @@ export async function* executeStreaming(
         if (stdout) yield stdout;
         if (stderr) yield stderr;
         return exitCode === 0
-          ? { success: true, output: (stdout || stderr || 'Command executed successfully (no output)').trim() }
+          ? { success: true, output: stdout || stderr || 'Command executed successfully (no output)' }
           : {
               success: false,
               error: `${(stderr || stdout || `Command exited with code ${exitCode}`).trim()}\n[sandbox:${backend}; exit code ${exitCode}]`,
