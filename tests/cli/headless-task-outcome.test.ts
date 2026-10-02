@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { resolveHeadlessTurnExitCode } from '../../src/cli/headless-options.js';
+import { evaluateHeadlessTaskOutcome } from '../../src/cli/headless-task-outcome.js';
 
 const result = (name: string, command: string, success: boolean) => ({
   type: 'tool_result', content: success ? 'OK' : 'Tests failed',
   toolCall: { id: 'call', function: { name, arguments: JSON.stringify({ command }) } },
   toolResult: { success },
+});
+
+it('un refus terminal après une édition reste non validé avec sa cause', () => {
+  const entries = [result('str_replace_editor', 'str_replace', true), {
+    ...result('str_replace_editor', 'str_replace', false),
+    content: 'Approval requires an interactive terminal or configured remote approval channel',
+    toolResult: { success: false, metadata: { failure: { code: 'APPROVAL_UNAVAILABLE', terminal: true } } },
+  }];
+  expect(evaluateHeadlessTaskOutcome('Fix the requested files', entries)).toMatchObject({
+    status: 'unverified', success: false, exitCode: 1, reasons: ['approval_unavailable'],
+  });
 });
 
 describe('headless task evidence', () => {

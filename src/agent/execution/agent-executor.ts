@@ -994,27 +994,38 @@ export class AgentExecutor {
     relationshipSafety = false,
     surface?: string,
     introspectionText?: string,
+    onEntry?: (entry: ChatEntry) => void,
   ): Promise<ChatEntry[]> {
     const initialHistoryLength = history.length;
-    for await (const event of this.runMeasuredTurn(
-      message,
-      history,
-      messages,
-      null,
-      turnStartedAt,
-      transientContext,
-      relationshipSafety,
-      surface,
-      introspectionText,
-    )) {
-      if (event.type === 'ask_user' && event.askUser?.question.trim()) {
-        const content = sanitizeAssistantOutput(event.askUser.question.trim());
-        history.push({ type: 'assistant', content, timestamp: new Date() });
-        messages.push({ role: 'assistant', content });
+    let emittedLength = initialHistoryLength;
+    const emitEntries = () => {
+      while (emittedLength < history.length) {
+        const entry = history[emittedLength++]!;
+        onEntry?.(entry);
       }
-      // Other entries are pushed by runTurnLoop itself. Progress-only events
-      // have no durable sequential representation and are intentionally dropped.
-    }
+    };
+    try {
+      for await (const event of this.runMeasuredTurn(
+        message,
+        history,
+        messages,
+        null,
+        turnStartedAt,
+        transientContext,
+        relationshipSafety,
+        surface,
+        introspectionText,
+      )) {
+        if (event.type === 'ask_user' && event.askUser?.question.trim()) {
+          const content = sanitizeAssistantOutput(event.askUser.question.trim());
+          history.push({ type: 'assistant', content, timestamp: new Date() });
+          messages.push({ role: 'assistant', content });
+        }
+        emitEntries();
+        // Other entries are pushed by runTurnLoop itself. Progress-only events
+        // have no durable sequential representation and are intentionally dropped.
+      }
+    } finally { emitEntries(); }
     return history.slice(initialHistoryLength);
   }
 
@@ -2074,6 +2085,7 @@ export class AgentExecutor {
           );
 
           let terminalCapabilityFailure = false;
+          let terminalCapabilityCause = '';
           const completedToolIds = new Set<string>();
           toolExecution: for (const batch of executionBatches) {
             // Compaction mutates shared transcript state, so keep this preflight
@@ -2461,6 +2473,7 @@ export class AgentExecutor {
               yield { type: 'run_event', runEvent: { runId: this.deps.toolHandler.getRunId?.() ?? '', eventType: 'capability_blocked',
                 data: { code: failure.code, toolCallId: toolCall.id } } };
               terminalCapabilityFailure = true;
+              terminalCapabilityCause = result.error ?? failure.code;
               continue;
             }
 
@@ -2564,6 +2577,10 @@ export class AgentExecutor {
               messages.push({ role: 'tool', content: skippedReason, tool_call_id: toolCall.id, name: toolCall.function.name } as CodeBuddyMessage);
               yield { type: 'tool_result', toolCall, toolResult };
             }
+            const content = `Execution blocked: ${terminalCapabilityCause}`;
+            history.push({ type: 'assistant', content, timestamp: new Date() });
+            messages.push({ role: 'assistant', content });
+            yield { type: 'content', content };
             yield { type: 'done' };
             return;
           }

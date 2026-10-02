@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentExecutor, type ExecutorConfig, type ExecutorDependencies } from '../../../src/agent/execution/agent-executor.js';
-import type { StreamingChunk } from '../../../src/agent/types.js';
+import type { ChatEntry, StreamingChunk } from '../../../src/agent/types.js';
 import type { CodeBuddyMessage } from '../../../src/codebuddy/client.js';
 import { getGlobalEventBus } from '../../../src/events/event-bus.js';
 import { wireDomainEventBridge } from '../../../src/sensory/domain-event-bridge.js';
@@ -117,6 +117,34 @@ describe('AgentExecutor tool loop guard (P1)', () => {
   });
   afterEach(() => {
     bus.off(listenerId);
+  });
+
+  it('publie les entrées durables avant la fin du tour sans les dupliquer', async () => {
+    const deps = createDeps();
+    const executor = new AgentExecutor(deps, createConfig());
+    const call = toolCall('view_file', { path: 'src/a.ts' }, 1);
+    let round = 0;
+    let release!: () => void;
+    let reached!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const nextRequest = new Promise<void>(resolve => { reached = resolve; });
+    (deps.client.chatStream as unknown as ReturnType<typeof vi.fn>).mockImplementation(async function* () {
+      round += 1;
+      if (round === 2) { reached(); await gate; }
+      yield { choices: [{ delta: { content: round === 1 ? '' : 'final answer' } }] };
+    });
+    (deps.streamingHandler.getAccumulatedMessage as unknown as ReturnType<typeof vi.fn>)
+      .mockImplementation(() => ({ content: round === 1 ? '' : 'final answer', tool_calls: round === 1 ? [call] : undefined }));
+    const observed: ChatEntry[] = [];
+    const turn = executor.processUserMessage('Read src/a.ts', [], [], Date.now(), undefined, false, 'cli', undefined,
+      (entry: ChatEntry) => observed.push(entry));
+    await nextRequest;
+    try {
+      expect(observed.some(entry => entry.type === 'assistant' && entry.toolCalls?.[0]?.id === call.id)).toBe(true);
+      expect(observed.find(entry => entry.type === 'tool_result')?.content).toBe('export const answer = 42;');
+    } finally { release(); await turn; }
+    expect(observed.filter(entry => entry.type === 'tool_result')).toHaveLength(1);
+    expect(observed.filter(entry => entry.type === 'assistant' && entry.content === 'final answer')).toHaveLength(1);
   });
 
   it('streaming: 5 identical view_file calls inject exactly one guard message and one event', async () => {
@@ -340,6 +368,7 @@ describe('refus headless définitif du banc', () => {
       expect(execute).toHaveBeenCalledTimes(1);
       expect(chunks.filter(chunk => chunk.type === 'tool_result')).toHaveLength(1);
       expect(chunks.find(chunk => chunk.type === 'tool_result')?.toolResult?.error).toContain('Approval requires');
+      expect(chunks.filter(chunk => chunk.type === 'content').map(chunk => chunk.content).join('')).toContain('Approval requires an interactive terminal');
       expect(chunks.at(-1)?.type).toBe('done');
     } finally { vi.unstubAllEnvs(); }
   });

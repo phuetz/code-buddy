@@ -1349,7 +1349,15 @@ async function processPromptHeadless(
     }
 
     // Process the user message
-    const chatEntries = await agent.processUserMessage(prompt, { surface: 'cli' });
+    const { headlessMessage } = await import('./cli/headless-message.js');
+    const incrementalJson = ['stream-json', 'streaming'].includes(outputFormat.toLowerCase());
+    const chatEntries = await agent.processUserMessage(prompt, {
+      surface: 'cli',
+      ...(incrementalJson ? { onEntry: (entry: import('./agent/types.js').ChatEntry) => {
+        const message = headlessMessage(entry);
+        if (message) process.stdout.write(JSON.stringify(message) + '\n');
+      } } : {}),
+    });
     if (!sessionStore.isEphemeral()) {
       await agent.saveCurrentSession();
     }
@@ -1363,7 +1371,6 @@ async function processPromptHeadless(
         ? configuredTimeout : 15000;
       await runSessionEndFlush({
         chatHistory: chatEntries,
-        client: agent.getClient(),
         signal: AbortSignal.timeout(Math.min(flushTimeoutMs, 2_147_483_647)),
       });
     } catch (e) {
@@ -1383,49 +1390,10 @@ async function processPromptHeadless(
     }
 
     // Convert chat entries to OpenAI compatible message objects
-    const messages: ChatCompletionMessageParam[] = [];
-
-    for (const entry of chatEntries) {
-      switch (entry.type) {
-        case "user":
-          messages.push({
-            role: "user",
-            content: entry.content,
-          });
-          break;
-
-        case "assistant":
-          const assistantMessage: ChatCompletionMessageParam = {
-            role: "assistant",
-            content: entry.content,
-          };
-
-          // Add tool calls if present
-          if (entry.toolCalls && entry.toolCalls.length > 0) {
-            assistantMessage.tool_calls = entry.toolCalls.map((toolCall) => ({
-              id: toolCall.id,
-              type: "function",
-              function: {
-                name: toolCall.function.name,
-                arguments: toolCall.function.arguments,
-              },
-            }));
-          }
-
-          messages.push(assistantMessage);
-          break;
-
-        case "tool_result":
-          if (entry.toolCall) {
-            messages.push({
-              role: "tool",
-              tool_call_id: entry.toolCall.id,
-              content: entry.content,
-            });
-          }
-          break;
-      }
-    }
+    const messages: ChatCompletionMessageParam[] = chatEntries.flatMap(entry => {
+      const message = headlessMessage(entry);
+      return message ? [message] : [];
+    });
 
     // Extract the final assistant response directly from chatEntries. This is
     // the text used by every headless output mode and by the file flags.
@@ -1519,10 +1487,7 @@ async function processPromptHeadless(
         cli.stdout(resultText);
       }
     } else if (format === 'stream-json' || format === 'streaming') {
-      // Stream JSON: each message on its own line (NDJSON)
-      for (const message of messages) {
-        process.stdout.write(JSON.stringify(message) + '\n');
-      }
+      // Durable messages have already been emitted during the turn.
       // Emit a final summary event
       const summaryData: Record<string, unknown> = {
         type: 'summary',

@@ -540,7 +540,7 @@ describe('CodeBuddyAgent', () => {
       expect(messages[0].role).toBe('system');
     });
 
-    it('primes local runtime context before the first prompt is ready', async () => {
+    it('primes the default bounded local runtime context before the first prompt is ready', async () => {
       globalThis.fetch = jest.fn().mockImplementation(async (input: string | URL | Request) => {
         const url = String(input);
         if (url.endsWith('/api/show')) {
@@ -548,6 +548,11 @@ describe('CodeBuddyAgent', () => {
             ok: true,
             json: async () => ({ model_info: { 'x7.context_length': 131072 } }),
           } as Response;
+        }
+        if (url.endsWith('/api/ps')) {
+          return { ok: true, json: async () => ({ models: [{
+            name: 'x7-agent-local:latest', context_length: 131072,
+          }] }) } as Response;
         }
         return { ok: true, json: async () => ({ models: [] }) } as Response;
       }) as unknown as typeof fetch;
@@ -561,9 +566,9 @@ describe('CodeBuddyAgent', () => {
 
       const manager = (createContextManager as jest.Mock).mock.results.at(-1)?.value;
       expect(manager.updateConfig).toHaveBeenCalledWith({
-        maxContextTokens: 131072,
-        responseReserveTokens: 16384,
-        autoCompactThreshold: 131072,
+        maxContextTokens: 32768,
+        responseReserveTokens: 4096,
+        autoCompactThreshold: 32768,
       });
       const buildSystemPrompt = (PromptBuilder as jest.Mock).mock.results.at(-1)?.value.buildSystemPrompt;
       expect(buildSystemPrompt.mock.invocationCallOrder[0])

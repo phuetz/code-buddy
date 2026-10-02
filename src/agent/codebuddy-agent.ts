@@ -1383,6 +1383,8 @@ Look at the screenshot and find the element matching the user's intent. Output o
       surface?: string;
       /** Exact current user utterance when `message` contains a transport preamble. */
       introspectionText?: string;
+      /** Observe durable entries as they are produced, without changing the turn. */
+      onEntry?: (entry: ChatEntry) => void;
     } = {},
   ): Promise<ChatEntry[]> {
     const turnStartedAt = Date.now();
@@ -1417,6 +1419,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // Trim history to prevent memory bloat
     this.trimHistory();
 
+    options.onEntry?.(userEntry);
     const newEntries = await this.executor.processUserMessage(
       message,
       this.chatHistory,
@@ -1426,6 +1429,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
       options.relationshipSafety === true,
       options.surface,
       options.introspectionText,
+      ...(options.onEntry ? [options.onEntry] : []),
     );
 
     // Fire-and-forget Hermes-style post-session learning review (interactive only).

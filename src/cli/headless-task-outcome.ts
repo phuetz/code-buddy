@@ -176,11 +176,17 @@ export function evaluateHeadlessTaskOutcome(
     }
   }
   const reasons: string[] = [];
+  if (entries.some(entry => {
+    const failure = entry.toolResult?.metadata?.failure;
+    return failure && typeof failure === 'object'
+      && (failure as Record<string, unknown>).code === 'APPROVAL_UNAVAILABLE'
+      && (failure as Record<string, unknown>).terminal === true;
+  })) reasons.push('approval_unavailable');
   if (responseExitCode !== 0) reasons.push('response_failed');
   if (/Stopped by the loop guard|maximum (?:number of )?tool|read budget exhausted/i.test(entries.at(-1)?.content ?? '')) reasons.push('execution_stopped');
   if ([...checks.values()].some(check => !check.success && !(check.optionalRead && lastWrite > check.sequence))) reasons.push('verification_failed');
   if (requestsRepositoryAction(prompt) && actionTools.length === 0) reasons.push('no_action_executed');
-  const status = reasons.some(reason => reason !== 'no_action_executed') ? 'failed'
+  const status = reasons.some(reason => !['no_action_executed', 'approval_unavailable'].includes(reason)) ? 'failed'
     : reasons.length ? 'unverified' : 'success';
   return { status, success: status === 'success', exitCode: responseExitCode || (status === 'success' ? 0 : 1), reasons, actionTools,
     checks: [...checks.values()].map(({ tool, command, success, optionalRead, sequence }) => ({ tool, ...(command ? { command } : {}), success,
