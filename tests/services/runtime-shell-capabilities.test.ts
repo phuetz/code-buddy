@@ -52,3 +52,11 @@ it('les tests seuls refusent une option npm de portée avec les arguments autori
   expect(decision.capabilityRefusal).toContain('CAPABILITY_DENIED');
   expect(decision.capabilityRefusal).toContain('npm test --');
 });
+
+it('une option npm refusée ne transforme jamais le refus dur d’un autre segment en demande', async () => {
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'tests');
+  getPermissionModeManager().setMode('dontAsk');
+  const decision = await evaluateShellExecution('npm test --prefix=/other/project; rm -rf /', process.cwd());
+  expect(decision.action).toBe('deny');
+  expect(decision.capabilityRefusal).toBeUndefined();
+});

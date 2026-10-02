@@ -216,7 +216,7 @@ export async function evaluateShellExecution(
   const withoutPrompt = getPermissionModeManager().getMode() === 'dontAsk';
   // A routine's builtin sandbox classification must not bypass the narrower
   // explicit test grant (for example npm --prefix or --script-shell).
-  if (withoutPrompt && grants.has('tests')
+  if (evaluation.action !== 'deny' && withoutPrompt && grants.has('tests')
     && evaluation.segmentEvaluations.some((segment, index) =>
       segment.matchedRule?.id === 'builtin-pkg-routines'
       && evaluation.parsedSegments[index]?.[0] === 'npm'
