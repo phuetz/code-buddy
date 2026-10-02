@@ -259,7 +259,7 @@ export async function evaluateShellExecution(
     && evaluation.segmentEvaluations.some((segment, index) => segment.action === 'ask'
       && segment.matchedRule?.id === 'builtin-pkg-managers'
       && !capabilityAllowsSegment(evaluation.parsedSegments[index] ?? []))) {
-    return { ...evaluation, capabilityRefusal: 'CAPABILITY_DENIED: npm operation is outside the granted registry capability. Lock resolution: npm install --package-lock-only --ignore-scripts. Audit: npm audit --json. Full install and external sources require separate approval; do not change HOME or permissions.' };
+    return { ...evaluation, capabilityRefusal: 'CAPABILITY_DENIED: npm operation is outside the granted registry capability. Lock resolution: npm install --package-lock-only --ignore-scripts. Audit: npm audit --json. Full install and new external sources require separate approval; do not change HOME or permissions.' };
   }
   return evaluation;
 }

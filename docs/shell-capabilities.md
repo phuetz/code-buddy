@@ -22,7 +22,12 @@ Les refus explicites et les règles personnalisées restent prioritaires.
   unique de taille bornée dans `$TMPDIR`, sans écraser un fichier existant. Une passerelle Unix lance le npm
   de l’installation Node dans un répertoire privé, avec registre fixe,
   scripts désactivés, sans configuration utilisateur ni identifiants. Les
-  résolutions de lock refusent les sources Git, fichiers et URL externes.
+  résolutions de lock s’exécutent sans réseau, sans Git et sans le HOME de
+  l’opérateur. Seules des métadonnées demandées à npmjs.org alimentent leur
+  cache (une fois par paquet, volume et durée bornés). Les entrées Git/URL et
+  les liens de workspaces déjà verrouillés doivent rester identiques ; toute
+  création, modification ou suppression d’une entrée externe est refusée.
+  Les sources `file:`/`link:` restent interdites.
   L’audit conserve son JSON et son code de sortie, y compris les vulnérabilités.
   Ses workspaces acceptent des chemins relatifs et glob simples locaux ; les
   chemins absolus, traversées et expansions ambiguës sont refusés avant npm.

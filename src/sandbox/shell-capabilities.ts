@@ -20,7 +20,7 @@ export function shellCapabilitySnapshot() {
       ...(capabilities.has('git-local') ? ['git add', 'git commit (initial cd to this workspace allowed)'] : []),
       ...(capabilities.has('npm-registry') ? ['npm audit --json', 'npm view <package> <field> --json', 'npm pack <registry-package>', 'npm install --package-lock-only --ignore-scripts', 'npm update --package-lock-only --ignore-scripts'] : []),
     ],
-    constraints: 'Full npm install requires approval. Registry lock resolution refuses external Git/file/URL sources. Do not alter HOME, trust or permissions to bypass a refusal.',
+    constraints: 'Full npm install requires approval. Registry lock resolution is offline: existing Git/URL pins and workspace links stay unchanged; new external sources and file specs are refused. Do not alter HOME, trust or permissions to bypass a refusal.',
   };
 }
 
