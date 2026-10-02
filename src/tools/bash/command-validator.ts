@@ -19,7 +19,7 @@ import {
 import * as fs from 'node:fs';
 import { classifySecretPath, getHomeCredentialRoots, getHomeDirectories } from '../../security/secret-files.js';
 import { foldPathCase, isPathInside, pathForPlatform } from '../../security/path-comparison.js';
-import { parseShellCommand } from '../../security/bash-parser.js';
+import { parseBashCommand, parseShellCommand } from '../../security/bash-parser.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
 
@@ -201,9 +201,14 @@ export function validateCommand(command: string, shell?: string): { valid: boole
     };
   }
 
-  // Check for blocked patterns
+  // A complete native AST can prove that a quoted heredoc body is literal
+  // data. Backticks in that body (for example TypeScript documentation) are
+  // not shell substitutions. Missing/uncertain grammar keeps the raw checks.
+  const patternInput = parseBashCommand(command).policyInput ?? command;
+  // Check for blocked patterns; user denies and protected-path checks still
+  // inspect the original command, and outer commands remain in patternInput.
   for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(command)) {
+    if (pattern.test(patternInput)) {
       return {
         valid: false,
         reason: `Blocked command pattern detected: ${pattern.source}`
