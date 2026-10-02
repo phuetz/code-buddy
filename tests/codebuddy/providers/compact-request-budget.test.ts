@@ -107,3 +107,13 @@ describe('assembled compact request budget', () => {
     expect(tools(compactOllamaRequest(discovered))).toContain('apply_patch');
   });
 });
+
+it('defers duplicate editors for ordinary tasks but keeps discovery and an editor', () => {
+  WritePolicy.resetInstance();
+  const request = { model: 'fixture', stream: true, messages: [{ role: 'user', content: 'Explain the entry point, then rename its export.' }],
+    tools: ['view_file', 'str_replace_editor', 'apply_patch', 'tool_search'].map(name => ({ type: 'function', function: { name } })) };
+  const names = compactOllamaRequest(request).tools?.map(tool => (tool as { function: { name: string } }).function.name);
+  expect(names).toEqual(['view_file', 'str_replace_editor', 'tool_search']);
+  expect(request.tools).toHaveLength(4);
+  WritePolicy.resetInstance();
+});
