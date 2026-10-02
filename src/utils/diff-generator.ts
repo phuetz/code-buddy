@@ -1,3 +1,5 @@
+import { diff_match_patch } from 'diff-match-patch';
+
 /**
  * Shared diff generation utility
  *
@@ -50,159 +52,75 @@ const DEFAULT_OPTIONS: Required<DiffOptions> = {
  * Find all change regions between old and new content
  */
 function findChanges(oldLines: string[], newLines: string[]): DiffChange[] {
+  // Compare line identities instead of advancing both cursors together:
+  // inserting one line must not turn the unchanged suffix into a replacement.
+  const differ = new diff_match_patch();
+  const encoded = differ.diff_linesToChars_(
+    oldLines.map(line => line + '\n').join(''),
+    newLines.map(line => line + '\n').join(''),
+  );
+  const differences = differ.diff_main(encoded.chars1, encoded.chars2, false);
+  differ.diff_charsToLines_(differences, encoded.lineArray);
   const changes: DiffChange[] = [];
-  let i = 0;
-  let j = 0;
-
-  while (i < oldLines.length || j < newLines.length) {
-    // Skip matching lines
-    while (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
-      i++;
-      j++;
+  let oldPosition = 0;
+  let newPosition = 0;
+  let pending: DiffChange | undefined;
+  for (const [operation, text] of differences) {
+    const count = text.split('\n').length - 1;
+    if (operation === 0) {
+      if (pending) changes.push(pending);
+      pending = undefined;
+      oldPosition += count;
+      newPosition += count;
+      continue;
     }
-
-    if (i < oldLines.length || j < newLines.length) {
-      const changeStart = { old: i, new: j };
-
-      let oldEnd = i;
-      let newEnd = j;
-
-      // Find the end of this change block
-      const maxIter = oldLines.length + newLines.length + 10;
-      let iter = 0;
-      while ((oldEnd < oldLines.length || newEnd < newLines.length) && ++iter < maxIter) {
-        let matchFound = false;
-        let matchLength = 0;
-
-        // Look for matching lines to end the change block
-        for (let k = 0; k < Math.min(2, oldLines.length - oldEnd, newLines.length - newEnd); k++) {
-          if (
-            oldEnd + k < oldLines.length &&
-            newEnd + k < newLines.length &&
-            oldLines[oldEnd + k] === newLines[newEnd + k]
-          ) {
-            matchLength++;
-          } else {
-            break;
-          }
-        }
-
-        if (matchLength >= 2 || (oldEnd >= oldLines.length && newEnd >= newLines.length)) {
-          matchFound = true;
-        }
-
-        if (matchFound) {
-          break;
-        }
-
-        if (oldEnd < oldLines.length) oldEnd++;
-        if (newEnd < newLines.length) newEnd++;
-      }
-
-      changes.push({
-        oldStart: changeStart.old,
-        oldEnd: oldEnd,
-        newStart: changeStart.new,
-        newEnd: newEnd,
-      });
-
-      i = oldEnd;
-      j = newEnd;
-    }
+    pending ??= { oldStart: oldPosition, oldEnd: oldPosition, newStart: newPosition, newEnd: newPosition };
+    if (operation === -1) oldPosition += count;
+    else newPosition += count;
+    pending.oldEnd = oldPosition;
+    pending.newEnd = newPosition;
   }
-
+  if (pending) changes.push(pending);
   return changes;
 }
 
-/**
- * Build hunks from changes with context
- */
+/** Build non-overlapping hunks, counting every context line exactly once. */
 function buildHunks(
   oldLines: string[],
   newLines: string[],
   changes: DiffChange[],
   contextLines: number
 ): DiffHunk[] {
-  const hunks: DiffHunk[] = [];
-  let accumulatedOffset = 0;
-
+  const context = Math.max(0, Math.floor(contextLines));
+  const groups: DiffChange[][] = [];
   for (const change of changes) {
-    const contextStart = Math.max(0, change.oldStart - contextLines);
-    const contextEnd = Math.min(oldLines.length, change.oldEnd + contextLines);
-
-    // Try to merge with previous hunk if they overlap
-    const lastHunk = hunks[hunks.length - 1];
-    if (lastHunk) {
-      const lastHunkEnd = lastHunk.oldStart + lastHunk.oldCount;
-
-      if (lastHunkEnd >= contextStart) {
-        // Merge with previous hunk
-        const oldHunkEnd = lastHunk.oldStart + lastHunk.oldCount;
-        const newContextEnd = Math.min(oldLines.length, change.oldEnd + contextLines);
-
-        // Add context between previous change and current
-        for (const content of oldLines.slice(oldHunkEnd, change.oldStart)) {
-          lastHunk.lines.push({ type: ' ', content });
-        }
-
-        // Add removed lines
-        for (const content of oldLines.slice(change.oldStart, change.oldEnd)) {
-          lastHunk.lines.push({ type: '-', content });
-        }
-
-        // Add added lines
-        for (const content of newLines.slice(change.newStart, change.newEnd)) {
-          lastHunk.lines.push({ type: '+', content });
-        }
-
-        // Add trailing context
-        for (const content of oldLines.slice(change.oldEnd, newContextEnd)) {
-          lastHunk.lines.push({ type: ' ', content });
-        }
-
-        lastHunk.oldCount = newContextEnd - lastHunk.oldStart;
-        lastHunk.newCount =
-          lastHunk.oldCount + (change.newEnd - change.newStart) - (change.oldEnd - change.oldStart);
-
-        continue;
-      }
-    }
-
-    // Create new hunk
-    const hunk: DiffHunk = {
-      oldStart: contextStart + 1,
-      oldCount: contextEnd - contextStart,
-      newStart: contextStart + 1 + accumulatedOffset,
-      newCount:
-        contextEnd - contextStart + (change.newEnd - change.newStart) - (change.oldEnd - change.oldStart),
-      lines: [],
-    };
-
-    // Add leading context
-    for (const content of oldLines.slice(contextStart, change.oldStart)) {
-      hunk.lines.push({ type: ' ', content });
-    }
-
-    // Add removed lines
-    for (const content of oldLines.slice(change.oldStart, change.oldEnd)) {
-      hunk.lines.push({ type: '-', content });
-    }
-
-    // Add added lines
-    for (const content of newLines.slice(change.newStart, change.newEnd)) {
-      hunk.lines.push({ type: '+', content });
-    }
-
-    // Add trailing context
-    for (const content of oldLines.slice(change.oldEnd, contextEnd)) {
-      hunk.lines.push({ type: ' ', content });
-    }
-
-    hunks.push(hunk);
-    accumulatedOffset += (change.newEnd - change.newStart) - (change.oldEnd - change.oldStart);
+    const group = groups.at(-1);
+    const previous = group?.at(-1);
+    if (group && previous && change.oldStart - previous.oldEnd <= context * 2) group.push(change);
+    else groups.push([change]);
   }
-
-  return hunks;
+  return groups.map(group => {
+    const first = group[0]!;
+    const last = group.at(-1)!;
+    const oldStart = Math.max(0, first.oldStart - context);
+    const oldEnd = Math.min(oldLines.length, last.oldEnd + context);
+    const newStart = first.newStart - (first.oldStart - oldStart);
+    const newEnd = last.newEnd + (oldEnd - last.oldEnd);
+    const lines: DiffHunk['lines'] = [];
+    let cursor = oldStart;
+    for (const change of group) {
+      for (const content of oldLines.slice(cursor, change.oldStart)) lines.push({ type: ' ', content });
+      for (const content of oldLines.slice(change.oldStart, change.oldEnd)) lines.push({ type: '-', content });
+      for (const content of newLines.slice(change.newStart, change.newEnd)) lines.push({ type: '+', content });
+      cursor = change.oldEnd;
+    }
+    for (const content of oldLines.slice(cursor, oldEnd)) lines.push({ type: ' ', content });
+    return {
+      oldStart: oldStart + (oldEnd > oldStart ? 1 : 0), oldCount: oldEnd - oldStart,
+      newStart: newStart + (newEnd > newStart ? 1 : 0), newCount: newEnd - newStart,
+      lines,
+    };
+  });
 }
 
 /**
@@ -262,7 +180,9 @@ function formatDiff(hunks: DiffHunk[], filePath: string, summary: string): strin
     }
   }
 
-  return diff.trim();
+  // A final blank context line still needs its leading space. trim() would
+  // remove that line's patch prefix and make the hunk counts invalid.
+  return diff;
 }
 
 /**

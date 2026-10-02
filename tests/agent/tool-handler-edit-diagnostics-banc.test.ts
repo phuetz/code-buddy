@@ -77,3 +77,18 @@ it('reports malformed JSON written through apply_patch', async () => {
   expect(result.success, result.error).toBe(true);
   expect(result.output).toContain('syntax checking failed');
 });
+
+it('retourne le petit diff réel après une insertion dans un grand fichier', async () => {
+  const file = join(root, 'large.ts');
+  const original = Array.from({ length: 7000 }, (_, index) => `const line${index} = ${index};`).join('\n') + '\n';
+  writeFileSync(file, original);
+  const replacement = '// Require human confirmation.\nconst line1367 = 1367;';
+  const result = await handler.executeTool({ id: 'a-small-edit-large-file', type: 'function', function: {
+    name: 'str_replace_editor', arguments: JSON.stringify({ path: file, old_str: 'const line1367 = 1367;', new_str: replacement }),
+  } });
+  expect(result.success, result.error).toBe(true);
+  expect(readFileSync(file, 'utf8')).toBe(original.replace('const line1367 = 1367;', replacement));
+  expect(result.output).toContain('with 1 addition');
+  expect(result.output).not.toContain('removal');
+  expect(result.output!.length).toBeLessThan(2000);
+});
