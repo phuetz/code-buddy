@@ -213,6 +213,7 @@ export class SettingsManager {
           models: result.data.models ?? DEFAULT_USER_SETTINGS.models,
           provider: result.data.provider,
           model: result.data.model,
+          computerControl: result.data.computerControl,
         };
       }
 

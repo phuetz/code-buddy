@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { executeGuiAction, type GuiToolInput } from '../../src/tools/gui-tool.js';
 import { GuiControlTool } from '../../src/tools/registry/gui-tools.js';
@@ -16,6 +19,14 @@ vi.mock('@nut-tree-fork/nut-js', () => ({
   straightTo: (point: unknown) => point,
   Point: class { constructor(public x: number, public y: number) {} },
 }));
+
+vi.mock('child_process', async importOriginal => ({ ...await importOriginal<typeof import('child_process')>(), execSync: vi.fn(), execFileSync: vi.fn() }));
+vi.mock('fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return { ...actual, existsSync: (file: string) => (typeof file === 'string' && file.includes('codebuddy_gui_')) || actual.existsSync(file),
+    readFileSync: (file: string, ...args: unknown[]) => (typeof file === 'string' && file.includes('codebuddy_gui_')) ? Buffer.from('fixture png')
+      : actual.readFileSync(file, ...args as []), unlinkSync: vi.fn() };
+});
 
 const actions: GuiToolInput[] = [
   { action: 'click', x: 100, y: 100 },
@@ -102,4 +113,28 @@ describe('B2: gui_control human action gate', () => {
     ] });
     for (const tool of ['computer_control', 'gui_control']) expect(policy.resolve(tool).action).toBe('deny');
   });
+  it('Grok GUI inventory matches all six exposed actions', () => {
+    const schema = new GuiControlTool().getSchema().parameters as { properties: { action: { enum: string[] } } };
+    expect([...schema.properties.action.enum].sort()).toEqual(['click', 'find_element', 'key', 'screenshot', 'scroll', 'type']);
+  });
+  it.each(actions)('Grok GUI action $action ignores a cloned project allow', async input => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'gui-project-guard-'));
+    mkdirSync(path.join(directory, '.codebuddy'));
+    writeFileSync(path.join(directory, '.codebuddy', 'settings.json'), JSON.stringify({ permissions: { allow: ['gui_control'] } }));
+    try {
+      const outer = await service.requestConfirmation({ operation: 'Execute tool: gui_control', filename: input.action,
+        toolName: 'gui_control', toolArgs: { ...input }, detail: { cwd: directory } }, 'tool');
+      expect(outer.confirmed).toBe(true); expect(human).not.toHaveBeenCalled();
+      vi.stubEnv('CODEBUDDY_AUTO_CONFIRM', 'true');
+      expect((await executeGuiAction(input)).success).toBe(false);
+      expect(human).toHaveBeenCalledTimes(1); expect(human.mock.calls[0]?.[0].forcePrompt).toBe(true);
+      expect(mouse.click).not.toHaveBeenCalled(); expect(keyboard.type).not.toHaveBeenCalled();
+      expect(keyboard.pressKey).not.toHaveBeenCalled(); expect(mouse.scrollDown).not.toHaveBeenCalled();
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+  it.each(['screenshot', 'find_element'] as const)('Grok GUI observation %s needs no activation approval', async action => {
+    expect((await executeGuiAction({ action, description: 'Search' })).success).toBe(true);
+    expect(human).not.toHaveBeenCalled(); expect(mouse.click).not.toHaveBeenCalled(); expect(keyboard.type).not.toHaveBeenCalled();
+  });
+
 });

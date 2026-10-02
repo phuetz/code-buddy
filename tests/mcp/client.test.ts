@@ -1,3 +1,5 @@
+// Protocol tests supply approval; real refusal/mode/project tests live in project-host-effect-guard.test.ts.
+vi.mock('../../src/security/host-effect-confirmation.js', () => ({ confirmHostEffect: vi.fn().mockResolvedValue(true), describeMCPConnection: JSON.stringify }));
 /**
  * Tests for MCP Client implementations
  *

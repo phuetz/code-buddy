@@ -1,3 +1,4 @@
+import { confirmHostEffect, describeMCPConnection } from '../security/host-effect-confirmation.js';
 import { mcpToolAllowed, validateMCPToolFilter } from './import-normalize.js';
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -97,9 +98,13 @@ export class MCPManager extends EventEmitter {
   }
 
   private async addServerInternal(config: MCPServerConfig): Promise<void> {
+    const epoch = this.currentEpoch(config.name);
+    if (!await confirmHostEffect('mcp_connect', config.name, describeMCPConnection(config))) {
+      throw new Error(`MCP server "${config.name}" requires fresh human confirmation`);
+    }
+    this.assertConnectCurrent(config.name, epoch);
     this.serverConfigs.set(config.name, config);
     this.serverStatuses.set(config.name, 'connecting');
-    const epoch = this.currentEpoch(config.name);
     
     try {
       // Handle legacy stdio-only configuration

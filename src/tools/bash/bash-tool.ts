@@ -1,3 +1,4 @@
+import { confirmDesktopCommand } from '../../security/host-effect-confirmation.js';
 /**
  * BashTool - Main coordinator class for shell command execution.
  *
@@ -443,6 +444,10 @@ export class BashTool implements Disposable {
           success: false,
           error: `Command blocked by execution policy: ${policy.reason}`,
         };
+      }
+
+      if (!await confirmDesktopCommand(executionCommand)) {
+        return { success: false, error: 'Desktop command requires fresh human confirmation' };
       }
 
       let requiresDirectApproval = policy.action === 'ask';

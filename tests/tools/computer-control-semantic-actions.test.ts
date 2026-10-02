@@ -155,6 +155,8 @@ describe('ComputerControlTool semantic actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setCurrentSnapshot(null);
+    // Functional cases explicitly supply human authorization. Adverse cases override it.
+    ConfirmationService.getInstance().setInteractiveBridge(async () => ({ confirmed: true }));
   });
 
   it('fills a named text field by focusing, clearing, and typing', async () => {
@@ -403,6 +405,7 @@ describe('ComputerControlTool semantic actions', () => {
   });
 
   it('requires confirmation before clicking destructive dialog choices', async () => {
+    ConfirmationService.getInstance().setInteractiveBridge(null);
     const warning = makeElement({
       ref: 16,
       role: 'text',
@@ -540,8 +543,8 @@ describe('ComputerControlTool semantic actions', () => {
     expect(mockAutomation.click).not.toHaveBeenCalled();
   });
 
-  it('B1: safe cancellation and observed text fields remain autonomous', async () => {
-    const human = vi.fn().mockResolvedValue({ confirmed: false });
+  it('Grok: cancellation and observed text fields require explicit human authorization', async () => {
+    const human = vi.fn().mockResolvedValue({ confirmed: true });
     ConfirmationService.getInstance().setInteractiveBridge(human);
     const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
     const tool = new ComputerControlTool();
@@ -550,7 +553,7 @@ describe('ComputerControlTool semantic actions', () => {
       setCurrentSnapshot(makeSnapshot([element]));
       expect((await tool.execute({ action: 'click', ref: element.ref })).success).toBe(true);
     }
-    expect(human).not.toHaveBeenCalled();
+    expect(human).toHaveBeenCalledTimes(2);
     expect(mockAutomation.click).toHaveBeenCalledTimes(2);
   });
 
@@ -619,6 +622,7 @@ describe('ComputerControlTool semantic actions', () => {
   });
 
   it('requires explicit confirmation for live high-risk app profile actions', async () => {
+    ConfirmationService.getInstance().setInteractiveBridge(null);
     const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
     const tool = new ComputerControlTool();
 
@@ -647,6 +651,7 @@ describe('ComputerControlTool semantic actions', () => {
   });
 
   it('applies app profile safety and window context to workflows', async () => {
+    ConfirmationService.getInstance().setInteractiveBridge(null);
     const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
     const tool = new ComputerControlTool();
 
@@ -674,6 +679,7 @@ describe('ComputerControlTool semantic actions', () => {
       .mockResolvedValueOnce([{ ...notepadWindow, focused: false }])
       .mockResolvedValue([{ ...notepadWindow, focused: true }]);
 
+    ConfirmationService.getInstance().setInteractiveBridge(async () => ({ confirmed: true }));
     const notepadResult = await tool.execute({
       action: 'use_app_workflow',
       appName: 'notepad',
@@ -851,4 +857,41 @@ describe('ComputerControlTool semantic actions', () => {
     setVisionGroundingProvider(null);
     delete process.env.CODEBUDDY_VISION_GROUNDING;
   });
+  it.each([
+    { action: 'drag', fromX: 150, fromY: 112, toX: 150, toY: 112 },
+    { action: 'type', text: 'y\n' },
+    { action: 'key', key: 'KP_Enter' },
+    { action: 'key_down', key: 'y' },
+    { action: 'key_up', key: 'enter' },
+    { action: 'hotkey', key: 'y', modifiers: ['alt'] },
+    { action: 'hotkey', key: 'j', modifiers: ['ctrl'] },
+    { action: 'hotkey', key: 'm', modifiers: ['ctrl'] },
+    { action: 'clear_and_type', text: 'approve' },
+    { action: 'macro', steps: [{ action: 'type', text: 'approve' }] },
+    { action: 'use_app_workflow', appName: 'notepad', steps: [{ action: 'type', text: 'approve' }] },
+  ] as import('../../src/tools/computer-control-tool.js').ComputerControlInput[])(
+    'Grok actual actuator refusal: %j', async input => {
+      const human = vi.fn().mockResolvedValue({ confirmed: false });
+      ConfirmationService.getInstance().setInteractiveBridge(human);
+      const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+      expect((await new ComputerControlTool().execute(input)).success).toBe(false);
+      expect(human).toHaveBeenCalledTimes(1);
+      for (const actuator of [mockAutomation.drag, mockAutomation.type, mockAutomation.keyPress,
+        mockAutomation.keyDown, mockAutomation.keyUp, mockAutomation.hotkey, mockAutomation.focusWindow]) {
+        expect(actuator).not.toHaveBeenCalled();
+      }
+    });
+  it.each([
+    { role: 'button', name: 'Cancel' }, { role: 'list-item', name: 'Send' },
+    { role: 'checkbox', name: 'Pay' }, { role: 'radio', name: 'I agree' },
+    { role: 'text-field', name: 'Search' },
+  ])('Grok fresh but misleading control: %j', async ({ role, name }) => {
+    setCurrentSnapshot(makeSnapshot([makeElement({ ref: 81, role, name })]));
+    const human = vi.fn().mockResolvedValue({ confirmed: false });
+    ConfirmationService.getInstance().setInteractiveBridge(human);
+    const { ComputerControlTool } = await import('../../src/tools/computer-control-tool.js');
+    expect((await new ComputerControlTool().execute({ action: 'click', ref: 81 })).success).toBe(false);
+    expect(human).toHaveBeenCalledTimes(1); expect(mockAutomation.click).not.toHaveBeenCalled();
+  });
+
 });

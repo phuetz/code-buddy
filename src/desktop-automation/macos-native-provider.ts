@@ -196,6 +196,7 @@ export class MacOSNativeProvider extends BaseNativeProvider {
 
   async moveMouse(x: number, y: number, _options?: MouseMoveOptions): Promise<void> {
     this.ensureInitialized();
+    this.validateNumbers(x, y);
     if (this.hasCliclick) {
       await this.exec(`cliclick m:${x},${y}`);
     } else {
@@ -266,6 +267,7 @@ export class MacOSNativeProvider extends BaseNativeProvider {
 
   async drag(fromX: number, fromY: number, toX: number, toY: number, _options?: MouseDragOptions): Promise<void> {
     this.ensureInitialized();
+    this.validateNumbers(fromX, fromY, toX, toY);
     if (this.hasCliclick) {
       await this.exec(`cliclick dd:${fromX},${fromY} du:${toX},${toY}`);
     } else {

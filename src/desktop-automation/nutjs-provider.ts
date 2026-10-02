@@ -42,17 +42,8 @@ function createHeadlessNutJsMock(): typeof import('@nut-tree-fork/nut-js') {
   let mousePosition = { x: 0, y: 0 };
   let clipboardText = '';
 
-  const keyMap = new Proxy<Record<string, string>>(
-    { Space: 'Space' },
-    {
-      get(target, key) {
-        if (typeof key !== 'string') {
-          return target.Space;
-        }
-        return target[key] ?? key;
-      },
-    }
-  );
+  const names = [...new Set([...Object.values(KEY_MAP), ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'])];
+  const keyMap = Object.fromEntries(names.map((name, index) => [name, index]));
 
   const createWindow = () => ({
     region: Promise.resolve({ left: 100, top: 100, width: 1280, height: 720 }),
@@ -223,7 +214,9 @@ export class NutJsProvider implements IAutomationProvider {
   private getKey(key: KeyCode) {
     const nutjs = this.ensureInitialized();
     const mapped = KEY_MAP[key.toLowerCase()] || key.toUpperCase();
-    return (nutjs.Key as unknown as Record<string, number>)[mapped] ?? nutjs.Key.Space;
+    const value = (nutjs.Key as unknown as Record<string, number>)[mapped];
+    if (typeof value !== 'number') throw new Error(`Unsupported key: ${key}`);
+    return value;
   }
 
   // ============================================================================

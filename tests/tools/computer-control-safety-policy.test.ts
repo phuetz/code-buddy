@@ -87,16 +87,27 @@ describe('computer_control host safety policy', () => {
     expect(human).not.toHaveBeenCalled();
   });
 
-  it.each([{ action: 'click', x: 10, y: 20 }, { action: 'snapshot' }, { action: 'close_window', simulateOnly: true }] as ComputerControlInput[])(
+  it.each([{ action: 'snapshot' }, { action: 'close_window', simulateOnly: true }] as ComputerControlInput[])(
     'preserves benign/read/dry-run actions: %j', async (input) => {
       expect(await gate(tool, input)).toBeNull();
       expect(human).not.toHaveBeenCalled();
     });
 
-  it('takes action overrides only from host settings', async () => {
+  it('user allow cannot waive the mandatory effect guard', async () => {
     vi.spyOn(getSettingsManager(), 'getUserSetting').mockReturnValue({ policyOverrides: { close_window: 'allow' } });
-    expect(await gate(tool, { action: 'close_window', policyOverrides: { close_window: 'block' } })).toBeNull();
-    expect(human).not.toHaveBeenCalled();
+    expect(await gate(tool, { action: 'close_window', policyOverrides: { close_window: 'block' } })).toMatch(/human confirmation/);
+    expect(human).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['allow', 'confirm'] as const)('Grok project %s cannot weaken a user block', async policy => {
+    vi.spyOn(getSettingsManager(), 'getUserSetting').mockReturnValue({ policyOverrides: { close_window: 'block' } });
+    vi.spyOn(getSettingsManager(), 'getProjectSetting').mockReturnValue({ policyOverrides: { close_window: policy } });
+    human.mockResolvedValue({ confirmed: true });
+    const effect = vi.spyOn(tool as unknown as PolicyAccess, 'closeWindow').mockResolvedValue({ success: true });
+    const result = await tool.execute({ action: 'close_window' });
+    expect({ success: result.success, effects: effect.mock.calls.length, humans: human.mock.calls.length })
+      .toEqual({ success: false, effects: 0, humans: 0 });
+    expect(result.error).toMatch(/blocked/);
   });
 
   it('a host block wins over agent flags and simulation', async () => {

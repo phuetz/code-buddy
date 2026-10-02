@@ -64,7 +64,7 @@ export class MacroManager {
   }
 
   async listMacros(): Promise<MacroDefinition[]> {
-    await this.ensureDir();
+    if (!(await this.vfs.exists(this.macrosDir))) return [];
     const files = await this.vfs.readdir(this.macrosDir);
     const macros: MacroDefinition[] = [];
 

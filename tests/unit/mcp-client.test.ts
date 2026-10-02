@@ -1,3 +1,5 @@
+// Protocol tests supply approval; real refusal/mode/project tests live in project-host-effect-guard.test.ts.
+vi.mock('../../src/security/host-effect-confirmation.js', () => ({ confirmHostEffect: vi.fn().mockResolvedValue(true), describeMCPConnection: JSON.stringify }));
 /**
  * Unit tests for MCP Client
  *
@@ -1246,8 +1248,9 @@ describe('Request Timeout', () => {
     const connectPromise = client.connect(testConfig);
 
     // Advance timers to trigger timeout (default 5s)
-    jest.advanceTimersByTime(5001);
+    const rejected = expect(connectPromise).rejects.toThrow('MCP request timed out after 5 seconds');
+    await vi.advanceTimersByTimeAsync(5001);
 
-    await expect(connectPromise).rejects.toThrow('MCP request timed out after 5 seconds');
+    await rejected;
   });
 });

@@ -1,3 +1,4 @@
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -28,12 +29,14 @@ describe('Hermes lifecycle hook contract', () => {
   let tmpDir: string;
 
   beforeEach(() => {
+    ConfirmationService.getInstance().setInteractiveBridge(async () => ({ confirmed: true }));
     tmpDir = makeTmpDir();
     resetUserHooksManager();
     resetToolHooksManager();
   });
 
   afterEach(() => {
+    ConfirmationService.getInstance().setInteractiveBridge(null);
     resetUserHooksManager();
     resetToolHooksManager();
     fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

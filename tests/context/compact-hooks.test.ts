@@ -90,7 +90,7 @@ describe('COMPACT1 — global compaction events and preservation hooks', () => {
     manager.dispose();
   });
 
-  it('injects a command hook preserve response into the compaction summary', () => {
+  it('compacts without executing an unapproved synchronous project hook', () => {
     const workDir = fsRealpathForTmp(fs.mkdtempSync(path.join(osTmpdirForTests(), 'compact1-test-')));
     try {
       const script = path.join(workDir, 'preserve-hook.cjs');
@@ -111,9 +111,9 @@ describe('COMPACT1 — global compaction events and preservation hooks', () => {
       const summary = compacted.find(message =>
         typeof message.content === 'string' && message.content.includes('[Conversation Summary]'));
 
-      expect(summary?.content).toContain('<preserved_context>');
-      expect(summary?.content).toContain('plan invariant: keep the parser contract');
-      expect(summary?.content).toContain('</preserved_context>');
+      expect(summary?.content).not.toContain('<preserved_context>');
+      expect(summary?.content).not.toContain('plan invariant: keep the parser contract');
+      expect(summary?.content).not.toContain('</preserved_context>');
       manager.dispose();
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });

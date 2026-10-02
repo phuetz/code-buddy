@@ -6,7 +6,7 @@ import { tmpdir as osTmpdirForTests } from 'node:os';
 import { realpathSync as fsRealpathForTmp } from 'node:fs';
 
 describe('COMPACT1 — user pre_compact hook contract', () => {
-  it('uses the existing hooks.json command format and sends JSON on stdin', () => {
+  it('does not run project commands at a synchronous boundary without human approval', () => {
     const workDir = fsRealpathForTmp(fs.mkdtempSync(path.join(osTmpdirForTests(), 'compact1-test-')));
     try {
       const script = path.join(workDir, 'stdin-hook.cjs');
@@ -28,7 +28,7 @@ describe('COMPACT1 — user pre_compact hook contract', () => {
         messagesBefore: 8,
       });
 
-      expect(preserved).toBe('manual:123');
+      expect(preserved).toBeUndefined();
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }

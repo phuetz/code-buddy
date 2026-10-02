@@ -1,11 +1,12 @@
-import { exec } from 'node:child_process';
+import { confirmHostEffect } from '../security/host-effect-confirmation.js';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import type { ToolResult } from '../types/index.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface OfficeMacroToolInput {
   application: 'Excel' | 'Word' | 'PowerPoint';
@@ -25,6 +26,12 @@ export class OfficeMacroTool {
 
     try {
       const { application, macroCode, type, runHeadless = false } = input;
+      if (!['Excel', 'Word', 'PowerPoint'].includes(application) || !['vba', 'powershell'].includes(type)) {
+        return { success: false, error: 'Invalid Office macro application or type' };
+      }
+      if (!await confirmHostEffect('office_macro_execute', application, `${type} macro:\n${macroCode}`)) {
+        return { success: false, error: 'Office macro requires fresh human confirmation' };
+      }
       const appName = `"${application}.Application"`;
 
       let psScript = '';
@@ -88,7 +95,7 @@ ${macroCode}
       await fs.writeFile(psFilePath, psScript, 'utf8');
 
       // Execute via Powershell
-      const { stdout, stderr } = await execAsync(`powershell.exe -ExecutionPolicy Bypass -File "${psFilePath}"`, {
+      const { stdout, stderr } = await execFileAsync('powershell.exe', ['-ExecutionPolicy', 'Bypass', '-File', psFilePath], {
         timeout: 60000, // 60 seconds max
       });
 

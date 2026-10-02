@@ -328,6 +328,9 @@ export type Settings = z.infer<typeof SettingsSchema>;
 // ----------------------------------------------------------------------------
 
 export const UserSettingsSchema = z.object({
+  computerControl: z.object({
+    policyOverrides: z.record(z.string(), z.enum(['allow', 'block', 'confirm'])).optional(),
+  }).strict().optional(),
   apiKey: z.string()
     .min(1, 'API key cannot be empty')
     .optional()

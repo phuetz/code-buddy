@@ -1,3 +1,4 @@
+import { COMPUTER_ACTION_EFFECTS } from '../computer-control-actions.js';
 /**
  * Miscellaneous Tool Adapters
  *
@@ -510,29 +511,7 @@ export class BrowserDialogExecuteTool implements ITool {
 // ComputerControlExecuteTool
 // ============================================================================
 
-const COMPUTER_CONTROL_ACTIONS = [
-  'snapshot', 'snapshot_with_screenshot', 'get_element', 'find_elements',
-  'click_element_by_name', 'click_button', 'click_link',
-  'fill_text_field', 'clear_and_type', 'select_dropdown_option',
-  'select_radio', 'activate_tab', 'select_list_item', 'open_menu_item',
-  'toggle_checkbox', 'set_slider_value', 'select_tree_item', 'expand_tree_item', 'collapse_tree_item',
-  'assert_text_visible', 'assert_element_visible', 'use_app_workflow',
-  'inspect_dialog', 'click_dialog_button', 'handle_dialog',
-  'list_app_profiles', 'get_app_profile', 'open_app', 'focus_app', 'read_app_text', 'save_app_document',
-  'excel_open_workbook', 'excel_set_cell', 'excel_get_cell', 'excel_save_workbook',
-  'macro', 'click_text', 'save_macro', 'play_macro', 'list_macros', 'delete_macro', 'wait_for_text', 'speak',
-  'click', 'left_click', 'middle_click', 'double_click', 'right_click', 'move_mouse', 'drag', 'scroll',
-  'cursor_position', 'wait',
-  'type', 'key', 'key_down', 'key_up', 'hotkey',
-  'get_windows', 'get_window', 'list_window_matches', 'wait_for_window', 'focus_window', 'close_window',
-  'get_active_window', 'minimize_window', 'maximize_window', 'restore_window', 'move_window', 'resize_window',
-  'set_window', 'act_on_best_window', 'get_audit_log', 'clear_audit_log', 'export_audit_log',
-  'set_pilot_mode', 'get_pilot_mode',
-  'get_volume', 'set_volume', 'get_brightness', 'set_brightness',
-  'notify', 'lock', 'sleep',
-  'start_recording', 'stop_recording', 'recording_status',
-  'system_info', 'battery_info', 'network_info', 'check_permission',
-] as const;
+const COMPUTER_CONTROL_ACTIONS = Object.keys(COMPUTER_ACTION_EFFECTS);
 
 /**
  * ComputerControlExecuteTool - ITool adapter for desktop computer control

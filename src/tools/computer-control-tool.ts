@@ -1,3 +1,4 @@
+import { COMPUTER_ACTION_EFFECTS } from './computer-control-actions.js';
 /**
  * Computer Control Tool
  *
@@ -30,7 +31,6 @@ import { getPermissionModeManager } from '../security/permission-modes.js';
 import { logger } from '../utils/logger.js';
 import { ConfirmationService } from '../utils/confirmation-service.js';
 import { getSettingsManager } from '../utils/settings-manager.js';
-import { resolveUserName } from '../companion/user-name.js';
 import {
   getDesktopAutomation,
   getPermissionManager,
@@ -362,7 +362,7 @@ export class ComputerControlTool {
    * Execute a computer control action
    */
   async execute(input: ComputerControlInput): Promise<ToolResult> {
-    const enrichedInput = this.applyPilotDefaults(this.ignoreModelPermissions(input));
+    let enrichedInput = input;
     const { action } = enrichedInput;
     this.lastWindowMatchError = null;
     this.lastTargetFocusProof = null;
@@ -372,6 +372,7 @@ export class ComputerControlTool {
     logger.debug('Computer control action', { action, input: enrichedInput });
 
     try {
+      enrichedInput = this.applyPilotDefaults(this.ignoreModelPermissions(input));
       const safetyError = await this.enforceSafetyPolicy(enrichedInput);
       if (safetyError) {
         return this.finalizeActionResult(action, enrichedInput, {
@@ -380,7 +381,8 @@ export class ComputerControlTool {
         }, startedAt, false);
       }
 
-      if (this.requiresAutomation(action)) {
+      const simulated = Boolean(enrichedInput.simulateOnly && this.isMutatingAction(action, enrichedInput));
+      if (!simulated && this.requiresAutomation(action)) {
         await this.ensureAutomationInitialized();
       }
 
@@ -616,16 +618,6 @@ export class ComputerControlTool {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Computer control error', { action, error: errorMessage });
-      
-      // Phase 7: Rétroaction Vocale sur Erreur
-      try {
-        const spokenText = `${resolveUserName()}, j'ai rencontré une erreur inattendue sur l'action ${action.replace(/_/g, ' ')}`;
-        const encodedText = Buffer.from(spokenText, 'utf16le').toString('base64');
-        const script = `Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${encodedText}')))`;
-        execFile('powershell', ['-NoProfile', '-Command', script], () => {}); // fire and forget
-      } catch (e) {
-        logger.debug('Failed to speak error', { error: e });
-      }
       
       return this.finalizeActionResult(action, enrichedInput, {
         success: false,
@@ -6434,7 +6426,10 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     delete out.confirmDangerous;
     delete out.policyOverrides;
     // Workflows and stored macros must cross the same trust boundary per step.
-    if (out.steps) out.steps = out.steps.map(step => this.ignoreModelPermissions(step));
+    if (out.steps) {
+      if (!Array.isArray(out.steps)) throw new Error('Macro steps must be an array');
+      out.steps = out.steps.map(step => this.ignoreModelPermissions(step));
+    }
     return out;
   }
 
@@ -6445,14 +6440,11 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     if (this.isMutatingAction(input.action, input) && getPermissionModeManager().getMode() === 'plan') {
       return `Action "${input.action}" is blocked: only read-only actions are allowed in plan mode.`;
     }
-    if (policy === 'allow') return null;
-    // Each workflow step and each observed dialog button gets its own gate.
-    if (input.action === 'macro') {
-      return this.resolveConfiguredPolicy(input.action) === 'confirm' ? this.requestHumanConfirmation(input) : null;
+    // Model arguments, project rules and permissive modes cannot authorize effects.
+    if (this.isMutatingAction(input.action, input) || policy === 'confirm') {
+      return this.requestHumanConfirmation(input);
     }
-    if (['click_dialog_button', 'handle_dialog'].includes(input.action)) return null;
-    if (input.action === 'use_app_workflow' && !this.requiresApplicationConfirmation(input)) return null;
-    return this.requestHumanConfirmation(input);
+    return null;
   }
 
   private resolveConfiguredPolicy(action: ComputerAction): 'allow' | 'block' | 'confirm' | undefined {
@@ -6461,8 +6453,10 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     const user = settings.getUserSetting('computerControl')?.policyOverrides;
     const projectValue = project && Object.prototype.hasOwnProperty.call(project, action) ? project[action] : undefined;
     if (projectValue === 'allow') {
-      logger.warn('Ignoring project computer control allow policy; only user configuration may authorize actions', { action });
+      logger.warn('Ignoring project computer control allow policy; effects require human confirmation', { action });
     }
+    // A cloned project cannot turn a user's denial into a question.
+    if (user?.[action] === 'block') return 'block';
     const value = projectValue === 'allow' || projectValue === undefined ? user?.[action] : projectValue;
     if (value === undefined) return undefined;
     if (value === 'allow' || value === 'block' || value === 'confirm') return value;
@@ -6485,7 +6479,7 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
       try {
         // Observe an already initialized backend; never load native control just to ask permission.
         const targeted = input.windowHandle || input.windowTitle || input.windowTitleRegex || input.processName;
-        const window = targeted ? await this.findWindowFromInput(input) : await this.automation.getActiveWindow();
+        const window = targeted ? null : await this.automation.getActiveWindow();
         if (window) application = `${window.processName} — ${window.title}`;
       } catch {
         logger.warn('Could not identify application for computer control confirmation', { action: input.action });
@@ -6496,13 +6490,19 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
       ? `Unknown application (requested target: ${requestedTarget}; not verified)`
       : 'Unknown application (target could not be verified)';
     const riskLevel = profile?.riskLevel === 'critical' ? 'critical' : 'high';
-    const choice = button ? `; button "${button.name}" (${button.risk})` : '';
+    const cached = this.snapshotManager.getCurrentSnapshot?.();
+    const cachedNames = cached?.elements.filter(element => element.visible && element.interactive)
+      .map(element => element.name).filter(Boolean).join(', ').slice(0, 500);
+    // Advisory evidence only: neither a benign label nor a fresh snapshot grants approval.
+    const choice = button ? `; button "${button.name}" (${button.risk})`
+      : cachedNames ? `; cached controls (not verified): ${cachedNames}` : '';
+
     const decision = await ConfirmationService.getInstance().requestConfirmation({
       operation: `Computer control: ${input.action}${choice} — risk: ${riskLevel}`,
       filename: application,
       toolName: 'computer_control',
       toolArgs: { ...input },
-      content: `Application: ${application}\nAction: ${input.action}${choice}\nRisk level: ${riskLevel}\nA fresh human confirmation is required before this action.`,
+      content: `Application: ${application}\nAction: ${input.action}${choice}\nRisk level: ${riskLevel}\nInput: ${JSON.stringify(input)}\nA fresh human confirmation is required before this action.`,
       riskLevel,
       forcePrompt: true,
     }, 'tool');
@@ -6638,37 +6638,9 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
   }
 
   private isMutatingAction(action: ComputerAction, input: ComputerControlInput): boolean {
-    const mutating = new Set<ComputerAction>([
-      'click_element_by_name', 'click_button', 'click_link',
-      'fill_text_field', 'clear_and_type', 'select_dropdown_option',
-      'select_radio', 'activate_tab', 'select_list_item', 'open_menu_item', 'toggle_checkbox',
-      'set_slider_value', 'select_tree_item', 'expand_tree_item', 'collapse_tree_item',
-      'click_dialog_button', 'handle_dialog',
-      'open_app', 'focus_app', 'save_app_document', 'excel_open_workbook', 'excel_set_cell', 'excel_save_workbook',
-      'powerpoint_open_presentation', 'powerpoint_add_slide', 'powerpoint_set_text', 'powerpoint_save_presentation',
-      'word_open_document', 'word_type_text', 'word_save_document',
-      'click', 'left_click', 'middle_click', 'double_click', 'right_click', 'move_mouse', 'drag', 'scroll',
-      'type', 'key', 'key_down', 'key_up', 'hotkey',
-      'focus_window', 'close_window', 'minimize_window', 'maximize_window', 'restore_window',
-      'move_window', 'resize_window', 'set_window', 'act_on_best_window',
-      'set_volume', 'set_brightness', 'notify', 'lock', 'sleep',
-      'start_recording', 'stop_recording',
-      'clear_audit_log', 'export_audit_log', 'save_macro', 'delete_macro', 'play_macro',
-    ]);
-
-    if (action === 'act_on_best_window' && input.bestWindowAction) {
-      return true;
-    }
-
-    if (action === 'macro' || action === 'use_app_workflow') {
-      return (input.steps || []).some(step => this.isMutatingAction(step.action, step));
-    }
-
-    if (action === 'click_text') {
-      return true; // it clicks
-    }
-
-    return mutating.has(action);
+    if (COMPUTER_ACTION_EFFECTS[action] !== 'observe') return true;
+    // Some observations explicitly focus a requested window while resolving elements.
+    return this.hasWindowMatcher(input);
   }
 
   private finalizeActionResult(

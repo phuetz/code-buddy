@@ -1,3 +1,4 @@
+import { confirmHostEffect, describeMCPConnection } from '../security/host-effect-confirmation.js';
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import fs from 'fs';
@@ -313,6 +314,9 @@ class MCPServerConnection extends EventEmitter {
   }
 
   async start(): Promise<void> {
+    if (!await confirmHostEffect('mcp_connect', this.config.name, describeMCPConnection(this.config))) {
+      throw new Error(`MCP server "${this.config.name}" requires fresh human confirmation`);
+    }
     return new Promise((resolve, reject) => {
       this.isInitializing = true;
       let settled = false;

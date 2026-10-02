@@ -1,3 +1,4 @@
+import { COMPUTER_CONTROL_TOOL } from '../../../src/codebuddy/tool-definitions/computer-control-tools.js';
 /**
  * Tests for Computer Use Tool Adapters
  *
@@ -51,6 +52,15 @@ jest.mock('../../../src/tools/reasoning-tool.js', () => ({
     execute: jest.fn().mockResolvedValue({ success: true, output: 'Reasoning result' }),
   }; }),
 }));
+
+it('Grok registry inventory matches the model schema without permission flags', () => {
+  const adapter = new ComputerControlExecuteTool();
+  const schema = adapter.getSchema();
+  const model = COMPUTER_CONTROL_TOOL.function.parameters as { properties: { action: { enum: string[] } } };
+  expect([...schema.parameters.properties!.action.enum!].sort()).toEqual([...model.properties.action.enum].sort());
+  expect(JSON.stringify(schema)).not.toMatch(/confirmDangerous|policyOverrides/);
+  for (const action of model.properties.action.enum) expect(adapter.validate({ action }).valid).toBe(true);
+});
 
 describe('Computer Use Tool Adapters', () => {
   beforeEach(() => {

@@ -1,3 +1,4 @@
+import { confirmDesktopCommand } from '../../security/host-effect-confirmation.js';
 /**
  * Streaming execution for BashTool.
  *
@@ -90,6 +91,10 @@ export async function* executeStreaming(
   }
   if (policy.action === 'deny') {
     return { success: false, error: `Command blocked by execution policy: ${policy.reason}` };
+  }
+
+  if (!await confirmDesktopCommand(executionCommand)) {
+    return { success: false, error: 'Desktop command requires fresh human confirmation' };
   }
 
   let requiresDirectApproval = policy.action === 'ask';

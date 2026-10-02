@@ -8,7 +8,7 @@
 
 // Mock child_process before imports
 
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { LinuxNativeProvider } from '../../src/desktop-automation/linux-native-provider.js';
 import { WindowsNativeProvider } from '../../src/desktop-automation/windows-native-provider.js';
 import { MacOSNativeProvider } from '../../src/desktop-automation/macos-native-provider.js';
@@ -18,6 +18,7 @@ jest.mock('child_process', async () => {
   return {
     ...actual,
     execSync: jest.fn(),
+    execFileSync: jest.fn(),
     exec: jest.fn(),
     spawn: jest.fn(function() { return {
       pid: 12345,
@@ -46,19 +47,19 @@ jest.mock('util', async () => {
 });
 
 
+const mockExecFileSync = vi.mocked(execFileSync);
 const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
 
 // Helper to set up execSync responses based on command patterns
 function mockCommand(patterns: Record<string, string>): void {
-  mockExecSync.mockImplementation((cmd: string) => {
-    const cmdStr = String(cmd);
-    for (const [pattern, response] of Object.entries(patterns)) {
-      if (cmdStr.includes(pattern)) {
-        return response;
-      }
+  const response = (cmd: string) => {
+    for (const [pattern, value] of Object.entries(patterns)) {
+      if (cmd.includes(pattern)) return value;
     }
     return '';
-  });
+  };
+  mockExecSync.mockImplementation((cmd: string) => response(String(cmd)));
+  mockExecFileSync.mockImplementation((program, args) => response([program, ...(Array.isArray(args) ? args : [])].join(' ')));
 }
 
 describe('LinuxNativeProvider', () => {
@@ -135,9 +136,8 @@ describe('LinuxNativeProvider', () => {
 
       await provider.moveMouse(100, 200);
       // Verify xdotool mousemove was called (via the mock)
-      expect(mockExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('xdotool mousemove'),
-        expect.any(Object)
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'xdotool', expect.arrayContaining(['mousemove']), expect.any(Object)
       );
     });
 
@@ -148,9 +148,8 @@ describe('LinuxNativeProvider', () => {
       });
 
       await provider.click({ button: 'right' });
-      expect(mockExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('click 3'),
-        expect.any(Object)
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'xdotool', expect.arrayContaining(['click', '3']), expect.any(Object)
       );
     });
 
@@ -162,9 +161,8 @@ describe('LinuxNativeProvider', () => {
 
       await provider.scroll({ deltaY: -3 });
       // Scroll up = button 4
-      expect(mockExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('click --repeat 3 4'),
-        expect.any(Object)
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'xdotool', expect.arrayContaining(['click', '--repeat', '3', '4']), expect.any(Object)
       );
     });
   });
@@ -185,9 +183,8 @@ describe('LinuxNativeProvider', () => {
       });
 
       await provider.keyPress('enter');
-      expect(mockExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('Return'),
-        expect.any(Object)
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'xdotool', expect.arrayContaining(['Return']), expect.any(Object)
       );
     });
 
@@ -198,9 +195,8 @@ describe('LinuxNativeProvider', () => {
       });
 
       await provider.keyPress('c', { modifiers: ['ctrl'] });
-      expect(mockExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('ctrl+c'),
-        expect.any(Object)
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'xdotool', expect.arrayContaining(['ctrl+c']), expect.any(Object)
       );
     });
 
@@ -211,9 +207,8 @@ describe('LinuxNativeProvider', () => {
       });
 
       await provider.type('hello world');
-      expect(mockExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('xdotool type'),
-        expect.any(Object)
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'xdotool', expect.arrayContaining(['type']), expect.any(Object)
       );
     });
   });
@@ -253,9 +248,8 @@ describe('LinuxNativeProvider', () => {
       });
 
       await provider.focusWindow('12345');
-      expect(mockExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('windowactivate --sync 12345'),
-        expect.any(Object)
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'xdotool', expect.arrayContaining(['windowactivate', '--sync', '12345']), expect.any(Object)
       );
     });
 
@@ -266,9 +260,8 @@ describe('LinuxNativeProvider', () => {
       });
 
       await provider.minimizeWindow('12345');
-      expect(mockExecSync).toHaveBeenCalledWith(
-        expect.stringContaining('windowminimize 12345'),
-        expect.any(Object)
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'xdotool', expect.arrayContaining(['windowminimize', '12345']), expect.any(Object)
       );
     });
   });

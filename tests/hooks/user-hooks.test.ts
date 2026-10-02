@@ -1,3 +1,4 @@
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 /**
  * Tests for UserHooksManager
  *
@@ -36,11 +37,14 @@ describe('UserHooksManager', () => {
   let tmpDir: string;
 
   beforeEach(() => {
+    // Functional handlers run with an explicitly accepting human bridge.
+    ConfirmationService.getInstance().setInteractiveBridge(async () => ({ confirmed: true }));
     tmpDir = makeTmpDir();
     resetUserHooksManager();
   });
 
   afterEach(() => {
+    ConfirmationService.getInstance().setInteractiveBridge(null);
     resetUserHooksManager();
     fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });

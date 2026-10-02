@@ -6,7 +6,7 @@
  * and common helper methods.
  */
 
-import { execSync, exec as execCb } from 'child_process';
+import { execFileSync, execSync, exec as execCb } from 'child_process';
 import { promisify } from 'util';
 import type { IAutomationProvider } from './automation-manager.js';
 import type {
@@ -73,6 +73,17 @@ export abstract class BaseNativeProvider implements IAutomationProvider {
       timeout,
       maxBuffer: 1024 * 1024,
     }).trim();
+  }
+
+  /** Execute argv directly; data must never be parsed as shell source. */
+  protected async execFile(program: string, args: string[], timeout = 10000): Promise<string> {
+    return execFileSync(program, args, { encoding: 'utf-8', timeout, maxBuffer: 1024 * 1024 }).trim();
+  }
+
+  protected validateNumbers(...values: number[]): void {
+    if (values.some(value => typeof value !== 'number' || !Number.isSafeInteger(value))) {
+      throw new Error('Desktop coordinates and counts must be finite safe integers');
+    }
   }
 
   /**

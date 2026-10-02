@@ -129,7 +129,14 @@ export class LinuxNativeProvider extends BaseNativeProvider {
    * Map a key name to the xdotool equivalent
    */
   private mapKey(key: string): string {
+    if (typeof key !== 'string' || !/^[a-zA-Z0-9_]+$/.test(key)) throw new Error('Invalid desktop key');
     return keyMap[key.toLowerCase()] ?? key;
+  }
+
+  private validateHandle(handle: string): void {
+    if (typeof handle !== 'string' || !/^(?:[0-9]+|0x[a-fA-F0-9]+)$/.test(handle)) {
+      throw new Error('Invalid desktop window handle');
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -139,7 +146,7 @@ export class LinuxNativeProvider extends BaseNativeProvider {
   async getMousePosition(): Promise<MousePosition> {
     this.ensureInitialized();
     try {
-      const output = await this.exec('xdotool getmouselocation');
+      const output = await this.execFile('xdotool', ['getmouselocation']);
       const xMatch = output.match(/x:(\d+)/);
       const yMatch = output.match(/y:(\d+)/);
       const screenMatch = output.match(/screen:(\d+)/);
@@ -155,43 +162,47 @@ export class LinuxNativeProvider extends BaseNativeProvider {
 
   async moveMouse(x: number, y: number, options?: MouseMoveOptions): Promise<void> {
     this.ensureInitialized();
-    let cmd = 'xdotool mousemove';
+    this.validateNumbers(x, y);
+    const args = ['mousemove'];
     if (options?.smooth && options.steps) {
-      cmd += ` --steps ${options.steps}`;
+      this.validateNumbers(options.steps);
+      args.push('--steps', String(options.steps));
     }
-    cmd += ` ${x} ${y}`;
-    await this.exec(cmd);
+    args.push(String(x), String(y));
+    await this.execFile('xdotool', args);
   }
 
   async click(options?: MouseClickOptions): Promise<void> {
     this.ensureInitialized();
-    const btn = buttonNumber(options?.button);
-    let cmd = `xdotool click`;
+    const args = ['click'];
     if (options?.clicks && options.clicks > 1) {
-      cmd += ` --repeat ${options.clicks} --delay ${options.delay ?? 100}`;
+      this.validateNumbers(options.clicks, options.delay ?? 100);
+      args.push('--repeat', String(options.clicks), '--delay', String(options.delay ?? 100));
     }
-    cmd += ` ${btn}`;
-    await this.exec(cmd);
+    args.push(String(buttonNumber(options?.button)));
+    await this.execFile('xdotool', args);
   }
 
   async doubleClick(button?: MouseButton): Promise<void> {
     this.ensureInitialized();
     const btn = buttonNumber(button);
-    await this.exec(`xdotool click --repeat 2 --delay 50 ${btn}`);
+    await this.execFile('xdotool', ['click', '--repeat', '2', '--delay', '50', String(btn)]);
   }
 
   async rightClick(): Promise<void> {
     this.ensureInitialized();
-    await this.exec('xdotool click 3');
+    await this.execFile('xdotool', ['click', '3']);
   }
 
   async drag(fromX: number, fromY: number, toX: number, toY: number, _options?: MouseDragOptions): Promise<void> {
     this.ensureInitialized();
-    await this.exec(`xdotool mousemove ${fromX} ${fromY} mousedown 1 mousemove ${toX} ${toY} mouseup 1`);
+    this.validateNumbers(fromX, fromY, toX, toY);
+    await this.execFile('xdotool', ['mousemove', String(fromX), String(fromY), 'mousedown', '1', 'mousemove', String(toX), String(toY), 'mouseup', '1']);
   }
 
   async scroll(options: MouseScrollOptions): Promise<void> {
     this.ensureInitialized();
+    this.validateNumbers(options.deltaX ?? 0, options.deltaY ?? 0);
     const { deltaX = 0, deltaY = 0 } = options;
 
     // Vertical scroll: button 4 = up, button 5 = down
@@ -199,7 +210,7 @@ export class LinuxNativeProvider extends BaseNativeProvider {
       const btn = deltaY < 0 ? 4 : 5; // negative = scroll up
       const count = Math.abs(Math.round(deltaY));
       if (count > 0) {
-        await this.exec(`xdotool click --repeat ${count} ${btn}`);
+        await this.execFile('xdotool', ['click', '--repeat', String(count), String(btn)]);
       }
     }
 
@@ -208,7 +219,7 @@ export class LinuxNativeProvider extends BaseNativeProvider {
       const btn = deltaX < 0 ? 6 : 7; // negative = scroll left
       const count = Math.abs(Math.round(deltaX));
       if (count > 0) {
-        await this.exec(`xdotool click --repeat ${count} ${btn}`);
+        await this.execFile('xdotool', ['click', '--repeat', String(count), String(btn)]);
       }
     }
   }
@@ -224,27 +235,26 @@ export class LinuxNativeProvider extends BaseNativeProvider {
     if (options?.modifiers && options.modifiers.length > 0) {
       modPrefix = options.modifiers.map(m => this.mapKey(m)).join('+') + '+';
     }
-    await this.exec(`xdotool key ${modPrefix}${mappedKey}`);
+    await this.execFile('xdotool', ['key', `${modPrefix}${mappedKey}`]);
   }
 
   async keyDown(key: KeyCode): Promise<void> {
     this.ensureInitialized();
     const mappedKey = this.mapKey(key);
-    await this.exec(`xdotool keydown ${mappedKey}`);
+    await this.execFile('xdotool', ['keydown', mappedKey]);
   }
 
   async keyUp(key: KeyCode): Promise<void> {
     this.ensureInitialized();
     const mappedKey = this.mapKey(key);
-    await this.exec(`xdotool keyup ${mappedKey}`);
+    await this.execFile('xdotool', ['keyup', mappedKey]);
   }
 
   async type(text: string, options?: TypeOptions): Promise<void> {
     this.ensureInitialized();
     const delay = options?.delay ?? 30;
-    // Escape backslashes and double quotes for shell safety
-    const escapedText = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    await this.exec(`xdotool type --delay ${delay} "${escapedText}"`);
+    this.validateNumbers(delay);
+    await this.execFile('xdotool', ['type', '--delay', String(delay), '--', text]);
   }
 
   async hotkey(sequence: HotkeySequence): Promise<void> {
@@ -255,7 +265,7 @@ export class LinuxNativeProvider extends BaseNativeProvider {
     }
     parts.push(...sequence.keys.map(k => this.mapKey(k)));
     const combo = parts.join('+');
-    await this.exec(`xdotool key ${combo}`);
+    await this.execFile('xdotool', ['key', combo]);
   }
 
   // --------------------------------------------------------------------------
@@ -265,7 +275,7 @@ export class LinuxNativeProvider extends BaseNativeProvider {
   async getActiveWindow(): Promise<WindowInfo | null> {
     this.ensureInitialized();
     try {
-      const handle = await this.exec('xdotool getactivewindow');
+      const handle = await this.execFile('xdotool', ['getactivewindow']);
       if (!handle) return null;
       return this.getWindow(handle);
     } catch {
@@ -276,7 +286,7 @@ export class LinuxNativeProvider extends BaseNativeProvider {
   async getWindows(options?: WindowSearchOptions): Promise<WindowInfo[]> {
     this.ensureInitialized();
     try {
-      const output = await this.exec('xdotool search --onlyvisible --name ""');
+      const output = await this.execFile('xdotool', ['search', '--onlyvisible', '--name', '']);
       const handles = output.split('\n').filter(h => h.trim().length > 0);
       const windows: WindowInfo[] = [];
 
@@ -309,17 +319,18 @@ export class LinuxNativeProvider extends BaseNativeProvider {
 
   async getWindow(handle: string): Promise<WindowInfo | null> {
     this.ensureInitialized();
+    this.validateHandle(handle);
     try {
       let title = '';
       try {
-        title = await this.exec(`xdotool getwindowname ${handle}`);
+        title = await this.execFile('xdotool', ['getwindowname', handle]);
       } catch {
         // Some windows have no name
       }
 
       let pid = 0;
       try {
-        const pidStr = await this.exec(`xdotool getwindowpid ${handle}`);
+        const pidStr = await this.execFile('xdotool', ['getwindowpid', handle]);
         pid = parseInt(pidStr, 10) || 0;
       } catch {
         // PID may not be available
@@ -327,7 +338,7 @@ export class LinuxNativeProvider extends BaseNativeProvider {
 
       let x = 0, y = 0, width = 0, height = 0;
       try {
-        const geom = await this.exec(`xdotool getwindowgeometry ${handle}`);
+        const geom = await this.execFile('xdotool', ['getwindowgeometry', handle]);
         const posMatch = geom.match(/Position:\s*(\d+),(\d+)/);
         const sizeMatch = geom.match(/Geometry:\s*(\d+)x(\d+)/);
         if (posMatch?.[1] && posMatch[2]) {
@@ -345,7 +356,7 @@ export class LinuxNativeProvider extends BaseNativeProvider {
       let processName = '';
       if (pid > 0) {
         try {
-          processName = await this.exec(`ps -p ${pid} -o comm=`);
+          processName = await this.execFile('ps', ['-p', String(pid), '-o', 'comm=']);
         } catch {
           // Process may have exited
         }
@@ -353,7 +364,7 @@ export class LinuxNativeProvider extends BaseNativeProvider {
 
       let focused = false;
       try {
-        const activeHandle = await this.exec('xdotool getactivewindow');
+        const activeHandle = await this.execFile('xdotool', ['getactivewindow']);
         focused = handle === activeHandle;
       } catch {
         // Can't determine focus
@@ -378,40 +389,48 @@ export class LinuxNativeProvider extends BaseNativeProvider {
 
   async focusWindow(handle: string): Promise<void> {
     this.ensureInitialized();
-    await this.exec(`xdotool windowactivate --sync ${handle}`);
+    this.validateHandle(handle);
+    await this.execFile('xdotool', ['windowactivate', '--sync', handle]);
   }
 
   async minimizeWindow(handle: string): Promise<void> {
     this.ensureInitialized();
-    await this.exec(`xdotool windowminimize ${handle}`);
+    this.validateHandle(handle);
+    await this.execFile('xdotool', ['windowminimize', handle]);
   }
 
   async maximizeWindow(handle: string): Promise<void> {
     this.ensureInitialized();
+    this.validateHandle(handle);
     if (this.hasTool('wmctrl')) {
-      await this.exec(`wmctrl -ir ${handle} -b add,maximized_vert,maximized_horz`);
+      await this.execFile('wmctrl', ['-ir', handle, '-b', 'add,maximized_vert,maximized_horz']);
     }
   }
 
   async restoreWindow(handle: string): Promise<void> {
     this.ensureInitialized();
+    this.validateHandle(handle);
     if (this.hasTool('wmctrl')) {
-      await this.exec(`wmctrl -ir ${handle} -b remove,maximized_vert,maximized_horz`);
+      await this.execFile('wmctrl', ['-ir', handle, '-b', 'remove,maximized_vert,maximized_horz']);
     }
   }
 
   async closeWindow(handle: string): Promise<void> {
     this.ensureInitialized();
-    await this.exec(`xdotool windowclose ${handle}`);
+    this.validateHandle(handle);
+    await this.execFile('xdotool', ['windowclose', handle]);
   }
 
   async setWindow(handle: string, options: WindowSetOptions): Promise<void> {
     this.ensureInitialized();
+    this.validateHandle(handle);
     if (options.position) {
-      await this.exec(`xdotool windowmove ${handle} ${options.position.x} ${options.position.y}`);
+      this.validateNumbers(options.position.x, options.position.y);
+      await this.execFile('xdotool', ['windowmove', handle, String(options.position.x), String(options.position.y)]);
     }
     if (options.size) {
-      await this.exec(`xdotool windowsize ${handle} ${options.size.width} ${options.size.height}`);
+      this.validateNumbers(options.size.width, options.size.height);
+      await this.execFile('xdotool', ['windowsize', handle, String(options.size.width), String(options.size.height)]);
     }
     if (options.focus) {
       await this.focusWindow(handle);
