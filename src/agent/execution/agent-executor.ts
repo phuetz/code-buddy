@@ -2624,6 +2624,23 @@ export class AgentExecutor {
               logger.debug('[loop-guard] event emission failed', { error: String(err) });
             }
             if (decision.action === 'warn') {
+              // A stalled native reasoning trace can reproduce the same call
+              // despite the warning. Start a fresh reasoning attempt at this
+              // recovery boundary; retain every instruction, call and result.
+              // Normal tool continuations still preserve native thinking.
+              const taskStart = messages.findLastIndex(message => message.role === 'user');
+              let clearedReasoning = 0;
+              for (let index = taskStart + 1; index < messages.length; index++) {
+                const message = messages[index];
+                if (message?.role !== 'assistant' || !message.ollama_thinking) continue;
+                const recovered = { ...message };
+                delete recovered.ollama_thinking;
+                messages[index] = recovered;
+                clearedReasoning += 1;
+              }
+              if (clearedReasoning) {
+                logger.info('[loop-guard] native reasoning reset for recovery', { clearedReasoning });
+              }
               logger.warn('[loop-guard] loop warning injected', loopData);
               yield { type: "content", content: `\n⚠️ ${decision.message}\n` };
               messages.push({
