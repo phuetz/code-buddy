@@ -207,7 +207,8 @@ export function validateCommand(command: string, shell?: string): { valid: boole
   // A complete native AST can prove that a quoted heredoc body is literal
   // data. Backticks in that body (for example TypeScript documentation) are
   // not shell substitutions. Missing/uncertain grammar keeps the raw checks.
-  const patternInput = parseBashCommand(command).policyInput ?? command;
+  const parsedCommand = parseBashCommand(command);
+  const patternInput = parsedCommand.policyInput ?? command;
   // Check for blocked patterns; user denies and protected-path checks still
   // inspect the original command, and outer commands remain in patternInput.
   for (const pattern of BLOCKED_PATTERNS) {
@@ -245,7 +246,10 @@ export function validateCommand(command: string, shell?: string): { valid: boole
   // file tools (src/security/secret-files.ts). Best-effort on the command
   // text: a path assembled at runtime by the interpreter is out of reach of
   // this static filter. In particular, this does not protect Git objects.
-  const secretToken = findCredentialPathInCommand(command);
+  // A quoted here-document written by bare cat is source text, not access to
+  // the paths it mentions. The AST leaves destinations and outer commands
+  // visible; interpreter input, pipelines and uncertain syntax stay raw.
+  const secretToken = findCredentialPathInCommand(parsedCommand.credentialPolicyInput ?? command);
   if (secretToken) {
     auditLogger.logCommandValidation({ command, valid: false, reason: `Credential path: ${secretToken}`, source: 'command-validator' });
     return {

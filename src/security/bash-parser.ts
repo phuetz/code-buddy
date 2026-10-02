@@ -83,6 +83,8 @@ export interface ParseResult {
   hasRedirection?: boolean;
   /** AST-verified shell syntax with literal here-document data removed. Never execute this text. */
   policyInput?: string;
+  /** Literal input written by a bare cat to a file, not interpreted or piped. */
+  credentialPolicyInput?: string;
   /** Present only for a complete native AST; quoted literals are not shell syntax. */
   hasProcessSubstitution?: boolean;
 }
@@ -100,12 +102,28 @@ function containsProcessSubstitution(node: HeredocSyntaxNode): boolean {
   return node.type === 'process_substitution' || node.children.some(containsProcessSubstitution);
 }
 
+function mayRedefineShellCommands(node: HeredocSyntaxNode): boolean {
+  if (node.type === 'heredoc_redirect') return false;
+  if (node.type === 'function_definition' || node.type === 'variable_assignment') return true;
+  if (node.type === 'command_name' && ['.', 'source', 'eval', 'alias', 'hash', 'trap', 'enable', 'builtin'].includes(node.text)) return true;
+  return node.children.some(mayRedefineShellCommands);
+}
+
 /** Only the complete native AST can prove where quoted heredoc data ends. */
-function literalHeredocPolicyInput(root: HeredocSyntaxNode, input: string): string | undefined {
+function literalHeredocPolicyInput(root: HeredocSyntaxNode, input: string, onlyFileData = false): string | undefined {
   if (root.hasError) return undefined;
+  if (onlyFileData && mayRedefineShellCommands(root)) return undefined;
   const ranges: Array<{ start: number; end: number }> = [];
-  const visit = (node: HeredocSyntaxNode): void => {
+  const visit = (node: HeredocSyntaxNode, parent?: HeredocSyntaxNode, inPipeline = false): void => {
     if (node.type === 'heredoc_redirect') {
+      if (onlyFileData) {
+        const body = parent?.children.find(child => child.type === 'command' || child.type === 'list');
+        const command = body?.type === 'list' ? body.children.at(-1) : body;
+        const writesFile = parent?.children.some(child => child.type === 'file_redirect' && /^>\s*[^>&]/.test(child.text));
+        if (inPipeline || parent?.type !== 'redirected_statement' || !writesFile
+          || command?.type !== 'command' || command.children.length !== 1
+          || command.children[0]?.type !== 'command_name' || command.children[0].text !== 'cat') return;
+      }
       const start = node.children.find(child => child.type === 'heredoc_start');
       const end = node.children.find(child => child.type === 'heredoc_end');
       const literal = start?.text.match(/^(['"])([A-Za-z0-9_]+)\1$/);
@@ -116,7 +134,7 @@ function literalHeredocPolicyInput(root: HeredocSyntaxNode, input: string): stri
       // Data in the heredoc is not a nested shell redirection.
       return;
     }
-    for (const child of node.children) visit(child);
+    for (const child of node.children) visit(child, node, inPipeline || node.type === 'pipeline');
   };
   visit(root);
   if (!ranges.length) return undefined;
@@ -474,9 +492,11 @@ export function parseBashCommand(input: string): ParseResult {
       logger.debug('Parsed bash with tree-sitter', { commandCount: commands.length });
 
       const policyInput = literalHeredocPolicyInput(tree.rootNode, input);
+      const credentialPolicyInput = literalHeredocPolicyInput(tree.rootNode, input, true);
       return {
         commands, usedTreeSitter: true, warnings: [],
         ...(policyInput ? { policyInput } : {}),
+        ...(credentialPolicyInput ? { credentialPolicyInput } : {}),
         ...(!tree.rootNode.hasError ? { hasProcessSubstitution: containsProcessSubstitution(tree.rootNode) } : {}),
       };
     } catch {

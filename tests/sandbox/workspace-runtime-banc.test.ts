@@ -8,6 +8,8 @@ import { probeNativeSandbox } from './native-sandbox-ready.js';
 import { executeInWorkspaceSandbox } from '../../src/tools/bash/execution-policy.js';
 import { getPermissionModeManager } from '../../src/security/permission-modes.js';
 import { formatRuntimeSettingsContext } from '../../src/services/runtime-settings-context.js';
+import { validateCommand } from '../../src/tools/bash/command-validator.js';
+import { parseBashCommand } from '../../src/security/bash-parser.js';
 
 const ready = await probeNativeSandbox();
 const roots: string[] = [];
@@ -29,6 +31,22 @@ function lane(kind: 'shared' | 'worktree') {
   fs.writeFileSync(path.join(source, '.npmrc'), 'SECRET_SENTINEL');
   return { workspace, source };
 }
+
+it('écrit le texte du test de clé dans le vrai sandbox sans lire une clé', async context => {
+  parseBashCommand(':');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  if (!ready.ready || !parseBashCommand(':').usedTreeSitter) context.skip();
+  const { workspace } = lane('shared');
+  const source = "const pem = fs.readFileSync('priv.key', 'utf8');\n";
+  const command = `cat > key-test.ts <<'EOF'\n${source}EOF\n`;
+  expect(validateCommand(command)).toMatchObject({ valid: true });
+  getPermissionModeManager().setMode('dontAsk');
+  const result = await executeInWorkspaceSandbox(command, workspace, 5000);
+  expect(result.result?.exitCode, result.result?.stderr).toBe(0);
+  expect(fs.readFileSync(path.join(workspace, 'key-test.ts'), 'utf8')).toBe(source);
+  expect(validateCommand('cat priv.key').valid).toBe(false);
+  expect(fs.existsSync(path.join(workspace, 'priv.key'))).toBe(false);
+});
 
 describe.sequential('banc shell : clone partagé et worktree', () => {
   for (const kind of ['shared', 'worktree'] as const) {
