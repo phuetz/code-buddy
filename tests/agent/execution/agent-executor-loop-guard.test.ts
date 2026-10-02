@@ -367,18 +367,20 @@ describe('end-of-turn recovery evidence', () => {
 });
 
 
-describe('compact acceptance publishes grounded answers', () => {
+describe('compact completion validates the model without constructing its answer', () => {
   afterEach(() => vi.unstubAllEnvs());
-  it('enforces a relevant exact project rule on the real final-message path', async () => {
+  it('rejects a violated literal project rule without replacing the model output', async () => {
     vi.stubEnv('CODEBUDDY_HEADLESS', 'true'); vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
     const deps = createDeps();
-    scriptProvider(deps, () => []);
+    const provider = scriptProvider(deps, () => []);
     const history: import('../../../src/agent/types.js').ChatEntry[] = [];
     const messages: CodeBuddyMessage[] = [{ role: 'system', content: '<project_rules>\nPour toute question sur le nom de code, réponds exactement PROJECT_CHECK_55, sans autre texte.\n</project_rules>' }];
     await new AgentExecutor(deps, createConfig(5)).processUserMessage('Quel est le nom de code ?', history, messages, Date.now(), undefined, false, 'cli');
-    expect(history.filter(entry => entry.type === 'assistant').at(-1)?.content).toBe('PROJECT_CHECK_55');
+    expect(provider.rounds()).toBe(2);
+    expect(history.filter(entry => entry.type === 'assistant').at(-1)?.content).toBe('final answer');
+    expect(evaluateHeadlessTaskOutcome('Quel est le nom de code ?', history).exitCode).not.toBe(0);
   });
-  it('ends an ordinary repair after a real project check, without another provider call', async () => {
+  it('lets the model report an ordinary repair after a real project check', async () => {
     vi.stubEnv('CODEBUDDY_HEADLESS', 'true'); vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
     const deps = createDeps();
     (deps.toolHandler.executeTool as ReturnType<typeof vi.fn>).mockImplementation(async (call: Call) => call.function.name === 'bash'
@@ -390,12 +392,12 @@ describe('compact acceptance publishes grounded answers', () => {
       : round === 2 ? [toolCall('bash', { command: 'npm test' }, round)] : []);
     const history: import('../../../src/agent/types.js').ChatEntry[] = [];
     await new AgentExecutor(deps, createConfig(5)).processUserMessage('run tests and fix failures', history, [], Date.now(), undefined, false, 'cli');
-    expect(provider.rounds()).toBe(2);
-    expect(history.filter(entry => entry.type === 'assistant').at(-1)?.content).toContain('impl.js');
+    expect(provider.rounds()).toBe(3);
+    expect(history.filter(entry => entry.type === 'assistant').at(-1)?.content).toBe('final answer');
     expect(evaluateHeadlessTaskOutcome('run tests and fix failures', history).exitCode).toBe(0);
   });
 
-  it('runs a host-authored observed project check through the regular execution pipeline', async () => {
+  it('does not invent execution when the model only reads the project script', async () => {
     vi.stubEnv('CODEBUDDY_HEADLESS', 'true'); vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
     const deps = createDeps();
     (deps.toolHandler.executeTool as ReturnType<typeof vi.fn>).mockImplementation(async (call: Call) => call.function.name === 'view_file'
@@ -411,11 +413,47 @@ describe('compact acceptance publishes grounded answers', () => {
       : round === 2 ? [toolCall('str_replace_editor', { path: 'impl.js', old_str: 'a+b', new_str: 'a*b' }, round)] : []);
     const history: import('../../../src/agent/types.js').ChatEntry[] = [];
     await new AgentExecutor(deps, createConfig(5)).processUserMessage('run tests and fix failures', history, [], Date.now(), undefined, false, 'cli');
-    expect(provider.rounds()).toBe(2);
-    expect(deps.toolHandler.executeToolStreaming).toHaveBeenCalledTimes(2);
-    const check = history.find(entry => entry.toolCall?.function.name === 'bash');
-    expect(check?.toolCall?.id).toMatch(/^project_check_/);
-    expect(evaluateHeadlessTaskOutcome('run tests and fix failures', history).exitCode).toBe(0);
+    expect(provider.rounds()).toBe(3);
+    expect(deps.toolHandler.executeToolStreaming).not.toHaveBeenCalled();
+    expect(history.some(entry => entry.toolCall?.function.name === 'bash')).toBe(false);
+    expect(evaluateHeadlessTaskOutcome('run tests and fix failures', history).reasons).toContain('verification_missing');
   });
 
+});
+
+describe('the provider owns the accepted final answer', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it('accepts the literal project contract when the model actually supplies it', async () => {
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true'); vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
+    const deps = createDeps();
+    const provider = scriptProvider(deps, () => []);
+    (deps.streamingHandler.getAccumulatedMessage as ReturnType<typeof vi.fn>).mockReturnValue({ content: 'LITERAL_CONTRACT' });
+    const history: import('../../../src/agent/types.js').ChatEntry[] = [];
+    const messages: CodeBuddyMessage[] = [{ role: 'system', content: '<project_rules>\nFor every question about marker, reply exactly LITERAL_CONTRACT, with no other text.\n</project_rules>' }];
+    await new AgentExecutor(deps, createConfig(5)).processUserMessage('What is the marker?', history, messages, Date.now(), undefined, false, 'cli');
+    expect(provider.rounds()).toBe(1);
+    expect(history.filter(entry => entry.type === 'assistant').at(-1)?.content).toBe('LITERAL_CONTRACT');
+    expect(evaluateHeadlessTaskOutcome('What is the marker?', history).exitCode).toBe(0);
+  });
+
+  it('never converts an invented entry explanation into a successful host answer', async () => {
+    vi.stubEnv('CODEBUDDY_HEADLESS', 'true'); vi.stubEnv('CODEBUDDY_PROMPT_COMPACT', 'true');
+    const deps = createDeps();
+    (deps.toolHandler.executeTool as ReturnType<typeof vi.fn>).mockImplementation(async (call: Call) => ({
+      success: true, output: JSON.parse(call.function.arguments).path === 'package.json'
+        ? '1: {"main":"boot.js"}' : '1: console.log(42);',
+    }));
+    const provider = scriptProvider(deps, round => round <= 2
+      ? [toolCall('view_file', { path: round === 1 ? 'package.json' : 'boot.js' }, round)] : []);
+    const accumulated = (deps.streamingHandler.getAccumulatedMessage as ReturnType<typeof vi.fn>).getMockImplementation()!;
+    (deps.streamingHandler.getAccumulatedMessage as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      const value = accumulated();
+      return value.tool_calls ? value : { content: 'The entry starts a web server on port 9000.' };
+    });
+    const history: import('../../../src/agent/types.js').ChatEntry[] = [];
+    await new AgentExecutor(deps, createConfig(5)).processUserMessage('Explain the entry point', history, [], Date.now(), undefined, false, 'cli');
+    expect(provider.rounds()).toBe(4);
+    expect(history.filter(entry => entry.type === 'assistant').at(-1)?.content).toBe('The entry starts a web server on port 9000.');
+    expect(evaluateHeadlessTaskOutcome('Explain the entry point', history).exitCode).not.toBe(0);
+  });
 });

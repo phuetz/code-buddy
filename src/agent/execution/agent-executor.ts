@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { compactTurnObservations, compactObservation } from '../../context/compact-turn-observations.js';
-import { completedCheckRepairAnswer, projectCheckToRun } from '../../cli/headless-check-repair.js';
 import { groundedEntryAnswer, exactProjectAnswer, isEntryExplanation } from '../../cli/headless-source-answer.js';
 import { unsupportedActionClaims } from '../../cli/headless-task-outcome.js';
 import { bootstrapRepositoryReads } from './repository-read-bootstrap.js';
@@ -1764,24 +1763,6 @@ export class AgentExecutor {
           }
         }
 
-        if (surface === 'cli' && isHeadlessLocalPromptCompact()) {
-          const system = typeof messages[0]?.content === 'string' ? messages[0].content : '';
-          const evidence = history.slice(evidenceStart);
-          const completed = completedCheckRepairAnswer(turnQueryText, evidence, process.cwd());
-          const exact = toolRounds === 0 ? exactProjectAnswer(turnQueryText, system) : undefined;
-          const grounded = completed ?? exact ?? (toolRounds === 0 ? await groundedEntryAnswer(turnQueryText, evidence) : undefined);
-          if (grounded !== undefined) {
-            const accepted = sanitizeAssistantOutput(grounded);
-            history.push({ type: 'assistant', content: accepted, timestamp: new Date() });
-            messages.push({ role: 'assistant', content: accepted });
-            this.commitAssistantSideEffects(message, messages, accepted, toolRounds);
-            yield { type: 'content', content: accepted };
-            yield { type: 'done' };
-            return;
-          }
-        }
-        const hostProjectCheck = surface === 'cli' && isHeadlessLocalPromptCompact() && isToolNameAllowed('bash')
-          ? projectCheckToRun(turnQueryText, history.slice(evidenceStart)) : undefined;
         this.deps.streamingHandler.reset();
         let steeringRequestedDuringText = false;
         let streamObservedToolCalls = false;
@@ -1792,7 +1773,7 @@ export class AgentExecutor {
         // hangs FOREVER (turns stuck for hours in Cowork and headless waves).
         // Fail fast with a clear error instead; the caller/user retries.
         const progress = startHeadlessPromptProgress();
-        const streamFactory = () => hostProjectCheck ? (async function* () { /* Host check uses the ordinary execution path below. */ })() : withStallGuard(this.deps.client.chatStream(
+        const streamFactory = () => withStallGuard(this.deps.client.chatStream(
           preparedMessages,
           tools,
           {
@@ -1911,10 +1892,7 @@ export class AgentExecutor {
           }
         }
 
-        const accumulatedMessage = hostProjectCheck ? { content: '', tool_calls: [{
-          id: `project_check_${randomUUID()}`, type: 'function' as const,
-          function: { name: 'bash', arguments: JSON.stringify({ command: hostProjectCheck }) },
-        }], finishReason: undefined } : this.deps.streamingHandler.getAccumulatedMessage();
+        const accumulatedMessage = this.deps.streamingHandler.getAccumulatedMessage();
         // Sanitize streamed assistant content: strip model control tokens and invisible chars
         let toolCalls = accumulatedMessage.tool_calls;
         if (Array.isArray(toolCalls) && toolCalls.length > 0) {
@@ -1975,15 +1953,17 @@ export class AgentExecutor {
         }
 
         let sourceAnswerUnverified = false;
+        let sourceAnswerContract: string | undefined;
         if (!hasToolCalls && streamFinishReason !== 'length' && surface === 'cli' && isHeadlessLocalPromptCompact()) {
           const system = typeof messages[0]?.content === 'string' ? messages[0].content : '';
           const exact = exactProjectAnswer(turnQueryText, system);
-          if (exact !== undefined) content = exact;
-          else if (isEntryExplanation(turnQueryText)) {
-            const grounded = await groundedEntryAnswer(turnQueryText, history.slice(evidenceStart));
-            sourceAnswerUnverified = grounded === undefined;
-            content = grounded ?? 'Entry point not established by successful source reads. No inferred explanation was accepted.';
-          }
+          sourceAnswerContract = exact ?? (isEntryExplanation(turnQueryText)
+            ? await groundedEntryAnswer(turnQueryText, history.slice(evidenceStart)) : undefined);
+          // Validate the provider's answer; never replace it with a host reply.
+          // An unsupported entry explanation remains closed, even without reads.
+          sourceAnswerUnverified = sourceAnswerContract !== undefined
+            ? content.trim() !== sourceAnswerContract.trim()
+            : isEntryExplanation(turnQueryText);
         }
 
         // D1: empty provider response (no tools, no length truncation).
@@ -2027,7 +2007,6 @@ export class AgentExecutor {
           content: persistedAssistantContent ?? '',
           timestamp: new Date(),
           toolCalls: toolCalls,
-          ...(sourceAnswerUnverified ? { terminationReason: 'unverified_source_answer' } : {}),
         };
         history.push(assistantEntry);
         messages.push({
@@ -2041,7 +2020,7 @@ export class AgentExecutor {
 
         // Sum the provider's own counters across rounds: one HTTP completion can
         // cost several provider calls, exactly like the cost accounting above.
-        const roundProviderUsage = hostProjectCheck ? undefined : this.deps.streamingHandler.getProviderUsage?.();
+        const roundProviderUsage = this.deps.streamingHandler.getProviderUsage?.();
         if (roundProviderUsage) {
           providerUsageSeen = true;
           providerPromptTokens += roundProviderUsage.promptTokens ?? 0;
@@ -2772,11 +2751,16 @@ export class AgentExecutor {
 
           if (process.env.CODEBUDDY_HEADLESS === 'true' && surface === 'cli') {
             const missing = unsupportedActionClaims(assistantEntry.content, history.slice(evidenceStart));
-            if (missing.length && !claimRetry) {
+            if ((missing.length || sourceAnswerUnverified) && !claimRetry) {
               claimRetry = true;
-              messages.push({ role: 'user', content: 'Your answer claims completed actions without successful tool evidence (' + missing.join(', ') + '). Perform and verify the requested actions using tools, or correct your answer to report the blocker honestly. Do not invent a result.' });
+              messages.push({ role: 'user', content: sourceAnswerUnverified
+                ? (sourceAnswerContract !== undefined
+                  ? 'Your answer does not satisfy the observed source/project output contract. Reply with exactly these attested facts and no other assertions:\n' + sourceAnswerContract
+                  : 'The entry point has not been established by successful source reads. Read its declaration and source; do not infer its purpose or behavior.')
+                : 'Your answer claims completed actions without successful tool evidence (' + missing.join(', ') + '). Perform and verify the requested actions using tools, or correct your answer to report the blocker honestly. Do not invent a result.' });
               continue;
             }
+            if (sourceAnswerUnverified) assistantEntry.terminationReason = 'unverified_source_answer';
           }
 
           // Companion hosts own the canonical commit boundary: voice,

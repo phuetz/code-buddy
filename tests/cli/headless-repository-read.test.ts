@@ -37,8 +37,9 @@ it.each([
     requests.push(body);
     const read = body.messages.some((m: { role: string; content: string }) =>
       (m.role === 'tool' || m.role === 'user') && m.content.includes('ORACLE_TANGERINE'));
+    const entryFacts = 'Le champ `main` de package.json déclare `launch.js`.\nAppel observé (launch.js:1) : `console.log("ORACLE_TANGERINE")`.';
     res.end(JSON.stringify({ model: 'fixture-model', message: { role: 'assistant',
-      content: read ? 'launch.js prints ORACLE_TANGERINE.' : 'I have no access to project files.' },
+      content: read ? (args[1]?.includes('point d’entrée') ? entryFacts : 'launch.js prints ORACLE_TANGERINE.') : 'I have no access to project files.' },
     done: true, done_reason: 'stop', prompt_eval_count: 10, eval_count: 10 }) + '\n');
   });
   try {
@@ -66,7 +67,7 @@ it.each([
       expect(output.result).toContain('package.json déclare `launch.js`');
       expect(output.result).toContain('Appel observé (launch.js:1) : `console.log("ORACLE_TANGERINE")`');
       expect(output.messages.filter((m: { role: string }) => m.role === 'tool').map((m: { content: string }) => m.content).join('\n')).toContain('ORACLE_TANGERINE');
-      expect(requests.some(r => r.messages.some(m => m.role === 'user' && m.content === args[1]))).toBe(false);
+      expect(requests.some(r => r.messages.some(m => m.role === 'user' && m.content === args[1]))).toBe(true);
     } else {
     expect(result.stdout).toContain('launch.js prints ORACLE_TANGERINE');
     const first = requests.find(r => r.messages?.some(m => m.role === 'user'));

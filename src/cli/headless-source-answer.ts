@@ -78,8 +78,9 @@ function observedFile(entries: readonly TaskEvidenceEntry[], file: string): stri
   return undefined;
 }
 
-/** A compact entry explanation consists only of independently attested facts.
- * Never publish the model's inferred purpose or an unobserved return value.
+/** Build an acceptance contract consisting only of independently attested facts.
+ * The executor validates the provider answer against it, without substituting
+ * host prose. Never attest inferred purpose or an unobserved return value.
  * Source parsing is lazy and applies only to this narrow informational request.
  */
 export async function groundedEntryAnswer(

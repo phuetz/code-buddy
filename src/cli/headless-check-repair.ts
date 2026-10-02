@@ -1,3 +1,5 @@
+// Legacy diagnostic helpers, retained for evidence regressions only.
+// The agent loop does not call them: it neither authors checks nor final replies.
 import path from 'node:path';
 import { evaluateHeadlessTaskOutcome, type TaskEvidenceEntry } from './headless-task-outcome.js';
 
