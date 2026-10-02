@@ -83,6 +83,8 @@ export interface ParseResult {
   hasRedirection?: boolean;
   /** AST-verified shell syntax with literal here-document data removed. Never execute this text. */
   policyInput?: string;
+  /** Present only for a complete native AST; quoted literals are not shell syntax. */
+  hasProcessSubstitution?: boolean;
 }
 
 interface HeredocSyntaxNode {
@@ -92,6 +94,10 @@ interface HeredocSyntaxNode {
   endIndex: number;
   hasError: boolean;
   children: HeredocSyntaxNode[];
+}
+
+function containsProcessSubstitution(node: HeredocSyntaxNode): boolean {
+  return node.type === 'process_substitution' || node.children.some(containsProcessSubstitution);
 }
 
 /** Only the complete native AST can prove where quoted heredoc data ends. */
@@ -468,7 +474,11 @@ export function parseBashCommand(input: string): ParseResult {
       logger.debug('Parsed bash with tree-sitter', { commandCount: commands.length });
 
       const policyInput = literalHeredocPolicyInput(tree.rootNode, input);
-      return { commands, usedTreeSitter: true, warnings: [], ...(policyInput ? { policyInput } : {}) };
+      return {
+        commands, usedTreeSitter: true, warnings: [],
+        ...(policyInput ? { policyInput } : {}),
+        ...(!tree.rootNode.hasError ? { hasProcessSubstitution: containsProcessSubstitution(tree.rootNode) } : {}),
+      };
     } catch {
       // tree-sitter parse failed — use fallback
     }

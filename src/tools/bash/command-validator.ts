@@ -124,8 +124,11 @@ export function hasShellBypassFeatures(command: string): { bypass: boolean; reas
     }
   }
 
-  // Check for process substitution
-  if (/[<>]\(/.test(command)) {
+  // A quoted JavaScript arrow `=>({ ... })` is data, not `>(...)` shell
+  // syntax. Only a complete native AST can make this distinction; retain
+  // the conservative raw check when parsing is unavailable or incomplete.
+  const parsed = parseBashCommand(command);
+  if (parsed.hasProcessSubstitution ?? /[<>]\(/.test(command)) {
     return { bypass: true, reason: 'Process substitution detected' };
   }
 
