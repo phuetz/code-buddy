@@ -1171,8 +1171,9 @@ async function processPromptHeadless(
     formatEmptyHeadlessResponseError,
     isHeadlessFinalResponseEmpty,
     resolveHeadlessTurnExitCode,
+    summarizeHeadlessTurn,
+    validateHeadlessOutputText,
   } = await import('./cli/headless-options.js');
-  const { validateOutputText } = await import('./utils/output-schema-validator.js');
   const { writeFileAtomic } = await import('./utils/atomic-write.js');
 
   try {
@@ -1407,14 +1408,10 @@ async function processPromptHeadless(
 
     // Extract the final assistant response directly from chatEntries. This is
     // the text used by every headless output mode and by the file flags.
-    const lastAssistantEntry = [...chatEntries]
-      .reverse()
-      .find((entry) => entry.type === 'assistant');
-    const costLimitReached = agent.isSessionCostLimitReached() || chatEntries.some(
-      (entry) => entry.type === 'tool_result'
-        && entry.toolResult?.error?.startsWith('Skipped because the session cost limit was reached'),
+    const { resultText, costLimitReached } = summarizeHeadlessTurn(
+      chatEntries,
+      agent.isSessionCostLimitReached(),
     );
-    const resultText = lastAssistantEntry?.content || (costLimitReached ? 'Session cost limit reached.' : '');
 
     const client = agent.getClient();
     const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
@@ -1435,14 +1432,14 @@ async function processPromptHeadless(
     // Validate before writing or emitting any successful output. The schema
     // applies to the JSON value represented by the final assistant text, not
     // to the internal/OpenAI-compatible message history.
-    if (outputSchemaPath && !costLimitReached) {
-      const validation = validateOutputText(resultText, outputSchemaPath);
+    if (outputSchemaPath) {
+      const validation = validateHeadlessOutputText(resultText, outputSchemaPath, costLimitReached);
       if (!validation.valid) {
         cli.error('Output schema validation failed:');
         for (const error of validation.errors) {
           cli.error(`  - ${error}`);
         }
-        return 1;
+        return validation.exitCodeOnFailure;
       }
     }
 

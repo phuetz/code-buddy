@@ -73,6 +73,7 @@ import { loadToolLoopGuardOptions, ToolLoopGuard, type ToolLoopDecision } from "
 import { getGlobalEventBus } from "../../events/event-bus.js";
 import { takeFirstUseHint } from "../../utils/first-use-hints.js";
 import { getTurnMetricsRecorder } from '../../observability/turn-metrics.js';
+import { SESSION_COST_LIMIT_STOP_REASON } from './stop-reasons.js';
 import type { ICMBridge } from "../../memory/icm-bridge.js";
 import { shouldCompactBeforeToolExec, estimateToolResultTokens } from "../../context/proactive-compaction.js";
 import { formatTokenUsage, estimateCost } from "../../utils/token-display.js";
@@ -1991,6 +1992,7 @@ export class AgentExecutor {
               const toolResult: ToolResult = {
                 success: false,
                 error: 'Skipped because the session cost limit was reached before tool execution.',
+                metadata: { stopReason: SESSION_COST_LIMIT_STOP_REASON },
               };
               history.push({
                 type: 'tool_result',

@@ -1,4 +1,7 @@
 import { sanitizeModelOutput } from '../utils/output-sanitizer.js';
+import type { ChatEntry } from '../agent/types.js';
+import { SESSION_COST_LIMIT_STOP_REASON } from '../agent/execution/stop-reasons.js';
+import { validateOutputText } from '../utils/output-schema-validator.js';
 
 export interface HeadlessOutputOptions {
   output?: string;
@@ -14,6 +17,34 @@ export interface EmptyHeadlessResponseInfo {
 export interface UnexecutedProseToolCall {
   toolName: string;
   line: string;
+}
+
+/** Resolve the final text and a cost stop from persisted entries, not display-only events. */
+export function summarizeHeadlessTurn(
+  entries: ReadonlyArray<ChatEntry>,
+  agentCostLimitReached: boolean,
+): { resultText: string; costLimitReached: boolean } {
+  const costLimitReached = agentCostLimitReached || entries.some(
+    (entry) => entry.type === 'tool_result'
+      && entry.toolResult?.metadata?.stopReason === SESSION_COST_LIMIT_STOP_REASON,
+  );
+  const lastAssistantEntry = [...entries].reverse().find((entry) => entry.type === 'assistant');
+  return {
+    resultText: lastAssistantEntry?.content || (costLimitReached ? 'Session cost limit reached.' : ''),
+    costLimitReached,
+  };
+}
+
+/** Validate the final assistant JSON even when a cost stop determines the exit code. */
+export function validateHeadlessOutputText(
+  resultText: string,
+  schemaPath: string,
+  costLimitReached: boolean,
+): { valid: boolean; errors: string[]; exitCodeOnFailure: 1 | 3 } {
+  return {
+    ...validateOutputText(resultText, schemaPath),
+    exitCodeOnFailure: costLimitReached ? 3 : 1,
+  };
 }
 
 export function resolveHeadlessOutputFormat(options: HeadlessOutputOptions): string {

@@ -290,7 +290,9 @@ directly and atomically to a file — handy when you only want the answer, not
 the full JSON envelope. `--output-schema <file>` takes a path to a JSON
 Schema file and validates the final response against it before exiting; a
 non-conforming response makes the process exit with code `1` instead of
-silently returning bad output. Combine with `--permission-mode dontAsk` to
+silently returning bad output. If a cost limit also stops the turn, the schema
+is still checked and the process exits with code `3`; no invalid response is
+written to the output file. Combine with `--permission-mode dontAsk` to
 run a real task (file writes, `bash`) without interactive confirmation
 prompts in a script or CI job.
 

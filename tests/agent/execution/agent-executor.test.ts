@@ -16,6 +16,7 @@ import type { CodeBuddyMessage } from '../../../src/codebuddy/client';
 import { logger } from '../../../src/utils/logger.js';
 import { YIELD_SIGNAL } from '../../../src/agent/execution/yield-coordinator.js';
 import { INTERACTIVE_SHELL_SIGNAL } from '../../../src/agent/execution/turn-signals.js';
+import { summarizeHeadlessTurn, resolveHeadlessTurnExitCode } from '../../../src/cli/headless-options.js';
 import {
   getLatencyOptimizer,
   getStreamingOptimizer,
@@ -1445,7 +1446,7 @@ describe('AgentExecutor', () => {
       const history: ChatEntry[] = [];
       const messages: CodeBuddyMessage[] = [];
 
-      await executor.processUserMessage('Expensive task', history, messages);
+      const entries = await executor.processUserMessage('Expensive task', history, messages);
 
       // Phase D: cost limit message is yielded as a `content` event by runTurnLoop
       // but not pushed as a ChatEntry. Invariant: pre-check is invoked (and the
@@ -1455,6 +1456,9 @@ describe('AgentExecutor', () => {
       expect(messages.filter((entry) => entry.role === 'tool')).toEqual([
         expect.objectContaining({ tool_call_id: toolCall.id }),
       ]);
+      const headless = summarizeHeadlessTurn(entries, false);
+      expect(headless.costLimitReached).toBe(true);
+      expect(resolveHeadlessTurnExitCode(headless.resultText, [], [], headless.costLimitReached)).toBe(3);
     });
 
     it('should handle API errors gracefully', async () => {
