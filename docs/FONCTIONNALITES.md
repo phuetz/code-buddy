@@ -59,7 +59,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `cli-nodes` — Companion app nodes | Gérez les nœuds de l’application compagnon sur ordinateur et mobile. | **Échec constaté** | [Trace de l’échec](preuves/p7-cli-nodes.log); [Maillons vérifiés](preuves/verification-statique.md#cli-nodes) |
 | `fleet-peer-chat` — Peer chat | Interrogez un pair connecté disposant d’un fournisseur ; sinon refus explicite avec les prérequis à configurer sur ce pair. | **Prérequis vérifiés** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/fleet-peer-chat.md) ; [Raccordement](preuves/verification-statique.md#fleet-peer-chat) |
 | `fleet-peer-tools` — Peer read-only tools | Demandez un outil autorisé en lecture seule à un pair. | **Testée localement** | [Trace réelle](preuves/p6-fleet-peer-tools.log); [Maillons vérifiés](preuves/verification-statique.md#fleet-peer-tools) |
-| `fleet-peer-sessions` — Multi-turn peer sessions | Poursuivez une conversation avec un pair de la flotte sur plusieurs tours. | **Testée localement** | [Trace réelle](preuves/p6-fleet-peer-sessions.log); [Maillons vérifiés](preuves/verification-statique.md#fleet-peer-sessions) |
+| `fleet-peer-sessions` — Multi-turn peer sessions | Créez, listez et fermez des sessions de pair ; poursuivre les échanges exige un fournisseur sur ce pair. | **Partiellement vérifiée** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/fleet-peer-sessions.md) ; [Raccordement](preuves/verification-statique.md#fleet-peer-sessions) |
 
 ## Serveur et API
 

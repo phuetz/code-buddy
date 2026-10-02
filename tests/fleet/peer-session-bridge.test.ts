@@ -493,6 +493,7 @@ describe('peer.chat-session.continue', () => {
     const response = await dispatch('peer.chat-session.continue', { sessionId, prompt: 'hi' });
     expect(response.ok).toBe(false);
     expect(response.error?.message).toContain('CLIENT_UNAVAILABLE');
+      expect(response.error?.message).toMatch(/buddy login.*Ollama.*API key/);
   });
 
   it('rejects missing sessionId or prompt', async () => {

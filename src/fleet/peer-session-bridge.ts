@@ -30,6 +30,7 @@
  * Idempotent (mirror of peer-chat-bridge): a second wire call is a no-op.
  */
 
+import { PROVIDER_SETUP_MESSAGE } from '../utils/provider-prerequisites.js';
 import type { CodeBuddyClient, ChatOptions } from '../codebuddy/client.js';
 import {
   normalizePeerChatProviderId,
@@ -241,7 +242,7 @@ function resolvePeerSessionClient(
     const client = cachedGetter?.() ?? null;
     if (!client) {
       throw new Error(
-        `CLIENT_UNAVAILABLE: no LLM client wired on this peer (${methodName} cannot answer)`,
+        `CLIENT_UNAVAILABLE: ${PROVIDER_SETUP_MESSAGE} Configure it on this peer (${methodName}).`,
       );
     }
     return {
