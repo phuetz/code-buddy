@@ -134,6 +134,16 @@ describe('buddy try', () => {
     });
   });
 
+  it('does not fall back to ChatGPT when the selected Ollama server is unreachable', async () => {
+    const provider = await resolveTryProvider({
+      env: { CODEBUDDY_PROVIDER: 'ollama' },
+      hasChatGptCredentials: () => true,
+      fetchImpl: async () => { throw new Error('unreachable'); },
+    });
+
+    expect(provider).toBeNull();
+  });
+
   it('explains login first and Ollama second when neither free provider is ready', async () => {
     const stdout: string[] = [];
     const stderr: string[] = [];
