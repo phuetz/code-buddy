@@ -16,15 +16,31 @@ import {
 import { ChatEntry } from '../../src/agent/codebuddy-agent.js';
 import { getAutonomyManager } from '../../src/utils/autonomy-manager.js';
 import { resetSkillManager } from '../../src/skills/skill-manager.js';
+import * as autonomy from '../../src/utils/autonomy-manager.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const originalCwd = process.cwd();
+let workDir: string;
 
 // Reset managers before each test
 beforeEach(() => {
+  workDir = mkdtempSync(join(tmpdir(), 'core-handlers-'));
+  process.chdir(workDir);
+  vi.spyOn(autonomy, 'getAutonomyManager').mockReturnValue(new autonomy.AutonomyManager());
   // Reset autonomy to default state
   const manager = getAutonomyManager();
   manager.setLevel('suggest');
   manager.disableYOLO();
 
   resetSkillManager();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  process.chdir(originalCwd);
+  rmSync(workDir, { recursive: true, force: true });
 });
 
 describe('Core Handlers', () => {

@@ -52,6 +52,18 @@ describe('YOLO Mode Fixes', () => {
     vi.clearAllMocks();
   });
 
+  it('keeps default YOLO lists private to each instance', () => {
+    const first = new AutonomyManager();
+    first.addToYOLOAllowList('fixture-instance-only');
+    first.addToYOLODenyList('fixture-instance-denied');
+    first.getYOLOConfig().allowedPaths.push('fixture-instance-path/');
+
+    const second = new AutonomyManager();
+    expect(second.getYOLOConfig().allowList).not.toContain('fixture-instance-only');
+    expect(second.getYOLOConfig().denyList).not.toContain('fixture-instance-denied');
+    expect(second.getYOLOConfig().allowedPaths).not.toContain('fixture-instance-path/');
+  });
+
   // ===========================================================================
   // Fix 1: Cost limit bypass — setYoloMode() must NOT set Infinity
   // ===========================================================================

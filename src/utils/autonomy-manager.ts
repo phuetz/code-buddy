@@ -147,7 +147,7 @@ export class AutonomyManager {
       dangerousOperations: [...DEFAULT_DANGEROUS_OPERATIONS],
       safeOperations: [...DEFAULT_SAFE_OPERATIONS],
       sessionOverrides: new Map(),
-      yolo: { ...DEFAULT_YOLO_CONFIG },
+      yolo: structuredClone(DEFAULT_YOLO_CONFIG),
     };
 
     if (existsSync(this.configPath)) {
@@ -164,7 +164,7 @@ export class AutonomyManager {
           ...saved,
           sessionOverrides: new Map(Object.entries(saved.sessionOverrides || {})),
           yolo: {
-            ...DEFAULT_YOLO_CONFIG,
+            ...defaultConfig.yolo,
             ...(saved.yolo && typeof saved.yolo === 'object' ? saved.yolo : {}),
           },
         };
