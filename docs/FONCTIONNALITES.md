@@ -138,7 +138,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
 | `catalog-status` — Catalogue des états et preuves | Consultez le niveau de preuve des fonctionnalités avant de les présenter. | **Testée localement** | [Trace réelle](preuves/p5-catalog-status-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#catalog-status) |
-| `cli-daemon` — Background daemon | Exécutez Code Buddy comme processus de fond administré. | **Testée localement** | [Trace réelle](preuves/p7-cli-daemon.log); [Maillons vérifiés](preuves/verification-statique.md#cli-daemon) |
+| `cli-daemon` — Background daemon | Démarrez, inspectez le PID et arrêtez le processus de fond ; consultez /api/health séparément pour la santé HTTP. | **Partiellement vérifiée** | [Recette du 02/10](preuves/fonctions-reelles-2026-10-02/cli-daemon.md) ; [Raccordement](preuves/verification-statique.md#cli-daemon) |
 | `cli-trigger` — Event triggers | Configurez des réponses de l’agent déclenchées par événement. | **Testée localement** | [Trace réelle](preuves/p5-cli-trigger-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-trigger) |
 | `cli-widgets` — Conversation widgets | Gérez les widgets intégrés aux conversations. | **Testée localement** | [Trace réelle](preuves/p5-cli-widgets-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-widgets) |
 | `cli-hub` — Skills marketplace | Recherchez et gérez des skills partagés. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-hub) |
