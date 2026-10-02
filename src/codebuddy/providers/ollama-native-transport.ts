@@ -20,6 +20,7 @@ import { readDoctorLocalContextCap } from '../../doctor/local-context-cap.js';
  * @module codebuddy/providers/ollama-native-transport
  */
 
+import { randomUUID } from 'node:crypto';
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
 
 import { getModelToolConfig } from '../../config/model-tools.js';
@@ -27,7 +28,7 @@ import { getModelToolConfig } from '../../config/model-tools.js';
 /** Native `/api/chat` tool call: `arguments` is an object, not a JSON string. */
 interface OllamaNativeToolCall {
   id?: string;
-  function?: { name?: string; arguments?: unknown };
+  function?: { index?: number; name?: string; arguments?: unknown };
 }
 
 export interface OllamaNativeChatResponse {
@@ -379,18 +380,48 @@ export function fromOllamaNativeResponse(
   };
 }
 
-/** One NDJSON line → one OpenAI streaming chunk. */
+/** Native calls are complete snapshots, not OpenAI argument deltas. */
+export class OllamaStreamCalls {
+  private nextIndex = 0;
+  private readonly byId = new Map<string, number>();
+  private readonly emitted = new Map<number, string>();
+  private readonly prefix = randomUUID();
+
+  convert(calls: OllamaNativeToolCall[] = []) {
+    return calls.flatMap((call) => {
+      if (!call.function?.name) return [];
+      const nativeIndex = call.function.index;
+      const index = (call.id ? this.byId.get(call.id) : undefined)
+        ?? (Number.isSafeInteger(nativeIndex) && nativeIndex! >= 0 ? nativeIndex! : this.nextIndex);
+      this.nextIndex = Math.max(this.nextIndex, index + 1);
+      const id = call.id || `ollama-${this.prefix}-${index}`;
+      this.byId.set(id, index);
+      const snapshot = JSON.stringify({ id, function: call.function });
+      const previous = this.emitted.get(index);
+      if (previous === snapshot) return [];
+      if (previous !== undefined) throw new Error(`Conflicting Ollama tool-call snapshot at index ${index}`);
+      this.emitted.set(index, snapshot);
+      return [{ index, id, type: 'function' as const,
+        function: { name: call.function.name, arguments: JSON.stringify(call.function.arguments ?? {}) } }];
+    });
+  }
+
+  get hasCalls(): boolean { return this.emitted.size > 0; }
+}
+
+/** One NDJSON line → one OpenAI streaming chunk. State belongs to ONE response. */
 export function toOpenAiChunk(
   data: OllamaNativeChatResponse,
   fallbackModel: string,
   isFirst: boolean,
+  calls = new OllamaStreamCalls(),
 ): ChatCompletionChunk {
-  const toolCalls = toOpenAiToolCalls(data.message?.tool_calls);
+  const toolCalls = calls.convert(data.message?.tool_calls);
   const delta: Record<string, unknown> = {};
   if (isFirst || data.message?.role) delta.role = data.message?.role || 'assistant';
   if (data.message?.content) delta.content = data.message.content;
   if (toolCalls.length > 0) {
-    delta.tool_calls = toolCalls.map((call, index) => ({ index, ...call }));
+    delta.tool_calls = toolCalls;
   }
   return {
     id: `chatcmpl-ollama-${fallbackModel}`,
@@ -400,7 +431,7 @@ export function toOpenAiChunk(
     choices: [{
       index: 0,
       delta,
-      finish_reason: data.done === true ? toFinishReason(data, toolCalls.length > 0) : null,
+      finish_reason: data.done === true ? toFinishReason(data, calls.hasCalls) : null,
     }],
     ...(data.done === true && toUsage(data) ? { usage: toUsage(data) } : {}),
   } as unknown as ChatCompletionChunk;
@@ -417,6 +448,7 @@ export async function* streamOllamaNative(
   const decoder = new TextDecoder();
   let buffer = '';
   let emitted = 0;
+  const calls = new OllamaStreamCalls();
   const emit = function* (line: string): Generator<ChatCompletionChunk> {
     if (!line.trim()) return;
     let parsed: OllamaNativeChatResponse;
@@ -425,7 +457,7 @@ export async function* streamOllamaNative(
     } catch {
       return;
     }
-    yield toOpenAiChunk(parsed, fallbackModel, emitted === 0);
+    yield toOpenAiChunk(parsed, fallbackModel, emitted === 0, calls);
     emitted++;
   };
 
