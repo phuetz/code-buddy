@@ -255,6 +255,22 @@ export function toOllamaNativeMessages(
   return messages.map((message) => {
     const { tool_call_id: toolCallId, tool_calls: toolCalls, ...rest } = message;
     const next: Record<string, unknown> = { ...rest };
+    if (Array.isArray(message.content)) {
+      const text: string[] = [];
+      const images: string[] = [];
+      for (const part of message.content as unknown[]) {
+        if (!part || typeof part !== 'object') throw new Error('Unsupported Ollama message part; no request sent');
+        const item = part as Record<string, unknown>;
+        if (item.type === 'text' && typeof item.text === 'string') { text.push(item.text); continue; }
+        const image = item.image_url as { url?: unknown } | undefined;
+        const match = item.type === 'image_url' && typeof image?.url === 'string'
+          ? /^data:image\/(?:png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/.exec(image.url) : null;
+        if (!match?.[1] || match[1].length % 4 !== 0) throw new Error('Ollama requires an inline base64 image; no request sent');
+        images.push(match[1]);
+      }
+      next.content = text.join('\n');
+      if (images.length) next.images = images;
+    }
     if (Array.isArray(toolCalls) && toolCalls.length > 0) {
       next.tool_calls = (toolCalls as OllamaNativeToolCall[]).map((call) => ({
         ...(call.id ? { id: call.id } : {}),

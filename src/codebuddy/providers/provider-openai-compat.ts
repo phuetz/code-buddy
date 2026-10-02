@@ -754,7 +754,8 @@ export class OpenAICompatProvider implements Provider {
   ): Promise<unknown> {
     let openAiPayload = payload as unknown as OpenAiChatPayload;
     const hasParts = (openAiPayload.messages as Array<{ content?: unknown }>)?.some((m) => Array.isArray(m?.content));
-    if (!hasParts) {
+    const nativeOllama = (await this.ensureOllamaEndpoint()) && isOllamaNativeChatEnabled();
+    if (!hasParts || nativeOllama) {
       const config = getModelToolConfig(openAiPayload.model);
       const window = config.contextWindow ?? 32768;
       const budget = budgetFinalPayload(openAiPayload, window, scope ?? { workDir: process.cwd(), sessionId: this.payloadScopeId }, config.maxOutputTokens);
@@ -772,7 +773,7 @@ export class OpenAICompatProvider implements Provider {
         inputTokens: budget.inputTokens, outputTokens: budget.outputTokens, safetyTokens: budget.safetyTokens,
         recoveryIdentifier: budget.identifier });
     }
-    if (!hasParts && (await this.ensureOllamaEndpoint()) && isOllamaNativeChatEnabled()) {
+    if (nativeOllama) {
       return this.createOllamaNativeCompletion(openAiPayload, signal);
     }
     return signal
