@@ -18,6 +18,7 @@ import {
   createSshSandbox,
   resolveExplicitSshSandboxRequest,
 } from '../../sandbox/ssh-sandbox.js';
+import { getWorkspaceIsolation } from '../../workspace/workspace-isolation.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { checkDeclarativePermission } from '../../security/declarative-rules.js';
 import { getPermissionModeManager } from '../../security/permission-modes.js';
@@ -322,11 +323,13 @@ export async function executeInWorkspaceSandbox(
       (entry): entry is [string, string] => typeof entry[1] === 'string'
     )
   );
-  const sandbox = await createSandboxForMode('workspace-write', cwd);
+  const additionalPaths = getWorkspaceIsolation().getConfig().additionalAllowedPaths.filter(p => path.resolve(p) !== path.resolve(cwd));
+  const sandbox = await createSandboxForMode('workspace-write', cwd, [], additionalPaths);
+  const runtimeEnv = sandbox.getConfig().env;
   sandbox.updateConfig({
     timeout,
     allowUnsandboxed: false,
-    env,
+    env: { ...env, ...runtimeEnv },
     ...(signal ? { abortSignal: signal } : {}),
   });
 

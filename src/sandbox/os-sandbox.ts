@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
+import { resolveWorkspaceRuntime, sessionTemporary } from './workspace-runtime.js';
 import { sanitizeEnvVars } from '../security/env-blocklist.js';
 import { logger } from '../utils/logger.js';
 import type { SandboxBackendInterface, SandboxExecOptions, SandboxExecResult } from './sandbox-backend.js';
@@ -1476,12 +1477,16 @@ export async function createSandboxConfigForMode(
 ): Promise<Partial<OSSandboxConfig>> {
   const workspaceRoot = await getWorkspaceRoot(cwd);
 
-  const systemReadOnly = ['/usr', '/lib', '/lib64', '/bin', '/sbin', '/etc'];
+  const runtime = resolveWorkspaceRuntime(workspaceRoot);
+  const temporary = sessionTemporary(workspaceRoot);
+  const systemReadOnly = ['/usr', '/lib', '/lib64', '/bin', '/sbin', '/etc', ...runtime.readOnly];
+  const runtimeEnv = { PATH: [runtime.nodeDirectory, path.join(workspaceRoot, 'node_modules', '.bin'), '/usr/local/bin', '/usr/bin', '/bin'].join(path.delimiter), TMPDIR: temporary, TMP: temporary, TEMP: temporary };
 
   if (mode === 'read-only') {
     return {
       workDir: cwd,
-      readOnlyPaths: [...systemReadOnly, workspaceRoot, ...extraReadOnly],
+      env: runtimeEnv,
+      readOnlyPaths: [...systemReadOnly, workspaceRoot, temporary, ...extraReadOnly],
       readWritePaths: [],
       allowNetwork: false,
       allowUnsandboxed: false,
@@ -1499,8 +1504,9 @@ export async function createSandboxConfigForMode(
 
     return {
       workDir: cwd,
+      env: runtimeEnv,
       readOnlyPaths: [...systemReadOnly, ...protectedPaths, ...extraReadOnly],
-      readWritePaths: [workspaceRoot, ...extraReadWrite],
+      readWritePaths: [workspaceRoot, temporary, ...extraReadWrite],
       allowNetwork: false,
       allowUnsandboxed: false,
     };
