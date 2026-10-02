@@ -25,6 +25,7 @@ import {
 } from './execution-policy.js';
 import { confineSpawn } from '../../security/native-sandbox.js';
 import { refusedUnconfinedEscalationResult } from './unconfined-escalation.js';
+import { headlessBoundaryRefusal } from './headless-boundary-refusal.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
@@ -118,6 +119,8 @@ export async function* executeStreaming(
               output: stdout,
             };
       }
+      const boundaryRefusal = headlessBoundaryRefusal(sandboxed.result);
+      if (boundaryRefusal) return boundaryRefusal;
       requiresDirectApproval = true;
       escalationReason = `Sandbox boundary denied the command: ${stderr || stdout}`;
     } else {

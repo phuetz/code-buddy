@@ -1,0 +1,24 @@
+{
+  "source": "B-ornith-3/stdout.log",
+  "assistant": {
+    "role": "assistant",
+    "content": "",
+    "tool_calls": [
+      {
+        "id": "wl9JxUel6J21UqAtBbfQmAw3oIy0Qagw",
+        "type": "function",
+        "function": {
+          "name": "bash",
+          "arguments": "{\"command\":\"cd /workspace && cat /proc/mounts 2>/dev/null | grep -i 'code-buddy' | head; echo \\\"=== test write at root ===\\\"; touch .write_test 2>&1 && echo \\\"root writable\\\" && rm -f .write_test; echo \\\"=== test write .codebuddy ===\\\"; touch .codebuddy/.write_test 2>&1 && echo \\\"codebuddy writable\\\" && rm -f .codebuddy/.write_test\"}"
+        }
+      }
+    ]
+  },
+  "tool": {
+    "role": "tool",
+    "tool_call_id": "wl9JxUel6J21UqAtBbfQmAw3oIy0Qagw",
+    "content": "Approval requires an interactive terminal or configured remote approval channel"
+  },
+  "workspace": "/workspace",
+  "normalization": "Only the private workspace prefix is replaced by /workspace; recorded shell syntax and tool identity are preserved."
+}

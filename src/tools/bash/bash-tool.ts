@@ -46,6 +46,7 @@ import {
 } from './execution-policy.js';
 import { confineSpawn } from '../../security/native-sandbox.js';
 import { refusedUnconfinedEscalationResult } from './unconfined-escalation.js';
+import { headlessBoundaryRefusal } from './headless-boundary-refusal.js';
 
 /**
  * Vrai seulement pour un `cd` SEUL, qui doit changer le répertoire de la session.
@@ -483,6 +484,8 @@ export class BashTool implements Disposable {
               `sandbox:${sandboxed.result.backend}`,
             );
           }
+          const boundaryRefusal = headlessBoundaryRefusal(sandboxed.result);
+          if (boundaryRefusal) return boundaryRefusal;
           requiresDirectApproval = true;
           escalationReason = `Sandbox boundary denied the command: ${sandboxed.result.stderr || sandboxed.result.stdout}`;
         } else {
