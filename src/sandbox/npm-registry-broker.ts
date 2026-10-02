@@ -163,6 +163,29 @@ if (!['audit','view','pack','install','update'].includes(argv[0] ?? '')) {
 }
 `);
   fs.writeFileSync(path.join(directory, 'npm'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(client)} "$@"\n`, { mode: 0o755 });
+  // npx uses its own entry point and bypasses npm-script adaptation. Only an
+  // already installed workspace Vitest is routed; other npx commands retain
+  // their original, networkless sandbox execution. Nothing is downloaded here.
+  const npxCli = fs.realpathSync(path.join(path.dirname(process.execPath), 'npx'));
+  const npxClient = path.join(directory, 'npx-client.mjs');
+  fs.writeFileSync(npxClient, `import fs from 'node:fs';
+import path from 'node:path';
+import {spawn} from 'node:child_process';
+let argv=process.argv.slice(2);
+let entry=${JSON.stringify(npxCli)};
+if(argv[0]==='vitest') {
+ try {
+  const local=fs.realpathSync(path.resolve('node_modules/vitest/vitest.mjs'));
+  if(fs.statSync(local).isFile()) {
+   entry=local;argv=argv.slice(1);
+   if(!argv.some(arg=>/^--configLoader(?:=|$)/.test(arg))) argv.push('--configLoader','runner');
+  }
+ } catch {}
+}
+const child=spawn(${JSON.stringify(process.execPath)},[entry,...argv],{stdio:'inherit'});
+child.on('close',code=>{process.exitCode=code??1});child.on('error',error=>{process.stderr.write(error.message);process.exitCode=1});
+`);
+  fs.writeFileSync(path.join(directory, 'npx'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(npxClient)} "$@"\n`, { mode: 0o755 });
   return {
     directory,
     async close() {

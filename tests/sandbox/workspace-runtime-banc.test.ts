@@ -74,3 +74,31 @@ it.each(['tests', 'tests,npm-registry'])('npm test charge Vitest sans écrire da
   expect(mutation.result?.exitCode).not.toBe(0);
   expect(fs.existsSync(path.join(workspace, 'node_modules/vitest/smuggled'))).toBe(false);
 }, 60000);
+
+// Recorded Ornith call XB7FNd5Jot9uqxT6YuZeCOLi3eiS2T49 used npx directly.
+it.each(['', '--configLoader runner'])('npx Vitest respecte les dépendances en lecture seule (%s)', async (loader) => {
+  const { workspace } = lane('shared');
+  fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ type: 'module' }));
+  fs.writeFileSync(path.join(workspace, 'vitest.config.mjs'), "import { defineConfig } from 'vitest/config'; export default defineConfig({test:{include:['sample.test.js']}});\n");
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'tests');
+  getPermissionModeManager().setMode('dontAsk');
+  if (!ready.ready) return;
+  const result = await executeInWorkspaceSandbox(`cd '${workspace}' && npx vitest run sample.test.js -t 'tiny' --maxWorkers=1 ${loader} 2>&1 | tail -25`, workspace, 30000);
+  // The recorded tail pipeline hides a nonzero exit, so verify the test outcome.
+  expect(result.result?.stdout, result.result?.stderr).toContain('1 passed');
+  expect(result.result?.stdout).not.toContain('EROFS');
+}, 60000);
+
+it('npx conserve le choix explicite de chargeur et délègue les autres commandes', async () => {
+  const { workspace } = lane('shared');
+  fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ type: 'module' }));
+  fs.writeFileSync(path.join(workspace, 'vitest.config.mjs'), "export default {test:{include:['sample.test.js']}};\n");
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'tests');
+  if (!ready.ready) return;
+  const explicit = await executeInWorkspaceSandbox('npx vitest run --configLoader=bundle --maxWorkers=1', workspace, 30000);
+  expect(explicit.result?.exitCode).not.toBe(0);
+  expect(explicit.result?.stderr).toContain('EROFS');
+  const other = await executeInWorkspaceSandbox('npx --version', workspace, 5000);
+  expect(other.result?.exitCode).toBe(0);
+  expect(other.result?.stdout).toMatch(/\d+\.\d+\.\d+/);
+}, 60000);
