@@ -13,7 +13,9 @@ vi.mock('node:child_process', async (importOriginal) => {
       // Replay a registry response without a network dependency. Both the trusted
       // runner and generated client remain real child processes with real pipes.
       const command = args.includes('--registry=https://registry.npmjs.org')
-        ? ['-e', args.includes('pack')
+        ? ['-e', args.includes('audit')
+          ? `const fs=require('node:fs');const root=JSON.parse(fs.readFileSync('package.json'));process.stdout.write(JSON.stringify({workspaces:root.workspaces,child:fs.existsSync('packages/child/package.json')?JSON.parse(fs.readFileSync('packages/child/package.json')):null}))`
+          : args.includes('pack')
           ? `require('node:fs').writeFileSync('fixture-1.0.0.tgz','archive-sentinel');process.stdout.write('fixture-1.0.0.tgz\\n')`
           : `process.stdout.write(JSON.stringify({metadata:'réponse'.repeat(200000)}))`]
         : args;
@@ -70,5 +72,23 @@ it.skipIf(process.platform === 'win32')('garde le paquet du registre dans le tem
     expect((await execute()).error).toBeTruthy();
     expect(fs.readFileSync(archive, 'utf8')).toBe('existing-file');
     expect(fs.existsSync(path.join(workspace, 'fixture-1.0.0.tgz'))).toBe(false);
+  } finally { await broker.close(); vi.unstubAllEnvs(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+it.skipIf(process.platform === 'win32')('conserve les manifestes des workspaces dans l’entrée de l’audit', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'registry-workspace-'));
+  const workspace = path.join(root, 'workspace'); const temporary = path.join(root, 'tmp');
+  fs.mkdirSync(path.join(workspace, 'packages/child'), { recursive: true }); fs.mkdirSync(temporary);
+  fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0', workspaces: ['packages/*'] }));
+  fs.writeFileSync(path.join(workspace, 'packages/child/package.json'), JSON.stringify({ name: 'fixture-child', version: '1.0.0', dependencies: { zod: '^3.25.0' }, scripts: { prepare: 'must-not-run' } }));
+  fs.writeFileSync(path.join(workspace, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: { '': {}, 'packages/child': { name: 'fixture-child', version: '1.0.0' } } }));
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'npm-registry');
+  const broker = await startNpmRegistryBroker(workspace, temporary);
+  try {
+    const { execFile } = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+    const text = await new Promise<string>((resolve, reject) => execFile(process.execPath,
+      [path.join(broker.directory, 'npm-client.mjs'), 'audit', '--json'], { encoding: 'utf8' },
+      (error, stdout) => error ? reject(error) : resolve(stdout)));
+    expect(JSON.parse(text)).toEqual({ workspaces: ['packages/*'], child: { name: 'fixture-child', version: '1.0.0', dependencies: { zod: '^3.25.0' } } });
   } finally { await broker.close(); vi.unstubAllEnvs(); fs.rmSync(root, { recursive: true, force: true }); }
 });

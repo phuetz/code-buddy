@@ -73,13 +73,30 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
           const lockText = fs.existsSync(lockPath) ? fs.readFileSync(lockPath, 'utf8') : '';
           const packageData = JSON.parse(packageText) as Record<string, unknown>;
           // npm install is allowed to resolve metadata, never to execute scripts.
-          delete packageData.scripts; delete packageData.workspaces;
+          delete packageData.scripts;
+          if (argv[0] !== 'audit') delete packageData.workspaces;
           if (!['audit', 'view', 'pack'].includes(argv[0] ?? '')) {
             assertRegistrySpecs(packageData);
             if (lockText) assertRegistrySpecs(JSON.parse(lockText));
           }
           fs.writeFileSync(path.join(scratch, 'package.json'), JSON.stringify(packageData));
           if (lockText) fs.writeFileSync(path.join(scratch, 'package-lock.json'), lockText);
+          if (argv[0] === 'audit' && packageData.workspaces && lockText) {
+            const lock = JSON.parse(lockText) as { packages?: Record<string, unknown> };
+            for (const key of Object.keys(lock.packages ?? {})) {
+              if (!key || key.split('/').includes('node_modules')) continue;
+              const manifest = path.join(workspace, key, 'package.json');
+              if (!fs.existsSync(manifest) || !isPathWithin(fs.realpathSync(manifest), fs.realpathSync(workspace))
+                || classifySecretPath(manifest).secret) throw new Error('Workspace audit manifest is unavailable or outside the allowed workspace');
+              const data = JSON.parse(fs.readFileSync(manifest, 'utf8')) as Record<string, unknown>;
+              delete data.scripts;
+              const destination = path.resolve(scratch, key, 'package.json');
+              if (!isPathWithin(destination, scratch)) throw new Error('Workspace lock path escapes scratch');
+              fs.mkdirSync(path.dirname(destination), { recursive: true });
+              fs.writeFileSync(destination, JSON.stringify(data));
+            }
+          }
+
           const args = [...argv, '--ignore-scripts', '--registry=https://registry.npmjs.org',
             '--userconfig=' + path.join(scratch, 'empty-user.npmrc'), '--globalconfig=' + path.join(scratch, 'empty-global.npmrc'), '--cache=' + path.join(scratch, 'cache')];
           const result = await new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve, reject) => {
