@@ -18,6 +18,7 @@ export class PreVerifyMiddleware implements ConversationMiddleware {
     const hooks = getUserHooksManager(this.workingDirectory);
     if (hooks.getConfigurationError()) return { action: 'stop', message: 'pre_verify: hooks.json illisible ou invalide.' };
     const handlers = hooks.getHandlers('pre_verify');
+    if (handlers.length === 0) return { action: 'stop', message: 'pre_verify: aucune commande de vérification configurée dans hooks.json.' };
     // A conditional filter can silently skip the required verification. This
     // first version accepts unconditional commands only, with bounded timeouts.
     if (handlers.some(h => h.type !== 'command' || !h.command || h.if ||

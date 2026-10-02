@@ -46,3 +46,17 @@ it('honours the existing BeforeMemoryWrite hook', async () => {
   await flushAutoCompactionMemory(args('[{"kind":"fact","value":"The store uses atomic saves"}]'));
   expect(fs.readFileSync(path.join(cwd, '.codebuddy', 'CODEBUDDY_MEMORY.md'), 'utf8')).not.toContain('The store uses atomic saves');
 });
+
+it('redacts secrets before the auxiliary request and before persistent writes', async () => {
+  const inputSecret = ['sk', 'ant', 'a'.repeat(48)].join('-');
+  const outputSecret = 'AKIA' + 'A'.repeat(16);
+  const options = args(JSON.stringify([{ kind: 'fact', value: `Storage credential: ${outputSecret}` }]));
+  options.messages = [{ role: 'user', content: `Preference: use plain text. Token: ${inputSecret}` }];
+  await flushAutoCompactionMemory(options);
+  expect(JSON.stringify(options.client.chat.mock.calls[0]![0])).not.toContain(inputSecret);
+  expect(JSON.stringify(options.client.chat.mock.calls[0]![0])).toContain('REDACTED');
+  const content = fs.readFileSync(path.join(cwd, '.codebuddy', 'CODEBUDDY_MEMORY.md'), 'utf8');
+  expect(content).not.toContain(inputSecret);
+  expect(content).not.toContain(outputSecret);
+  expect(content).toContain('REDACTED');
+});

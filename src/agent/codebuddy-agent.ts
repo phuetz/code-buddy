@@ -481,9 +481,12 @@ export class CodeBuddyAgent extends BaseAgent {
     });
 
     // Initialize default middleware pipeline with WorkflowGuardMiddleware + ReasoningMiddleware
-    import('./middleware/index.js').then(async ({ MiddlewarePipeline, WorkflowGuardMiddleware }) => {
-      if (!this.executor.getMiddlewarePipeline()) {
-        const pipeline = new MiddlewarePipeline();
+    this.middlewareReady = import('./middleware/index.js').then(async ({ MiddlewarePipeline, WorkflowGuardMiddleware }) => {
+      if (process.env.CODEBUDDY_PRE_VERIFY === 'true' || !this.executor.getMiddlewarePipeline()) {
+        const pipeline = this.executor.getMiddlewarePipeline() ?? new MiddlewarePipeline();
+        // Share this instance before awaited imports when pre_verify is active:
+        // first-turn registration and auto-observation must retain default gates.
+        if (process.env.CODEBUDDY_PRE_VERIFY === 'true') this.executor.setMiddlewarePipeline(pipeline);
         // Turn limit middleware (priority 10) — enforces max turns per session
         try {
           const { TurnLimitMiddleware } = await import('./middleware/turn-limit.js');
@@ -541,10 +544,6 @@ export class CodeBuddyAgent extends BaseAgent {
           logger.debug('AutoRepairMiddleware registered in pipeline (priority 150)');
         } catch (err) {
           logger.debug('Failed to register AutoRepairMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
-        }
-        if (process.env.CODEBUDDY_PRE_VERIFY === 'true') {
-          const { PreVerifyMiddleware } = await import('./middleware/pre-verify.js');
-          pipeline.use(new PreVerifyMiddleware(this.toolHandler.getWorkingDirectory()));
         }
         // Verification enforcement (priority 155) — after >= 3 file changes with
         // no task_verify/run_tests, nudges the model to verify before finishing.
@@ -750,6 +749,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
   /** Resolves when the system prompt has been loaded (or failed gracefully). */
   public systemPromptReady: Promise<void>;
+  private middlewareReady: Promise<void>;
   /** Resolves when the asynchronous skill registry startup has settled. */
   private skillsReady: Promise<void> = Promise.resolve();
 
@@ -1395,6 +1395,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // See processUserMessageStream — the system prompt builds async and a
     // first turn must not race it (embedded hosts don't await it themselves).
     await this.systemPromptReady;
+    if (process.env.CODEBUDDY_PRE_VERIFY === 'true') await this.middlewareReady;
 
     if (!readOnlySelfInspection) {
       // These global/context services are irrelevant to the deterministic,
@@ -1514,6 +1515,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // (observed live: 23-77 input tokens, "je ne peux pas générer d'image").
     // Await here so every host is covered; resolved-promise cost is ~zero.
     await this.systemPromptReady;
+    if (process.env.CODEBUDDY_PRE_VERIFY === 'true') await this.middlewareReady;
 
     if (!readOnlySelfInspection) {
       // Keep mutable decision/tool context out of deterministic self-reports.
@@ -2221,6 +2223,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
    * Called automatically when a profile with metadata.enableAutoObservation is active.
    */
   async enableAutoObservation(config?: Partial<import('./middleware/auto-observation.js').AutoObservationConfig>): Promise<void> {
+    if (process.env.CODEBUDDY_PRE_VERIFY === 'true') await this.middlewareReady;
     // Ensure the executor has a middleware pipeline
     if (!this.executor.getMiddlewarePipeline()) {
       const { MiddlewarePipeline } = await import('./middleware/index.js');

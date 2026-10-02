@@ -49,3 +49,14 @@ describe('pre_verify completion phase', () => {
     expect((await new PreVerifyMiddleware(cwd).beforeComplete(ctx)).action).toBe('stop');
   });
 });
+
+for (const config of [undefined, { hooks: { pre_verify: [] } }, { hooks: { PreVerify: [] } }]) {
+  it(`refuses an enabled verification without any command: ${JSON.stringify(config)}`, async () => {
+    vi.stubEnv('CODEBUDDY_PRE_VERIFY', 'true');
+    if (config) {
+      fs.mkdirSync(path.join(cwd, '.codebuddy'));
+      fs.writeFileSync(path.join(cwd, '.codebuddy', 'hooks.json'), JSON.stringify(config));
+    }
+    expect(await new PreVerifyMiddleware(cwd).beforeComplete(ctx)).toMatchObject({ action: 'stop', message: expect.stringContaining('pre_verify') });
+  });
+}

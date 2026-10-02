@@ -126,3 +126,182 @@ describe('pre_verify finalization in the real executor loop', () => {
     });
   }
 });
+
+// Adverse review regressions: publication is a commit boundary, including length recovery.
+for (const continuations of [0, 1, 3]) {
+  for (const code of [0, 1]) {
+    it(`verifies a terminal length response after ${continuations} continuations, exit ${code}`, async () => {
+      vi.stubEnv('CODEBUDDY_PRE_VERIFY', 'true');
+      vi.stubEnv('CODEBUDDY_MAX_LENGTH_CONTINUATIONS', String(continuations));
+      const cwd = directory();
+      fs.mkdirSync(path.join(cwd, '.codebuddy'));
+      fs.writeFileSync(path.join(cwd, 'verify.cjs'), `const fs=require('fs'); let input=''; process.stdin.on('data',c=>input+=c); process.stdin.on('end',()=>{fs.appendFileSync('verified.txt',input+'\\n'); process.exit(${code});});`);
+      fs.writeFileSync(path.join(cwd, '.codebuddy', 'hooks.json'), JSON.stringify({ hooks: { pre_verify: [{ type: 'command', command: 'node verify.cjs' }] } }));
+      const f = fixture(cwd);
+      f.deps.middlewarePipeline = new MiddlewarePipeline().use(new PreVerifyMiddleware(cwd));
+      let round = 0;
+      const entries: import('../../../src/agent/types.js').ChatEntry[] = [];
+      const messages: CodeBuddyMessage[] = [{ role: 'user', content: 'finish' }];
+      vi.mocked(f.deps.client.chatStream).mockImplementation(async function* () {
+        expect(JSON.stringify(entries)).not.toContain('Task finished');
+        expect(JSON.stringify(messages)).not.toContain('Task finished');
+        yield { choices: [{ index: 0, delta: { content: `Task finished part ${++round}` }, finish_reason: null }] } as never;
+        yield { choices: [{ index: 0, delta: {}, finish_reason: 'length' }], usage: { prompt_tokens: 80, completion_tokens: 4, total_tokens: 84 } } as never;
+      });
+
+      const output: string[] = [];
+      try {
+        for await (const chunk of new AgentExecutor(f.deps, f.config).processUserMessageStream('finish', entries, messages, null)) {
+          if (chunk.type === 'content' && chunk.content) {
+            if (chunk.content.includes('Task finished')) expect(fs.existsSync(path.join(cwd, 'verified.txt'))).toBe(true);
+            output.push(chunk.content);
+          }
+        }
+        const proof = fs.readFileSync(path.join(cwd, 'verified.txt'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+        expect(proof).toHaveLength(1);
+        expect(proof[0].candidate).toContain('Task finished part 1');
+        expect(proof[0].candidate).toContain(`Task finished part ${continuations + 1}`);
+        expect(round).toBe(continuations + 1);
+        if (code === 0) {
+          expect(output.join('')).toContain('Task finished part 1');
+          expect(entries.at(-1)?.truncated).toBe(true);
+        } else {
+          expect(output.join('')).not.toContain('Task finished');
+          expect(output.join('')).toContain('pre_verify');
+          expect(JSON.stringify(entries)).not.toContain('Task finished');
+          expect(JSON.stringify(messages)).not.toContain('Task finished');
+        }
+        expect(f.config.recordSessionCost).toHaveBeenCalledWith(expect.any(Number), expect.any(Number), { promptTokens: 80 * round, completionTokens: 4 * round });
+      } finally { f.dispose(); }
+    });
+  }
+}
+
+for (const setup of ['missing', 'empty', 'unrelated'] as const) {
+  it(`installs required pre_verify before the first request with a ${setup} pipeline`, async () => {
+    vi.stubEnv('CODEBUDDY_PRE_VERIFY', 'true');
+    const cwd = directory();
+    fs.mkdirSync(path.join(cwd, '.codebuddy'));
+    fs.writeFileSync(path.join(cwd, 'verify.cjs'), "require('fs').writeFileSync('verified.txt','proof'); process.exit(1);");
+    fs.writeFileSync(path.join(cwd, '.codebuddy', 'hooks.json'), JSON.stringify({ hooks: { pre_verify: [{ type: 'command', command: 'node verify.cjs' }] } }));
+    const f = fixture(cwd);
+    f.deps.middlewarePipeline = setup === 'missing' ? undefined : new MiddlewarePipeline();
+    if (setup === 'unrelated') f.deps.middlewarePipeline!.use({ name: 'other', beforeComplete: () => ({ action: 'continue' }) });
+    try {
+      const entries = await new AgentExecutor(f.deps, f.config).processUserMessage('finish', [], [{ role: 'user', content: 'finish' }]);
+      expect(fs.existsSync(path.join(cwd, 'verified.txt'))).toBe(true);
+      expect(JSON.stringify(entries)).toContain('pre_verify');
+      expect(JSON.stringify(entries)).not.toContain('Task finished');
+    } finally { f.dispose(); }
+  });
+}
+
+for (const steeringExit of [0, 1]) {
+  it(`keeps an interrupted steering draft private, final verification exit ${steeringExit}`, async () => {
+    vi.stubEnv('CODEBUDDY_PRE_VERIFY', 'true');
+    const cwd = directory();
+    fs.mkdirSync(path.join(cwd, '.codebuddy'));
+    fs.writeFileSync(path.join(cwd, 'verify.cjs'), `require('fs').writeFileSync('verified.txt','proof'); process.exit(${steeringExit});`);
+    fs.writeFileSync(path.join(cwd, '.codebuddy', 'hooks.json'), JSON.stringify({ hooks: { pre_verify: [{ type: 'command', command: 'node verify.cjs' }] } }));
+    const f = fixture(cwd);
+    f.deps.middlewarePipeline = new MiddlewarePipeline().use(new PreVerifyMiddleware(cwd));
+    let round = 0;
+    vi.mocked(f.deps.client.chatStream).mockImplementation(async function* () {
+      yield { choices: [{ index: 0, delta: { content: round++ === 0 ? 'Stale Task finished' : 'Fresh Task finished' }, finish_reason: 'stop' }] } as never;
+    });
+    let pending = true;
+    f.deps.messageQueue = {
+      hasPendingMessages: () => false,
+      hasSteeringMessage: () => pending,
+      consumeSteeringMessage: () => { pending = false; return { content: 'Use the revised goal', source: 'test', timestamp: new Date() }; },
+    } as never;
+    const entries: import('../../../src/agent/types.js').ChatEntry[] = [];
+    const messages: CodeBuddyMessage[] = [{ role: 'user', content: 'finish' }];
+    const output: string[] = [];
+    try {
+      for await (const chunk of new AgentExecutor(f.deps, f.config).processUserMessageStream('finish', entries, messages, null)) {
+        if (chunk.type === 'content') output.push(chunk.content ?? '');
+      }
+      expect(fs.existsSync(path.join(cwd, 'verified.txt'))).toBe(true);
+      expect(output.join('')).not.toContain('Stale Task finished');
+      expect(JSON.stringify(entries)).not.toContain('Stale Task finished');
+      expect(JSON.stringify(messages)).not.toContain('Stale Task finished');
+      if (steeringExit === 0) expect(output.join('')).toContain('Fresh Task finished');
+      else expect(output.join('')).not.toContain('Fresh Task finished');
+      expect(JSON.stringify(entries)).toContain('Use the revised goal');
+    } finally { f.dispose(); }
+  });
+}
+
+it('bounds archival to one attempt per agent turn even when compaction stays above threshold', async () => {
+  vi.stubEnv('CODEBUDDY_COMPACTION_MEMORY_FLUSH', 'true');
+  vi.stubEnv('CODEBUDDY_MAX_LENGTH_CONTINUATIONS', '1');
+  const f = fixture(directory());
+  vi.spyOn(f.deps.contextManager, 'prepareMessages').mockImplementation(m => m);
+  vi.mocked(f.deps.client.chat).mockResolvedValue({ choices: [{ message: { content: '[]' }, finish_reason: 'stop' }], usage: { prompt_tokens: 300, completion_tokens: 2 } } as never);
+  vi.mocked(f.deps.client.chatStream).mockImplementation(async function* () {
+    yield { choices: [{ index: 0, delta: { content: 'Partial answer' }, finish_reason: 'length' }] } as never;
+  });
+  try {
+    await f.executor.processUserMessage('finish', [], history());
+    expect(f.deps.client.chatStream).toHaveBeenCalledTimes(2);
+    expect(f.deps.client.chat).toHaveBeenCalledTimes(1);
+    expect(f.config.recordSessionCost).toHaveBeenCalledWith(300, 2, { promptTokens: 300, completionTokens: 2 });
+  } finally { f.dispose(); }
+});
+
+for (const ending of ['stop', 'empty-length'] as const) {
+  it(`keeps recovery drafts private across compaction and verifies the ${ending} terminal path`, async () => {
+    vi.stubEnv('CODEBUDDY_PRE_VERIFY', 'true');
+    vi.stubEnv('CODEBUDDY_MAX_LENGTH_CONTINUATIONS', '1');
+    const cwd = directory();
+    fs.mkdirSync(path.join(cwd, '.codebuddy'));
+    fs.writeFileSync(path.join(cwd, 'verify.cjs'), "require('fs').writeFileSync('verified.txt','proof'); process.exit(1);");
+    fs.writeFileSync(path.join(cwd, '.codebuddy', 'hooks.json'), JSON.stringify({ hooks: { pre_verify: [{ type: 'command', command: 'node verify.cjs' }] } }));
+    const f = fixture(cwd);
+    f.deps.middlewarePipeline = new MiddlewarePipeline().use(new PreVerifyMiddleware(cwd));
+    const prepare = vi.spyOn(f.deps.contextManager, 'prepareMessages');
+    const entries: import('../../../src/agent/types.js').ChatEntry[] = [];
+    const messages: CodeBuddyMessage[] = [{ role: 'user', content: 'finish' }];
+    let round = 0;
+    vi.mocked(f.deps.client.chatStream).mockImplementation(async function* () {
+      expect(JSON.stringify(entries)).not.toContain('Task finished');
+      expect(JSON.stringify(messages)).not.toContain('Task finished');
+      const first = round++ === 0;
+      yield { choices: [{ index: 0, delta: { content: first ? 'Task finished '+ 'draft '.repeat(1600) : ending === 'stop' ? 'Final answer' : '' },
+        finish_reason: first || ending === 'empty-length' ? 'length' : 'stop' }] } as never;
+    });
+    const output: string[] = [];
+    try {
+      for await (const chunk of new AgentExecutor(f.deps, f.config).processUserMessageStream('finish', entries, messages, null)) {
+        if (chunk.type === 'content') output.push(chunk.content ?? '');
+      }
+      expect(prepare).toHaveBeenCalled();
+      expect(fs.existsSync(path.join(cwd, 'verified.txt'))).toBe(true);
+      expect(output.join('')).toContain('pre_verify');
+      expect(output.join('')).not.toContain('Task finished');
+      expect(output.join('')).not.toContain('Final answer');
+      expect(JSON.stringify(messages)).not.toContain('Task finished');
+      expect(JSON.stringify(entries)).not.toContain('Task finished');
+      expect(round).toBe(2);
+    } finally { f.dispose(); }
+  });
+}
+
+it('includes private continuation input in cost estimates when the provider omits usage', async () => {
+  vi.stubEnv('CODEBUDDY_PRE_VERIFY', 'true');
+  const cwd = directory();
+  fs.mkdirSync(path.join(cwd, '.codebuddy'));
+  fs.writeFileSync(path.join(cwd, '.codebuddy', 'hooks.json'), JSON.stringify({ hooks: { pre_verify: [{ type: 'command', command: 'exit 0' }] } }));
+  const f = fixture(cwd);
+  let round = 0;
+  vi.mocked(f.deps.client.chatStream).mockImplementation(async function* () {
+    const first = round++ === 0;
+    yield { choices: [{ index: 0, delta: { content: first ? 'Draft '.repeat(200) : 'Final answer' }, finish_reason: first ? 'length' : 'stop' }] } as never;
+  });
+  try {
+    await new AgentExecutor(f.deps, f.config).processUserMessage('finish', [], [{ role: 'user', content: 'finish' }]);
+    expect(f.config.recordSessionCost).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(f.config.recordSessionCost).mock.calls[0]![0]).toBeGreaterThan(200);
+  } finally { f.dispose(); }
+});

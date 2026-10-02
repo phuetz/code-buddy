@@ -1397,8 +1397,9 @@ export class AgentExecutor {
       }
     };
 
+    let archivalAttempted = false;
     const flushBeforeCompaction = async (): Promise<void> => {
-      if (isolatedSharedHost || relationshipSafety ||
+      if (archivalAttempted || isolatedSharedHost || relationshipSafety ||
           process.env.CODEBUDDY_COMPACTION_MEMORY_FLUSH !== 'true' ||
           this.deps.memoryEnabled?.() !== true) return;
       const manager = this.deps.contextManager;
@@ -1407,6 +1408,8 @@ export class AgentExecutor {
       const { slimToolResultsToFit } = await import('./context-pipeline.js');
       const slimmed = slimToolResultsToFit(manager, messages);
       if (!manager.shouldAutoCompact(slimmed) && !manager.getStats(slimmed).isNearLimit) return;
+      // One paid attempt per agent turn, even if compression stays above threshold.
+      archivalAttempted = true;
       const { flushAutoCompactionMemory } = await import('../../context/auto-compaction-memory.js');
       await flushAutoCompactionMemory({
         messages, memoryEnabled: true, cwd: this.deps.toolHandler.getWorkingDirectory(),
@@ -1444,8 +1447,25 @@ export class AgentExecutor {
     } catch { /* progress tracker optional */ }
 
     try {
+      const preVerifyEnabled = process.env.CODEBUDDY_PRE_VERIFY === 'true';
+      if (preVerifyEnabled) {
+        // Await registration at the execution boundary. A constructor's lazy
+        // pipeline (or an auto-observation replacement) cannot bypass the hook.
+        const { MiddlewarePipeline } = await import('../middleware/pipeline.js');
+        const { PreVerifyMiddleware } = await import('../middleware/pre-verify.js');
+        const active = this.deps.middlewarePipeline ?? new MiddlewarePipeline();
+        if (!active.getMiddlewareNames().includes('pre_verify')) {
+          active.use(new PreVerifyMiddleware(this.deps.toolHandler.getWorkingDirectory()));
+        }
+        this.deps.middlewarePipeline = active;
+      }
       const pipeline = this.deps.middlewarePipeline;
-      const preVerifyEnabled = process.env.CODEBUDDY_PRE_VERIFY === 'true' && pipeline?.hasCompletionHandlers() === true;
+      const pendingCompletionEntries: ChatEntry[] = [];
+      const pendingCompletionMessages: CodeBuddyMessage[] = [];
+      const discardPendingCompletion = (): void => {
+        pendingCompletionEntries.length = 0;
+        pendingCompletionMessages.length = 0;
+      };
       // New task: clear per-task middleware latching (quality-gate run count,
       // auto-repair attempts, verification one-shot warning). The pipeline is
       // built once and reused across tasks while toolRound restarts at 0, so
@@ -1675,7 +1695,12 @@ export class AgentExecutor {
         let preparedMessages: CodeBuddyMessage[];
         try {
           await flushBeforeCompaction();
-          preparedMessages = prepareTurnMessages(this.deps.contextManager, messages, {
+          // Provisional continuations enter only the provider's private input.
+          // Compaction must never fold an unverified draft into shared history.
+          const turnMessages = pendingCompletionMessages.length
+            ? [...messages, ...pendingCompletionMessages]
+            : messages;
+          preparedMessages = prepareTurnMessages(this.deps.contextManager, turnMessages, {
             isolatedSharedHost,
           });
         } catch (error) {
@@ -1726,7 +1751,9 @@ export class AgentExecutor {
           });
         }
 
-        inputTokens = incrementalTokenCounter.count(messages);
+        inputTokens = pendingCompletionMessages.length
+          ? this.deps.tokenCounter.countMessageTokens(preparedMessages.map(m => ({ role: m.role, content: m.content ?? null })))
+          : incrementalTokenCounter.count(messages);
         totalInputTokensForCost += inputTokens;
 
         // Context warning — always check regardless of pipeline state
@@ -1984,14 +2011,25 @@ export class AgentExecutor {
           yield { type: 'content', content: `${content}\n\n` };
         }
 
-        if (preVerifyEnabled && !hasToolCalls && !steeringRequestedDuringText &&
-            streamFinishReason !== 'length' && !abortController?.signal.aborted) {
+        const completionSteering = preVerifyEnabled && !hasToolCalls && steeringRequestedDuringText
+          ? this.deps.messageQueue?.consumeSteeringMessage()
+          : undefined;
+        const continuingLength = !hasToolCalls && streamFinishReason === 'length' &&
+          streamedContentRaw.length > 0 && lengthContinuations < maxLengthContinuations;
+        const deferCompletion = preVerifyEnabled && (continuingLength || !!completionSteering);
+        if (completionSteering || hasToolCalls) discardPendingCompletion();
+
+        // Decide whether this is terminal BEFORE publishing or persisting text.
+        // Length recovery drafts remain private until their combined candidate
+        // passes this same boundary, including exhausted/empty truncations.
+        if (preVerifyEnabled && !hasToolCalls && !deferCompletion && !abortController?.signal.aborted) {
           const context = this.buildMiddlewareContext(
             toolRounds, inputTokens, totalOutputTokens, history, messages, true, abortController,
           );
-          context.completionCandidate = content;
+          context.completionCandidate = [...pendingCompletionEntries.map(entry => entry.content), content].join('\n\n');
           const result = await pipeline!.runBeforeComplete(context);
           if (result.action !== 'continue') {
+            discardPendingCompletion();
             const stop = result.message ?? 'pre_verify: vérification requise avant la fin.';
             history.push({ type: 'assistant', content: stop, timestamp: new Date() });
             messages.push({ role: 'assistant', content: stop });
@@ -2008,7 +2046,15 @@ export class AgentExecutor {
             return;
           }
         }
-        if (preVerifyEnabled && content && !abortController?.signal.aborted) {
+        if (preVerifyEnabled && !hasToolCalls && !deferCompletion && !abortController?.signal.aborted) {
+          for (const entry of pendingCompletionEntries) {
+            history.push(entry);
+            if (entry.content) yield { type: 'content', content: `${entry.content}\n\n` };
+          }
+          messages.push(...pendingCompletionMessages);
+          discardPendingCompletion();
+        }
+        if (preVerifyEnabled && !deferCompletion && content && !abortController?.signal.aborted) {
           yield { type: 'content', content: `${content}\n\n` };
         }
 
@@ -2021,12 +2067,15 @@ export class AgentExecutor {
           timestamp: new Date(),
           toolCalls: toolCalls,
         };
-        history.push(assistantEntry);
-        messages.push({
-          role: 'assistant',
-          content: persistedAssistantContent,
-          tool_calls: toolCalls,
-        });
+        if (!completionSteering) {
+          if (deferCompletion) pendingCompletionEntries.push(assistantEntry);
+          else history.push(assistantEntry);
+          const assistantMessage: CodeBuddyMessage = {
+            role: 'assistant', content: persistedAssistantContent, tool_calls: toolCalls,
+          };
+          if (deferCompletion) pendingCompletionMessages.push(assistantMessage);
+          else messages.push(assistantMessage);
+        }
 
         const currentOutputTokens = this.deps.streamingHandler.getTokenCount() || 0;
         totalOutputTokens += currentOutputTokens;
@@ -2042,7 +2091,7 @@ export class AgentExecutor {
         yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
         if (steeringRequestedDuringText && !hasToolCalls) {
-          const steering = this.deps.messageQueue?.consumeSteeringMessage();
+          const steering = completionSteering ?? this.deps.messageQueue?.consumeSteeringMessage();
           if (steering) {
             yield { type: 'steer', steer: { content: steering.content, source: steering.source } };
             messages.push({ role: 'user', content: steering.content });
@@ -2720,13 +2769,15 @@ export class AgentExecutor {
                 attempt: lengthContinuations,
                 max: maxLengthContinuations,
               });
-              messages.push({
+              const continuationMessage: CodeBuddyMessage = {
                 role: 'user',
                 content:
                   'Your previous message was cut off because it reached the output length limit. ' +
                   'Continue it from exactly where it stopped — do not repeat earlier text and do not ' +
                   'restart. When the full response is complete, finish normally.',
-              });
+              };
+              if (preVerifyEnabled) pendingCompletionMessages.push(continuationMessage);
+              else messages.push(continuationMessage);
               continue;
             }
             if (streamFinishReason === 'length') {
