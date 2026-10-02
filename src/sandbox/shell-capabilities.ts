@@ -18,7 +18,7 @@ export function shellCapabilitySnapshot() {
     operations: [
       ...(capabilities.has('tests') ? ['npm test', 'npm run test|build|lint|typecheck|check|verify|audit'] : []),
       ...(capabilities.has('git-local') ? ['git add', 'git commit (initial cd to this workspace allowed)'] : []),
-      ...(capabilities.has('npm-registry') ? ['npm audit --json', 'npm view <package> <field> --json', 'npm pack <registry-package>', 'npm install --package-lock-only --ignore-scripts', 'npm update --package-lock-only --ignore-scripts'] : []),
+      ...(capabilities.has('npm-registry') ? ['npm audit --json', 'npm view <package> [<field> ...] --json', 'npm pack <registry-package>', 'npm install --package-lock-only --ignore-scripts', 'npm update --package-lock-only --ignore-scripts'] : []),
     ],
     constraints: 'Full npm install requires approval. Registry lock resolution is offline: existing Git/URL pins and workspace links stay unchanged; new external sources and file specs are refused. Do not alter HOME, trust or permissions to bypass a refusal.',
   };
@@ -47,7 +47,8 @@ export function capabilityAllowsSegment(argv: string[], capabilities = shellCapa
   if (operation === 'pack') return args.length >= 1 && args.length <= 3
     && /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(args[0] ?? '')
     && args.slice(1).every(arg => ['--json', '--silent'].includes(arg));
-  if (operation === 'view') return args.length >= 1 && args.length <= 3
+  // npm accepts multiple metadata selectors; each is data, never an npm option.
+  if (operation === 'view') return args.length >= 1
     && /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(args[0] ?? '')
     && args.slice(1).every(arg => arg === '--json' || /^[a-z][a-z0-9_.-]*$/i.test(arg));
   return ['install', 'update'].includes(operation ?? '') && args.includes('--package-lock-only')
