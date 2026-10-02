@@ -14,14 +14,58 @@
 
 /** Strip markdown so it reads naturally aloud. */
 export function cleanForSpeech(text: string): string {
-  return text
+  const clean = text
     .replace(/```[\s\S]*?```/g, '')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/^#+\s*/gm, '')
     .replace(/^>\s*/gm, '')
-    .replace(/(^|[\s.,;:!?()[\]{}])([*_~]+)(?=\S)(.+?)(?<=\S)\2(?=[\s.,;:!?()[\]{}]|$)/g, '$1$3')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .trim();
+  return stripDelimitedEmphasis(clean);
+}
+
+function stripDelimitedEmphasis(text: string): string {
+  const boundary = /[\s.,;:!?()[\]{}]/;
+  const opens = new Map<string, number[]>();
+  const omitted = new Uint8Array(text.length);
+
+  for (let i = 0; i < text.length;) {
+    const marker = text[i];
+    if (marker !== '*' && marker !== '_' && marker !== '~') {
+      i++;
+      continue;
+    }
+    let end = i + 1;
+    while (text[end] === marker) end++;
+    const delimiter = text.slice(i, end);
+    const before = text[i - 1];
+    const after = text[end];
+    const stack = opens.get(delimiter) ?? [];
+
+    if (stack.length && before !== undefined && !/\s/.test(before)
+      && (after === undefined || boundary.test(after))) {
+      const start = stack.pop()!;
+      for (let k = start; k < start + delimiter.length; k++) omitted[k] = 1;
+      for (let k = i; k < end; k++) omitted[k] = 1;
+    } else if ((before === undefined || boundary.test(before))
+      && after !== undefined && !/\s/.test(after)) {
+      stack.push(i);
+      opens.set(delimiter, stack);
+    }
+    i = end;
+  }
+
+  const parts: string[] = [];
+  let start = 0;
+  for (let i = 0; i < omitted.length; i++) {
+    if (!omitted[i]) continue;
+    if (i > start) parts.push(text.slice(start, i));
+    while (i < omitted.length && omitted[i]) i++;
+    start = i;
+    i--;
+  }
+  if (start < text.length) parts.push(text.slice(start));
+  return parts.join('');
 }
 
 export interface CondenseOptions {

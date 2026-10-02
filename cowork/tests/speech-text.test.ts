@@ -17,6 +17,12 @@ describe('voice command mode (Cowork defaults to piloting)', () => {
 });
 
 describe('cleanForSpeech', () => {
+  it('handles a long run of markdown markers without blocking the renderer', () => {
+    const markers = '*'.repeat(80_000);
+    const start = performance.now();
+    expect(cleanForSpeech(markers)).toHaveLength(markers.length);
+    expect(performance.now() - start).toBeLessThan(1_500);
+  });
   it('conserves underscores and hashes when not emphasizing', () => {
     expect(cleanForSpeech('Ouvre my_config_file.json')).toBe('Ouvre my_config_file.json');
     expect(cleanForSpeech('Le langage C# est typé')).toBe('Le langage C# est typé');
