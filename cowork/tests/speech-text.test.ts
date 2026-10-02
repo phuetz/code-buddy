@@ -16,9 +16,25 @@ describe('voice command mode (Cowork defaults to piloting)', () => {
   });
 });
 
+describe('cleanForSpeech', () => {
+  it('conserves underscores and hashes when not emphasizing', () => {
+    expect(cleanForSpeech('Ouvre my_config_file.json')).toBe('Ouvre my_config_file.json');
+    expect(cleanForSpeech('Le langage C# est typé')).toBe('Le langage C# est typé');
+  });
+
+  it('removes tags when emphasizing', () => {
+    expect(cleanForSpeech('**gras** et _italique_')).toBe('gras et italique');
+  });
+});
+
 describe('condenseForSpeech', () => {
   it('strips markdown for natural speech', () => {
     expect(cleanForSpeech('**bold** and `code` and [link](http://x)')).toBe('bold and code and link');
+  });
+
+  it('does not split sentences on decimals', () => {
+    expect(condenseForSpeech('La version 3.5 est sortie. Elle corrige tout.')).toBe('La version 3.5 est sortie. Elle corrige tout.');
+    expect(condenseForSpeech('Le prix est 12.50 euros. Merci.')).toBe('Le prix est 12.50 euros. Merci.');
   });
 
   it('drops code blocks entirely', () => {

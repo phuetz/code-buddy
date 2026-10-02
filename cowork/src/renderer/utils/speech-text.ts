@@ -17,7 +17,9 @@ export function cleanForSpeech(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, '')
     .replace(/`([^`]+)`/g, '$1')
-    .replace(/[*_~#>]/g, '')
+    .replace(/^#+\s*/gm, '')
+    .replace(/^>\s*/gm, '')
+    .replace(/(^|[\s.,;:!?()[\]{}])([*_~]+)(?=\S)(.+?)(?<=\S)\2(?=[\s.,;:!?()[\]{}]|$)/g, '$1$3')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .trim();
 }
@@ -42,7 +44,7 @@ export function condenseForSpeech(text: string, opts: CondenseOptions = {}): str
   // First paragraph only — speech doesn't want a wall of text.
   const firstPara = clean.split(/\n{2,}/)[0]?.trim() || clean;
   // First N sentences (or the whole paragraph if it has no sentence punctuation).
-  const sentences = firstPara.match(/[^.!?]+[.!?]+(\s|$)/g);
+  const sentences = firstPara.match(/(?:[^.!?]|[.!?](?!\s|$))+[.!?]+(?=\s|$)|.+/g);
   let out = sentences
     ? sentences.slice(0, maxSentences).map((s) => s.trim()).join(' ').trim()
     : firstPara;
