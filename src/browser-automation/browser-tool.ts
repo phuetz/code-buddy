@@ -22,6 +22,8 @@ import {
 // ============================================================================
 
 export type BrowserAction =
+  | 'act'
+  | 'assert'
   // Lifecycle
   | 'launch'
   | 'connect'
@@ -103,6 +105,8 @@ export type BrowserAction =
 
 export interface BrowserToolInput {
   action: BrowserAction;
+  instruction?: string;
+  values?: Record<string, string>;
   /** Batch actions (for action='batch') — Native Engine v2026.3.13 */
   actions?: BrowserToolInput[];
   /** Stop on first error in batch mode (default: true) */
@@ -368,6 +372,20 @@ export class BrowserTool {
     try {
       switch (action) {
         // Lifecycle
+        case 'act': {
+          const { runSemanticAct } = await import('../automation-replay/engine.js');
+          const { browserReplayHost } = await import('../automation-replay/browser-host.js');
+          const result = await runSemanticAct(browserReplayHost(this.manager), {
+            instruction: input.instruction ?? '', expectedText: input.expectedText ?? '', values: input.values,
+          });
+          return { success: result.success, output: JSON.stringify(result), data: result };
+        }
+        case 'assert': {
+          const { assertNaturalLanguage } = await import('../automation-replay/engine.js');
+          const { browserReplayHost } = await import('../automation-replay/browser-host.js');
+          const result = await assertNaturalLanguage(browserReplayHost(this.manager), input.instruction ?? '');
+          return { success: result.passed, output: result.detail, data: result };
+        }
         case 'launch':
           return this.launch(input);
         case 'connect':

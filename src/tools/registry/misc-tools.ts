@@ -87,7 +87,7 @@ export function resetMiscInstances(): void {
 // ============================================================================
 
 const BROWSER_ACTIONS = [
-  'launch', 'connect', 'close',
+  'act', 'assert', 'launch', 'connect', 'close',
   'tabs', 'new_tab', 'focus_tab', 'close_tab',
   'snapshot', 'observe', 'get_element', 'find_elements',
   'navigate', 'go_back', 'go_forward', 'reload',
@@ -118,6 +118,8 @@ export class BrowserExecuteTool implements ITool {
       parameters: {
         type: 'object',
         properties: {
+          instruction: { type: 'string', description: 'Natural-language act/assert instruction. act records and replays a verified semantic sequence.' },
+          values: { type: 'object', description: 'Fresh named typing parameters; values are never persisted in recordings. Password replay is refused.' },
           action: {
             type: 'string',
             description: 'Browser action to perform',
@@ -537,6 +539,9 @@ export class ComputerControlExecuteTool implements ITool {
             enum: [...COMPUTER_CONTROL_ACTIONS],
             description: 'The action to perform',
           },
+          instruction: { type: 'string', description: 'Natural-language goal for act; fresh human approval remains mandatory for every desktop activation' },
+          expectedText: { type: 'string', description: 'Required final oracle for act' },
+          values: { type: 'object', description: 'Fresh named typing parameters, never persisted in recordings' },
           pilotMode: {
             type: 'string',
             enum: ['cautious', 'normal', 'fast'],

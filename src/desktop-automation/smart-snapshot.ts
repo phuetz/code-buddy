@@ -848,6 +848,7 @@ function Get-Elements($element, $depth) {
             y = [int]$rect.Y
             width = [int]$rect.Width
             height = [int]$rect.Height
+            isPassword = $element.Current.IsPassword
             focused = $element.Current.HasKeyboardFocus
             enabled = $element.Current.IsEnabled
         }
@@ -898,6 +899,8 @@ if ($focused) {
           focused: Boolean(item.focused),
           enabled: item.enabled !== false,
           visible: item.width > 0 && item.height > 0,
+          attributes: { source: 'uia', protected: role === 'text-field' ? item.isPassword !== false : false,
+            windowTitle: items[0]?.role === 'ControlType.Window' ? items[0].name : undefined },
           controlType: typeof item.role === 'string' ? item.role : undefined,
           automationId: item.automationId || undefined,
           runtimeId: item.runtimeId || undefined,
@@ -998,7 +1001,7 @@ gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi
 import json
 
-def get_elements(obj, depth=0, max_depth=5):
+def get_elements(obj, depth=0, max_depth=5, window_title=""):
     elements = []
     if depth > max_depth:
         return elements
@@ -1006,6 +1009,8 @@ def get_elements(obj, depth=0, max_depth=5):
     try:
         role = Atspi.Accessible.get_role_name(obj)
         name = Atspi.Accessible.get_name(obj) or ""
+        if role in ("frame", "dialog", "window"):
+            window_title = name
 
         try:
             component = obj.get_component()
@@ -1020,12 +1025,13 @@ def get_elements(obj, depth=0, max_depth=5):
         elements.append({
             "role": role,
             "name": name,
+            "windowTitle": window_title,
             "bounds": bounds
         })
 
         for i in range(obj.get_child_count()):
             child = obj.get_child_at_index(i)
-            elements.extend(get_elements(child, depth + 1, max_depth))
+            elements.extend(get_elements(child, depth + 1, max_depth, window_title))
     except:
         pass
 
@@ -1058,6 +1064,7 @@ print(json.dumps(all_elements[:100]))
             ref: this.nextRef++,
             role,
             name: item.name || 'Unknown',
+            attributes: { source: 'at-spi', protected: /password/i.test(item.role), windowTitle: item.windowTitle },
             bounds: item.bounds,
             center: {
               x: item.bounds.x + item.bounds.width / 2,
@@ -1127,6 +1134,7 @@ function Get-Elements($element, $depth) {
             y = [int]$rect.Y
             width = [int]$rect.Width
             height = [int]$rect.Height
+            isPassword = $element.Current.IsPassword
             focused = $element.Current.HasKeyboardFocus
             enabled = $element.Current.IsEnabled
         }
@@ -1177,6 +1185,8 @@ if ($focused) {
           focused: Boolean(item.focused),
           enabled: item.enabled !== false,
           visible: item.width > 0 && item.height > 0,
+          attributes: { source: 'uia', protected: role === 'text-field' ? item.isPassword !== false : false,
+            windowTitle: items[0]?.role === 'ControlType.Window' ? items[0].name : undefined },
           controlType: typeof item.role === 'string' ? item.role : undefined,
           automationId: item.automationId || undefined,
           runtimeId: item.runtimeId || undefined,

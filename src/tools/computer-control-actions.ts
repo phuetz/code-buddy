@@ -2,6 +2,7 @@ import type { ComputerAction } from './computer-control-tool.js';
 
 // Every new action requires an explicit review; unknown runtime actions fail closed.
 export const COMPUTER_ACTION_EFFECTS: Record<ComputerAction, 'observe' | 'mutate'> = {
+  act: 'mutate',
   snapshot: 'observe',
   snapshot_with_screenshot: 'observe',
   get_element: 'observe',

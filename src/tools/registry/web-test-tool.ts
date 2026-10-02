@@ -18,7 +18,7 @@ import { BrowserConsoleExecuteTool, BrowserExecuteTool, BrowserSnapshotExecuteTo
 
 export interface WebTestAssertion {
   /** 'text' = page text contains value; 'selector' = querySelector matches; 'title' = document.title contains value. */
-  type: 'text' | 'selector' | 'title';
+  type: 'text' | 'selector' | 'title' | 'assert';
   value: string;
 }
 
@@ -190,6 +190,10 @@ export class WebTestTool implements ITool {
   }
 
   private async runAssertion(assertion: WebTestAssertion): Promise<{ passed: boolean; detail: string }> {
+    if (assertion.type === 'assert') {
+      const result = await this.browser.execute({ action: 'assert', instruction: assertion.value });
+      return { passed: result.success, detail: result.output ?? result.error ?? 'No assertion evidence' };
+    }
     const value = JSON.stringify(assertion.value);
     const expression =
       assertion.type === 'text'
@@ -345,7 +349,7 @@ export class WebTestTool implements ITool {
             items: {
               type: 'object',
               properties: {
-                type: { type: 'string', enum: ['text', 'selector', 'title'] },
+                type: { type: 'string', enum: ['text', 'selector', 'title', 'assert'] },
                 value: { type: 'string' },
               },
               required: ['type', 'value'],

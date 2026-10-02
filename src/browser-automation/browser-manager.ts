@@ -1534,6 +1534,22 @@ export class BrowserManager extends EventEmitter {
   // Helpers
   // ============================================================================
 
+  /** Re-resolve role/name with Playwright strictness; never fall back to pixels. */
+  async performSemanticAction(
+    action: import('../automation-replay/types.js').SemanticAction,
+    values: Record<string, string>,
+  ): Promise<void> {
+    const locator = this.getCurrentPage().getByRole(action.target.role, { name: action.target.name, exact: true });
+    if (await locator.count() !== 1 || !await locator.isVisible() || !await locator.isEnabled()) {
+      throw new Error('Semantic target missing, ambiguous or disabled');
+    }
+    if (await locator.getAttribute('type') === 'password') throw new Error('Password replay refused');
+    if (action.kind === 'click') await locator.click({ timeout: 3000 });
+    else if (action.kind === 'type') await locator.fill(values[action.valueKey!], { timeout: 3000 });
+    else await locator.press(action.key, { timeout: 3000 });
+    await this.getCurrentPage().waitForTimeout(200);
+  }
+
   private getCurrentPage(): Page {
     if (!this.currentPageId || !this.pages.has(this.currentPageId)) {
       throw new Error('No active page. Open a tab first.');

@@ -196,6 +196,7 @@ public class CodeBuddyDesktopBridge {
             info["y"] = (int)rect.Y;
             info["width"] = (int)rect.Width;
             info["height"] = (int)rect.Height;
+            info["isPassword"] = current.IsPassword;
             info["focused"] = current.HasKeyboardFocus;
             info["enabled"] = current.IsEnabled;
 

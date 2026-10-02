@@ -27,6 +27,7 @@ WORKFLOW:
 3. Use these refs in click/type actions instead of coordinates
 
 ACTIONS:
+- act: Execute instruction with required expectedText using locally trusted semantic recordings; every desktop activation still requires fresh human approval, no password or blind-coordinate replay
 - snapshot: Take UI snapshot, returns element list with refs
 - snapshot_with_screenshot: Take snapshot + capture normalized screenshot (returns text + base64 image)
 - get_element: Get details of element by ref
@@ -119,9 +120,13 @@ ACTIONS:
     parameters: {
       type: 'object',
       properties: {
+        instruction: { type: 'string', description: 'Natural-language act/assert instruction. act records and replays a verified semantic sequence.' },
+        values: { type: 'object', description: 'Fresh named typing parameters; values are never persisted in recordings. Password replay is refused.' },
+        expectedText: { type: 'string', description: 'Required deterministic final oracle for act' },
         action: {
           type: 'string',
           enum: [
+            'act',
             'snapshot',
             'snapshot_with_screenshot',
             'get_element',

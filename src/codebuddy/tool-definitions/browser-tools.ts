@@ -51,6 +51,8 @@ Navigation:
 - reload: Reload page
 
 Interaction:
+- act: Execute a natural-language instruction with required expectedText; record verified semantic actions and replay without a model when state matches
+- assert: Judge instruction against a fresh page observation (never cached)
 - click: Click element by ref
 - double_click: Double-click element
 - right_click: Right-click element
@@ -114,10 +116,12 @@ Download:
     parameters: {
       type: 'object',
       properties: {
+        instruction: { type: 'string', description: 'Natural-language act/assert instruction. act records and replays a verified semantic sequence.' },
+        values: { type: 'object', description: 'Fresh named typing parameters; values are never persisted in recordings. Password replay is refused.' },
         action: {
           type: 'string',
           enum: [
-            'launch', 'connect', 'close',
+            'act', 'assert', 'launch', 'connect', 'close',
             'tabs', 'new_tab', 'focus_tab', 'close_tab',
             'snapshot', 'observe', 'get_element', 'find_elements',
             'navigate', 'go_back', 'go_forward', 'reload',
@@ -893,11 +897,11 @@ export const WEB_TEST_TOOL: CodeBuddyTool = {
         },
         assertions: {
           type: "array",
-          description: "Declarative checks: {type: 'text'|'selector'|'title', value: string}",
+          description: "Declarative checks: {type: 'text'|'selector'|'title'|'assert', value: string}; assert is a fresh natural-language judgment",
           items: {
             type: "object",
             properties: {
-              type: { type: "string", enum: ["text", "selector", "title"] },
+              type: { type: "string", enum: ["text", "selector", "title", "assert"] },
               value: { type: "string" }
             },
             required: ["type", "value"]

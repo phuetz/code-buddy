@@ -93,6 +93,7 @@ export function resolveGroundingCoordinatesToAbsolute(
 // ============================================================================
 
 export type ComputerAction =
+  | 'act'
   // Snapshot actions
   | 'snapshot'
   | 'snapshot_with_screenshot'
@@ -201,6 +202,9 @@ export type ComputerAction =
 
 export interface ComputerControlInput {
   action: ComputerAction;
+  instruction?: string;
+  expectedText?: string;
+  values?: Record<string, string>;
   pilotMode?: 'cautious' | 'normal' | 'fast';
   safetyProfile?: 'balanced' | 'strict';
   /** @deprecated Ignored compatibility field. Only the host can authorize actions. */
@@ -401,6 +405,8 @@ export class ComputerControlTool {
 
       switch (action) {
         // Snapshot actions
+        case 'act':
+          return run(() => this.semanticAct(enrichedInput));
         case 'snapshot':
           return run(() => this.takeSnapshot(enrichedInput));
         case 'snapshot_with_screenshot':
@@ -629,8 +635,19 @@ export class ComputerControlTool {
   /**
    * Whether the action requires desktop automation provider access.
    */
+  private async semanticAct(input: ComputerControlInput): Promise<ToolResult> {
+    const { runSemanticAct } = await import('../automation-replay/engine.js');
+    const { desktopReplayHost } = await import('../automation-replay/desktop-host.js');
+    const host = desktopReplayHost(this.snapshotManager, () => this.automation.getActiveWindow(), step => this.execute(step));
+    const result = await runSemanticAct(host, {
+      instruction: input.instruction ?? '', expectedText: input.expectedText ?? '', values: input.values,
+    });
+    return { success: result.success, output: JSON.stringify(result), data: result };
+  }
+
   private requiresAutomation(action: ComputerAction): boolean {
     return [
+      'act',
       'snapshot',
       'snapshot_with_screenshot',
       'click_element_by_name',

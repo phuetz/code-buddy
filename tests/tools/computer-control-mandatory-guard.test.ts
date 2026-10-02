@@ -15,6 +15,7 @@ vi.mock('../../src/desktop-automation/index.js', () => ({
 
 // Review inventory: a frozen fixture, not derived from the implementation under test.
 const inventory: [ComputerControlInput['action'], string, boolean][] = [
+  ['act', 'semanticAct', true],
   [
     "snapshot",
     "takeSnapshot",

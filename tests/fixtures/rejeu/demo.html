@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Replay demonstration</title>
+<style>body{font:18px system-ui;max-width:650px;margin:60px auto}button,input{font:inherit;margin:12px;padding:12px}section{padding:25px;border:1px solid #ddd}</style>
+<section id="app"></section><script>
+const app=document.querySelector('#app');
+const flow=new URL(location.href).searchParams.get('flow');
+const changed=new URL(location.href).searchParams.has('changed');
+if(flow==='greeting') {
+ app.innerHTML='<h1>Greeting</h1><label>Name <input aria-label="Name"></label><button>Greet</button><p role="status"></p>';
+ app.querySelector('button').onclick=()=>app.querySelector('p').textContent='Welcome '+app.querySelector('input').value;
+} else if(flow==='theme') {
+ app.innerHTML='<h1>Preferences</h1><button>Appearance</button>';
+ app.querySelector('button').onclick=()=>{app.innerHTML='<h1>Appearance</h1><button>Dark</button><p role="status"></p>';app.querySelector('button').onclick=()=>app.querySelector('p').textContent='Dark theme enabled';};
+} else {
+ app.innerHTML='<h1>Information</h1><button>'+(changed?'Show information':'Details')+'</button><p role="status"></p>';
+ app.querySelector('button').onclick=()=>app.querySelector('p').textContent='Details ready';
+}
+</script></html>
