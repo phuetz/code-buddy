@@ -1821,6 +1821,10 @@ program
     "path to a JSON Schema file to validate the final response shape against"
   )
   .option(
+    "--shell-capabilities <capabilities>",
+    "explicit confined shell grants: tests,git-local,npm-registry"
+  )
+  .option(
     "--add-dir <paths...>",
     "grant additional writable directories (repeatable)"
   )
@@ -2255,6 +2259,13 @@ program
         process.env.GROK_SKIP_PERMISSIONS = 'true';
         cli.error("⚠️  DANGEROUS: All permission checks BYPASSED");
         cli.error("   Only use this in trusted containers without network access!");
+      }
+
+      if (options.shellCapabilities !== undefined) {
+        process.env.CODEBUDDY_SHELL_CAPABILITIES = options.shellCapabilities;
+        const { shellCapabilities } = await import('./sandbox/shell-capabilities.js');
+        shellCapabilities();
+        cli.error(`Confined shell capabilities: ${options.shellCapabilities}`);
       }
 
       // Handle --add-dir: grant additional writable directories to sandbox

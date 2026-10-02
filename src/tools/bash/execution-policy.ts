@@ -9,6 +9,7 @@
 import { initializeExecPolicy, type ShellPolicyEvaluation } from '../../sandbox/execpolicy.js';
 import {
   createSandboxForMode,
+  getWorkspaceRoot,
   detectCapabilities,
   sandboxCapabilityProbeInstalled,
   type OSSandboxResult,
@@ -18,6 +19,9 @@ import {
   createSshSandbox,
   resolveExplicitSshSandboxRequest,
 } from '../../sandbox/ssh-sandbox.js';
+import { shellCapabilities, scopedCapabilityAllows, capabilityAllowsSegment } from '../../sandbox/shell-capabilities.js';
+import { resolveWorkspaceRuntime, sessionTemporary } from '../../sandbox/workspace-runtime.js';
+import { startNpmRegistryBroker } from '../../sandbox/npm-registry-broker.js';
 import { getWorkspaceIsolation } from '../../workspace/workspace-isolation.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { checkDeclarativePermission } from '../../security/declarative-rules.js';
@@ -207,6 +211,10 @@ export async function evaluateShellExecution(
     return { ...evaluation, action: 'ask', reason: policyResult.reason };
   }
 
+  if (evaluation.action === 'ask' && scopedCapabilityAllows(evaluation)) {
+    return { ...evaluation, action: 'sandbox', reason: 'Explicit mission capability; workspace confinement remains enforced' };
+  }
+
   // A declarative allow removes the prompt but never removes confinement.
   if (declarative === 'allow' && evaluation.action === 'ask') {
     return {
@@ -394,7 +402,31 @@ export async function executeInWorkspaceSandbox(
     };
   }
 
-  const result = await sandbox.execShellTracked(command);
+  const grants = shellCapabilities();
+  const evaluation = await evaluateShellExecution(command, cwd);
+  if (grants.has('git-local') && evaluation.action === 'sandbox' && !evaluation.complex
+    && evaluation.parsedSegments.length > 0
+    && evaluation.parsedSegments.every(argv => argv[0] === 'git' && capabilityAllowsSegment(argv, grants))) {
+    const runtime = resolveWorkspaceRuntime(await getWorkspaceRoot(cwd));
+    const gitRoots = [runtime.gitDirectory, runtime.commonDirectory].filter((p): p is string => Boolean(p));
+    const config = sandbox.getConfig();
+    sandbox.updateConfig({
+      readOnlyPaths: [...config.readOnlyPaths.filter(p => !gitRoots.some(root => p === root || p.startsWith(root + path.sep))),
+        ...gitRoots.flatMap(root => ['config', 'hooks', 'refs/remotes'].map(suffix => path.join(root, suffix)))],
+      readWritePaths: [...config.readWritePaths, ...gitRoots],
+    });
+  }
+  const broker = grants.has('npm-registry')
+    ? await startNpmRegistryBroker(cwd, sessionTemporary(await getWorkspaceRoot(cwd)), signal) : undefined;
+  if (broker) {
+    const config = sandbox.getConfig();
+    sandbox.updateConfig({ readOnlyPaths: [...config.readOnlyPaths, broker.directory],
+      env: { ...config.env, PATH: broker.directory + path.delimiter + config.env.PATH } });
+  }
+  let result: OSSandboxResult;
+  try { result = await sandbox.execShellTracked(command); }
+  finally { await broker?.close(); }
+
   if (!result.sandboxed) {
     return {
       available: false,
