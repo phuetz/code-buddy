@@ -35,6 +35,8 @@ export interface OSSandboxConfig {
   readOnlyPaths: string[];
   /** Read-write paths */
   readWritePaths: string[];
+  /** Linux-only empty per-invocation mount, never a host write grant. */
+  privateViteCachePath?: string;
   /** Allow network access */
   allowNetwork: boolean;
   /** Allow subprocess spawning */
@@ -273,6 +275,9 @@ function appendSandboxMounts(bwrapArgs: string[], config: OSSandboxConfig): void
     if (fs.existsSync(p)) {
       bwrapArgs.push('--ro-bind', p, p);
     }
+  }
+  if (config.privateViteCachePath) {
+    bwrapArgs.push('--tmpfs', config.privateViteCachePath);
   }
 }
 
@@ -1502,9 +1507,21 @@ export async function createSandboxConfigForMode(
       `${workspaceRoot}/${suffix}`
     );
 
+    // Vite's bundle loader writes beside installed dependencies and supplies
+    // __dirname for ESM configs. Keep its existing cache mount point private
+    // without making the shared dependency tree writable on the host.
+    let privateViteCachePath: string | undefined;
+    if (process.platform === 'linux' && runtime.nodeModulesDirectory) {
+      const candidate = path.join(runtime.nodeModulesDirectory, '.vite-temp');
+      try {
+        if (fs.lstatSync(candidate).isDirectory()) privateViteCachePath = candidate;
+      } catch { /* No safe existing mount point: retain the runner fallback. */ }
+    }
+
     return {
       workDir: cwd,
-      env: runtimeEnv,
+      env: { ...runtimeEnv, ...(privateViteCachePath ? { CODEBUDDY_SANDBOX_VITE_CACHE: 'private' } : {}) },
+      ...(privateViteCachePath ? { privateViteCachePath } : {}),
       readOnlyPaths: [...systemReadOnly, ...protectedPaths, ...extraReadOnly],
       readWritePaths: [workspaceRoot, temporary, ...extraReadWrite],
       allowNetwork: false,

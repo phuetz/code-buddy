@@ -28,6 +28,7 @@ export interface WorkspaceRuntimePaths {
   gitDirectory?: string;
   commonDirectory?: string;
   nodeDirectory: string;
+  nodeModulesDirectory?: string;
 }
 
 export function resolveWorkspaceRuntime(workspace: string): WorkspaceRuntimePaths {
@@ -56,11 +57,11 @@ export function resolveWorkspaceRuntime(workspace: string): WorkspaceRuntimePath
     }
   };
   if (commonDirectory) visitObjects(path.join(commonDirectory, 'objects'));
-  add(path.join(workspace, 'node_modules'));
+  const nodeModulesDirectory = add(path.join(workspace, 'node_modules'));
   // An nvm/Volta installation also needs npm's ../lib and Corepack's modules.
   // Grant this version's prefix, never the user's home or the version manager.
   const nodeDirectory = path.dirname(fs.realpathSync(process.execPath));
   const prefix = path.dirname(nodeDirectory);
   if (!['/usr', '/usr/local', '/'].includes(prefix)) add(prefix);
-  return { readOnly: [...readOnly], gitDirectory, commonDirectory, nodeDirectory };
+  return { readOnly: [...readOnly], gitDirectory, commonDirectory, nodeDirectory, nodeModulesDirectory };
 }

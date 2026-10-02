@@ -95,9 +95,46 @@ it('npm run test reconnaît le préfixe NODE_OPTIONS cité de WorkflowBuilder', 
   expect(result.result?.stdout).toContain('2 passed');
   expect(result.result?.stderr).not.toContain('EROFS');
   const explicit = await executeInWorkspaceSandbox('npm run test -- sample.test.js --run --maxWorkers=1 --configLoader=bundle', workspace, 30000);
-  expect(explicit.result?.exitCode).not.toBe(0);
-  expect(explicit.result?.stderr).toContain('EROFS');
+  expect(explicit.result?.exitCode, explicit.result?.stderr).toBe(0);
+  expect(explicit.result?.stdout).toContain('2 passed');
 }, 60000);
+
+it('exécute la configuration ESM avec __dirname dans un cache Vite privé', async context => {
+  if (!ready.ready) context.skip();
+  const { workspace } = lane('shared');
+  fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ type: 'module', scripts: { test: "NODE_OPTIONS='--max-old-space-size=8192' vitest" } }));
+  fs.writeFileSync(path.join(workspace, 'vitest.config.mjs'), "import { defineConfig } from 'vitest/config'; if (__dirname !== process.cwd()) throw new Error('Wrong config directory'); export default defineConfig({test:{include:['sample.test.js']}});\n");
+  vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'tests');
+  getPermissionModeManager().setMode('dontAsk');
+  for (const command of ['node node_modules/vitest/vitest.mjs run --maxWorkers=1', 'npm test -- --run --maxWorkers=1', 'npx vitest run --maxWorkers=1']) {
+    const result = await executeInWorkspaceSandbox(command, workspace, 30000);
+    expect(result.result?.exitCode, result.result?.stderr).toBe(0);
+    expect(result.result?.stdout).toContain('1 passed');
+  }
+  const marker = `cache-marker-${path.basename(workspace)}-${Date.now()}`;
+  const cache = path.join(fs.realpathSync(path.join(workspace, 'node_modules')), '.vite-temp');
+  const write = await executeInWorkspaceSandbox(`printf private > node_modules/.vite-temp/${marker}`, workspace, 5000);
+  expect(write.result?.exitCode, write.result?.stderr).toBe(0);
+  expect(fs.existsSync(path.join(cache, marker))).toBe(false);
+  const next = await executeInWorkspaceSandbox(`test ! -e node_modules/.vite-temp/${marker}`, workspace, 5000);
+  expect(next.result?.exitCode).toBe(0);
+  const denied = await executeInWorkspaceSandbox('touch node_modules/vitest/forbidden-banc-write', workspace, 5000);
+  expect(denied.result?.exitCode).not.toBe(0);
+}, 90000);
+
+it('ne crée pas de cache privé en lecture seule ni sur un lien symbolique', async () => {
+  const { workspace } = lane('shared');
+  const readOnly = await createSandboxConfigForMode('read-only', workspace);
+  expect(readOnly.privateViteCachePath).toBeUndefined();
+  expect(readOnly.env?.CODEBUDDY_SANDBOX_VITE_CACHE).toBeUndefined();
+  const modules = path.join(workspace, 'node_modules');
+  fs.unlinkSync(modules); // This lane's symlink, never the shared dependencies.
+  fs.mkdirSync(modules);
+  fs.symlinkSync(workspace, path.join(modules, '.vite-temp'), 'dir');
+  const linked = await createSandboxConfigForMode('workspace-write', workspace);
+  expect(linked.privateViteCachePath).toBeUndefined();
+  expect(linked.env?.CODEBUDDY_SANDBOX_VITE_CACHE).toBeUndefined();
+});
 
 // Recorded Ornith call XB7FNd5Jot9uqxT6YuZeCOLi3eiS2T49 used npx directly.
 it.each(['', '--configLoader runner'])('npx Vitest respecte les dépendances en lecture seule (%s)', async (loader) => {
@@ -116,12 +153,12 @@ it.each(['', '--configLoader runner'])('npx Vitest respecte les dépendances en 
 it('npx conserve le choix explicite de chargeur et délègue les autres commandes', async () => {
   const { workspace } = lane('shared');
   fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ type: 'module' }));
-  fs.writeFileSync(path.join(workspace, 'vitest.config.mjs'), "export default {test:{include:['sample.test.js']}};\n");
+  fs.writeFileSync(path.join(workspace, 'vitest.config.mjs'), "if (__dirname !== process.cwd()) throw new Error('Bundle loader required'); export default {test:{include:['sample.test.js']}};\n");
   vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'tests');
   if (!ready.ready) return;
   const explicit = await executeInWorkspaceSandbox('npx vitest run --configLoader=bundle --maxWorkers=1', workspace, 30000);
-  expect(explicit.result?.exitCode).not.toBe(0);
-  expect(explicit.result?.stderr).toContain('EROFS');
+  expect(explicit.result?.exitCode, explicit.result?.stderr).toBe(0);
+  expect(explicit.result?.stdout).toContain('1 passed');
   const other = await executeInWorkspaceSandbox('npx --version', workspace, 5000);
   expect(other.result?.exitCode).toBe(0);
   expect(other.result?.stdout).toMatch(/\d+\.\d+\.\d+/);

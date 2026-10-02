@@ -145,11 +145,11 @@ import {spawn} from 'node:child_process';
 import fs from 'node:fs';
 let argv=process.argv.slice(2);
 if (!['audit','view','pack','install','update'].includes(argv[0] ?? '')) {
- // A simple Vitest npm script must not bundle its config into shared dependencies.
+ // Without a private cache, avoid bundling into shared dependencies.
  const task=argv[0]==='test'?'test':argv[0]==='run'?argv[1]:undefined;
  try {
   const script=JSON.parse(fs.readFileSync('package.json','utf8')).scripts?.[task];
-  if(typeof script==='string' && new RegExp(${JSON.stringify(SIMPLE_VITEST_SCRIPT.source)},'i').test(script)
+  if(process.env.CODEBUDDY_SANDBOX_VITE_CACHE!=='private' && typeof script==='string' && new RegExp(${JSON.stringify(SIMPLE_VITEST_SCRIPT.source)},'i').test(script)
    && ![script,...argv].some(arg=>/--configLoader(?:=|\\s|$)/.test(arg))) {
    argv=[...argv,...(argv.includes('--')?[]:['--']),'--configLoader','runner'];
   }
@@ -181,7 +181,7 @@ if(argv[0]==='vitest') {
   const local=fs.realpathSync(path.resolve('node_modules/vitest/vitest.mjs'));
   if(fs.statSync(local).isFile()) {
    entry=local;argv=argv.slice(1);
-   if(!argv.some(arg=>/^--configLoader(?:=|$)/.test(arg))) argv.push('--configLoader','runner');
+   if(process.env.CODEBUDDY_SANDBOX_VITE_CACHE!=='private' && !argv.some(arg=>/^--configLoader(?:=|$)/.test(arg))) argv.push('--configLoader','runner');
   }
  } catch {}
 }
