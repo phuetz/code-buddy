@@ -1410,7 +1410,11 @@ async function processPromptHeadless(
     const lastAssistantEntry = [...chatEntries]
       .reverse()
       .find((entry) => entry.type === 'assistant');
-    const resultText = lastAssistantEntry?.content ?? '';
+    const costLimitReached = agent.isSessionCostLimitReached() || chatEntries.some(
+      (entry) => entry.type === 'tool_result'
+        && entry.toolResult?.error?.startsWith('Skipped because the session cost limit was reached'),
+    );
+    const resultText = lastAssistantEntry?.content || (costLimitReached ? 'Session cost limit reached.' : '');
 
     const client = agent.getClient();
     const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
@@ -1431,7 +1435,7 @@ async function processPromptHeadless(
     // Validate before writing or emitting any successful output. The schema
     // applies to the JSON value represented by the final assistant text, not
     // to the internal/OpenAI-compatible message history.
-    if (outputSchemaPath) {
+    if (outputSchemaPath && !costLimitReached) {
       const validation = validateOutputText(resultText, outputSchemaPath);
       if (!validation.valid) {
         cli.error('Output schema validation failed:');
@@ -1467,6 +1471,7 @@ async function processPromptHeadless(
       resultText,
       knownToolNames,
       executedToolNames,
+      costLimitReached,
     );
     runStatus = exitCode === 0 ? 'completed' : 'failed';
 

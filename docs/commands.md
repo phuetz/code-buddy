@@ -772,10 +772,10 @@ own local operator review draft.
 | `--api-key <key>` | `-k` | API key | - |
 | `--base-url <url>` | `-u` | API base URL | - |
 | `--model <model>` | `-m` | AI model | auto-detect |
-| `--prompt <prompt>` | `-p` | Single prompt (headless mode) | - |
+| `--prompt <prompt>` | `-p` | Single prompt (headless mode). Exits with code 3 on turn or cost limit, 1 on error, 0 on success. | - |
 | `--profile <name>` | | Named config profile | - |
-| `--max-tool-rounds <n>` | | Max tool execution rounds | 400 |
-| `--max-price <dollars>` | | Session cost limit | $10 |
+| `--max-tool-rounds <n>` | | Max tool execution rounds. Headless mode exits with code 3 if reached. | 400 |
+| `--max-price <dollars>` | | Session cost limit. Headless mode exits with code 3 if reached. | $10 |
 | `--security-mode <mode>` | `-s` | `suggest`, `auto-edit`, or `full-auto` | `suggest` |
 | `--permission-mode <mode>` | | `default`, `plan`, `acceptEdits`, `dontAsk`, `bypassPermissions` | `default` |
 | `--output-format <fmt>` | `-o` | `json`, `stream-json`, `text`, `markdown` | `json` |

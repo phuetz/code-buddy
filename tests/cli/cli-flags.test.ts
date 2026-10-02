@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import { validateOutputSchema } from '../../src/utils/output-schema-validator';
 import { SessionStore } from '../../src/persistence/session-store';
-import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from '../../src/cli/headless-options';
+import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode, resolveHeadlessTurnExitCode } from '../../src/cli/headless-options';
 
 // ============================================================================
 // Feature 1: --output-schema validation
@@ -196,6 +196,18 @@ describe('Headless output option resolution', () => {
   it('marks canonical assistant error envelopes as failed headless runs', () => {
     expect(resolveHeadlessResultExitCode('Sorry, I encountered an error: provider failed')).toBe(1);
     expect(resolveHeadlessResultExitCode('Normal assistant answer')).toBe(0);
+  });
+
+  it('marks turn limit or cost limit reaching as exit code 3', () => {
+    expect(resolveHeadlessResultExitCode('Maximum tool execution rounds reached.')).toBe(3);
+    expect(resolveHeadlessResultExitCode('\n\nMaximum tool execution rounds reached.  ')).toBe(3);
+    expect(resolveHeadlessResultExitCode('Session cost limit reached ($1.00 / $1.00). Please start a new session.')).toBe(3);
+    expect(resolveHeadlessResultExitCode('\n\n💸 Session cost limit reached ($1.00 / $1.00).')).toBe(3);
+    expect(resolveHeadlessResultExitCode('The output was: Maximum tool execution rounds reached.')).toBe(0);
+  });
+
+  it('marks a cost limit signalled outside the final assistant text as exit code 3', () => {
+    expect(resolveHeadlessTurnExitCode('Normal assistant answer', [], [], true)).toBe(3);
   });
 });
 

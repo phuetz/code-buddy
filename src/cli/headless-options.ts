@@ -40,6 +40,12 @@ export function resolveHeadlessResultExitCode(resultText: string): number {
     return 1;
   }
   const normalized = resultText.trim().toLowerCase();
+  if (normalized.startsWith('maximum tool execution rounds reached')) {
+    return 3;
+  }
+  if (/^(?:💸\s*)?session cost limit reached/.test(normalized)) {
+    return 3;
+  }
   if (normalized.startsWith('sorry, i encountered an error:')) {
     return 1;
   }
@@ -144,7 +150,9 @@ export function resolveHeadlessTurnExitCode(
   resultText: string,
   knownToolNames: Iterable<string>,
   executedToolNames: Iterable<string>,
+  costLimitReached = false,
 ): number {
+  if (costLimitReached) return 3;
   if (findUnexecutedProseToolCall(resultText, knownToolNames, executedToolNames)) {
     return 3;
   }
