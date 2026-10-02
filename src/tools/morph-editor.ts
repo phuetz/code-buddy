@@ -3,11 +3,12 @@ import axios from "axios";
 import { ToolResult, getErrorMessage } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { logger } from "../utils/logger.js";
-import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
+import { UnifiedVfsRouter, getVfsTextTransport } from "../services/vfs/unified-vfs-router.js";
 import { generateDiff as sharedGenerateDiff } from "../utils/diff-generator.js";
+import { maybeReviewGatedWrite } from './review-gate-helper.js';
 
 export class MorphEditorTool {
-  private confirmationService = ConfirmationService.getInstance();
+  private get confirmationService(): ConfirmationService { return ConfirmationService.getInstance(); }
   private morphApiKey: string;
   private morphBaseUrl: string = "https://api.morphllm.com/v1";
   private vfs = UnifiedVfsRouter.Instance;
@@ -45,10 +46,13 @@ export class MorphEditorTool {
   async editFile(
     targetFile: string,
     instructions: string,
-    codeEdit: string
+    codeEdit: string,
+    baseDirectory: string = process.cwd()
   ): Promise<ToolResult> {
     try {
-      const resolvedPath = path.resolve(targetFile);
+      const resolved = this.vfs.resolvePath(path.resolve(baseDirectory, targetFile), baseDirectory, 'write');
+      if (!resolved.valid) return { success: false, error: resolved.error };
+      const resolvedPath = resolved.resolved;
 
       if (!(await this.vfs.exists(resolvedPath))) {
         return {
@@ -91,6 +95,18 @@ export class MorphEditorTool {
       // Call Morph Fast Apply API
       const mergedCode = await this.callMorphApply(instructions, initialCode, codeEdit);
 
+      const gated = await maybeReviewGatedWrite({
+        baseDirectory,
+        resolvedPath,
+        displayPath: targetFile,
+        newContent: mergedCode,
+        intent: instructions,
+        originLabel: 'Morph Fast Apply',
+      });
+      if (gated.gated) {
+        return gated.ok ? { success: true, output: gated.summary } : { success: false, error: gated.error };
+      }
+
       // Write the merged code back to file
       await this.vfs.writeFile(resolvedPath, mergedCode, "utf-8");
 
@@ -131,6 +147,7 @@ export class MorphEditorTool {
           "Content-Type": "application/json",
         },
         timeout: 30000,
+        signal: getVfsTextTransport()?.signal,
       });
 
       if (!response.data.choices || !response.data.choices[0] || !response.data.choices[0].message) {

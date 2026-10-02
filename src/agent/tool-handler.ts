@@ -740,7 +740,8 @@ export class ToolHandler {
           result = await this.morphEditor.editFile(
             finalArgs.target_file as string,
             finalArgs.instructions as string,
-            finalArgs.code_edit as string
+            finalArgs.code_edit as string,
+            this.getWorkingDirectory()
           );
         }
       } else if (this.registry.has(toolName)) {

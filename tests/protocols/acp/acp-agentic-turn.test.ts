@@ -1,5 +1,6 @@
 /** The provider is fake; the agent loop, tool registry and security gates are real. */
 import fs from 'node:fs';
+import axios from 'axios';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAcpAgenticRunner, type AcpAgenticRunner } from '../../../src/protocols/acp/acp-agentic-runner.js';
@@ -60,6 +61,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await runner?.dispose();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
 });
@@ -73,7 +75,7 @@ describe('ACP adapter around the interactive agent', () => {
     expect(updates.some((update) => update.sessionUpdate === 'agent_thought_chunk')).toBe(true);
     expect(updates.some((update) => update.sessionUpdate === 'tool_call_update' && update.status === 'completed')).toBe(true);
     expect(JSON.stringify(modelMessages[1])).toContain('buffer-only');
-  });
+  }, 45_000); // First turn imports the full agent/tool graph, also under parallel suite load.
   it('uses the disk when no filesystem capability is advertised', async () => {
     fs.writeFileSync(path.join(dir, 'file.txt'), 'disk-content');
     await create('view_file', { path: 'file.txt' })(context());
@@ -102,6 +104,47 @@ describe('ACP adapter around the interactive agent', () => {
     await create('view_file', { path: 'escape/outside.txt' })(context(true));
     expect(client).not.toHaveBeenCalled();
     expect(updates.some((update) => update.sessionUpdate === 'tool_call_update' && update.status === 'failed')).toBe(true);
+  });
+  it('resolves the legacy Morph edit against the session cwd and current editor buffer', async () => {
+    vi.stubEnv('MORPH_API_KEY', 'synthetic-test-value');
+    fs.writeFileSync(path.join(dir, 'file.txt'), 'disk-before');
+    const apply = vi.spyOn(axios, 'post').mockResolvedValue({ data: { choices: [{ message: { content: 'merged-buffer' } }] } });
+    expect(dir).not.toBe(process.cwd());
+    await create('edit_file', { target_file: 'file.txt', instructions: 'merge', code_edit: 'merged-buffer' })(context(true));
+    expect(apply).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ messages: [expect.objectContaining({ content: expect.stringContaining('<code>buffer-only\n</code>') })] }), expect.any(Object));
+    expect(client).toHaveBeenCalledWith('fs/write_text_file', expect.objectContaining({ path: path.join(dir, 'file.txt'), content: 'merged-buffer' }));
+    expect(fs.readFileSync(path.join(dir, 'file.txt'), 'utf8')).toBe('disk-before');
+  });
+  it('refuses a legacy Morph path outside the session before editor or provider IO', async () => {
+    vi.stubEnv('MORPH_API_KEY', 'synthetic-test-value');
+    fs.symlinkSync(path.dirname(dir), path.join(dir, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+    const apply = vi.spyOn(axios, 'post');
+    await create('edit_file', { target_file: 'escape/outside.txt', instructions: 'merge', code_edit: 'never' })(context(true));
+    expect(apply).not.toHaveBeenCalled();
+    expect(client).not.toHaveBeenCalled();
+    expect(updates.some((update) => update.status === 'failed')).toBe(true);
+  });
+  it('keeps the review transaction closed for legacy Morph edits to unsaved buffers', async () => {
+    vi.stubEnv('MORPH_API_KEY', 'synthetic-test-value');
+    vi.stubEnv('CODEBUDDY_DIFF_REVIEW', 'static');
+    const apply = vi.spyOn(axios, 'post').mockResolvedValue({ data: { choices: [{ message: { content: 'merged-buffer' } }] } });
+    await create('edit_file', { target_file: 'unsaved.txt', instructions: 'merge', code_edit: 'merged-buffer' })(context(true));
+    expect(apply).toHaveBeenCalled();
+    expect(client.mock.calls.some(([method]) => method === 'fs/write_text_file')).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'unsaved.txt'))).toBe(false);
+    expect(updates.some((update) => update.status === 'failed' && JSON.stringify(update.content).includes('requires disk snapshots'))).toBe(true);
+  });
+  it.each(['review', 'shadow'])('keeps %s disk transactions closed for an unsaved read-only editor buffer', async (gate) => {
+    vi.stubEnv(gate === 'review' ? 'CODEBUDDY_DIFF_REVIEW' : 'CODEBUDDY_SHADOW_WORKSPACE', gate === 'review' ? 'static' : 'true');
+    fs.writeFileSync(path.join(dir, 'file.txt'), 'disk-before');
+    const ctx = context(true);
+    ctx.clientCapabilities = { fs: { readTextFile: true } };
+    ctx.canRequestClient = (method) => method === 'fs/read_text_file' || method === 'session/request_permission';
+    await create('str_replace_editor', { path: 'file.txt', old_str: 'buffer-only', new_str: 'changed' })(ctx);
+    expect(client).toHaveBeenCalledWith('fs/read_text_file', expect.objectContaining({ path: path.join(dir, 'file.txt') }));
+    expect(client.mock.calls.some(([method]) => method === 'fs/write_text_file')).toBe(false);
+    expect(fs.readFileSync(path.join(dir, 'file.txt'), 'utf8')).toBe('disk-before');
+    expect(updates.some((update) => update.status === 'failed' && JSON.stringify(update.content).includes('requires disk snapshots'))).toBe(true);
   });
   it('retains a finite tool round limit', async () => {
     expect(await create('list_directory', { path: '.' }, true)(context())).toEqual({ stopReason: 'max_turn_requests' });
