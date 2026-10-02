@@ -404,10 +404,18 @@ export async function executeInWorkspaceSandbox(
 
   const grants = shellCapabilities();
   const evaluation = await evaluateShellExecution(command, cwd);
+  const workspaceRoot = await getWorkspaceRoot(cwd);
+  const sameWorkspaceCd = (argv: string[], index: number): boolean => {
+    if (index !== 0 || argv[0] !== 'cd' || argv.length !== 2) return false;
+    const argument = argv[1]!.replace(/^(['"])(.*)\1$/, '$2');
+    try { return fs.realpathSync(path.resolve(cwd, argument)) === fs.realpathSync(workspaceRoot); }
+    catch { return false; }
+  };
   if (grants.has('git-local') && evaluation.action === 'sandbox' && (!evaluation.complex || evaluation.simpleSequence)
-    && evaluation.parsedSegments.length > 0
-    && evaluation.parsedSegments.every(argv => argv[0] === 'git' && capabilityAllowsSegment(argv, grants))) {
-    const runtime = resolveWorkspaceRuntime(await getWorkspaceRoot(cwd));
+    && evaluation.parsedSegments.some(argv => argv[0] === 'git')
+    && evaluation.parsedSegments.every((argv, index) => sameWorkspaceCd(argv, index)
+      || (argv[0] === 'git' && capabilityAllowsSegment(argv, grants)))) {
+    const runtime = resolveWorkspaceRuntime(workspaceRoot);
     const gitRoots = [runtime.gitDirectory, runtime.commonDirectory].filter((p): p is string => Boolean(p));
     const config = sandbox.getConfig();
     sandbox.updateConfig({

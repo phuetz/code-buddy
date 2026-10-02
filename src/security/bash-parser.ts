@@ -225,6 +225,7 @@ function fallbackParse(input: string, depth: number = 0): ParseResult {
 
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
+
     const next = input[i + 1];
 
     if (escaped) {
@@ -367,6 +368,15 @@ function tokenizeSimple(input: string): string[] {
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
 
+    if (ch === '\\' && !inSingle && input[i + 1] !== undefined) {
+      const next = input[i + 1]!;
+      if (!inDouble || ['$', '`', '"', '\\', '\n'].includes(next)) {
+        if (next !== '\n') current += next;
+        i++;
+        continue;
+      }
+    }
+
     if (ch === "'" && !inDouble) {
       inSingle = !inSingle;
       continue;
@@ -464,8 +474,8 @@ function extractCommandsFromTree(
         const parts: string[] = [];
         for (let i = 0; i < n.childCount; i++) {
           const child = n.child(i) as typeof node;
-          if (child.type === 'command_name' || child.type === 'word' || child.type === 'string') {
-            parts.push(child.text);
+          if (['command_name', 'word', 'string', 'raw_string', 'concatenation'].includes(child.type)) {
+            parts.push(tokenizeSimple(child.text).join(' '));
           }
         }
         const [commandName, ...commandArgs] = parts;

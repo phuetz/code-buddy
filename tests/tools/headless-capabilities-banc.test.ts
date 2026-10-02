@@ -82,3 +82,21 @@ it('refuse le détournement du broker vers un fichier extérieur au workspace', 
     expect(result.result?.stdout).not.toContain('DO_NOT_READ');
   } finally { fs.unlinkSync(outside); }
 });
+
+it('permet le commit local précédé du cd vers la même lane', async () => {
+  const cwd = fixture();
+  if (!readiness.ready) return;
+  const command = `cd '${cwd}' && git add package.json package-lock.json && git commit -m fixture`;
+  const result = await executeInWorkspaceSandbox(command, cwd, 30000);
+  expect(result.result?.exitCode, result.result?.stderr).toBe(0);
+  expect(execFileSync('git', ['log', '-1', '--format=%s'], { cwd, encoding: 'utf8' }).trim()).toBe('fixture');
+});
+
+it('une commande non Git suivant un saut de ligne ne peut pas écrire dans les métadonnées Git', async () => {
+  const cwd = fixture();
+  if (!readiness.ready) return;
+  const command = `git add package.json\nnode -e "require('node:fs').writeFileSync('.git/smuggled', 'denied')"`;
+  const result = await executeInWorkspaceSandbox(command, cwd, 30000);
+  expect(result.result?.exitCode).not.toBe(0);
+  expect(fs.existsSync(path.join(cwd, '.git/smuggled'))).toBe(false);
+});

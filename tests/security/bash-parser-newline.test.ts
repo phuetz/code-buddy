@@ -18,6 +18,22 @@ describe('séquences du shell signalées par la relecture du harnais', () => {
     expect(parseBashCommand('git commit -m "titre\n\ncorps"').commands).toHaveLength(1);
     expect(parseBashCommand('git commit -m "titre\n\ncorps"').commands[0]?.args.at(-1)).toContain('titre\n\ncorps');
   });
+
+  it('conserve les arguments entre apostrophes après chargement de la grammaire native', async () => {
+    parseBashCommand("cd '/workspace'");
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const parsed = parseBashCommand("cd '/workspace' && git commit '--amend'");
+    expect(parsed.commands[0]?.args.map(arg => arg.replace(/^(['"])(.*)\1$/, '$2'))).toEqual(['/workspace']);
+    expect(parsed.commands[1]?.args.map(arg => arg.replace(/^(['"])(.*)\1$/, '$2'))).toEqual(['commit', '--amend']);
+    vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'git-local');
+    getPermissionModeManager().setMode('dontAsk');
+    expect((await evaluateShellExecution("git commit '--amend'", process.cwd())).action).not.toBe('sandbox');
+  });
+  it.each(["'--a'mend", '--a\\mend'])('garde l’option Git citée ou échappée %s', async (argument) => {
+    vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'git-local');
+    getPermissionModeManager().setMode('dontAsk');
+    expect((await evaluateShellExecution(`git commit ${argument}`, process.cwd())).action).not.toBe('sandbox');
+  });
   it('ne confère pas git-local à la commande npm suivante', async () => {
     vi.stubEnv('CODEBUDDY_SHELL_CAPABILITIES', 'git-local');
     getPermissionModeManager().setMode('dontAsk');
