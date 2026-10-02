@@ -50,7 +50,8 @@ export type UserHookEvent =
   | 'SubagentStop'
   | 'TaskCreated'
   | 'TaskCompleted'
-  | 'pre_compact';
+  | 'pre_compact'
+  | 'pre_verify';
 
 // ─── Handler Types ────────────────────────────────────────────────────────────
 
@@ -137,7 +138,7 @@ function expandCommandVars(command: string, context: HookContext, event: UserHoo
   const toolName = context.toolName ?? '';
   const filePath = context.filePath ?? '';
   const sessionId = context.sessionId ?? '';
-  const cwd = process.cwd();
+  const cwd = event === 'pre_verify' && typeof context.cwd === 'string' ? context.cwd : process.cwd();
   const toolInput = context.toolInput ? JSON.stringify(context.toolInput) : '{}';
 
   result = result
@@ -201,6 +202,7 @@ function mergeResult(combined: HookResult, child: HookResult): HookResult {
 
 export class UserHooksManager {
   private configDir: string;
+  private configurationError: string | null = null;
   private hooksMap: Partial<Record<UserHookEvent, UserHookHandler[]>> = {};
 
   constructor(configDir: string) {
@@ -208,11 +210,14 @@ export class UserHooksManager {
     this.loadConfig();
   }
 
+  getConfigurationError(): string | null { return this.configurationError; }
+
   /**
    * (Re-)load hooks from `.codebuddy/hooks.json`.
    * Silently skips missing files; logs warnings on parse errors.
    */
   loadConfig(): void {
+    this.configurationError = null;
     const configPath = path.join(this.configDir, '.codebuddy', 'hooks.json');
     if (!fs.existsSync(configPath)) {
       this.hooksMap = {};
@@ -227,6 +232,7 @@ export class UserHooksManager {
       logger.debug(`[user-hooks] Loaded ${count} handler(s) from ${configPath}`);
     } catch (err) {
       logger.warn(`[user-hooks] Failed to parse hooks.json: ${err}`);
+      this.configurationError = 'hooks.json is unreadable or invalid';
       this.hooksMap = {};
     }
   }
@@ -268,7 +274,7 @@ export class UserHooksManager {
         }
       } catch (err) {
         logger.warn(`[user-hooks] Handler threw unexpectedly: ${err}`);
-        result = { allowed: true };
+        result = event === 'pre_verify' ? { allowed: false, feedback: 'Verification hook failed' } : { allowed: true };
       }
 
       combined = mergeResult(combined, result);
@@ -387,6 +393,7 @@ export class UserHooksManager {
 
       const child = spawn(shell, [shellFlag, expandedCommand], {
         stdio: ['pipe', 'pipe', 'pipe'],
+        ...(event === 'pre_verify' && typeof context.cwd === 'string' ? { cwd: context.cwd } : {}),
         detached: !isWindows,
         windowsHide: true,
         env: {
@@ -395,7 +402,7 @@ export class UserHooksManager {
           TOOL_INPUT: context.toolInput ? JSON.stringify(context.toolInput) : '{}',
           FILE: context.filePath ?? '',
           SESSION_ID: context.sessionId ?? '',
-          CWD: process.cwd(),
+          CWD: event === 'pre_verify' && typeof context.cwd === 'string' ? context.cwd : process.cwd(),
         },
       });
 
@@ -432,7 +439,7 @@ export class UserHooksManager {
       child.on('error', (err: Error) => {
         clearTimeout(timer);
         logger.warn(`[user-hooks] command spawn error: ${err.message}`);
-        resolve({ allowed: true });
+        resolve(event === 'pre_verify' ? { allowed: false, feedback: 'Verification command could not start' } : { allowed: true });
       });
 
       child.on('close', (code: number | null) => {
@@ -440,7 +447,7 @@ export class UserHooksManager {
 
         if (timedOut) {
           logger.warn(`[user-hooks] command handler timed out after ${timeout}ms`);
-          resolve({ allowed: true });
+          resolve(event === 'pre_verify' ? { allowed: false, feedback: 'Verification command timed out' } : { allowed: true });
           return;
         }
 
@@ -457,7 +464,7 @@ export class UserHooksManager {
 
         if (code === 0) {
           resolve({
-            allowed: true,
+            allowed: event !== 'pre_verify' || (parsed?.decision !== 'block' && parsed?.permissionDecision !== 'deny'),
             updatedInput: parsed?.updatedInput,
             additionalContext: parsed?.additionalContext,
             feedback: parsed?.reason,
@@ -470,7 +477,7 @@ export class UserHooksManager {
         } else {
           // Any other non-zero exit: non-blocking warning
           logger.warn(`[user-hooks] command handler exited ${code}: ${stderr.trim() || stdout.trim()}`);
-          resolve({ allowed: true });
+          resolve(event === 'pre_verify' ? { allowed: false, feedback: stderr.trim() || stdout.trim() || `Verification exited ${code}` } : { allowed: true });
         }
       });
     });

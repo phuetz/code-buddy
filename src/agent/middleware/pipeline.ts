@@ -59,6 +59,14 @@ export class MiddlewarePipeline {
     return this.runPhase('afterTurn', context);
   }
 
+  hasCompletionHandlers(): boolean {
+    return this.middlewares.some(m => typeof m.beforeComplete === 'function');
+  }
+
+  async runBeforeComplete(context: MiddlewareContext): Promise<MiddlewareResult> {
+    return this.runPhase('beforeComplete', context);
+  }
+
   /**
    * Get list of registered middleware names.
    */
@@ -85,7 +93,7 @@ export class MiddlewarePipeline {
   }
 
   private async runPhase(
-    phase: 'beforeTurn' | 'afterTurn',
+    phase: 'beforeTurn' | 'afterTurn' | 'beforeComplete',
     context: MiddlewareContext
   ): Promise<MiddlewareResult> {
     const warnings: string[] = [];
@@ -107,6 +115,9 @@ export class MiddlewarePipeline {
         }
       } catch (error) {
         logger.error(`Middleware "${middleware.name}" threw in ${phase}`, error as Error);
+        if (phase === 'beforeComplete') {
+          return { action: 'stop', message: `Completion hook "${middleware.name}" failed.` };
+        }
         // Don't let a failing middleware break the loop
       }
     }

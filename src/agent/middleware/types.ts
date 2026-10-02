@@ -59,6 +59,8 @@ export interface MiddlewareContext {
   lastToolResults?: Array<{ toolName: string; success: boolean; output: string }>;
   /** Available tools (for tool-filter middleware) */
   tools?: Array<{ function: { name: string; description?: string }; [key: string]: unknown }>;
+  /** Draft final reply, available only during beforeComplete. */
+  completionCandidate?: string;
   /** State bag for cross-middleware communication */
   state?: Record<string, unknown>;
   /** State setter for middleware that needs to persist state */
@@ -90,5 +92,7 @@ export interface ConversationMiddleware {
    * the start of every new user task so state from a previous task doesn't
    * suppress this one. Optional — stateless middlewares can omit it.
    */
+  /** Called on a natural text-only completion, before committing or delivering it. */
+  beforeComplete?(context: MiddlewareContext): Promise<MiddlewareResult> | MiddlewareResult;
   reset?(): void;
 }

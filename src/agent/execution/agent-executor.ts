@@ -474,6 +474,8 @@ export function setDecisionContextProvider(
 export interface ExecutorDependencies {
   /** API client for LLM communication */
   client: CodeBuddyClient;
+  /** Read dynamically; disabled memory must never trigger an archival call. */
+  memoryEnabled?: () => boolean;
   /** Dispatcher for tool execution */
   toolHandler: ToolHandler;
   /** RAG-based tool selection for query optimization */
@@ -1354,6 +1356,9 @@ export class AgentExecutor {
     let providerCompletionTokens = 0;
     let providerUsageSeen = false;
     let sessionCostRecorded = false;
+    let archivalPromptTokens = 0;
+    let archivalCompletionTokens = 0;
+    let archivalUsageEstimated = false;
     const recordTurnCost = (): void => {
       if (sessionCostRecorded) return;
       sessionCostRecorded = true;
@@ -1365,22 +1370,57 @@ export class AgentExecutor {
         // Only pass provider usage when the provider reported one, so the
         // historical two-argument call (and its tests) stays byte-identical.
         if (providerUsage) {
-          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens, providerUsage);
+          this.config.recordSessionCost(totalInputTokensForCost - archivalPromptTokens, totalOutputTokens - archivalCompletionTokens, providerUsage);
         } else {
-          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
+          this.config.recordSessionCost(totalInputTokensForCost - archivalPromptTokens, totalOutputTokens - archivalCompletionTokens);
+        }
+        if (archivalPromptTokens || archivalCompletionTokens) {
+          if (archivalUsageEstimated) {
+            this.config.recordSessionCost(archivalPromptTokens, archivalCompletionTokens);
+          } else {
+            this.config.recordSessionCost(archivalPromptTokens, archivalCompletionTokens, {
+              promptTokens: archivalPromptTokens, completionTokens: archivalCompletionTokens,
+            });
+          }
         }
       } catch (error) {
         logger.warn('Failed to record session cost', { error: getErrorMessage(error) });
       }
       try {
         this.config.recordTurnProviderUsage?.(
-          providerUsageSeen
-            ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
+          providerUsageSeen && !archivalUsageEstimated
+            ? { promptTokens: providerPromptTokens + archivalPromptTokens, completionTokens: providerCompletionTokens + archivalCompletionTokens }
             : undefined,
         );
       } catch (error) {
         logger.warn('Failed to record provider turn usage', { error: getErrorMessage(error) });
       }
+    };
+
+    const flushBeforeCompaction = async (): Promise<void> => {
+      if (isolatedSharedHost || relationshipSafety ||
+          process.env.CODEBUDDY_COMPACTION_MEMORY_FLUSH !== 'true' ||
+          this.deps.memoryEnabled?.() !== true) return;
+      const manager = this.deps.contextManager;
+      if (manager.getContextEngine?.()?.ownsCompaction) return;
+      if (!manager.shouldAutoCompact(messages) && !manager.getStats(messages).isNearLimit) return;
+      const { slimToolResultsToFit } = await import('./context-pipeline.js');
+      const slimmed = slimToolResultsToFit(manager, messages);
+      if (!manager.shouldAutoCompact(slimmed) && !manager.getStats(slimmed).isNearLimit) return;
+      const { flushAutoCompactionMemory } = await import('../../context/auto-compaction-memory.js');
+      await flushAutoCompactionMemory({
+        messages, memoryEnabled: true, cwd: this.deps.toolHandler.getWorkingDirectory(),
+        client: this.deps.client, counter: this.deps.tokenCounter,
+        recordUsage: (usage) => {
+          totalInputTokensForCost += usage.promptTokens;
+          totalOutputTokens += usage.completionTokens;
+          archivalUsageEstimated ||= usage.estimated;
+          // Charge auxiliary usage separately so estimates never become provider measurements.
+          archivalPromptTokens += usage.promptTokens;
+          archivalCompletionTokens += usage.completionTokens;
+          logger.debug('Pre-compaction archival usage', { ...usage });
+        },
+      });
     };
 
     // In-loop recovery budgets (Hermes parity): bound re-prompts WITHIN a turn
@@ -1405,6 +1445,7 @@ export class AgentExecutor {
 
     try {
       const pipeline = this.deps.middlewarePipeline;
+      const preVerifyEnabled = process.env.CODEBUDDY_PRE_VERIFY === 'true' && pipeline?.hasCompletionHandlers() === true;
       // New task: clear per-task middleware latching (quality-gate run count,
       // auto-repair attempts, verification one-shot warning). The pipeline is
       // built once and reused across tasks while toolRound restarts at 0, so
@@ -1433,6 +1474,7 @@ export class AgentExecutor {
           if (mwResult.action === 'compact') {
             // Trigger context compaction IN PLACE — prepareMessages() is pure
             // and its discarded return made this action a silent no-op.
+            await flushBeforeCompaction();
             const compacted = compactTurnMessagesInPlace(this.deps.contextManager, messages, {
               isolatedSharedHost,
             });
@@ -1632,6 +1674,7 @@ export class AgentExecutor {
 
         let preparedMessages: CodeBuddyMessage[];
         try {
+          await flushBeforeCompaction();
           preparedMessages = prepareTurnMessages(this.deps.contextManager, messages, {
             isolatedSharedHost,
           });
@@ -1694,6 +1737,7 @@ export class AgentExecutor {
             yield { type: "content", content: `\n${contextWarning.message}\n` };
 
             // --- Native Engine pre-compaction memory flush (streaming path) ---
+            if (this.deps.memoryEnabled?.() !== false && process.env.CODEBUDDY_COMPACTION_MEMORY_FLUSH !== 'true') {
             try {
               const { getPrecompactionFlusher } = await import('../../context/precompaction-flush.js');
               const flusher = getPrecompactionFlusher();
@@ -1712,6 +1756,7 @@ export class AgentExecutor {
               );
             } catch {
               // non-critical
+            }
             }
           }
         }
@@ -1799,7 +1844,7 @@ export class AgentExecutor {
             };
           }
 
-          if (result.displayContent && !relationshipSafety && !guardGenerativeSelfInspection) {
+          if (result.displayContent && !preVerifyEnabled && !relationshipSafety && !guardGenerativeSelfInspection) {
             streamEmittedVisibleDelta = true;
             yield { type: "content", content: result.displayContent };
           }
@@ -1826,6 +1871,7 @@ export class AgentExecutor {
         const trailingDisplayContent = this.deps.streamingHandler.flushDisplayContent?.() ?? '';
         if (
           trailingDisplayContent &&
+          !preVerifyEnabled &&
           !relationshipSafety &&
           !guardGenerativeSelfInspection
         ) {
@@ -1928,12 +1974,41 @@ export class AgentExecutor {
 
         if (
           (relationshipSafety || guardGenerativeSelfInspection) &&
+          !preVerifyEnabled &&
           content &&
           !(synthesizedToolFallback && hasToolCalls)
         ) {
           // The outer last-mile gate buffers the complete agent turn. Explicit
           // spacing keeps a genuine pre-tool preamble and the final answer from
           // being concatenated into one word after per-round trimming.
+          yield { type: 'content', content: `${content}\n\n` };
+        }
+
+        if (preVerifyEnabled && !hasToolCalls && !steeringRequestedDuringText &&
+            streamFinishReason !== 'length' && !abortController?.signal.aborted) {
+          const context = this.buildMiddlewareContext(
+            toolRounds, inputTokens, totalOutputTokens, history, messages, true, abortController,
+          );
+          context.completionCandidate = content;
+          const result = await pipeline!.runBeforeComplete(context);
+          if (result.action !== 'continue') {
+            const stop = result.message ?? 'pre_verify: vérification requise avant la fin.';
+            history.push({ type: 'assistant', content: stop, timestamp: new Date() });
+            messages.push({ role: 'assistant', content: stop });
+            totalOutputTokens += this.deps.streamingHandler.getTokenCount() || 0;
+            const usage = this.deps.streamingHandler.getProviderUsage?.();
+            if (usage) {
+              providerUsageSeen = true;
+              providerPromptTokens += usage.promptTokens ?? 0;
+              providerCompletionTokens += usage.completionTokens ?? 0;
+            }
+            recordTurnCost();
+            yield { type: 'content', content: stop };
+            yield { type: 'done' };
+            return;
+          }
+        }
+        if (preVerifyEnabled && content && !abortController?.signal.aborted) {
           yield { type: 'content', content: `${content}\n\n` };
         }
 
@@ -2061,6 +2136,7 @@ export class AgentExecutor {
                 // name them so repair does not close them with a synthetic
                 // '[result lost during compaction]' that would then win over
                 // the real output.
+                await flushBeforeCompaction();
                 const compacted = compactTurnMessagesInPlace(this.deps.contextManager, messages, {
                   isolatedSharedHost,
                   pendingToolCallIds: toolCalls

@@ -378,6 +378,7 @@ export class CodeBuddyAgent extends BaseAgent {
     const readMaxToolRounds = (): number => this.maxToolRounds;
     this.executor = new AgentExecutor({
       client: this.codebuddyClient,
+      memoryEnabled: () => this.isMemoryEnabled(),
       toolHandler: this.toolHandler,
       toolSelectionStrategy: this.toolSelectionStrategy,
       streamingHandler: this.streamingHandler,
@@ -540,6 +541,10 @@ export class CodeBuddyAgent extends BaseAgent {
           logger.debug('AutoRepairMiddleware registered in pipeline (priority 150)');
         } catch (err) {
           logger.debug('Failed to register AutoRepairMiddleware (non-critical)', { error: err instanceof Error ? err.message : String(err) });
+        }
+        if (process.env.CODEBUDDY_PRE_VERIFY === 'true') {
+          const { PreVerifyMiddleware } = await import('./middleware/pre-verify.js');
+          pipeline.use(new PreVerifyMiddleware(this.toolHandler.getWorkingDirectory()));
         }
         // Verification enforcement (priority 155) — after >= 3 file changes with
         // no task_verify/run_tests, nudges the model to verify before finishing.
