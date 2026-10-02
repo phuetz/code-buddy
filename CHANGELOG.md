@@ -2,6 +2,8 @@
 
 ### Corrigé
 
+- `buddy autonomous-code` retourne **1** pour `blocked`, `validation_failed` et `verification_failed`, y compris lorsqu’un humain refuse volontairement une proposition : le contrat n’a pas été exécuté, donc un script (`set -e`) doit s’arrêter. Aucun code distinct n’est introduit ; `--json` distingue le refus via `status: "blocked"` et `approvalDecision.decision: "rejected"`. Une prévisualisation réussie reste un succès.
+
 - Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.
 - Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré.
 

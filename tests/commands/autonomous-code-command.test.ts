@@ -4085,6 +4085,35 @@ describe('autonomous-code CLI command', () => {
     expect(seedReport.status).toBe('previewed');
   });
 
+  it.each([false, true])('returns exit 1 on a deliberate human refusal (JSON=%s)', async (json) => {
+    const program = createProgram();
+    const { repo, taskFile } = await createTaskFile({
+      edits: [{ expectedOccurrences: 1, find: 'before', path: 'docs/note.md', replace: 'after', type: 'replace_text' }],
+    });
+    await fs.mkdir(path.join(repo, 'docs'), { recursive: true });
+    await fs.writeFile(path.join(repo, 'docs/note.md'), 'before', 'utf8');
+    const decisionFile = path.join(tempRoot, 'refusal.json');
+    await fs.writeFile(decisionFile, JSON.stringify({
+      kind: 'agentic-coding-approval-decision', schemaVersion: 1,
+      decision: 'rejected', reviewer: 'qa-reviewer', reason: 'Deliberate refusal.',
+    }), 'utf8');
+    registerAutonomousCodeCommand(program);
+    await program.parseAsync([
+      'node', 'test', 'autonomous-code', '--task-file', taskFile,
+      '--approval-decision-file', decisionFile, '--require-approval', '--apply-edits',
+      ...(json ? ['--json'] : []),
+    ]);
+    expect(process.exitCode).toBe(1);
+    expect(await fs.readFile(path.join(repo, 'docs/note.md'), 'utf8')).toBe('before');
+    if (json) {
+      expect(JSON.parse(getLogOutput())).toMatchObject({
+        status: 'blocked', approvalDecision: { decision: 'rejected', reason: 'Deliberate refusal.' },
+      });
+    } else {
+      expect(getLogOutput()).toContain('blocked');
+    }
+  });
+
   it('can require an approved decision file before applying edits', async () => {
     const program = createProgram();
     const { repo, taskFile } = await createTaskFile({
