@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import * as providerDetector from '../../../src/utils/provider-detector.js';
 import { runVerificationAndSelfCorrectionLoop } from '../../../src/agent/autonomous/verification-loop.js';
 import { loadCheckpoint } from '../../../src/agent/autonomous/checkpoint-manager.js';
 import type { AgenticCodingTaskContract } from '../../../src/agent/autonomous/agentic-coding-contract.js';
@@ -116,6 +117,20 @@ describe('runVerificationAndSelfCorrectionLoop', () => {
       },
     };
   }
+
+  it('blocks without a provider with actionable setup and no fabricated verification', async () => {
+    const detector = vi.spyOn(providerDetector, 'detectProviderFromEnv').mockReturnValue(null);
+    try {
+      await expect(runVerificationAndSelfCorrectionLoop(
+        getContract(repoPath), { taskFile }, getDispatch(repoPath, taskFile),
+      )).resolves.toMatchObject({
+        status: 'blocked', verification: [], iterations: 0,
+        reason: expect.stringMatching(/buddy login.*Ollama.*API key/),
+      });
+    } finally {
+      detector.mockRestore();
+    }
+  });
 
   it('returns immediately if verification passes on first try', async () => {
     // Write correct greeting and commit it to make it clean

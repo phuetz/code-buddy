@@ -2759,6 +2759,10 @@ export function registerAutonomousCodeCommand(program: Command): void {
           assertOvernightCompletion(overnightReadiness);
         }
 
+        if (['blocked', 'validation_failed', 'verification_failed'].includes(report.status)) {
+          process.exitCode = 1;
+        }
+
         if (options.json) {
           console.log(JSON.stringify({
             ...report,

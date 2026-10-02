@@ -90,8 +90,11 @@ function createProducerTrace(overrides: Record<string, unknown> = {}): Record<st
 
 describe('autonomous-code CLI command', () => {
   let oldHome: string | undefined;
+  let previousExitCode: typeof process.exitCode;
 
   beforeEach(async () => {
+    previousExitCode = process.exitCode;
+    process.exitCode = 0;
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-autonomous-code-cli-'));
     oldHome = process.env.CODEBUDDY_HOME;
     process.env.CODEBUDDY_HOME = tempRoot;
@@ -107,6 +110,7 @@ describe('autonomous-code CLI command', () => {
   });
 
   afterEach(async () => {
+    process.exitCode = previousExitCode;
     vi.doUnmock('../../src/agent/autonomous/edit-proposal-producer.js');
     vi.doUnmock('../../src/agent/autonomous/agentic-coding-runner.js');
     process.env.CODEBUDDY_HOME = oldHome;
@@ -709,6 +713,7 @@ describe('autonomous-code CLI command', () => {
     };
 
     expect(output.status).toBe('blocked');
+    expect(process.exitCode).toBe(1);
     expect(output.workflowProgressPath).toBe(workflowProgressFile);
     expect(progress.kind).toBe('agentic-coding-workflow-progress');
     expect(progress.activeNodeId).toBe('git-preflight');
@@ -752,6 +757,7 @@ describe('autonomous-code CLI command', () => {
     };
 
     expect(output.status).toBe('blocked');
+    expect(process.exitCode).toBe(1);
     expect(output.workflowEventsPath).toBe(workflowEventsFile);
     expect(events.kind).toBe('agentic-coding-workflow-events');
     expect(events.activeNodeId).toBe('git-preflight');
