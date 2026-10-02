@@ -24,7 +24,7 @@ import {
   removeCommands,
 } from './cli/command-routing.js';
 import { attachUnknownOptionHint } from './cli/unknown-option-hint.js';
-import { parseListenPort } from './cli/listen-port.js';
+import { resolveServerListenOptions } from './cli/listen-port.js';
 import {
   hoistPermissionModeOption,
   installPermissionModeActionHook,
@@ -3014,10 +3014,14 @@ program
   .option("--port <port>", "server port", "3000")
   .option("--host <host>", "server host (default: HOST, else 127.0.0.1 — pass 0.0.0.0 to expose on the network)")
   .option("--no-auth", "disable JWT authentication (loopback development only)")
-  .action(async (options) => {
-    let port: number;
+  .action(async (options, command) => {
+    let listenOptions: { port: number; host: string };
     try {
-      port = parseListenPort(String(options.port));
+      listenOptions = resolveServerListenOptions(
+        options,
+        (key: string) => command.getOptionValueSource(key),
+        process.env
+      );
     } catch (error) {
       process.stderr.write(`error: ${error instanceof Error ? error.message : String(error)}\n`);
       process.exit(1);
@@ -3026,9 +3030,8 @@ program
     const { startServer } = await import("./server/index.js");
     try {
       await startServer({
-        port,
-        // Loopback unless the operator asks otherwise (flag, then HOST).
-        ...(options.host ? { host: String(options.host) } : {}),
+        port: listenOptions.port,
+        host: listenOptions.host,
         authEnabled: options.auth !== false,
       });
     } catch (error) {

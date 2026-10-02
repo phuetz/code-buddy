@@ -19,3 +19,18 @@ export function parseListenPort(value: string): number {
   }
   return port;
 }
+
+export function resolveServerListenOptions(
+  options: { port?: string; host?: string },
+  getOptionValueSource: (key: string) => string | undefined,
+  env: NodeJS.ProcessEnv,
+): { port: number; host: string } {
+  const explicitPort = getOptionValueSource('port') === 'cli';
+  const explicitHost = getOptionValueSource('host') === 'cli';
+  const rawPort = explicitPort ? options.port : env.PORT || options.port || '3000';
+  const host = explicitHost ? options.host : env.HOST || options.host || '127.0.0.1';
+  if (!host?.trim()) {
+    throw new Error('--host must not be empty');
+  }
+  return { port: parseListenPort(rawPort ?? '3000'), host };
+}
