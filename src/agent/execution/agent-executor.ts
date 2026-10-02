@@ -1475,6 +1475,10 @@ export class AgentExecutor {
             // and its discarded return made this action a silent no-op.
             const compacted = compactTurnMessagesInPlace(this.deps.contextManager, messages, {
               isolatedSharedHost,
+              recoveryScope: {
+                workDir: this.deps.toolHandler.getWorkingDirectory?.() ?? process.cwd(),
+                sessionId: this.deps.toolHandler.getRecoverySessionId?.(),
+              },
             });
             if (compacted) incrementalTokenCounter.invalidate();
             // S7: record a fork run at the compaction boundary for lineage.
@@ -1674,6 +1678,10 @@ export class AgentExecutor {
         try {
           preparedMessages = prepareTurnMessages(this.deps.contextManager, messages, {
             isolatedSharedHost,
+            recoveryScope: {
+              workDir: this.deps.toolHandler.getWorkingDirectory?.() ?? process.cwd(),
+              sessionId: this.deps.toolHandler.getRecoverySessionId?.(),
+            },
           });
         } catch (error) {
           if (error instanceof ContextCompactionError) {
@@ -2113,6 +2121,10 @@ export class AgentExecutor {
                 // the real output.
                 const compacted = compactTurnMessagesInPlace(this.deps.contextManager, messages, {
                   isolatedSharedHost,
+                  recoveryScope: {
+                    workDir: this.deps.toolHandler.getWorkingDirectory?.() ?? process.cwd(),
+                    sessionId: this.deps.toolHandler.getRecoverySessionId?.(),
+                  },
                   pendingToolCallIds: toolCalls
                     .map((call) => call.id)
                     .filter((id): id is string => typeof id === 'string' && id.length > 0),

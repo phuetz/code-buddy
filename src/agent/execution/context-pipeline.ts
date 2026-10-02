@@ -17,7 +17,10 @@
  */
 
 import type { CodeBuddyMessage } from '../../codebuddy/client.js';
+import { createHash } from 'node:crypto';
 import type { ContextManagerV2 } from '../../context/context-manager-v2.js';
+import type { PayloadRecoveryScope } from '../../context/final-payload-budget.js';
+import { getRestorableCompressor } from '../../context/restorable-compression.js';
 import { repairToolCallPairs } from '../../context/transcript-repair.js';
 import { sanitizeModelOutput, stripInvisibleChars } from '../../utils/output-sanitizer.js';
 import { getLessonsTracker } from '../lessons-tracker.js';
@@ -108,6 +111,7 @@ function contextThresholdExceeded(
 export function slimToolResultsToFit(
   contextManager: ContextManagerV2,
   messages: CodeBuddyMessage[],
+  recoveryScope?: PayloadRecoveryScope,
 ): CodeBuddyMessage[] {
   if (!contextThresholdExceeded(contextManager, messages)) return messages;
   let result: CodeBuddyMessage[] | null = null;
@@ -145,7 +149,13 @@ export function slimToolResultsToFit(
     }
 
     if (!result) result = [...messages];
-    result[index] = { ...source, content: TRUNCATED_TOOL_OUTPUT_STUB } as CodeBuddyMessage;
+    let content = TRUNCATED_TOOL_OUTPUT_STUB;
+    if (recoveryScope) {
+      const identifier = `observation-${createHash('sha256').update(source.content).digest('hex').slice(0, 24)}`;
+      getRestorableCompressor().capture(identifier, source.content, recoveryScope.workDir, recoveryScope.sessionId);
+      content = `[Older observation reduced. Use restore_context(identifier="${identifier}") to recover this content only.]`;
+    }
+    result[index] = { ...source, content } as CodeBuddyMessage;
     if (!contextThresholdExceeded(contextManager, result)) return result;
   }
 
@@ -173,7 +183,7 @@ async function buildOptionalContextBlock(
 export function prepareTurnMessages(
   contextManager: ContextManagerV2,
   messages: CodeBuddyMessage[],
-  options: { isolatedSharedHost?: boolean } = {},
+  options: { isolatedSharedHost?: boolean; recoveryScope?: PayloadRecoveryScope } = {},
 ): CodeBuddyMessage[] {
   const dirty = transcriptNeedsToolRepair(messages);
   const thresholdExceeded = contextThresholdExceeded(contextManager, messages);
@@ -184,7 +194,7 @@ export function prepareTurnMessages(
   if (!dirty && !thresholdExceeded && !hasContextEngine) return [...messages];
 
   const slimmed = thresholdExceeded
-    ? slimToolResultsToFit(contextManager, messages)
+    ? slimToolResultsToFit(contextManager, messages, options.recoveryScope)
     : messages;
   const stillOverThreshold = thresholdExceeded &&
     contextThresholdExceeded(contextManager, slimmed);
@@ -275,7 +285,7 @@ function withoutPendingPlaceholders(
 export function compactTurnMessagesInPlace(
   contextManager: ContextManagerV2,
   messages: CodeBuddyMessage[],
-  options: { isolatedSharedHost?: boolean; pendingToolCallIds?: Iterable<string> } = {},
+  options: { isolatedSharedHost?: boolean; pendingToolCallIds?: Iterable<string>; recoveryScope?: PayloadRecoveryScope } = {},
 ): boolean {
   const pending = unansweredPendingCalls(messages, options.pendingToolCallIds);
   const prepared = prepareTurnMessages(contextManager, messages, options);
