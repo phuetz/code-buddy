@@ -18,7 +18,7 @@ import { withLlmStreamRetry } from '../../../src/codebuddy/llm-retry.js';
  * `system` message is emitted, in position 0.
  */
 describe('mergeSystemMessagesToFront (pure)', () => {
-  it('merges multiple system messages into a single leading one', () => {
+  it('leaves a single leading system message and folds a late one into the preceding user turn', () => {
     const messages: CodeBuddyMessage[] = [
       { role: 'system', content: 'base system prompt' },
       { role: 'user', content: 'Reply PONG' },
@@ -30,20 +30,50 @@ describe('mergeSystemMessagesToFront (pure)', () => {
     const systemCount = out.filter((m) => m.role === 'system').length;
     expect(systemCount).toBe(1);
     expect(out[0]?.role).toBe('system');
-    expect(out[0]?.content).toBe('base system prompt\n\n<todo_context>none</todo_context>');
+    expect(out[0]?.content).toBe('base system prompt');
     // Non-system messages keep their relative order.
     expect(out.slice(1).map((m) => m.role)).toEqual(['user']);
-    expect(out[1]?.content).toBe('Reply PONG');
+    expect(out[1]?.content).toBe('Reply PONG\n\n<system_note>\n<todo_context>none</todo_context>\n</system_note>');
+    // The caller's history is not mutated.
+    expect(messages[1]?.content).toBe('Reply PONG');
   });
 
-  it('moves a single non-leading system message to the front', () => {
+  it('folds a late system message into the preceding user turn (no system left)', () => {
     const messages: CodeBuddyMessage[] = [
       { role: 'user', content: 'hi' },
       { role: 'system', content: 'late system' },
     ];
     const out = mergeSystemMessagesToFront(messages);
-    expect(out.map((m) => m.role)).toEqual(['system', 'user']);
-    expect(out[0]?.content).toBe('late system');
+    expect(out.map((m) => m.role)).toEqual(['user']);
+    expect(out[0]?.content).toBe('hi\n\n<system_note>\nlate system\n</system_note>');
+  });
+
+  it('still merges into the head a late system message that follows an assistant turn', () => {
+    const messages: CodeBuddyMessage[] = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'yo' },
+      { role: 'system', content: 'late' },
+    ];
+    const out = mergeSystemMessagesToFront(messages);
+    expect(out.map((m) => m.role)).toEqual(['system', 'user', 'assistant']);
+    expect(out[0]?.content).toBe('sys\n\nlate');
+  });
+
+  // Banc harnais 03/10 (qwen3.5:4b, Ollama): a context-warning note whose
+  // percentage changed every request rewrote message 0 → full prompt re-eval.
+  it('keeps the head byte-identical across requests when only the per-turn note changes', () => {
+    const conversation = (note: string): CodeBuddyMessage[] => [
+      { role: 'system', content: 'base system prompt' },
+      { role: 'user', content: 'Corrige le bug' },
+      { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'view_file', arguments: '{}' } }] } as CodeBuddyMessage,
+      { role: 'tool', content: 'file body', tool_call_id: 'c1' } as CodeBuddyMessage,
+      { role: 'system', content: note },
+    ];
+    const first = mergeSystemMessagesToFront(conversation('<context type="middleware-hint">86.9% used</context>'));
+    const second = mergeSystemMessagesToFront(conversation('<context type="middleware-hint">105.9% used</context>'));
+    expect(JSON.stringify(second.slice(0, 3))).toBe(JSON.stringify(first.slice(0, 3)));
+    expect(second[3]?.content).toContain('105.9% used');
   });
 
   it('is a no-op (same reference) when already compliant', () => {
@@ -63,8 +93,8 @@ describe('mergeSystemMessagesToFront (pure)', () => {
   it('flattens array-part system content when merging', () => {
     const messages: CodeBuddyMessage[] = [
       { role: 'system', content: [{ type: 'text', text: 'part-a' }] },
-      { role: 'user', content: 'hi' },
       { role: 'system', content: 'part-b' },
+      { role: 'user', content: 'hi' },
     ];
     const out = mergeSystemMessagesToFront(messages);
     expect(out[0]?.content).toBe('part-a\n\npart-b');

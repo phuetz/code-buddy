@@ -219,9 +219,20 @@ function messageContentToText(content: CodeBuddyMessage['content']): string {
  * companion context blocks — see agent-executor). Public cloud providers accept
  * that ordering; strict local templates do not.
  *
- * The transform merges every `system` content, in original order, into a single
- * leading system message and keeps all non-system messages in their original
- * relative order. It is a no-op (returns the same array reference) when the list
+ * The transform keeps the leading system messages (those before the first
+ * non-system message) merged into a single leading system message. A LATER
+ * system message is folded, wrapped in `<system_note>`, into the preceding
+ * `user`/`tool` message when that one carries text; only when it follows an
+ * assistant message (or non-text content) is it merged into the head as before.
+ *
+ * Why not always merge into the head (banc harnais 03/10, qwen3.5:4b on
+ * Ollama): a per-turn note whose text changes every request (context-warning
+ * percentage, todo list, discovered context) then rewrote message 0, and
+ * Ollama re-evaluated the WHOLE prompt on every such request (~33 s each on a
+ * 27K prompt). Folded next to where it was injected, the note only changes the
+ * tail of the conversation and the cached prefix survives.
+ *
+ * It is a no-op (returns the same array reference) when the list
  * already has at most one system message and it is already at index 0, so
  * runtimes that tolerate the current ordering are byte-identical.
  *
@@ -236,17 +247,28 @@ export function mergeSystemMessagesToFront(messages: CodeBuddyMessage[]): CodeBu
   if (systemIndexes.length === 0) return messages;
   if (systemIndexes.length === 1 && systemIndexes[0] === 0) return messages;
 
-  const systemTexts: string[] = [];
+  const headTexts: string[] = [];
   const rest: CodeBuddyMessage[] = [];
   for (const msg of messages) {
-    if (msg.role === 'system') {
-      const text = messageContentToText(msg.content);
-      if (text) systemTexts.push(text);
-    } else {
+    if (msg.role !== 'system') {
       rest.push(msg);
+      continue;
+    }
+    const text = messageContentToText(msg.content);
+    if (!text) continue;
+    const previous = rest[rest.length - 1];
+    if (previous && (previous.role === 'user' || previous.role === 'tool') && typeof previous.content === 'string') {
+      // Copy: the caller's history must not be mutated.
+      rest[rest.length - 1] = {
+        ...previous,
+        content: `${previous.content}\n\n<system_note>\n${text}\n</system_note>`,
+      } as CodeBuddyMessage;
+    } else {
+      headTexts.push(text);
     }
   }
-  const merged: CodeBuddyMessage = { role: 'system', content: systemTexts.join('\n\n') };
+  if (headTexts.length === 0) return rest;
+  const merged: CodeBuddyMessage = { role: 'system', content: headTexts.join('\n\n') };
   return [merged, ...rest];
 }
 
