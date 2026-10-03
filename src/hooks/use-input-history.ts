@@ -5,6 +5,7 @@ export interface InputHistoryHook {
   navigateHistory: (direction: "up" | "down") => string | null;
   getCurrentHistoryIndex: () => number;
   resetHistory: () => void;
+  resetNavigation: () => void;
   isNavigatingHistory: () => boolean;
   setOriginalInput: (input: string) => void;
 }
@@ -60,6 +61,11 @@ export function useInputHistory(): InputHistoryHook {
     setOriginalInput("");
   }, []);
 
+  const resetNavigation = useCallback(() => {
+    setCurrentIndex(-1);
+    setOriginalInput("");
+  }, []);
+
   const isNavigatingHistory = useCallback(() => currentIndex !== -1, [currentIndex]);
 
   const setOriginalInputCallback = useCallback((input: string) => {
@@ -73,6 +79,7 @@ export function useInputHistory(): InputHistoryHook {
     navigateHistory,
     getCurrentHistoryIndex,
     resetHistory,
+    resetNavigation,
     isNavigatingHistory,
     setOriginalInput: setOriginalInputCallback,
   };

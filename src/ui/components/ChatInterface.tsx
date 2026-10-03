@@ -539,7 +539,7 @@ function ChatInterfaceWithAgent({
           />
 
           <Text color={colors.textMuted} dimColor>
-            {isProcessing || isStreaming ? 'Enter queue' : 'Enter send'} · Ctrl+J newline · Esc cancel · Ctrl+C quit
+            {isProcessing || isStreaming ? 'Enter queue' : 'Enter send'} · Ctrl+J newline · Esc cancel · Ctrl+C clear/quit · ↑ restore
           </Text>
 
           <Box flexDirection="row" flexWrap="wrap" marginTop={1} justifyContent="space-between">

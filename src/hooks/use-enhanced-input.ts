@@ -40,6 +40,7 @@ export interface EnhancedInputHook {
   setInput: (text: string) => void;
   setCursorPosition: (position: number) => void;
   clearInput: () => void;
+  discardCancelledDraft: () => void;
   insertAtCursor: (text: string) => void;
   resetHistory: () => void;
   handleInput: (inputChar: string, key: Key) => void;
@@ -48,6 +49,7 @@ export interface EnhancedInputHook {
 interface UseEnhancedInputProps {
   onSubmit?: (text: string) => void;
   onEscape?: () => void;
+  onEmptyInterrupt?: () => void;
   onSpecialKey?: (key: Key) => boolean; // Return true to prevent default handling
   disabled?: boolean;
   multiline?: boolean;
@@ -56,23 +58,35 @@ interface UseEnhancedInputProps {
 export function useEnhancedInput({
   onSubmit,
   onEscape,
+  onEmptyInterrupt,
   onSpecialKey,
   disabled = false,
   multiline = false,
 }: UseEnhancedInputProps = {}): EnhancedInputHook {
   const [input, updateInput] = useState('');
   const inputRef = useRef('');
+  // Never put cancelled input in history or persistent storage.
+  const cancelledDraftRef = useRef<string | null>(null);
+  const restoredDraftRef = useRef(false);
   const setInputState = useCallback((text: string) => {
+    restoredDraftRef.current = false;
     inputRef.current = text;
     updateInput(text);
   }, []);
   const [cursorPosition, updateCursor] = useState(0);
   const cursorRef = useRef(0);
   const setCursorPositionState = useCallback((position: number) => {
+    restoredDraftRef.current = false;
     cursorRef.current = position;
     updateCursor(position);
   }, []);
-  const [isReverseSearchActive, setIsReverseSearchActive] = useState(false);
+  const [isReverseSearchActive, updateReverseSearchActive] = useState(false);
+  const reverseSearchActiveRef = useRef(false);
+  const reverseSearchSnapshotRef = useRef({ cursorPosition: 0, restoredDraft: false });
+  const setIsReverseSearchActive = useCallback((active: boolean) => {
+    reverseSearchActiveRef.current = active;
+    updateReverseSearchActive(active);
+  }, []);
   const [reverseSearchPrompt, setReverseSearchPrompt] = useState("");
   const isMultilineRef = useRef(multiline);
   const historyManager = getHistoryManager();
@@ -81,6 +95,7 @@ export function useEnhancedInput({
     addToHistory,
     navigateHistory,
     resetHistory,
+    resetNavigation,
     setOriginalInput,
     isNavigatingHistory,
   } = useInputHistory();
@@ -103,6 +118,10 @@ export function useEnhancedInput({
     setOriginalInput("");
   }, [setOriginalInput]);
 
+  const discardCancelledDraft = useCallback(() => {
+    cancelledDraftRef.current = null;
+  }, []);
+
   const insertAtCursor = useCallback((text: string) => {
     const result = insertText(inputRef.current, cursorRef.current, text);
     setInputState(result.text);
@@ -113,18 +132,29 @@ export function useEnhancedInput({
   const handleSubmit = useCallback(() => {
     const input = inputRef.current;
     if (input.trim()) {
+      discardCancelledDraft();
       addToHistory(input);
       onSubmit?.(input);
       clearInput();
     }
-  }, [input, addToHistory, onSubmit, clearInput]);
+  }, [input, addToHistory, onSubmit, clearInput, discardCancelledDraft]);
 
-  const handleInput = useCallback((inputChar: string, key: Key) => {
+  const handleInput: EnhancedInputHook['handleInput'] = useCallback((inputChar: string, key: Key): void => {
     if (disabled) return;
+    // Ink can deliver a paste and the following Ctrl+C in the same stdin chunk.
+    if (inputChar.length > 1 && inputChar.includes('\x03')) {
+      const parts = inputChar.split('\x03');
+      parts.forEach((part, index) => {
+        if (part) handleInput(part, {});
+        if (index < parts.length - 1) handleInput('\x03', {});
+      });
+      return;
+    }
     // Read synchronously updated refs: multiple events may arrive before React
     // commits a render (fast typing, Windows Terminal and pasted input).
-    const input = inputRef.current;
-    const cursorPosition = cursorRef.current;
+    let input = inputRef.current;
+    let cursorPosition = cursorRef.current;
+    const isReverseSearchActive = reverseSearchActiveRef.current;
     // Ink 4 parses CRLF as Ctrl+M, and LF (Ctrl+J) as literal text.
     // Normalize Enter without executing embedded newlines in pasted content.
     if (inputChar === '\r\n' || (key.ctrl && inputChar === 'm')) {
@@ -143,14 +173,142 @@ export function useEnhancedInput({
 
     // Handle Ctrl+C - check multiple ways it could be detected
     if ((key.ctrl && inputChar === "c") || inputChar === "\x03") {
-      setInputState("");
-      setCursorPositionState(0);
-      setOriginalInput("");
+      if (isReverseSearchActive) {
+        const originalInput = historyManager.cancelReverseSearch();
+        setInputState(originalInput);
+        setCursorPositionState(Math.min(reverseSearchSnapshotRef.current.cursorPosition, originalInput.length));
+        setOriginalInput(originalInput);
+        restoredDraftRef.current = reverseSearchSnapshotRef.current.restoredDraft;
+        setIsReverseSearchActive(false);
+        setReverseSearchPrompt("");
+        return;
+      }
+      if (input.length > 0) {
+        cancelledDraftRef.current = input;
+        resetNavigation();
+        clearInput();
+      } else {
+        onEmptyInterrupt?.();
+      }
+      return;
+    }
+
+    // Handle Ctrl+R: Reverse search (bash-like)
+    if (key.ctrl && inputChar === "r") {
+      if (isReverseSearchActive) {
+        // Already in search mode - go to next match
+        const nextMatch = historyManager.reverseSearchNext();
+        if (nextMatch) {
+          setInputState(nextMatch.text);
+          setCursorPositionState(nextMatch.text.length);
+        }
+        setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+      } else {
+        // Start reverse search mode
+        reverseSearchSnapshotRef.current = { cursorPosition, restoredDraft: restoredDraftRef.current };
+        historyManager.startReverseSearch(input);
+        setIsReverseSearchActive(true);
+        setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+      }
+      return;
+    }
+
+    // Handle Ctrl+S: Forward search (when in reverse search mode)
+    if (key.ctrl && inputChar === "s" && isReverseSearchActive) {
+      const prevMatch = historyManager.reverseSearchPrev();
+      if (prevMatch) {
+        setInputState(prevMatch.text);
+        setCursorPositionState(prevMatch.text.length);
+      }
+      setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+      return;
+    }
+
+    // Handle input during reverse search mode
+    if (isReverseSearchActive) {
+      // Escape cancels search
+      if (key.escape) {
+        const originalInput = historyManager.cancelReverseSearch();
+        setInputState(originalInput);
+        setCursorPositionState(Math.min(reverseSearchSnapshotRef.current.cursorPosition, originalInput.length));
+        setOriginalInput(originalInput);
+        restoredDraftRef.current = reverseSearchSnapshotRef.current.restoredDraft;
+        setIsReverseSearchActive(false);
+        setReverseSearchPrompt("");
+        return;
+      }
+
+      // Enter accepts the match
+      if (key.return) {
+        const selectedText = historyManager.acceptReverseSearch();
+        setInputState(selectedText);
+        setCursorPositionState(selectedText.length);
+        setOriginalInput(selectedText);
+        setIsReverseSearchActive(false);
+        setReverseSearchPrompt("");
+        return;
+      }
+
+      // Backspace removes last char from search query
+      const isBackspaceInSearch = key.backspace ||
+                                  key.name === 'backspace' ||
+                                  inputChar === '\b' ||
+                                  inputChar === '\x7f';
+      if (isBackspaceInSearch) {
+        const state = historyManager.getReverseSearchState();
+        if (state.query.length > 0) {
+          const newQuery = state.query.slice(0, -1);
+          const match = historyManager.updateReverseSearch(newQuery);
+          if (match) {
+            setInputState(match.text);
+            setCursorPositionState(match.text.length);
+          }
+          setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+        }
+        return;
+      }
+
+      // Regular characters update the search query
+      if (inputChar && !key.ctrl && !key.meta && inputChar.length === 1) {
+        const state = historyManager.getReverseSearchState();
+        const newQuery = state.query + inputChar;
+        const match = historyManager.updateReverseSearch(newQuery);
+        if (match) {
+          setInputState(match.text);
+          setCursorPositionState(match.text.length);
+        }
+        setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
+        return;
+      }
+
+      // Any other key exits search mode but keeps the match
+      if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) {
+        const selectedText = historyManager.acceptReverseSearch();
+        setInputState(selectedText);
+        setCursorPositionState(selectedText.length);
+        setOriginalInput(selectedText);
+        setIsReverseSearchActive(false);
+        setReverseSearchPrompt("");
+        // Continue using the accepted text, not the pre-search snapshot.
+        input = selectedText;
+        cursorPosition = selectedText.length;
+      }
+    }
+
+    const historyUp = (key.upArrow || key.name === 'up') && !key.ctrl && !key.meta;
+    if (historyUp && input.length === 0 && cancelledDraftRef.current !== null) {
+      const draft = cancelledDraftRef.current;
+      discardCancelledDraft();
+      setInputState(draft);
+      setCursorPositionState(draft.length);
+      setOriginalInput(draft);
+      // The next Up enters history even when the restored text is multiline.
+      restoredDraftRef.current = true;
       return;
     }
 
     // Allow special key handler to override default behavior
-    if (onSpecialKey?.(key)) {
+    if (!(historyUp && restoredDraftRef.current) && onSpecialKey?.(key)) {
       return;
     }
 
@@ -176,7 +334,8 @@ export function useEnhancedInput({
 
     // In a multiline draft, arrows move within the draft instead of replacing
     // it with history. History remains available on a single-line prompt.
-    if (input.includes('\n') && !isNavigatingHistory() && (key.upArrow || key.downArrow) && !key.ctrl && !key.meta) {
+    if (input.includes('\n') && !(historyUp && restoredDraftRef.current) && !isNavigatingHistory() && (key.upArrow || key.downArrow) && !key.ctrl && !key.meta) {
+      // Only an actual cursor move disarms the next-Up history shortcut.
       const before = input.slice(0, cursorPosition).split('\n');
       const row = before.length - 1;
       const column = before[row]?.length ?? 0;
@@ -326,101 +485,6 @@ export function useEnhancedInput({
       return;
     }
 
-    // Handle Ctrl+R: Reverse search (bash-like)
-    if (key.ctrl && inputChar === "r") {
-      if (isReverseSearchActive) {
-        // Already in search mode - go to next match
-        const nextMatch = historyManager.reverseSearchNext();
-        if (nextMatch) {
-          setInputState(nextMatch.text);
-          setCursorPositionState(nextMatch.text.length);
-        }
-        setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
-      } else {
-        // Start reverse search mode
-        historyManager.startReverseSearch(input);
-        setIsReverseSearchActive(true);
-        setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
-      }
-      return;
-    }
-
-    // Handle Ctrl+S: Forward search (when in reverse search mode)
-    if (key.ctrl && inputChar === "s" && isReverseSearchActive) {
-      const prevMatch = historyManager.reverseSearchPrev();
-      if (prevMatch) {
-        setInputState(prevMatch.text);
-        setCursorPositionState(prevMatch.text.length);
-      }
-      setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
-      return;
-    }
-
-    // Handle input during reverse search mode
-    if (isReverseSearchActive) {
-      // Escape cancels search
-      if (key.escape) {
-        const originalInput = historyManager.cancelReverseSearch();
-        setInputState(originalInput);
-        setCursorPositionState(originalInput.length);
-        setIsReverseSearchActive(false);
-        setReverseSearchPrompt("");
-        return;
-      }
-
-      // Enter accepts the match
-      if (key.return) {
-        const selectedText = historyManager.acceptReverseSearch();
-        setInputState(selectedText);
-        setCursorPositionState(selectedText.length);
-        setIsReverseSearchActive(false);
-        setReverseSearchPrompt("");
-        return;
-      }
-
-      // Backspace removes last char from search query
-      const isBackspaceInSearch = key.backspace ||
-                                  key.name === 'backspace' ||
-                                  inputChar === '\b' ||
-                                  inputChar === '\x7f';
-      if (isBackspaceInSearch) {
-        const state = historyManager.getReverseSearchState();
-        if (state.query.length > 0) {
-          const newQuery = state.query.slice(0, -1);
-          const match = historyManager.updateReverseSearch(newQuery);
-          if (match) {
-            setInputState(match.text);
-            setCursorPositionState(match.text.length);
-          }
-          setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
-        }
-        return;
-      }
-
-      // Regular characters update the search query
-      if (inputChar && !key.ctrl && !key.meta && inputChar.length === 1) {
-        const state = historyManager.getReverseSearchState();
-        const newQuery = state.query + inputChar;
-        const match = historyManager.updateReverseSearch(newQuery);
-        if (match) {
-          setInputState(match.text);
-          setCursorPositionState(match.text.length);
-        }
-        setReverseSearchPrompt(historyManager.formatReverseSearchPrompt());
-        return;
-      }
-
-      // Any other key exits search mode but keeps the match
-      if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) {
-        const selectedText = historyManager.acceptReverseSearch();
-        setInputState(selectedText);
-        setCursorPositionState(selectedText.length);
-        setIsReverseSearchActive(false);
-        setReverseSearchPrompt("");
-        // Continue to handle the key normally
-      }
-    }
-
     // Handle regular character input
     if (inputChar && !key.ctrl && !key.meta) {
       const result = insertText(input, cursorPosition, inputChar);
@@ -428,7 +492,7 @@ export function useEnhancedInput({
       setCursorPositionState(result.position);
       setOriginalInput(result.text);
     }
-  }, [disabled, onSpecialKey, input, cursorPosition, multiline, handleSubmit, navigateHistory, setOriginalInput, isReverseSearchActive, historyManager]);
+  }, [disabled, onSpecialKey, onEmptyInterrupt, input, cursorPosition, multiline, handleSubmit, navigateHistory, resetNavigation, clearInput, discardCancelledDraft, setOriginalInput, isReverseSearchActive, historyManager]);
 
   return {
     input,
@@ -439,6 +503,7 @@ export function useEnhancedInput({
     setInput,
     setCursorPosition,
     clearInput,
+    discardCancelledDraft,
     insertAtCursor,
     resetHistory,
     handleInput,

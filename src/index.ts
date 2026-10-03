@@ -2593,7 +2593,8 @@ program
       }
 
       // Configure Ink render options
-      const inkOptions: Record<string, unknown> = { exitOnCtrlC: true };
+      // The input handler cancels a nonempty draft and exits on an empty one.
+      const inkOptions: Record<string, unknown> = { exitOnCtrlC: false };
       if (options.altScreen === false) {
         // --no-alt-screen disables Ink's alternate screen buffer
         inkOptions.patchConsole = false;

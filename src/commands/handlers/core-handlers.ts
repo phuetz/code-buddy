@@ -98,7 +98,7 @@ export async function handleHelp(): Promise<CommandHandlerResult> {
 
   lines.push('─────────────────────────────────────────────────────────────────');
   lines.push('  Tip: Type naturally to chat with the AI');
-  lines.push('  Use Ctrl+C to cancel, "exit" to quit');
+  lines.push('  Ctrl+C clears a draft (Up restores); on empty input it quits. Esc cancels an operation.');
   lines.push('─────────────────────────────────────────────────────────────────');
 
   return {
@@ -700,7 +700,8 @@ export function handleShortcuts(): CommandHandlerResult {
   Ctrl+R          Reverse search through command history
   Ctrl+P          Previous command in history
   Ctrl+N          Next command in history
-  Up/Down         Navigate through history
+  Up (empty)      Restore a cancelled draft once
+  Up/Down         Navigate history or move within multiline text
   Tab             Auto-complete file paths and commands
 
 ── Editing ────────────────────────────────────────────────────────
@@ -715,7 +716,8 @@ export function handleShortcuts(): CommandHandlerResult {
 
 ── Control ────────────────────────────────────────────────────────
 
-  Ctrl+C          Cancel current operation/interrupt
+  Ctrl+C          Cancel reverse search; otherwise clear draft, quit when empty
+  Esc             Cancel reverse search or the current operation
   Ctrl+D          Exit (when input is empty)
   Ctrl+Z          Suspend to background (Unix only)
   Enter           Submit input / Send message
@@ -724,7 +726,7 @@ export function handleShortcuts(): CommandHandlerResult {
 
   Shift+Enter     New line without submitting
   Ctrl+Enter      Submit multiline input
-  Esc             Cancel multiline mode
+  Ctrl+J          Insert a new line
 
 ── Tool Confirmations ─────────────────────────────────────────────
 

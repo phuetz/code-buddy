@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useInput } from "ink";
+import { useApp, useInput } from "ink";
 import { promises as fsPromises } from "fs";
 import path from "path";
 import * as yaml from 'js-yaml';
@@ -73,6 +73,7 @@ export function useInputHandler({
   finalizeStreamingEntry,
   updateToolCallEntry,
 }: UseInputHandlerProps) {
+  const { exit } = useApp();
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const commandSelectionMoved = useRef(false);
@@ -188,7 +189,7 @@ export function useInputHandler({
 
     if (timeSinceLastEscape < DOUBLE_ESCAPE_THRESHOLD) {
       // Double escape - trigger checkpoint rewind via /undo command
-      handleDirectCommand('/undo');
+      handleDirectCommand('/undo', false);
       return true;
     }
 
@@ -406,6 +407,7 @@ export function useInputHandler({
   };
 
   const handleInputSubmit = async (userInput: string) => {
+    if (userInput.trim()) discardCancelledDraft();
     if (userInput === "exit" || userInput === "quit") {
       try {
         logger.info('\n[user-model] Running post-session dialectic user preference analysis...');
@@ -502,10 +504,12 @@ export function useInputHandler({
     setInput,
     setCursorPosition,
     clearInput,
+    discardCancelledDraft,
     resetHistory,
     handleInput,
   } = useEnhancedInput({
     onSubmit: handleInputSubmit,
+    onEmptyInterrupt: exit,
     onSpecialKey: handleSpecialKey,
     disabled: isConfirmationActive,
     multiline: true,
@@ -513,13 +517,21 @@ export function useInputHandler({
 
   // Hook up the actual input handling
   useInput((inputChar: string, key: Key) => {
+    if (isConfirmationActive) {
+      if ((key.ctrl && inputChar === 'c') || inputChar === '\x03') exit();
+      return;
+    }
     // A picker owns the keyboard, including text-editing shortcuts such as Ctrl+J.
     if (showModelSelection) {
+      if ((key.ctrl && inputChar === 'c') || inputChar === '\x03') {
+        exit();
+        return;
+      }
       handleModelSelectionNav(key);
       return;
     }
     handleInput(inputChar, key);
-  }, { isActive: !isConfirmationActive });
+  });
 
   // Update command suggestions when input changes
   useEffect(() => {
@@ -545,7 +557,8 @@ export function useInputHandler({
       isModelCompatibleWithProvider(option.model, provider));
   }, [current, provider]);
 
-  const handleDirectCommand = async (input: string): Promise<boolean> => {
+  const handleDirectCommand = async (input: string, consumeCancelledDraft = true): Promise<boolean> => {
+    if (consumeCancelledDraft && input.trim()) discardCancelledDraft();
     const context: ClientCommandContext = {
       agent,
       chatHistory,

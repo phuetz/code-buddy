@@ -31,7 +31,7 @@ const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   { keys: 'Shift+Tab', description: 'Toggle auto-edit mode', category: 'Navigation' },
 
   // Editing
-  { keys: 'Ctrl+C', description: 'Quit Code Buddy', category: 'Session' },
+  { keys: 'Ctrl+C', description: 'Clear draft; quit when empty (↑ restores)', category: 'Session' },
   { keys: 'Ctrl+J', description: 'Insert a new line', category: 'Editing' },
   { keys: 'Enter', description: 'Send message (queue while working)', category: 'Editing' },
   { keys: 'Ctrl+U', description: 'Clear line', category: 'Editing' },

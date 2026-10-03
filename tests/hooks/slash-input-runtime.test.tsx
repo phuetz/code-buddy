@@ -24,7 +24,7 @@ vi.mock('../../src/ui/components/FileAutocomplete.js', () => ({ extractFileRefer
 vi.mock('../../src/utils/model-config.js', () => ({ loadModelConfig: () => [{ model: 'first-model' }, { model: 'second-model' }] }));
 afterEach(() => vi.clearAllMocks());
 
-function mount() {
+function mount(isConfirmationActive = false) {
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() {}, ref() {}, unref() {} });
   const stdout = Object.assign(new PassThrough(), { columns: 80, rows: 24 });
   stdout.resume();
@@ -33,13 +33,15 @@ function mount() {
     const [chatHistory, setChatHistory] = useState<ChatEntry[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
-    editor = useInputHandler({ agent: {} as CodeBuddyAgent, chatHistory, setChatHistory, isProcessing, setIsProcessing,
+    editor = useInputHandler({ isConfirmationActive, agent: {} as CodeBuddyAgent, chatHistory, setChatHistory, isProcessing, setIsProcessing,
       isStreaming, setIsStreaming, setTokenCount() {}, setProcessingTime() {}, processingStartTime: useRef(0) });
     return <><Text>{editor.input}</Text><ModelSelection models={editor.availableModels} selectedIndex={editor.selectedModelIndex} isVisible={editor.showModelSelection} currentModel="first-model" /></>;
   }
   const app = render(<App />, { stdin: stdin as unknown as NodeJS.ReadStream,
-    stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream, debug: true, patchConsole: false });
-  return { stdin, editor: () => editor!, close: () => { app.unmount(); stdin.destroy(); stdout.destroy(); } };
+    stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream, exitOnCtrlC: false, debug: true, patchConsole: false });
+  let exited = false;
+  void app.waitUntilExit().then(() => { exited = true; });
+  return { stdin, exited: () => exited, editor: () => editor!, close: () => { app.unmount(); stdin.destroy(); stdout.destroy(); } };
 }
 
 it.each(['/help', '/model', '/models', '/status', '/clear', '/cost', '/context', '/tools', '/model custom-model'])('submits %s with one Enter through real Ink', async command => {
@@ -170,5 +172,98 @@ it('Right completes a file reference without submitting a message', async () => 
     app.stdin.write('\x1b[C');
     await vi.waitFor(() => expect(app.editor().input).toBe('@src/file.ts '));
     expect(ClientCommandDispatcher.dispatch).not.toHaveBeenCalled();
+  } finally { app.close(); }
+});
+
+it('cancels and restores a slash draft through real Ink without dispatching it', async () => {
+  const app = mount();
+  try {
+    app.stdin.write('/help');
+    await vi.waitFor(() => expect(app.editor().input).toBe('/help'));
+    app.stdin.write('\x03');
+    await vi.waitFor(() => expect(app.editor().input).toBe(''));
+    app.stdin.write('\x1b[A');
+    await vi.waitFor(() => expect(app.editor().input).toBe('/help'));
+    expect(ClientCommandDispatcher.dispatch).not.toHaveBeenCalled();
+  } finally { app.close(); }
+});
+
+it('sending a slash command through completion discards a pending cancelled draft', async () => {
+  const app = mount();
+  try {
+    app.stdin.write('cancelled');
+    await vi.waitFor(() => expect(app.editor().input).toBe('cancelled'));
+    app.stdin.write('\x03');
+    await vi.waitFor(() => expect(app.editor().input).toBe(''));
+    app.stdin.write('/he');
+    await vi.waitFor(() => expect(app.editor().showCommandSuggestions).toBe(true));
+    app.stdin.write('\r');
+    await vi.waitFor(() => expect(ClientCommandDispatcher.dispatch).toHaveBeenCalled());
+    await vi.waitFor(() => expect(app.editor().input).toBe(''));
+    app.stdin.write('\x1b[A');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(app.editor().input).toBe('');
+  } finally { app.close(); }
+});
+
+it('keeps Ink mounted after cancelling text and exits on the second Ctrl+C', async () => {
+  const app = mount();
+  try {
+    app.stdin.write('draft');
+    await vi.waitFor(() => expect(app.editor().input).toBe('draft'));
+    app.stdin.write('\x03');
+    await vi.waitFor(() => expect(app.editor().input).toBe(''));
+    expect(app.exited()).toBe(false);
+    app.stdin.write('\x03');
+    await vi.waitFor(() => expect(app.exited()).toBe(true));
+  } finally { app.close(); }
+});
+
+
+it('keeps the pending cancelled draft when double Escape invokes checkpoint rewind', async () => {
+  const app = mount();
+  try {
+    app.stdin.write('draft before undo');
+    await vi.waitFor(() => expect(app.editor().input).toBe('draft before undo'));
+    app.stdin.write('\x03');
+    await vi.waitFor(() => expect(app.editor().input).toBe(''));
+    app.stdin.write('\x1b');
+    await new Promise(resolve => setTimeout(resolve, 30));
+    app.stdin.write('\x1b');
+    await vi.waitFor(() => expect(ClientCommandDispatcher.dispatch).toHaveBeenCalledWith('/undo', expect.any(Object)));
+    app.stdin.write('\x1b[A');
+    await vi.waitFor(() => expect(app.editor().input).toBe('draft before undo'));
+  } finally { app.close(); }
+});
+
+it('handles pasted text and Ctrl+C delivered in the same Ink stdin chunk', async () => {
+  const app = mount();
+  try {
+    app.stdin.write('burst paste\nsecond line\x03');
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(app.editor().input).toBe('');
+    expect(app.exited()).toBe(false);
+    app.stdin.write('\x1b[A');
+    await vi.waitFor(() => expect(app.editor().input).toBe('burst paste\nsecond line'));
+  } finally { app.close(); }
+});
+
+it('preserves immediate Ctrl+C exit while a confirmation owns the keyboard', async () => {
+  const app = mount(true);
+  try {
+    app.stdin.write('\x03');
+    await vi.waitFor(() => expect(app.exited()).toBe(true));
+  } finally { app.close(); }
+});
+
+it('preserves immediate Ctrl+C exit in the model picker', async () => {
+  const app = mount();
+  try {
+    app.stdin.write('/model');
+    await vi.waitFor(() => expect(app.editor().input).toBe('/model'));
+    app.stdin.write('\r');
+    await vi.waitFor(() => expect(app.editor().showModelSelection).toBe(true));
+    app.stdin.write('\x03');
+    await vi.waitFor(() => expect(app.exited()).toBe(true));
   } finally { app.close(); }
 });

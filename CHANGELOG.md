@@ -2,6 +2,9 @@
 
 ### Corrigé
 
+- Dans le terminal, Flèche bas conserve le brouillon restauré lors du retour de l’historique et déplace normalement le curseur multiligne ; Ctrl+C annule une recherche Ctrl+R sans quitter ni remplacer le brouillon.
+- Dans le terminal, Ctrl+C conserve le brouillon annulé en mémoire ; Flèche haut sur une saisie vide le restaure une fois, y compris les collages multilignes. Ctrl+C sur une saisie vide quitte toujours.
+
 - Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.
 - Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré.
 

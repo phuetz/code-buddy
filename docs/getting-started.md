@@ -67,8 +67,10 @@ The compact Ink interface shows the active provider/model, edit permissions and 
 - **Enter:** send, or queue while working.
 - **Ctrl+J:** insert a newline (Shift+Enter also works in terminals that distinguish it).
 - **Up/Down:** history on a single-line prompt, cursor navigation within a multiline draft.
+- **Ctrl+C:** cancel a nonempty draft; **Up** on an empty prompt restores it once, including pasted multiline text. The next Up press navigates history; Down returns to the restored draft. A Down press on the last line leaves this shortcut available. Cursor movement and editing resume normal multiline navigation. Sending a message consumes the cancelled draft. It stays in memory only. Ctrl+C on an empty prompt quits, so two successive Ctrl+C presses still quit.
 - **Ctrl+A / Ctrl+E:** start/end of the draft; **Ctrl+U:** clear before the cursor.
-- **Esc:** cancel the current operation; **Ctrl+C:** quit.
+- **Ctrl+R:** search sent-message history; Ctrl+C or Esc cancels the search and restores the previous input, including when it was empty.
+- **Esc:** cancel the current operation.
 - **/** opens command suggestions; **@** completes file references; **Shift+Tab** changes edit permissions.
 
 Starting `buddy` in your home directory or a drive root no longer runs deep cartography or starts background semantic indexing over your personal files. Open a project directory to enable project profiling. A ChatGPT subscription uses its Codex model family; stale API-only defaults such as GPT-4o are ignored in favor of the detected subscription default.

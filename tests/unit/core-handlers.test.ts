@@ -14,6 +14,7 @@
 
 import {
   handleHelp,
+  handleShortcuts,
   handleYoloMode,
   handleAutonomy,
   handlePipeline,
@@ -833,4 +834,15 @@ describe('Core Handlers', () => {
       );
     });
   });
+});
+
+
+it('describes draft cancellation, restoration, quitting and reverse-search cancellation in CLI help', async () => {
+  const help = await handleHelp();
+  expect(help.entry?.content).toContain('Ctrl+C clears a draft (Up restores)');
+  expect(help.entry?.content).toContain('on empty input it quits');
+  const shortcuts = handleShortcuts();
+  expect(shortcuts.entry?.content).toContain('Up (empty)      Restore a cancelled draft once');
+  expect(shortcuts.entry?.content).toContain('Cancel reverse search; otherwise clear draft, quit when empty');
+  expect(shortcuts.entry?.content).toContain('Esc             Cancel reverse search or the current operation');
 });
