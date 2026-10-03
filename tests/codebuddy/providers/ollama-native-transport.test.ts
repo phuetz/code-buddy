@@ -310,6 +310,17 @@ describe('streamOllamaNative', () => {
     expect(chunks.map((c) => c.choices[0]?.delta.content)).toEqual(['a', 'b']);
   });
 
+  it.each([
+    '',
+    '{"message":{"thinking":"unfinished"},"done":false}\n',
+    '{"message":{"content":"partial"},"done":false}\n',
+    '{"message":{"tool_calls":[{"function":{"name":"bash","arguments":{"command":"echo test"}}}]},"done":false}\n',
+  ])('refuse un EOF natif sans événement terminal (%s)', async wire => {
+    await expect(async () => {
+      for await (const _ of streamOllamaNative(ndjsonBody([wire]), 'qwen3.8:27b')) { /* consume */ }
+    }).rejects.toThrow(/stream terminated.*done:true/i);
+  });
+
   it('refuses an empty body rather than yielding nothing silently', async () => {
     await expect(async () => {
       for await (const _ of streamOllamaNative(null, 'qwen3:4b-instruct')) { /* unreachable */ }

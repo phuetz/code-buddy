@@ -5,6 +5,7 @@ import {
 } from '../../../src/codebuddy/providers/provider-openai-compat.js';
 import { resetOllamaEndpointCache } from '../../../src/codebuddy/providers/ollama-native-transport.js';
 import type { CodeBuddyMessage } from '../../../src/codebuddy/client.js';
+import { withLlmStreamRetry } from '../../../src/codebuddy/llm-retry.js';
 
 /**
  * Regression: Qwen3 (and other strict Jinja chat templates served by Ollama /
@@ -135,6 +136,23 @@ describe('OpenAICompatProvider — system-message normalization by runtime', () 
     { role: 'user', content: 'Reply PONG' },
     { role: 'system', content: '<todo_context>none</todo_context>' },
   ];
+
+  it('retries an incomplete native stream through the provider when the caller owns retries', async () => {
+    process.env.CODEBUDDY_PROVIDER = 'ollama';
+    const provider = makeProvider('http://127.0.0.1:11434/v1', 'qwen3.8:27b');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('{"message":{"thinking":"unfinished"},"done":false}\n'))
+      .mockResolvedValueOnce(new Response('{"message":{"content":"recovered"},"done":true}\n'));
+    vi.stubGlobal('fetch', fetchMock);
+    const chunks = [];
+    for await (const chunk of withLlmStreamRetry(
+      () => provider.chatStream(structuredClone(scattered), undefined, { retryOwner: 'caller', streamRetry: false }),
+      { maxRetries: 1, baseDelayMs: 1 },
+    )) chunks.push(chunk);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(chunks.some(chunk => chunk.type === 'retry')).toBe(true);
+    expect(chunks.some(chunk => chunk.type === 'value' && chunk.value.choices?.[0]?.delta.content === 'recovered')).toBe(true);
+  });
 
   it.each([['', undefined], ['none', false], ['high', 'high']])(
     'Ollama agentic headless: effort opérateur %s conservé sans défaut none', async (effort, expected) => {

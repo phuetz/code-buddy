@@ -7,7 +7,8 @@ const recorded = readFileSync(new URL('../../fixtures/ollama-banc-two-calls.ndjs
 async function replay(lines: string) {
   const body = new ReadableStream<Uint8Array>({ start(controller) {
     // Exercise byte framing independently from native chunk framing.
-    const bytes = new TextEncoder().encode(lines);
+    // This fixture contains only tool snapshots, so finish the test response explicitly.
+    const bytes = new TextEncoder().encode(lines.trimEnd() + '\n{"done":true,"done_reason":"stop"}\n');
     for (let i = 0; i < bytes.length; i += 17) controller.enqueue(bytes.slice(i, i + 17));
     controller.close();
   } });

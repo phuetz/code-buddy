@@ -462,7 +462,7 @@ export function toOpenAiChunk(
   } as unknown as ChatCompletionChunk;
 }
 
-/** NDJSON body → OpenAI chunks. A malformed line is skipped, never fatal. */
+/** NDJSON body → OpenAI chunks. EOF is successful only after done:true. */
 export async function* streamOllamaNative(
   body: ReadableStream<Uint8Array> | null,
   fallbackModel: string,
@@ -473,6 +473,7 @@ export async function* streamOllamaNative(
   const decoder = new TextDecoder();
   let buffer = '';
   let emitted = 0;
+  let completed = false;
   const calls = new OllamaStreamCalls();
   const emit = function* (line: string): Generator<ChatCompletionChunk> {
     if (!line.trim()) return;
@@ -482,6 +483,7 @@ export async function* streamOllamaNative(
     } catch {
       return;
     }
+    if (parsed.done === true) completed = true;
     yield toOpenAiChunk(parsed, fallbackModel, emitted === 0, calls);
     emitted++;
   };
@@ -497,6 +499,10 @@ export async function* streamOllamaNative(
     }
     buffer += decoder.decode();
     yield* emit(buffer);
+    // A clean HTTP EOF can still truncate Ollama's NDJSON protocol. The
+    // existing stream retry layer retries only before answer/tool deltas and
+    // resets abandoned thinking; partial answers and calls remain failures.
+    if (!completed) throw new Error('Ollama stream terminated before done:true; response incomplete');
   } finally {
     reader.releaseLock();
   }

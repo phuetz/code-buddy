@@ -4,6 +4,8 @@
  *
  * Faux fournisseurs uniquement (générateurs collés). Aucun réseau, aucun LLM.
  */
+import { streamOllamaNative } from '../../../src/codebuddy/providers/ollama-native-transport.js';
+import { StreamingHandler } from '../../../src/agent/streaming/streaming-handler.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -211,6 +213,62 @@ describe('R23 AgentExecutor — faux succès', () => {
       expect(deps.client.chatStream).toHaveBeenCalledTimes(2);
       expect(entries.map((entry) => entry.content).join('\n')).toContain('Réponse après retry');
       expect(entries.map((entry) => entry.content).join('\n')).not.toMatch(/Empty provider response/i);
+    });
+  });
+
+  describe('flux Ollama interrompu avant done:true', () => {
+    function native(wire: string) {
+      return streamOllamaNative(new ReadableStream<Uint8Array>({
+        start(controller) { controller.enqueue(new TextEncoder().encode(wire)); controller.close(); },
+      }), 'qwen3.8:27b');
+    }
+
+    it('reprend après le seul raisonnement, sans conserver le fragment abandonné ni changer la demande', async () => {
+      const streaming = new StreamingHandler({ trackTokens: false });
+      deps.streamingHandler = streaming;
+      executor = new AgentExecutor(deps, config);
+      const stream = deps.client.chatStream as jest.Mock;
+      stream.mockImplementationOnce(() => native('{"message":{"thinking":"abandoned"},"done":false}\n'));
+      stream.mockImplementationOnce(() => native('{"message":{"thinking":"valid","content":"Reprise valide"},"done":true}\n'));
+      const messages: CodeBuddyMessage[] = [];
+      try {
+        const entries = await executor.processUserMessage('Mission à conserver exactement', [], messages);
+        expect(stream).toHaveBeenCalledTimes(2);
+        expect(stream.mock.calls[1][0]).toEqual(stream.mock.calls[0][0]);
+        expect(entries.map(entry => entry.content).join('\n')).toContain('Reprise valide');
+        const last = messages.filter(message => message.role === 'assistant').at(-1);
+        expect(last?.ollama_thinking).toBe('valid');
+        expect(JSON.stringify(messages)).not.toContain('abandoned');
+        expect(deps.toolHandler.executeTool).not.toHaveBeenCalled();
+      } finally { streaming.dispose(); }
+    });
+
+    it('ne retente pas un appel outil reçu dans un flux incomplet et ne l’exécute pas', async () => {
+      const streaming = new StreamingHandler({ trackTokens: false });
+      deps.streamingHandler = streaming;
+      executor = new AgentExecutor(deps, config);
+      const stream = deps.client.chatStream as jest.Mock;
+      stream.mockImplementation(() => native('{"message":{"tool_calls":[{"id":"partial-tool","function":{"name":"bash","arguments":{"command":"echo must-not-run"}}}]},"done":false}\n'));
+      try {
+        const entries = await executor.processUserMessage('Mission', [], []);
+        expect(stream).toHaveBeenCalledTimes(1);
+        expect(deps.toolHandler.executeTool).not.toHaveBeenCalled();
+        expect(entries.map(entry => entry.content).join('\n')).toMatch(/interrompue/);
+      } finally { streaming.dispose(); }
+    });
+
+    it('borne à deux reprises les fermetures successives sans réponse', async () => {
+      const streaming = new StreamingHandler({ trackTokens: false });
+      deps.streamingHandler = streaming;
+      executor = new AgentExecutor(deps, config);
+      const stream = deps.client.chatStream as jest.Mock;
+      stream.mockImplementation(() => native('{"message":{"thinking":"unfinished"},"done":false}\n'));
+      try {
+        const entries = await executor.processUserMessage('Mission', [], []);
+        expect(stream).toHaveBeenCalledTimes(3);
+        expect(entries.map(entry => entry.content).join('\n')).toMatch(/stream terminated/);
+        expect(deps.toolHandler.executeTool).not.toHaveBeenCalled();
+      } finally { streaming.dispose(); }
     });
   });
 
