@@ -1203,6 +1203,9 @@ async function processPromptHeadless(
     const resumeId = resumeStore.isEphemeral() ? null : resumeStore.getCurrentSessionId();
     const resumeSession = resumeId ? await resumeStore.loadSession(resumeId) : null;
     const projectDir = resumeSession?.workingDirectory || process.cwd();
+    // État de session (.codebuddy/) : jamais de `git status` sali par le harnais.
+    const { ensureSelfIgnoredProjectStateDir } = await import('./utils/project-state-dir.js');
+    if (!resumeStore.isEphemeral()) ensureSelfIgnoredProjectStateDir(projectDir);
     // Stratégie opt-in : elle ne comble que l'absence de --max-tool-rounds et de
     // [middleware].max_turns. Désactivée, l'overlay est vide.
     const { resolveStrategyOverlay, applyStrategyCostCap } = await import('./agent/self-improvement/strategy-runtime.js');
