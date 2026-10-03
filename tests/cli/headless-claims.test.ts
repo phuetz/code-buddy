@@ -17,7 +17,7 @@ describe('headless action claims require successful evidence', () => {
     expect(evaluateHeadlessTaskOutcome('Explain', [result('bash', true, '{"command":"echo OK"}', 'OK'), { type: 'assistant', content: 'All tests passed.' }]).exitCode).toBe(4);
   });
   it('accepts an observed edit and a completed green test runner', () => {
-    expect(evaluateHeadlessTaskOutcome('Explain', [result('str_replace_editor', true, '{"command":"str_replace","path":"greet.js"}'), result('bash', true, '{"command":"npm test"}', '# tests 3\n# fail 0'), { type: 'assistant', content: "J'ai modifié greet.js. Les tests passent." }]).exitCode).toBe(0);
+    expect(evaluateHeadlessTaskOutcome('Edit greet.js and run tests', [result('str_replace_editor', true, '{"command":"str_replace","path":"greet.js"}'), result('bash', true, '{"command":"npm test"}', '# tests 3\n# fail 0'), { type: 'assistant', content: "J'ai modifié greet.js. Les tests passent." }]).exitCode).toBe(0);
   });
   it.each(['Run npm test to verify.', "Je n'ai pas modifié les fichiers.", 'The documentation says: "I created the file."', 'If tests pass, commit.', 'I will create the file.'])('does not mistake advice, quotes or a blocker for completion: %s', content => {
     expect(evaluateHeadlessTaskOutcome('Explain', [{ type: 'assistant', content }]).exitCode).toBe(0);
@@ -58,7 +58,7 @@ it('does not let an honest cognitive clause hide a false edit claim', () => {
 });
 it('checks double-quoted file targets and preserves case', () => {
   const content = 'I edited "Greet.js".';
-  expect(evaluateHeadlessTaskOutcome('Explain', [result('str_replace_editor', true, '{"path":"Greet.js"}'), { type: 'assistant', content }]).exitCode).toBe(0);
+  expect(evaluateHeadlessTaskOutcome('Edit Greet.js', [result('str_replace_editor', true, '{"path":"Greet.js"}'), { type: 'assistant', content }]).exitCode).toBe(0);
   expect(evaluateHeadlessTaskOutcome('Explain', [result('str_replace_editor', true, '{"path":"other.js"}'), { type: 'assistant', content }]).exitCode).toBe(4);
 });
 

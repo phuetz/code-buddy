@@ -22,13 +22,13 @@ it.each(['direct', 'sandbox'] as const)('preserves failing assertions after real
     return { available: true, result: { stdout: child.stdout, stderr: child.stderr, exitCode: child.status!, duration: 1, timedOut: false, backend: 'docker', sandboxed: true } };
   });
   try {
-    for (const summary of ['Tests: 2 failed, 1 passed, 3 total', 'Tests 1 passed | 2 failed', 'Tests 2 failed (2)', '2 failed in 0.12s', 'Tests: 3 passed, 3 total']) {
+    for (const summary of ['Tests: 2 failed, 1 passed, 3 total', 'Tests 1 passed | 2 failed', 'Tests 2 failed (2)', '2 failed in 0.12s', '2 errors in 0.4s', 'Tests: 3 passed, 3 total']) {
       writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { test: 'node check.cjs' } }));
       writeFileSync(join(root, 'check.cjs'), `console.log(${JSON.stringify(summary)});\n`);
       const result = await tool.execute('npm test', 15000, root);
       expect(result.output, JSON.stringify(result)).toBeDefined();
       const parsed = JSON.parse(result.output!);
-      const failed = summary.includes('failed');
+      const failed = /failed|errors/.test(summary);
       expect(parsed.summary.failed).toBe(failed ? 2 : 0);
       expect(result.success).toBe(!failed);
       expect(parsed.rawOutput).toContain(summary);

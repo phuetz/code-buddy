@@ -242,7 +242,7 @@ it('does not mistake an echoed summary for the required executed suite', () => {
 const edited = (path: string): TaskEvidenceEntry => ({ type: 'tool_result', content: 'updated', toolCall: { id: path, function: { name: 'str_replace_editor', arguments: JSON.stringify({ path }) } }, toolResult: { success: true } });
 it.each(['I edited Panel.js after reading Helpers.js.', "J'ai modifié Panel.js après lecture de Helpers.js."])(
   'scopes a physical target to its assertion rather than incidental reading: %s', content => {
-    expect(evaluateHeadlessTaskOutcome('Explain', [edited('Panel.js'), answer(content)]).exitCode).toBe(0);
+    expect(evaluateHeadlessTaskOutcome('Edit Panel.js', [edited('Panel.js'), answer(content)]).exitCode).toBe(0);
   },
 );
 it('keeps both coordinated edit targets as evidence obligations', () => {

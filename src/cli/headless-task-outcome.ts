@@ -1,3 +1,4 @@
+import { isHeadlessProhibition } from './headless-prohibition.js';
 import { parseTestOutput } from '../utils/test-output-parser.js';
 import { checkHeadlessDeliverable } from './headless-deliverable.js';
 import { stripVTControlCharacters } from 'node:util';
@@ -63,6 +64,9 @@ function repositoryActionClauses(prompt: string): string[] {
     return outputVerb && (outputObject || /\b(?:only|alone|just)\b/.test(clause)) && !physical;
   };
   return clauses.filter((clause, index) => {
+    // Prohibitions take precedence over every positive means clause. French
+    // ne…que is restrictive, so it remains a positive request below.
+    if (isHeadlessProhibition(clause)) return false;
     // Auxiliary-led interrogatives ask for an observation, not an imperative.
     // Each subsequent independent clause is still checked separately.
     if (/^(?:does|did|is|are|was|were|has|had|will|would|could)\b|^(?:do|have|can)\s+(?:you|we|they|i|it|this|these|those)\b|^est-ce\s+que\b/.test(clause)) return false;
@@ -442,6 +446,7 @@ export function evaluateHeadlessTaskOutcome(
   if ([...checks.values()].some(check => !check.success && !(check.optionalRead && lastWrite > check.sequence))) reasons.push('verification_failed');
   if (requestsRepositoryAction(prompt) && actionTools.length === 0) reasons.push('no_action_executed');
   const actionRequested = requestsRepositoryAction(prompt);
+  if (!actionRequested && lastWrite >= 0) reasons.push('unexpected_edit_executed');
   const actionClauses = repositoryActionClauses(prompt);
   const testRequest = actionClauses.some(clause => /\b(?:run|execute|lance|relance|lancer|make|ensure|fais|rends|check|verify|verifie|controle)\b.*\btests?\b/.test(clause));
   if (testRequest && (lastGreen < 0 || lastGreen < lastWrite)) reasons.push('verification_missing');

@@ -131,7 +131,7 @@ export function createApiError(
  */
 export function mapProviderError(rawMessage: string, provider?: string): string {
   const msg = rawMessage || 'Unknown provider error';
-  const lower = msg.toLowerCase();
+  const lower = msg.toLowerCase().replace(/\bhttp(?=[45]\d{2}\b)/g, 'http ');
   const configKey = provider ? `${provider}_api_key` : 'api_key';
   const prefix = `CodeBuddy API error: ${msg}`;
 

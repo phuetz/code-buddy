@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { isHeadlessProhibition } from './headless-prohibition.js';
 import { checkSourceOutputReport } from './headless-source-output-report.js';
 import { parseBashCommand } from '../security/bash-parser.js';
 import { TOOL_ALIASES } from '../tools/registry/tool-alias-map.js';
@@ -81,7 +82,12 @@ export function checkHeadlessDeliverable(
   const reasons: string[] = [];
   if (reading && /^(?:please\s+)?(?:read|lis|lire|consult|consulte|inspect|inspecte)\b/.test(text)
     && !/\b(?:sentence|paragraph|poem|phrase|paragraphe)\b/.test(text) && !files.size) reasons.push('source_evidence_missing');
-  const sourceTargets = [...query.matchAll(/\/?(?:[\w.-]+\/)*[\w.-]+\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh)\b/g)]
+  // A separate declarative presence statement is context, not a request to
+  // read that file. Keep every other target closed, including unfamiliar
+  // restitution verbs; do not require a whitelist of reading imperatives.
+  const readingClauses = query.split(/[?!;\n]\s*|\.(?=\s|$)\s*/).filter((clause, index) =>
+    !isHeadlessProhibition(clause) && (index === 0 || !/^(?:the|an?|this|that)\s+[\w\s-]+\s+(?:appears?|exists?|occurs?)\s+(?:in|inside)\s+/i.test(clause.trim())));
+  const sourceTargets = [...readingClauses.join(' ').matchAll(/\/?(?:[\w.-]+\/)*[\w.-]+\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh)\b/gi)]
     .map(match => path.relative(process.cwd(), path.resolve(match[0])).replaceAll('\\', '/'));
   const refersToObservedInterface = /\b(?:its|their)\s+(?:inputs?|outputs?)\b/.test(text);
   if (reading && (sourceTargets.some(target => !files.has(target)) || refersToObservedInterface && !files.size)

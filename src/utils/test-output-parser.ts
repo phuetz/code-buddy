@@ -25,7 +25,7 @@ export interface ParseResult {
 function summaryCounts(line: string) {
   const count = (label: string) => Number(line.match(new RegExp(`\\b(\\d+)\\s+${label}\\b`, 'i'))?.[1] ?? 0);
   const passed = count('passed');
-  const failed = count('failed');
+  const failed = count('failed') + count('errors?');
   const skipped = count('skipped') + count('todo');
   return { total: count('total') || passed + failed + skipped, passed, failed, skipped };
 }
@@ -405,6 +405,7 @@ export function isLikelyTestOutput(output: string): boolean {
     /^\s*Tests:?\s*\d+/im,
     /\d+\s+passing/i,
     /\d+\s+(?:passed|failed|skipped)/i,
+    PYTEST_SUMMARY_REGEX,
     /---\s+(PASS|FAIL):/,
     /PASSED|FAILED/,
     /✓|✕|○/,
