@@ -48,9 +48,32 @@ function runAudit() {
   }
 }
 
+function isCompleteAudit(audit) {
+  const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!isObject(audit) || audit.error || !isObject(audit.vulnerabilities)
+    || !isObject(audit.metadata) || !isObject(audit.metadata.vulnerabilities)) return false;
+  const counts = audit.metadata.vulnerabilities;
+  const severities = ['info', 'low', 'moderate', 'high', 'critical'];
+  const observed = Object.fromEntries(severities.map((severity) => [severity, 0]));
+  for (const vulnerability of Object.values(audit.vulnerabilities)) {
+    if (!isObject(vulnerability) || !severities.includes(vulnerability.severity)) return false;
+    observed[vulnerability.severity] += 1;
+  }
+  for (const severity of severities) {
+    const count = severity === 'info' ? (counts.info ?? 0) : counts[severity];
+    if (!Number.isSafeInteger(count) || count < 0 || count !== observed[severity]) return false;
+  }
+  return Number.isSafeInteger(counts.total)
+    && counts.total === Object.keys(audit.vulnerabilities).length;
+}
+
 const today = new Date().toISOString().slice(0, 10);
 const allow = loadAllowlist();
 const audit = runAudit();
+if (!isCompleteAudit(audit)) {
+  console.error('audit-gate: FAIL — npm did not return a complete, coherent audit; no security result established.');
+  process.exit(1);
+}
 const vulns = audit.vulnerabilities ?? {};
 const meta = audit.metadata?.vulnerabilities ?? {};
 

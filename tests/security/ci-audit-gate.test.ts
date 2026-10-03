@@ -10,6 +10,10 @@ const input = vi.hoisted(() => ({
 vi.mock('node:child_process', () => ({
   execSync: () => JSON.stringify({
     vulnerabilities: { undici: { severity: input.severity, nodes: input.nodes } },
+    metadata: { vulnerabilities: {
+      info: 0, low: 0, moderate: 0, high: input.severity === 'high' ? 1 : 0,
+      critical: input.severity === 'critical' ? 1 : 0, total: 1,
+    } },
   }),
 }));
 vi.mock('node:fs', () => ({
