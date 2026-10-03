@@ -254,9 +254,12 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\bexec\s*\(/, severity: 'high', description: 'Command execution', name: 'exec', capability: 'shell' },
 
   { pattern: /\b(?:(?:import\s+subprocess\b|subprocess\s*\.)|from\s+subprocess\s+import\b|from\s+os\s+import\s+[^\n]*(?:system|popen|spawn|exec)\b|import\s+os\s+as\s+\w+|os\s*\.\s*(?:system|popen|spawn\w*|exec\w*)\s*\()/, severity: 'high', description: 'Python process execution capability', name: 'python-process', capability: 'shell' },
-  { pattern: /\b(?:(?:[A-Za-z_]\w*\s*\.\s*)?rmtree\s*\(|from\s+shutil\s+import\s+[^\n]*\brmtree\b)|\b(?:rmSync|rm|rmdirSync|rmdir)\s*\([^;]*\brecursive\s*:\s*true/s, severity: 'critical', description: 'Recursive deletion in executable code', name: 'script-recursive-delete', capability: 'filesystem' },
+  { pattern: /\brmtree\s*\(|\bfrom\s+shutil\s+import\s+[^\n]*\brmtree\b|\b(?:rmSync|rmdirSync)\s*\(|(?:\.\s*(?:rm|rmdir)|\[\s*['"](?:rmSync|rm|rmdirSync|rmdir)['"]\s*\])\s*\(/s, severity: 'critical', description: 'Recursive deletion in executable code', name: 'script-recursive-delete', capability: 'filesystem' },
 
   { pattern: /\b(?:exec\s*\.\s*Command(?:Context)?|Command\s*::\s*new|ProcessBuilder|shell_exec|system|popen|spawnSync|execFileSync)\s*\(|\bStart-Process\b/, severity: 'high', description: 'Native process execution', name: 'native-process', capability: 'shell' },
+
+  { pattern: /\bos\s*\[\s*['"](?:system|popen|posix_spawn|exec\w*|spawn\w*)['"]\s*\]\s*\(|\bgetattr\s*\(\s*os\s*,\s*['"](?:system|popen|posix_spawn|exec\w*|spawn\w*)['"]\s*\)\s*\(|\b(?:create_subprocess_(?:shell|exec)|posix_spawn|execv(?:e|p|pe)?|passthru|proc_open|execa)\s*\(|\b(?:pty\s*\.\s*spawn|Open3\s*\.\s*capture\w*|syscall\s*\.\s*Exec|os\s*\.\s*StartProcess|Deno\s*\.\s*Command)\s*\(|\bInvoke-Expression\b|\$\s*`|%x[({/]/, severity: 'high', description: 'Process execution including quoted APIs and language-native launchers', name: 'extended-process', capability: 'shell' },
+  { pattern: /`[^`\n]+`/, severity: 'high', description: 'PHP backtick process execution', name: 'php-backtick', capability: 'shell' },
 
   // File system dangers
   { pattern: /\brm\s+-rf\b/, severity: 'critical', description: 'Recursive force delete', name: 'rm-rf', capability: 'filesystem' },
@@ -382,10 +385,11 @@ function getDangerousPatterns(): DangerousPattern[] {
   });
 }
 
-interface ScanContext { markdown: boolean; language: string; watched: boolean }
+interface ScanContext { markdown: boolean; language: string; watched: boolean; imperative: boolean }
 function scanContexts(content: string, filePath: string, executableContext = false): ScanContext[] {
   const markdown = /\.md$/i.test(filePath) && !executableContext && !content.startsWith('#!');
-  let language = '';
+  let language = markdown ? '' : path.extname(filePath).slice(1).toLowerCase();
+  const imperative = /(?<![\w-])(?:run|execute)\b[^\n]{0,100}\b(?:every|listed|now|immediately|with\s+(?:the\s+)?bash|rm\s+-rf|curl|wget)|\b(?:first\s+run|then\s+comply|you\s+obey|agent\s+runs|follow\s+the\s+description\s+literally|ignore\s+them)\b/i.test(content.replace(/(?:never|don't|do not|must not)\s+(?:run|execute)/gi, 'blocked'));
   let fence = '';
   let watched = false;
   return content.split('\n').map(line => {
@@ -395,11 +399,24 @@ function scanContexts(content: string, filePath: string, executableContext = fal
       else if (!fence) { fence = delimiter[1]!; language = delimiter[2]!.toLowerCase(); }
     }
     if (markdown && fence && !language && /^Watched patterns:\s*$/i.test(line.trim())) watched = true;
-    return { markdown, language, watched };
+    return { markdown, language, watched, imperative };
   });
 }
 function classifyMention(dp: DangerousPattern, line: string, context: ScanContext, offset: number, length: number): 'active' | 'benign' | 'documentary' {
+  if (dp.name === 'child_process' && /\b(?:const|let|var)\s+child_process\s*=\s*(?:\d+|true|false|null)\s*;?\s*$/.test(line)) return 'benign';
+  if (dp.name === 'secret-ref') {
+    const token = line.slice(offset, offset + length);
+    if (!token.includes('_') && token !== token.toUpperCase() && line[offset - 1] !== '$') return 'benign';
+  }
+  if (dp.name === 'php-backtick' && context.language !== 'php') return 'benign';
   if (!context.markdown) return 'active';
+  if (['native-process', 'python-process'].includes(dp.name)) {
+    if (dp.name === 'native-process' && (/\b(?:operating|file|management)\s+system\s*\(/i.test(line) || /\.system\s*\(\s*size\s*:/.test(line))) return 'benign';
+    return context.imperative ? 'active' : 'documentary';
+  }
+  if (['secret-ref', 'prefixed-secret', 'template-injection'].includes(dp.name)) return 'documentary';
+  if (['script-recursive-delete', 'php-backtick', 'extended-process'].includes(dp.name)) return context.imperative ? 'active' : 'documentary';
+
   if (dp.name === 'eval' && /\bmodel\s*\.\s*$/.test(line.slice(0, offset)) &&
       /^eval\s*\(\s*\)/.test(line.slice(offset)) &&
       ['', 'python', 'py', 'text', 'plaintext'].includes(context.language)) {
@@ -410,7 +427,7 @@ function classifyMention(dp: DangerousPattern, line: string, context: ScanContex
   if (dp.name === 'dynamic-require' && ['kotlin', 'kt', 'solidity'].includes(context.language)) {
     // These languages use require as an assertion. A JS-style module load
     // remains suspicious even inside a misleading fence.
-    if (/^require\s*\([^)]*(?:isNotBlank\(|\.value|\[|>=|<=|>|<| in )/.test(line.slice(offset))) return 'benign';
+    if (/^require\s*\(\s*[A-Za-z_]\w*(?:\.\w+|\[[^\]]+\])?\.isNotBlank\s*\(\s*\)\s*\)/.test(line.slice(offset)) || /^require\s*\([^;]*?(?:>=|<=|>|<)\s*[^;]+\)\s*;?\s*$/.test(line.slice(offset))) return 'benign';
     return 'documentary';
   }
   // Only these inert read/arithmetic examples avoid cumulative quarantine.
@@ -419,14 +436,14 @@ function classifyMention(dp: DangerousPattern, line: string, context: ScanContex
     const command = line.slice(offset + 2, offset + length).replace(/\)\s*(?:\)\s*)*$/, '').trim();
     if (/^mktemp$/.test(command) ||
         /^jq\s+'\s*\.[A-Za-z_]\w*(?:\s*\/\/\s*0)?\s*'\s+"\$[A-Za-z_]\w*"$/.test(command) ||
-        /^echo\s+"[\w$ .<>=;*/+%-]+"\s*\|\s*bc(?:\s+-l)?$/.test(command)) return 'documentary';
+        /^echo\s+"(?:scale=\d+;\s*)?(?:(?:\$[A-Za-z_]\w*|\d+(?:\.\d+)?|[ .<>=*/+%-])+)(?:\s*)"\s*\|\s*bc(?:\s+-l)?$/.test(command)) return 'documentary';
     return 'active';
   }
   const documentaryPatterns = ['prompt-override', 'remote-download-pipe-shell', 'rm-rf'];
-  if (!documentaryPatterns.includes(dp.name) || /<!--/.test(line)) return 'active';
+  if (!documentaryPatterns.includes(dp.name) || /<!--/.test(line) || context.imperative) return 'active';
   // Require an explicit refusal referring to quoted input, or a catalogued
   // command. A warning elsewhere never grants permission to an active line.
-  if (dp.name === 'rm-rf' && context.watched && offset === line.indexOf('rm') && /^\s*-\s+rm\s+-rf\b/.test(line)) return 'documentary';
+  if (dp.name === 'rm-rf' && context.watched && !/\$\(|https?:|[;&|]/.test(line) && offset === line.indexOf('rm') && /^\s*-\s+rm\s+-rf\b/.test(line)) return 'documentary';
   if (context.language && !['text', 'plaintext'].includes(context.language)) return 'active';
   if (dp.name === 'rm-rf' && /^description:.*intercepts dangerous commands.*confirmation/i.test(line)) return 'documentary';
   const prefix = line.slice(0, offset);
@@ -442,48 +459,47 @@ export function scanFile(filePath: string, executableContext = false): ScanResul
   try {
     const content = readTextForScan(filePath);
     if (content === null) return refusalResult(filePath);
-    const findings: ScanFinding[] = [];
-    const lines = content.split('\n');
-    const patterns = getDangerousPatterns();
-
-    const contexts = scanContexts(content, filePath, executableContext);
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line === undefined) continue;
-      if (line.trim().startsWith('<!--') || line.trim() === '---') continue;
-      for (const dp of patterns) {
-        for (const match of line.matchAll(new RegExp(dp.pattern.source, dp.pattern.flags.replace('g', '') + 'g'))) {
-          const kind = classifyMention(dp, line, contexts[i]!, match.index, match[0].length);
-          if (kind === 'benign') continue;
-          findings.push({
-            severity: kind === 'documentary' && dp.name !== 'shell-subst' ? 'info' : dp.severity,
-            pattern: dp.name, description: dp.description, file: filePath,
-            line: i + 1, evidence: line.trim().slice(0, 120),
-            ...(kind === 'documentary' ? { documentary: true } : {}),
-          });
-        }
-      }
-    }
-    // Apply the same context decisions to the full-document deobfuscation
-    // pass. Only the matched span is masked; hidden/multiline/encoded attacks
-    // and other patterns on the same line remain visible.
-    findings.push(...collectPromptInjectionFindings(content, filePath, findings, contexts));
-    return { file: filePath, findings, scannedAt: Date.now(), textRead: true };
+    return scanSkillContent(content, filePath, executableContext);
   } catch (error) {
     logger.debug(`Failed to scan file: ${filePath}`, { error });
     return { file: filePath, findings: [], scannedAt: Date.now(), textRead: false };
   }
 }
 
-/**
- * True when this result must not authorize an install or a registration.
- * Critical findings still block. A high finding that is not an unread file
- * keeps the historical allow. An unread file never does.
- */
+export function scanSkillContent(content: string, filePath: string, executableContext = false): ScanResult {
+  const findings: ScanFinding[] = [];
+  const lines = content.split('\n');
+  const patterns = getDangerousPatterns();
+
+  const contexts = scanContexts(content, filePath, executableContext);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) continue;
+    if (line.trim().startsWith('<!--') || line.trim() === '---') continue;
+    for (const dp of patterns) {
+      for (const match of line.matchAll(new RegExp(dp.pattern.source, dp.pattern.flags.replace('g', '') + 'g'))) {
+        const kind = classifyMention(dp, line, contexts[i]!, match.index, match[0].length);
+        if (kind === 'benign') continue;
+        findings.push({
+          severity: dp.severity,
+          pattern: dp.name, description: dp.description, file: filePath,
+          line: i + 1, evidence: line.trim().slice(0, 120),
+          ...(kind === 'documentary' ? { documentary: true } : {}),
+        });
+      }
+    }
+  }
+  // Apply the same context decisions to the full-document deobfuscation
+  // pass. Only the matched span is masked; hidden/multiline/encoded attacks
+  // and other patterns on the same line remain visible.
+  findings.push(...collectPromptInjectionFindings(content, filePath, findings, contexts));
+  return { file: filePath, findings, scannedAt: Date.now(), textRead: true };
+}
+
+/** Automatic installation/registration requires allow; review is never automatic. */
 export function scanDeniesInstall(result: ScanResult): boolean {
   if (result.textRead !== true) return true;
-  if (result.findings.some((finding) => finding.pattern === 'special-file-not-read')) return true;
-  return result.findings.some((finding) => finding.severity === 'critical');
+  return buildSkillFirewallReport(result.file, [result]).verdict !== 'allow';
 }
 
 /**
