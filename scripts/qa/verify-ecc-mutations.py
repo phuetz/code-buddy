@@ -7,7 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = '70bcab004f822bccadb73f931e9de1d932b900a5'
-OUT = ROOT / '_qa/pare-feu-ecc/mutations'
+OUT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / '_qa/pare-feu-ecc/mutations'
 OUT.mkdir(parents=True, exist_ok=True)
 CASES = [
     ('scanner-original', 'src/security/skill-scanner.ts', 'tests/security/skill-firewall-ecc.test.ts'),

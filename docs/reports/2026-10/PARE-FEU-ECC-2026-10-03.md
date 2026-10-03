@@ -2,6 +2,10 @@
 
 Branche `fix/pare-feu-import-ecc-2026-10-03`, base Code Buddy `70bcab004f822bccadb73f931e9de1d932b900a5`. ECC [Everything Claude Code](https://github.com/affaan-m/everything-claude-code/tree/ef648e01899ba3e8dc6371642deaaf64b4477775), commit `ef648e01899ba3e8dc6371642deaaf64b4477775`, licence MIT, clone local `_qa/pare-feu-ecc/ecc`. Linux, Node `v24.14.1`. Aucun push, aucun service démarré, aucun travail détaché. Hooks exclus.
 
+## Statut de cette première livraison
+
+La relecture de `8ec6ff16b` invalide la barrière annoncée : le rapport n'était pas encore suivi pendant les tests et contenait un chemin privé. Elle constate aussi une exception eval trop large. Les mesures ci-dessous décrivent la première livraison ; la [reprise 1](REPRISE-1-PARE-FEU-ECC-2026-10-03.md) fournit le correctif et la validation des fichiers suivis.
+
 ## Résultat
 
 Les trois cas A ne sont plus autorisés ; les huit cas B quittent la quarantaine. Les scripts sont traités plus strictement que les mentions documentaires. Les allowlists des agents sont conservées et les politiques illisibles refusées. Les agents externes restent désactivés en revue.
@@ -171,10 +175,11 @@ Le chargeur Vite runner évite une écriture refusée dans node_modules/.vite-te
 
 ## Livrables et commits
 
-Rapport de mission créé dans `docs/reports/2026-10/PARE-FEU-ECC-2026-10-03.md` avant la reproduction. Copie remise dans `/home/patrice/Videos/Partage/20261003-cb-pare-feu-ecc/sol61/RAPPORT.md`. Guide : `docs/features/skills-import.md`. Les traces finales, mutations et contrôles réels sont sous `sol61/preuves/`, avec manifeste SHA-256.
+Rapport de mission créé dans `docs/reports/2026-10/PARE-FEU-ECC-2026-10-03.md` avant la reproduction. Copie remise dans `Partage/20261003-cb-pare-feu-ecc/sol61/RAPPORT.md`. Guide : `docs/features/skills-import.md`. Les traces finales, mutations et contrôles réels sont sous `sol61/preuves/`, avec manifeste SHA-256.
 
 - `71e5f055c` — `fix(security): durcir le pare-feu des skills et distinguer les mentions`.
 - `994ff7415` — `feat(skills): importer la racine canonique et préparer les agents en revue`.
+- `8ec6ff16b` — `docs(qa): livrer les reproductions ECC et les preuves de mutation`.
 
 ## Ce que je n’ai pas pu vérifier
 
