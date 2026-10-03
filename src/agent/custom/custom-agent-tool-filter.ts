@@ -9,7 +9,7 @@
 import type { ToolFilterConfig } from '../../utils/tool-filter.js';
 import type { CustomAgentConfig } from './custom-agent-loader.js';
 import { TOOL_ALIASES } from '../../tools/registry/tool-alias-map.js';
-import { resolveAgentTool } from '../agent-tools.js';
+import { parseAgentTools, resolveAgentTool } from '../agent-tools.js';
 import { filterToolNames } from '../../utils/tool-filter.js';
 import { buildDispatchToolFilter } from '../../fleet/dispatch-profile.js';
 
@@ -31,6 +31,9 @@ export function buildCustomAgentToolFilter(
   existing: ToolFilterConfig = EMPTY_FILTER,
   availableTools: readonly string[] = [],
 ): ToolFilterConfig {
+  // Programmatic configs must obey the same contract as files.
+  parseAgentTools(agent.tools);
+  parseAgentTools(agent.disabledTools, 'deny');
   const agentEnabled = unique((agent.tools ?? []).flatMap(name => resolveAgentTool(name) === 'bash' ? ['bash', 'terminal', 'shell_exec', 'interactive_shell'] : [name]));
   const rawDisabled = agent.disabledTools ?? [];
   const names = [...Object.keys(TOOL_ALIASES), ...Object.values(TOOL_ALIASES), 'interactive_shell'];

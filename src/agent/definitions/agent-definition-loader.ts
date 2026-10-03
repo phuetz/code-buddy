@@ -65,7 +65,7 @@ export function parseAgentMarkdown(content: string, filePath: string): AgentDefi
 
   definition.tools = parseAgentTools(meta.tools);
 
-  definition.disallowedTools = parseAgentTools(meta.disallowedTools);
+  definition.disallowedTools = parseAgentTools(meta.disallowedTools, 'deny');
 
   if (typeof meta.maxTurns === 'number') {
     definition.maxTurns = meta.maxTurns;

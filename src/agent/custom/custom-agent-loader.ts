@@ -412,7 +412,7 @@ export class CustomAgentLoader {
       systemPrompt,
       model: parsed.model ? String(parsed.model) : undefined,
       tools: parseAgentTools(parsed.tools),
-      disabledTools: parseAgentTools(parsed.disabledTools),
+      disabledTools: parseAgentTools(parsed.disabledTools, 'deny'),
       fleetDispatchProfile: typeof parsed.fleetDispatchProfile === 'string'
         ? normalizeDispatchProfile(parsed.fleetDispatchProfile)
         : undefined,

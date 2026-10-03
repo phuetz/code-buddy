@@ -38,7 +38,7 @@ it('legacy colon in a descriptive YAML scalar cannot erase a valid tool policy',
   expect(config).not.toBeNull();
   expect(config.description).toBe('Use when: reviewing code'); expect(config.tools).toEqual(['view_file']);
 });
-it.each(['*_exec', '*file*', 'view_?ile', '!bash'])('retains supported glob policy %s', pattern => {
+it.each(['*_exec', '*file*', 'view_?ile'])('retains supported glob policy %s', pattern => {
   expect(parseAgentTools([pattern])).toEqual([pattern]);
 });
 it('all execution aliases are denied by the production agent filter', () => {
@@ -65,4 +65,8 @@ it('production loader retains a wildcard denial instead of losing the agent', ()
 it('a Bash allowlist reaches the same execution aliases as its denials', () => {
   const config = { id: 'probe', name: 'Probe', description: '', systemPrompt: 'Review', tools: ['bash'] };
   expect(filterToolNames(['bash', 'terminal', 'shell_exec', 'interactive_shell', 'docker'], buildCustomAgentToolFilter(config))).toEqual(['bash', 'terminal', 'shell_exec', 'interactive_shell']);
+});
+
+it('a negative agent allowlist is unreadable instead of authorizing a complement', () => {
+  expect(() => parseAgentTools(['!bash'])).toThrow(/allowlist/);
 });

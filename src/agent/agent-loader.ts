@@ -20,6 +20,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { homedir } from 'os';
 import * as yaml from 'yaml';
+import { buildCustomAgentToolFilter } from './custom/custom-agent-tool-filter.js';
+import { filterToolNames } from '../utils/tool-filter.js';
 import { parseAgentTools, resolveAgentTool } from './agent-tools.js';
 import { logger } from '../utils/logger.js';
 
@@ -100,7 +102,7 @@ function loadAgentsFromDir(dir: string): MarkdownAgentDefinition[] {
           description: typeof meta.description === 'string' ? meta.description : `Custom agent: ${name}`,
           model: typeof meta.model === 'string' ? meta.model : undefined,
           tools: parseAgentTools(meta.tools),
-          disallowedTools: parseAgentTools(meta.disallowedTools),
+          disallowedTools: parseAgentTools(meta.disallowedTools, 'deny'),
           maxTurns: typeof meta.maxTurns === 'number' ? meta.maxTurns : undefined,
           permissionMode: ['suggest', 'auto-edit', 'full-auto'].includes(meta.permissionMode as string)
             ? meta.permissionMode as 'suggest' | 'auto-edit' | 'full-auto'
@@ -181,18 +183,15 @@ export function listCustomAgents(projectRoot?: string): Array<{ name: string; de
  * Check if a tool is allowed for a custom agent.
  */
 export function isToolAllowedForAgent(agent: MarkdownAgentDefinition, toolName: string): boolean {
-  const normalized = resolveAgentTool(toolName).toLowerCase();
-
-  // If disallowedTools is set, check it first
-  if (agent.disallowedTools?.some(t => resolveAgentTool(t).toLowerCase() === normalized)) {
+  try {
+    const policy = buildCustomAgentToolFilter({
+      id: agent.name, name: agent.name, description: agent.description,
+      systemPrompt: agent.systemPrompt,
+      tools: parseAgentTools(agent.tools),
+      disabledTools: parseAgentTools(agent.disallowedTools, 'deny'),
+    });
+    return filterToolNames([resolveAgentTool(toolName)], policy).length > 0;
+  } catch {
     return false;
   }
-
-  // If tools is set, only those tools are allowed
-  if (agent.tools) {
-    return agent.tools.some(t => resolveAgentTool(t).toLowerCase() === normalized);
-  }
-
-  // No restrictions
-  return true;
 }

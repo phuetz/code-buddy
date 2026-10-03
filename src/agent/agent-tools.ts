@@ -8,10 +8,13 @@ const CLAUDE_TOOLS: Record<string, string> = {
   TodoWrite: 'todo_update', AskUserQuestion: 'ask_human',
 };
 
-export function parseAgentTools(value: unknown): string[] | undefined {
+/** Allowlists require positive bounded patterns; a wildcard can only deny all. */
+export function parseAgentTools(value: unknown, purpose: 'allow' | 'deny' = 'allow'): string[] | undefined {
   if (value === undefined) return undefined;
   const tools = typeof value === 'string' ? value.split(',').map(t => t.trim()) : value;
-  if (!Array.isArray(tools) || tools.some(t => typeof t !== 'string' || !/^!?[A-Za-z*?][\w.*?:-]*$/.test(t))) {
+  if (!Array.isArray(tools) || tools.some(t => typeof t !== 'string' ||
+      !/^!?[A-Za-z*?][\w.*?:-]*$/.test(t) || t.startsWith('!') ||
+      (purpose === 'allow' && !/[A-Za-z]/.test(t.replace(/[*?]/g, ''))))) {
     throw new Error('Unreadable agent tool allowlist');
   }
   return [...new Set((tools as string[]).map(t => Object.hasOwn(CLAUDE_TOOLS, t) ? CLAUDE_TOOLS[t]! : t))];
