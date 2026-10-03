@@ -10,6 +10,9 @@ export class PayloadBudgetError extends Error {
   constructor(message: string) { super(message); this.name = 'PayloadBudgetError'; }
 }
 
+/** Old assistant/tool groups evicted together (see budgetFinalPayload). */
+export const EVICTION_CHUNK = 8;
+
 export function estimateFinalPayloadTokens(payload: Pick<OpenAiChatPayload, 'messages' | 'tools' | 'model'>): number {
   const serialized = JSON.stringify({ messages: payload.messages, tools: payload.tools ?? [] });
   // Runtime tokenizer is not always exposed. Use both encoding and UTF-8,
@@ -63,14 +66,16 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
   // Schemas and transport framing can trigger pressure even when the earlier
   // context pass fitted. Retire completed native reasoning before evicting
   // its findings; preserve the current tool round's thinking byte for byte.
-  let afterThinkingTokens = estimateFinalPayloadTokens(next);
+  // All completed reasoning goes at once: this pass is stateless, and removing
+  // "just enough" moved the cut one message further on every request, so a
+  // local runtime re-evaluated the whole prompt each turn (banc harnais 03/10,
+  // A-27b : 117 s d'évaluation par tour au lieu de ~3 s avec le cache).
   for (const message of next.messages) {
-    if (afterThinkingTokens <= inputBudget) break;
     if (message.role === 'assistant' && !recentMessages.has(message) && message.ollama_thinking) {
       delete message.ollama_thinking;
-      afterThinkingTokens = estimateFinalPayloadTokens(next);
     }
   }
+  const afterThinkingTokens = estimateFinalPayloadTokens(next);
   if (afterThinkingTokens <= inputBudget) {
     return { payload: next, beforeTokens, inputTokens: afterThinkingTokens, outputTokens, safetyTokens, identifier };
   }
@@ -83,12 +88,24 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
   }
   // Evict old assistant/tool groups before erasing instructions/capabilities.
   // The current observation and last user query remain protected together.
-  while (estimateFinalPayloadTokens(next) > inputBudget) {
+  // Groups go by chunks of EVICTION_CHUNK so that the following requests,
+  // whose history only grows at the tail, keep exactly the same head and the
+  // same cut until a whole new chunk is needed (prompt-cache stability).
+  let evictedGroups = 0;
+  const evictOldestGroup = (): boolean => {
     const index = next.messages.findIndex(message => message !== lastUser && message.role !== 'system' && !recentMessages.has(message));
-    if (index < 0) break;
+    if (index < 0) return false;
     const first = next.messages[index]!;
     const callIds = new Set((Array.isArray(first.tool_calls) ? first.tool_calls : []).map(call => call.id));
     next.messages = next.messages.filter((message, position) => position !== index && !(message.role === 'tool' && callIds.has(message.tool_call_id)));
+    evictedGroups += 1;
+    return true;
+  };
+  while (estimateFinalPayloadTokens(next) > inputBudget) {
+    if (!evictOldestGroup()) break;
+  }
+  while (evictedGroups > 0 && evictedGroups % EVICTION_CHUNK !== 0) {
+    if (!evictOldestGroup()) break;
   }
   // Only reduce the latest result when even user + tools + that group alone
   // cannot fit. An oversized system injection must not cause this reduction.
