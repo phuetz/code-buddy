@@ -129,3 +129,25 @@ describe('withStallGuard first-token window', () => {
     expect(source.closed).toBe(true);
   });
 });
+
+describe('budget de génération des arguments outils locaux', () => {
+  it('couvre le silence du JSON natif après les premiers tokens de raisonnement', () => {
+    expect(resolveStallTimeoutMs({}, { targetIsLocal: true, toolOutputTokens: 4701 })).toBe(940_200);
+  });
+  it('borne ce budget au plafond local configuré', () => {
+    expect(resolveStallTimeoutMs({}, { targetIsLocal: true, toolOutputTokens: 32768 })).toBe(1_200_000);
+    expect(resolveStallTimeoutMs({ CODEBUDDY_STALL_MAX_MS: '300000' },
+      { targetIsLocal: true, toolOutputTokens: 32768 })).toBe(300_000);
+  });
+  it('garde le délai ordinaire sans outils, dans le cloud et pour les petites sorties', () => {
+    expect(resolveStallTimeoutMs({}, { targetIsLocal: false, toolOutputTokens: 32768 })).toBe(120_000);
+    expect(resolveStallTimeoutMs({}, { targetIsLocal: true, toolOutputTokens: 0 })).toBe(120_000);
+    expect(resolveStallTimeoutMs({}, { targetIsLocal: true, toolOutputTokens: 100 })).toBe(120_000);
+  });
+  it('respecte un délai explicite y compris la désactivation', () => {
+    for (const value of [0, 30000, 180000]) {
+      expect(resolveStallTimeoutMs({ CODEBUDDY_LLM_STALL_TIMEOUT_MS: String(value) },
+        { targetIsLocal: true, toolOutputTokens: 32768 })).toBe(value);
+    }
+  });
+});

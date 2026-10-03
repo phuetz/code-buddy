@@ -34,21 +34,33 @@ function parseEnvNumber(raw: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-/** Resolve the configured inactivity budget (<=0 or NaN disables the guard). */
-export function resolveStallTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+/** Resolve inactivity, including locally buffered tool arguments when requested. */
+export function resolveStallTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+  options?: { targetIsLocal?: boolean; toolOutputTokens?: number },
+): number {
   const raw = env.CODEBUDDY_LLM_STALL_TIMEOUT_MS;
-  if (raw === undefined || raw.trim() === '') return DEFAULT_STALL_TIMEOUT_MS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return DEFAULT_STALL_TIMEOUT_MS;
-  return parsed;
+  // An explicit operator setting takes precedence, including disabling.
+  if (raw !== undefined && raw.trim() !== '' && Number.isFinite(Number(raw))) {
+    return Number(raw);
+  }
+  const tokens = options?.toolOutputTokens ?? 0;
+  const local = options?.targetIsLocal ?? isLocalLlmProvider(env);
+  if (!local || !Number.isFinite(tokens) || tokens <= 0) return DEFAULT_STALL_TIMEOUT_MS;
+  // Native local runtimes can buffer the entire tool JSON after streaming
+  // reasoning. That silence is generation, not necessarily a dead backend.
+  const ceiling = Math.max(DEFAULT_STALL_TIMEOUT_MS,
+    parseEnvNumber(env.CODEBUDDY_STALL_MAX_MS, DEFAULT_STALL_MAX_MS));
+  return Math.min(ceiling, Math.max(DEFAULT_STALL_TIMEOUT_MS,
+    Math.ceil(tokens * DEFAULT_LOCAL_PROMPT_MS_PER_TOKEN)));
 }
 
 /**
  * First-token budget for LOCAL runtimes only (Ollama / LM Studio / vLLM /
  * Lemonade, see `isLocalLlmProvider`): `max(120s, promptTokens × ms/token)`
  * capped at `CODEBUDDY_STALL_MAX_MS` (default 20 min). Cloud providers keep
- * the plain 120 s window. After the first token the regular 120 s
- * inactivity window applies.
+ * the plain 120 s window. The caller may separately allow buffered local
+ * tool generation after the first token through inactivityTimeoutMs.
  *
  * `CODEBUDDY_LOCAL_PROMPT_MS_PER_TOKEN` defaults to 200.
  */
@@ -79,6 +91,8 @@ export function resolveFirstTokenStallTimeoutMs(
 export interface StallGuardOptions {
   /** Inactivity budget until the first chunk. Defaults to `timeoutMs`. */
   firstTokenTimeoutMs?: number | (() => number);
+  /** Resolve after each chunk so a provider handoff uses the effective target. */
+  inactivityTimeoutMs?: () => number;
 }
 
 /**
@@ -106,7 +120,7 @@ export async function* withStallGuard<T>(
   let awaitingFirst = true;
   try {
     while (true) {
-      const budget = awaitingFirst ? resolveFirstTimeout() : timeoutMs;
+      const budget = awaitingFirst ? resolveFirstTimeout() : (options?.inactivityTimeoutMs?.() ?? timeoutMs);
       if (budget <= 0) {
         const rest = await iterator.next();
         if (rest.done) return;

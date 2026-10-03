@@ -3757,3 +3757,38 @@ describe('durable sequential entry observers', () => {
     expect(saved).toBe(true);
   });
 });
+
+describe('génération locale avec arguments outils mis en tampon', () => {
+  it('conserve une réponse valide après 274 secondes de silence natif', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.stubEnv('CODEBUDDY_LLM_STALL_TIMEOUT_MS', '');
+    vi.stubEnv('CODEBUDDY_MAX_TOKENS', '32768');
+    let started!: () => void;
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    const deps = createMockDeps();
+    Object.assign(deps.client, { isEffectiveTargetLocal: () => true });
+    (deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mockResolvedValue({
+      tools: [{ type: 'function', function: { name: 'create_file', parameters: { type: 'object' } } }],
+      selection: null, fromCache: false, query: '', timestamp: new Date(),
+    });
+    (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
+      yield { choices: [{ delta: { reasoning_content: 'Preparing the file.' } }] };
+      started();
+      await new Promise<void>(resolve => setTimeout(resolve, 274_000));
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'buffered', type: 'function',
+        function: { name: 'create_file', arguments: '{"path":"example.ts","content":"hello"}' } }] } }] };
+    });
+    try {
+      const turn = new AgentExecutor(deps, createMockConfig()).processUserMessage('Create the file', [], [], Date.now());
+      const completed = turn.then(() => null, error => error);
+      await ready;
+      await vi.advanceTimersByTimeAsync(275_000);
+      const error = await completed;
+      if (error) throw error;
+      expect(deps.client.chatStream).toHaveBeenCalledTimes(1);
+      expect(deps.streamingHandler.accumulateChunk).toHaveBeenCalledWith(expect.objectContaining({
+        choices: [{ delta: { tool_calls: [expect.objectContaining({ id: 'buffered' })] } }],
+      }));
+    } finally { vi.useRealTimers(); vi.unstubAllEnvs(); }
+  });
+});

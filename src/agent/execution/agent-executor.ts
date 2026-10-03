@@ -1801,6 +1801,16 @@ export class AgentExecutor {
           firstTokenTimeoutMs: () => resolveFirstTokenStallTimeoutMs(inputTokens, process.env, {
             targetIsLocal: this.deps.client.isEffectiveTargetLocal?.(),
           }),
+          inactivityTimeoutMs: () => {
+            const configuredOutput = Number(process.env.CODEBUDDY_MAX_TOKENS);
+            return resolveStallTimeoutMs(process.env, {
+              targetIsLocal: this.deps.client.isEffectiveTargetLocal?.(),
+              toolOutputTokens: tools.length > 0
+                ? (Number.isFinite(configuredOutput) && configuredOutput > 0
+                  ? configuredOutput : modelToolConfig.maxOutputTokens)
+                : 0,
+            });
+          },
         });
         try {
         for await (const streamEvent of withLlmStreamRetry(streamFactory, {
