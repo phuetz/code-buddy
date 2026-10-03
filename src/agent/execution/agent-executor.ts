@@ -1216,7 +1216,11 @@ export class AgentExecutor {
       history.push({ type: 'assistant', content: notice, timestamp: new Date() });
       yield { type: 'content', content: `\n${notice}\n` };
     }
-    const jitContextBlocks: CodeBuddyMessage[] = [];
+    // JIT context discovered by a tool is appended to that tool's observation
+    // (see runJitContextDiscovery below), never to a trailing system block:
+    // strict local templates merge every system block into message 0, so each
+    // discovery rewrote the head of the payload and Ollama re-evaluated the
+    // whole conversation (banc harnais 03/10 : 66 % du temps modèle A-27b).
     // Query ranking should also follow the current utterance on transports that
     // embed history in `message`; keep the full composite only as user context
     // for the provider. Normal CLI turns retain the preprocessed query.
@@ -1572,7 +1576,6 @@ export class AgentExecutor {
         // existing compaction and repair ordering remains unchanged.
         const contextBlocks: CodeBuddyMessage[] = [
           ...fileMentionContextBlocks,
-          ...jitContextBlocks,
         ];
         const contextPromise = toolRounds === 0
           ? injectInitialContext(contextBlocks, {
@@ -2346,11 +2349,15 @@ export class AgentExecutor {
             // --- JIT context discovery: load subdirectory context files ---
             // Décision #2 du plan task #5 — promu du sequential vers streaming
             // pour parité d'enrichissement après chaque tool qui touche un path.
-            // The current provider request already consumed preparedMessages.
-            // Keep newly discovered instructions in turn-local state so the
-            // next provider round actually receives them without persisting
-            // them into later user turns.
-            jitContextBlocks.push(...await runJitContextDiscovery(toolCall));
+            // Attached to this observation, i.e. at a fixed position in the
+            // transcript (Gemini CLI does the same for read tools). A trailing
+            // system block would be merged into message 0 by strict local
+            // templates and invalidate the provider's prompt cache for the
+            // whole conversation on every discovery.
+            const jitObservationSuffix = (await runJitContextDiscovery(toolCall))
+              .map((block) => (typeof block.content === 'string' ? block.content : ''))
+              .filter(Boolean)
+              .join('\n');
 
             // Build three deliberately separate views of one observation:
             //   1. recovery: exact native output persisted before any hook/optimizer,
@@ -2494,7 +2501,9 @@ export class AgentExecutor {
             // Note: 'name' is required for Gemini API to match functionResponse with functionCall
             messages.push({
               role: "tool",
-              content: variedStreamContent,
+              content: jitObservationSuffix
+                ? `${variedStreamContent}${jitObservationSuffix.startsWith('\n') ? '' : '\n\n'}${jitObservationSuffix}`
+                : variedStreamContent,
               tool_call_id: toolCall.id || `tool_${Date.now()}`,
               name: toolCall.function.name,
             } as CodeBuddyMessage);

@@ -3467,10 +3467,39 @@ describe('AgentExecutor', () => {
 
       const secondRoundMessages = (deps.client.chatStream as jest.Mock).mock.calls[1][0] as
         CodeBuddyMessage[];
-      expect(secondRoundMessages).toContainEqual({
-        role: 'system',
-        content: 'JIT_CONTEXT_SENTINEL',
-      });
+      const toolMessage = secondRoundMessages.find(
+        (m) => m.role === 'tool' && (m as { tool_call_id?: string }).tool_call_id === 'jit_context',
+      );
+      expect(String(toolMessage?.content)).toContain('JIT_CONTEXT_SENTINEL');
+    });
+
+    it('JIT discovery leaves the payload head unchanged (prompt cache of local runtimes)', async () => {
+      // Banc harnais 03/10 (A-27b) : chaque découverte JIT ajoutait un bloc
+      // system fusionné dans le message 0 par les gabarits locaux stricts ;
+      // Ollama réévaluait alors toute la conversation (jusqu'à 117 s/tour).
+      const toolCall = makeToolCall('view_file', { path: 'src/example.ts' }, 'jit_prefix');
+      setupLLMFlow(deps, [
+        { content: '', tool_calls: [toolCall] },
+        { content: 'Done.' },
+      ]);
+      const jitMock = runJitContextDiscoveryMock as unknown as jest.Mock;
+      jitMock.mockResolvedValueOnce([
+        { role: 'system', content: 'JIT_PREFIX_SENTINEL' },
+      ]);
+
+      await executor.processUserMessage('Inspect the file', [], []);
+
+      const secondRoundMessages = (deps.client.chatStream as jest.Mock).mock.calls[1][0] as
+        CodeBuddyMessage[];
+      const systemTexts = secondRoundMessages
+        .filter((m) => m.role === 'system')
+        .map((m) => String(m.content));
+      expect(systemTexts.some((text) => text.includes('JIT_PREFIX_SENTINEL'))).toBe(false);
+      const toolIndex = secondRoundMessages.findIndex(
+        (m) => m.role === 'tool' && (m as { tool_call_id?: string }).tool_call_id === 'jit_prefix',
+      );
+      expect(toolIndex).toBeGreaterThan(0);
+      expect(String(secondRoundMessages[toolIndex]?.content)).toContain('JIT_PREFIX_SENTINEL');
     });
 
     // -------------------------------------------------------------------------
