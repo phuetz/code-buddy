@@ -245,7 +245,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
     justification: 'Hex escape sequences in printf/echo piped into shells reconstruct binary or shell payloads stealthily',
   },
   { pattern: /\beval\s+\$\(\s*[^)]*\)/i, severity: 'critical', description: 'Dynamic evaluation of shell command substitution', name: 'eval-command-substitution', capability: 'shell' },
-  { pattern: /(?:(?<![\w$.])eval|\b(?:globalThis|window|global|builtins)\s*\.\s*eval)\s*\(/, severity: 'critical', description: 'Dynamic code execution via eval()', name: 'eval', capability: 'dynamic-code' },
+  { pattern: /\beval\s*\(/, severity: 'critical', description: 'Dynamic code execution via eval()', name: 'eval', capability: 'dynamic-code' },
   { pattern: /\bnew\s+Function\s*\(/, severity: 'critical', description: 'Dynamic function creation', name: 'new-function', capability: 'dynamic-code' },
   { pattern: /\bchild_process\b/, severity: 'high', description: 'Child process module usage', name: 'child_process', capability: 'shell' },
   { pattern: /\bexecSync\s*\(/, severity: 'high', description: 'Synchronous command execution', name: 'execSync', capability: 'shell' },
@@ -400,16 +400,28 @@ function scanContexts(content: string, filePath: string, executableContext = fal
 }
 function classifyMention(dp: DangerousPattern, line: string, context: ScanContext, offset: number, length: number): 'active' | 'benign' | 'documentary' {
   if (!context.markdown) return 'active';
+  if (dp.name === 'eval' && /\bmodel\s*\.\s*$/.test(line.slice(0, offset)) &&
+      /^eval\s*\(\s*\)/.test(line.slice(offset)) &&
+      ['', 'python', 'py', 'text', 'plaintext'].includes(context.language)) {
+    // PyTorch's zero-argument mode switch is documentary guidance, not an
+    // authorization for an unknown evaluator. Scripts retain the critical hit.
+    return 'documentary';
+  }
   if (dp.name === 'dynamic-require' && ['kotlin', 'kt', 'solidity'].includes(context.language)) {
     // These languages use require as an assertion. A JS-style module load
     // remains suspicious even inside a misleading fence.
     if (/^require\s*\([^)]*(?:isNotBlank\(|\.value|\[|>=|<=|>|<| in )/.test(line.slice(offset))) return 'benign';
     return 'documentary';
   }
-  // Substitution is syntax, not proof of injection. In documentation retain
-  // it for review without cumulative quarantine; nested dangerous commands
-  // still hit their own blocking patterns. Scripts keep the stricter verdict.
-  if (dp.name === 'shell-subst') return 'documentary';
+  // Only these inert read/arithmetic examples avoid cumulative quarantine.
+  // Unknown substitutions keep their original medium severity and penalties.
+  if (dp.name === 'shell-subst') {
+    const command = line.slice(offset + 2, offset + length).replace(/\)\s*(?:\)\s*)*$/, '').trim();
+    if (/^mktemp$/.test(command) ||
+        /^jq\s+'\s*\.[A-Za-z_]\w*(?:\s*\/\/\s*0)?\s*'\s+"\$[A-Za-z_]\w*"$/.test(command) ||
+        /^echo\s+"[\w$ .<>=;*/+%-]+"\s*\|\s*bc(?:\s+-l)?$/.test(command)) return 'documentary';
+    return 'active';
+  }
   const documentaryPatterns = ['prompt-override', 'remote-download-pipe-shell', 'rm-rf'];
   if (!documentaryPatterns.includes(dp.name) || /<!--/.test(line)) return 'active';
   // Require an explicit refusal referring to quoted input, or a catalogued

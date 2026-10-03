@@ -15,8 +15,11 @@ Le pare-feu analyse le manifeste et les fichiers associés. Les processus Python
 et autres appels natifs, les suppressions récursives et les secrets à préfixe sont
 signalés. Le code copié dans `scripts/`, les fichiers exécutables et les shebangs
 conservent les règles strictes, même si leurs commentaires parlent de sécurité.
-Les assertions Kotlin/Solidity et `model.eval()` ne sont pas des évaluations dynamiques.
-Les avertissements explicites et les substitutions documentaires restent en revue ;
+Les assertions Kotlin/Solidity ne sont pas des évaluations dynamiques. Le passage
+PyTorch `model.eval()` sans argument dans la documentation reste en revue ; les
+autres récepteurs eval et les scripts sont bloqués. Les avertissements explicites
+et les substitutions documentaires reconnues (mktemp, lecture jq, calcul echo/bc)
+restent en revue ; les substitutions inconnues conservent leurs pénalités,
 une commande dangereuse active conserve sa quarantaine. `--include-review` est le choix
 explicite existant pour installer les skills en revue, sans contourner la quarantaine.
 

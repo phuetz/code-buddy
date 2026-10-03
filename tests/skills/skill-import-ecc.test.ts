@@ -53,3 +53,13 @@ it('dry-run agents writes nothing and malformed allowlists cannot be staged', as
   expect(report.agents?.review).toHaveLength(1);
   expect(fs.readdirSync(dest)).toEqual([]);
 });
+it('external agents with broken frontmatter are refused even without a tools key', async () => {
+  const src = root(); const dest = root();
+  fs.mkdirSync(path.join(src, 'agents'));
+  fs.writeFileSync(path.join(src, 'agents', 'broken.md'), '---\nname: broken\nThis never closes the frontmatter');
+  const report = await importSkills(src, { destRoot: root(), agentDestRoot: dest, importAgents: true });
+  expect(report.agents?.review).toEqual([]);
+  expect(report.agents?.skipped).toHaveLength(1);
+  expect(report.agents?.skipped[0]?.reason).toContain('frontmatter');
+  expect(fs.readdirSync(dest)).toEqual([]);
+});
