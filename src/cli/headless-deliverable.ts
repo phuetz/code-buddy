@@ -1,6 +1,6 @@
 import { splitHeadlessClauses, isIncidentalHeadlessClause } from './headless-clauses.js';
 import path from 'node:path';
-import { isHeadlessProhibition } from './headless-prohibition.js';
+import { isHeadlessProhibition, unwrapHeadlessRequest } from './headless-prohibition.js';
 import { checkSourceOutputReport } from './headless-source-output-report.js';
 import { parseBashCommand } from '../security/bash-parser.js';
 import { TOOL_ALIASES } from '../tools/registry/tool-alias-map.js';
@@ -75,6 +75,7 @@ function requiredPrefix(rules: string, reading: boolean): { value: string; separ
 export function checkHeadlessDeliverable(
   query: string, response: string, entries: readonly TaskEvidenceEntry[], projectRules = '', reading = true,
 ): DeliverableCheck {
+  query = unwrapHeadlessRequest(query);
   const text = normalized(query);
   const files = observedFiles(entries);
   const rules = [projectRules, ...[...files].filter(([file]) => /(?:^|\/)(?:AGENTS|CODEBUDDY|INSTRUCTIONS)\.md$/.test(file)).map(([, content]) => content)].join('\n');

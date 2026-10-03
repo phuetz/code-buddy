@@ -1,5 +1,6 @@
+import path from 'node:path';
 import { splitHeadlessClauses, isIncidentalHeadlessClause } from './headless-clauses.js';
-import { isHeadlessProhibition } from './headless-prohibition.js';
+import { isHeadlessProhibition, unwrapHeadlessRequest } from './headless-prohibition.js';
 import { parseTestOutput } from '../utils/test-output-parser.js';
 import { checkHeadlessDeliverable } from './headless-deliverable.js';
 import { stripVTControlCharacters } from 'node:util';
@@ -36,7 +37,7 @@ function repositoryActionClauses(prompt: string): string[] {
     /[\w/-]+\.[a-z0-9]+\b/.test(quoted) ? 'file_target ' + (/agents\.md/.test(quoted) ? 'agents' : '') : 'quoted');
   // Clause boundaries are grammatical separators, independent of the next
   // verb's vocabulary. Otherwise an unfamiliar operation after "and" vanishes.
-  const clauses = splitHeadlessClauses(unquoted).map(clause => clause.replace(/^(?:please|then|puis|ensuite|and|et)\s+/, ''));
+  const clauses = splitHeadlessClauses(unquoted).map(clause => unwrapHeadlessRequest(clause).replace(/^(?:please|then|puis|ensuite|and|et)\s+/, ''));
   const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|trace|cite|identify|locate|inspect|consult|report|outline|highlight|state|mention|show|list|what|where|which|count|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|recense|identifie|repere|consulte|indique|montre|liste|quel|quelle|quels|quelles|ou|combien|comment|pourquoi|reponds|dis|traduis)\b/;
   const outputConstraint = (clause: string): boolean => {
     // An output rule cannot exempt an independent, unfamiliar operation.
@@ -230,7 +231,7 @@ function inspection(command: string): boolean {
   return !parsed.warnings.length && parsed.commands.length > 0 && parsed.commands.every(part =>
     !part.isSubshell && ['cat', 'ls', 'pwd', 'echo', 'head', 'tail', 'grep', 'rg'].includes(part.command)
     && !(part.command === 'rg' && part.args.some(arg => /^(?:--pre|--hostname-bin)(?:=|$)/.test(arg)))
-    && (part.connector === null || part.connector === '&&'));
+    && (part.connector === null || part.connector === '&&' || part.connector === '|'));
 }
 
 /** A runner must actually be the executable, not a word in a read/echo. */
@@ -380,6 +381,32 @@ export function unsupportedActionClaims(response: string, entries: readonly Task
   return [...claims];
 }
 
+/** Literal file identities only; the case belongs to the filesystem, not to intent normalization. */
+function namedFiles(clause: string): string[] {
+  return [...clause.matchAll(/`([^`]+)`|"([^"\n]+)"|(?<![\w])'([^'\n]+)'|((?:\/)?[\w.-]+(?:\/[\w.-]+)*\.[a-zA-Z][\w.-]*)/g)]
+    .map(match => (match[1] ?? match[2] ?? match[3] ?? match[4]!).replace(/[.!?]+$/, ''))
+    .filter(file => /\.[a-zA-Z][\w-]*$/.test(file))
+    .map(file => path.resolve(file));
+}
+
+function writtenFiles(entries: readonly TaskEvidenceEntry[]): Set<string> {
+  const files = new Set<string>();
+  for (const entry of entries) {
+    if (entry.type !== 'tool_result' || !entry.toolCall || !entry.toolResult?.success) continue;
+    const name = TOOL_ALIASES[entry.toolCall.function.name] ?? entry.toolCall.function.name;
+    const args = argumentsOf(entry);
+    const write = TOOL_METADATA.find(tool => tool.name === name)?.category === 'file_write'
+      && !(name === 'str_replace_editor' && /^(?:view|read)$/.test(String(args.command)));
+    const file = args.path ?? args.file_path ?? args.file;
+    if (write && typeof file === 'string') files.add(path.resolve(file));
+    if (name === 'apply_patch') {
+      for (const match of String(args.patch ?? args.input ?? '').matchAll(/\*\*\* (?:Add|Update|Delete) File: ([^\n]+)/g)) files.add(path.resolve(match[1]!.trim()));
+    }
+    for (const file of runtimeShell(entry)?.changedFiles ?? []) files.add(path.resolve(runtimeShell(entry)?.cwd ?? process.cwd(), file));
+  }
+  return files;
+}
+
 export function evaluateHeadlessTaskOutcome(
   prompt: string,
   entries: readonly TaskEvidenceEntry[],
@@ -428,7 +455,7 @@ export function evaluateHeadlessTaskOutcome(
       }
       const key = JSON.stringify([name, identity.command, directory, args.args ?? args.runner ?? '']);
       const optionalRead = name === 'bash' && command && inspection(command)
-        && /\b(?:replace|edit|modify|change|fix|repair|refactor|remplace|modifie|corrige|repare)\b/i.test(prompt)
+        && requestsRepositoryAction(prompt)
         && !/\b(?:cat|ls|pwd|head|tail|grep|rg)\b/.test(prompt);
       checks.set(key, { tool: name, ...(command ? { command } : {}), success, directory,
         ...('alternatives' in identity ? { alternatives: identity.alternatives } : {}), optionalRead: !!optionalRead, sequence });
@@ -463,7 +490,22 @@ export function evaluateHeadlessTaskOutcome(
       || /\b(?:replace|edit|modify|change|update|set|implement|refactor|rewrite|delete|add|remove|remplace|modifie|ecris|cree|reecris|ajoute|supprime|create|write)\b/.test(clause)
       || /\b(?:fix|repair|corrige|repare)\b/.test(clause) && !/\b(?:tests?|lint|eslint|typecheck|checks?)\b/.test(clause);
   });
-  if (editRequest && lastWrite < 0) reasons.push('requested_edit_not_executed');
+  const clauses = splitHeadlessClauses(prompt);
+  const written = writtenFiles(entries);
+  const independent = clauses.filter((clause, index) => !isHeadlessProhibition(clause) && !isIncidentalHeadlessClause(clause, index));
+  const targets = editRequest ? independent.filter(clause => requestsRepositoryAction(clause)
+    && !/^(?:preserve|keep|retain|leave|garde|conserve|preserve)\b/i.test(unwrapHeadlessRequest(clause)))
+    .flatMap(namedFiles) : [];
+  if (editRequest && (lastWrite < 0 || targets.some(file => !written.has(file)))) reasons.push('requested_edit_not_executed');
+  // A successful write elsewhere cannot satisfy a named target or cancel an
+  // independent prohibition. This is evidence checking, not rollback.
+  const forbidden = clauses.filter(clause => isHeadlessProhibition(clause)
+    && /\b(?:edit\w*|writ\w*|chang\w*|modif\w*|updat\w*|delet\w*|remov\w*|ecri\w*|supprim\w*)\b/i.test(clause.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))
+    .flatMap(namedFiles);
+  if (forbidden.some(file => written.has(file)) && !reasons.includes('unexpected_edit_executed')) reasons.push('unexpected_edit_executed');
+  if (actionRequested && independent.some(clause => !requestsRepositoryAction(clause)
+    && checkHeadlessDeliverable(unwrapHeadlessRequest(clause), final, entries).reasons.includes('source_evidence_missing'))
+    && !reasons.includes('source_evidence_missing')) reasons.push('source_evidence_missing');
   const status = reasons.some(reason => reason !== 'no_action_executed') ? 'failed'
     : reasons.length ? 'unverified' : 'success';
   return { status, success: status === 'success', exitCode: responseExitCode || (reasons.includes('unsupported_action_claim') ? 4 : status === 'success' ? 0 : 1), reasons, actionTools,

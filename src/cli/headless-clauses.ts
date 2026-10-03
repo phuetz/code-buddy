@@ -16,5 +16,8 @@ export function splitHeadlessClauses(prompt: string): string[] {
 
 /** A separate statement of presence supplies context, not an imperative. */
 export function isIncidentalHeadlessClause(clause: string, index: number): boolean {
-  return index > 0 && /^(?:the|an?|this|that)\s+[\w\s-]+\s+(?:appears?|exists?|occurs?)\s+(?:in|inside)\s+/i.test(clause.trim());
+  // Only a complete presence statement is incidental. Matching just its
+  // prefix would discard a following means, condition or obligation.
+  const text = clause.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return index > 0 && /^(?:(?:the|an?|this|that)\s+[\w\s-]+\s+(?:appears?|exists?|occurs?)\s+(?:in|inside)|(?:le|la|les|un|une|ce|cet|cette)\s+[\w\s-]+\s+(?:existe(?:nt)?|apparait|apparaissent|se trouve(?:nt)?)\s+dans)\s+[^\s]+[.!?]?$/i.test(text.trim());
 }

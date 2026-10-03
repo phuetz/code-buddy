@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { evaluateHeadlessTaskOutcome, requestsRepositoryAction, unsupportedActionClaims, type TaskEvidenceEntry } from '../../src/cli/headless-task-outcome.js';
 
 const reply = (content: string): TaskEvidenceEntry => ({ type: 'assistant', content });
-const read: TaskEvidenceEntry = { type: 'tool_result', content: 'observed', toolCall: { id: 'r', function: { name: 'view_file', arguments: '{"path":"index.js"}' } }, toolResult: { success: true } };
+const read: TaskEvidenceEntry = { type: 'tool_result', content: '1: export const value = 1;', toolCall: { id: 'r', function: { name: 'view_file', arguments: '{"path":"index.js"}' } }, toolResult: { success: true } };
 const edit: TaskEvidenceEntry = { type: 'tool_result', content: 'updated', toolCall: { id: 'e', function: { name: 'str_replace_editor', arguments: '{"path":"index.js"}' } }, toolResult: { success: true } };
 
 describe('headless grammatical scope', () => {
@@ -26,7 +26,7 @@ describe('headless grammatical scope', () => {
       for (const join of [' and ', ', then ', '; ', '. ']) {
         const prompt = `Read index.js and describe it, with a concise answer${join}${action}.`;
         expect(evaluateHeadlessTaskOutcome(prompt, [read, reply('Done.')]).exitCode).not.toBe(0);
-        expect(evaluateHeadlessTaskOutcome(prompt, [read, edit, reply('Done.')]).exitCode).toBe(0);
+        expect(evaluateHeadlessTaskOutcome(prompt, [read, edit, read, reply('Done.')]).exitCode).toBe(0);
       }
     },
   );
