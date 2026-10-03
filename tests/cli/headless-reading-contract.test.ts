@@ -49,3 +49,11 @@ it('distinguishes French restrictive ne…que from a prohibition', () => {
   expect(requestsRepositoryAction('Ne modifie aucun fichier.')).toBe(false);
   expect(requestsRepositoryAction('Ne modifie jamais config.json.')).toBe(false);
 });
+
+it.each(['Explain source.js, using two bullets.', 'Tell me its inputs and outputs.'])(
+  'rejects an unobserved repository explanation: %s', prompt => {
+    const result = evaluateHeadlessTaskOutcome(prompt, [{ type: 'assistant', content: 'Observed answer.' }]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.reasons).toContain('source_evidence_missing');
+  },
+);
