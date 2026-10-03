@@ -19,7 +19,12 @@ import { createHash } from 'crypto';
 function hasDisplayLineLabels(text: string): boolean {
   return text.split(/\r?\n/).some(line =>
     /^\s*\d+\s*(?:[:|)\]-]|\.(?!\d))\s?/.test(line)
-    || /^\s*\d+(?:\.\d+)+[ \t]+\S/.test(line));
+    || /^\s*\d+(?:\.\d+)+[^\d.\r\n]/.test(line));
+}
+
+function introducesDisplayLabels(file: string, before: string, after: string): boolean {
+  return /\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh|vue|php)$/i.test(file)
+    && hasDisplayLineLabels(after) && !hasDisplayLineLabels(before);
 }
 
 /**
@@ -211,6 +216,9 @@ export class TextEditorTool implements Disposable {
       // view_file labels are display metadata. Approximate matching must not
       // erase those labels from the search while inserting them into source.
       // Literal numbered records remain valid when oldStr really exists.
+      if (introducesDisplayLabels(resolvedPath, oldStr, newStr)) {
+        return { success: false, error: 'Replacement contains display line labels. Use literal source text without line numbers.' };
+      }
       const hasDisplayLabels = hasDisplayLineLabels(oldStr);
       if (!content.includes(oldStr) && hasDisplayLabels) {
         return {
@@ -516,6 +524,10 @@ export class TextEditorTool implements Disposable {
         };
       }
 
+      if (introducesDisplayLabels(resolvedPath, lines.slice(startLine - 1, endLine).join('\n'), newContent)) {
+        return { success: false, error: 'Replacement contains display line labels. Use literal source text without line numbers.' };
+      }
+
       const sessionFlags = this.confirmationService.getSessionFlags();
       if (!sessionFlags.fileOperations && !sessionFlags.allOperations) {
         const newLines = [...lines];
@@ -620,8 +632,7 @@ export class TextEditorTool implements Disposable {
       const lines = fileContent.split("\n");
       // Code insertions must not introduce copied display labels. Numbered
       // prose in Markdown/text remains literal content, not source metadata.
-      if (/\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh)$/i.test(resolvedPath)
-        && hasDisplayLineLabels(content)) {
+      if (introducesDisplayLabels(resolvedPath, '', content)) {
         return { success: false, error: 'Insertion contains display line labels. Insert literal source text without line numbers.' };
       }
 

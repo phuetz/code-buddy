@@ -118,4 +118,30 @@ describe('display line labels are not approximate source text', () => {
     expect(readFileSync(file, 'utf8')).toContain('1.2 changed');
   });
 
+
+  it.each(['1.2', '1.2:', '1.2\u00a0'])('rejects decimal prefixes without an ASCII separator: %s', async prefix => {
+    const file = join(directory, 'sample.js');
+    writeFileSync(file, source);
+    const decorated = prefix + source;
+    expect((await editor.strReplace(file, decorated, decorated.replace('initial', 'changed'))).success).toBe(false);
+    expect(readFileSync(file, 'utf8')).toBe(source);
+  });
+  it('rejects labels introduced only by new_str', async () => {
+    const file = join(directory, 'sample.js');
+    writeFileSync(file, source);
+    expect((await editor.strReplace(file, "const title = 'initial';", "1.2 const title = 'changed';")).success).toBe(false);
+    expect(readFileSync(file, 'utf8')).toBe(source);
+  });
+  it.each(['vue', 'php'])('guards insertions in .%s source', async extension => {
+    const file = join(directory, `sample.${extension}`);
+    writeFileSync(file, source);
+    expect((await editor.insert(file, 1, "1.2 const title = 'changed';")).success).toBe(false);
+    expect(readFileSync(file, 'utf8')).toBe(source);
+  });
+  it('guards direct line replacement too', async () => {
+    const file = join(directory, 'sample.js');
+    writeFileSync(file, source);
+    expect((await editor.replaceLines(file, 1, 1, "1.2 const title = 'changed';")).success).toBe(false);
+    expect(readFileSync(file, 'utf8')).toBe(source);
+  });
 });
