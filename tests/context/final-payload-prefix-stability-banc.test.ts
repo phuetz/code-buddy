@@ -27,9 +27,9 @@ function payload(groups: number, thinking: (i: number) => string, observation: (
 
 const scope = { workDir: process.cwd(), sessionId: 'payload-prefix-stability' };
 
-/** Messages of the first request that precede its last (then recent) group. */
+/** Include the previous latest group: changing it also rewinds a recurrent cache. */
 function stableHead(first: OpenAiChatPayload): number {
-  return first.messages.length - 2;
+  return first.messages.length;
 }
 
 it('garde la même tête de requête en requête quand les pensées anciennes sont retirées', () => {

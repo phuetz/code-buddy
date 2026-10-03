@@ -58,18 +58,33 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
 
   // A newly read/restored observation must not immediately lose its middle
   // while old diagnostics occupy the window. Keep its whole call group.
-  const recentCall = next.messages.findLast(message => message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0);
-  const recentIds = new Set((Array.isArray(recentCall?.tool_calls) ? recentCall.tool_calls : []).map(call => call.id));
-  const recentMessages = new Set(next.messages.filter(message => message === recentCall
-    || (message.role === 'tool' && recentIds.has(message.tool_call_id))));
+  const calls = next.messages.filter(message => message.role === 'assistant'
+    && Array.isArray(message.tool_calls) && message.tool_calls.length > 0);
+  const cohortStart = Math.floor(Math.max(0, calls.length - 1) / EVICTION_CHUNK) * EVICTION_CHUNK;
+  const protectedCalls = calls.slice(cohortStart);
+  const protectedMessages = () => {
+    const ids = new Set(protectedCalls.flatMap(call => Array.isArray(call.tool_calls)
+      ? call.tool_calls.flatMap((tool: unknown) => tool && typeof tool === 'object'
+        && 'id' in tool && typeof tool.id === 'string' ? [tool.id] : []) : []));
+    return new Set(next.messages.filter(message => protectedCalls.includes(message)
+      || (message.role === 'tool' && typeof message.tool_call_id === 'string' && ids.has(message.tool_call_id))));
+  };
+  let recentMessages = protectedMessages();
+  // Keep the current fixed cohort unchanged between requests, including the
+  // previous latest thinking/result. A sliding "latest only" exception loses
+  // one more thinking field each round and forces full recurrent reprocessing.
+  // Extra cohort groups never displace instructions or exceed the real budget:
+  // release them oldest first when they cannot fit, retaining the latest group.
+  while (protectedCalls.length > 1) {
+    const protectedPayload = { ...next, messages: next.messages.filter(message =>
+      message === lastUser || message.role === 'system' || recentMessages.has(message)) };
+    if (estimateFinalPayloadTokens(protectedPayload) <= inputBudget) break;
+    protectedCalls.shift();
+    recentMessages = protectedMessages();
+  }
 
-  // Schemas and transport framing can trigger pressure even when the earlier
-  // context pass fitted. Retire completed native reasoning before evicting
-  // its findings; preserve the current tool round's thinking byte for byte.
-  // All completed reasoning goes at once: this pass is stateless, and removing
-  // "just enough" moved the cut one message further on every request, so a
-  // local runtime re-evaluated the whole prompt each turn (banc harnais 03/10,
-  // A-27b : 117 s d'évaluation par tour au lieu de ~3 s avec le cache).
+  // Retire reasoning outside this fixed cohort before its tool findings.
+
   for (const message of next.messages) {
     if (message.role === 'assistant' && !recentMessages.has(message) && message.ollama_thinking) {
       delete message.ollama_thinking;
