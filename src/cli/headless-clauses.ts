@@ -19,5 +19,9 @@ export function isIncidentalHeadlessClause(clause: string, index: number): boole
   // Only a complete presence statement is incidental. Matching just its
   // prefix would discard a following means, condition or obligation.
   const text = clause.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  return index > 0 && /^(?:(?:the|an?|this|that)\s+[\w\s-]+\s+(?:appears?|exists?|occurs?)\s+(?:in|inside)|(?:le|la|les|un|une|ce|cet|cette)\s+[\w\s-]+\s+(?:existe(?:nt)?|apparait|apparaissent|se trouve(?:nt)?)\s+dans)\s+[^\s]+[.!?]?$/i.test(text.trim());
+  const presence = text.trim().match(/^(?:(?:the|an?|this|that)\s+([\w\s-]+)\s+(?:appears?|exists?|occurs?)\s+(?:in|inside)|(?:le|la|les|un|une|ce|cet|cette)\s+([\w\s-]+)\s+(?:existe(?:nt)?|apparait|apparaissent|se trouve(?:nt)?)\s+dans)\s+[^\s]+[.!?]?$/i);
+  if (index <= 0 || !presence) return false;
+  // Inspect the subject, not the path: means, relative clauses and modal
+  // obligations cannot become incidental in either word order.
+  return !/\b(?:by|en|to|that|which|qui|que|must|shall|should|needs?|requires?|doit|doivent|faut)\b/i.test(presence[1] ?? presence[2]!);
 }

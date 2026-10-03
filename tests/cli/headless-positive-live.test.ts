@@ -9,6 +9,12 @@ type Call = { name: string; arguments: Record<string, unknown> };
 const read: Call = { name: 'view_file', arguments: { path: 'source.js' } };
 const edit = (path: string): Call => ({ name: 'str_replace_editor', arguments: { path, command: 'str_replace', old_str: '1', new_str: '2' } });
 const cases: Array<{ name: string; prompt: string; calls: Call[]; success: boolean; source?: string; package?: string; answer?: string }> = [
+  { name: 'anteposed-means-missing', prompt: 'Explique les closures. Le correctif en modifiant la version existe dans package.json.', calls: [], success: false },
+  { name: 'anteposed-means-ok', prompt: 'Explique les closures. Le correctif en modifiant la version existe dans package.json.', calls: [edit('package.json')], success: true, package: '{"name":"fixture","version":"2"}\n' },
+  { name: 'reminder-modifier-missing', prompt: "N'oublie surtout pas de modifier source.js", calls: [], success: false },
+  { name: 'negative-question-edit', prompt: 'Can you not edit package.json', calls: [edit('package.json')], success: false, package: '{"name":"fixture","version":"2"}\n' },
+  { name: 'new-string-label', prompt: 'Change value to 2 in source.js.', calls: [{ name: 'str_replace_editor', arguments: { path: 'source.js', old_str: 'export const value = 1;', new_str: '1.2 export const value = 2;' } }], success: false },
+
   { name: 'reminder-read-missing', prompt: "N'oublie pas d'expliquer source.js", calls: [], success: false },
   { name: 'reminder-read-ok', prompt: 'You must not forget to explain source.js.', calls: [read], success: true, answer: 'source.js exports value, equal to 1.' },
   { name: 'reminder-edit-missing', prompt: "N'hésite pas à modifier source.js", calls: [], success: false },

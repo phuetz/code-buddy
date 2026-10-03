@@ -89,7 +89,7 @@ function repositoryActionClauses(prompt: string): string[] {
     const modifierWrite = /\b(?:writing|saving|editing|creating|replacing|ecrivant|creant|modifiant)\b|\b(?:saved|written)\s+(?:to|into)\b/.test(clause)
       && /\b(?:file_target|file|source|module|script|fichier)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause);
     if (dependent.test(clause) && !modifierWrite || index > 0 && nominal.test(clause)
-      && !/\b(?:must|shall|should|needs?|requires?|doit|doivent|is|are|be|etre|sont|est)\b/.test(clause)) return false;
+      && !/\b(?:must|shall|should|needs?|requires?|doit|doivent|faut|is|are|be|etre|sont|est)\b/.test(clause)) return false;
     // Negation in French need not contain "pas" (aucun/rien/jamais).
     if (/^ne\b.*\b(?:aucun\w*|rien|jamais)\b/.test(clause)) return false;
     // Following a source means tracing it or obeying its reading rules. A
