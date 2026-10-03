@@ -205,7 +205,7 @@ export class TextEditorTool implements Disposable {
       // erase those labels from the search while inserting them into source.
       // Literal numbered records remain valid when oldStr really exists.
       const hasDisplayLabels = oldStr.split(/\r?\n/).some(line =>
-        /^\s*\d+\s*[:|.)]\s?/.test(line));
+        /^\s*\d+\s*(?:[:|)\]-]|\.(?!\d))\s?/.test(line));
       if (!content.includes(oldStr) && hasDisplayLabels) {
         return {
           success: false,
