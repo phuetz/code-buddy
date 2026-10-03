@@ -50,6 +50,30 @@ describe('Skill Tools', () => {
     expect(result.output).toContain('It does nothing.');
   });
 
+  // Grok Bot 03/10: imported as `imported-security-review`, asked as `security-review`.
+  const writeGlobalSkill = (dir: string, body: string) => {
+    fs.mkdirSync(path.join(tempHome, '.codebuddy', 'skills', dir), { recursive: true });
+    fs.writeFileSync(path.join(tempHome, '.codebuddy', 'skills', dir, 'SKILL.md'),
+      `---\nname: ${dir}\ndescription: ${body}\n---\n# ${dir}\n${body}`);
+  };
+
+  it('skill_view resolves the bare name of an imported skill and says so', async () => {
+    writeGlobalSkill('imported-security-review', 'Imported review checklist');
+    const result = await executeSkillViewTool({ name: 'security-review' });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ requestedName: 'security-review', resolvedName: 'imported-security-review' });
+    expect(result.output).toContain('Imported review checklist');
+  });
+
+  it('skill_view prefers an exact native name over the imported namespace', async () => {
+    writeGlobalSkill('imported-security-review', 'Imported review checklist');
+    writeGlobalSkill('security-review', 'Native review checklist');
+    const result = await executeSkillViewTool({ name: 'security-review' });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('Native review checklist');
+    expect(result.data).not.toHaveProperty('resolvedName');
+  });
+
   it('create_skill should create a new skill', async () => {
     const tool = new CreateSkillExecuteTool();
     const result = await tool.execute({

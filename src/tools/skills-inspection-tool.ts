@@ -64,23 +64,48 @@ export async function executeSkillsListTool(input: SkillsListToolInput): Promise
   }
 }
 
+/**
+ * Names to try, in order. Imported skills are installed as `imported-<name>`
+ * (provenance namespace, see skill-importer) while their SKILL.md, the user
+ * and the model keep calling them `<name>`. Measured by Grok Bot (03/10):
+ * `skill_view security-review` → "skill not found" although
+ * `imported-security-review` was installed. The exact name always wins, so a
+ * native skill is never shadowed by an imported one.
+ */
+const IMPORTED_SKILL_PREFIX = 'imported-';
+function skillNameCandidates(name: string): string[] {
+  return name.startsWith(IMPORTED_SKILL_PREFIX) ? [name] : [name, `${IMPORTED_SKILL_PREFIX}${name}`];
+}
+
 export async function executeSkillViewTool(input: SkillViewToolInput): Promise<ToolResult> {
-  const name = typeof input.name === 'string' ? input.name.trim() : '';
-  if (!name) {
+  const requested = typeof input.name === 'string' ? input.name.trim() : '';
+  if (!requested) {
     return { success: false, error: 'skill_view: name is required' };
   }
 
   try {
     const { getSkillsHub } = await import('../skills/hub.js');
-    const result = getSkillsHub().info(name);
+    const candidates = skillNameCandidates(requested);
+    let name = requested;
+    let result: ReturnType<ReturnType<typeof getSkillsHub>['info']> = null;
+    for (const candidate of candidates) {
+      result = getSkillsHub().info(candidate);
+      if (result) { name = candidate; break; }
+    }
+    const resolution = name !== requested ? { requestedName: requested, resolvedName: name } : {};
     if (!result) {
       const { readLocalSkillInventory, readLocalSkillContent } = await import('../skills/local-inventory.js');
       const inventory = await readLocalSkillInventory(getSkillsHub().listWithIntegrity());
-      const skill = inventory.entries.find((entry) => entry.name === name);
-      if (!skill) return { success: false, error: `skill_view: skill not found: ${name}` };
+      let skill: (typeof inventory.entries)[number] | undefined;
+      for (const candidate of candidates) {
+        skill = inventory.entries.find((entry) => entry.name === candidate);
+        if (skill) { name = candidate; break; }
+      }
+      if (!skill) return { success: false, error: `skill_view: skill not found: ${requested}` };
       await recordView(name);
       return serializePayload({
         action: 'skill_view',
+        ...(name !== requested ? { requestedName: requested, resolvedName: name } : {}),
         skill,
         ...(input.include_content !== false ? { content: await readLocalSkillContent(skill) } : {}),
       });
@@ -90,6 +115,7 @@ export async function executeSkillViewTool(input: SkillViewToolInput): Promise<T
     await recordView(name);
     return serializePayload({
       action: 'skill_view',
+      ...resolution,
       installed: result.installed,
       integrityOk: result.integrityOk,
       ...(includeContent ? { content: result.content ?? '' } : {}),
