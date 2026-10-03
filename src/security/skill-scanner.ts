@@ -254,7 +254,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\bexec\s*\(/, severity: 'high', description: 'Command execution', name: 'exec', capability: 'shell' },
 
   { pattern: /\b(?:(?:import\s+subprocess\b|subprocess\s*(?:\.|\[))|from\s+subprocess\s+import\b|from\s+os\s+import\s+[^\n]*(?:system|popen|spawn|exec)\b|import\s+os\s+as\s+\w+|os\s*\.\s*(?:system|popen|spawn\w*|exec\w*)\s*\()/, severity: 'high', description: 'Python process execution capability', name: 'python-process', capability: 'shell' },
-  { pattern: /\brmtree\s*\(|\bfrom\s+shutil\s+import\s+[^\n]*\brmtree\b|\b(?:rmSync|rm|rmdirSync|rmdir)\s*\(|(?:\.\s*(?:rm|rmdir)|\[\s*['"](?:rmSync|rm|rmdirSync|rmdir)['"]\s*\])\s*\(/s, severity: 'critical', description: 'Recursive deletion in executable code', name: 'script-recursive-delete', capability: 'filesystem' },
+  { pattern: /\brmtree\s*(?:\?\.\s*)?\(|\bfrom\s+shutil\s+import\s+[^\n]*\brmtree\b|\b(?:rmSync|rm|rmdirSync|rmdir)\s*(?:\?\.\s*)?\(|(?:\.\s*(?:rm|rmdir)|\[\s*['"](?:rmSync|rm|rmdirSync|rmdir)['"]\s*\])\s*(?:\?\.\s*)?\(/s, severity: 'critical', description: 'Recursive deletion in executable code', name: 'script-recursive-delete', capability: 'filesystem' },
 
   { pattern: /\b(?:exec\s*\.\s*Command(?:Context)?|Command\s*::\s*new|ProcessBuilder|shell_exec|system|popen|spawnSync|execFileSync)\s*\(|\bStart-Process\b/, severity: 'high', description: 'Native process execution', name: 'native-process', capability: 'shell' },
 
@@ -431,6 +431,8 @@ function scanContexts(content: string, filePath: string, executableContext = fal
     return { markdown, language, watched, imperative, shellLiteral };
   });
 }
+const PROSE_SYSTEM_REFERENCE = /^system\s+\(\s*(?:Linux|Windows|macOS|OS|DBMS|local\s+disk)(?:\s*,\s*(?:Linux|Windows|macOS|OS|DBMS|local\s+disk))*\s*\)/i;
+
 function classifyMention(dp: DangerousPattern, line: string, context: ScanContext, offset: number, length: number): 'active' | 'benign' | 'documentary' {
   if (dp.name === 'child_process' && /\b(?:const|let|var)\s+$/.test(line.slice(0, offset)) && /^child_process\s*=\s*(?:\d+|true|false|null)\s*;?\s*$/.test(line.slice(offset))) return 'benign';
   if (dp.name === 'secret-ref') {
@@ -445,7 +447,7 @@ function classifyMention(dp: DangerousPattern, line: string, context: ScanContex
     const prefix = line.slice(0, offset);
     const call = line.slice(offset);
     if (dp.name === 'native-process' && /^system\s*\(/.test(call) &&
-        ((/\b(?:operating|file|management)\s+$/i.test(prefix) && /^system\s*\(\s*[^'"`();{}]+\)/.test(call)) ||
+        ((/\b(?:operating|file|management)\s+$/i.test(prefix) && PROSE_SYSTEM_REFERENCE.test(call)) ||
          (/\.$/.test(prefix) && /^system\s*\(\s*size\s*:\s*\d+(?:\.\d+)?\s*[,)]/.test(call)))) return 'benign';
     return context.imperative ? 'active' : 'documentary';
   }
@@ -755,6 +757,19 @@ function collectDeobfuscatedFindings(
   const seen = new Set(existing.map((finding) => finding.pattern));
 
   const deobAll = isDeobAllEnabled();
+  // Fold compatibility operators while preserving interpreter framing.
+  // HTML/whitespace stripping must not erase fences or heredoc delimiters.
+  // Rebuild language and literal contexts after NFKC, including folded fences.
+  if (deobAll) {
+    const folded = content.normalize('NFKC');
+    if (folded !== content) {
+      const foldedContexts = scanContexts(folded, filePath, !contexts[0]?.markdown);
+      for (const finding of collectMultilineBackticks(folded, filePath, foldedContexts, [])) {
+        if (existing.some(f => f.pattern === finding.pattern && Boolean(f.documentary) === Boolean(finding.documentary))) continue;
+        extra.push({ ...finding, line: 1, description: `${finding.description} (obfuscated)` });
+      }
+    }
+  }
   const patterns = getDangerousPatterns();
 
   const originalRawWindows = sliceScanWindows(content);
@@ -762,6 +777,7 @@ function collectDeobfuscatedFindings(
   let aggressiveWindows: string[] | null = null;
 
   for (const dp of patterns) {
+    // Interpreter backticks were folded and checked with language context above.
     if (dp.name === 'php-backtick' || dp.name === 'shell-backtick') continue;
     const isInjection = dp.capability === 'prompt-injection';
     if (!isInjection && !deobAll) continue;
