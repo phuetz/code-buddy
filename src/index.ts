@@ -3935,8 +3935,15 @@ addLazyCommandGroup(
     const { registerFleetAutonomyCommands } = await import('./commands/cli/native-engine-commands.js');
     registerFleetAutonomyCommands(program);
   },
-  ['colab'],
+  process.env.CODEBUDDY_COLAB === 'true' ? [] : ['colab'],
 );
+
+if (process.env.CODEBUDDY_COLAB === 'true') {
+  addLazyCommandGroup(program, 'colab', 'Ephemeral Google Colab GPU jobs (spends compute units)', async () => {
+    const { registerColabCommands } = await import('./commands/cli/colab-command.js');
+    registerColabCommands(program);
+  });
+}
 
 addLazyCommandGroup(program, 'device', 'Manage paired device nodes (SSH, ADB, local)', async () => {
   const { registerDeviceCommands } = await import('./commands/cli/device-commands.js');

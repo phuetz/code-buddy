@@ -49,6 +49,8 @@ export interface ShutdownHandler {
   priority: number;
   /** The shutdown handler function */
   handler: () => void | Promise<void>;
+  /** Minimum total shutdown budget while a bounded critical cleanup is active. */
+  timeoutMs?: number;
 }
 
 const DEFAULT_OPTIONS: ShutdownOptions = {
@@ -205,6 +207,10 @@ export class GracefulShutdownManager implements Disposable {
    * Execute the actual shutdown sequence
    */
   private async executeShutdown(options: ShutdownOptions): Promise<void> {
+    options = {
+      ...options,
+      timeoutMs: Math.max(options.timeoutMs, ...this.handlers.map(handler => handler.timeoutMs ?? 0)),
+    };
     const startTime = Date.now();
     this.completedHandlers.clear();
 

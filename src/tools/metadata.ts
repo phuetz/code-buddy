@@ -4,6 +4,7 @@ import type { ToolMetadata, ToolCategory } from './types.js';
  * Default tool metadata for all built-in tools
  */
 export const TOOL_METADATA: ToolMetadata[] = [
+  ...(typeof process !== 'undefined' && process.env.CODEBUDDY_COLAB === 'true' ? [{ name: 'colab_run', effect: 'emission' as const, category: 'system' as const, keywords: ['colab', 'gpu', 'torch', 'diffusion', 'training'], priority: 8, fleetSafe: false, description: 'Run a confirmed ephemeral Colab GPU job; spends compute units, uploads only explicit non-secret project files.' }] : []),
   { name: 'a2a_call', effect: 'emission', category: 'web', keywords: ['a2a', 'peer', 'hermes', 'openclaw', 'delegate'], priority: 6, fleetSafe: false, description: 'Send a task to a configured remote A2A peer; remote execution can have effects and requires permission.' },
   { name: 'resource_catalog', effect: 'read', category: 'system', keywords: ['resource', 'catalog', 'network', 'fleet', 'ragchat', 'available', 'ressources', 'réseau'], priority: 7, fleetSafe: false, description: 'Read explicit resource declarations and select fresh permitted resources; no probes or dispatch.' },
   { name: 'ragchat_search', effect: 'read', category: 'web',

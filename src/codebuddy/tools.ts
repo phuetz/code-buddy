@@ -1,3 +1,4 @@
+import { COLAB_RUN_TOOL_DEF } from './colab-tool-defs.js';
 import { A2A_CALL_TOOL_DEF } from './a2a-call-tool-defs.js';
 import { RESOURCE_CATALOG_TOOL_DEF } from './resource-catalog-tool-defs.js';
 import { RAGCHAT_TOOL_DEF } from './ragchat-tool-defs.js';
@@ -228,6 +229,7 @@ export function getBuiltinToolNames(): string[] {
     VULN_SCANNER_TOOLS,
     SESSION_TOOLS,
     [RAGCHAT_TOOL_DEF, RESOURCE_CATALOG_TOOL_DEF, A2A_CALL_TOOL_DEF],
+    ...(process.env.CODEBUDDY_COLAB === 'true' ? [[COLAB_RUN_TOOL_DEF]] : []),
     FLEET_TOOLS,
     CODE_EXPLORER_TOOLS,
     WINDOWS_TOOLS,
@@ -387,6 +389,7 @@ export function initializeToolRegistry(): void {
   // Fleet tools — peer_delegate, list_peers (Phase (d).17). Always available;
   // peer_delegate returns a clear error when no peers are connected.
   registerGroup([RAGCHAT_TOOL_DEF, RESOURCE_CATALOG_TOOL_DEF, A2A_CALL_TOOL_DEF]);
+  if (process.env.CODEBUDDY_COLAB === 'true') registerGroup([COLAB_RUN_TOOL_DEF]);
   registerGroup(FLEET_TOOLS);
 
   // CodeExplorer tools

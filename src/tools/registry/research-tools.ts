@@ -1,3 +1,4 @@
+import { ColabRunTool } from '../colab-run-tool.js';
 import { A2ACallTool } from '../a2a-call-tool.js';
 /**
  * Research Tool Adapters (factory)
@@ -23,5 +24,5 @@ import { PaperQaTool } from '../paper-qa-tool.js';
  * Create all research tool instances.
  */
 export function createResearchTools(): ITool[] {
-  return [new DeepResearchTool(), new PaperQaTool(), new RagChatTool(), new ResourceCatalogTool(), new A2ACallTool()];
+  return [new DeepResearchTool(), new PaperQaTool(), new RagChatTool(), new ResourceCatalogTool(), new A2ACallTool(), ...(process.env.CODEBUDDY_COLAB === 'true' ? [new ColabRunTool()] : [])];
 }

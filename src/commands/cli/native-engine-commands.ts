@@ -806,8 +806,8 @@ export function registerGatewayPairingCommands(program: Command): void {
 export function registerFleetAutonomyCommands(program: Command): void {
   const fleet = program
     .command('autonomy')
-    .alias('colab')
     .description('Autonomous fleet loop — claim and run colab tasks on local-first models');
+  if (process.env.CODEBUDDY_COLAB !== 'true') fleet.alias('colab');
 
   fleet
     .command('run')
