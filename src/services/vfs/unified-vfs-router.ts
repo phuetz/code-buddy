@@ -1,5 +1,5 @@
 import fs from "fs-extra";
-import { createFileExclusive } from "./exclusive-create.js";
+import { assertCreationWithinBase, createFileExclusive } from "./exclusive-create.js";
 import * as path from "path";
 import { measureLatency } from "../../optimization/latency-optimizer.js";
 import { getWorkspaceIsolation, type PathValidationResult } from "../../workspace/workspace-isolation.js";
@@ -90,6 +90,7 @@ export class UnifiedVfsRouter implements IVfsProvider {
   async createFile(filePath: string, content: string, encoding: string = 'utf-8', baseDirectory: string = process.cwd()): Promise<void> {
     await measureLatency('file_create', async () => {
       createFileExclusive(filePath, content, encoding as BufferEncoding, () => {
+        assertCreationWithinBase(filePath, baseDirectory);
         const verdict = this.resolvePath(filePath, baseDirectory, 'write');
         if (!verdict.valid) throw new Error(verdict.error ?? 'Creation path refused');
       });

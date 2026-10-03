@@ -5,7 +5,7 @@
  * generation scoped to /tmp/e2e-meteo3 wrote `index.html` into the Electron
  * launch dir and overwrote cowork's own vite entry.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -18,14 +18,18 @@ import {
 } from '../../src/tools/registry/text-editor-tools.js';
 
 let sessionCwd: string;
+let localCwd: string;
 
 beforeAll(() => {
   ConfirmationService.getInstance().setSessionFlag('fileOperations', true);
   sessionCwd = mkdtempSync(join(tmpdir(), 'tools-cwd-test-'));
+  mkdirSync(join(process.cwd(), '_qa'), { recursive: true });
+  localCwd = mkdtempSync(join(process.cwd(), '_qa', 'tools-cwd-'));
 });
 
 afterAll(() => {
   rmSync(sessionCwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  rmSync(localCwd, { recursive: true, force: true });
   resetTextEditorInstance();
 });
 
@@ -62,18 +66,41 @@ describe('registry file tools honor context.cwd for relative paths', () => {
     expect(result.output).toContain('Météo Cristal v2');
   });
 
-  it('absolute paths and missing context keep the historical behavior', async () => {
+  it('keeps independent bases for concurrent calls on the shared adapter', async () => {
+    const tool = new CreateFileTool();
+    const results = await Promise.all([
+      tool.execute({ path: 'parallel-a.txt', content: 'session-a' }, { cwd: sessionCwd }),
+      tool.execute({ path: 'parallel-b.txt', content: 'session-b' }, { cwd: localCwd }),
+    ]);
+    expect(results.map(result => result.success)).toEqual([true, true]);
+    expect(readFileSync(join(sessionCwd, 'parallel-a.txt'), 'utf8')).toBe('session-a');
+    expect(readFileSync(join(localCwd, 'parallel-b.txt'), 'utf8')).toBe('session-b');
+    expect(existsSync(join(sessionCwd, 'parallel-b.txt'))).toBe(false);
+    expect(existsSync(join(localCwd, 'parallel-a.txt'))).toBe(false);
+  });
+
+  it('absolute paths retain their location within the explicit session base', async () => {
     const absolute = join(sessionCwd, 'abs.txt');
     const tool = new CreateFileTool();
-    const withContext = await tool.execute({ path: absolute, content: 'abs' }, { cwd: '/nonexistent-base' });
+    const withContext = await tool.execute({ path: absolute, content: 'abs' }, { cwd: sessionCwd });
     expect(withContext.success).toBe(true);
-    expect(existsSync(absolute)).toBe(true);
+    expect(readFileSync(absolute, 'utf8')).toBe('abs');
+  });
 
-    // No context → resolve against process.cwd() (CLI behavior) — write into
-    // a real subdir of the repo cwd? NO: keep the test hermetic by asserting
-    // only that the path stays UNRESOLVED (we point at an absolute temp file).
-    const legacy = await tool.execute({ path: join(sessionCwd, 'legacy.txt'), content: 'ok' });
-    expect(legacy.success).toBe(true);
-    expect(readFileSync(join(sessionCwd, 'legacy.txt'), 'utf8')).toBe('ok');
+  it('an absolute path cannot bypass the explicit session base', async () => {
+    const absolute = join(sessionCwd, 'outside.txt');
+    const result = await new CreateFileTool().execute({ path: absolute, content: 'outside' }, { cwd: localCwd });
+    expect(result.success).toBe(false);
+    expect(existsSync(absolute)).toBe(false);
+  });
+
+  it('missing context uses the process base and refuses a whitelisted path outside it', async () => {
+    const tool = new CreateFileTool();
+    const local = join(localCwd, 'legacy.txt');
+    expect((await tool.execute({ path: local, content: 'ok' })).success).toBe(true);
+    expect(readFileSync(local, 'utf8')).toBe('ok');
+    const outside = join(sessionCwd, 'legacy-outside.txt');
+    expect((await tool.execute({ path: outside, content: 'outside' })).success).toBe(false);
+    expect(existsSync(outside)).toBe(false);
   });
 });

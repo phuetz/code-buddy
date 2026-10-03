@@ -9,6 +9,7 @@ import {
   suggestWhitespaceFixes,
 } from "../utils/fuzzy-match.js";
 import { multiStrategyMatch } from "../utils/multi-strategy-match.js";
+import { assertCreationWithinBase } from "../services/vfs/exclusive-create.js";
 import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
 import { generateDiff as sharedGenerateDiff } from "../utils/diff-generator.js";
 import { detectOmissionPlaceholders, formatOmissionError } from "./omission-placeholder-detector.js";
@@ -336,11 +337,12 @@ export class TextEditorTool implements Disposable {
    *
    * @param filePath - Path where the new file should be created
    * @param content - Content to write to the file
+   * @param baseDirectory - Invocation scope (defaults to the configured editor base)
    * @returns Unified diff showing the file creation, or error
    */
-  async create(filePath: string, content: string): Promise<ToolResult> {
+  async create(filePath: string, content: string, baseDirectory: string = this.baseDirectory): Promise<ToolResult> {
     try {
-      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory, 'write');
+      const pathValidation = this.vfs.resolvePath(filePath, baseDirectory, 'write');
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }
@@ -403,12 +405,12 @@ export class TextEditorTool implements Disposable {
       // human gate, it never replaces it); see tools/review-gate-helper.ts.
       // Confirmation can be arbitrarily long: revalidate containment/secret
       // guards before the review or exclusive publication touches the path.
-      const currentValidation = this.vfs.resolvePath(filePath, this.baseDirectory, 'write');
+      const currentValidation = this.vfs.resolvePath(filePath, baseDirectory, 'write');
       if (!currentValidation.valid || currentValidation.resolved !== resolvedPath) {
         return { success: false, error: currentValidation.error ?? 'Creation path changed during confirmation' };
       }
       const gate = await maybeReviewGatedWrite({
-        baseDirectory: this.baseDirectory,
+        baseDirectory,
         resolvedPath,
         displayPath: filePath,
         newContent: content,
@@ -430,9 +432,13 @@ export class TextEditorTool implements Disposable {
         return { success: true, output: `${gatedDiff}\n\n${gate.summary}` };
       }
 
+      // Workspace whitelists (e.g. /tmp) do not widen this editor's base.
+      // Check before ensureDir so a moved parent cannot create directories
+      // outside it. VFS rechecks after that asynchronous operation too.
+      assertCreationWithinBase(resolvedPath, baseDirectory);
       const dir = path.dirname(resolvedPath);
       await this.vfs.ensureDir(dir);
-      await this.vfs.createFile(resolvedPath, content, "utf-8", this.baseDirectory);
+      await this.vfs.createFile(resolvedPath, content, "utf-8", baseDirectory);
 
       this.editHistory.push({
         command: "create",

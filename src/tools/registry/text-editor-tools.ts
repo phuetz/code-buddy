@@ -202,7 +202,12 @@ export class CreateFileTool implements ITool {
     const path = resolveAgainstCwd(extractPath(input) as string, context);
     const content = input.content as string;
 
-    const result = await getTextEditor().create(path, content);
+    // Keep the session base local to this invocation: mutating the shared
+    // editor would let concurrent embedded sessions change each other's scope.
+    const editor = getTextEditor();
+    const result = context?.cwd
+      ? await editor.create(path, content, context.cwd)
+      : await editor.create(path, content);
     const data = result.data as { code?: string } | undefined;
     if (!result.success && data?.code === 'FILE_ALREADY_EXISTS') {
       return {

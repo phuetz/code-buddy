@@ -50,6 +50,7 @@ jest.mock('fs-extra', () => {
 });
 
 jest.mock('../../src/services/vfs/exclusive-create.js', () => ({
+  assertCreationWithinBase: jest.fn(),
   createFileExclusive: (p: string, content: string, encoding: string) => mockWriteFile(p, content, encoding),
 }));
 

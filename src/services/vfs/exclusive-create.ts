@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-/** Review transactions cover project files, including at publication time. */
+/** Creation stays within its physical base, with or without diff review. */
 export function assertCreationWithinBase(filePath: string, baseDirectory: string): void {
   const base = fs.realpathSync(baseDirectory);
   let ancestor = path.dirname(filePath);
@@ -14,7 +14,7 @@ export function assertCreationWithinBase(filePath: string, baseDirectory: string
   const realParent = fs.realpathSync(ancestor);
   const relative = path.relative(base, realParent);
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new Error('Creation parent resolves outside the review base directory');
+    throw new Error('Creation parent resolves outside the base directory');
   }
 }
 
