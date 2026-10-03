@@ -37,24 +37,6 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
   } else next.max_tokens = outputTokens;
   const lastUser = next.messages.findLast(message => message.role === 'user');
   const beforeTokens = estimateFinalPayloadTokens(next);
-  if (beforeTokens <= inputBudget) return { payload: next, beforeTokens, inputTokens: beforeTokens, outputTokens, safetyTokens };
-  if (!lastUser) throw new PayloadBudgetError('Context payload has no user query. Restore the mission before retrying.');
-
-  const original = JSON.stringify(payload);
-  const identifier = `payload-${createHash('sha256').update(original).digest('hex').slice(0, 24)}`;
-  const marker = '\n[Older context reduced to fit the window. Reduced observations carry individual recovery references.]';
-  const recovery = getRestorableCompressor();
-  // Keep the complete snapshot for diagnostics, but never suggest restoring a
-  // whole request into a tool result: that recursively duplicates the history.
-  recovery.capture(identifier, original, scope.workDir, scope.sessionId);
-  const contentMarker = (content: string): string => {
-    const key = `payload-content-${createHash('sha256').update(content).digest('hex').slice(0, 24)}`;
-    recovery.capture(key, content, scope.workDir, scope.sessionId);
-    return `\n[Content reduced. Use restore_context(identifier="${key}") to recover this content only.]\n`;
-  };
-  let system = next.messages.find(message => message.role === 'system');
-  if (!system) { system = { role: 'system', content: marker }; next.messages.unshift(system); }
-  else system.content = (typeof system.content === 'string' ? system.content : '') + marker;
 
   // A newly read/restored observation must not immediately lose its middle
   // while old diagnostics occupy the window. Keep its whole call group.
@@ -83,7 +65,9 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
     recentMessages = protectedMessages();
   }
 
-  // Retire reasoning outside this fixed cohort before its tool findings.
+  // Normalize old reasoning on both sides of the pressure threshold. Otherwise
+  // a request that fits restores previously retired thinking, then the next
+  // oversized request removes it again and invalidates the recurrent cache.
 
   for (const message of next.messages) {
     if (message.role === 'assistant' && !recentMessages.has(message) && message.ollama_thinking) {
@@ -92,8 +76,22 @@ export function budgetFinalPayload(payload: OpenAiChatPayload, contextWindow: nu
   }
   const afterThinkingTokens = estimateFinalPayloadTokens(next);
   if (afterThinkingTokens <= inputBudget) {
-    return { payload: next, beforeTokens, inputTokens: afterThinkingTokens, outputTokens, safetyTokens, identifier };
+    return { payload: next, beforeTokens, inputTokens: afterThinkingTokens, outputTokens, safetyTokens };
   }
+
+  if (!lastUser) throw new PayloadBudgetError('Context payload has no user query. Restore the mission before retrying.');
+
+  const original = JSON.stringify(payload);
+  const identifier = `payload-${createHash('sha256').update(original).digest('hex').slice(0, 24)}`;
+  const recovery = getRestorableCompressor();
+  // Keep the complete snapshot for diagnostics, but never suggest restoring a
+  // whole request into a tool result: that recursively duplicates the history.
+  recovery.capture(identifier, original, scope.workDir, scope.sessionId);
+  const contentMarker = (content: string): string => {
+    const key = `payload-content-${createHash('sha256').update(content).digest('hex').slice(0, 24)}`;
+    recovery.capture(key, content, scope.workDir, scope.sessionId);
+    return `\n[Content reduced. Use restore_context(identifier="${key}") to recover this content only.]\n`;
+  };
 
   // Keep protocol envelopes/IDs intact; only summarize older observations.
   for (const message of next.messages) {

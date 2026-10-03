@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { budgetFinalPayload, EVICTION_CHUNK } from '../../src/context/final-payload-budget.js';
+import { budgetFinalPayload, EVICTION_CHUNK, estimateFinalPayloadTokens } from '../../src/context/final-payload-budget.js';
 import type { OpenAiChatPayload } from '../../src/codebuddy/providers/ollama-native-transport.js';
 
 // Banc harnais 03/10 (A-27b-initial, requêtes 32-39) : la réduction finale,
@@ -52,4 +52,20 @@ it('évince les groupes anciens par blocs : la coupe ne bouge pas à chaque requ
   expect(evicted % EVICTION_CHUNK).toBe(0);
   const head = stableHead(first);
   expect(second.messages.slice(0, head)).toEqual(first.messages.slice(0, head));
+});
+
+it('ne réintroduit pas les pensées retirées et ne change pas le système au franchissement du seuil', () => {
+  const thinking = (i: number) => `Reasoning ${i}: ` + 'inspect the module, compare call sites, plan edit. '.repeat(40);
+  const observation = (i: number) => `export const value${i} = ${i};`;
+  const firstRaw = payload(9, thinking, observation);
+  const secondRaw = payload(10, thinking, observation);
+  const contextWindow = estimateFinalPayloadTokens(firstRaw) + 1024 + 512 + 100;
+  expect(estimateFinalPayloadTokens(secondRaw)).toBeGreaterThan(contextWindow - 1024 - 512);
+  const first = budgetFinalPayload(firstRaw, contextWindow, scope).payload;
+  const second = budgetFinalPayload(secondRaw, contextWindow, scope).payload;
+  expect(first.messages[0]).toEqual(firstRaw.messages[0]);
+  expect(second.messages.slice(0, first.messages.length)).toEqual(first.messages);
+  expect(firstRaw.messages[2]?.ollama_thinking).toBeTruthy();
+  expect(first.messages[2]?.ollama_thinking).toBeUndefined();
+  expect(first.messages.at(-2)?.ollama_thinking).toBeTruthy();
 });
