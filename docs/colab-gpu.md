@@ -26,7 +26,12 @@ formel → `ColabRunTool` → `ColabRunner`, comme les autres outils du registre
 Seuls le script et les fichiers `--in` sont envoyés. Les chemins canoniques doivent
 rester dans le projet ; les noms sensibles et les contenus reconnus par le
 catalogue existant de secrets sont refusés, même si la lecture locale des secrets
-est autorisée. Les liens durs et fichiers spéciaux sont refusés. Des copies privées
+est autorisée. Les affectations de mots de passe, jetons, clés API et identifiants
+d’authentification sont aussi refusées, même avec une valeur courte, sans guillemets
+ou dans un fichier renommé (`DB_PASS=1234` dans `config.txt`, par exemple).
+Ce contrôle s’applique au script, aux entrées et aux sorties ; il reste heuristique
+et ne détecte pas tous les secrets encodés ou reconstruits par un programme.
+Les liens durs et fichiers spéciaux sont refusés. Des copies privées
 figent les octets contrôlés avant l'envoi. Les dépendances acceptent un nom PyPI ou
 `nom==version` ; ni URL, ni fichier de requirements, ni option pip.
 
@@ -79,11 +84,21 @@ conservatrice précède toute allocation : délai + 280 secondes de marge, aux
 plafonds horaires L4=15, A100=30, H100=100 unités, plus 0,02 unité d'arrondi.
 Le débit réel du compte est contrôlé après allocation ; un dépassement arrête la VM.
 Après fermeture, la charge retenue est le maximum entre la différence de solde
-augmentée de 0,02 et le temps écoulé au plafond horaire augmenté de 0,02. Si la
+augmentée de 0,02 et le temps monotone écoulé au plafond horaire augmenté de 0,02. Si la
 mesure échoue, toute la réservation reste chargée. `status` distingue cette charge
-prudente de la différence de solde mesurée. Le jour comptable est UTC ; les jobs
-dont la réservation franchirait minuit UTC sont refusés. Un état corrompu est
-refusé. Le budget s'applique aux jobs utilisant ce compteur ; utiliser le même
+prudente de la différence de solde mesurée. Le compteur conserve un ancrage entre
+l’heure UTC initiale et l’horloge monotone du système, réutilisé entre instances
+et processus. Les jours comptables avancent uniquement avec cette horloge monotone :
+changer la date locale ne crée pas un nouveau quota. Les petites corrections d’heure
+ne déplacent pas le jour comptable ; un écart de plus de cinq minutes avec l’ancrage
+ou un recul du temps monotone refuse toute allocation. Si cela survient pendant
+un job, la VM est fermée et toute la réservation reste chargée. Un redémarrage
+du système ou une suspension peut donc provoquer un refus ; l’ancrage n’est jamais
+réinitialisé automatiquement, et l’arrêt explicite reste disponible.
+Les anciens compteurs sans ancrage reportent la somme de leurs charges historiques
+sur le jour initial plutôt que d’oublier ces charges lors de la migration.
+Les jobs dont la réservation franchirait minuit comptable UTC sont refusés.
+Un état corrompu est refusé. Le budget s'applique aux jobs utilisant ce compteur ; utiliser le même
 profil pour toutes les instances devant partager le budget.
 
 Après un arrêt non interceptable (SIGKILL, panne électrique), aucun `finally` ne

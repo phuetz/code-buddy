@@ -70,6 +70,7 @@ export interface ColabJobResult { session: string; gpu: ColabGpu; outputDir: str
 const ledgerSchema = z.object({
   days: z.record(z.string(), z.object({ charged: z.number().finite().nonnegative(), measured: z.number().finite().nonnegative() })),
   open: z.record(z.string(), z.object({ day: z.string(), reserved: z.number().finite().nonnegative() })),
+  clock: z.object({ wallMs: z.number().finite().nonnegative(), monotonicMs: z.number().finite().nonnegative() }).strict().optional(),
 }).strict();
 type Ledger = z.infer<typeof ledgerSchema>;
 // Conservative ceilings; verify the actual account rate after allocation.
@@ -78,6 +79,7 @@ const RATE: Record<ColabGpu, number> = { L4: 15, A100: 30, H100: 100 };
 const CLEANUP_MS = 160000;
 const MAX_FILE = 64 * 1024 * 1024;
 const MAX_OUTPUT = 256 * 1024 * 1024;
+const CLOCK_SKEW_MS = 5 * 60000;
 
 function inside(root: string, candidate: string): boolean {
   const rel = path.relative(root, candidate);
@@ -92,7 +94,17 @@ function secretName(name: string): boolean {
 }
 function hasSecret(content: Buffer): boolean {
   const text = content.toString('utf8');
-  return SECRET_PATTERNS.some(({ pattern }) => new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, '')).test(text));
+  if (SECRET_PATTERNS.some(({ pattern }) => new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, '')).test(text))) return true;
+  // Remote transfer is stricter than local source scanning: a short/unquoted
+  // credential is still private, even when an env file was renamed. Cover env,
+  // Python, JSON, YAML and TOML assignments without relying on value entropy.
+  for (const match of text.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_.-]*)["']?[^\S\r\n]*[:=][^\S\r\n]*([^\r\n,;}]+)/g)) {
+    const key = match[1]!.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+    const value = match[2]!.trim();
+    if (/(?:^|[_.-])(?:pass(?:word|wd)?|pwd|secret|token|credentials?|auth(?:orization)?|(?:api|access|private|client)[_.-]?key)(?:$|[_.-])/i.test(key)
+      && value.length > 0 && value !== '""' && value !== "''") return true;
+  }
+  return false;
 }
 function isAllocationCapacityFailure(error: unknown): boolean {
   const text = stripVTControlCharacters(String(error)).replace(/\s+/g, ' ');
@@ -121,11 +133,30 @@ export function parseColabUsage(text: string): { balance: number; rate: number; 
 
 export class ColabRunner {
   private readonly stateFile: string;
-  constructor(private readonly options: { cli?: ColabCli; stateDir?: string; projectRoot?: string; now?: () => number } = {}) {
+  constructor(private readonly options: { cli?: ColabCli; stateDir?: string; projectRoot?: string; now?: () => number; monotonicNow?: () => number } = {}) {
     this.stateFile = path.join(options.stateDir ?? path.join(process.env.CODEBUDDY_HOME ?? path.join(os.homedir(), '.codebuddy'), 'compute'), 'colab-units.json');
   }
   private now() { return (this.options.now ?? Date.now)(); }
-  private day() { return new Date(this.now()).toISOString().slice(0, 10); }
+  private monotonicNow() { return (this.options.monotonicNow ?? (() => Number(process.hrtime.bigint()) / 1000000))(); }
+  private day(time: number) { return new Date(time).toISOString().slice(0, 10); }
+  private accountingTime(ledger: Ledger): number {
+    const wall = this.now(), monotonic = this.monotonicNow();
+    if (![wall, monotonic].every(value => Number.isFinite(value) && value >= 0) || !Number.isFinite(new Date(wall).getTime())) throw new Error('Colab clock unreadable; allocation refused');
+    if (!ledger.clock) {
+      // Older counters have no trustworthy clock anchor. Carry ALL prior
+      // charges into the initial day rather than trusting a changed local date.
+      const totals = Object.values(ledger.days).reduce((sum, day) => ({ charged: sum.charged + day.charged, measured: sum.measured + day.measured }), { charged: 0, measured: 0 });
+      if (Object.keys(ledger.days).length) ledger.days = { [this.day(wall)]: totals };
+      ledger.clock = { wallMs: wall, monotonicMs: monotonic };
+    }
+    const elapsed = monotonic - ledger.clock.monotonicMs;
+    const time = ledger.clock.wallMs + elapsed;
+    // The anchor never follows Date.now(), including on a new runner/process.
+    // Small NTP adjustments cannot move the accounting day; large jumps or a
+    // monotonic reset fail closed. Explicit stop remains available for recovery.
+    if (elapsed < 0 || !Number.isFinite(new Date(time).getTime()) || Math.abs(wall - time) > CLOCK_SKEW_MS) throw new Error('Colab clock discontinuity; allocation refused');
+    return time;
+  }
   private enabled() { if (!isColabEnabled()) throw new Error('Colab disabled: set CODEBUDDY_COLAB=true'); }
   private async call(args: string[], options?: CliOptions): Promise<string> {
     const result = await (this.options.cli ?? invokeColab)(args, options);
@@ -156,8 +187,9 @@ export class ColabRunner {
   async status() {
     this.enabled();
     const ledger = await this.readLedger();
+    const day = this.day(this.accountingTime(ledger));
     const [sessions, usage] = await Promise.all([this.call(['sessions']), this.call(['usage'])]);
-    return { day: this.day(), ...(ledger.days[this.day()] ?? { charged: 0, measured: 0 }),
+    return { day, ...(ledger.days[day] ?? { charged: 0, measured: 0 }),
       limit: this.limit(), reservations: ledger.open, sessions, account: parseColabUsage(usage) };
   }
   /** Explicit session name, never stops other users' sessions in bulk. */
@@ -237,7 +269,12 @@ export class ColabRunner {
     process.on('SIGINT', sigint); process.on('SIGTERM', sigterm);
     externalSignal?.addEventListener('abort', interrupt, { once: true });
     if (externalSignal?.aborted) interrupt();
-    const ledger = await this.readLedger().catch(async error => { clearTimeout(timer); process.off('SIGINT', sigint); process.off('SIGTERM', sigterm); externalSignal?.removeEventListener('abort', interrupt); await release(); throw error; });
+    const { ledger, accountingStarted } = await this.readLedger().then(async ledger => {
+      const accountingStarted = this.accountingTime(ledger);
+      // Persist even before a refused allocation, under the existing lock.
+      await writeJsonAtomic(this.stateFile, ledger);
+      return { ledger, accountingStarted };
+    }).catch(async error => { clearTimeout(timer); process.off('SIGINT', sigint); process.off('SIGTERM', sigterm); externalSignal?.removeEventListener('abort', interrupt); await release(); throw error; });
     // Servers already have global signal handlers. Cooperate with their shutdown
     // rather than letting process.exit race allocation identity and finally.
     const shutdown = getShutdownManager();
@@ -248,19 +285,20 @@ export class ColabRunner {
       name: shutdownName, priority: 2000, timeoutMs: CLEANUP_MS + 120000 + 20000,
       handler: async () => { interrupt(); await settlement; },
     });
-    const day = this.day();
+    const day = this.day(accountingStarted);
     const record = ledger.days[day] ??= { charged: 0, measured: 0 };
     const reserved = Math.ceil((job.timeoutSeconds * 1000 + CLEANUP_MS + 120000) / 3600000 * RATE[job.gpu] * 100) / 100 + 0.02;
-    let session: string | undefined, before: number | undefined, started = this.now(), cleanupError: unknown;
+    let session: string | undefined, before: number | undefined, started = this.monotonicNow(), cleanupError: unknown;
     let allocatedGpu = job.gpu;
     let result: ColabJobResult | undefined;
     let jobError: unknown;
     const call = (args: string[], stdin?: string) => {
       controller.signal.throwIfAborted();
+      this.accountingTime(ledger);
       return this.call(args, { stdin, signal: controller.signal, timeoutMs: job.timeoutSeconds * 1000 });
     };
     try {
-      if (new Date(this.now() + job.timeoutSeconds * 1000 + CLEANUP_MS + 120000).toISOString().slice(0, 10) !== day) throw new Error('Colab job would cross UTC accounting midnight; reduce deadline or retry tomorrow');
+      if (this.day(accountingStarted + job.timeoutSeconds * 1000 + CLEANUP_MS + 120000) !== day) throw new Error('Colab job would cross UTC accounting midnight; reduce deadline or retry tomorrow');
       if (record.charged + reserved > this.limit()) throw new Error(`Colab daily unit ceiling exceeded (${record.charged.toFixed(2)} + ${reserved.toFixed(2)} > ${this.limit()}); job refused`);
       if (Object.keys(ledger.open).length) throw new Error('Unclosed Colab reservation; close the recorded session before another job');
       before = parseColabUsage(await call(['usage'])).balance;
@@ -269,7 +307,7 @@ export class ColabRunner {
       ledger.open[session] = { day, reserved };
       await writeJsonAtomic(this.stateFile, ledger);
       temp = await fs.mkdtemp(path.join(os.tmpdir(), 'cb-colab-'));
-      started = this.now();
+      started = this.monotonicNow();
       // Do not abort allocation mid-request: let the CLI persist the VM identity,
       // then honor cancellation. Still bounded, and finally always attempts stop.
       try { await this.call(['new', '-s', session, '--gpu', job.gpu], { timeoutMs: 120000 }); }
@@ -327,13 +365,18 @@ export class ColabRunner {
         catch (error) { cleanupError = error; }
         if (!cleanupError) {
           let charge = reserved;
-          try {
-            const after = parseColabUsage(await this.call(['usage'], { timeoutMs: 10000 })).balance;
-            const measured = Math.max(0, (before ?? after) - after);
-            record.measured += measured;
-            // Balance is rounded to 0.01; conservative time charge covers lag.
-            charge = Math.max(measured + 0.02, (this.now() - started) / 3600000 * RATE[job.gpu] + 0.02);
-          } catch { /* Retain the full reservation when metering is unavailable. */ }
+          let clockValid = true;
+          try { this.accountingTime(ledger); }
+          catch (error) { clockValid = false; jobError ??= error; }
+          if (clockValid) {
+            try {
+              const after = parseColabUsage(await this.call(['usage'], { timeoutMs: 10000 })).balance;
+              const measured = Math.max(0, (before ?? after) - after);
+              record.measured += measured;
+              // Balance is rounded to 0.01; conservative time charge covers lag.
+              charge = Math.max(measured + 0.02, (this.monotonicNow() - started) / 3600000 * RATE[job.gpu] + 0.02);
+            } catch { /* Retain the full reservation when metering is unavailable. */ }
+          }
           record.charged = Math.max(0, record.charged - reserved + charge);
           delete ledger.open[session];
         }
