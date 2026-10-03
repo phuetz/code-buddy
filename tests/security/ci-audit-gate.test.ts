@@ -5,16 +5,33 @@ const input = vi.hoisted(() => ({
   allowedNodes: ['node_modules/npm/node_modules/undici'] as string[] | undefined,
   severity: 'high',
   reviewBy: '2999-01-01',
+  reviewedOn: '2026-01-01',
+  reason: 'Only build-time fetch; no WebSocket calls.',
+  urls: ['https://github.com/advisories/GHSA-rfgv-xxqx-mfg5'],
+  allowedUrls: ['https://github.com/advisories/GHSA-rfgv-xxqx-mfg5'] as string[] | undefined,
+  inherited: false,
+  error: false,
 }));
 
 vi.mock('node:child_process', () => ({
   execSync: () => JSON.stringify({
-    vulnerabilities: { undici: { severity: input.severity, nodes: input.nodes } },
+    ...(input.error ? { error: { code: 'E503' } } : {}),
+    metadata: { vulnerabilities: { high: 1, critical: 0 } },
+    vulnerabilities: {
+      undici: {
+        severity: input.severity, nodes: input.nodes,
+        via: input.inherited ? ['child'] : input.urls.map((url) => ({ url })),
+      },
+      ...(input.inherited ? { child: { severity: 'moderate', via: input.urls.map((url) => ({ url })) } } : {}),
+    },
   }),
 }));
 vi.mock('node:fs', () => ({
   readFileSync: () => JSON.stringify({
-    allow: [{ package: 'undici', nodes: input.allowedNodes, reviewBy: input.reviewBy }],
+    allow: [{
+      package: 'undici', nodes: input.allowedNodes, reviewBy: input.reviewBy,
+      reviewedOn: input.reviewedOn, reason: input.reason, advisories: input.allowedUrls,
+    }],
   }),
 }));
 
@@ -25,6 +42,12 @@ describe('audit-gate : exception limitée à une copie d’outillage', () => {
     input.allowedNodes = ['node_modules/npm/node_modules/undici'];
     input.severity = 'high';
     input.reviewBy = '2999-01-01';
+    input.reviewedOn = '2026-01-01';
+    input.reason = 'Only build-time fetch; no WebSocket calls.';
+    input.urls = ['https://github.com/advisories/GHSA-rfgv-xxqx-mfg5'];
+    input.allowedUrls = [...input.urls];
+    input.inherited = false;
+    input.error = false;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('audit refusé'); });
@@ -69,5 +92,27 @@ describe('audit-gate : exception limitée à une copie d’outillage', () => {
     input.allowedNodes = undefined;
     await runGate();
     expect(process.exit).not.toHaveBeenCalled();
+  });
+
+  it('refuse un nouvel avis sur la copie déjà autorisée', async () => {
+    input.urls.push('https://github.com/advisories/GHSA-new-advisory');
+    await expect(runGate()).rejects.toThrow('audit refusé');
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('advisory outside'));
+  });
+
+  it('contrôle aussi les avis hérités des dépendances', async () => {
+    input.inherited = true;
+    await runGate();
+    vi.resetModules();
+    input.urls.push('https://github.com/advisories/GHSA-new-advisory');
+    await expect(runGate()).rejects.toThrow('audit refusé');
+  });
+
+  it.each(['motif', 'date', 'avis', 'erreur npm'])('refuse une exception ou un audit incomplet : %s', async (field) => {
+    if (field === 'motif') input.reason = '';
+    if (field === 'date') input.reviewedOn = '';
+    if (field === 'avis') input.allowedUrls = undefined;
+    if (field === 'erreur npm') input.error = true;
+    await expect(runGate()).rejects.toThrow('audit refusé');
   });
 });
