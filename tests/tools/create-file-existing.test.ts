@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CreateFileTool, StrReplaceEditorTool, ViewFileTool, resetTextEditorInstance } from '../../src/tools/registry/text-editor-tools.js';
 import { createAliasTools } from '../../src/tools/registry/tool-aliases.js';
+import { WritePolicy } from '../../src/security/write-policy.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 
 describe('existing-file recovery uses the exposed tool names (B5)', () => {
@@ -63,6 +64,20 @@ describe('existing-file recovery uses the exposed tool names (B5)', () => {
     expect(result.error).toContain('Use apply_patch with {"patch":');
     expect(result.error).toContain('*** Update File: answer.ts');
     expect(result.error).not.toContain('str_replace_editor');
+    expect(readFileSync(join(cwd, 'answer.ts'), 'utf8')).toBe(original);
+  });
+
+  it('R1: prefers the exposed apply_patch accepted by strict policy', async () => {
+    const policy = new WritePolicy();
+    policy.setMode('strict');
+    const result = await new CreateFileTool().execute(
+      { path: 'answer.ts', content: replacement },
+      { cwd, extra: { exposedToolNames: ['write_file', 'str_replace_editor', 'apply_patch'] } },
+    );
+    expect(result.error).toContain('Use apply_patch with');
+    expect(result.error).not.toContain('Use str_replace_editor');
+    expect(await policy.gate({ toolName: 'str_replace_editor', paths: ['answer.ts'] })).toMatchObject({ allowed: false });
+    expect(await policy.gate({ toolName: 'apply_patch', paths: ['answer.ts'] })).toMatchObject({ allowed: true });
     expect(readFileSync(join(cwd, 'answer.ts'), 'utf8')).toBe(original);
   });
 

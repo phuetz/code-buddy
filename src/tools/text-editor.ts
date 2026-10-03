@@ -346,16 +346,14 @@ export class TextEditorTool implements Disposable {
       }
       const resolvedPath = pathValidation.resolved;
 
-      // Check if file already exists - prevent accidental overwrite
-      if (await this.vfs.exists(resolvedPath)) {
-        const stats = await this.vfs.stat(resolvedPath);
-        if (stats.isFile()) {
-          return {
-            success: false,
-            error: `File already exists: ${filePath}. Nothing was written.`,
-            data: { code: 'FILE_ALREADY_EXISTS' },
-          };
-        }
+      // Refuse every existing entry without following links or reading it.
+      const existing = await this.vfs.lstat(resolvedPath);
+      if (existing) {
+        return {
+          success: false,
+          error: `${existing.isFile() ? 'File' : 'Path'} already exists: ${filePath}. Nothing was written.`,
+          data: { code: existing.isFile() ? 'FILE_ALREADY_EXISTS' : 'PATH_ALREADY_EXISTS' },
+        };
       }
 
       // Omission placeholder detection: block file creation with placeholders
@@ -403,11 +401,18 @@ export class TextEditorTool implements Disposable {
       // Diff-review gate — covers create_file AND its write_file alias.
       // Runs AFTER the user confirmation above (the review complements the
       // human gate, it never replaces it); see tools/review-gate-helper.ts.
+      // Confirmation can be arbitrarily long: revalidate containment/secret
+      // guards before the review or exclusive publication touches the path.
+      const currentValidation = this.vfs.resolvePath(filePath, this.baseDirectory, 'write');
+      if (!currentValidation.valid || currentValidation.resolved !== resolvedPath) {
+        return { success: false, error: currentValidation.error ?? 'Creation path changed during confirmation' };
+      }
       const gate = await maybeReviewGatedWrite({
         baseDirectory: this.baseDirectory,
         resolvedPath,
         displayPath: filePath,
         newContent: content,
+        createOnly: true,
         intent: `create ${filePath}`,
         originLabel: "create_file",
       });
@@ -427,7 +432,7 @@ export class TextEditorTool implements Disposable {
 
       const dir = path.dirname(resolvedPath);
       await this.vfs.ensureDir(dir);
-      await this.vfs.writeFile(resolvedPath, content, "utf-8");
+      await this.vfs.createFile(resolvedPath, content, "utf-8", this.baseDirectory);
 
       this.editHistory.push({
         command: "create",

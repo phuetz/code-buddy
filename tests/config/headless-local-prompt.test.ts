@@ -9,6 +9,7 @@ import {
   isHeadlessPromptCompact,
   isLocalLlmProvider,
 } from '../../src/config/headless-local-prompt.js';
+import { filterToolsForModel, getModelToolConfig } from '../../src/config/model-tools.js';
 import { logger } from '../../src/utils/logger.js';
 
 afterEach(() => {
@@ -33,6 +34,30 @@ describe('headless local compact prompt', () => {
     expect(filtered).not.toContain('apply_patch');
     expect(filtered).toContain('str_replace_editor');
     expect(filtered).toHaveLength(8);
+  });
+
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])('G3: retains a surviving editor within a ceiling of %s', max => {
+    for (const editor of ['apply_patch', 'str_replace_editor', 'patch', 'file_edit']) {
+      const tools = ['view_file', 'bash', 'search', 'tool_search', 'restore_context',
+        'read_file', 'create_file', 'write_file', editor].map(name => ({ function: { name } }));
+      const selected = capCompactToolList(tools, max);
+      expect(selected).toHaveLength(max);
+      expect(selected.map(tool => tool.function.name)).toContain(editor);
+      expect(selected.every(tool => tools.includes(tool))).toBe(true);
+    }
+  });
+
+  it('G3: keeps only schemas surviving the actual qwen3 model filter', () => {
+    const names = ['view_file', 'bash', 'search', 'tool_search', 'restore_context',
+      'read_file', 'create_file', 'write_file', 'apply_patch', 'str_replace_editor', 'patch'];
+    const allowed = filterToolsForModel(names, getModelToolConfig('qwen3:4b-instruct'));
+    expect(allowed).not.toContain('apply_patch');
+    const tools = allowed.map(name => ({ function: { name } }));
+    for (let max = 1; max <= 8; max++) {
+      const selected = capCompactToolList(tools, max).map(tool => tool.function.name);
+      expect(selected).not.toContain('apply_patch');
+      expect(selected).toContain('str_replace_editor');
+    }
   });
 
   it('detects Ollama / LM Studio / vLLM and ignores cloud providers', () => {

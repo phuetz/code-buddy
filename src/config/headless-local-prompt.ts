@@ -88,15 +88,17 @@ export function capCompactToolList<T extends { function: { name: string } }>(
   for (const tool of tools) {
     if (!byName.has(tool.function.name)) byName.set(tool.function.name, tool);
   }
+  const editorName = COMPACT_EDITOR_PRIORITY.find(name => byName.has(name));
+  // Reserve the editor before filling the core, even when max is only one.
+  const coreLimit = editorName ? max - 1 : max;
   for (const name of COMPACT_TOOL_PRIORITY) {
-    if (chosen.length >= max) break;
+    if (chosen.length >= coreLimit) break;
     const tool = byName.get(name);
     if (!tool || used.has(name)) continue;
     chosen.push(tool);
     used.add(name);
   }
   if (chosen.length < max) {
-    const editorName = COMPACT_EDITOR_PRIORITY.find(name => byName.has(name));
     const editor = editorName ? byName.get(editorName) : undefined;
     if (editor && editorName) {
       chosen.push(editor);

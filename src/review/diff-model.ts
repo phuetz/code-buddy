@@ -32,6 +32,8 @@ export interface ProposedChangeInput {
   path: string;
   /** Full resulting content; null/undefined means DELETE the file. */
   newContent: string | null;
+  /** Creation cannot become a modification when another writer wins the race. */
+  createOnly?: boolean;
 }
 
 export interface BuildProposedDiffInput {
@@ -64,7 +66,10 @@ export function buildProposedDiff(input: BuildProposedDiffInput): ProposedDiff {
   const files: ProposedFileChange[] = input.changes.map((change) => {
     const rel = normalizeRelativePath(input.workDir, change.path);
     const abs = path.join(input.workDir, rel);
-    const exists = fs.existsSync(abs);
+    if (change.createOnly && change.newContent === null) {
+      throw new Error(`creation-only diff cannot delete: ${rel}`);
+    }
+    const exists = !change.createOnly && fs.existsSync(abs);
     const baseContent = exists ? fs.readFileSync(abs, 'utf-8') : null;
     const newContent = change.newContent ?? null;
     const action: ProposedFileChange['action'] =
@@ -110,7 +115,10 @@ export function detectConflicts(diff: ProposedDiff): DiffConflict[] {
     seen.add(file.path);
 
     const abs = path.join(diff.workDir, file.path);
-    const exists = fs.existsSync(abs);
+    let exists = false;
+    try { fs.lstatSync(abs); exists = true; } catch (error) {
+      if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+    }
 
     if (file.action === 'create') {
       if (exists) {

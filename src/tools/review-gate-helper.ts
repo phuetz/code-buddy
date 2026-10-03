@@ -14,6 +14,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import type { ProposedChangeInput } from '../review/diff-model.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -51,6 +52,8 @@ interface SingleGatedWriteRequest extends GatedWriteRequestBase {
   /** The user-facing path, for error messages. */
   displayPath: string;
   newContent: string;
+  /** Keep creation intent across confirmation, review and revisions. */
+  createOnly?: boolean;
 }
 
 interface BatchGatedWriteRequest extends GatedWriteRequestBase {
@@ -72,14 +75,19 @@ export async function maybeReviewGatedWrite(req: GatedWriteRequest): Promise<Gat
 
   const changes = 'changes' in req
     ? req.changes
-    : [{ path: path.relative(req.baseDirectory, req.resolvedPath), newContent: req.newContent }];
-  const normalizedChanges: Array<{ path: string; newContent: string | null }> = [];
+    : [{ path: path.relative(req.baseDirectory, req.resolvedPath), newContent: req.newContent, createOnly: req.createOnly }];
+  const normalizedChanges: ProposedChangeInput[] = [];
   // Compare canonical forms on BOTH sides: a lexical base directory vs a
   // canonical resolved path (symlinked tmp/workspace) must not be mistaken
   // for an escape; a genuinely-outside path still fails closed below.
   const canonicalBase = canonicalize(req.baseDirectory);
   for (const change of changes) {
-    const resolved = canonicalize(path.resolve(req.baseDirectory, change.path));
+    const target = path.resolve(req.baseDirectory, change.path);
+    // Creation must retain its leaf: canonicalizing a newly introduced symlink
+    // would turn it into another destination (and could expose its contents).
+    const resolved = 'createOnly' in change && change.createOnly
+      ? path.join(canonicalize(path.dirname(target)), path.basename(target))
+      : canonicalize(target);
     const rel = path.relative(canonicalBase, resolved);
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
       const displayPath = 'displayPath' in req ? req.displayPath : change.path;
@@ -89,7 +97,7 @@ export async function maybeReviewGatedWrite(req: GatedWriteRequest): Promise<Gat
         error: `review gate: ${displayPath} resolves outside the base directory — gated writes only cover project files (fail-closed, nothing written)`,
       };
     }
-    normalizedChanges.push({ path: rel.split(path.sep).join('/'), newContent: change.newContent });
+    normalizedChanges.push({ path: rel.split(path.sep).join('/'), newContent: change.newContent, ...('createOnly' in change ? { createOnly: change.createOnly } : {}) });
   }
 
   if (shadowEnabled) {

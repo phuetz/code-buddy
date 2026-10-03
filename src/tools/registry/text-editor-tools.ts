@@ -17,13 +17,19 @@ function existingFileRecovery(filePath: string, exposedToolNames: unknown): stri
   const names = Array.isArray(exposedToolNames)
     ? exposedToolNames.filter((name): name is string => typeof name === 'string')
     : [];
-  const find = (legacy: string): string | undefined =>
-    names.find(name => (TOOL_ALIASES[name] ?? name) === legacy);
-  const reader = find('view_file');
+  const findPrimaryTool = (primaryName: string): string | undefined =>
+    names.find(name => (TOOL_ALIASES[name] ?? name) === primaryName);
+  const reader = findPrimaryTool('view_file');
   const readHint = reader
     ? `Use ${reader} with ${JSON.stringify({ path: filePath })} to read the existing text. `
     : '';
-  const editor = find('str_replace_editor');
+  const patcher = findPrimaryTool('apply_patch');
+  if (patcher) {
+    return `${readHint}Use ${patcher} with ${JSON.stringify({
+      patch: `*** Begin Patch\n*** Update File: ${filePath}\n@@\n-old line\n+new line\n*** End Patch`,
+    })}. Replace old line with an exact existing line and new line with the desired line.`;
+  }
+  const editor = findPrimaryTool('str_replace_editor');
   if (editor) {
     return `${readHint}Use ${editor} with ${JSON.stringify({
       path: filePath,
@@ -31,13 +37,7 @@ function existingFileRecovery(filePath: string, exposedToolNames: unknown): stri
       new_str: '<replacement text>',
     })}. Copy old_str exactly from the file and put the desired text in new_str; do not use the example placeholders literally.`;
   }
-  const patcher = find('apply_patch');
-  if (patcher) {
-    return `${readHint}Use ${patcher} with ${JSON.stringify({
-      patch: `*** Begin Patch\n*** Update File: ${filePath}\n@@\n-old line\n+new line\n*** End Patch`,
-    })}. Replace old line with an exact existing line and new line with the desired line.`;
-  }
-  const search = find('tool_search');
+  const search = findPrimaryTool('tool_search');
   return search
     ? `Use ${search} with ${JSON.stringify({ query: 'edit existing file' })} to discover an editing tool, then use its returned schema.`
     : 'No editing tool is exposed in this round. Enable an editing tool before retrying; creation cannot overwrite an existing file.';

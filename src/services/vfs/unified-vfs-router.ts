@@ -1,4 +1,5 @@
 import fs from "fs-extra";
+import { createFileExclusive } from "./exclusive-create.js";
 import * as path from "path";
 import { measureLatency } from "../../optimization/latency-optimizer.js";
 import { getWorkspaceIsolation, type PathValidationResult } from "../../workspace/workspace-isolation.js";
@@ -83,6 +84,24 @@ export class UnifiedVfsRouter implements IVfsProvider {
     await measureLatency('file_write', () =>
       fs.writeFile(filePath, content, encoding as BufferEncoding)
     );
+  }
+
+  /** Exclusive creation; never overwrite an entry appearing after confirmation. */
+  async createFile(filePath: string, content: string, encoding: string = 'utf-8', baseDirectory: string = process.cwd()): Promise<void> {
+    await measureLatency('file_create', async () => {
+      createFileExclusive(filePath, content, encoding as BufferEncoding, () => {
+        const verdict = this.resolvePath(filePath, baseDirectory, 'write');
+        if (!verdict.valid) throw new Error(verdict.error ?? 'Creation path refused');
+      });
+    });
+  }
+
+  /** lstat observes the entry itself, including dangling symlinks. */
+  async lstat(filePath: string): Promise<IFileStat | null> {
+    try { return await fs.lstat(filePath); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    }
   }
 
   async writeFileBuffer(filePath: string, content: Buffer): Promise<void> {

@@ -34,6 +34,10 @@ jest.mock('fs-extra', () => {
   const impl = {
   pathExists: (...args: unknown[]) => mockPathExists(...args),
   stat: (...args: unknown[]) => mockStat(...args),
+  lstat: async (...args: unknown[]) => {
+    if (await mockPathExists(...args)) return mockStat(...args);
+    throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+  },
   readdir: (...args: unknown[]) => mockReaddir(...args),
   readFile: (...args: unknown[]) => mockReadFile(...args),
   existsSync: (...args: unknown[]) => mockExistsSync(...args),
@@ -44,6 +48,10 @@ jest.mock('fs-extra', () => {
 };
   return { ...impl, default: impl };
 });
+
+jest.mock('../../src/services/vfs/exclusive-create.js', () => ({
+  createFileExclusive: (p: string, content: string, encoding: string) => mockWriteFile(p, content, encoding),
+}));
 
 // Mock fs/promises module
 // Kept for compatibility if other modules use it, but TextEditorTool now goes through VFS -> fs-extra

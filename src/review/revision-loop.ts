@@ -136,16 +136,18 @@ export async function reviseProposedDiff(
     seen.add(file.path);
     if (file.newContent === 'KEEP-BASE') continue; // change withdrawn for this file
     if (file.newContent === null) {
-      changes.push({ path: file.path, newContent: null });
+      // A creation-only proposal may be withdrawn, never converted into a
+      // deletion of an entry that appeared during review.
+      if (original.action !== 'create') changes.push({ path: file.path, newContent: null });
     } else if (typeof file.newContent === 'string') {
-      changes.push({ path: file.path, newContent: file.newContent });
+      changes.push({ path: file.path, newContent: file.newContent, ...(original.action === 'create' ? { createOnly: true } : {}) });
     }
   }
   // Files the reviser forgot are carried over unchanged — a partial answer
   // must not silently drop part of the proposal.
   for (const original of diff.files) {
     if (!seen.has(original.path)) {
-      changes.push({ path: original.path, newContent: original.newContent });
+      changes.push({ path: original.path, newContent: original.newContent, ...(original.action === 'create' ? { createOnly: true } : {}) });
     }
   }
 
