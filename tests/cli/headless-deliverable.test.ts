@@ -91,3 +91,16 @@ it('does not confuse outputting a JSON field with explaining program stdout', ()
   const query = 'Read package.json and output only the package name.';
   expect(evaluateHeadlessTaskOutcome(query, [read('package.json', '1: {"name":"sample-module"}'), answer('sample-module')]).exitCode).toBe(0);
 });
+
+it.each(['./package.json', process.cwd() + '/package.json'])(
+  'matches observed JSON files by normalized path: %s', file => {
+    expect(evaluateHeadlessTaskOutcome(`Read ${file} and report only the package name.`,
+      [read(file, '1: {"name":"sample-module"}'), answer('sample-module')]).exitCode).toBe(0);
+  },
+);
+it('preserves case-sensitive JSON property names', () => {
+  const evidence = read('config.json', '1: {"DisplayName":"correct","displayname":"wrong"}');
+  const query = 'Read the DisplayName field in config.json. Return only its value.';
+  expect(evaluateHeadlessTaskOutcome(query, [evidence, answer('correct')]).exitCode).toBe(0);
+  expect(evaluateHeadlessTaskOutcome(query, [evidence, answer('wrong')]).exitCode).not.toBe(0);
+});

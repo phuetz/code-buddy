@@ -89,11 +89,13 @@ export function checkHeadlessDeliverable(
     (prefix && response.trimStart().startsWith(prefix) ? response.trim().slice(prefix.length) : response).trim(), files, entries) : undefined;
   if (sourceReport) return { required: true, verified: !reasons.length && !sourceReport.reasons.length,
     reasons: [...reasons, ...sourceReport.reasons], guidance: `${prefixGuidance} ${sourceReport.guidance}`.trim() };
-  const field = text.match(/\b(?:the|le|la)\s+[`"']?([\w-]+)[`"']?\s+(?:field|property|champ|propriete)\b/)?.[1]
-    ?? text.match(/\b(?:champ|propriete)\s+[`"']?([\w-]+)[`"']?/)?.[1]
+  const field = query.match(/\b(?:the|le|la)\s+[`"']?([\w-]+)[`"']?\s+(?:field|property|champ|propri[eé]t[eé])(?=\W|$)/i)?.[1]
+    ?? query.match(/\b(?:champ|propri[eé]t[eé])\s+[`"']?([\w-]+)[`"']?/i)?.[1]
     ?? (/\b(?:package|project)\s+name\b|\bnom\s+du\s+(?:projet|package|paquet)\b/.test(text) ? 'name' : undefined);
-  const jsonTarget = query.match(/(?:[\w.-]+\/)*[\w.-]+\.json\b/)?.[0]
+  const rawJsonTarget = query.match(/\/?(?:[\w.-]+\/)*[\w.-]+\.json\b/i)?.[0]
     ?? (field === 'name' && /\b(?:package|project|projet|paquet)\b/.test(text) ? 'package.json' : undefined);
+  const jsonTarget = rawJsonTarget === undefined ? undefined
+    : path.relative(process.cwd(), path.resolve(rawJsonTarget)).replaceAll('\\', '/');
   if (!field || !jsonTarget) return { required: !!prefix, verified: !!prefix && !reasons.length, reasons, guidance: prefixGuidance || undefined };
   // A write request's new value must not be mistaken for a reading contract.
   if (/^(?:please\s+)?(?:change|replace|edit|modify|set|update|modifie|remplace|cree|ecris)\b/.test(text))
