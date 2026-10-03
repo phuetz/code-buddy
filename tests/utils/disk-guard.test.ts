@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, statfsSync: vi.fn(actual.statfsSync) };
+});
+
 import {
   getFreeSpaceInfo,
   getFreeBytes,
@@ -32,6 +37,7 @@ describe('disk-guard', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(nodeFs.statfsSync).mockReset();
     resetDiskGuardForTests();
     // restore any env vars the test touched
     delete process.env.CODEBUDDY_MIN_FREE_MB;
@@ -102,16 +108,13 @@ describe('disk-guard', () => {
     });
 
     it('honours CODEBUDDY_MIN_FREE_MB as the default threshold', () => {
-      const freeMb = Math.floor(getFreeBytes(sandbox)! / (1024 * 1024));
-      // A threshold just above real free space must trip the guard. Clamp to the
-      // reader's max (1 TB) so the env value is accepted; on a >1 TB-free volume
-      // the throw branch is skipped but the '0 never trips' branch still proves
-      // the env var is read.
-      const trip = Math.min(freeMb + 1, 1_000_000);
-      process.env.CODEBUDDY_MIN_FREE_MB = String(trip);
-      if (trip > freeMb) {
-        expect(() => ensureFreeSpace(sandbox)).toThrow(DiskSpaceError);
-      }
+      // This case checks env parsing, not a changing filesystem snapshot.
+      // A concurrent cleanup can release more than the former one-MiB margin.
+      const snapshot = { ...nodeFs.statfsSync(sandbox), bsize: 4096, bavail: 2560, bfree: 2560 };
+      vi.mocked(nodeFs.statfsSync).mockReturnValue(snapshot);
+      expect(getFreeBytes(sandbox)).toBe(10 * 1024 * 1024);
+      process.env.CODEBUDDY_MIN_FREE_MB = '11';
+      expect(() => ensureFreeSpace(sandbox)).toThrow(DiskSpaceError);
       process.env.CODEBUDDY_MIN_FREE_MB = '0';
       expect(() => ensureFreeSpace(sandbox)).not.toThrow();
     });
