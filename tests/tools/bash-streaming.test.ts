@@ -47,6 +47,20 @@ describe('BashTool - Streaming Execution', () => {
     expect(result.value.success).toBe(true);
   });
 
+  it('keeps stderr alongside stdout in a successful sandbox observation', async () => {
+    vi.spyOn(executionPolicy, 'executeInWorkspaceSandbox').mockResolvedValue({
+      available: true,
+      result: { stdout: 'exit=0', stderr: 'tar: archive.tgz: Cannot open: No such file or directory', exitCode: 0,
+        duration: 1, timedOut: false, backend: 'landlock', sandboxed: true },
+    });
+    const gen = bash.executeStreaming('echo fixture');
+    let result = await gen.next();
+    while (!result.done) result = await gen.next();
+    expect(result.value.success).toBe(true);
+    expect(result.value.output).toContain('exit=0');
+    expect(result.value.output).toContain('tar: archive.tgz: Cannot open');
+  });
+
   it('keeps sandbox stdout in the final failed observation sent to the model', async () => {
     vi.spyOn(executionPolicy, 'executeInWorkspaceSandbox').mockResolvedValue({
       available: true,
