@@ -48,6 +48,18 @@ describe('display line labels are not approximate source text', () => {
     expect(result.error).toMatch(/line numbers|line labels/i);
     expect(readFileSync(file, 'utf8')).toBe(source);
   });
+  it.each([
+    "1: const title='initial';\n2: const status='ready';\n3: console.log(title,status);",
+    "1: const title='initial';",
+    "  1 | const title = 'initial';\n  2 | const status = 'ready';",
+  ])('rejects entirely drifted display labels: %s', async decorated => {
+    const file = join(directory, 'sample.js');
+    writeFileSync(file, source);
+    const result = await editor.strReplace(file, decorated, decorated.replace('initial', 'changed'));
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/line numbers|line labels/i);
+    expect(readFileSync(file, 'utf8')).toBe(source);
+  });
   it('still edits real numbered records literally', async () => {
     const file = join(directory, 'records.txt');
     writeFileSync(file, '1: first\n2: second\n');

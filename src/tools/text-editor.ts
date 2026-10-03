@@ -204,11 +204,8 @@ export class TextEditorTool implements Disposable {
       // view_file labels are display metadata. Approximate matching must not
       // erase those labels from the search while inserting them into source.
       // Literal numbered records remain valid when oldStr really exists.
-      const sourceLines = content.split(/\r?\n/);
-      const hasDisplayLabels = oldStr.split(/\r?\n/).some(line => {
-        const label = line.match(/^(\d+): ?(.*)$/);
-        return label && sourceLines[Number(label[1]) - 1] === label[2];
-      });
+      const hasDisplayLabels = oldStr.split(/\r?\n/).some(line =>
+        /^\s*\d+\s*[:|]\s?/.test(line));
       if (!content.includes(oldStr) && hasDisplayLabels) {
         return {
           success: false,
