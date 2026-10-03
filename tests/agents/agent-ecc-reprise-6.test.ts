@@ -16,3 +16,12 @@ it.each(['/bin/bash ../payload.txt', '/usr/bin/bash ../payload.txt', 'ｂａｓ�
     expect(fs.existsSync(destRoot)).toBe(false);
   }
 });
+
+it.each(['Use Bash only for read-only inspection commands.', 'Reject or flag any Bash command that attempts file mutations.'])('an agent mentioning the Bash tool %s stays disabled in review', body => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-agent6-doc-')); dirs.push(dir);
+  fs.mkdirSync(path.join(dir, 'agents'));
+  fs.writeFileSync(path.join(dir, 'agents/probe.md'), `---\nname: probe\ntools: Read, Bash\n---\n${body}\n`);
+  const destRoot = path.join(dir, 'staged'); const report = importAgents(dir, { source: 'fixture', dryRun: false, destRoot });
+  expect(report.quarantined).toHaveLength(0); expect(report.review).toHaveLength(1);
+  expect(fs.readFileSync(report.review[0]!.destination!, 'utf8')).toContain('disabled: true');
+});

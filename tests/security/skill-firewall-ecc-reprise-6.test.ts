@@ -40,3 +40,9 @@ it('a Python loop in a quoted diagnostic heredoc is inert only in Markdown', () 
   expect(scanSkillFirewall(fixture('```bash\n' + body + '\n```')).verdict).toBe('allow');
   expect(scanSkillFirewall(fixture(body, 'run.sh')).verdict).toBe('quarantine');
 });
+
+it.each(['Use Bash only for read-only inspection commands.', 'Reject or flag any Bash command that attempts file mutations.', 'A PreToolUse hook on Bash blocks legacy package managers.'])('the tool mention %s is inert only in prose', body => {
+  expect(scanSkillFirewall(fixture(body)).verdict).toBe('allow');
+  expect(scanSkillFirewall(fixture(body, 'run.sh')).verdict).toBe('quarantine');
+  expect(scanSkillFirewall(fixture('```sh\n' + body + '\n```')).verdict).toBe('review');
+});

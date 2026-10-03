@@ -470,6 +470,11 @@ function classifyMention(dp: DangerousPattern, line: string, context: ScanContex
   if (dp.name === 'shell-interpreter' && context.shellLiteral
       && /^\s*for$/.test(line.slice(0, offset))
       && /^\s*for\s+(?:bash|sh|zsh|dash|ksh|fish)\s+in\s+.+:\s*$/.test(line)) return 'benign';
+  // Claude's capitalized Bash tool in explicit prose is not a Unix launcher.
+  // No command, fence, imperative, or copied script receives this exception.
+  if (dp.name === 'shell-interpreter' && !context.language && !context.imperative
+      && /\b(?:Use|any|a|on)$/i.test(line.slice(0, offset))
+      && /^[ \t]Bash[ \t]+(?:only|command|call|blocks)\b/.test(line.slice(offset, offset + length))) return 'benign';
   // Newly scanned reference documents retain network mentions for review.
   // Credential exfiltration and other critical/high rules keep their treatment.
   if (context.supportDocument && dp.capability === 'network' && !['critical', 'high'].includes(dp.severity)) return 'documentary';

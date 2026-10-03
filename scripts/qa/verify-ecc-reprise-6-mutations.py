@@ -38,6 +38,7 @@ CASES = [
     ('mandatory-launcher-folding-disabled', SCANNER, replace("const launcher = DANGEROUS_PATTERNS.find(dp => dp.name === 'shell-interpreter')!;", "const launcher = { ...DANGEROUS_PATTERNS.find(dp => dp.name === 'shell-interpreter')!, pattern: deobAll ? DANGEROUS_PATTERNS.find(dp => dp.name === 'shell-interpreter')!.pattern : /(?!)/ };")),
     ('fenced-shebang-ignored', SCANNER, replace('if (fencedShebang) {', 'if (false && fencedShebang) {')),
     ('heredoc-loop-quarantined', SCANNER, replace("if (dp.name === 'shell-interpreter' && context.shellLiteral", "if (false && dp.name === 'shell-interpreter' && context.shellLiteral")),
+    ('tool-prose-quarantined', SCANNER, replace("if (dp.name === 'shell-interpreter' && !context.language && !context.imperative", "if (false && dp.name === 'shell-interpreter' && !context.language && !context.imperative")),
     ('documentary-floor-removed', SCANNER, replace("const verdict = activeVerdict === 'allow' && findings.some(f => f.documentary) ? 'review' : activeVerdict;", 'const verdict = activeVerdict;')),
     ('agent-documentary-critical-accepted', 'src/skills/agent-importer.ts', replace("scan.findings = scan.findings.map(f => f.severity === 'critical' || f.severity === 'high' ? { ...f, documentary: false } : f);", '')),
 ]
