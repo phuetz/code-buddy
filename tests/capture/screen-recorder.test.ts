@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
 import {
   buildFrameArgs,
@@ -75,6 +75,22 @@ function mockProc() {
 }
 
 describe('ScreenRecorder', () => {
+  beforeEach(() => {
+    vi.stubEnv('XDG_SESSION_TYPE', 'x11');
+    vi.stubEnv('WAYLAND_DISPLAY', '');
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('refuses capture and recording under Wayland before spawning ffmpeg', async () => {
+    vi.stubEnv('XDG_SESSION_TYPE', 'wayland');
+    const spawnImpl = vi.fn();
+    const rec = new ScreenRecorder({ spawnImpl, platform: 'linux' });
+    expect(() => rec.start('/tmp/x/out.mp4')).toThrow(/Wayland session/);
+    await expect(rec.captureFrame('/tmp/x/f.png')).rejects.toThrow(/Wayland session/);
+    expect(spawnImpl).not.toHaveBeenCalled();
+    expect(rec.isRecording()).toBe(false);
+  });
+
   it('start() spawns ffmpeg with the record args and tracks state', () => {
     let captured: { cmd: string; args: string[] } | null = null;
     const proc = mockProc();
