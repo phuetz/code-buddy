@@ -225,7 +225,7 @@ function parseMochaOutput(output: string): ParseResult {
 // Pytest Parser
 // ============================================================================
 
-const PYTEST_SUMMARY_REGEX = /^\s*(?:=+\s*)?((?:\d+\s+(?:passed|failed|skipped|xfailed|xpassed|errors?)(?:,\s*)?)+)(?:\s+in\s+([\d.]+)s)?(?:\s*=+)?\s*$/im;
+const PYTEST_SUMMARY_REGEX = /^\s*(?:=+\s*)?((?:\d+\s+(?:passed|failed|skipped|xfailed|xpassed|errors?|warnings?)(?:,\s*)?)+)(?:\s+in\s+([\d.]+)s)?(?:\s*=+)?\s*$/im;
 
 function parsePytestOutput(output: string): ParseResult {
   const summaryMatch = output.match(PYTEST_SUMMARY_REGEX);

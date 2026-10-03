@@ -47,7 +47,7 @@ it.each([
   'What is a closure? The idea also appears in source.js.',
   'Explain closures. An example exists in Source.JS.',
 ])('does not require reading an incidental source mention: %s', prompt => {
-  expect(evaluateHeadlessTaskOutcome(prompt, [answer]).reasons).not.toContain('source_evidence_missing');
+  expect(evaluateHeadlessTaskOutcome(prompt, [answer]).exitCode).toBe(0);
 });
 
 it.each(['2 errors in 0.4s', '1 error in 0.4s', '1 failed, 2 errors in 0.4s'])('preserves pytest collection errors: %s', output => {
@@ -77,4 +77,43 @@ it.each(['Give me the inputs of Source.JS.', 'Return the parameter names from so
 );
 it('does not approve an unsolicited edit during an explanation', () => {
   expect(evaluateHeadlessTaskOutcome('Explain', [edit, answer]).reasons).toContain('unexpected_edit_executed');
+});
+
+it.each([', ', ' and ', ' et ', ' then ', ' puis ', ' but ', ' mais ', '; ', '. '])(
+  'does not drop positive reading after a prohibition separated by %s', separator => {
+    const prompt = `Do not edit package.json${separator}explain Source.JS.`;
+    expect(requestsRepositoryAction(prompt)).toBe(false);
+    expect(evaluateHeadlessTaskOutcome(prompt, [answer]).reasons).toContain('source_evidence_missing');
+    const read: TaskEvidenceEntry = { type: 'tool_result', content: '1: const value = 1;',
+      toolCall: { id: 'r', function: { name: 'view_file', arguments: '{"path":"Source.JS"}' } },
+      toolResult: { success: true, output: '1: const value = 1;' } };
+    expect(evaluateHeadlessTaskOutcome(prompt, [read, answer]).exitCode).toBe(0);
+  },
+);
+it('keeps the French coordinated reading obligation', () => {
+  expect(evaluateHeadlessTaskOutcome('Ne modifie pas package.json et explique source.js.', [answer]).reasons).toContain('source_evidence_missing');
+});
+it.each([
+  "N'édite pas package.json", "N'édite pas la version en modifiant package.json",
+  "N'affiche pas la version en modifiant package.json", 'N’écris pas dans package.json',
+  'You must not edit package.json',
+])('recognizes a contracted or modal prohibition: %s', prompt => {
+  expect(requestsRepositoryAction(prompt)).toBe(false);
+  expect(evaluateHeadlessTaskOutcome(prompt, [answer]).exitCode).toBe(0);
+  expect(evaluateHeadlessTaskOutcome(prompt, [edit, answer]).reasons).toContain('unexpected_edit_executed');
+});
+it.each([
+  ['1 failed, 3 warnings in 0.4s', 1],
+  ['2 errors, 1 warning in 0.4s', 2],
+  ['=== 1 failed, 2 passed, 3 warnings in 0.12s ===', 1],
+  ['2 passed, 3 warnings in 0.4s', 0],
+] as const)('preserves pytest outcomes with warnings: %s', (output, failed) => {
+  expect(isLikelyTestOutput(output)).toBe(true);
+  const summary = parseTestOutput(output).data?.summary;
+  expect(summary?.failed).toBe(failed);
+  expect(summary?.total).toBe(failed + (output.includes('2 passed') ? 2 : 0));
+  const outcome = evaluateHeadlessTaskOutcome('Run the tests', [{ type: 'tool_result', content: output,
+    toolCall: { id: 't', function: { name: 'bash', arguments: '{"command":"pytest"}' } },
+    toolResult: { success: true, output } }, answer]);
+  expect(outcome.exitCode === 0).toBe(failed === 0);
 });

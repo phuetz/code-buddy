@@ -1,3 +1,4 @@
+import { splitHeadlessClauses, isIncidentalHeadlessClause } from './headless-clauses.js';
 import path from 'node:path';
 import { isHeadlessProhibition } from './headless-prohibition.js';
 import { checkSourceOutputReport } from './headless-source-output-report.js';
@@ -85,8 +86,8 @@ export function checkHeadlessDeliverable(
   // A separate declarative presence statement is context, not a request to
   // read that file. Keep every other target closed, including unfamiliar
   // restitution verbs; do not require a whitelist of reading imperatives.
-  const readingClauses = query.split(/[?!;\n]\s*|\.(?=\s|$)\s*/).filter((clause, index) =>
-    !isHeadlessProhibition(clause) && (index === 0 || !/^(?:the|an?|this|that)\s+[\w\s-]+\s+(?:appears?|exists?|occurs?)\s+(?:in|inside)\s+/i.test(clause.trim())));
+  const readingClauses = splitHeadlessClauses(query).filter((clause, index) =>
+    !isHeadlessProhibition(clause) && !isIncidentalHeadlessClause(clause, index));
   const sourceTargets = [...readingClauses.join(' ').matchAll(/\/?(?:[\w.-]+\/)*[\w.-]+\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh)\b/gi)]
     .map(match => path.relative(process.cwd(), path.resolve(match[0])).replaceAll('\\', '/'));
   const refersToObservedInterface = /\b(?:its|their)\s+(?:inputs?|outputs?)\b/.test(text);

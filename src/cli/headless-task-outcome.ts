@@ -1,3 +1,4 @@
+import { splitHeadlessClauses, isIncidentalHeadlessClause } from './headless-clauses.js';
 import { isHeadlessProhibition } from './headless-prohibition.js';
 import { parseTestOutput } from '../utils/test-output-parser.js';
 import { checkHeadlessDeliverable } from './headless-deliverable.js';
@@ -35,8 +36,7 @@ function repositoryActionClauses(prompt: string): string[] {
     /[\w/-]+\.[a-z0-9]+\b/.test(quoted) ? 'file_target ' + (/agents\.md/.test(quoted) ? 'agents' : '') : 'quoted');
   // Clause boundaries are grammatical separators, independent of the next
   // verb's vocabulary. Otherwise an unfamiliar operation after "and" vanishes.
-  const boundaries = /[?!;,\n]\s*|\.(?=\s|$)\s*|\b(?:then|puis|ensuite|but|mais|and|et)\s+/g;
-  const clauses = unquoted.split(boundaries).map(clause => clause.trim().replace(/^(?:please|then|puis|ensuite|and|et)\s+/, '')).filter(Boolean);
+  const clauses = splitHeadlessClauses(unquoted).map(clause => clause.replace(/^(?:please|then|puis|ensuite|and|et)\s+/, ''));
   const informational = /^(?:explain|describe|summari[sz]e|analy[sz]e|compare|review|audit|read|trace|cite|identify|locate|inspect|consult|report|outline|highlight|state|mention|show|list|what|where|which|count|how|why|tell|reply|respond|answer|say|translate|explique|decris|resume|analyse|compare|audite|lis|recense|identifie|repere|consulte|indique|montre|liste|quel|quelle|quels|quelles|ou|combien|comment|pourquoi|reponds|dis|traduis)\b/;
   const outputConstraint = (clause: string): boolean => {
     // An output rule cannot exempt an independent, unfamiliar operation.
@@ -64,6 +64,7 @@ function repositoryActionClauses(prompt: string): string[] {
     return outputVerb && (outputObject || /\b(?:only|alone|just)\b/.test(clause)) && !physical;
   };
   return clauses.filter((clause, index) => {
+    if (isIncidentalHeadlessClause(clause, index)) return false;
     // Prohibitions take precedence over every positive means clause. French
     // ne…que is restrictive, so it remains a positive request below.
     if (isHeadlessProhibition(clause)) return false;

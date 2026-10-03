@@ -4,5 +4,5 @@ export function isHeadlessProhibition(clause: string): boolean {
     .replace(/[’‘]/g, "'").toLowerCase().trim()
     .replace(/^(?:please|can you|could you|would you|peux-tu|pourrais-tu|s'il te plait)\s+/, '');
   // French ne…que restricts a positive request; it is not a prohibition.
-  return /^(?:do not|don't|never)\b|^ne\b.*\b(?:pas|aucun\w*|rien|jamais)\b/.test(text);
+  return /^(?:do not|don't|never|you\s+(?:must|should|may)\s+not)\b|^(?:ne\b|n').*\b(?:pas|aucun\w*|rien|jamais)\b/.test(text);
 }
