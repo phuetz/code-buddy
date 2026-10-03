@@ -1,3 +1,4 @@
+import { REPLACEMENT_PARAMETERS } from './replacement-schema.js';
 /**
  * Text Editor Tool Adapters
  *
@@ -283,77 +284,7 @@ export class StrReplaceEditorTool implements ITool {
     return {
       name: this.name,
       description: this.description,
-      parameters: {
-        type: 'object',
-        properties: {
-          path: {
-            type: 'string',
-            description: 'Path to the file to edit',
-          },
-          file_path: {
-            type: 'string',
-            description: 'Alias for path',
-          },
-          target_file: {
-            type: 'string',
-            description: 'Alias for path',
-          },
-          old_str: {
-            type: 'string',
-            description: 'Text to find and replace',
-          },
-          old_text: {
-            type: 'string',
-            description: 'Alias for old_str',
-          },
-          old_content: {
-            type: 'string',
-            description: 'Alias for old_str',
-          },
-          find: {
-            type: 'string',
-            description: 'Alias for old_str',
-          },
-          old_string: {
-            type: 'string',
-            description: 'Alias for old_str',
-          },
-          pattern: {
-            type: 'string',
-            description: 'Alias for old_str',
-          },
-          new_str: {
-            type: 'string',
-            description: 'Replacement text',
-          },
-          new_text: {
-            type: 'string',
-            description: 'Alias for new_str',
-          },
-          new_content: {
-            type: 'string',
-            description: 'Alias for new_str',
-          },
-          replace: {
-            type: 'string',
-            description: 'Alias for new_str',
-          },
-          new_string: {
-            type: 'string',
-            description: 'Alias for new_str',
-          },
-          replacement: {
-            type: 'string',
-            description: 'Alias for new_str',
-          },
-          replace_all: {
-            type: 'boolean',
-            description: 'If true, replace all occurrences; otherwise only first',
-            default: false,
-          },
-        },
-        required: ['path'],
-      },
+      parameters: REPLACEMENT_PARAMETERS,
     };
   }
 

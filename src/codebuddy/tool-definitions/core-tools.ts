@@ -1,3 +1,4 @@
+import { REPLACEMENT_PARAMETERS } from '../../tools/registry/replacement-schema.js';
 /**
  * Core Tool Definitions
  *
@@ -106,69 +107,8 @@ export const STR_REPLACE_EDITOR_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "str_replace_editor",
-    description: "Replace specific text in a file. Use this for single line edits only. After editing, verify the change with view_file.",
-    parameters: {
-      type: "object",
-      properties: {
-        path: {
-          type: "string",
-          description: "Path to the file to edit",
-        },
-        file_path: {
-          type: "string",
-          description: "Alias for path",
-        },
-        target_file: {
-          type: "string",
-          description: "Alias for path",
-        },
-        old_str: {
-          type: "string",
-          description: "Text to replace (must match exactly, or will use fuzzy matching for multi-line strings)",
-        },
-        old_text: {
-          type: "string",
-          description: "Alias for old_str",
-        },
-        old_content: {
-          type: "string",
-          description: "Alias for old_str",
-        },
-        find: {
-          type: "string",
-          description: "Alias for old_str",
-        },
-        old_string: {
-          type: "string",
-          description: "Alias for old_str",
-        },
-        new_str: {
-          type: "string",
-          description: "Text to replace with",
-        },
-        new_text: {
-          type: "string",
-          description: "Alias for new_str",
-        },
-        new_content: {
-          type: "string",
-          description: "Alias for new_str",
-        },
-        replace: {
-          type: "string",
-          description: "Alias for new_str",
-        },
-        new_string: {
-          type: "string",
-          description: "Alias for new_str",
-        },
-        replace_all: {
-          type: "boolean",
-          description: "Replace all occurrences (default: false, only replaces first occurrence)",
-        },
-      },
-      required: ["path", "old_str", "new_str"],
-    },
+    description: "Replace literal text in a file, including multiline blocks. Use path, old_str and new_str once each. Read the current file before editing, then verify the change with view_file.",
+    parameters: REPLACEMENT_PARAMETERS,
   },
 };
 

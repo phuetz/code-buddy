@@ -139,10 +139,11 @@ describe('text-editor-tools aliases', () => {
     });
   });
 
-  it('schema allows alias-only replace args without requiring old_str/new_str keys', () => {
+  it('advertises canonical replacement fields while accepting legacy aliases at runtime', () => {
     const tool = new StrReplaceEditorTool();
     const schema = tool.getSchema();
-    expect(schema.parameters.required).toEqual(['path']);
+    expect(schema.parameters.required).toEqual(['path', 'old_str', 'new_str']);
+    expect(schema.parameters.additionalProperties).toBe(false);
     expect(tool.validate({ path: 'a.ts', old_string: 'a', new_string: 'b' }).valid).toBe(true);
   });
 });
