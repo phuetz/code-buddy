@@ -1615,20 +1615,20 @@ export class AgentExecutor {
           }
         }
 
-        const turnExecutionExtra: Record<string, unknown> | undefined = introspectionIntent || surface === 'cli'
-          ? {
-              ...(activeModelName ? { model: activeModelName } : {}),
-              ...(providerName ? { provider: providerName } : {}),
-              ...(surface ? { surface } : {}),
-              ...(permissionMode ? { permissionMode } : {}),
-              ...(operationalRobotName
-                ? { robotName: operationalRobotName }
-                : {}),
-              maxToolRounds,
-              exposedToolNames: tools.map((tool) => tool.function.name),
-              introspectionIntent,
-            }
-          : undefined;
+        // Recovery diagnostics need the final schema list on every surface,
+        // including loop's sequential collector (which has no CLI surface).
+        const turnExecutionExtra: Record<string, unknown> = {
+          ...(activeModelName ? { model: activeModelName } : {}),
+          ...(providerName ? { provider: providerName } : {}),
+          ...(surface ? { surface } : {}),
+          ...(permissionMode ? { permissionMode } : {}),
+          ...(operationalRobotName
+            ? { robotName: operationalRobotName }
+            : {}),
+          maxToolRounds,
+          exposedToolNames: tools.map((tool) => tool.function.name),
+          introspectionIntent,
+        };
 
         let preparedMessages: CodeBuddyMessage[];
         try {

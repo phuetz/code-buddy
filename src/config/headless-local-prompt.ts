@@ -6,7 +6,7 @@
  * `HEADLESS_LOCAL_COMPACT_MAX_TOOLS` is the number of tool schemas sent, not a
  * hint the selector may exceed. The selector's anti-starvation slack
  * (`alwaysInclude.length + 5` when `maxTools` > 5, `src/tools/tool-selector.ts`)
- * turned a compact request into 10 schemas: the four names below, plus
+ * turned a compact request into 10 schemas: the original four names, plus
  * `restore_context` (forced by the selection strategy — observation contract,
  * kept inside the ceiling), plus five RAG hits. The last two of those hits
  * (`peer_tool_invoke`, `web_test` on « Réponds uniquement : OK ») were the
@@ -24,11 +24,20 @@ export const HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE = [
   'bash',
   'search',
   'tool_search',
+  // Keep an editor beside creation tools: recovery on an existing file must
+  // remain callable after the ceiling, including under WritePolicy strict.
+  'apply_patch',
+  'str_replace_editor',
 ] as const;
+
+// Some small-model profiles disable apply_patch. Preserve one editor that
+// survived model/tool filtering; never inject a schema that was filtered out.
+const COMPACT_EDITOR_PRIORITY = ['apply_patch', 'str_replace_editor', 'patch', 'file_edit'] as const;
 
 /** Kept inside the ceiling: truncated observations name this recovery tool. */
 const COMPACT_TOOL_PRIORITY = [
-  ...HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE,
+  ...HEADLESS_LOCAL_COMPACT_ALWAYS_INCLUDE.filter(name =>
+    !COMPACT_EDITOR_PRIORITY.some(editor => editor === name)),
   'restore_context',
 ] as const;
 
@@ -85,6 +94,14 @@ export function capCompactToolList<T extends { function: { name: string } }>(
     if (!tool || used.has(name)) continue;
     chosen.push(tool);
     used.add(name);
+  }
+  if (chosen.length < max) {
+    const editorName = COMPACT_EDITOR_PRIORITY.find(name => byName.has(name));
+    const editor = editorName ? byName.get(editorName) : undefined;
+    if (editor && editorName) {
+      chosen.push(editor);
+      used.add(editorName);
+    }
   }
   for (const tool of tools) {
     if (chosen.length >= max) break;

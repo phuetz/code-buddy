@@ -352,7 +352,8 @@ export class TextEditorTool implements Disposable {
         if (stats.isFile()) {
           return {
             success: false,
-            error: `File already exists: ${filePath}. Use str_replace_editor to modify existing files instead of create_file.`,
+            error: `File already exists: ${filePath}. Nothing was written.`,
+            data: { code: 'FILE_ALREADY_EXISTS' },
           };
         }
       }

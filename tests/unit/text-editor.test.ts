@@ -503,7 +503,10 @@ describe('TextEditorTool', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('File already exists');
-      expect(result.error).toContain('str_replace_editor');
+      expect(result.error).toContain('Nothing was written');
+      expect(result.data).toEqual({ code: 'FILE_ALREADY_EXISTS' });
+      expect(result.error).not.toContain('str_replace_editor');
+      expect(mockWriteFile).not.toHaveBeenCalled();
     });
 
     it('should add create to edit history', async () => {

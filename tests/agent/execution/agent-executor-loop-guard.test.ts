@@ -16,6 +16,8 @@ import { LoopDetectionService } from '../../../src/agent/loop-detection-service.
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { CreateFileTool, resetTextEditorInstance } from '../../../src/tools/registry/text-editor-tools.js';
+import type { ToolResult } from '../../../src/types/index.js';
 
 vi.mock('../../../src/utils/logger.js', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -117,6 +119,39 @@ describe('AgentExecutor tool loop guard (P1)', () => {
   });
   afterEach(() => {
     bus.off(listenerId);
+  });
+
+  it('sequential loop recovery names the editor from the model round without a CLI surface', async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-loop-existing-'));
+    fs.writeFileSync(path.join(cwd, 'answer.ts'), 'const answer = 1;\n');
+    try {
+      const deps = createDeps();
+      const tools = ['write_file', 'patch', 'read_file'].map(name => ({
+        type: 'function' as const,
+        function: { name, description: name, parameters: { type: 'object', properties: {} } },
+      }));
+      vi.mocked(deps.toolSelectionStrategy.selectToolsForQuery).mockResolvedValue({
+        tools, selection: null, fromCache: false, query: '', timestamp: new Date(),
+      });
+      let nativeResult: ToolResult | undefined;
+      vi.mocked(deps.toolHandler.executeTool).mockImplementation(async (call, extra) => {
+        nativeResult = await new CreateFileTool().execute(JSON.parse(call.function.arguments), { cwd, extra });
+        return nativeResult;
+      });
+      scriptProvider(deps, round => round === 1
+        ? [toolCall('write_file', { path: 'answer.ts', content: 'const answer = 42;\n' }, round)]
+        : []);
+      const messages: CodeBuddyMessage[] = [{ role: 'user', content: 'Update answer.ts' }];
+      await new AgentExecutor(deps, createConfig()).processUserMessage('Update answer.ts', [], messages);
+      expect(nativeResult?.error).toContain('Use patch with {"path":"answer.ts","old_str":');
+      const toolResult = messages.find(message => message.role === 'tool');
+      expect(toolResult?.content).toContain('Use patch with {"path":"answer.ts","old_str":');
+      expect(toolResult?.content).not.toContain('str_replace_editor');
+      expect(fs.readFileSync(path.join(cwd, 'answer.ts'), 'utf8')).toBe('const answer = 1;\n');
+    } finally {
+      resetTextEditorInstance();
+      fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
   });
 
   it('streaming: 5 identical view_file calls inject exactly one guard message and one event', async () => {

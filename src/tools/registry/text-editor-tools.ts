@@ -10,6 +10,38 @@ import path from 'path';
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
 import { TextEditorTool } from '../index.js';
+import { TOOL_ALIASES } from './tool-alias-map.js';
+
+/** Recovery must use the schemas sent to this model round, not registry names. */
+function existingFileRecovery(filePath: string, exposedToolNames: unknown): string {
+  const names = Array.isArray(exposedToolNames)
+    ? exposedToolNames.filter((name): name is string => typeof name === 'string')
+    : [];
+  const find = (legacy: string): string | undefined =>
+    names.find(name => (TOOL_ALIASES[name] ?? name) === legacy);
+  const reader = find('view_file');
+  const readHint = reader
+    ? `Use ${reader} with ${JSON.stringify({ path: filePath })} to read the existing text. `
+    : '';
+  const editor = find('str_replace_editor');
+  if (editor) {
+    return `${readHint}Use ${editor} with ${JSON.stringify({
+      path: filePath,
+      old_str: '<exact existing text>',
+      new_str: '<replacement text>',
+    })}. Copy old_str exactly from the file and put the desired text in new_str; do not use the example placeholders literally.`;
+  }
+  const patcher = find('apply_patch');
+  if (patcher) {
+    return `${readHint}Use ${patcher} with ${JSON.stringify({
+      patch: `*** Begin Patch\n*** Update File: ${filePath}\n@@\n-old line\n+new line\n*** End Patch`,
+    })}. Replace old line with an exact existing line and new line with the desired line.`;
+  }
+  const search = find('tool_search');
+  return search
+    ? `Use ${search} with ${JSON.stringify({ query: 'edit existing file' })} to discover an editing tool, then use its returned schema.`
+    : 'No editing tool is exposed in this round. Enable an editing tool before retrying; creation cannot overwrite an existing file.';
+}
 
 function extractPath(input: Record<string, unknown>): string | undefined {
   const candidate = input.path ?? input.file_path ?? input.target_file ?? input.file;
@@ -170,7 +202,15 @@ export class CreateFileTool implements ITool {
     const path = resolveAgainstCwd(extractPath(input) as string, context);
     const content = input.content as string;
 
-    return await getTextEditor().create(path, content);
+    const result = await getTextEditor().create(path, content);
+    const data = result.data as { code?: string } | undefined;
+    if (!result.success && data?.code === 'FILE_ALREADY_EXISTS') {
+      return {
+        ...result,
+        error: `${result.error} ${existingFileRecovery(extractPath(input) as string, context?.extra?.exposedToolNames)}`,
+      };
+    }
+    return result;
   }
 
   getSchema(): ToolSchema {

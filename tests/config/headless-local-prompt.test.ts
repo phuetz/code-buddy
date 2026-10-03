@@ -16,6 +16,25 @@ afterEach(() => {
 });
 
 describe('headless local compact prompt', () => {
+  it('keeps an editor inside the eight schemas when creation aliases precede it (B5)', () => {
+    const tools = [
+      'bash', 'view_file', 'read_file', 'create_file', 'write_file',
+      'str_replace_editor', 'patch', 'search', 'tool_search', 'restore_context', 'apply_patch',
+    ].map(name => ({ function: { name } }));
+    const selected = capCompactToolList(tools).map(tool => tool.function.name);
+    expect(selected).toHaveLength(8);
+    expect(selected).toContain('apply_patch');
+    expect(selected).toContain('restore_context');
+    expect(selected).toContain('tool_search');
+    expect(selected.some(name => name === 'create_file' || name === 'write_file')).toBe(true);
+    // A filtered-out editor must never be reintroduced by the cap.
+    const filtered = capCompactToolList(tools.filter(tool => tool.function.name !== 'apply_patch'))
+      .map(tool => tool.function.name);
+    expect(filtered).not.toContain('apply_patch');
+    expect(filtered).toContain('str_replace_editor');
+    expect(filtered).toHaveLength(8);
+  });
+
   it('detects Ollama / LM Studio / vLLM and ignores cloud providers', () => {
     expect(isLocalLlmProvider({ CODEBUDDY_PROVIDER: 'ollama' })).toBe(true);
     expect(isLocalLlmProvider({ CODEBUDDY_PROVIDER: 'lmstudio' })).toBe(true);
