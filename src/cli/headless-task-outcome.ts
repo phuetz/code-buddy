@@ -57,7 +57,7 @@ function echoedCheckStatus(entry: TaskEvidenceEntry, command: string): { command
 
 function hasRedVerification(entry: TaskEvidenceEntry, name: string, command?: string): boolean {
   const verifies = name === 'lint_project' || name === 'test_runner'
-    || /(?:^|[\s;&|])(?:npm|pnpm|yarn|bun|npx|node|vitest|jest|eslint|tsc|pytest|cargo|go|dotnet)(?=\s|$)/.test(command ?? '')
+    || /(?:^|[\s;&|])(?:[^\s;&|'"`<>$]+\/)?(?:npm|pnpm|yarn|bun|npx|node|vitest|jest|eslint|tsc|pytest|cargo|go|dotnet)(?=\s|$)/.test(command ?? '')
       && /\b(?:test|tests|lint|eslint|vitest|jest|tsc|pytest|check|typecheck)\b/.test(command ?? '');
   if (!verifies) return false;
   if (command && (echoedCheckStatus(entry, command)?.code ?? 0) > 0) return true;
