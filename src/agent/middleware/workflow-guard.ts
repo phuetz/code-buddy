@@ -243,8 +243,8 @@ export class WorkflowGuardMiddleware implements ConversationMiddleware {
         action: 'warn',
         message: [
           `[workflow-guard] This task has ${reason}.`,
-          'Consider initialising a plan first: call the `plan` tool with action="init"',
-          'or create PLAN.md to break the work into verifiable steps before acting.',
+          'Consider creating PLAN.md first with the task goal and verifiable steps.',
+          'Use one of the file-editing tools provided in this turn.',
           `Proceeding without a plan — but be mindful of the Verification Contract.${docsHint}`,
         ].join(' '),
       };
