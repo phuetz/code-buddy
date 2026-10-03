@@ -8,6 +8,14 @@ import type { OllamaNativeRequest } from './ollama-native-transport.js';
  */
 export function compactOllamaRequest(request: OllamaNativeRequest): OllamaNativeRequest {
   const copy = structuredClone(request);
+  // Qwen's native renderer trims tool message boundaries. Encode meaningful
+  // whitespace as data so a stdout observation cannot silently lose bytes.
+  for (const message of copy.messages) {
+    if (message.role === 'tool' && typeof message.content === 'string'
+      && /^[\s\u0085]|[\s\u0085]$/u.test(message.content)) {
+      message.content = JSON.stringify({ tool_output: message.content });
+    }
+  }
   // Progressive discovery keeps the search capability through tool_search.
   // Its full schema becomes visible as soon as discovery is actually used.
   const names = new Set(
