@@ -253,13 +253,14 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\bspawn\s*\(/, severity: 'medium', description: 'Process spawning', name: 'spawn', capability: 'shell' },
   { pattern: /\bexec\s*\(/, severity: 'high', description: 'Command execution', name: 'exec', capability: 'shell' },
 
-  { pattern: /\b(?:(?:import\s+subprocess\b|subprocess\s*\.)|from\s+subprocess\s+import\b|from\s+os\s+import\s+[^\n]*(?:system|popen|spawn|exec)\b|import\s+os\s+as\s+\w+|os\s*\.\s*(?:system|popen|spawn\w*|exec\w*)\s*\()/, severity: 'high', description: 'Python process execution capability', name: 'python-process', capability: 'shell' },
-  { pattern: /\brmtree\s*\(|\bfrom\s+shutil\s+import\s+[^\n]*\brmtree\b|\b(?:rmSync|rmdirSync)\s*\(|(?:\.\s*(?:rm|rmdir)|\[\s*['"](?:rmSync|rm|rmdirSync|rmdir)['"]\s*\])\s*\(/s, severity: 'critical', description: 'Recursive deletion in executable code', name: 'script-recursive-delete', capability: 'filesystem' },
+  { pattern: /\b(?:(?:import\s+subprocess\b|subprocess\s*(?:\.|\[))|from\s+subprocess\s+import\b|from\s+os\s+import\s+[^\n]*(?:system|popen|spawn|exec)\b|import\s+os\s+as\s+\w+|os\s*\.\s*(?:system|popen|spawn\w*|exec\w*)\s*\()/, severity: 'high', description: 'Python process execution capability', name: 'python-process', capability: 'shell' },
+  { pattern: /\brmtree\s*\(|\bfrom\s+shutil\s+import\s+[^\n]*\brmtree\b|\b(?:rmSync|rm|rmdirSync|rmdir)\s*\(|(?:\.\s*(?:rm|rmdir)|\[\s*['"](?:rmSync|rm|rmdirSync|rmdir)['"]\s*\])\s*\(/s, severity: 'critical', description: 'Recursive deletion in executable code', name: 'script-recursive-delete', capability: 'filesystem' },
 
   { pattern: /\b(?:exec\s*\.\s*Command(?:Context)?|Command\s*::\s*new|ProcessBuilder|shell_exec|system|popen|spawnSync|execFileSync)\s*\(|\bStart-Process\b/, severity: 'high', description: 'Native process execution', name: 'native-process', capability: 'shell' },
 
   { pattern: /\bos\s*\[\s*['"](?:system|popen|posix_spawn|exec\w*|spawn\w*)['"]\s*\]\s*\(|\bgetattr\s*\(\s*os\s*,\s*['"](?:system|popen|posix_spawn|exec\w*|spawn\w*)['"]\s*\)\s*\(|\b(?:create_subprocess_(?:shell|exec)|posix_spawn|execv(?:e|p|pe)?|passthru|proc_open|execa)\s*\(|\b(?:pty\s*\.\s*spawn|Open3\s*\.\s*capture\w*|syscall\s*\.\s*Exec|os\s*\.\s*StartProcess|Deno\s*\.\s*Command)\s*\(|\bInvoke-Expression\b|\$\s*`|%x[({/]/, severity: 'high', description: 'Process execution including quoted APIs and language-native launchers', name: 'extended-process', capability: 'shell' },
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'PHP backtick process execution', name: 'php-backtick', capability: 'shell' },
+  { pattern: /`[^`\n]+`/, severity: 'high', description: 'Shell backtick process execution', name: 'shell-backtick', capability: 'shell' },
 
   // File system dangers
   { pattern: /\brm\s+-rf\b/, severity: 'critical', description: 'Recursive force delete', name: 'rm-rf', capability: 'filesystem' },
@@ -385,37 +386,71 @@ function getDangerousPatterns(): DangerousPattern[] {
   });
 }
 
-interface ScanContext { markdown: boolean; language: string; watched: boolean; imperative: boolean }
+interface ScanContext { markdown: boolean; language: string; watched: boolean; imperative: boolean; shellLiteral: boolean }
+const SHELL_LANGUAGES = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'shell']);
+
+/** Quotes and comments at this occurrence, not another expression on the line. */
+function shellPosition(line: string, offset: number): { quoted: boolean; literal: boolean } {
+  let quote = '';
+  let escaped = false;
+  for (let i = 0; i < offset; i++) {
+    const char = line[i]!;
+    if (escaped) { escaped = false; continue; }
+    if (char === '\\' && quote !== "'") { escaped = true; continue; }
+    if (char === quote) { quote = ''; continue; }
+    if (!quote && (char === "'" || char === '"')) { quote = char; continue; }
+    if (!quote && char === '#' && (i === 0 || /[\s;|&()]/.test(line[i - 1]!))) return { quoted: false, literal: true };
+  }
+  return { quoted: Boolean(quote), literal: escaped || quote === "'" };
+}
 function scanContexts(content: string, filePath: string, executableContext = false): ScanContext[] {
   const markdown = /\.md$/i.test(filePath) && !executableContext && !content.startsWith('#!');
   let language = markdown ? '' : path.extname(filePath).slice(1).toLowerCase();
   const imperative = /(?<![\w-])(?:run|execute)\b[^\n]{0,100}\b(?:every|listed|now|immediately|with\s+(?:the\s+)?bash|rm\s+-rf|curl|wget)|\b(?:first\s+run|then\s+comply|you\s+obey|agent\s+runs|follow\s+the\s+description\s+literally|ignore\s+them)\b/i.test(content.replace(/(?:never|don't|do not|must not)\s+(?:run|execute)/gi, 'blocked'));
   let fence = '';
   let watched = false;
+  let heredoc: { delimiter: string; stripTabs: boolean } | undefined;
   return content.split('\n').map(line => {
-    const delimiter = markdown ? line.match(/^\s*(`{3,}|~{3,})([\w-]*)/) : null;
+    const shellLiteral = Boolean(heredoc);
+    if (heredoc && (heredoc.stripTabs ? line.replace(/^\t+/, '') : line) === heredoc.delimiter) heredoc = undefined;
+    const delimiter = markdown && !shellLiteral ? line.match(/^\s*(`{3,}|~{3,})([\w-]*)/) : null;
     if (delimiter) {
       if (fence && delimiter[1]![0] === fence[0]) { fence = ''; language = ''; watched = false; }
       else if (!fence) { fence = delimiter[1]!; language = delimiter[2]!.toLowerCase(); }
     }
     if (markdown && fence && !language && /^Watched patterns:\s*$/i.test(line.trim())) watched = true;
-    return { markdown, language, watched, imperative };
+    if (!shellLiteral && SHELL_LANGUAGES.has(language)) {
+      for (const match of line.matchAll(/<<(-?)\s*(?:'([A-Za-z_]\w*)'|"([A-Za-z_]\w*)")/g)) {
+        const position = shellPosition(line, match.index);
+        if (!position.quoted && !position.literal) {
+          heredoc = { delimiter: (match[2] ?? match[3])!, stripTabs: match[1] === '-' };
+          break;
+        }
+      }
+    }
+    return { markdown, language, watched, imperative, shellLiteral };
   });
 }
 function classifyMention(dp: DangerousPattern, line: string, context: ScanContext, offset: number, length: number): 'active' | 'benign' | 'documentary' {
-  if (dp.name === 'child_process' && /\b(?:const|let|var)\s+child_process\s*=\s*(?:\d+|true|false|null)\s*;?\s*$/.test(line)) return 'benign';
+  if (dp.name === 'child_process' && /\b(?:const|let|var)\s+$/.test(line.slice(0, offset)) && /^child_process\s*=\s*(?:\d+|true|false|null)\s*;?\s*$/.test(line.slice(offset))) return 'benign';
   if (dp.name === 'secret-ref') {
     const token = line.slice(offset, offset + length);
     if (!token.includes('_') && token !== token.toUpperCase() && line[offset - 1] !== '$') return 'benign';
   }
   if (dp.name === 'php-backtick' && context.language !== 'php') return 'benign';
+  if (dp.name === 'shell-backtick' && (!SHELL_LANGUAGES.has(context.language) || context.shellLiteral || shellPosition(line, offset).literal)) return 'benign';
   if (!context.markdown) return 'active';
   if (['native-process', 'python-process'].includes(dp.name)) {
-    if (dp.name === 'native-process' && (/\b(?:operating|file|management)\s+system\s*\(/i.test(line) || /\.system\s*\(\s*size\s*:/.test(line))) return 'benign';
+    // An inert occurrence never exempts another call on the same line.
+    const prefix = line.slice(0, offset);
+    const call = line.slice(offset);
+    if (dp.name === 'native-process' && /^system\s*\(/.test(call) &&
+        ((/\b(?:operating|file|management)\s+$/i.test(prefix) && /^system\s*\(\s*[^'"`();{}]+\)/.test(call)) ||
+         (/\.$/.test(prefix) && /^system\s*\(\s*size\s*:\s*\d+(?:\.\d+)?\s*[,)]/.test(call)))) return 'benign';
     return context.imperative ? 'active' : 'documentary';
   }
   if (['secret-ref', 'prefixed-secret', 'template-injection'].includes(dp.name)) return 'documentary';
-  if (['script-recursive-delete', 'php-backtick', 'extended-process'].includes(dp.name)) return context.imperative ? 'active' : 'documentary';
+  if (['script-recursive-delete', 'php-backtick', 'shell-backtick', 'extended-process'].includes(dp.name)) return context.imperative ? 'active' : 'documentary';
 
   if (dp.name === 'eval' && /\bmodel\s*\.\s*$/.test(line.slice(0, offset)) &&
       /^eval\s*\(\s*\)/.test(line.slice(offset)) &&
@@ -475,7 +510,7 @@ export function scanSkillContent(content: string, filePath: string, executableCo
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line === undefined) continue;
-    if (line.trim().startsWith('<!--') || line.trim() === '---') continue;
+    if (line.trim() === '---') continue;
     for (const dp of patterns) {
       for (const match of line.matchAll(new RegExp(dp.pattern.source, dp.pattern.flags.replace('g', '') + 'g'))) {
         const kind = classifyMention(dp, line, contexts[i]!, match.index, match[0].length);
@@ -492,8 +527,39 @@ export function scanSkillContent(content: string, filePath: string, executableCo
   // Apply the same context decisions to the full-document deobfuscation
   // pass. Only the matched span is masked; hidden/multiline/encoded attacks
   // and other patterns on the same line remain visible.
+  findings.push(...collectMultilineBackticks(content, filePath, contexts, findings));
   findings.push(...collectPromptInjectionFindings(content, filePath, findings, contexts));
   return { file: filePath, findings, scannedAt: Date.now(), textRead: true };
+}
+
+/** Backticks are interpreter syntax; decoding prose must not manufacture them. */
+function collectMultilineBackticks(content: string, filePath: string, contexts: ScanContext[], existing: ScanFinding[]): ScanFinding[] {
+  const lines = content.split('\n');
+  const findings: ScanFinding[] = [];
+  for (const name of ['php-backtick', 'shell-backtick']) {
+    const dp = DANGEROUS_PATTERNS.find(pattern => pattern.name === name)!;
+    const scoped = lines.map((line, i) => {
+      const context = contexts[i]!;
+      const language = name === 'php-backtick' ? context.language === 'php' : SHELL_LANGUAGES.has(context.language) && !context.shellLiteral;
+      if (!language || (context.markdown && /^\s*(?:`{3,}|~{3,})/.test(line))) return ' '.repeat(line.length);
+      // A literal delimiter must not consume the opening of a later command.
+      return name === 'shell-backtick'
+        ? line.replace(/`/g, (tick, offset: number) => shellPosition(line, offset).literal ? ' ' : tick)
+        : line;
+    }).join('\n');
+    for (const match of scoped.matchAll(/`[^`]+`/g)) {
+      const lineIndex = scoped.slice(0, match.index).split('\n').length - 1;
+      const offset = match.index - (scoped.lastIndexOf('\n', match.index - 1) + 1);
+      if (!match[0].includes('\n') && existing.some(f => f.pattern === name && f.line === lineIndex + 1)) continue;
+      const kind = classifyMention(dp, lines[lineIndex]!, contexts[lineIndex]!, offset, match[0].length);
+      if (kind === 'benign') continue;
+      findings.push({ severity: dp.severity, pattern: dp.name, description: dp.description,
+        file: filePath, line: lineIndex + 1, evidence: match[0].trim().slice(0, 120),
+        ...(kind === 'documentary' ? { documentary: true } : {}),
+      });
+    }
+  }
+  return findings;
 }
 
 /** Automatic installation/registration requires allow; review is never automatic. */
@@ -696,6 +762,7 @@ function collectDeobfuscatedFindings(
   let aggressiveWindows: string[] | null = null;
 
   for (const dp of patterns) {
+    if (dp.name === 'php-backtick' || dp.name === 'shell-backtick') continue;
     const isInjection = dp.capability === 'prompt-injection';
     if (!isInjection && !deobAll) continue;
     if (existing.some(f => f.pattern === dp.name && !f.documentary)) continue;

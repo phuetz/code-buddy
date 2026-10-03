@@ -290,11 +290,11 @@ describe('scanFile', () => {
 
   // ---- Edge cases ----
 
-  it('should skip HTML comment lines', () => {
+  it('should retain dangerous code hidden in HTML comments', () => {
     const fp = writeTestFile('test.skill.md', '<!-- eval("safe comment") -->');
     const result = scanFile(fp);
-    // The line starting with <!-- should be skipped
-    expect(result.findings).toHaveLength(0);
+    // A hidden instruction is still untrusted input to the skill consumer.
+    expect(result.findings).toContainEqual(expect.objectContaining({ severity: 'critical', pattern: 'eval' }));
   });
 
   it('should skip YAML frontmatter delimiter lines', () => {
