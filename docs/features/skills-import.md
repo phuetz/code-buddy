@@ -15,7 +15,9 @@ indépendants portant le même nom conservent chacun un nom d'import distinct.
 
 Le pare-feu analyse le manifeste et les fichiers associés. Les processus Python/Node
 et autres appels natifs, les suppressions récursives et les références de secrets sont
-signalés. La prose et les exemples Markdown conservent une revue sans accumuler
+signalés, y compris les appels de suppression déstructurés et les backticks shell.
+Une occurrence bénigne de prose ou Swift ne masque pas un autre appel sur la même
+ligne. Les commentaires HTML sont scannés. La prose et les exemples Markdown conservent une revue sans accumuler
 les pénalités des scripts. Les occurrences critiques gardent leur sévérité d’origine. Le code copié dans `scripts/`, les fichiers exécutables et les shebangs
 conservent les règles strictes, même si leurs commentaires parlent de sécurité.
 Les assertions Kotlin/Solidity ne sont pas des évaluations dynamiques. Le passage
@@ -51,7 +53,10 @@ directs, en modes synchrone et asynchrone. Il refuse un fichier marqué désacti
 
 Un outil externe inconnu ou une liste absente/illisible refuse la préparation de
 l'agent. Les chargeurs acceptent `tools: Read, Grep, Glob` et les tableaux YAML/JSON/TOML.
-Les politiques locales acceptent les motifs `*`, `?` et `!`. Les refus sont propagés
+Une allowlist locale doit contenir des noms ou motifs positifs bornés, comme
+`Read`, `view_?ile` ou `*file*`. `tools: "*"`, `tools: "**"` et les négations
+comme `tools: ["!bash"]` refusent le fichier ; elles ne peuvent pas ouvrir les
+outils par complément. `disabledTools: ["*"]` signifie en revanche tout refuser. Les refus sont propagés
 aux alias équivalents, dont `terminal`, `shell_exec` et `interactive_shell` pour Bash.
 Les anciennes descriptions YAML contenant un deux-points non cité sont normalisées
 sans réparation des listes d’outils.

@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / '_qa/pare-feu-ecc/reprise-2/mutations'
+OUT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / '_qa/pare-feu-ecc/reprise-2/mutations'
 OUT.mkdir(parents=True, exist_ok=True)
 SCANNER = 'src/security/skill-scanner.ts'
 AGENTS = 'src/agent/custom/custom-agent-loader.ts'
@@ -32,7 +32,11 @@ def pattern_disabled(name):
         start = lines[index].index('pattern: /')
         end = lines[index].index(', severity:', start)
         lines[index] = lines[index][:start] + 'pattern: /(?!)/' + lines[index][end:]
-        return '\n'.join(lines) + '\n'
+        mutated = '\n'.join(lines) + '\n'
+        if name == 'php-backtick':
+            # Remove the scoped interpreter pass as well as the line pattern.
+            mutated = mutated.replace("['php-backtick', 'shell-backtick']", "['shell-backtick']")
+        return mutated
     return edit
 
 def original_pattern(name):
@@ -54,7 +58,7 @@ def old_bc(source):
 CASES = [
     ('documentary-severity-info', SCANNER, lambda source: source.replace('severity: dp.severity,', "severity: kind === 'documentary' ? 'info' : dp.severity,", 1)),
     ('compound-warning-imperative', SCANNER, replace('(?<![\\w-])(?:run|execute)', r'\b(?:run|execute)')),
-    ('imperatives-ignored', SCANNER, replace('return { markdown, language, watched, imperative };', 'return { markdown, language, watched, imperative: false };')),
+    ('imperatives-ignored', SCANNER, replace('return { markdown, language, watched, imperative, shellLiteral };', 'return { markdown, language, watched, imperative: false, shellLiteral };')),
     ('watched-flag-ignored', SCANNER, replace('context.watched &&', 'true &&')),
     ('html-guard-removed', SCANNER, replace('/<!--/.test(line) || ', '')),
     ('description-unanchored', SCANNER, replace('/^description:', '/description:')),
