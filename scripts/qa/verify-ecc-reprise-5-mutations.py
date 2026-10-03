@@ -42,7 +42,7 @@ CASES = [
     ('prefixed-node-missed', SCANNER, replace(r'(?:[A-Za-z_$][\w$]*_)?child_process', 'child_process')),
     ('credential-assignment-missed', SCANNER, pattern_disabled('embedded-secret')),
     ('script-secret-exemption', SCANNER, replace("if (!context.markdown) return 'active';", "if (!context.markdown && !['secret-ref', 'prefixed-secret', 'embedded-secret'].includes(dp.name)) return 'active';")),
-    ('shebang-language-ignored', SCANNER, replace("shebang ?? (SCRIPT_EXTENSIONS.has(extension) ? extension.slice(1) : 'unknown')", "path.extname(filePath).slice(1).toLowerCase()")),
+    ('shebang-language-ignored', SCANNER, lambda source: replace(next(line for line in source.splitlines() if "let language = markdown" in line) + "\n    ?? (extension && !SCRIPT_EXTENSIONS.has(extension) ? 'unknown' : declaredLanguages.find(Boolean) ?? 'unknown');", "  let language = markdown ? '' : SCRIPT_EXTENSIONS.has(extension) ? extension.slice(1) : '';")(source)),
     ('unknown-language-authorized', SCANNER, replace("(Boolean(context.language) && context.language !== 'php' && !DATA_BACKTICK_LANGUAGES.has(context.language))", 'false')),
     ('mandatory-folding-optout', SCANNER, replace("  {\n    // Minimum interpreter framing", "  if (deobAll) {\n    // Minimum interpreter framing")),
     ('support-payload-ignored', SCANNER, replace('} else if (entry.isFile() || entry.isSymbolicLink()) {', "} else if ((entry.isFile() || entry.isSymbolicLink()) && (withinScripts || SCRIPT_EXTENSIONS.has(path.extname(entry.name)) || /\\.md$/i.test(entry.name) || isExecutableOrShebang(fullPath))) {")),

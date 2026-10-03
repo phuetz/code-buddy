@@ -63,7 +63,7 @@ CASES = [
     ('html-guard-removed', SCANNER, replace('/<!--/.test(line) || ', '')),
     ('description-unanchored', SCANNER, replace('/^description:', '/description:')),
     ('native-prose-active', SCANNER, replace("return context.imperative ? 'active' : 'documentary';", "return 'active';")),
-    ('prefixed-secret-penalties', SCANNER, replace("if (['secret-ref', 'prefixed-secret', 'template-injection', 'embedded-secret', 'shell-interpreter'].includes(dp.name)) return 'documentary';", "if (dp.name === 'template-injection') return 'documentary';")),
+    ('prefixed-secret-penalties', SCANNER, replace("if (['secret-ref', 'prefixed-secret', 'template-injection', 'embedded-secret', 'shell-interpreter', 'destructive-process'].includes(dp.name)) return 'documentary';", "if (dp.name === 'template-injection') return 'documentary';")),
     ('extended-process-missed', SCANNER, pattern_disabled('extended-process')),
     ('php-backticks-missed', SCANNER, pattern_disabled('php-backtick')),
     ('quoted-delete-missed', SCANNER, original_pattern('script-recursive-delete')),
