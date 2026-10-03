@@ -22,8 +22,29 @@ import { readDoctorLocalContextCap } from '../../doctor/local-context-cap.js';
 
 import { randomUUID } from 'node:crypto';
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
+import { Agent, type Dispatcher } from 'undici';
 
 import { getModelToolConfig } from '../../config/model-tools.js';
+import { resolveLocalTransportTimeoutMs } from '../../utils/stream-stall-guard.js';
+
+const nativeDispatchers = new Map<number, Dispatcher>();
+
+/**
+ * Dispatcher for native `/api/chat` requests. Without it, Node's fetch keeps
+ * undici's 300 s `headersTimeout`/`bodyTimeout`, shorter than the stall guard
+ * that owns local inactivity (see `resolveLocalTransportTimeoutMs`): a cold
+ * local prompt eval or a tool call buffered by Ollama for more than 5 min was
+ * cut by the socket (`fetch failed` / `terminated`) although still generating.
+ */
+export function getOllamaNativeDispatcher(env: NodeJS.ProcessEnv = process.env): Dispatcher {
+  const timeoutMs = resolveLocalTransportTimeoutMs(env);
+  let dispatcher = nativeDispatchers.get(timeoutMs);
+  if (!dispatcher) {
+    dispatcher = new Agent({ headersTimeout: timeoutMs, bodyTimeout: timeoutMs });
+    nativeDispatchers.set(timeoutMs, dispatcher);
+  }
+  return dispatcher;
+}
 
 /** Native `/api/chat` tool call: `arguments` is an object, not a JSON string. */
 interface OllamaNativeToolCall {

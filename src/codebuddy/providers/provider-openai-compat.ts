@@ -54,6 +54,7 @@ import {
 } from './provider-openai-compat-hooks.js';
 import {
   fromOllamaNativeResponse,
+  getOllamaNativeDispatcher,
   isOllamaEndpoint,
   isOllamaNativeChatEnabled,
   ollamaNativeChatUrl,
@@ -806,7 +807,8 @@ export class OpenAICompatProvider implements Provider {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       ...(signal ? { signal } : {}),
-    });
+      dispatcher: getOllamaNativeDispatcher(),
+    } as RequestInit);
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
       const error = new Error(

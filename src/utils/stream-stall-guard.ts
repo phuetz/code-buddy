@@ -88,6 +88,28 @@ export function resolveFirstTokenStallTimeoutMs(
   return Math.min(Math.max(afterFirst, Math.ceil(tokens * msPerToken)), maxMs);
 }
 
+/** Margin so the stall guard's explicit LlmStallError fires before the socket timeout. */
+const TRANSPORT_TIMEOUT_MARGIN_MS = 30_000;
+
+/**
+ * Socket-level timeout for a LOCAL runtime's HTTP response (headers and the gap
+ * between body chunks). Node's fetch (undici) defaults both to 300 s, below the
+ * budgets resolved above (up to `CODEBUDDY_STALL_MAX_MS`, 20 min): a local
+ * prompt eval or a buffered tool call longer than 5 min was cut with an opaque
+ * `fetch failed` / `terminated` that the stall guard would have allowed. The
+ * transport therefore waits for the guard's own ceiling, plus a margin, and
+ * keeps a finite backstop for callers that pass no signal.
+ * Returns 0 (no socket timeout) only when the operator disabled the guard.
+ */
+export function resolveLocalTransportTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CODEBUDDY_LLM_STALL_TIMEOUT_MS;
+  const explicit = raw !== undefined && raw.trim() !== '' && Number.isFinite(Number(raw)) ? Number(raw) : undefined;
+  if (explicit !== undefined && explicit <= 0) return 0;
+  const ceiling = Math.max(DEFAULT_STALL_TIMEOUT_MS, explicit ?? 0,
+    parseEnvNumber(env.CODEBUDDY_STALL_MAX_MS, DEFAULT_STALL_MAX_MS));
+  return ceiling + TRANSPORT_TIMEOUT_MARGIN_MS;
+}
+
 export interface StallGuardOptions {
   /** Inactivity budget until the first chunk. Defaults to `timeoutMs`. */
   firstTokenTimeoutMs?: number | (() => number);
