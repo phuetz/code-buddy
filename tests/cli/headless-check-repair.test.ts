@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  completedCheckRepairAnswer,
+  completedCheckRepairAnswer as completedAnswer,
   projectCheckToRun,
 } from '../../src/cli/headless-check-repair.js';
 import type { TaskEvidenceEntry } from '../../src/cli/headless-task-outcome.js';
+// Supply a final answer in every fixture, including negative controls.
+const completedCheckRepairAnswer = (query: string, entries: TaskEvidenceEntry[], cwd: string) =>
+  completedAnswer(query, [...entries, { type: 'assistant', content: 'The requested check finished.' }], cwd);
 const edit: TaskEvidenceEntry = {
   type: 'tool_result',
   content: 'Updated',

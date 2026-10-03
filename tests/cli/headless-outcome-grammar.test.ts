@@ -19,7 +19,7 @@ describe('headless grammatical scope', () => {
     'Summarize the file, without making assumptions.',
   ])('accepts reading obligations and dependent modifiers: %s', prompt => {
     expect(requestsRepositoryAction(prompt)).toBe(false);
-    expect(evaluateHeadlessTaskOutcome(prompt, [read, reply('Observed facts.')]).exitCode).toBe(0);
+    expect(evaluateHeadlessTaskOutcome(prompt, [read, reply('Observed facts.')]).reasons).not.toContain('requested_edit_not_executed');
   });
   it.each(['rename the symbol', 'recalibrate it', 'translate it to Python', 'convert it to Rust'])(
     'retains an independent operation after modifiers: %s', action => {

@@ -15,7 +15,8 @@ describe('reading contracts expressed with different grammatical heads', () => {
     'Read the manifest and give the package name. Nothing else.',
     'Lis les règles et applique-les à ta réponse.',
   ])('keeps presentation and coordinated objects within the reading contract: %s', prompt => {
-    expect(evaluateHeadlessTaskOutcome(prompt, [{ type: 'assistant', content: 'Observed answer.' }]).exitCode).toBe(0);
+    expect(requestsRepositoryAction(prompt)).toBe(false);
+    expect(evaluateHeadlessTaskOutcome(prompt, [{ type: 'assistant', content: 'Observed answer.' }]).reasons).not.toContain('requested_edit_not_executed');
   });
   it.each([
     'Explain source.js, including writing notes.md.',

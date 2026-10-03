@@ -13,7 +13,7 @@ const edit: TaskEvidenceEntry = { type: 'tool_result', content: 'Changed greet.j
   toolCall: { id: 'edit', function: { name: 'str_replace_editor', arguments: '{"path":"greet.js","command":"str_replace"}' } },
   toolResult: { success: true, output: 'Changed greet.js' },
 };
-const exit = (entries: TaskEvidenceEntry[], prompt = 'run tests and fix failures') => evaluateHeadlessTaskOutcome(prompt, entries).exitCode;
+const exit = (entries: TaskEvidenceEntry[], prompt = 'run tests and fix failures') => evaluateHeadlessTaskOutcome(prompt, [...entries, { type: 'assistant', content: 'The requested check finished.' }]).exitCode;
 
 describe('headless recovery with execution evidence', () => {
   it('does not make a missing optional read invalidate a later real edit (C edit-5)', () => {

@@ -8,7 +8,9 @@ describe('informational restitution and independent unknown operations', () => {
   const restitution = ['return it', 'return its current value', 'return the answer as JSON', 'return them below the header'];
   it.each(subjects.flatMap(subject => restitution.map(output => `Read ${subject} and ${output}. No extra text.`)))('accepts a restitution without requiring an edit: %s', prompt => {
     expect(requestsRepositoryAction(prompt)).toBe(false);
-    expect(evaluateHeadlessTaskOutcome(prompt, [reply('Observed answer.')]).exitCode).toBe(0);
+    const result = evaluateHeadlessTaskOutcome(prompt, [reply('Observed answer.')]);
+    expect(result.reasons).not.toContain('requested_edit_not_executed');
+    expect(result.exitCode).not.toBe(0); // classification alone supplies no observed result
   });
   it.each(['modernize it', 'convert it to TypeScript', 'rename the function', 'inline the helper', 'enable strict mode', 'increase coverage', 'recalibrate it', 'transpose the implementation'])(
     'keeps an unfamiliar operation after an informative clause: %s', operation => {

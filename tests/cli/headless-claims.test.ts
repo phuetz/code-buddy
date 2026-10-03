@@ -45,7 +45,7 @@ describe('honest wording and concrete action targets', () => {
     expect(evaluateHeadlessTaskOutcome('Explain', [result('bash', true, '{"command":"ls ."}'), { type: 'assistant', content: 'I executed `npm test`.' }]).exitCode).toBe(4);
   });
   it.each(['Quel est le nom du projet ?', 'Where is greet defined?', 'Count the functions in index.js.', 'Combien de fonctions contient index.js ?'])('allows an informational query without a mutation: %s', prompt => {
-    expect(evaluateHeadlessTaskOutcome(prompt, [{ type: 'assistant', content: 'Observed answer' }]).exitCode).toBe(0);
+    expect(evaluateHeadlessTaskOutcome(prompt, [{ type: 'assistant', content: 'Observed answer' }]).reasons).not.toContain('requested_edit_not_executed');
   });
   it('keeps the action requirement on compound interrogative requests', () => {
     expect(evaluateHeadlessTaskOutcome('Where is greet defined? Then fix it.', [{ type: 'assistant', content: 'Done' }]).exitCode).not.toBe(0);

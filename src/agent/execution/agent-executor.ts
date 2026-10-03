@@ -1,8 +1,9 @@
+import { checkHeadlessDeliverable } from '../../cli/headless-deliverable.js';
 import { withCompactToolSurface } from '../../prompts/headless-compact.js';
 import { randomUUID } from 'node:crypto';
 import { compactTurnObservations, compactObservation } from '../../context/compact-turn-observations.js';
 import { groundedEntryAnswer, exactProjectAnswer, isEntryExplanation } from '../../cli/headless-source-answer.js';
-import { unsupportedActionClaims } from '../../cli/headless-task-outcome.js';
+import { unsupportedActionClaims, requestsRepositoryAction } from '../../cli/headless-task-outcome.js';
 import { bootstrapRepositoryReads } from './repository-read-bootstrap.js';
 import { isToolNameAllowed } from '../../utils/tool-filter.js';
 import { bindFactsMemorySession } from '../../memory/facts-memory.js';
@@ -2756,10 +2757,15 @@ export class AgentExecutor {
           }
 
           if (process.env.CODEBUDDY_HEADLESS === 'true' && surface === 'cli') {
-            const missing = unsupportedActionClaims(assistantEntry.content, history.slice(evidenceStart));
-            if ((missing.length || sourceAnswerUnverified) && !claimRetry) {
+            const evidence = history.slice(evidenceStart);
+            const system = typeof messages[0]?.content === 'string' ? messages[0].content : '';
+            const deliverable = checkHeadlessDeliverable(turnQueryText, assistantEntry.content, evidence, system, !requestsRepositoryAction(turnQueryText));
+            const missing = unsupportedActionClaims(assistantEntry.content, evidence);
+            if ((missing.length || sourceAnswerUnverified || deliverable.reasons.length) && !claimRetry) {
               claimRetry = true;
-              messages.push({ role: 'user', content: sourceAnswerUnverified
+              messages.push({ role: 'user', content: deliverable.reasons.length
+                ? deliverable.guidance ?? 'The answer does not satisfy the required project output format. Follow the project instructions and verify the requested result.'
+                : sourceAnswerUnverified
                 ? (sourceAnswerContract !== undefined
                   ? 'Your answer does not satisfy the observed source/project output contract. Reply with exactly these attested facts and no other assertions:\n' + sourceAnswerContract
                   : 'The entry point has not been established by successful source reads. Read its declaration and source; do not infer its purpose or behavior.')
@@ -2767,6 +2773,7 @@ export class AgentExecutor {
               continue;
             }
             if (sourceAnswerUnverified) assistantEntry.terminationReason = 'unverified_source_answer';
+            if (deliverable.reasons.length) assistantEntry.terminationReason = 'unverified_deliverable';
           }
 
           // Companion hosts own the canonical commit boundary: voice,

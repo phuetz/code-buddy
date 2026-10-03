@@ -1,3 +1,4 @@
+import { checkHeadlessDeliverable } from './headless-deliverable.js';
 import { stripVTControlCharacters } from 'node:util';
 import { TOOL_METADATA } from '../tools/metadata.js';
 import { TOOL_ALIASES } from '../tools/registry/tool-alias-map.js';
@@ -25,7 +26,7 @@ export interface HeadlessTaskOutcome {
 /** Independent clauses carry independent obligations; unknown imperatives stay closed. */
 function repositoryActionClauses(prompt: string): string[] {
   const text = prompt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-    .replace(/^(?:please|can you|could you|peux-tu|pourrais-tu|s'il te plait)\s+/, '');
+    .replace(/^(?:please|can you|could you|would you|will you|est-ce que tu peux|est-ce que vous pouvez|peux-tu|pourrais-tu|s'il te plait)\s+/, '');
   // Apostrophes inside words are not quote delimiters. Keep a physical-target
   // marker for quoted paths so output formatting cannot hide a requested file.
   const unquoted = text.replace(/`[^`]*`|"[^"\n]*"|(?<![\w])'[^'\n]*'/g, quoted =>
@@ -61,6 +62,11 @@ function repositoryActionClauses(prompt: string): string[] {
     return outputVerb && (outputObject || /\b(?:only|alone|just)\b/.test(clause)) && !physical;
   };
   return clauses.filter((clause, index) => {
+    // Auxiliary-led interrogatives ask for an observation, not an imperative.
+    // Each subsequent independent clause is still checked separately.
+    if (/^(?:does|did|is|are|was|were|has|had|will|would|could)\b|^(?:do|have|can)\s+(?:you|we|they|i|it|this|these|those)\b|^est-ce\s+que\b/.test(clause)) return false;
+    // A courtesy question takes the infinitive in French.
+    if (/^(?:expliquer|decrire|resumer|analyser|comparer|auditer|lire|identifier|reperer|consulter|indiquer|montrer|lister|repondre)\b/.test(clause)) return false;
     // French ne…que restricts a positive request; it does not prohibit it.
     clause = clause.replace(/^ne\s+(\S+)\s+que\s+/, '$1 ');
     // Supplements constrain the preceding answer; they are not imperatives.
@@ -84,14 +90,16 @@ function repositoryActionClauses(prompt: string): string[] {
     // translating prose. Do not exempt it just because "translate" is a
     // common informational verb.
     if (/^(?:translate|traduis)\b/.test(clause)
-      && /\b(?:to|into|en)\s+(?:python|typescript|javascript|rust|go|java|ruby|c\+\+|c#|f#|c|sql|bash|lua|kotlin|swift|scala|php|perl|clojure|haskell|ocaml|cobol|fortran|elixir|dart|julia)(?=\s|[.!?,;]|$)/.test(clause)) return true;
+      && !/^(?:translate|traduis)\s+(?:(?:the|this|une?|la|le)\s+)?(?:explanation|description|documentation|comments?|sentence|paragraph|prose|explication|phrase|commentaires?)\b/.test(clause)
+      && /\b(?:to|into|en)\s+\S+/.test(clause)
+      && /\b(?:source|code|implementation|module)\b|\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh)\b/.test(unquoted)) return true;
     if (/^(?:after|before|apres|avant)\b/.test(clause) && clauses[index + 1] && outputConstraint(clauses[index + 1]!)) return false;
     if (/^(?:do not|don't|never|ne\b.*\bpas)\b/.test(clause)) return false;
     if (outputConstraint(clause)) return false;
     if (informational.test(clause)) return false;
     // A coordinated noun list is still the object of the preceding read.
     if (index > 0 && (informational.test(clauses[index - 1]!) || /^(?:follow|suis)\b/.test(clauses[index - 1]!))
-      && /^(?:files?|folders?|imports?|exports?|names?|values?|parameters?|calculations?|dependencies|inputs?|outputs?|arguments?)$/.test(clause)) return false;
+      && /^(?:(?:actual|observed|printed|computed|expected)\s+)?(?:files?|folders?|imports?|exports?|names?|values?|parameters?|calculations?|dependencies|inputs?|outputs?|arguments?|results?|numbers?)(?:\s+(?:of|from|in)\s+(?:file_target|[\w./-]+))?$/.test(clause)) return false;
     if (/^(?:hi|hello|hey|bonjour|salut)$/.test(clause)) return false;
     if (/^write (?:a |an )?(?:poem|story|essay|email|sql query)\b/.test(clause)
       && !/\bfile_target\b/.test(clause)) return false;
@@ -410,7 +418,11 @@ export function evaluateHeadlessTaskOutcome(
   if (entries.some(entry => entry.terminationReason || entry.truncated)) reasons.push('execution_stopped');
   if (responseExitCode !== 0) reasons.push('response_failed');
   if (entries.some(entry => entry.type === 'assistant' && /Stopped by the loop guard|maximum (?:number of )?tool|read budget exhausted|Session cost limit reached|Operation cancelled by user|execution stopped|context compaction refused/i.test(entry.content))) reasons.push('execution_stopped');
-  const final = [...entries].reverse().find(entry => entry.type === 'assistant')?.content ?? '';
+  const finalIndex = entries.findLastIndex(entry => entry.type === 'assistant');
+  const final = entries[finalIndex]?.content ?? '';
+  if (!final.trim() || entries.findLastIndex(entry => entry.type === 'tool_result') > finalIndex)
+    reasons.push('final_answer_missing');
+  reasons.push(...checkHeadlessDeliverable(prompt, final, entries, '', !requestsRepositoryAction(prompt)).reasons);
   if (unsupportedActionClaims(final, entries).length) reasons.push('unsupported_action_claim');
   if ([...checks.values()].some(check => !check.success && !(check.optionalRead && lastWrite > check.sequence))) reasons.push('verification_failed');
   if (requestsRepositoryAction(prompt) && actionTools.length === 0) reasons.push('no_action_executed');

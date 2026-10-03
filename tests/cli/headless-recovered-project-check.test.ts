@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  evaluateHeadlessTaskOutcome,
+  evaluateHeadlessTaskOutcome as evaluateEvidence,
   type TaskEvidenceEntry,
 } from '../../src/cli/headless-task-outcome.js';
+// Every positive and negative fixture includes the final answer, so failures
+// below must still come from the verification evidence rather than its absence.
+const evaluateHeadlessTaskOutcome = (query: string, entries: TaskEvidenceEntry[]) =>
+  evaluateEvidence(query, [...entries, { type: 'assistant', content: 'The requested check finished.' }]);
 const result = (
   command: string,
   success: boolean,

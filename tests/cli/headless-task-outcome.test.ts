@@ -9,7 +9,7 @@ const result = (name: string, command: string, success: boolean) => ({
 
 describe('headless task evidence', () => {
   const exit = (prompt: string, entries: ReturnType<typeof result>[], text = 'All fixed.') =>
-    resolveHeadlessTurnExitCode(text, ['bash', 'str_replace_editor'], entries.map(e => e.toolCall.function.name), { prompt, entries });
+    resolveHeadlessTurnExitCode(text, ['bash', 'str_replace_editor'], entries.map(e => e.toolCall.function.name), { prompt, entries: [...entries, { type: 'assistant', content: text }] });
 
   it.each(Array.from({ length: 5 }, (_, i) => i))('rejects an unexecuted modification, replay %i', () => {
     expect(exit('run tests and fix failures', [])).toBe(1);

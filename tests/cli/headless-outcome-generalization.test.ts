@@ -216,7 +216,7 @@ it.each([
   'Read the options. After inspection, output only the raw datum.',
 ])('treats presentation instructions as output, regardless of their object vocabulary: %s', prompt => {
   expect(requestsRepositoryAction(prompt)).toBe(false);
-  expect(evaluateHeadlessTaskOutcome(prompt, [answer('Observed answer.')]).exitCode).toBe(0);
+  expect(evaluateHeadlessTaskOutcome(prompt, [answer('Observed answer.')]).reasons).not.toContain('requested_edit_not_executed');
 });
 
 it.each([
@@ -258,7 +258,7 @@ it('preserves the explicitly mental model exception', () => {
 it.each(['Read the exports. Use the presentation format in AGENTS.md.', 'Lis la déclaration. Utilise le format de lecture défini dans AGENTS.md.'])(
   'does not mistake use of project presentation instructions for a mutation: %s', prompt => {
     expect(requestsRepositoryAction(prompt)).toBe(false);
-    expect(evaluateHeadlessTaskOutcome(prompt, [answer('Observed answer.')]).exitCode).toBe(0);
+    expect(evaluateHeadlessTaskOutcome(prompt, [answer('Observed answer.')]).reasons).not.toContain('requested_edit_not_executed');
   },
 );
 it.each(['Read the exports. Use the format in output.js.', 'Read the exports. Use the format in AGENTS.md and rework the module.'])(
