@@ -11,6 +11,7 @@ import { fetchOllamaStatus } from '../ollama.js';
 import type { CommandHandlerResult } from './backup-handlers.js';
 
 import { failureFlag } from '../slash-failure.js';
+import { getOllamaBaseUrl } from '../../utils/ollama-url.js';
 
 // ---------------------------------------------------------------------------
 // Health check helpers
@@ -148,7 +149,7 @@ async function handleInfraDashboard(): Promise<CommandHandlerResult> {
   const ollamaUrl =
     process.env['TURBOQUANT_OLLAMA_ENDPOINT'] ??
     process.env['OLLAMA_HOST'] ??
-    'http://localhost:11434';
+    getOllamaBaseUrl();
   const vllmUrl = process.env['TURBOQUANT_VLLM_ENDPOINT'] ?? '';
 
   // Check local backends in parallel
@@ -235,7 +236,7 @@ async function handleInfraHealth(): Promise<CommandHandlerResult> {
   const ollamaUrl =
     process.env['TURBOQUANT_OLLAMA_ENDPOINT'] ??
     process.env['OLLAMA_HOST'] ??
-    'http://localhost:11434';
+    getOllamaBaseUrl();
   const vllmUrl = process.env['TURBOQUANT_VLLM_ENDPOINT'] ?? '';
 
   const checks: Promise<EndpointStatus>[] = [

@@ -16,7 +16,9 @@ import {
   SAFE_ENV_VARS,
   BLOCKED_PATHS,
 } from './security-patterns.js';
-import * as os from 'node:os';
+import * as fs from 'node:fs';
+import { classifySecretPath, getHomeCredentialRoots, getHomeDirectories } from '../../security/secret-files.js';
+import { foldPathCase, isPathInside, pathForPlatform } from '../../security/path-comparison.js';
 import { parseShellCommand } from '../../security/bash-parser.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
@@ -209,8 +211,10 @@ export function validateCommand(command: string, shell?: string): { valid: boole
     }
   }
 
-  // Check for access to blocked paths
-  const commandWithExpandedHome = command.replace(/~(?=[\\/])/g, os.homedir());
+  // Check for access to blocked paths. `~`, `$HOME`, `${HOME}` (quoted or
+  // not) are all expanded: a bare `.includes()` on the raw text missed
+  // `cat $HOME/.ssh/id_rsa`.
+  const commandWithExpandedHome = expandHomeReferences(command);
   for (const blockedPath of BLOCKED_PATHS) {
     const isWindowsPath = blockedPath.includes('\\');
     const commandVariants = [command, commandWithExpandedHome];
@@ -226,6 +230,20 @@ export function validateCommand(command: string, shell?: string): { valid: boole
         reason: `Access to protected path blocked: ${blockedPath}`
       };
     }
+  }
+
+  // Credential files (codex-auth.json, ~/.codebuddy/*.env, *auth*.json under
+  // the Code Buddy / sibling CLI homes, private keys…) — same deny list as the
+  // file tools (src/security/secret-files.ts). Best-effort on the command
+  // text: a path assembled at runtime by the interpreter is out of reach of
+  // this static filter. In particular, this does not protect Git objects.
+  const secretToken = findCredentialPathInCommand(command);
+  if (secretToken) {
+    auditLogger.logCommandValidation({ command, valid: false, reason: `Credential path: ${secretToken}`, source: 'command-validator' });
+    return {
+      valid: false,
+      reason: `Access to a credential/secret file blocked: ${secretToken}`
+    };
   }
 
   // Phase 2: AST-based validation via bash-parser
@@ -340,4 +358,139 @@ export function getFilteredEnv(): Record<string, string> {
   // apply it after getFilteredEnv() if needed.
 
   return filtered;
+}
+
+
+/**
+ * Replace `~`, `$HOME`, `${HOME}` with the home directory (POSIX shells).
+ * Only the forms a shell would expand to the home directory are handled.
+ */
+export function expandHomeReferences(command: string, platform: NodeJS.Platform = process.platform): string {
+  const home = getHomeDirectories(platform)[0];
+  if (!home) return command;
+  return command
+    .replace(/\$\{HOME\}/g, home)
+    .replace(/\$HOME(?![A-Za-z0-9_])/g, home)
+    .replace(/(^|[\s'"=:(])~(?=[\\/]|$|[\s'";|&)])/g, (_m, lead: string) => `${lead}${home}`);
+}
+
+/** Universal credential store names, dangerous even as a relative path in bash. */
+const BASH_CREDENTIAL_BASENAMES = new Set([
+  'codex-auth.json',
+  'xai-auth.json',
+  'gemini-auth.json',
+  'nous_auth.json',
+  'mcp-tokens.json',
+  'auth-profiles.json',
+  '.credentials.json',
+  'credentials.enc',
+  '.git-credentials',
+]);
+
+/** Readers that dump a whole directory tree when handed a credential root. */
+const RECURSIVE_READERS = new Set([
+  'grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'tar', 'zip', '7z', 'cp', 'rsync', 'scp',
+  'find', 'cat', 'xargs', 'base64', 'xxd', 'od', 'strings', 'head', 'tail', 'less', 'more',
+  'curl', 'wget', 'nc', 'ncat', 'socat', 'python', 'python3', 'node', 'perl', 'ruby',
+  'awk', 'sed', 'diff', 'cmp', 'tee', 'openssl',
+]);
+
+/**
+ * Return the first token of `command` that designates a credential file (or a
+ * glob / recursive read over a credential root), or null.
+ */
+export function findCredentialPathInCommand(command: string, platform: NodeJS.Platform = process.platform): string | null {
+  if (typeof command !== 'string' || !command) return null;
+  // Both POSIX-style escapes (`codex-auth\.json`) and Windows separators
+  // (`C:\Users\...`) can occur on Windows. Check both interpretations before
+  // allowing the command; expanding HOME afterwards preserves its separators.
+  const unquoted = command
+    .replace(/\$(?:""|'')/g, '')
+    .replace(/["']/g, '');
+  const variants = [expandHomeReferences(unquoted.replace(/\\([^\n])/g, '$1'), platform)];
+  if (platform === 'win32') {
+    // Preserve literal Windows separators too: replacing every backslash can
+    // turn a doubled separator into an invalid mixed separator sequence.
+    variants.unshift(expandHomeReferences(unquoted, platform));
+    variants.push(expandHomeReferences(unquoted.replace(/\\([^\n])/g, '/$1'), platform));
+  }
+  const roots = getHomeCredentialRoots({ platform });
+  for (const expanded of new Set(variants)) {
+    const found = findCredentialPathInExpandedCommand(expanded, platform, roots);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findCredentialPathInExpandedCommand(
+  expanded: string,
+  platform: NodeJS.Platform,
+  roots: readonly string[],
+): string | null {
+  const paths = pathForPlatform(platform);
+  const fold = (value: string): string => foldPathCase(value, platform);
+  const tokens = expanded.split(/[\s`;|&<>()=,]+/).filter(Boolean);
+  const words = new Set(
+    tokens.map((token) => token.split(/[\\/]/).filter(Boolean).at(-1)?.toLowerCase() ?? ''),
+  );
+  const usesRecursiveReader = Array.from(words).some((word) => RECURSIVE_READERS.has(word));
+
+  // A dynamic suffix under a credential root cannot be resolved statically.
+  // Refuse that narrow case for readers before tokenization splits `$()`.
+  if (usesRecursiveReader) {
+    const dynamicPath = expanded.split(/[\s;|&<>]+/).find((token) =>
+      roots.some((root) => {
+        const normalizedRoot = platform === 'win32' ? root.replace(/\\/g, '/') : root;
+        const normalizedToken = platform === 'win32' ? token.replace(/\\/g, '/') : token;
+        const separator = platform === 'win32' ? '/' : paths.sep;
+        return fold(normalizedToken).includes(fold(`${normalizedRoot}${separator}`)) && /\$|`/.test(token);
+      }),
+    );
+    if (dynamicPath) return dynamicPath;
+  }
+
+  // `cd <credential root>` then a RELATIVE name: resolve relative tokens
+  // against the last `cd` target seen in the command text.
+  let cdTarget = platform === process.platform ? process.cwd() : getHomeDirectories(platform)[0] ?? paths.sep;
+  for (let i = 0; i < tokens.length; i += 1) {
+    const raw = tokens[i] ?? '';
+    const token = raw.replace(/^--?[A-Za-z0-9-]+=/, '');
+    const base = paths.basename(token).toLowerCase();
+    if (BASH_CREDENTIAL_BASENAMES.has(base)) return raw;
+    if (i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd')) {
+      cdTarget = paths.isAbsolute(token) ? paths.normalize(token) : paths.resolve(cdTarget, token);
+    }
+    let candidate = token;
+    if (!paths.isAbsolute(token)) {
+      if (token.startsWith('-')) continue;
+      candidate = paths.resolve(cdTarget, token);
+    }
+    const normalized = paths.normalize(candidate).replace(/[\\/]+$/, '') || paths.sep;
+    // A simple copy of a public template to a new .env is a supported
+    // scaffolding operation. The source remains subject to the read guard.
+    if (tokens[0] === 'cp' && i === tokens.length - 1 &&
+      tokens.length === 3 && !classifySecretPath(tokens[1] ?? '', undefined, { platform }).secret) continue;
+    if (classifySecretPath(normalized, undefined, { platform }).secret) return raw;
+    let canonical = normalized;
+    if (platform === process.platform) {
+      try { canonical = fs.realpathSync(normalized); } catch { /* missing path */ }
+    }
+    const underRoot = roots.find((root) => isPathInside(canonical, root, platform));
+    if (!underRoot) continue;
+    if (/[*?[\]{}]/.test(normalized)) return raw;
+    const isCdTarget = i > 0 && (tokens[i - 1] === 'cd' || tokens[i - 1] === 'pushd');
+    let isDirectory = false;
+    let exists = false;
+    if (platform === process.platform) {
+      try {
+        isDirectory = fs.statSync(normalized).isDirectory();
+        exists = true;
+      } catch { /* missing path */ }
+    }
+    // A simulated platform may not have the directory on this host. A
+    // directory-shaped operand under a credential root is still unsafe.
+    if (usesRecursiveReader && !isCdTarget &&
+      (isDirectory || (!exists && /[\\/]/.test(token) && !paths.extname(normalized)))) return raw;
+  }
+  return null;
 }

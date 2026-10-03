@@ -82,7 +82,7 @@ export interface PeerCapability {
   models: FleetModelDescriptor[];
   /** Where this peer makes its outbound LLM calls — privacy gate. */
   egress: FleetEgress;
-  /** Stable label the user gave the machine (`hub`, `gpuNode`, …). */
+  /** Stable label the user gave the machine (`hub`, `gpu-worker`, …). */
   machineLabel: string;
   /**
    * Lightweight machine spec for routing. Optional — a peer may not

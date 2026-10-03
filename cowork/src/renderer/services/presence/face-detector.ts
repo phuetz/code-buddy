@@ -8,7 +8,7 @@
  * in the main process via `face-recognizer.ts` and `onnxruntime-node`.
  *
  * Adapted from Lisa `packages/vision-engine/src/FaceDetector.ts` (MIT,
- * original by Patrice Huetz). Adaptations vs Lisa version:
+ * original implementation). Adaptations vs Lisa version:
  * - Lazy-loads `@mediapipe/tasks-vision` so the bundle stays light when
  *   presence detection isn't enabled.
  * - Allows passing a local WASM path (Cowork ships offline; defaulting to

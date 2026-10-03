@@ -260,15 +260,14 @@ describe('PersistentAnalytics', () => {
   describe('calculateCost', () => {
     it('should calculate cost for grok model', () => {
       const cost = analytics.calculateCost('grok', 1000000, 500000);
-      // grok: input $5/M, output $15/M
-      // (1M * 5 + 0.5M * 15) / 1M = 5 + 7.5 = $12.50
-      expect(cost).toBeCloseTo(12.5);
+      // The grok alias targets Grok Code Fast 1: $0.20/M in, $1.50/M out.
+      expect(cost).toBeCloseTo(0.95);
     });
 
     it('should calculate cost for grok-2', () => {
       const cost = analytics.calculateCost('grok-2', 1000000, 500000);
-      // grok-2: input $10/M, output $30/M
-      expect(cost).toBeCloseTo(25);
+      // grok-2 retains the marked legacy estimate: $2/M in, $10/M out.
+      expect(cost).toBeCloseTo(7);
     });
 
     it('should calculate cost for gpt-4o-mini', () => {
@@ -277,9 +276,9 @@ describe('PersistentAnalytics', () => {
       expect(cost).toBeCloseTo(0.75);
     });
 
-    it('should fall back to grok pricing for unknown models', () => {
+    it('should use the documented unknown-model estimate', () => {
       const cost = analytics.calculateCost('unknown-model', 1000000, 500000);
-      expect(cost).toBeCloseTo(12.5); // Same as grok
+      expect(cost).toBeCloseTo(10.5); // $3/M in + half a million at $15/M out
     });
   });
 

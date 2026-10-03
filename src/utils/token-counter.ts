@@ -1,3 +1,5 @@
+import { MODEL_PRICE_DATA } from '../config/model-price-data.js';
+
 /**
  * Token Counter with Lazy Loading
  *
@@ -225,28 +227,11 @@ export function preloadTiktoken(): void {
 /**
  * Token pricing per 1K tokens (in USD)
  */
-export const TOKEN_PRICING: Record<string, { input: number; output: number }> = {
-  // OpenAI
-  'gpt-4o': { input: 0.0025, output: 0.01 },
-  'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
-  'gpt-4-turbo': { input: 0.01, output: 0.03 },
-  'gpt-4': { input: 0.03, output: 0.06 },
-  'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 },
-  // Anthropic
-  'claude-3-opus': { input: 0.015, output: 0.075 },
-  'claude-3-sonnet': { input: 0.003, output: 0.015 },
-  'claude-3-haiku': { input: 0.00025, output: 0.00125 },
-  'claude-3.5-sonnet': { input: 0.003, output: 0.015 },
-  // xAI Grok
-  'grok-2': { input: 0.002, output: 0.01 },
-  'grok-2-mini': { input: 0.0002, output: 0.001 },
-  'grok-3': { input: 0.003, output: 0.015 },
-  'grok-3-mini': { input: 0.0003, output: 0.0015 },
-  // Local models (free)
-  'local': { input: 0, output: 0 },
-  'ollama': { input: 0, output: 0 },
-  'lmstudio': { input: 0, output: 0 },
-};
+export const TOKEN_PRICING: Record<string, { input: number; output: number }> = Object.fromEntries(
+  Object.entries(MODEL_PRICE_DATA).map(([model, price]) => [model, {
+    input: price.inputPerMillion / 1000, output: price.outputPerMillion / 1000,
+  }]),
+);
 
 /**
  * Calculate cost for a request

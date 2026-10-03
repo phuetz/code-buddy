@@ -403,7 +403,7 @@ describe('ConfigResolver', () => {
         { url: 'https://api.openai.com/v1', expected: 'openai' },
         { url: 'https://api.anthropic.com/v1', expected: 'claude' },
         { url: 'http://localhost:1234/v1', expected: 'lmstudio' },
-        { url: 'http://localhost:11434/v1', expected: 'ollama' },
+        { url: 'http://127.0.0.1:11434/v1', expected: 'ollama' },
         // Note: 192.168.x.x is not detected as 'local' by default because
         // detectProvider looks for specific patterns, not generic IPs
       ];

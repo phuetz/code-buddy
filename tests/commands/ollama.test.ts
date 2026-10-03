@@ -12,7 +12,7 @@ describe('ollama command helpers', () => {
   });
 
   it('normalizes Ollama base URLs', () => {
-    expect(normalizeOllamaBaseUrl('http://localhost:11434/v1/')).toBe('http://localhost:11434');
+    expect(normalizeOllamaBaseUrl('http://127.0.0.1:11434/v1/')).toBe('http://127.0.0.1:11434');
     expect(normalizeOllamaBaseUrl('http://gpuNode.tailnet.ts.net:11434')).toBe('http://gpuNode.tailnet.ts.net:11434');
   });
 

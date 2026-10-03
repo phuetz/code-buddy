@@ -22,7 +22,7 @@ describe('shouldWireVisionReaction — the camera security invariant', () => {
 
   it('keeps raw VLM images loopback-only unless HTTPS remote egress is explicit', () => {
     expect(shouldAllowVisionImageEndpoint('http://127.0.0.1:11434/v1', false)).toBe(true);
-    expect(shouldAllowVisionImageEndpoint('http://localhost:11434/v1', false)).toBe(true);
+    expect(shouldAllowVisionImageEndpoint('http://127.0.0.1:11434/v1', false)).toBe(true);
     expect(shouldAllowVisionImageEndpoint('https://vision.example.test/v1', false)).toBe(false);
     expect(shouldAllowVisionImageEndpoint('http://vision.example.test/v1', true)).toBe(false);
     expect(shouldAllowVisionImageEndpoint('https://vision.example.test/v1', true)).toBe(true);

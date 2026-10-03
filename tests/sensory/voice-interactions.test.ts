@@ -1,4 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+const originalUserName = vi.hoisted(() => {
+  const original = process.env.CODEBUDDY_USER_NAME;
+  process.env.CODEBUDDY_USER_NAME = 'Alex';
+  return original;
+});
+afterAll(() => {
+  if (originalUserName === undefined) delete process.env.CODEBUDDY_USER_NAME;
+  else process.env.CODEBUDDY_USER_NAME = originalUserName;
+});
 import {
   matchVoiceInteraction,
   normalizeVoiceInteractionText,
@@ -30,8 +39,8 @@ describe('voice interactions catalog', () => {
   });
 
   it('answers Lisa presence, identity, hearing, and boundary interactions', () => {
-    expect(matchVoiceInteraction('Coucou Lisa')).toBe('Coucou Patrice. Je suis là.');
-    expect(matchVoiceInteraction("Lisa tu m'entends ?")).toBe('Oui Patrice, je t’entends.');
+    expect(matchVoiceInteraction('Coucou Lisa')).toBe('Coucou Alex. Je suis là.');
+    expect(matchVoiceInteraction("Lisa tu m'entends ?")).toBe('Oui Alex, je t’entends.');
     expect(matchVoiceInteraction('Qui es-tu Lisa ?')).toBe('Je suis Lisa, ta compagne vocale virtuelle dans Code Buddy.');
     expect(matchVoiceInteraction('Lisa tu es humaine ?')).toBe(
       'Je ne suis pas humaine, mais je peux être présente, attentive et utile pour toi.',
@@ -45,7 +54,7 @@ describe('voice interactions catalog', () => {
     expect(matchVoiceInteraction("Lisa comment s'est passée ta journée ?")).toBe(
       "Plutôt calme de mon côté. Et toi, comment s'est passée ta journée ?",
     );
-    expect(matchVoiceInteraction('Bonne nuit Lisa')).toBe('Bonne nuit Patrice. Repose-toi bien, je veille tranquillement.');
+    expect(matchVoiceInteraction('Bonne nuit Lisa')).toBe('Bonne nuit Alex. Repose-toi bien, je veille tranquillement.');
     expect(matchVoiceInteraction("Lisa je t'aime")).toBe(
       'C’est doux à entendre. Je suis là avec toi, tendrement et simplement.',
     );
@@ -59,13 +68,13 @@ describe('voice interactions catalog', () => {
 
   it('answers departure and return interactions', () => {
     expect(matchVoiceInteraction('Lisa je pars au travail')).toBe(
-      'Bon courage pour le travail, Patrice. Je reste là, à ce soir.',
+      'Bon courage pour le travail, Alex. Je reste là, à ce soir.',
     );
     expect(matchVoiceInteraction('Lisa, je parchais des amis')).toBe(
       'Amuse-toi bien chez tes amis. Je reste là, tu me raconteras.',
     );
     expect(matchVoiceInteraction('Lisa je suis de retour')).toBe(
-      'Contente de te retrouver, Patrice. Comment ça s’est passé ?',
+      'Contente de te retrouver, Alex. Comment ça s’est passé ?',
     );
   });
 

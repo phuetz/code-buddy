@@ -17,6 +17,7 @@
  * @module sensory/voice-loop
  */
 
+import { getOllamaBaseUrl, getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { existsSync } from 'fs';
@@ -756,7 +757,7 @@ export function isFactualVoiceQuestion(heard: string): boolean {
  * outside the 'concise' style: `Math.max(64, min(512, max(base, planned)))` turned
  * a deliberate 48 into at least 64 and, on any real exchange, into the 512 cap.
  *
- * Measured on Patrice's robot, 2026-09-02: he had set 48 and heard replies with a
+ * Measured on the owner's robot, 2026-09-02: he had set 48 and heard replies with a
  * 479-character median, delivered as a dozen phrases with a silence between each
  * — the gaps are what a listener calls choppy. Every one of those turns took the
  * chitchat route, so this function, not the agent summary, is the one he hears.
@@ -1251,7 +1252,7 @@ export async function resolveVoiceModel(
   const baseURL =
     env.CODEBUDDY_SENSORY_SPEAK_BASE_URL ||
     env.CODEBUDDY_VISION_BASE_URL ||
-    'http://127.0.0.1:11434/v1';
+    getOllamaV1BaseUrl(env);
   const fastOverride = env.CODEBUDDY_SENSORY_SPEAK_MODEL;
   const factOverride = env.CODEBUDDY_SENSORY_SPEAK_FACT_MODEL?.trim();
   const useFactLane =
@@ -1374,10 +1375,8 @@ function normalizedHttpUrl(raw: string): URL | null {
 function ollamaGenerateUrl(baseURL: string, env: NodeJS.ProcessEnv): string | null {
   const route = normalizedHttpUrl(baseURL);
   if (!route) return null;
-  const configured = normalizedHttpUrl(
-    env.OLLAMA_BASE_URL || env.OLLAMA_HOST || 'http://127.0.0.1:11434'
-  );
-  const knownOllamaOrigin = configured?.origin === route.origin;
+  const knownOllamaOrigin = [env.OLLAMA_BASE_URL, env.OLLAMA_HOST, getOllamaBaseUrl(env)]
+    .some((candidate) => normalizedHttpUrl(candidate ?? '')?.origin === route.origin);
   if (!knownOllamaOrigin && route.port !== '11434') return null;
   return new URL('/api/generate', route.origin).toString();
 }

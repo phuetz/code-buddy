@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-trigger",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "b2ae2ab0a6840cab115a2bef731a096418bb6c53282e6d3b133b09e50a9a486f",
+  "artifact": "docs/preuves/p5-cli-trigger-2026-09-29.log",
+  "summary": "Déclaration de trigger créée, relue puis supprimée."
+}

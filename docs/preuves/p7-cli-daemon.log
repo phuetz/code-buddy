@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-daemon
+Commande: CLI compilée : buddy daemon start --port 18736 ; status ; GET /api/health ; stop ; status
+Attendu: Processus détaché répond puis s’arrête proprement.
+Observé: Codes start/status/stop/status 0 ; health HTTP 200 ; running=true puis false ; aucun listener après arrêt.
+Verdict: prouvée
+Limite: Linux seulement ; PID et canal IPC corrigés dans un commit séparé.

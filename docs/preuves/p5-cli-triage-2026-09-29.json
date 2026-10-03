@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-triage",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "f2a920ac96a3494c96775d50f10cba221030f9fe3c729da877a285a3c944ab74",
+  "artifact": "docs/preuves/p5-cli-triage-2026-09-29.log",
+  "summary": "Dossier de diagnostic local et prompt réellement créés."
+}

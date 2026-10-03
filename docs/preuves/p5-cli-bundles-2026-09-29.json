@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-bundles",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "ac11c4564f1c12e0701849890972b4f5d9cb5880d0f4a8581bc5f71c72316916",
+  "artifact": "docs/preuves/p5-cli-bundles-2026-09-29.log",
+  "summary": "Bundle de skill local créé, relu puis supprimé."
+}

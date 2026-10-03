@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-identity",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "180879a0b845726fcc2a2173842c4767bc580de705bb1faab919b65b1267fe01",
+  "artifact": "docs/preuves/p5-cli-identity-2026-09-29.log",
+  "summary": "Identité locale écrite et relue dans le projet jetable."
+}

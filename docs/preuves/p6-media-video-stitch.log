@@ -1,0 +1,37 @@
+Fonctionnalité : media-video-stitch
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : node _qa/preuves-p6/stitch.mjs (VideoStitchTool.execute réel)
+Attendu : Outil video_stitch produit un fichier vidéo depuis deux clips locaux.
+Observé : Code 0 ; success=true, clipCount=2, probedDuration=4, hasAudio=true.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- media-video-stitch.out ---
+[2026-09-29T12:15:09.513Z]  INFO  [film-assemble] 2 clip(s), engine=xfade, 64x64@12, ~4s
+{
+  "success": true,
+  "output": "{\n  \"kind\": \"film_assemble_result\",\n  \"success\": true,\n  \"outputPath\": \"<WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-stitch-1790684109512-21eb2fab-79e9-4aa2-801f-d05deb253382.mp4\",\n  \"mediaPath\": \"MEDIA:<WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-stitch-1790684109512-21eb2fab-79e9-4aa2-801f-d05deb253382.mp4\",\n  \"engine\": \"xfade\",\n  \"clipCount\": 2,\n  \"transitionCount\": 1,\n  \"targetWidth\": 64,\n  \"targetHeight\": 64,\n  \"fps\": 12,\n  \"estimatedDuration\": 4,\n  \"probedDuration\": 4,\n  \"hasAudio\": true,\n  \"transitions\": [\n    {\n      \"type\": \"cut\",\n      \"duration\": 0\n    }\n  ],\n  \"warnings\": []\n}",
+  "data": {
+    "kind": "film_assemble_result",
+    "success": true,
+    "outputPath": "<WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-stitch-1790684109512-21eb2fab-79e9-4aa2-801f-d05deb253382.mp4",
+    "mediaPath": "MEDIA:<WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-stitch-1790684109512-21eb2fab-79e9-4aa2-801f-d05deb253382.mp4",
+    "engine": "xfade",
+    "clipCount": 2,
+    "transitionCount": 1,
+    "targetWidth": 64,
+    "targetHeight": 64,
+    "fps": 12,
+    "estimatedDuration": 4,
+    "probedDuration": 4,
+    "hasAudio": true,
+    "transitions": [
+      {
+        "type": "cut",
+        "duration": 0
+      }
+    ],
+    "warnings": []
+  }
+}

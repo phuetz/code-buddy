@@ -87,6 +87,7 @@ describe('provider list runtime probes', () => {
     await command.parseAsync(['list', '--free'], { from: 'user' });
     const output = consoleLogSpy.mock.calls.map((call) => call.join(' ')).join('\n');
     expect(output).toContain('✅ 🆓 LM Studio');
+    expect(output).not.toContain('No providers configured');
   });
 
   it('marks vLLM active when the same OpenAI-compat probe reaches a fake runtime', async () => {

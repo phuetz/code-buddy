@@ -2,6 +2,7 @@ const mocks = vi.hoisted(() => ({
   getSessionStore: vi.fn(),
   getRecentSessions: vi.fn(),
   getSessionByPartialId: vi.fn(),
+  listSessions: vi.fn(() => [] as unknown[]),
   resumeSession: vi.fn(),
   getLastSession: vi.fn(),
   searchSessions: vi.fn(),
@@ -37,6 +38,7 @@ describe('CLI session commands', () => {
     mocks.getSessionStore.mockReturnValue({
       getRecentSessions: mocks.getRecentSessions,
       getSessionByPartialId: mocks.getSessionByPartialId,
+      listSessions: mocks.listSessions,
       resumeSession: mocks.resumeSession,
       getLastSession: mocks.getLastSession,
       searchSessions: mocks.searchSessions,
@@ -186,17 +188,37 @@ describe('CLI session commands', () => {
     const program = new Command();
     program.exitOverride();
     registerSessionCommands(program);
-    mocks.getSessionByPartialId.mockResolvedValue({
+    mocks.listSessions.mockReturnValue([{
       id: 'session_child_123456',
       name: 'Child session',
       messages: [],
       lastAccessedAt: new Date('2026-05-16T08:00:00Z'),
-    });
+    }]);
 
     await program.parseAsync(['node', 'buddy', 'session', 'resume', 'session_']);
 
-    expect(mocks.getSessionByPartialId).toHaveBeenCalledWith('session_');
     expect(mocks.resumeSession).toHaveBeenCalledWith('session_child_123456');
     expect(logSpy).toHaveBeenCalledWith('Resuming session: Child session (session_)');
+  });
+
+  it('refuses a partial ID shared by several sessions', async () => {
+    const program = new Command();
+    program.exitOverride();
+    registerSessionCommands(program);
+    const at = new Date('2026-05-16T08:00:00Z');
+    mocks.listSessions.mockReturnValue([
+      { id: 'session_child_123456', name: 'Child', messages: [], lastAccessedAt: at },
+      { id: 'session_parent_abcdef', name: 'Parent', messages: [], lastAccessedAt: at },
+    ]);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`exit ${code}`);
+    }) as never);
+    try {
+      await expect(program.parseAsync(['node', 'buddy', 'session', 'resume', 'session_'])).rejects.toThrow('exit 1');
+    } finally {
+      exitSpy.mockRestore();
+    }
+    expect(mocks.resumeSession).not.toHaveBeenCalled();
+    expect(mocks.loggerError).toHaveBeenCalledWith('Ambiguous session id: session_ matches 2 sessions.');
   });
 });

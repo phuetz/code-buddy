@@ -208,6 +208,19 @@ function wantsStatusReport(query: Record<string, unknown>): boolean {
 }
 
 /**
+ * Express `trust proxy` value from `CODEBUDDY_TRUSTED_PROXIES` (csv of
+ * addresses/subnets, or Express keywords such as `loopback`). Unset or empty
+ * ⇒ `false`: `req.ip` is the socket address and `X-Forwarded-For` is ignored.
+ */
+export function resolveTrustProxySetting(raw: string | undefined): false | string[] {
+  const entries = (raw ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return entries.length > 0 ? entries : false;
+}
+
+/**
  * Create and configure the Express application
  */
 function createApp(
@@ -217,8 +230,10 @@ function createApp(
 ): Application {
   const app = express();
 
-  // Trust proxy (for rate limiting behind reverse proxy)
-  app.set('trust proxy', 1);
+  // Trust proxy ONLY when the operator lists the proxies. Trusting one hop
+  // unconditionally let any direct client pick its own `X-Forwarded-For`, and
+  // thus a fresh rate-limit bucket per request (req.ip is the rate-limit key).
+  app.set('trust proxy', resolveTrustProxySetting(process.env.CODEBUDDY_TRUSTED_PROXIES));
   app.set('authEnabled', config.authEnabled);
 
   // Request ID middleware
@@ -1759,7 +1774,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 };
               }
 
-              // Event follow-ups (opt-in): when Patrice mentions a dated future event IN a real
+              // Event follow-ups (opt-in): when the user mentions a dated future event IN a real
               // conversation with Lisa, capture it and confirm aloud so a mis-hear is corrected on
               // the spot; the presence loop later asks how it went. Capture runs AFTER the reply and
               // fire-and-forget so it never adds reply latency, and is skipped for reminder commands

@@ -662,7 +662,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
 
       // Voice-assistant affordance: a short standalone greeting is directed at the assistant
       // when the mic loop is active. Keep it narrow so human-to-human greetings such as
-      // "bonjour Patrice" or a longer sentence do not wake the robot.
+      // "bonjour à quelqu'un" or a longer sentence do not wake the robot.
       if (respondToGreeting && isDirectGreeting(text)) {
         markEngaged('greeting');
         return { respond: true, reason: 'greeting' };

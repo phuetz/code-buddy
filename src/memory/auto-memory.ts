@@ -11,6 +11,7 @@ import path from 'path';
 import os from 'os';
 import { logger } from '../utils/logger.js';
 import { readTextAtomicSync, writeFileAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 // ============================================================================
 // Types
@@ -173,7 +174,7 @@ export class AutoMemoryManager {
   getMemoryPath(scope: MemoryScope): string {
     switch (scope) {
       case 'user':
-        return path.join(os.homedir(), '.codebuddy', 'memory', 'MEMORY.md');
+        return getCodeBuddyPath('memory', 'MEMORY.md');
       case 'project':
         return path.join(this.projectDir, '.codebuddy', 'memory', 'MEMORY.md');
       case 'local':

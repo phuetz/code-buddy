@@ -1,0 +1,42 @@
+Fonctionnalité : cli-policy
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : buddy policy check --json
+Attendu : Diagnostic de politique lisible sans modifier la configuration.
+Observé : Code 0 ; ok=true, application=DIAGNOSTIC NON APPLIQUÉ, cinq domaines.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- cli-policy ---
+$ buddy policy check --json
+Code de sortie : 0
+{
+  "ok": true,
+  "source": null,
+  "application": "DIAGNOSTIC NON APPLIQUÉ",
+  "domains": [
+    {
+      "domain": "gateway",
+      "application": "DIAGNOSTIC NON APPLIQUÉ"
+    },
+    {
+      "domain": "channels",
+      "application": "DIAGNOSTIC NON APPLIQUÉ"
+    },
+    {
+      "domain": "mcp",
+      "application": "DIAGNOSTIC NON APPLIQUÉ"
+    },
+    {
+      "domain": "sandbox",
+      "application": "DIAGNOSTIC NON APPLIQUÉ"
+    },
+    {
+      "domain": "exec",
+      "application": "DIAGNOSTIC NON APPLIQUÉ"
+    }
+  ],
+  "findings": [],
+  "repairs": [],
+  "errors": []
+}

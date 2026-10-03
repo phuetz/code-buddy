@@ -15,6 +15,8 @@ let constructorCalls: Array<{
 }> = [];
 let disposedCount = 0;
 let processedPrompts: string[] = [];
+let yoloBudgets: number[] = [];
+let yoloEnables = 0;
 
 class FakeCodeBuddyAgent {
   apiKey: string;
@@ -51,6 +53,12 @@ class FakeCodeBuddyAgent {
   dispose() {
     disposedCount++;
   }
+  setSessionCostOverride(maxCostUsd?: number) {
+    if (maxCostUsd !== undefined) yoloBudgets.push(maxCostUsd);
+  }
+  setYoloMode(enabled: boolean) {
+    if (enabled) yoloEnables++;
+  }
   setWorkingDirectory(dir: string | undefined) {
     this.workingDirectory = dir;
   }
@@ -83,6 +91,20 @@ describe('CodeBuddyEngineAdapter — hot-swap on config change (Phase 8)', () =>
     constructorCalls = [];
     disposedCount = 0;
     processedPrompts = [];
+    yoloBudgets = [];
+    yoloEnables = 0;
+  });
+
+  it('applies and hot-swaps an explicit YOLO budget on the core agent', async () => {
+    const adapter = new CodeBuddyEngineAdapter({ apiKey: 'k', model: 'gemma' });
+    await adapter.runSession('budget', [{ role: 'user', content: 'one' }], () => undefined,
+      { yoloMode: true, maxCostUsd: 42 });
+    expect(yoloBudgets).toEqual([42]);
+    expect(yoloEnables).toBe(1);
+    await adapter.runSession('budget', [{ role: 'user', content: 'two' }], () => undefined,
+      { yoloMode: true, maxCostUsd: 60 });
+    expect(yoloBudgets).toEqual([42, 60]);
+    expect(disposedCount).toBe(1);
   });
 
   it('reuses the cached agent when config is unchanged across turns', async () => {

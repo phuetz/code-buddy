@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Formulaire de démonstration</title>
+<main>
+  <h1>Inscription de démonstration</h1>
+  <form id="inscription">
+    <label for="courriel">E-mail</label>
+    <input id="courriel" type="email" required>
+    <button id="validation" type="button">Valider</button>
+  </form>
+  <p role="status" aria-live="polite"></p>
+</main>
+<script>
+  document.querySelector('button').addEventListener('click', () => {
+    document.querySelector('[role="status"]').textContent =
+      `Inscription validée : ${document.querySelector('input').value}`;
+  });
+</script>
+</html>

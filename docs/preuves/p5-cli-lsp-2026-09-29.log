@@ -1,0 +1,8 @@
+Date: 2026-09-29T12:25:02.439Z
+Révision testée: 281daf9a6c28606b1259713fcf623ed868cb4a1b
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: HOME=<QA_HOME> buddy lsp diagnostics <QA_PROJECT>/bad.rs --json; HOME=<QA_HOME> rust-analyzer --version
+Attendu: Le serveur LSP démarre et signale l'erreur de type du vrai fichier Rust.
+Observé: Avant correctif: "Failed to start LSP server: Error: LSP server exited with code 1", diagnostics=[], code 0. Après correctif: {"error":"server_start_failed","language":"rust","command":"rust-analyzer"}, code 1. rust-analyzer --version sous HOME isolé: "error: rustup could not choose a version of rust-analyzer to run, because one wasn't specified explicitly, and no default is configured.", code 1.
+Captures brutes locales (gitignorées): _qa/preuves-p5/lsp-diagnostics-reprise.raw et _qa/preuves-p5/lsp-version-reprise.raw.
+Verdict: échec — composant rust-analyzer indisponible ici ; l'échec n'est plus présenté comme un fichier propre.

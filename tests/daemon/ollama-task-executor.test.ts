@@ -17,7 +17,7 @@ const TASK: ColabTask = {
 
 const LOCAL: AutonomousModelChoice = {
   model: 'qwen2.5:7b-instruct',
-  baseUrl: 'http://localhost:11434/v1',
+  baseUrl: 'http://127.0.0.1:11434/v1',
   tier: 'local',
   paid: false,
   reason: 'test',
@@ -43,7 +43,7 @@ describe('createLocalModelTaskExecutor', () => {
     const exec = createLocalModelTaskExecutor({ outputDir: dir, fetchImpl: fetchImpl as unknown as typeof fetch, now: () => 1000 });
     const result = await exec(TASK, LOCAL);
 
-    expect(fetchImpl).toHaveBeenCalledWith('http://localhost:11434/v1/chat/completions', expect.objectContaining({ method: 'POST' }));
+    expect(fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:11434/v1/chat/completions', expect.objectContaining({ method: 'POST' }));
     expect(result.ok).toBe(true);
     expect(result.summary).toMatch(/via local model qwen2.5:7b-instruct/);
     expect(existsSync(join(dir, 'task-haiku.md'))).toBe(true);

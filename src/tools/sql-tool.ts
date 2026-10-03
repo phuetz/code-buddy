@@ -10,6 +10,7 @@ import * as os from 'os';
 import type { ToolResult } from '../types/index.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import { logger } from '../utils/logger.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 
 // Blocked paths for security
 const BLOCKED_PATHS = [
@@ -107,6 +108,8 @@ export class SQLTool {
    */
   private validateDatabasePath(dbPath: string): { valid: boolean; error?: string } {
     const resolvedPath = path.resolve(dbPath);
+    const secret = checkSecretFileAccess(resolvedPath, 'read');
+    if (secret.secret) return { valid: false, error: formatSecretRefusal(resolvedPath, secret) };
     const cwd = process.cwd();
     const homeDir = os.homedir();
 

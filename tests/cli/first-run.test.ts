@@ -17,6 +17,9 @@ describe('first-run provider recovery', () => {
     expect(ollama).toBeLessThan(grokKey);
     expect(NO_PROVIDER_GUIDANCE).toContain('buddy try');
     expect(NO_PROVIDER_GUIDANCE).toContain('$0 marginal cost');
+    expect(NO_PROVIDER_GUIDANCE).toContain('ollama pull qwen3:8b');
+    expect(NO_PROVIDER_GUIDANCE).toContain('CODEBUDDY_PROVIDER=ollama');
+    expect(NO_PROVIDER_GUIDANCE).not.toContain('ollama pull qwen2.5');
   });
 
   it('defaults the interactive recommendation to yes', () => {

@@ -15,7 +15,7 @@
  *     made by `client.setCircuitBreakerConfig()` after construction
  *     propagate (advisor catch — guards against snapshot staleness)
  *
- * Known gap preserved (will close in Phase C4 if Patrice opts in):
+ * Known gap preserved (will close in Phase C4 if the owner opts in):
  *   - chatStream() does NOT call the Anthropic hooks. The chat() side
  *     does. Same asymmetry as before extraction. Documented in commit
  *     7f6853b's body.
@@ -93,7 +93,7 @@ type ReasoningCompatiblePayload = {
   max_completion_tokens?: number | null;
 };
 
-const EMPTY_PROVIDER_RESPONSE_ERROR = 'réponse vide du fournisseur';
+const EMPTY_PROVIDER_RESPONSE_ERROR = 'Empty provider response: no text or tool calls. Check the model and provider logs, then retry.';
 
 /** `CODEBUDDY_STREAM_USAGE=false` (or `0`/`off`) opts out of `stream_options`. */
 function streamUsageRequested(): boolean {

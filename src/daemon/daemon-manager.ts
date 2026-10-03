@@ -81,7 +81,9 @@ export class DaemonManager extends EventEmitter {
   async start(detach: boolean = false): Promise<void> {
     // Check if already running
     const existingPid = await this.readPid();
-    if (existingPid && this.isProcessRunning(existingPid)) {
+    const adoptingForkedProcess = !detach && process.env.CODEBUDDY_DAEMON === 'true'
+      && existingPid === process.pid;
+    if (existingPid && this.isProcessRunning(existingPid) && !adoptingForkedProcess) {
       throw new Error(`Daemon already running (PID: ${existingPid})`);
     }
 
@@ -131,6 +133,7 @@ export class DaemonManager extends EventEmitter {
         await this.writePid(child.pid);
         this.startedAt = new Date();
         child.unref();
+        child.disconnect();
         logger.info(`Daemon started (PID: ${child.pid})`);
         this.emit('started', { pid: child.pid, detached: true });
       }
@@ -144,7 +147,7 @@ export class DaemonManager extends EventEmitter {
    */
   private async startForeground(): Promise<void> {
     const pid = process.pid;
-    await this.writePid(pid);
+    if (await this.readPid() !== pid) await this.writePid(pid);
     this.startedAt = new Date();
     logger.info(`Daemon started in foreground (PID: ${pid})`);
     this.emit('started', { pid, detached: false });

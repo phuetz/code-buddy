@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-tools",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "41aba9c7ccc4c3309db60780abc4927c7da74c46face5e1781988178f146a278",
+  "artifact": "docs/preuves/p5-cli-tools-2026-09-29.log",
+  "summary": "Catalogue d’outils et décision de profil lus par la CLI compilée."
+}

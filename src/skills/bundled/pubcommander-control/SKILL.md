@@ -1,6 +1,17 @@
 ---
 name: pubcommander-control
 description: Pilot PubCommander editorial and social campaigns through its MCP tools. Use for listing, drafting, revising, submitting, scheduling, or publishing posts while preserving human approval and dry-run safety.
+version: 1.0.0
+tags: [pubcommander, social-media, scheduling, publishing]
+nativeEngine:
+  category: marketing
+  priority: 80
+  triggers:
+    - pubcommander control
+    - pilot social campaigns
+    - schedule post
+    - create draft post
+    - send post for approval
 ---
 
 # PubCommander Control

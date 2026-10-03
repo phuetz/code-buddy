@@ -137,7 +137,7 @@ export function prepareSpeech(raw: string): string | null {
   t = t.replace(/\s*\n\s*,\s*/gu, ', ');
   t = t.replace(/\n+/gu, '. ');
   // Replace foreign runs with a space (never ''), so Latin words on either side don't get glued
-  // ("bonjour，patrice"), then apply the bounded French pronunciation rules shared by every path.
+  // ("bonjour，utilisateur"), then apply the bounded French pronunciation rules shared by every path.
   t = stripForeignScript(t);
   t = normalizeFrenchNumbers(t);
   t = t.replace(/\b([A-ZÀ-ÖØ-Þ]{2,4})\b/gu, (sigle) => [...sigle].join(' '));

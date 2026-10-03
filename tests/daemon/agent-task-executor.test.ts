@@ -7,7 +7,7 @@ import type { AutonomousModelChoice } from '../../src/agent/model-tier.js';
 const localModel = {
   model: 'qwen3.6:35b-a3b',
   tier: 'local',
-  baseUrl: 'http://localhost:11434/v1',
+  baseUrl: 'http://127.0.0.1:11434/v1',
   paid: false,
   reason: 'free-first',
 } as unknown as AutonomousModelChoice;
@@ -70,7 +70,7 @@ describe('agent-task-executor', () => {
     expect(args).toEqual(expect.arrayContaining(['-p', '--permission-mode', 'acceptEdits', '--output-format', 'text']));
     const env = opts.env as NodeJS.ProcessEnv;
     expect(env.CODEBUDDY_PROVIDER).toBe('ollama');
-    expect(env.OLLAMA_HOST).toBe('http://localhost:11434'); // /v1 stripped
+    expect(env.OLLAMA_HOST).toBe('http://127.0.0.1:11434'); // /v1 stripped
     expect(env.GROK_MODEL).toBe('qwen3.6:35b-a3b');
   });
 
@@ -143,7 +143,7 @@ describe('agent-task-executor', () => {
   it('buildAgentEnv pins ollama for local tiers and leaves paid tiers on their provider', () => {
     const local = buildAgentEnv(localModel, {});
     expect(local.CODEBUDDY_PROVIDER).toBe('ollama');
-    expect(local.OLLAMA_HOST).toBe('http://localhost:11434');
+    expect(local.OLLAMA_HOST).toBe('http://127.0.0.1:11434');
     expect(local.GROK_MODEL).toBe('qwen3.6:35b-a3b');
 
     const paid = buildAgentEnv(paidModel, {});

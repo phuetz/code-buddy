@@ -203,8 +203,8 @@ describe('CostTracker', () => {
 
     it('should calculate cost for grok-code-fast-1 model', () => {
       const cost = tracker.calculateCost(1000, 1000, 'grok-code-fast-1');
-      // inputPer1k: 0.00015, outputPer1k: 0.0006
-      expect(cost).toBeCloseTo(0.00075, 6);
+      // xAI published $0.20 input and $1.50 output per million tokens.
+      expect(cost).toBeCloseTo(0.0017, 6);
     });
 
     it('should calculate cost for grok-2-latest model', () => {
@@ -919,6 +919,12 @@ describe('CostTracker', () => {
         expect(result.total).toBeCloseTo(expectedCost, 6);
         expect(result.pricing).toBe('unknown'); // modèle non connu
         expect(result.estimated).toBe(true); // pas d'usage provider
+      });
+
+      it('recognizes the shared price behind a model alias', () => {
+        const result = tracker.calculateCostExtended(1_000_000, 1_000_000, 'grok');
+        expect(result.total).toBeCloseTo(1.7);
+        expect(result.pricing).toBe('known');
       });
 
       it('COST1-VERT-7: ChatGPT subscription models have correct metadata', () => {

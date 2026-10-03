@@ -1502,6 +1502,16 @@ messageHandlers.set('status', async (ws, state, payload) => {
   } else {
     state.approvalCapable = false;
   }
+  // Before authentication (or for an anonymous remote socket) the reply says
+  // only that: no server version, uptime or connection counts to a stranger.
+  if (!state.authenticated || state.anonymousRemote) {
+    send(ws, {
+      type: 'status',
+      payload: { connectionId: state.id, authenticated: false },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
   send(ws, buildGatewayStatus({
     connection: {
       connectionId: state.id,
@@ -1527,6 +1537,10 @@ messageHandlers.set('status', async (ws, state, payload) => {
 messageHandlers.set('avatar.sync', async (ws, state, _payload) => {
   if (!state.authenticated) {
     sendError(ws, 'UNAUTHORIZED', 'Authentication required');
+    return;
+  }
+  if (state.anonymousRemote) {
+    sendError(ws, 'REMOTE_AUTH_REQUIRED', 'Remote avatar readers require authentication');
     return;
   }
   const { buildAvatarSyncMessage, canReadAvatarEvents } = await import(

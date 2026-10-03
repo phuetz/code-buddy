@@ -25,6 +25,7 @@ import { access, chmod, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { logger } from '../utils/logger.js';
+import { getCodeBuddyPathForEnv } from '../utils/codebuddy-home.js';
 
 /** Surfaces that can hand Lisa a photo. */
 export type SharedPhotoSurface = 'mobile' | 'telegram' | 'voice' | 'cli';
@@ -70,7 +71,7 @@ export interface SharedPhotoStoreOptions {
 export function resolveSharedPhotosDir(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.CODEBUDDY_SHARED_PHOTOS_DIR?.trim();
   if (configured) return configured;
-  return path.join(homedir(), '.codebuddy', 'companion', 'shared-photos');
+  return getCodeBuddyPathForEnv(env, 'companion', 'shared-photos');
 }
 
 /** Album capacity. Invalid or non-positive values fall back to the default. */

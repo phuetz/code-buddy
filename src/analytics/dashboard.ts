@@ -17,6 +17,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { LRUCache } from '../utils/lru-cache.js';
 import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
+import { getPricingPer1M } from '../config/model-pricing.js';
 
 export interface UsageMetrics {
   totalSessions: number;
@@ -101,21 +102,6 @@ export interface DashboardConfig {
   aggregationInterval: 'hourly' | 'daily' | 'weekly';
   exportFormat: 'json' | 'csv' | 'markdown';
 }
-
-// Model pricing (per 1M tokens)
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'grok-4-latest': { input: 3.0, output: 15.0 },
-  'grok-4-fast': { input: 3.0, output: 15.0 },
-  'grok-4-1-fast': { input: 3.0, output: 15.0 },
-  'grok-3': { input: 3.0, output: 15.0 },
-  'grok-3-latest': { input: 3.0, output: 15.0 },
-  'grok-3-fast': { input: 0.60, output: 4.0 },
-  'grok-3-mini': { input: 0.30, output: 0.50 },
-  'grok-code-fast-1': { input: 0.15, output: 0.60 },
-  'grok-2': { input: 2.0, output: 10.0 },
-  'grok-2-latest': { input: 2.0, output: 10.0 },
-  'default': { input: 3.0, output: 15.0 },
-};
 
 const DEFAULT_CONFIG: DashboardConfig = {
   enabled: true,
@@ -348,9 +334,7 @@ export class AnalyticsDashboard extends EventEmitter {
       session.tokensOutput += tokensOutput;
 
       // Calculate cost
-      const pricing =
-        MODEL_PRICING[model || session.model] ??
-        MODEL_PRICING.default ?? { input: 3.0, output: 15.0 };
+      const pricing = getPricingPer1M(model || session.model);
       const cost = (tokensInput * pricing.input + tokensOutput * pricing.output) / 1_000_000;
       session.cost += cost;
 

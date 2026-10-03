@@ -17,6 +17,7 @@
 
 import { createHash } from 'node:crypto';
 import { logger } from '../../utils/logger.js';
+import { checkSecretFileAccess } from '../../security/secret-files.js';
 import { findPageNo } from './provenance.js';
 import type {
   PageSpan,
@@ -343,6 +344,7 @@ export async function parsePdfStructure(
 ): Promise<StructuredDoc | null> {
   const warn = deps.warn ?? ((message, context) => logger.warn(message, context));
   try {
+    if (checkSecretFileAccess(pdfPath, 'read').secret) return null;
     const readFile = deps.readFile ?? defaultReadFile;
     const parsePdf = deps.parsePdf ?? defaultParsePdf;
     const maxPages = clampInt(opts.maxPages, DEFAULT_MAX_PAGES, 1, 200000);

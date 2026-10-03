@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: POST http://127.0.0.1:18729/api/a2a/tasks/send {agent:codebuddy,message:Réponds uniquement P5_A2A_OK}; GET /api/a2a/tasks/<id>
+Attendu: La tâche est exécutée par Ollama et relue.
+Observé: POST 200: status=completed, result=P5_A2A_OK, routedTo=codebuddy; GET 200: même résultat et historique submitted→working→completed. Serveur arrêté.
+Verdict: prouvée

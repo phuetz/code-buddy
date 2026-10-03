@@ -102,6 +102,30 @@ describe('ComfyUI inpaint workflow', () => {
     })).resolves.toEqual({ provider: 'comfyui', available: true, alphaMasking: true });
   });
 
+  it('refuse un chemin de workflow classé identifiant avant lecture', async () => {
+    const fakeHome = await temporaryWorkspace();
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    process.env.HOME = fakeHome;
+    process.env.USERPROFILE = fakeHome;
+    try {
+      const credentialDir = path.join(fakeHome, '.codebuddy');
+      await fs.mkdir(credentialDir, { recursive: true });
+      const credential = path.join(credentialDir, 'codex-auth.json');
+      await fs.writeFile(credential, JSON.stringify(inpaintBundle()));
+      const capability = await getImageEditCapabilities({
+        rootDir: fakeHome,
+        env: { CODEBUDDY_IMAGE_PROVIDER: 'comfyui', CODEBUDDY_COMFYUI_INPAINT_WORKFLOW: credential },
+      });
+      expect(capability.available).toBe(false);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+    }
+  });
+
   it('fails closed when configuration is absent, placeholders are incompatible, or mask dataflow is disconnected', async () => {
     const workspace = await temporaryWorkspace();
     let calls = 0;

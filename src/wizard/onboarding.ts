@@ -1,3 +1,4 @@
+import { getOllamaBaseUrl, getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import * as readline from 'readline';
 import { spawn } from 'child_process';
 import { existsSync, readFileSync, mkdirSync } from 'fs';
@@ -82,7 +83,7 @@ export const PROVIDER_DEFAULT_MODEL: Record<string, string> = {
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o',
   openrouter: 'openai/gpt-4o',
-  ollama: 'qwen2.5-coder:7b',
+  ollama: 'qwen3:8b',
   lmstudio: 'default',
 };
 
@@ -113,11 +114,11 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'Ollama local model — free and private',
     authMode: 'local',
     envVar: '',
-    defaultModel: 'qwen2.5-coder:7b',
-    baseURL: 'http://localhost:11434/v1',
+    defaultModel: 'qwen3:8b',
+    baseURL: getOllamaV1BaseUrl(),
     setupCommand: 'ollama serve',
-    verifyCommand: 'curl http://localhost:11434/api/tags',
-    help: 'Run Ollama locally and pull a coding model, for example: ollama pull qwen2.5-coder:7b',
+    verifyCommand: `curl ${getOllamaBaseUrl()}/api/tags`,
+    help: 'Run Ollama locally and pull a model that can call tools, for example: ollama pull qwen3:8b',
   },
   {
     id: 'grok',
@@ -307,7 +308,7 @@ export async function persistProviderSelection(
   }
 
   if (guide.id === 'ollama' && !process.env.OLLAMA_HOST) {
-    process.env.OLLAMA_HOST = 'http://localhost:11434';
+    process.env.OLLAMA_HOST = getOllamaBaseUrl();
   }
 }
 
@@ -398,7 +399,7 @@ export function buildRecommendedNextCommands(result: Pick<OnboardingResult, 'pro
 export function renderOnboardingRoadmap(result?: Pick<OnboardingResult, 'provider' | 'model' | 'apiKey'>): string {
   const nextCommands = result ? buildRecommendedNextCommands(result) : [];
   const lines: string[] = [
-    '  Hermes-style onboarding phases:',
+    '  Setup steps:',
     ...ONBOARDING_PHASES.map((phase, index) =>
       `    ${index + 1}. ${phase.title} — ${phase.codeBuddyAction}`
     ),
@@ -584,11 +585,11 @@ async function runQuickStart(
 
   // Case B: Ollama is running but empty — offer to pull a model, then use it.
   if (ollama?.available && !(ollama.models?.length)) {
-    const DEFAULT_PULL = 'qwen2.5-coder:7b';
+    const DEFAULT_PULL = 'qwen3:8b';
     const answer = (
       await ask(
         rl,
-        `Ollama is running but has no model. Pull ${DEFAULT_PULL} now (free, ~4.5 GB)? (Y/n)`,
+        `Ollama is running but has no model. Pull ${DEFAULT_PULL} now (free, ~5 GB, can call tools)? (Y/n)`,
         'y'
       )
     ).toLowerCase();
@@ -632,14 +633,14 @@ function finishQuickStart(
   return result;
 }
 
-/** Offer to run the isolated 60-second demo right after setup — ending the
+/** Offer to run the isolated coding demo right after setup — ending the
  *  wizard on proof (a green test), not prose. */
 export async function offerOnboardingDemo(rl: readline.Interface, result: OnboardingResult): Promise<void> {
   if (!['chatgpt', 'ollama', 'lmstudio'].includes(result.provider)) {
     console.log('  Verify this provider with the first-chat command below.');
     return;
   }
-  const answer = (await ask(rl, 'Run the 60-second demo now to confirm it works? (Y/n)', 'y')).toLowerCase();
+  const answer = (await ask(rl, 'Run the coding demo now to confirm it works? Duration depends on the model and hardware. (Y/n)', 'y')).toLowerCase();
   if (answer === 'y' || answer === 'yes' || answer === '') {
     try {
       const { runTryDemo } = await import('../commands/try.js');

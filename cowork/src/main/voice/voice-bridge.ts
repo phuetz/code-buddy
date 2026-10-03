@@ -101,7 +101,7 @@ function buildVoiceWorkerEnv(): NodeJS.ProcessEnv {
       'COWORK_WHISPER_DEVICE',
     ],
     extraEnv: {
-      // Default to the FR-friendly base model on CPU/int8. Patrice
+      // Default to the FR-friendly base model on CPU/int8. The owner
       // can tune via env vars.
       COWORK_WHISPER_MODEL: process.env.COWORK_WHISPER_MODEL ?? 'base',
       COWORK_WHISPER_COMPUTE: process.env.COWORK_WHISPER_COMPUTE ?? 'int8',

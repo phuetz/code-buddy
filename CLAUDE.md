@@ -12,7 +12,7 @@ Les invariants opératoires non-négociables sont :
 - Jamais de secret en clair dans les fichiers suivis (utiliser variables d'environnement ou SecretRef).
 - HOME isolé pour les tests sous `_qa/<mission>/home` (gitignoré).
 
-> **Status: 2.0.0 « Code Buddy 2 »** (`package.json`; dernier tag publié v1.8.0). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you _can't_ derive by reading the source.
+> **Status: candidat 2.3.0 « Code Buddy 2 »** (`package.json`; dernier tag publié v2.2.0). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you _can't_ derive by reading the source.
 
 ## Build, Test, Lint
 
@@ -242,6 +242,7 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 ## Config Files
 
 - `src/config/model-tools.ts` — **start here for model-specific behavior**. Per-model caps with glob matching.
+- `src/config/model-price-data.ts` — sole versioned price table (USD per million uncached text tokens), with source, verification date and scope per row; unverified legacy estimates are marked. Explicit catalogue prices can override it for a configured model.
 - `src/config/constants.ts` — `SUPPORTED_MODELS`, `TOKEN_LIMITS`
 - `src/config/toml-config.ts` — config profiles (`[profiles.<name>]` deep-merged; `buddy --profile <name>`). Also `[model_pairs]` for architect/editor split.
 - `src/config/advanced-config.ts` — effort levels (low/medium/high) → temperature + token params
@@ -268,7 +269,7 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `CODEBUDDY_AUTOCOMPACT_PCT` | Auto-compact threshold as % of context window |
 | `CODEBUDDY_MCP_INIT_TIMEOUT_MS` | Per-server MCP handshake timeout (default `15000`). A slow server is skipped so the others still load; the handshake continues in the background and tools appear when it responds. Invalid/non-positive values fall back to 15s. |
 | `MORPH_API_KEY` | Enables fast file editing |
-| `YOLO_MODE` / `MAX_COST` | Cost controls ($10 default, $100 in YOLO). Arm YOLO explicitly with `buddy --yolo` or `/yolo on`; setting `YOLO_MODE=true` alone only emits a warning and does not enable autonomy |
+| `YOLO_MODE` / `MAX_COST` | Cost controls ($10 default, $100 in YOLO; configurable, YOLO hard cap $1,000). CLI and Cowork defaults come from `src/config/session-cost-defaults.ts`. Arm YOLO explicitly with `buddy --yolo` or `/yolo on`; setting `YOLO_MODE=true` alone only emits a warning and does not enable autonomy |
 | `CODEBUDDY_NATIVE_SANDBOX` | Opt-in kernel confinement for `bash` (Bubblewrap, else Landlock, else macOS `sandbox-exec`). Unset = host spawn unchanged. Set = wrap after confirmation, **fail-closed** if confinement cannot be applied (never runs unsandboxed under a sandbox label). `bwrap` / `landlock` / `seatbelt` force one backend. |
 | `CODEBUDDY_BATCH_CONCURRENCY` | Maximum concurrent `/batch` delegate threads (default `1`) |
 | `CODEBUDDY_MOBILE_HISTORY` / `_DIR` | **Opt-out (default ON)**: the mobile PWA companion conversation (`assistant:'companion'` over `/ws`) is kept per connection (≤ 20 turns, text only, a `kind:'selfie'` marker instead of image bytes) and persisted per identity so a reconnection resumes the conversation. `=false` keeps the in-memory history and writes nothing. The file name is a sha256 of the JWT user id — no identity in clear, and a traversal-shaped id cannot escape `_DIR` (default `~/.codebuddy/companion/mobile-history/`). `src/companion/mobile-history.ts` |
@@ -469,7 +470,11 @@ In-session slash commands (not exhaustive):
 
 ## HTTP Server (`src/server/`)
 
-Started with `buddy server`. **One process, one port** (default **3000**, `--port N`): the HTTP API and the WebSocket endpoint `/ws` share that single listener — measured with `ss -ltnp`, nothing else is bound. The fleet convention of a *second* server on another port is a second process (see `docs/deployment.md`). CORS enabled, rate-limit 100 req/min, JWT required in production.
+**Limite sécurité 2.3.0 :** les lecteurs directs intégrés refusent les fichiers d'identifiants classés. Le filtre statique du shell ne couvre pas toutes les lectures récursives ni les chemins construits à l'exécution ; un secret suivi par Git peut encore sortir par le shell via les objets du dépôt. La garantie « secret suivi par Git illisible » est reportée en 2.3.1.
+
+Started with `buddy server`. **Binds to `127.0.0.1` by default (2.3.0)** — `--host 0.0.0.0` / `HOST=0.0.0.0` is the explicit network exposure (then `JWT_SECRET` is mandatory in practice); `X-Forwarded-For` is only trusted for proxies listed in `CODEBUDDY_TRUSTED_PROXIES`. JWTs without a numeric `exp`, or verified against an empty secret, are rejected; the WebSocket `status` reply before authentication carries only `{connectionId, authenticated:false}`. **One process, one port** (default **3000**, `--port N`): the HTTP API and the WebSocket endpoint `/ws` share that single listener — measured with `ss -ltnp`, nothing else is bound. The fleet convention of a *second* server on another port is a second process (see `docs/deployment.md`). CORS enabled, rate-limit 100 req/min, JWT required in production.
+
+`buddy daemon start` launches an internal HTTP server without JWT on `127.0.0.1` only. Remote access requires an authenticated `buddy server` configured explicitly for a network interface.
 
 Routes worth knowing: `/api/health`, `/api/chat`, `/api/chat/completions` (OpenAI-compatible), `/api/sessions`, `/api/memory`, `/api/a2a/*` (Google A2A: AgentCard discovery + task lifecycle), `/__codebuddy__/canvas/:id`, `/__codebuddy__/a2ui/`.
 

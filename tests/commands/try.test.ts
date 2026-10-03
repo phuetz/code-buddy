@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import type { ChatEntry } from '../../src/agent/types.js';
 import {
   NO_TRY_PROVIDER_MESSAGE,
+  isChatOnlyModel,
   TRY_DEMO_PROMPT,
   chooseOllamaModel,
   createTryCommand,
@@ -23,9 +24,44 @@ describe('buddy try', () => {
   it('prefers a coding-oriented Ollama model while honoring an installed request', () => {
     const models = ['llama3.2:latest', 'qwen2.5-coder:7b', 'devstral:latest'];
 
-    expect(chooseOllamaModel(models)).toBe('qwen2.5-coder:7b');
-    expect(chooseOllamaModel(models, 'devstral:latest')).toBe('devstral:latest');
+    // qwen2.5-coder:7b is chat-only (supportsToolCalls: false): the demo edits
+    // files, so the tool-capable devstral wins even though the coder regex ranks first.
+    expect(chooseOllamaModel(models)).toBe('devstral:latest');
+    expect(chooseOllamaModel(models, 'qwen2.5-coder:7b')).toBe('qwen2.5-coder:7b');
+    expect(chooseOllamaModel(['llama3.2:latest', 'qwen2.5-coder:7b'])).toBe('qwen2.5-coder:7b');
+    expect(chooseOllamaModel(['llama3.2:latest', 'qwen3:8b'])).toBe('qwen3:8b');
     expect(chooseOllamaModel([])).toBeNull();
+  });
+
+  it('names a chat-only model as the likely cause when the demo test stays red', async () => {
+    const errors: string[] = [];
+    const code = await runTryDemo({
+      verbose: true,
+      resolveProvider: async () => ({
+        kind: 'ollama', label: 'Ollama', apiKey: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', model: 'qwen2.5-coder:7b',
+      } as TryProvider),
+      createWorkspace: async () => '/tmp/code-buddy-try-test',
+      createAgent: async () => ({
+        systemPromptReady: Promise.resolve(),
+        processUserMessage: async () => [],
+        dispose: vi.fn(),
+      }),
+      verify: async () => ({ success: false, output: 'no test file' }),
+      stdout: () => {},
+      stderr: (m: string) => errors.push(m),
+    });
+    expect(code).toBe(1);
+    const text = errors.join('\n');
+    expect(text).toContain('qwen2.5-coder:7b is chat-only');
+    expect(text).toContain('ollama pull qwen3:8b');
+  });
+
+  it('flags chat-only models and recommends a tool-capable pull', () => {
+    expect(isChatOnlyModel('qwen2.5-coder:7b')).toBe(true);
+    expect(isChatOnlyModel('qwen3:8b')).toBe(false);
+    expect(isChatOnlyModel(undefined)).toBe(false);
+    expect(NO_TRY_PROVIDER_MESSAGE).toContain('ollama pull qwen3:8b');
+    expect(NO_TRY_PROVIDER_MESSAGE).not.toContain('ollama pull qwen2.5');
   });
 
   it('uses ChatGPT OAuth before probing Ollama', async () => {
@@ -53,13 +89,13 @@ describe('buddy try', () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      'http://localhost:11434/api/tags',
+      'http://127.0.0.1:11434/api/tags',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(provider).toMatchObject({
       kind: 'ollama',
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       model: 'qwen3-coder:30b',
     });
   });

@@ -5,7 +5,7 @@
  * Cowork's `presence-bridge` writes whenever the camera detects (or
  * loses) someone. Surfaces the result as a `<presence>` block in the
  * agent's system prompt so the LLM can adapt its greeting register
- * naturally — "Bonjour Patrice" vs "Bonjour mon chéri" vs "Bonjour
+ * naturally — "Bonjour" vs "Bonjour mon chéri" vs "Bonjour
  * (visage non reconnu)".
  *
  * Why file-based and not IPC: Cowork's main process and the Code Buddy
@@ -17,7 +17,7 @@
  *
  * Stale file handling: if `updatedAt` is older than `STALE_AFTER_MS`,
  * we treat the presence as unknown — better to greet generically than
- * to claim "Patrice est là" when the webcam was last seen 30 minutes
+ * to claim "la personne est là" when the webcam was last seen 30 minutes
  * ago.
  *
  * @module src/memory/presence-injector
@@ -27,8 +27,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomic } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
-const PRESENCE_FILE = path.join(os.homedir(), '.codebuddy', 'presence', 'current.json');
+const PRESENCE_FILE = getCodeBuddyPath('presence', 'current.json');
 
 /**
  * After this much time without an update from Cowork, we ignore the

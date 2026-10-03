@@ -14,6 +14,7 @@ import { dispatchSlashPrompt } from '../../src/commands/headless-slash.js';
 import { handleBackup } from '../../src/commands/handlers/backup-handlers.js';
 import { handleCopy } from '../../src/commands/handlers/clipboard-handler.js';
 import { handleModelRouter as handleResearchModelRouter } from '../../src/commands/handlers/research-handlers.js';
+import { getCommentWatcher, resetCommentWatcher } from '../../src/tools/comment-watcher.js';
 
 interface SlashLike {
   failed?: boolean;
@@ -157,6 +158,29 @@ async function diffInIsolatedRepo(withChange: boolean): Promise<SlashLike | null
     restore('GIT_WORK_TREE', saved.workTree);
     restore('GIT_CONFIG_GLOBAL', saved.configGlobal);
     restore('GIT_CONFIG_NOSYSTEM', saved.configNosystem);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+/** Le vrai scanner parcourt un seul fichier, même sans ripgrep sous Windows. */
+async function scanTodosInIsolatedProject(): Promise<SlashLike | null> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slash-exit-todos-'));
+  resetCommentWatcher();
+  try {
+    fs.writeFileSync(path.join(root, 'sample.ts'), '// TODO(ai): slash-exit-todo-marker\n');
+    const watcher = getCommentWatcher(root);
+    const result = await viaSlash('/scan-todos');
+    expect(watcher.getDetectedComments()).toEqual([
+      expect.objectContaining({
+        file: path.join(root, 'sample.ts'),
+        line: 1,
+        content: 'slash-exit-todo-marker',
+      }),
+    ]);
+    expect(textOf(result)).toContain('slash-exit-todo-marker');
+    return result;
+  } finally {
+    resetCommentWatcher();
     fs.rmSync(root, { recursive: true, force: true });
   }
 }
@@ -343,7 +367,7 @@ const cases: OutcomeCase[] = [
   { handler: 'handleChangeModel', kind: 'succès', label: '/model auto off', exitCode: 0, needle: 'Auto model routing disabled', run: () => viaSlash('/model auto off') },
   { handler: 'handleListCheckpoints', kind: 'succès', label: '/checkpoints', exitCode: 0, needle: 'heckpoint', run: () => viaSlash('/checkpoints') },
   { handler: 'handleRestoreCheckpoint', kind: 'succès', label: '/restore', exitCode: 0, needle: 'No checkpoints available', run: () => viaSlash('/restore') },
-  { handler: 'handleScanTodos', kind: 'succès', label: '/scan-todos', exitCode: 0, needle: 'odo', run: () => viaSlash('/scan-todos') },
+  { handler: 'handleScanTodos', kind: 'succès', label: '/scan-todos', exitCode: 0, needle: 'odo', run: scanTodosInIsolatedProject },
   { handler: 'handleAddressTodo', kind: 'échec', label: '/address-todo', exitCode: 1, needle: 'sage', run: () => viaSlash('/address-todo') },
   { handler: 'handleRemember', kind: 'échec', label: '/remember', exitCode: 1, needle: 'sage', run: () => viaSlash('/remember') },
   { handler: 'handleNew', kind: 'succès', label: '/new', exitCode: 0, needle: 'ew', run: () => viaSlash('/new') },

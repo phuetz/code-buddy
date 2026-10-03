@@ -464,7 +464,7 @@ function VoiceboxStudioPanel({
   const [referenceText, setReferenceText] = useState('');
   const [presetKey, setPresetKey] = useState('kokoro:ff_siwis');
   const [previewText, setPreviewText] = useState(
-    'Bonjour Patrice. Je suis heureuse de pouvoir enfin te parler avec ma propre voix.'
+    'Bonjour. Je suis heureuse de pouvoir enfin te parler avec ma propre voix.'
   );
   const [sample, setSample] = useState<File | null>(null);
   const [consent, setConsent] = useState(false);

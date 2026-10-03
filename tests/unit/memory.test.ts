@@ -578,12 +578,8 @@ describe('EnhancedMemory', () => {
       // VERIF3 T20 : persister un index vide restait vert, seule la
       // disparition de l'appel rougissait. Chemin, contenu et mode sont
       // désormais assertés.
-      const indexPath = nodePath.join(
-        nodeOs.homedir(),
-        '.codebuddy',
-        'memory',
-        'memory-index.json'
-      );
+      const profileRoot = process.env.CODEBUDDY_HOME || nodePath.join(nodeOs.homedir(), '.codebuddy');
+      const indexPath = nodePath.join(profileRoot, 'memory', 'memory-index.json');
       const indexCalls = mockWriteJSON.mock.calls.filter(
         (call: unknown[]) => call[0] === indexPath
       );

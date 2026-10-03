@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy hermes status --json
+Attendu: Le profil et ses sous-systèmes sont inspectés.
+Observé: ok=true; dispatchProfile=balanced; featureParity total=20 covered=15 coveredPartial=5; provider=ollama, model=qwen3:4b-instruct. Code 0.
+Verdict: prouvée

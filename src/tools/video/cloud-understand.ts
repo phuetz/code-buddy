@@ -26,6 +26,7 @@ import { readFile as realReadFile } from 'fs/promises';
 import { existsSync as realExistsSync } from 'fs';
 import { isAbsolute, resolve as resolvePath, extname } from 'path';
 import { logger } from '../../utils/logger.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../../security/secret-files.js';
 import { isYoutubeUrl } from './youtube-captions.js';
 
 /** Explicit privacy warning attached to every cloud result — the video went to Google. */
@@ -171,6 +172,8 @@ async function buildMediaPart(
   const localPath = isAbsolute(source) ? source : resolvePath(deps.cwd ?? process.cwd(), source);
   if (existsSync(source) || existsSync(localPath)) {
     const filePath = existsSync(source) ? source : localPath;
+    const secret = checkSecretFileAccess(filePath, 'read');
+    if (secret.secret) return { reason: formatSecretRefusal(filePath, secret) };
     const readFile = deps.readFile ?? realReadFile;
     const maxBytes = deps.maxInlineBytes ?? DEFAULT_MAX_INLINE_BYTES;
     let bytes: Buffer;
@@ -207,31 +210,30 @@ async function defaultCallGemini(req: GeminiVideoRequest, ctx: GeminiCallContext
   const body = { contents: [{ role: 'user', parts: req.parts }] };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ctx.timeoutMs);
-  let res: Response;
   try {
-    res = await ctx.fetch(url, {
+    const res = await ctx.fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': ctx.apiKey },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Gemini ${res.status}: ${text.slice(0, 300)}`);
+    }
+    const data = (await res.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const parts = data.candidates?.[0]?.content?.parts ?? [];
+    const answer = parts
+      .map((p) => p.text ?? '')
+      .join('')
+      .trim();
+    if (!answer) throw new Error('Gemini a renvoyé une réponse vide');
+    return answer;
   } finally {
     clearTimeout(timeout);
   }
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Gemini ${res.status}: ${text.slice(0, 300)}`);
-  }
-  const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  const answer = parts
-    .map((p) => p.text ?? '')
-    .join('')
-    .trim();
-  if (!answer) throw new Error('Gemini a renvoyé une réponse vide');
-  return answer;
 }
 
 /**

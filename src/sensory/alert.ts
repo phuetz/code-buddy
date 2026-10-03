@@ -10,8 +10,8 @@ import { resolveTelegramApiBase } from '../utils/telegram-api-base.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 
 /**
- * Send `text` as a Telegram VOICE NOTE (so the robot's voice reaches Patrice's phone when he's
- * away, not just the home speakers): synthesize to OGG/Opus (Piper → ffmpeg, the format Telegram
+ * Send `text` as a Telegram VOICE NOTE (so the robot's voice reaches the user's phone when away,
+ * not just the home speakers): synthesize to OGG/Opus (Piper → ffmpeg, the format Telegram
  * voice notes require) and POST `sendVoice`. Falls back to a text alert if synthesis/sending
  * fails. No-op (returns false) when the alert token/voice isn't configured. Never throws.
  * Injectable (`synthesize` / `post`) for deterministic tests.
@@ -94,7 +94,7 @@ export async function sendTelegramAlert(
         throw new Error('Telegram rejected the photo alert');
       } catch (photoErr) {
         // A missing/unreadable keyframe must NOT drop the whole alert — a vision
-        // event with a not-yet-written image would otherwise notify Patrice with
+        // event with a not-yet-written image would otherwise notify the user with
         // NOTHING (no photo, no text). Fall back to a plain text message.
         logger.warn(
           `[sensory] photo alert failed (${photoErr instanceof Error ? photoErr.message : String(photoErr)}) — sending text instead`,

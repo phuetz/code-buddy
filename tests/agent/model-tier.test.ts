@@ -82,7 +82,7 @@ describe('resolveModelTierConfig', () => {
   it('defaults to a local Ollama tier with no network/escalation', () => {
     const cfg = resolveModelTierConfig({});
     expect(cfg.localModel).toBe('llama3.2');
-    expect(cfg.localBaseUrl).toBe('http://localhost:11434/v1');
+    expect(cfg.localBaseUrl).toBe('http://127.0.0.1:11434/v1');
     expect(cfg.networkModels).toBeUndefined();
     expect(cfg.escalationModel).toBeUndefined();
   });
@@ -156,7 +156,7 @@ describe('resolveLiveModelTierConfig', () => {
 describe('chooseAutonomousModel (free-first ladder)', () => {
   const cfg: ModelTierConfig = {
     localModel: 'qwen2.5:7b-instruct',
-    localBaseUrl: 'http://localhost:11434/v1',
+    localBaseUrl: 'http://127.0.0.1:11434/v1',
     networkModels: [{ model: 'qwen3.6:27b', baseUrl: 'http://gpuNode:11434/v1' }],
     escalationModel: 'claude-opus-4-8',
   };

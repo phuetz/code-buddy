@@ -44,6 +44,39 @@ describe('TelegramChannel polling resilience', () => {
     vi.useRealTimers();
   });
 
+  it('waits for update handling and offset persistence before disconnect resolves', async () => {
+    let enterHandling!: () => void;
+    let finishHandling!: () => void;
+    const handlingStarted = new Promise<void>((resolve) => { enterHandling = resolve; });
+    const handlingFinished = new Promise<void>((resolve) => { finishHandling = resolve; });
+    global.fetch = vi.fn(async (input: string | URL | Request): Promise<Response> => {
+      const method = methodFrom(input);
+      if (method === 'getMe') return telegramResponse({ id: 123456, is_bot: true, first_name: 'Lisa' });
+      if (method === 'deleteWebhook') return telegramResponse(true);
+      if (method === 'getUpdates') return telegramResponse([{ update_id: 42, message: {} }]);
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    }) as typeof fetch;
+    channel = createChannel(10);
+    const internals = channel as unknown as { handleUpdate: (update: unknown) => Promise<void>; persistOffset: () => void };
+    vi.spyOn(internals, 'handleUpdate').mockImplementation(async () => {
+      enterHandling();
+      await handlingFinished;
+    });
+    const persisted = vi.spyOn(internals, 'persistOffset').mockImplementation(() => undefined);
+
+    await channel.connect();
+    await handlingStarted;
+    let disconnected = false;
+    const disconnecting = channel.disconnect().then(() => { disconnected = true; });
+    await Promise.resolve();
+    expect(disconnected).toBe(false);
+    expect(persisted).not.toHaveBeenCalled();
+
+    finishHandling();
+    await disconnecting;
+    expect(persisted).toHaveBeenCalledOnce();
+  });
+
   it('times out a getUpdates request that never settles and starts another poll', async () => {
     const pollSignals: AbortSignal[] = [];
     const fetchMock = vi.fn(

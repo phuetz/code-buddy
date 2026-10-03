@@ -93,6 +93,7 @@ function status(overrides: Record<string, unknown> = {}) {
 
 describe('companion impulses', () => {
   beforeEach(() => {
+    vi.stubEnv('CODEBUDDY_USER_NAME', 'Alex');
     jest.clearAllMocks();
     mocks.getCompanionStatus.mockResolvedValue(status());
     mocks.readRecentCompanionPercepts.mockResolvedValue([
@@ -112,6 +113,8 @@ describe('companion impulses', () => {
     mocks.readRecentCompanionSafetyEvents.mockResolvedValue([]);
     mocks.recordCompanionPercept.mockResolvedValue({ id: 'percept-1' });
   });
+
+  afterEach(() => vi.unstubAllEnvs());
 
   it('builds readiness and bootstrap impulses for an unwired companion', async () => {
     mocks.getCompanionStatus.mockResolvedValue(status({
@@ -150,7 +153,7 @@ describe('companion impulses', () => {
       'memory-start-sensory-journal',
     ]));
     expect(brief.impulses[0].priority).toBe('high');
-    expect(brief.nextPrompt).toContain('Patrice');
+    expect(brief.nextPrompt).toContain('Alex');
     expect(mocks.recordCompanionPercept).not.toHaveBeenCalled();
   });
 

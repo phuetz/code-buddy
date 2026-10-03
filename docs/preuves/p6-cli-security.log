@@ -1,0 +1,37 @@
+Fonctionnalité : cli-security
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : buddy security audit --json --profile-dir ../home --project .
+Attendu : Audit réel du profil et du projet jetables.
+Observé : Code 0 ; passed=true, status=passed, findings=[] et limites explicites.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- cli-security ---
+$ buddy security audit --json --profile-dir ../home --project .
+Code de sortie : 0
+{
+  "profileDir": "../home",
+  "projectDir": ".",
+  "effectiveProfileDir": "<WORKTREE>/_qa/preuves-p6/home",
+  "effectiveProjectDir": "<WORKTREE>/_qa/preuves-p6/work",
+  "limitations": [
+    "Remote MCP hostnames are not resolved. A passed URL is not a guarantee that DNS stays off private networks.",
+    "MCP server checks follow the runtime loader: project mcp.json (mcpServers or servers), project settings.json mcpServers, and profile mcp.json. Project settings.local.json and profile settings.json are not runtime MCP server sources.",
+    "Skill directories are capped at 40 entries and a bounded file walk. A larger tree fails the audit instead of being reported as clean. A symlink or non-regular file inside a skill is not followed and fails the audit.",
+    "exact_failure and same_tool_failure accept 0 as off. idempotent_no_progress does not: 0 keeps the historical default and the minimum is 2. same_tool_failure counts every failure of that tool in the turn, even when the arguments differ. warnings_enabled and hard_stop_enabled can both be turned off by the operator."
+  ],
+  "passed": true,
+  "status": "passed",
+  "findings": [],
+  "suppressedFindings": [],
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0
+  },
+  "fixes": []
+}

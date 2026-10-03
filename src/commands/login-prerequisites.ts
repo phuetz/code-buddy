@@ -10,6 +10,14 @@ export const LOGIN_NEEDS_BROWSER_MESSAGE = [
   'From a graphical desktop run `buddy login`, or set up a local model with `buddy onboard`.',
 ].join('\n');
 
+/** Printed for an explicit `buddy login --no-browser` (the session may well have a display). */
+export const LOGIN_NO_BROWSER_FLAG_MESSAGE = [
+  '--no-browser was set, so ChatGPT login did not start.',
+  'This flag does not switch to a device code: ChatGPT sign-in always goes through a browser.',
+  'On a graphical desktop, run `buddy login` and leave the terminal open (the sign-in attempt ends after five minutes).',
+  'Without a display, use a local model instead: `buddy onboard`.',
+].join('\n');
+
 export interface LoginIo {
   stdinIsTTY?: boolean;
   stdoutIsTTY?: boolean;

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-curator",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "5d7d0ab8ab32f0412ce34773fa019a92205094ad330ab895ede0df33d274c4de",
+  "artifact": "docs/preuves/p5-cli-curator-2026-09-29.log",
+  "summary": "Rapport Curator local créé puis relu."
+}

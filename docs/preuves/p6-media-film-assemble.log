@@ -1,0 +1,22 @@
+Fonctionnalité : media-film-assemble
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : buddy film assemble p6-demo
+Attendu : Montage ffmpeg de deux clips de 2 s avec audio.
+Observé : Code 0 ; quality PASS, durée 4 s, audio -24.1 dB, noir 0 s ; MP4 vérifié par ffprobe.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- media-film-assemble ---
+$ buddy film assemble p6-demo
+Code de sortie : 0
+[2026-09-29T12:14:54.742Z]  INFO  [film-assemble] 2 clip(s), engine=xfade, 64x64@12, ~4s
+[2026-09-29T12:14:55.040Z]  INFO  [film-quality] PASS — 4s, audio=-24.1dB, black=0s
+[2026-09-29T12:14:55.041Z]  INFO  [film-producer] 'p6-demo' → <WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-demo-1790684094741-e54e1c7f-70fc-4dc0-a8e7-37bf4bd8d564.mp4 (2 scene(s))
+
+🎬  p6-demo — 2/2 scene(s) ready
+   ✓ scene-1    ready
+   ✓ scene-2    ready
+
+   film: <WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-demo-1790684094741-e54e1c7f-70fc-4dc0-a8e7-37bf4bd8d564.mp4
+   quality: PASS — 4s, audio -24.1dB

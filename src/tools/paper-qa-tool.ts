@@ -28,6 +28,7 @@
 
 import { stat as fsStat, readdir as fsReaddir } from 'fs/promises';
 import path from 'path';
+import { checkSecretFileAccess } from '../security/secret-files.js';
 
 import type { ToolResult } from '../types/index.js';
 import type {
@@ -135,7 +136,7 @@ export async function resolvePdfPaths(
 
   const addFile = (p: string): void => {
     const abs = path.resolve(p);
-    if (!seen.has(abs) && isPdf(abs)) {
+    if (!seen.has(abs) && isPdf(abs) && !checkSecretFileAccess(abs, 'read').secret) {
       seen.add(abs);
       out.push(abs);
     }
@@ -143,6 +144,7 @@ export async function resolvePdfPaths(
 
   const walkDir = async (dir: string): Promise<void> => {
     if (out.length >= cap || visited >= MAX_WALK_ENTRIES) return;
+    if (checkSecretFileAccess(dir, 'read').secret) return;
     let entries: string[];
     try {
       entries = await fsReaddir(dir);

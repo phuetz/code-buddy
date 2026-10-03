@@ -5,6 +5,7 @@ import {
   createGpuWorkerCommand,
   parseGpuRunnerArgs,
 } from '../../src/commands/gpu-worker.js';
+import { resolveGpuMediaWorkerId } from '../../src/gpu-worker/gpu-media-worker-server.js';
 
 const options = {
   host: '192.0.2.42',
@@ -80,5 +81,11 @@ describe('gpu-worker command', () => {
     expect(parseGpuRunnerArgs('["runner.py", "--safe"]', 'ARGS')).toEqual(['runner.py', '--safe']);
     expect(() => parseGpuRunnerArgs('{"bad":true}', 'ARGS')).toThrow(/JSON array/);
     expect(createGpuWorkerCommand().name()).toBe('gpu-worker');
+    expect(createGpuWorkerCommand().opts().workerId).toBeUndefined();
+  });
+
+  it('uses the same worker identifier for the CLI log and server capabilities', () => {
+    expect(resolveGpuMediaWorkerId(undefined)).toBe('codebuddy-gpu-worker');
+    expect(resolveGpuMediaWorkerId('worker-test')).toBe('worker-test');
   });
 });

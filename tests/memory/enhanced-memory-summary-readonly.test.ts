@@ -28,6 +28,7 @@ describe('MEM1 — recall récupère les résumés corrompus', () => {
     fs.mkdirSync(testRoot, { recursive: true });
     home = fs.mkdtempSync(path.join(testRoot, 'enhanced-summary-'));
     homeHolder.dir = home;
+    vi.stubEnv('CODEBUDDY_HOME', path.join(home, '.codebuddy'));
     memory = null;
   });
 
@@ -35,6 +36,7 @@ describe('MEM1 — recall récupère les résumés corrompus', () => {
     memory?.dispose();
     await memory?.flush();
     memory = null;
+    vi.unstubAllEnvs();
     fs.rmSync(home, { recursive: true, force: true });
     try {
       fs.rmdirSync(testRoot);

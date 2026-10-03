@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-session",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "5e7ed022135bed5af04e9d192939d75870b0adeb1caddf15cb8e4df4c923b07e",
+  "artifact": "docs/preuves/p5-cli-session-2026-09-29.log",
+  "summary": "Session Ollama réelle retrouvée puis reprise avec réponse fondée sur le tour précédent."
+}

@@ -6,6 +6,7 @@
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
+import { getCodeBuddyPath } from '../../src/utils/codebuddy-home.js';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -196,10 +197,9 @@ describe('shared album — configuration', () => {
   });
 
   it('stores outside the repository by default', () => {
-    const resolved = resolveSharedPhotosDir({} as NodeJS.ProcessEnv);
-    expect(resolved).toContain(path.join('.codebuddy', 'companion', 'shared-photos'));
-    // Under the user's home, never under the tracked source tree.
-    expect(resolved.startsWith(homedir())).toBe(true);
+    const resolved = resolveSharedPhotosDir(process.env);
+    expect(resolved).toBe(getCodeBuddyPath('companion', 'shared-photos'));
+    // Under the configured Code Buddy home, never under the tracked source tree.
     expect(resolved).not.toContain(`${path.sep}src${path.sep}`);
     expect(resolved).not.toContain(`${path.sep}tests${path.sep}`);
   });
