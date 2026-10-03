@@ -2791,6 +2791,35 @@ export class AgentExecutor {
               });
               continue;
             }
+            // (1b) Runaway reasoning: the whole output budget went into the
+            // model's reasoning channel — no text, no tool call (banc harnais
+            // 03/10, qwen3.5:4b: 8 192 thinking tokens, then the task ended as
+            // "success" with nothing done). Distinct from the zero-token case
+            // above: tokens WERE produced, the model just never acted. Drop the
+            // empty turn (its reasoning would only fill the window) and ask it
+            // to act, within the same continuation budget.
+            if (
+              streamFinishReason === 'length' &&
+              streamedContentRaw.length === 0 &&
+              Boolean(accumulatedMessage.ollama_thinking?.trim()) &&
+              lengthContinuations < maxLengthContinuations
+            ) {
+              lengthContinuations++;
+              logger.warn('[agent-executor] reasoning used the whole output budget, asking the model to act', {
+                attempt: lengthContinuations,
+                max: maxLengthContinuations,
+              });
+              if (messages[messages.length - 1]?.role === 'assistant') messages.pop();
+              if (history[history.length - 1] === assistantEntry) history.pop();
+              messages.push({
+                role: 'user',
+                content:
+                  'Your reasoning reached the output length limit before you answered or called a tool, ' +
+                  'so nothing was done. Do not restart the analysis. Act now: make the next tool call ' +
+                  '(or give the final answer), keeping your reasoning short.',
+              });
+              continue;
+            }
             if (streamFinishReason === 'length') {
               assistantEntry.truncated = true;
               const notice = lengthContinuations > 0

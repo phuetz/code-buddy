@@ -354,6 +354,27 @@ describe('R23 AgentExecutor — faux succès', () => {
       expect(history.some((entry) => entry.truncated === true)).toBe(true);
       expect(entries.map((entry) => entry.content).join('\n')).toMatch(/tronquée/i);
     });
+
+    // Banc harnais 03/10 (C-4b-etat0) : qwen3.5:4b a produit 8 192 jetons de
+    // réflexion, ni texte ni appel d'outil ; la tâche s'arrêtait là.
+    it('relance un modèle dont la réflexion a consommé tout le budget de sortie', async () => {
+      process.env.CODEBUDDY_MAX_LENGTH_CONTINUATIONS = '3';
+      const stream = deps.client.chatStream as jest.Mock;
+      const acc = deps.streamingHandler.getAccumulatedMessage as jest.Mock;
+      stream.mockImplementationOnce(async function* () { /* reasoning only */ });
+      acc.mockReturnValueOnce({ content: '', ollama_thinking: 'Je vais utiliser apply_patch au lieu de…', finishReason: 'length' });
+      setupLLMFlow(deps, [{ content: 'Correctif appliqué.' }]);
+
+      const history: ChatEntry[] = [];
+      const messages: CodeBuddyMessage[] = [];
+      await executor.processUserMessage('Corrige le bug', history, messages);
+
+      expect(deps.client.chatStream).toHaveBeenCalledTimes(2);
+      expect(history.some((entry) => entry.truncated === true)).toBe(false);
+      expect(history.filter((entry) => entry.type === 'assistant').map((entry) => entry.content)).toEqual(['Correctif appliqué.']);
+      expect(messages.some((m) => m.role === 'assistant' && !m.content && !m.tool_calls)).toBe(false);
+      expect(messages.some((m) => m.role === 'user' && /reasoning reached the output length limit/.test(String(m.content)))).toBe(true);
+    });
   });
 
   describe('D4 — mention @fichier absente', () => {
