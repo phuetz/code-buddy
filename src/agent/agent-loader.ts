@@ -19,6 +19,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { homedir } from 'os';
+import * as yaml from 'yaml';
+import { TOOL_ALIASES } from '../tools/registry/tool-alias-map.js';
+import { parseAgentTools } from './agent-tools.js';
 import { logger } from '../utils/logger.js';
 
 // ============================================================================
@@ -55,43 +58,12 @@ export interface MarkdownAgentDefinition {
 function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: string } {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match) {
+    if (raw.trimStart().startsWith('---') && /^\s*(?:tools|disallowedTools):/m.test(raw)) throw new Error('Malformed agent tool allowlist');
     return { meta: {}, body: raw };
   }
-
-  const yamlBlock = match[1] ?? '';
-  const body = match[2] ?? '';
-  const meta: Record<string, unknown> = {};
-
-  for (const line of yamlBlock.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const colonIdx = trimmed.indexOf(':');
-    if (colonIdx === -1) continue;
-
-    const key = trimmed.slice(0, colonIdx).trim();
-    let value: unknown = trimmed.slice(colonIdx + 1).trim();
-
-    // Parse arrays: ["a", "b"]
-    if (typeof value === 'string' && value.startsWith('[') && value.endsWith(']')) {
-      try { value = JSON.parse(value); } catch { /* keep string */ }
-    }
-    // Parse numbers
-    else if (typeof value === 'string' && /^\d+$/.test(value)) {
-      value = parseInt(value, 10);
-    }
-    // Parse booleans
-    else if (value === 'true') value = true;
-    else if (value === 'false') value = false;
-    // Strip quotes
-    else if (typeof value === 'string' && value.startsWith('"') && value.endsWith('"')) {
-      value = value.slice(1, -1);
-    }
-
-    meta[key] = value;
-  }
-
-  return { meta, body };
+  const meta: unknown = yaml.parse(match[1]!);
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new Error('Invalid agent frontmatter');
+  return { meta: meta as Record<string, unknown>, body: match[2]! };
 }
 
 // ============================================================================
@@ -115,6 +87,8 @@ function loadAgentsFromDir(dir: string): MarkdownAgentDefinition[] {
         const raw = fs.readFileSync(filePath, 'utf-8');
         const { meta, body } = parseFrontmatter(raw);
 
+        if (meta.disabled === true) continue;
+
         if (!body.trim()) {
           logger.debug(`Agent file ${file} has no body, skipping`);
           continue;
@@ -126,8 +100,8 @@ function loadAgentsFromDir(dir: string): MarkdownAgentDefinition[] {
           name,
           description: typeof meta.description === 'string' ? meta.description : `Custom agent: ${name}`,
           model: typeof meta.model === 'string' ? meta.model : undefined,
-          tools: Array.isArray(meta.tools) ? meta.tools as string[] : undefined,
-          disallowedTools: Array.isArray(meta.disallowedTools) ? meta.disallowedTools as string[] : undefined,
+          tools: parseAgentTools(meta.tools),
+          disallowedTools: parseAgentTools(meta.disallowedTools),
           maxTurns: typeof meta.maxTurns === 'number' ? meta.maxTurns : undefined,
           permissionMode: ['suggest', 'auto-edit', 'full-auto'].includes(meta.permissionMode as string)
             ? meta.permissionMode as 'suggest' | 'auto-edit' | 'full-auto'
@@ -208,16 +182,16 @@ export function listCustomAgents(projectRoot?: string): Array<{ name: string; de
  * Check if a tool is allowed for a custom agent.
  */
 export function isToolAllowedForAgent(agent: MarkdownAgentDefinition, toolName: string): boolean {
-  const normalized = toolName.toLowerCase();
+  const normalized = (TOOL_ALIASES[toolName] ?? toolName).toLowerCase();
 
   // If disallowedTools is set, check it first
-  if (agent.disallowedTools?.some(t => t.toLowerCase() === normalized)) {
+  if (agent.disallowedTools?.some(t => (TOOL_ALIASES[t] ?? t).toLowerCase() === normalized)) {
     return false;
   }
 
   // If tools is set, only those tools are allowed
   if (agent.tools) {
-    return agent.tools.some(t => t.toLowerCase() === normalized);
+    return agent.tools.some(t => (TOOL_ALIASES[t] ?? t).toLowerCase() === normalized);
   }
 
   // No restrictions

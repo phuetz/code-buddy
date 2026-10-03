@@ -19,6 +19,7 @@ import { createHash } from 'crypto';
 import * as yaml from 'yaml';
 import { scanSkillFirewall } from '../security/skill-scanner.js';
 import { parseSkillFile, validateSkill } from './parser.js';
+import { importAgents, type AgentImportReport } from './agent-importer.js';
 import { logger } from '../utils/logger.js';
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
@@ -27,6 +28,9 @@ const SKIP_DIRS = new Set(['.git', 'index-cache', '.archive', 'node_modules', '.
 export const IMPORTED_PREFIX = 'imported-';
 
 export interface ImportOptions {
+  /** Stage external agents for human review; never activate them automatically. */
+  importAgents?: boolean;
+  agentDestRoot?: string;
   /** Tier dir to install under. Default ~/.codebuddy/skills. */
   destRoot?: string;
   /** Provenance label written to frontmatter (e.g. "hermes"). */
@@ -54,6 +58,8 @@ export interface SkippedSkill {
   verdict?: string;
 }
 export interface ImportReport {
+  canonicalRoot?: string;
+  agents?: AgentImportReport;
   imported: ImportedSkill[];
   quarantined: SkippedSkill[];
   review: SkippedSkill[];
@@ -248,8 +254,32 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
   const pinByDefault = options.pinByDefault ?? true;
   const report: ImportReport = { imported: [], quarantined: [], review: [], skipped: [], total: 0, dryRun };
 
-  const skillDirs = findSkillDirs(sourceDir);
-  report.total = skillDirs.length;
+  const allDirs = findSkillDirs(sourceDir);
+  report.total = allDirs.length;
+  const canonical = path.join(sourceDir, 'skills');
+  const hasCanonical = fs.existsSync(canonical) && fs.lstatSync(canonical).isDirectory() && !fs.lstatSync(canonical).isSymbolicLink();
+  if (hasCanonical) report.canonicalRoot = path.relative(sourceDir, canonical);
+  const candidates = allDirs.filter(dir => {
+    if (!hasCanonical || dir.startsWith(canonical + path.sep)) return true;
+    report.skipped.push({ sourcePath: path.relative(sourceDir, dir), reason: 'outside canonical skills/ root (documentation, translation or alternate integration copy)' });
+    return false;
+  });
+  const locale = (dir: string): boolean => path.relative(hasCanonical ? canonical : sourceDir, dir).split(path.sep).slice(0, -1)
+    .some(part => /^(?:en|es|fr|de|ja|ko|zh|pt|ru|it|tr|ar|hi)(?:[-_][A-Za-z]{2,4})?$/.test(part));
+  const skillDirs: string[] = [];
+  const baseSlugs = new Map<string, string>();
+  const originals = new Map<string, string>();
+  for (const dir of candidates.sort((a, b) => Number(locale(a)) - Number(locale(b)) || a.localeCompare(b))) {
+    const base = baseSlugForDir(dir);
+    baseSlugs.set(dir, base);
+    const original = originals.get(base);
+    if (original && (locale(dir) || locale(original))) {
+      report.skipped.push({ sourcePath: path.relative(sourceDir, dir), reason: `duplicate translation of ${path.relative(sourceDir, original)}` });
+      continue;
+    }
+    originals.set(base, dir);
+    skillDirs.push(dir);
+  }
 
   // Pre-pass: which base slugs are claimed by MORE THAN ONE distinct source?
   // Flattening the 1-3-level layout collapses category dirs, so two different
@@ -260,7 +290,7 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
   // path). Unique names keep the bare slug (the common case is unchanged).
   const baseSlugCounts = new Map<string, number>();
   for (const skillDir of skillDirs) {
-    const base = baseSlugForDir(skillDir);
+    const base = baseSlugs.get(skillDir)!;
     baseSlugCounts.set(base, (baseSlugCounts.get(base) ?? 0) + 1);
   }
 
@@ -367,5 +397,10 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
     }
   }
 
+  if (options.importAgents) {
+    report.agents = importAgents(sourceDir, {
+      source, dryRun, ...(options.agentDestRoot ? { destRoot: options.agentDestRoot } : {}),
+    });
+  }
   return report;
 }

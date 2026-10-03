@@ -9,6 +9,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as yaml from 'yaml';
+import { parseAgentTools } from '../agent-tools.js';
 import { logger } from '../../utils/logger.js';
 
 export interface AgentDefinition {
@@ -26,78 +28,22 @@ export interface AgentDefinition {
  * Parse YAML frontmatter from a markdown file.
  * Reuses the same pattern as SkillRegistry.parseFrontmatter.
  */
-function parseFrontmatter(content: string): { meta: Record<string, unknown>; body: string } {
-  const meta: Record<string, unknown> = {};
-  let body = content;
-
-  const trimmed = content.trimStart();
-  if (!trimmed.startsWith('---')) {
-    return { meta, body };
+function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: string } {
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) {
+    if (raw.trimStart().startsWith('---') && /^\s*(?:tools|disallowedTools):/m.test(raw)) throw new Error('Malformed agent tool allowlist');
+    return { meta: {}, body: raw };
   }
-
-  const endIdx = trimmed.indexOf('---', 3);
-  if (endIdx === -1) {
-    return { meta, body };
-  }
-
-  const block = trimmed.slice(3, endIdx).trim();
-  body = trimmed.slice(endIdx + 3).trim();
-
-  const lines = block.split('\n');
-  let currentArrayKey: string | null = null;
-  let currentArray: string[] = [];
-
-  const flushArray = (): void => {
-    if (currentArrayKey && currentArray.length > 0) {
-      meta[currentArrayKey] = currentArray;
-    }
-    currentArrayKey = null;
-    currentArray = [];
-  };
-
-  for (const line of lines) {
-    // Check for array item (indented with -)
-    if (currentArrayKey && /^\s+-\s+/.test(line)) {
-      const val = line.replace(/^\s+-\s+/, '').trim();
-      if (val) {
-        currentArray.push(val);
-      }
-      continue;
-    }
-
-    // Flush any pending array
-    flushArray();
-
-    const colonIdx = line.indexOf(':');
-    if (colonIdx === -1) continue;
-
-    const key = line.slice(0, colonIdx).trim();
-    const val = line.slice(colonIdx + 1).trim();
-
-    if (!val) {
-      // Possibly an array header
-      currentArrayKey = key;
-      currentArray = [];
-      continue;
-    }
-
-    // Try to parse as number
-    const num = Number(val);
-    if (!isNaN(num) && val !== '') {
-      meta[key] = num;
-    } else {
-      meta[key] = val;
-    }
-  }
-
-  flushArray();
-
-  return { meta, body };
+  const meta: unknown = yaml.parse(match[1]!);
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new Error('Invalid agent frontmatter');
+  return { meta: meta as Record<string, unknown>, body: match[2]!.trim() };
 }
 
 export function parseAgentFile(filePath: string): AgentDefinition {
   const content = fs.readFileSync(filePath, 'utf-8');
   const { meta, body } = parseFrontmatter(content);
+
+  if (meta.disabled === true) throw new Error('Agent disabled pending review');
 
   const name = (meta.name as string) || path.basename(filePath, '.md');
   const description = (meta.description as string) || '';
@@ -114,13 +60,9 @@ export function parseAgentFile(filePath: string): AgentDefinition {
     }
   }
 
-  if (Array.isArray(meta.tools)) {
-    definition.tools = meta.tools as string[];
-  }
+  definition.tools = parseAgentTools(meta.tools);
 
-  if (Array.isArray(meta.disallowedTools)) {
-    definition.disallowedTools = meta.disallowedTools as string[];
-  }
+  definition.disallowedTools = parseAgentTools(meta.disallowedTools);
 
   if (typeof meta.maxTurns === 'number') {
     definition.maxTurns = meta.maxTurns;

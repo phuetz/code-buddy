@@ -20,7 +20,7 @@ function unique(values: readonly string[]): string[] {
 }
 
 export function hasCustomAgentToolFilter(agent: CustomAgentConfig): boolean {
-  return Boolean(agent.tools?.length || agent.disabledTools?.length || agent.fleetDispatchProfile);
+  return Boolean(agent.tools !== undefined || agent.disabledTools?.length || agent.fleetDispatchProfile);
 }
 
 export function buildCustomAgentToolFilter(
@@ -46,6 +46,7 @@ export function buildCustomAgentToolFilter(
       ...profileFilter.disabledPatterns,
       ...existing.disabledPatterns,
       ...agentDisabled,
+      ...(agent.tools?.length === 0 ? ['*'] : []),
     ]),
   };
 }

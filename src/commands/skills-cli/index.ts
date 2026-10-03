@@ -849,12 +849,13 @@ export function registerSkillsCommands(program: Command): void {
     .description('Import external skills from a directory or a named source (firewall-gated)')
     .option('--dir <path>', 'import from a local directory')
     .option('--source <name>', 'import from a named source (see `skills sources`)')
+    .option('--agents', 'also stage agents/*.md for review (never activates them)')
     .option('--apply', 'install (default is a dry run)')
     .option('--include-review', "also import skills the firewall flags as 'review'")
     .option('--overwrite', 'overwrite an already-imported skill')
     .option('--category <c>', 'only import skills whose path contains this')
     .option('--json', 'output JSON')
-    .action(async (opts: { dir?: string; source?: string; apply?: boolean; includeReview?: boolean; overwrite?: boolean; category?: string; json?: boolean }) => {
+    .action(async (opts: { dir?: string; source?: string; apply?: boolean; includeReview?: boolean; overwrite?: boolean; category?: string; json?: boolean; agents?: boolean }) => {
       const { importSkills } = await import('../../skills/skill-importer.js');
       const { getSource, resolveSourceDir } = await import('../../skills/skill-sources.js');
       let dir: string | undefined;
@@ -881,6 +882,7 @@ export function registerSkillsCommands(program: Command): void {
       }
       const report = await importSkills(dir, {
         source: label,
+        importAgents: opts.agents === true,
         dryRun: opts.apply !== true,
         includeReview: opts.includeReview === true,
         overwrite: opts.overwrite === true,
@@ -896,6 +898,13 @@ export function registerSkillsCommands(program: Command): void {
       }
       console.log(report.dryRun ? `Dry run (use --apply to install) — "${label}"` : `Imported from "${label}"`);
       console.log(`  ${report.dryRun ? 'would import' : 'imported'}: ${report.imported.length} · quarantined: ${report.quarantined.length} · review: ${report.review.length} · skipped: ${report.skipped.length}`);
+      if (report.skipped.length) {
+        console.log('  ignored:');
+        for (const item of report.skipped) console.log(`     - ${item.sourcePath}: ${item.reason}`);
+      }
+      if (report.agents) {
+        console.log(`  agents staged for review: ${report.agents.review.length} · quarantined: ${report.agents.quarantined.length} · skipped: ${report.agents.skipped.length}`);
+      }
       if (report.quarantined.length) {
         console.log('  ⚠️  quarantined by firewall:');
         for (const q of report.quarantined.slice(0, 15)) console.log(`     - ${q.sourcePath}`);

@@ -14,6 +14,8 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import TOML from '@iarna/toml';
+import * as yaml from 'yaml';
+import { parseAgentTools } from '../agent-tools.js';
 import {
   normalizeDispatchProfile,
   type FleetDispatchProfile,
@@ -371,12 +373,14 @@ export class CustomAgentLoader {
         parsed = JSON.parse(content);
         break;
       case 'yaml':
-        // Simple YAML parsing for basic cases
+        // Parse YAML strictly so unreadable tool policies cannot disappear.
         parsed = this.parseSimpleYaml(content);
         break;
       default:
         return null;
     }
+
+    if (parsed.disabled === true) return null;
 
     // Validate required fields
     if (!parsed.name || !parsed.systemPrompt) {
@@ -398,8 +402,8 @@ export class CustomAgentLoader {
       description: String(parsed.description || ''),
       systemPrompt,
       model: parsed.model ? String(parsed.model) : undefined,
-      tools: Array.isArray(parsed.tools) ? parsed.tools.map(String) : undefined,
-      disabledTools: Array.isArray(parsed.disabledTools) ? parsed.disabledTools.map(String) : undefined,
+      tools: parseAgentTools(parsed.tools),
+      disabledTools: parseAgentTools(parsed.disabledTools),
       fleetDispatchProfile: typeof parsed.fleetDispatchProfile === 'string'
         ? normalizeDispatchProfile(parsed.fleetDispatchProfile)
         : undefined,
@@ -422,69 +426,9 @@ export class CustomAgentLoader {
    * Simple YAML parser for basic key-value pairs and multiline strings
    */
   private parseSimpleYaml(content: string): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
-    const lines = content.split('\n');
-    let currentKey: string | null = null;
-    let multilineValue: string[] = [];
-    let inMultiline = false;
-
-    for (const line of lines) {
-      // Skip comments and empty lines (unless in multiline)
-      if (!inMultiline && (line.trim().startsWith('#') || line.trim() === '')) {
-        continue;
-      }
-
-      // Check for multiline end
-      if (inMultiline) {
-        if (line.match(/^[a-zA-Z_]/)) {
-          // New key, end multiline
-          if (currentKey) {
-            result[currentKey] = multilineValue.join('\n').trim();
-          }
-          inMultiline = false;
-          multilineValue = [];
-          currentKey = null;
-        } else {
-          multilineValue.push(line);
-          continue;
-        }
-      }
-
-      // Parse key: value
-      const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/);
-      if (match) {
-        const [, key, value] = match;
-        if (key === undefined || value === undefined) {
-          continue;
-        }
-
-        if (value === '|' || value === '>') {
-          // Start multiline
-          currentKey = key;
-          inMultiline = true;
-          multilineValue = [];
-        } else if (value.startsWith('[') && value.endsWith(']')) {
-          // Array
-          result[key] = value
-            .slice(1, -1)
-            .split(',')
-            .map(s => s.trim().replace(/^["']|["']$/g, ''));
-        } else if (value === 'true' || value === 'false') {
-          result[key] = value === 'true';
-        } else if (!isNaN(Number(value))) {
-          result[key] = Number(value);
-        } else {
-          result[key] = value.replace(/^["']|["']$/g, '');
-        }
-      }
-    }
-
-    // Handle trailing multiline
-    if (inMultiline && currentKey) {
-      result[currentKey] = multilineValue.join('\n').trim();
-    }
-
-    return result;
+    const parsed: unknown = yaml.parse(content);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid agent YAML');
+    return parsed as Record<string, unknown>;
   }
 
   /**
