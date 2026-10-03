@@ -15,6 +15,13 @@ import { detectOmissionPlaceholders, formatOmissionError } from "./omission-plac
 import { maybeReviewGatedWrite } from "./review-gate-helper.js";
 import { createHash } from 'crypto';
 
+/** A bare version value is data; a numeric label followed by text can be a copied display prefix. */
+function hasDisplayLineLabels(text: string): boolean {
+  return text.split(/\r?\n/).some(line =>
+    /^\s*\d+\s*(?:[:|)\]-]|\.(?!\d))\s?/.test(line)
+    || /^\s*\d+(?:\.\d+)+[ \t]+\S/.test(line));
+}
+
 /**
  * Text Editor Tool
  *
@@ -204,8 +211,7 @@ export class TextEditorTool implements Disposable {
       // view_file labels are display metadata. Approximate matching must not
       // erase those labels from the search while inserting them into source.
       // Literal numbered records remain valid when oldStr really exists.
-      const hasDisplayLabels = oldStr.split(/\r?\n/).some(line =>
-        /^\s*\d+\s*(?:[:|)\]-]|\.(?!\d))\s?/.test(line));
+      const hasDisplayLabels = hasDisplayLineLabels(oldStr);
       if (!content.includes(oldStr) && hasDisplayLabels) {
         return {
           success: false,
@@ -612,6 +618,12 @@ export class TextEditorTool implements Disposable {
 
       const fileContent = await this.vfs.readFile(resolvedPath, "utf-8");
       const lines = fileContent.split("\n");
+      // Code insertions must not introduce copied display labels. Numbered
+      // prose in Markdown/text remains literal content, not source metadata.
+      if (/\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh)$/i.test(resolvedPath)
+        && hasDisplayLineLabels(content)) {
+        return { success: false, error: 'Insertion contains display line labels. Insert literal source text without line numbers.' };
+      }
 
       // Validate insert line
       if (insertLine < 1 || insertLine > lines.length + 1) {

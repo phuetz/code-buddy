@@ -88,4 +88,34 @@ describe('display line labels are not approximate source text', () => {
     expect(readFileSync(file, 'utf8')).toBe('2.3.0');
   });
 
+  it.each(['1.2', '1.0', '1.0.0'])('refuses numeric prefixes followed by source (%s)', async prefix => {
+    const file = join(directory, 'sample.js');
+    for (const firstOnly of [true, false]) {
+      writeFileSync(file, source);
+      const decorated = source.split('\n').map((line, i) => i === 0 || !firstOnly ? `${prefix} ${line}` : line).join('\n');
+      const result = await editor.strReplace(file, decorated, decorated.replace('initial', 'changed'));
+      expect(result.success).toBe(false);
+      expect(readFileSync(file, 'utf8')).toBe(source);
+    }
+  });
+  it('still edits a literal version record', async () => {
+    const file = join(directory, 'versions.txt');
+    writeFileSync(file, '1.2 initial\n');
+    expect((await editor.strReplace(file, '1.2 initial', '1.2 changed')).success).toBe(true);
+    expect(readFileSync(file, 'utf8')).toBe('1.2 changed\n');
+  });
+  it.each(['1-', '1]', '1.2', '1:'])('does not insert a display-prefixed source line (%s)', async prefix => {
+    const file = join(directory, 'sample.js');
+    writeFileSync(file, source);
+    const result = await editor.insert(file, 1, `${prefix} const title = 'changed';`);
+    expect(result.success).toBe(false);
+    expect(readFileSync(file, 'utf8')).toBe(source);
+  });
+  it('allows literal numbered prose on insertion', async () => {
+    const file = join(directory, 'notes.md');
+    writeFileSync(file, '# Notes\n');
+    expect((await editor.insert(file, 2, '1.2 changed')).success).toBe(true);
+    expect(readFileSync(file, 'utf8')).toContain('1.2 changed');
+  });
+
 });
