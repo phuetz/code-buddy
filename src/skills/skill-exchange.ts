@@ -216,9 +216,9 @@ function validateSkillName(name: string): void {
   if (!SAFE_NAME_RE.test(name)) throw new Error(`Invalid skill name: ${name}`);
 }
 
-// The skill firewall only scans SKILL.md/.ts/.js content; every other allowed
-// extension is inert data. Anything else (.sh, .py, extensionless executables…)
-// would ship unscanned under a "signed + firewalled" promise, so it is refused.
+// Keep the Exchange transport restricted to these formats. The directory
+// firewall scans every copied support file; an accepted suffix is never proof
+// of inert data. Other executable formats remain refused by the transport.
 const INERT_EXCHANGE_EXTENSIONS = new Set([
   '.md', '.markdown', '.txt', '.json', '.yaml', '.yml', '.toml', '.csv',
   '.ts', '.js', '.mjs', '.cjs',

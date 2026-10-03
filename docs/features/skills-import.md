@@ -13,13 +13,13 @@ ne suffit pas à éliminer un skill. Une racine canonique liée ou ambiguë refu
 l’import ; la casse réelle du nom du répertoire est conservée. Le rapport donne chaque chemin ignoré et sa raison. Deux skills
 indépendants portant le même nom conservent chacun un nom d'import distinct.
 
-Le pare-feu analyse le manifeste et les fichiers associés. Les processus Python/Node
+Le pare-feu analyse le manifeste et tous les fichiers copiés, sans exclure les charges `.txt`, les suffixes inconnus ou les scripts sans extension. Le shebang fournit le langage ; un langage inconnu impose une revue ou une quarantaine pour un opérateur de processus. Les processus Python/Node
 et autres appels natifs, les suppressions récursives et les références de secrets sont
-signalés, y compris les appels de suppression déstructurés ou optionnels (`rm?.(...)`) et les backticks shell.
-Les backticks révélés par NFKC (U+FF40 ou U+1FEF) passent par la même analyse de langage et de contexte littéral que les opérateurs ASCII.
+signalés, y compris les modules préfixés (`SAFE_subprocess`, `SAFE_child_process`), les affectations de secrets littéraux (`apiKey`, `secret`), les lanceurs shell et les appels de suppression déstructurés ou optionnels (`rm?.(...)`) et les backticks shell.
+Les backticks révélés par NFKC (U+FF40 ou U+1FEF) passent par la même analyse de langage et de contexte littéral que les opérateurs ASCII. Ce repli minimal et la lecture des langages de clôture contenant des caractères invisibles sont obligatoires, même avec `CODEBUDDY_SKILL_FIREWALL_DEOB_ALL=false`. Ce réglage ne désactive que la passe étendue.
 Une occurrence bénigne de prose ou Swift ne masque pas un autre appel sur la même
 ligne. Une référence ambiguë comme `operating system(whoami)` impose une revue ; les parenthèses de prose reconnues, comme `system (Linux)`, restent acceptées. Les commentaires HTML sont scannés. La prose et les exemples Markdown conservent une revue sans accumuler
-les pénalités des scripts. Les occurrences critiques gardent leur sévérité d’origine. Le code copié dans `scripts/`, les fichiers exécutables et les shebangs
+les pénalités des scripts. Les occurrences critiques gardent leur sévérité d’origine. Les mentions réseau non critiques des références Markdown restent en revue, sans provoquer une quarantaine par simple accumulation ; les références contenant une règle critique restent bloquées ou en revue selon son contexte. Le code copié dans `scripts/`, les fichiers exécutables et les shebangs
 conservent les règles strictes, même si leurs commentaires parlent de sécurité.
 Les assertions Kotlin/Solidity ne sont pas des évaluations dynamiques. Le passage
 PyTorch `model.eval()` sans argument dans la documentation reste en revue ; les
@@ -32,7 +32,7 @@ la quarantaine. Le registre, Exchange et les générations automatiques exigent
 `allow` : une copie en revue ne devient pas un skill automatiquement chargé.
 
 `--agents` analyse également les fichiers **directs** `agents/*.md` avec le même
-pare-feu. Les agents non quarantainés sont préparés dans
+pare-feu, avec une politique plus stricte : leurs motifs critiques et élevés sont actifs même dans une citation documentaire. Les agents non quarantainés sont préparés dans
 `$CODEBUDDY_HOME/agents/review/imported-<nom>.md` (par défaut sous `~/.codebuddy`), avec `disabled: true` et
 `permissionMode: suggest`. Ils restent désactivés, même avec `--include-review`.
 Ils portent la source, le chemin source, son SHA-256 et le verdict du pare-feu.

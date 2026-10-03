@@ -532,11 +532,12 @@ describe('scanDirectory', () => {
     expect(results.some((result) => result.file.endsWith('mix_task.exs'))).toBe(true);
   });
 
-  it('should NOT scan unrelated file types', () => {
+  it('scans copied text payloads regardless of extension', () => {
     writeTestFile('skills/readme.txt', 'eval("bad")');
     writeTestFile('skills/data.json', '{"eval": "bad"}');
     const results = scanDirectory(path.join(tmpDir, 'skills'));
-    expect(results).toHaveLength(0);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.file).toContain('readme.txt');
   });
 
   it('scans an extensionless shebang script even without executable mode', () => {

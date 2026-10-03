@@ -70,7 +70,7 @@ CASES = [
     ('backticks-reconstructed-from-prose', SCANNER, replace("    if (dp.name === 'php-backtick' || dp.name === 'shell-backtick') continue;\n", '')),
     ('html-process-line-skipped', SCANNER, replace("if (line.trim() === '---') continue;", "if (line.trim().startsWith('<!--') || line.trim() === '---') continue;")),
     ('shell-quoted-text-executed', SCANNER, replace(' || shellPosition(line, offset).literal', '')),
-    ('shell-heredoc-literal-executed', SCANNER, replace(' || context.shellLiteral', '')),
+    ('shell-heredoc-literal-executed', SCANNER, lambda source: replace('context.shellLiteral || ', '')(replace('!(SHELL_LANGUAGES.has(context.language) && context.shellLiteral)', 'true')(source))),
     ('heredoc-opener-inside-string', SCANNER, replace('!position.quoted && !position.literal', '!position.literal')),
     ('heredoc-never-closes', SCANNER, replace('if (heredoc && (heredoc.stripTabs', 'if (false && heredoc && (heredoc.stripTabs')),
     ('prose-quoted-argument-benign', SCANNER, replace('PROSE_SYSTEM_REFERENCE.test(call)', 'true')),

@@ -47,7 +47,11 @@ export function importAgents(sourceDir: string, options: { source: string; dryRu
         bytes = fs.readFileSync(fd);
       } finally { fs.closeSync(fd); }
       const raw = bytes.toString('utf8');
-      const fw = buildSkillFirewallReport(file, [scanSkillContent(raw, file)]);
+      const scan = scanSkillContent(raw, file);
+      // External agents are instruction-bearing: critical or high-risk content is active
+      // even when a skill document would retain it for human review.
+      scan.findings = scan.findings.map(f => f.severity === 'critical' || f.severity === 'high' ? { ...f, documentary: false } : f);
+      const fw = buildSkillFirewallReport(file, [scan]);
       item.verdict = fw.verdict;
       item.reason = fw.summary;
       if (fw.quarantineRequired) { report.quarantined.push(item); continue; }

@@ -79,6 +79,7 @@ const SCRIPT_EXTENSIONS = new Set([
   '.exs',
   '.go',
   '.js',
+  '.jsx',
   '.lua',
   '.mjs',
   '.php',
@@ -90,15 +91,9 @@ const SCRIPT_EXTENSIONS = new Set([
   '.rs',
   '.sh',
   '.ts',
+  '.tsx',
   '.zsh',
 ]);
-
-function isScannableSkillFile(fileName: string): boolean {
-  const lowerName = fileName.toLowerCase();
-  return lowerName.endsWith('.skill.md')
-    || lowerName === 'skill.md'
-    || SCRIPT_EXTENSIONS.has(path.extname(lowerName));
-}
 
 const O_NOFOLLOW = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
 
@@ -247,13 +242,13 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\beval\s+\$\(\s*[^)]*\)/i, severity: 'critical', description: 'Dynamic evaluation of shell command substitution', name: 'eval-command-substitution', capability: 'shell' },
   { pattern: /\beval\s*\(/, severity: 'critical', description: 'Dynamic code execution via eval()', name: 'eval', capability: 'dynamic-code' },
   { pattern: /\bnew\s+Function\s*\(/, severity: 'critical', description: 'Dynamic function creation', name: 'new-function', capability: 'dynamic-code' },
-  { pattern: /\bchild_process\b/, severity: 'high', description: 'Child process module usage', name: 'child_process', capability: 'shell' },
+  { pattern: /\b(?:[A-Za-z_$][\w$]*_)?child_process\b/, severity: 'high', description: 'Child process module usage', name: 'child_process', capability: 'shell' },
   { pattern: /\bexecSync\s*\(/, severity: 'high', description: 'Synchronous command execution', name: 'execSync', capability: 'shell' },
   { pattern: /\bexecFile\s*\(/, severity: 'high', description: 'File execution', name: 'execFile', capability: 'shell' },
   { pattern: /\bspawn\s*\(/, severity: 'medium', description: 'Process spawning', name: 'spawn', capability: 'shell' },
   { pattern: /\bexec\s*\(/, severity: 'high', description: 'Command execution', name: 'exec', capability: 'shell' },
 
-  { pattern: /\b(?:(?:import\s+subprocess\b|subprocess\s*(?:\.|\[))|from\s+subprocess\s+import\b|from\s+os\s+import\s+[^\n]*(?:system|popen|spawn|exec)\b|import\s+os\s+as\s+\w+|os\s*\.\s*(?:system|popen|spawn\w*|exec\w*)\s*\()/, severity: 'high', description: 'Python process execution capability', name: 'python-process', capability: 'shell' },
+  { pattern: /\b(?:(?:import\s+(?:\w+_)?subprocess\b|(?:\w+_)?subprocess\s*(?:\.|\[))|from\s+(?:\w+_)?subprocess\s+import\b|from\s+os\s+import\s+[^\n]*(?:system|popen|spawn|exec)\b|import\s+os\s+as\s+\w+|os\s*\.\s*(?:system|popen|spawn\w*|exec\w*)\s*\()/, severity: 'high', description: 'Python process execution capability', name: 'python-process', capability: 'shell' },
   { pattern: /\brmtree\s*(?:\?\.\s*)?\(|\bfrom\s+shutil\s+import\s+[^\n]*\brmtree\b|\b(?:rmSync|rm|rmdirSync|rmdir)\s*(?:\?\.\s*)?\(|(?:\.\s*(?:rm|rmdir)|\[\s*['"](?:rmSync|rm|rmdirSync|rmdir)['"]\s*\])\s*(?:\?\.\s*)?\(/s, severity: 'critical', description: 'Recursive deletion in executable code', name: 'script-recursive-delete', capability: 'filesystem' },
 
   { pattern: /\b(?:exec\s*\.\s*Command(?:Context)?|Command\s*::\s*new|ProcessBuilder|shell_exec|system|popen|spawnSync|execFileSync)\s*\(|\bStart-Process\b/, severity: 'high', description: 'Native process execution', name: 'native-process', capability: 'shell' },
@@ -261,6 +256,9 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\bos\s*\[\s*['"](?:system|popen|posix_spawn|exec\w*|spawn\w*)['"]\s*\]\s*\(|\bgetattr\s*\(\s*os\s*,\s*['"](?:system|popen|posix_spawn|exec\w*|spawn\w*)['"]\s*\)\s*\(|\b(?:create_subprocess_(?:shell|exec)|posix_spawn|execv(?:e|p|pe)?|passthru|proc_open|execa)\s*\(|\b(?:pty\s*\.\s*spawn|Open3\s*\.\s*capture\w*|syscall\s*\.\s*Exec|os\s*\.\s*StartProcess|Deno\s*\.\s*Command)\s*\(|\bInvoke-Expression\b|\$\s*`|%x[({/]/, severity: 'high', description: 'Process execution including quoted APIs and language-native launchers', name: 'extended-process', capability: 'shell' },
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'PHP backtick process execution', name: 'php-backtick', capability: 'shell' },
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'Shell backtick process execution', name: 'shell-backtick', capability: 'shell' },
+
+  { pattern: /(?:^|[ \t;&|])(?:bash|sh|zsh|dash|ksh|fish)(?:\.exe)?[ \t]+(?:-[cs]\b|['"]?(?:\.\.?\/|\/|~\/|\$)[^\s;&|]+|['"]?[A-Za-z_][\w-]*\.[A-Za-z0-9]+\b)/i, severity: 'high', description: 'Shell interpreter invocation can execute a copied payload', name: 'shell-interpreter', capability: 'shell' },
+  { pattern: /\b[\w$]*(?:api_?key|secret|password|token)[\w$]*\s*[:=]\s*['"][^'"\r\n]+['"]/i, severity: 'critical', description: 'Literal credential assignment requires quarantine in copied code', name: 'embedded-secret', capability: 'secrets' },
 
   // File system dangers
   { pattern: /\brm\s+-rf\b/, severity: 'critical', description: 'Recursive force delete', name: 'rm-rf', capability: 'filesystem' },
@@ -386,8 +384,15 @@ function getDangerousPatterns(): DangerousPattern[] {
   });
 }
 
-interface ScanContext { markdown: boolean; language: string; watched: boolean; imperative: boolean; shellLiteral: boolean }
+interface ScanContext { markdown: boolean; language: string; watched: boolean; imperative: boolean; shellLiteral: boolean; supportDocument: boolean }
 const SHELL_LANGUAGES = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'shell']);
+// A declared, understood language can distinguish an identifier/template from
+// interpreter syntax. An unknown copied payload or fence must fail closed.
+const DATA_BACKTICK_LANGUAGES = new Set(['py', 'python', 'python3', 'js', 'jsx', 'javascript', 'ts', 'tsx', 'typescript', 'cjs', 'mjs', 'node', 'fsharp', 'fs', 'fsx', 'go', 'rs', 'rust', 'kotlin', 'kt', 'solidity', 'json', 'yaml', 'yml', 'text', 'plaintext', 'swift', 'c', 'cpp', 'java', 'sql', 'css', 'html', 'xml', 'lua', 'pl', 'perl', 'r', 'ex', 'exs', 'ps1', 'powershell', 'bat', 'cmd']);
+function hasShellBackticks(context: ScanContext): boolean {
+  return SHELL_LANGUAGES.has(context.language) || context.language === 'rb' || context.language === 'ruby'
+    || (Boolean(context.language) && context.language !== 'php' && !DATA_BACKTICK_LANGUAGES.has(context.language));
+}
 
 /** Quotes and comments at this occurrence, not another expression on the line. */
 function shellPosition(line: string, offset: number): { quoted: boolean; literal: boolean } {
@@ -405,7 +410,10 @@ function shellPosition(line: string, offset: number): { quoted: boolean; literal
 }
 function scanContexts(content: string, filePath: string, executableContext = false): ScanContext[] {
   const markdown = /\.md$/i.test(filePath) && !executableContext && !content.startsWith('#!');
-  let language = markdown ? '' : path.extname(filePath).slice(1).toLowerCase();
+  const supportDocument = markdown && !/^(?:skill|.*\.skill)\.md$/i.test(path.basename(filePath));
+  const shebang = content.match(/^#![^\n]*?\b(php|bash|sh|zsh|dash|ksh|fish|python[\d.]*|node|ruby|perl)\b/i)?.[1]?.toLowerCase();
+  const extension = path.extname(filePath).toLowerCase();
+  let language = markdown ? '' : shebang ?? (SCRIPT_EXTENSIONS.has(extension) ? extension.slice(1) : 'unknown');
   const imperative = /(?<![\w-])(?:run|execute)\b[^\n]{0,100}\b(?:every|listed|now|immediately|with\s+(?:the\s+)?bash|rm\s+-rf|curl|wget)|\b(?:first\s+run|then\s+comply|you\s+obey|agent\s+runs|follow\s+the\s+description\s+literally|ignore\s+them)\b/i.test(content.replace(/(?:never|don't|do not|must not)\s+(?:run|execute)/gi, 'blocked'));
   let fence = '';
   let watched = false;
@@ -428,20 +436,27 @@ function scanContexts(content: string, filePath: string, executableContext = fal
         }
       }
     }
-    return { markdown, language, watched, imperative, shellLiteral };
+    return { markdown, language, watched, imperative, shellLiteral, supportDocument };
   });
 }
 const PROSE_SYSTEM_REFERENCE = /^system\s+\(\s*(?:Linux|Windows|macOS|OS|DBMS|local\s+disk)(?:\s*,\s*(?:Linux|Windows|macOS|OS|DBMS|local\s+disk))*\s*\)/i;
 
 function classifyMention(dp: DangerousPattern, line: string, context: ScanContext, offset: number, length: number): 'active' | 'benign' | 'documentary' {
+  if (dp.name === 'php-backtick' && context.language !== 'php') return 'benign';
+  if (dp.name === 'shell-backtick' && (!hasShellBackticks(context) ||
+      (SHELL_LANGUAGES.has(context.language) && (context.shellLiteral || shellPosition(line, offset).literal)))) return 'benign';
+  if (context.markdown && ['php-backtick', 'shell-backtick'].includes(dp.name) && /^\s*(?:`{3,}|~{3,})/.test(line)) return 'benign';
+  // No prose, secret-token, or documentary exception may authorize copied code.
+  if (!context.markdown) return 'active';
+  // Newly scanned reference documents retain network mentions for review.
+  // Credential exfiltration and other critical/high rules keep their treatment.
+  if (context.supportDocument && dp.capability === 'network' && !['critical', 'high'].includes(dp.severity)) return 'documentary';
+  if (dp.name === 'shell-backtick' && !SHELL_LANGUAGES.has(context.language) && !['rb', 'ruby'].includes(context.language)) return 'documentary';
   if (dp.name === 'child_process' && /\b(?:const|let|var)\s+$/.test(line.slice(0, offset)) && /^child_process\s*=\s*(?:\d+|true|false|null)\s*;?\s*$/.test(line.slice(offset))) return 'benign';
   if (dp.name === 'secret-ref') {
     const token = line.slice(offset, offset + length);
     if (!token.includes('_') && token !== token.toUpperCase() && line[offset - 1] !== '$') return 'benign';
   }
-  if (dp.name === 'php-backtick' && context.language !== 'php') return 'benign';
-  if (dp.name === 'shell-backtick' && (!SHELL_LANGUAGES.has(context.language) || context.shellLiteral || shellPosition(line, offset).literal)) return 'benign';
-  if (!context.markdown) return 'active';
   if (['native-process', 'python-process'].includes(dp.name)) {
     // An inert occurrence never exempts another call on the same line.
     const prefix = line.slice(0, offset);
@@ -451,8 +466,13 @@ function classifyMention(dp: DangerousPattern, line: string, context: ScanContex
          (/\.$/.test(prefix) && /^system\s*\(\s*size\s*:\s*\d+(?:\.\d+)?\s*[,)]/.test(call)))) return 'benign';
     return context.imperative ? 'active' : 'documentary';
   }
-  if (['secret-ref', 'prefixed-secret', 'template-injection'].includes(dp.name)) return 'documentary';
+  if (['secret-ref', 'prefixed-secret', 'template-injection', 'embedded-secret', 'shell-interpreter'].includes(dp.name)) return 'documentary';
   if (['script-recursive-delete', 'php-backtick', 'shell-backtick', 'extended-process'].includes(dp.name)) return context.imperative ? 'active' : 'documentary';
+
+  // A property argument in typed documentation can name an assertion or a
+  // module. Keep the ambiguity visible; copied code took the strict branch.
+  if (dp.name === 'dynamic-require' && ['ts', 'typescript', 'tsx'].includes(context.language) &&
+      /^require\s*\(\s*[A-Za-z_]\w*\s*\.\s*[A-Za-z_]\w*/.test(line.slice(offset))) return context.imperative ? 'active' : 'documentary';
 
   if (dp.name === 'eval' && /\bmodel\s*\.\s*$/.test(line.slice(0, offset)) &&
       /^eval\s*\(\s*\)/.test(line.slice(offset)) &&
@@ -542,10 +562,10 @@ function collectMultilineBackticks(content: string, filePath: string, contexts: 
     const dp = DANGEROUS_PATTERNS.find(pattern => pattern.name === name)!;
     const scoped = lines.map((line, i) => {
       const context = contexts[i]!;
-      const language = name === 'php-backtick' ? context.language === 'php' : SHELL_LANGUAGES.has(context.language) && !context.shellLiteral;
+      const language = name === 'php-backtick' ? context.language === 'php' : hasShellBackticks(context) && !(SHELL_LANGUAGES.has(context.language) && context.shellLiteral);
       if (!language || (context.markdown && /^\s*(?:`{3,}|~{3,})/.test(line))) return ' '.repeat(line.length);
       // A literal delimiter must not consume the opening of a later command.
-      return name === 'shell-backtick'
+      return name === 'shell-backtick' && SHELL_LANGUAGES.has(context.language)
         ? line.replace(/`/g, (tick, offset: number) => shellPosition(line, offset).literal ? ' ' : tick)
         : line;
     }).join('\n');
@@ -609,12 +629,9 @@ export function scanDirectory(dirPath: string, withinScripts = false): ScanResul
 
     if (entry.isDirectory()) {
       results.push(...scanDirectory(fullPath, withinScripts || entry.name.toLowerCase() === 'scripts'));
-    } else if (
-      withinScripts
-      || isScannableSkillFile(entry.name)
-      || isExecutableOrShebang(fullPath)
-    ) {
-      const result = scanFile(fullPath, withinScripts || isExecutableOrShebang(fullPath));
+    } else if (entry.isFile() || entry.isSymbolicLink()) {
+      // The importer copies every support file. A suffix cannot hide a payload.
+      const result = scanFile(fullPath, withinScripts || !/\.md$/i.test(entry.name) || isExecutableOrShebang(fullPath));
       if (result.textRead !== true) {
         results.push(result.findings.length > 0 ? result : unreadFinding(fullPath, 'file'));
       } else if (result.findings.length > 0) {
@@ -760,8 +777,9 @@ function collectDeobfuscatedFindings(
   // Fold compatibility operators while preserving interpreter framing.
   // HTML/whitespace stripping must not erase fences or heredoc delimiters.
   // Rebuild language and literal contexts after NFKC, including folded fences.
-  if (deobAll) {
-    const folded = content.normalize('NFKC');
+  {
+    // Minimum interpreter framing is mandatory even when extended decoding is off.
+    const folded = content.normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '');
     if (folded !== content) {
       const foldedContexts = scanContexts(folded, filePath, !contexts[0]?.markdown);
       for (const finding of collectMultilineBackticks(folded, filePath, foldedContexts, [])) {

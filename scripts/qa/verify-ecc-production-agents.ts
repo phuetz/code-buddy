@@ -5,7 +5,7 @@ import { CustomAgentLoader } from '../../src/agent/custom/custom-agent-loader.js
 import { buildCustomAgentToolFilter } from '../../src/agent/custom/custom-agent-tool-filter.js';
 import { filterToolNames } from '../../src/utils/tool-filter.js';
 
-const [ecc, staged, output] = process.argv.slice(2);
+const [ecc, staged, output, importReport] = process.argv.slice(2);
 assert(ecc && staged && output);
 const project = fs.mkdtempSync(path.join(path.dirname(output), 'production-agents-'));
 const active = path.join(project, 'agents'); fs.mkdirSync(active);
@@ -25,8 +25,21 @@ for (const asynchronous of [false, true]) {
   }
 }
 const stagedRoot = path.join(project, 'staged'); fs.mkdirSync(stagedRoot);
-for (const name of names) fs.copyFileSync(path.join(staged, 'review', `imported-${name}.md`), path.join(stagedRoot, `imported-${name}.md`));
+const report = importReport ? JSON.parse(fs.readFileSync(importReport, 'utf8')).report as {
+  agents: { quarantined: { sourcePath: string }[]; review: { sourcePath: string }[] };
+} : undefined;
+const stagedChecks = names.map(name => {
+  const sourcePath = `agents/${name}.md`;
+  const quarantined = report?.agents.quarantined.some(a => a.sourcePath === sourcePath) ?? false;
+  const file = path.join(staged, 'review', `imported-${name}.md`);
+  assert.equal(fs.existsSync(file), !quarantined);
+  if (!quarantined) {
+    if (report) assert(report.agents.review.some(a => a.sourcePath === sourcePath));
+    fs.copyFileSync(file, path.join(stagedRoot, `imported-${name}.md`));
+  }
+  return { name, quarantined, copiedToReview: !quarantined };
+});
 const stagedLoader = new CustomAgentLoader(stagedRoot);
 const stagedActiveCount = stagedLoader.listAgents().filter(a => a.id.startsWith('imported-')).length;
 assert.equal(stagedActiveCount, 0);
-fs.writeFileSync(output, JSON.stringify({ consumer: 'CustomAgentLoader + buildCustomAgentToolFilter (buddy --agent)', results, stagedActiveCount }, null, 2) + '\n');
+fs.writeFileSync(output, JSON.stringify({ consumer: 'CustomAgentLoader + buildCustomAgentToolFilter (buddy --agent)', results, stagedChecks, stagedActiveCount }, null, 2) + '\n');
