@@ -1,5 +1,7 @@
 # Reprise 3 — pare-feu ECC, 03/10/2026
 
+**Validation invalidée par la relecture de reprise 3.** Sur `6927cdc94`, les backticks révélés par NFKC étaient ignorés. Le rapport de reprise 4 traite cette régression. Les résultats ci-dessous restent historiques.
+
 Départ propre `6bf2289050ee7b7d1fe658dc6119a57de7b6ea48`, même worktree et branche `fix/pare-feu-import-ecc-2026-10-03`. Rapport de relecture de reprise 2 et mission lus entièrement ; trois bloquants acceptés. Rapport initial créé ici et chantier réservé avant les corrections. La validation de reprise 2 est invalidée dans le rapport versionné et dans la coordination ; les anciens livrables du partage sont conservés.
 
 ## Bloquant → traitement → preuve
@@ -53,7 +55,7 @@ Clone MIT au commit exact `ef648e01899ba3e8dc6371642deaaf64b4477775`. Rejeu sour
 
 Les **trois seuls changements de verdict** concernent fsharp-testing sous skills/, pi/core/skills/ et docs/ja-JP/skills/ : quarantine/76 → allow/100. Le seul ancien finding était php-backtick « obfuscated » à la ligne 1. Les noms F# entre doubles backticks et les clôtures Markdown avaient produit artificiellement un lancement PHP. Les fichiers ne contiennent aucun appel de processus détecté ni motif critique. Ce faux positif est supprimé avec tests et mutation ; les véritables substitutions PHP/shell restent quarantine dans les scripts et au minimum review dans les documents. Les trois répertoires Python continuous-learning-v2, taste-application et taste-distillation perdent aussi un faux finding PHP, sans changement de quarantine/0. `delivery-finding-changes.json` contient ces six différences complètes. Les **203 copies physiques** correspondent exactement au rapport CLI.
 
-Les 641 exclusions ont chacune un chemin et un motif : 473 sous docs, 107 sous pi et 61 copies/integrations supplémentaires. Les fichiers copiés sont comptés physiquement. L'inventaire des changements de verdict est exhaustif, y compris lorsqu'il est vide ; les différences de findings et de score sont jointes séparément.
+Les 641 exclusions ont chacune un chemin et un motif. Correction de comptage en reprise 4 : **518 sous docs et 123 sous pi**, tous avec la raison outside canonical skills/ root ; la ventilation 473/107/61 annoncée auparavant était inexacte. Les fichiers copiés sont comptés physiquement. L'inventaire des changements de verdict est exhaustif, y compris lorsqu'il est vide ; les différences de findings et de score sont jointes séparément.
 
 | Cas initiaux A/B sous skills/ | Avant → après | Copié après |
 |---|---|---|

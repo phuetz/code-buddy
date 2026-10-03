@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / '_qa/pare-feu-ecc/reprise-3/mutations'
+OUT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / '_qa/pare-feu-ecc/reprise-3/mutations'
 OUT.mkdir(parents=True, exist_ok=True)
 SCANNER = 'src/security/skill-scanner.ts'
 TOOLS = 'src/agent/agent-tools.ts'
@@ -73,7 +73,7 @@ CASES = [
     ('shell-heredoc-literal-executed', SCANNER, replace(' || context.shellLiteral', '')),
     ('heredoc-opener-inside-string', SCANNER, replace('!position.quoted && !position.literal', '!position.literal')),
     ('heredoc-never-closes', SCANNER, replace('if (heredoc && (heredoc.stripTabs', 'if (false && heredoc && (heredoc.stripTabs')),
-    ('prose-quoted-argument-benign', SCANNER, replace(r""" && /^system\s*\(\s*[^'"`();{}]+\)/.test(call)""", '')),
+    ('prose-quoted-argument-benign', SCANNER, replace('PROSE_SYSTEM_REFERENCE.test(call)', 'true')),
     ('swift-computed-size-benign', SCANNER, replace(r'/^system\s*\(\s*size\s*:\s*\d+(?:\.\d+)?\s*[,)]/', r'/^system\s*\(\s*size\s*:/')),
     ('documentary-severity-lowered', SCANNER, replace('severity: dp.severity,', "severity: kind === 'documentary' ? 'info' : dp.severity,")),
     ('review-automatic-gate-open', SCANNER, replace("return buildSkillFirewallReport(result.file, [result]).verdict !== 'allow';", "return result.findings.some(f => f.severity === 'critical');")),

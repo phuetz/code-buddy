@@ -15,9 +15,10 @@ indépendants portant le même nom conservent chacun un nom d'import distinct.
 
 Le pare-feu analyse le manifeste et les fichiers associés. Les processus Python/Node
 et autres appels natifs, les suppressions récursives et les références de secrets sont
-signalés, y compris les appels de suppression déstructurés et les backticks shell.
+signalés, y compris les appels de suppression déstructurés ou optionnels (`rm?.(...)`) et les backticks shell.
+Les backticks révélés par NFKC (U+FF40 ou U+1FEF) passent par la même analyse de langage et de contexte littéral que les opérateurs ASCII.
 Une occurrence bénigne de prose ou Swift ne masque pas un autre appel sur la même
-ligne. Les commentaires HTML sont scannés. La prose et les exemples Markdown conservent une revue sans accumuler
+ligne. Une référence ambiguë comme `operating system(whoami)` impose une revue ; les parenthèses de prose reconnues, comme `system (Linux)`, restent acceptées. Les commentaires HTML sont scannés. La prose et les exemples Markdown conservent une revue sans accumuler
 les pénalités des scripts. Les occurrences critiques gardent leur sévérité d’origine. Le code copié dans `scripts/`, les fichiers exécutables et les shebangs
 conservent les règles strictes, même si leurs commentaires parlent de sécurité.
 Les assertions Kotlin/Solidity ne sont pas des évaluations dynamiques. Le passage
