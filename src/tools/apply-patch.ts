@@ -577,9 +577,10 @@ export class ApplyPatchTool extends BaseTool {
     if (patchResult.filesUpdated.length > 0) lines.push(`Updated: ${patchResult.filesUpdated.join(', ')}`);
     if (patchResult.errors.length > 0) lines.push(`Errors: ${patchResult.errors.join('; ')}`);
     logger.debug(`apply_patch: +${patchResult.filesAdded.length} -${patchResult.filesDeleted.length} ~${patchResult.filesUpdated.length} !${patchResult.errors.length}`);
-    const onlyLine = lines[0];
-    return patchResult.errors.length > 0 && lines.length === 1 && onlyLine !== undefined
-      ? this.error(onlyLine)
+    // A partial application still failed. Keep both the applied paths and the
+    // errors so the caller can inspect the current tree before retrying.
+    return patchResult.errors.length > 0
+      ? this.error(lines.join('\n'))
       : this.success(lines.join('\n'));
   }
 }

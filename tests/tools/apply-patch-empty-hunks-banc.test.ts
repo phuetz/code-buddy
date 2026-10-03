@@ -54,3 +54,26 @@ describe('apply_patch ne prétend pas appliquer une mise à jour sans hunk', () 
     expect(fs.readFileSync(path.join(directory, 'renamed.ts'), 'utf8')).toBe(original);
   });
 });
+
+describe('apply_patch expose les erreurs même après une écriture', () => {
+  it('refuse le statut succès quand tous les hunks de mise à jour échouent', async () => {
+    const result = await new ApplyPatchTool().execute({ patch: patch(
+      '*** Update File: target.ts\n@@\n-missing line\n+replacement',
+    ) }, directory);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Hunk failed');
+    expect(fs.readFileSync(path.join(directory, 'target.ts'), 'utf8')).toBe(original);
+  });
+
+  it('signale une application partielle et conserve le détail des fichiers déjà écrits', async () => {
+    const result = await new ApplyPatchTool().execute({ patch: patch(
+      '*** Add File: earlier.ts\n+created\n*** Update File: target.ts\n@@\n-export const original = true;\n+export const original = false;\n@@\n-missing line\n+replacement',
+    ) }, directory);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Hunk failed');
+    expect(result.error).toContain('earlier.ts');
+    expect(result.error).toContain('target.ts');
+    expect(fs.readFileSync(path.join(directory, 'earlier.ts'), 'utf8')).toBe('created');
+    expect(fs.readFileSync(path.join(directory, 'target.ts'), 'utf8')).toBe('export const original = false;\n');
+  });
+});
