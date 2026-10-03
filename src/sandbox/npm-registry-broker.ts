@@ -12,7 +12,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { isPathWithin } from '../utils/path-within.js';
 import { classifySecretPath } from '../security/secret-files.js';
-import { capabilityAllowsSegment } from './shell-capabilities.js';
+import { capabilityAllowsSegment, isLocalNpmPackDryRun, LOCAL_NPM_PACK_DRY_RUN_OPTIONS } from './shell-capabilities.js';
 import { assertNoLocalPackageSources, resolveNpmLockOffline } from './npm-offline-resolution.js';
 
 const MAX_BYTES = 24 * 1024 * 1024;
@@ -56,7 +56,8 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
         const argv: unknown = JSON.parse(Buffer.concat(parts).toString());
         if (!Array.isArray(argv) || argv.length > 32 || !argv.every(arg => typeof arg === 'string')
           || !['audit', 'view', 'pack', 'install', 'update'].includes(argv[0] ?? '')
-          || !capabilityAllowsSegment(['npm', ...argv])) throw new Error('Registry operation not granted');
+          || !capabilityAllowsSegment(['npm', ...argv])
+          || (argv[0] === 'pack' && isLocalNpmPackDryRun(argv.slice(1)))) throw new Error('Registry operation not granted');
         const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-registry-'));
         try {
           const packagePath = path.join(workspace, 'package.json');
@@ -156,7 +157,12 @@ export async function startNpmRegistryBroker(workspace: string, temporary: strin
 import {spawn} from 'node:child_process';
 import fs from 'node:fs';
 let argv=process.argv.slice(2);
-if (!['audit','view','pack','install','update'].includes(argv[0] ?? '')) {
+// Local package inspection stays inside the networkless shell. It must not be
+// sent to the trusted registry process, which only sees a scratch manifest.
+const localPackDryRun=${capabilityAllowsSegment(['npm', 'pack', '--dry-run', '--ignore-scripts'])}
+ && argv[0]==='pack' && argv.includes('--dry-run') && argv.includes('--ignore-scripts')
+ && argv.slice(1).every(arg=>${JSON.stringify(LOCAL_NPM_PACK_DRY_RUN_OPTIONS)}.includes(arg));
+if (localPackDryRun || !['audit','view','pack','install','update'].includes(argv[0] ?? '')) {
  // Without a private cache, avoid bundling into shared dependencies.
  const task=argv[0]==='test'?'test':argv[0]==='run'?argv[1]:undefined;
  try {

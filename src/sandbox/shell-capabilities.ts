@@ -2,6 +2,13 @@
 import type { ShellPolicyEvaluation } from './execpolicy.js';
 
 export type ShellCapability = 'tests' | 'git-local' | 'npm-registry';
+export const LOCAL_NPM_PACK_DRY_RUN_OPTIONS = ['--dry-run', '--ignore-scripts', '--json', '--silent'];
+
+export function isLocalNpmPackDryRun(args: readonly string[]): boolean {
+  return args.includes('--dry-run') && args.includes('--ignore-scripts')
+    && args.every(arg => LOCAL_NPM_PACK_DRY_RUN_OPTIONS.includes(arg));
+}
+
 export function shellCapabilities(): Set<ShellCapability> {
   const values = (process.env.CODEBUDDY_SHELL_CAPABILITIES ?? '').split(',').filter(Boolean);
   const valid = new Set(['tests', 'git-local', 'npm-registry']);
@@ -17,7 +24,7 @@ export function shellCapabilitySnapshot() {
     network: 'closed',
     scratch: 'For files needed between shell calls, use the runtime-provided $TMPDIR or an authorized workspace path. Hard-coded /tmp may be recreated for each sandbox invocation; do not rely on its contents surviving the next call.',
     operations: [
-      ...(capabilities.has('tests') ? ['npm test', 'npm run test|build|lint|typecheck|check|verify|audit'] : []),
+      ...(capabilities.has('tests') ? ['npm test', 'npm run test|build|lint|typecheck|check|verify|audit', 'npm pack --dry-run --ignore-scripts [--json]'] : []),
       ...(capabilities.has('git-local') ? ['git add', 'git commit (initial cd to this workspace allowed)'] : []),
       ...(capabilities.has('npm-registry') ? ['npm audit --json', 'npm view <package> [<field> ...] --json', 'npm pack <registry-package>', 'npm install --package-lock-only --ignore-scripts', 'npm update --package-lock-only --ignore-scripts'] : []),
     ],
@@ -32,6 +39,7 @@ export function capabilityAllowsSegment(argv: string[], capabilities = shellCapa
     return ['add', 'commit'].includes(operation ?? '') && !args.some(arg => /^(?:--amend|--config-env|--exec-path|--git-dir|--work-tree|--output)(?:=|$)/.test(arg));
   }
   if (command !== 'npm') return false;
+  if (capabilities.has('tests') && operation === 'pack' && isLocalNpmPackDryRun(args)) return true;
   if (capabilities.has('tests') && ['ls', 'list', 'explain'].includes(operation ?? '')
     && args.every(arg => ['--json', '--all'].includes(arg) || /^--depth=\d+$/.test(arg)
       || /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(arg))) return true;
@@ -45,11 +53,11 @@ export function capabilityAllowsSegment(argv: string[], capabilities = shellCapa
   }
   if (!capabilities.has('npm-registry')) return false;
   if (operation === 'audit') return args.every(arg => ['--json', '--omit=dev', '--production'].includes(arg));
-  if (operation === 'pack') return args.length >= 1 && args.length <= 3
+  if (operation === 'pack') return args.length >= 1 && args.length <= 3 && !args[0]?.startsWith('-')
     && /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(args[0] ?? '')
     && args.slice(1).every(arg => ['--json', '--silent'].includes(arg));
   // npm accepts multiple metadata selectors; each is data, never an npm option.
-  if (operation === 'view') return args.length >= 1
+  if (operation === 'view') return args.length >= 1 && !args[0]?.startsWith('-')
     && /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-z0-9.*^~+<>=| -]+)?$/i.test(args[0] ?? '')
     && args.slice(1).every(arg => arg === '--json' || /^[a-z][a-z0-9_.-]*$/i.test(arg));
   return ['install', 'update'].includes(operation ?? '') && args.includes('--package-lock-only')
