@@ -9,8 +9,8 @@ type Call = { name: string; arguments: Record<string, unknown> };
 const read: Call = { name: 'view_file', arguments: { path: 'source.js' } };
 const edit = (path: string): Call => ({ name: 'str_replace_editor', arguments: { path, command: 'str_replace', old_str: '1', new_str: '2' } });
 const cases: Array<{ name: string; prompt: string; calls: Call[]; success: boolean; source?: string; package?: string; answer?: string }> = [
-  { name: 'anteposed-means-missing', prompt: 'Explique les closures. Le correctif en modifiant la version existe dans package.json.', calls: [], success: false },
-  { name: 'anteposed-means-ok', prompt: 'Explique les closures. Le correctif en modifiant la version existe dans package.json.', calls: [edit('package.json')], success: true, package: '{"name":"fixture","version":"2"}\n' },
+  { name: 'anteposed-means-missing', prompt: 'Explique les closures. Le correctif en modifiant la version existe dans package.json.', calls: [], success: false, answer: "Une closure conserve l'accès aux variables de son environnement lexical, même après le retour de la fonction qui l'a créée." },
+  { name: 'anteposed-means-ok', prompt: 'Explique les closures. Le correctif en modifiant la version existe dans package.json.', calls: [edit('package.json')], success: true, package: '{"name":"fixture","version":"2"}\n', answer: "Une closure conserve l'accès aux variables de son environnement lexical, même après le retour de la fonction qui l'a créée. La version de package.json est passée de 1 à 2." },
   { name: 'reminder-modifier-missing', prompt: "N'oublie surtout pas de modifier source.js", calls: [], success: false },
   { name: 'negative-question-edit', prompt: 'Can you not edit package.json', calls: [edit('package.json')], success: false, package: '{"name":"fixture","version":"2"}\n' },
   { name: 'new-string-label', prompt: 'Change value to 2 in source.js.', calls: [{ name: 'str_replace_editor', arguments: { path: 'source.js', old_str: 'export const value = 1;', new_str: '1.2 export const value = 2;' } }], success: false },
