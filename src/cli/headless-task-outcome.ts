@@ -9,6 +9,8 @@ export interface TaskEvidenceEntry {
   content: string;
   toolCall?: { id: string; function: { name: string; arguments: string } };
   toolResult?: { success: boolean; output?: string; error?: string; metadata?: Record<string, unknown> };
+  /** Set by the executor when an assistant answer hit the output-length limit. */
+  truncated?: boolean;
 }
 
 export interface HeadlessTaskOutcome {
@@ -184,6 +186,10 @@ export function evaluateHeadlessTaskOutcome(
   })) reasons.push('approval_unavailable');
   if (responseExitCode !== 0) reasons.push('response_failed');
   if (/Stopped by the loop guard|maximum (?:number of )?tool|read budget exhausted/i.test(entries.at(-1)?.content ?? '')) reasons.push('execution_stopped');
+  // Banc harnais 03/10 (C-4b) : 8 192 jetons de réflexion, aucune réponse ni
+  // appel d'outil, « Réponse tronquée » — et pourtant exit 0 / success. Une
+  // réponse finale coupée par la limite de longueur n'est pas un résultat.
+  if (entries.filter(entry => entry.type === 'assistant').at(-1)?.truncated === true) reasons.push('response_truncated');
   if ([...checks.values()].some(check => !check.success && !(check.optionalRead && lastWrite > check.sequence))) reasons.push('verification_failed');
   if (requestsRepositoryAction(prompt) && actionTools.length === 0) reasons.push('no_action_executed');
   const status = reasons.some(reason => !['no_action_executed', 'approval_unavailable'].includes(reason)) ? 'failed'

@@ -19,6 +19,20 @@ it('un refus terminal après une édition reste non validé avec sa cause', () =
   });
 });
 
+// Banc harnais 03/10 (C-4b-etat0) : exit 0 / success avec pour seule réponse
+// « Réponse tronquée (limite de longueur atteinte). », aucun fichier modifié.
+it('une réponse finale tronquée par la limite de longueur est un échec, pas un succès', () => {
+  const entries = [
+    result('bash', 'git status', true),
+    { type: 'assistant', content: 'Réponse tronquée (limite de longueur atteinte).', truncated: true },
+  ];
+  expect(evaluateHeadlessTaskOutcome('Corrige la licence', entries)).toMatchObject({
+    status: 'failed', success: false, exitCode: 1, reasons: ['response_truncated'],
+  });
+  const complete = [result('bash', 'git status', true), { type: 'assistant', content: 'Fait.' }];
+  expect(evaluateHeadlessTaskOutcome('Corrige la licence', complete)).toMatchObject({ status: 'success', exitCode: 0 });
+});
+
 describe('headless task evidence', () => {
   const exit = (prompt: string, entries: ReturnType<typeof result>[], text = 'All fixed.') =>
     resolveHeadlessTurnExitCode(text, ['bash', 'str_replace_editor'], entries.map(e => e.toolCall.function.name), { prompt, entries });
