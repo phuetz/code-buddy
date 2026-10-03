@@ -31,4 +31,26 @@ describe('consigne de plan et schémas disponibles', () => {
     const available = new Set((context.tools ?? []).map(tool => tool.function.name));
     expect(prescribed.filter(name => !available.has(name!))).toEqual([]);
   });
+
+  // Banc harnais 2026-10-03 : `?? PLAN.md` laissé à la racine sur B-27b-1, B-4b-1,
+  // C-4b-1, C-4b-2 (Astra) et sol61 B/C — la consigne « git status vide » échouait.
+  it('suggère le plan dans le dossier d’état auto-ignoré, pas à la racine du dépôt', () => {
+    const context: MiddlewareContext = {
+      toolRound: 0, maxToolRounds: 50, sessionCost: 0, sessionCostLimit: 10,
+      inputTokens: 100, outputTokens: 0, history: [], isStreaming: false,
+      messages: [{ role: 'user', content: 'Create a module, fix the tests and update the docs.' }],
+    };
+    const message = new WorkflowGuardMiddleware().beforeTurn(context).message ?? '';
+    expect(message).toContain('.codebuddy/PLAN.md');
+    expect(message.replaceAll('.codebuddy/PLAN.md', '')).not.toMatch(/creating PLAN\.md/);
+  });
+
+  it('l’audit de complétion lit .codebuddy/PLAN.md en l’absence de PLAN.md racine', async () => {
+    const { PlanCompletionAuditMiddleware } = await import('../../../src/agent/middleware/plan-completion-audit.js');
+    fs.mkdirSync(path.join(directory, '.codebuddy'));
+    fs.writeFileSync(path.join(directory, '.codebuddy', 'PLAN.md'), '- [ ] écrire le test rouge\n');
+    const audit = new PlanCompletionAuditMiddleware({ planPath: path.join(directory, 'PLAN.md') });
+    const open = await (audit as unknown as { readOpenItems(): Promise<Array<{ text: string }>> }).readOpenItems();
+    expect(open.map(item => item.text)).toEqual(['écrire le test rouge']);
+  });
 });

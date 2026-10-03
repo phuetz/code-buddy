@@ -243,7 +243,9 @@ export class WorkflowGuardMiddleware implements ConversationMiddleware {
         action: 'warn',
         message: [
           `[workflow-guard] This task has ${reason}.`,
-          'Consider creating PLAN.md first with the task goal and verifiable steps.',
+          // .codebuddy/ is Code Buddy's self-ignored state dir: a root PLAN.md
+          // stayed untracked and broke "git status clean" requirements.
+          'Consider creating .codebuddy/PLAN.md first with the task goal and verifiable steps (not a root PLAN.md: it would stay untracked in the repository).',
           'Use one of the file-editing tools provided in this turn.',
           `Proceeding without a plan — but be mindful of the Verification Contract.${docsHint}`,
         ].join(' '),

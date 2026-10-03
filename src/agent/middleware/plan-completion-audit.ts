@@ -172,10 +172,13 @@ export class PlanCompletionAuditMiddleware implements ConversationMiddleware {
   /** Read the plan file and return only the OPEN (pending/in_progress) items. Never throws. */
   private async readOpenItems(): Promise<PlanItem[]> {
     try {
-      if (!(await fs.pathExists(this.config.planPath))) {
-        return [];
+      let planPath = this.config.planPath;
+      if (!(await fs.pathExists(planPath))) {
+        // The workflow guard suggests the self-ignored .codebuddy/PLAN.md.
+        planPath = path.join(path.dirname(planPath), '.codebuddy', path.basename(planPath));
+        if (!(await fs.pathExists(planPath))) return [];
       }
-      const content = await fs.readFile(this.config.planPath, 'utf-8');
+      const content = await fs.readFile(planPath, 'utf-8');
       return parsePlanItems(content).filter(item => item.open);
     } catch (err) {
       // A plan we can't read is not a plan we should nag about — fail silent.
