@@ -216,15 +216,26 @@ export function parsePatch(patchText: string): FileOp[] {
               oldLines.push(l.slice(1));
             } else if (l.startsWith('+')) {
               newLines.push(l.slice(1));
+            } else if (l.trim()) {
+              throw new Error(`Invalid patch hunk in ${filePath}: prefix each line with a space, - or +.`);
             }
             i++;
             l = lines[i];
           }
           hunks.push({ header, oldLines, newLines });
         } else {
+          if (hunkLine.trim()) {
+            throw new Error(`Invalid update patch for ${filePath}: expected an @@ hunk before its lines.`);
+          }
           i++;
         }
         hunkLine = lines[i];
+      }
+      if (!moveTo && !hunks.some(hunk =>
+        hunk.oldLines.length !== hunk.newLines.length
+        || hunk.oldLines.some((oldLine, index) => oldLine !== hunk.newLines[index])
+      )) {
+        throw new Error(`Update patch for ${filePath} has no modifying @@ hunk. Use -/+ lines for the intended change.`);
       }
       ops.push({ type: 'update', path: filePath, moveTo, hunks });
 
