@@ -8,10 +8,10 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / '_qa/pare-feu-ecc/reprise-6/mutations'
+OUT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / '_qa/pare-feu-ecc/reprise-7/mutations'
 OUT.mkdir(parents=True, exist_ok=True)
 SCANNER = 'src/security/skill-scanner.ts'
-TESTS = ['tests/security/skill-firewall-ecc-reprise-6.test.ts', 'tests/skills/skill-firewall-ecc-reprise-6-consumers.test.ts', 'tests/agents/agent-ecc-reprise-6.test.ts']
+TESTS = ['tests/security/skill-firewall-ecc-reprise-7.test.ts', 'tests/skills/skill-firewall-ecc-reprise-7-consumers.test.ts', 'tests/agents/agent-ecc-reprise-7.test.ts']
 
 def replace(old, new):
     def edit(source):
@@ -27,18 +27,15 @@ def pattern_disabled(name):
     return edit
 
 CASES = [
-    ('shebang-masks-suffix', SCANNER, replace("let language = markdown ? '' : executableLanguage\n    ?? (extension && !SCRIPT_EXTENSIONS.has(extension) ? 'unknown' : declaredLanguages.find(Boolean) ?? 'unknown');", "let language = markdown ? '' : shebang ?? (SCRIPT_EXTENSIONS.has(extension) ? extension.slice(1) : 'unknown');")),
-    ('absolute-launcher-missed', SCANNER, replace(r"(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?", '')),
-    ('launcher-arguments-missed', SCANNER, replace('(?:[\'"]?[-+][^\\s;&|()]*|[\'"]?(?:\\.\\.?\\/|\\/|~\\/|\\$)[^\\s;&|]+|[\'"]?[A-Za-z_][\\w.-]*\\b)', '(?:-[cs]\\b|[\'"]?(?:\\.\\.?\\/|\\/|~\\/|\\$)[^\\s;&|]+|[\'"]?[A-Za-z_][\\w-]*\\.[A-Za-z0-9]+\\b)')),
-    ('perl-backticks-authorized', SCANNER, replace("'lua', 'r'", "'lua', 'pl', 'perl', 'r'")),
-    ('template-credential-missed', SCANNER, lambda source: replace(next(line for line in source.splitlines() if "name: 'embedded-secret'" in line), next(line for line in source.splitlines() if "name: 'embedded-secret'" in line).replace('`', ''))(source)),
-    ('camel-process-missed', SCANNER, replace(r'|[A-Za-z_$][\w$]*ChildProcess', '')),
-    ('destructive-process-missed', SCANNER, pattern_disabled('destructive-process')),
-    ('shell-substitution-launcher-missed', SCANNER, replace(r'[ \t;&|(]', r'[ \t;&|]')),
-    ('mandatory-launcher-folding-disabled', SCANNER, replace("const launcher = DANGEROUS_PATTERNS.find(dp => dp.name === 'shell-interpreter')!;", "const launcher = { ...DANGEROUS_PATTERNS.find(dp => dp.name === 'shell-interpreter')!, pattern: deobAll ? DANGEROUS_PATTERNS.find(dp => dp.name === 'shell-interpreter')!.pattern : /(?!)/ };")),
-    ('fenced-shebang-ignored', SCANNER, replace('if (fencedShebang) {', 'if (false && fencedShebang) {')),
-    ('heredoc-loop-quarantined', SCANNER, replace("if (dp.name === 'shell-interpreter' && context.shellLiteral", "if (false && dp.name === 'shell-interpreter' && context.shellLiteral")),
-    ('tool-prose-quarantined', SCANNER, replace("if (dp.name === 'shell-interpreter' && !context.language && !context.imperative", "if (false && dp.name === 'shell-interpreter' && !context.language && !context.imperative")),
+    ('terminators-missed', SCANNER, replace("['\"]?[-+][^\\s;&|()]*", r"-(?:[A-Za-z]+|-[A-Za-z][\w-]*)(?=[ \t]|$)")),
+    ('plus-options-missed', SCANNER, replace("['\"]?[-+][^\\s;&|()]*", "['\"]?-[^\\s;&|()]*")),
+    ('quoted-options-missed', SCANNER, replace("['\"]?[-+][^\\s;&|()]*", "[-+][^\\s;&|()]*")),
+    ('mandatory-unicode-folding-disabled', SCANNER, replace('const folded = foldUnicodeForScan(content);', 'const folded = content;')),
+    ('generic-launcher-folding-duplicated', SCANNER, replace("if (dp.name === 'shell-interpreter' && (existing.some(f => f.pattern === dp.name) || extra.some(f => f.pattern === dp.name))) continue;", '')),
+    ('unseen-launcher-decoding-lost', SCANNER, replace("if (dp.name === 'shell-interpreter' && (existing.some(f => f.pattern === dp.name) || extra.some(f => f.pattern === dp.name))) continue;", "if (dp.name === 'shell-interpreter') continue;")),
+    ('python-binding-quarantined', SCANNER, replace("if (dp.name === 'shell-interpreter' && /^(?:py|python[\\d.]*)$/.test(context.language)", "if (false && dp.name === 'shell-interpreter' && /^(?:py|python[\\d.]*)$/.test(context.language)")),
+    ('python-whole-line-exemption', SCANNER, replace("if (dp.name === 'shell-interpreter' && /^(?:py|python[\\d.]*)$/.test(context.language)", "if (/^(?:py|python[\\d.]*)$/.test(context.language) && /^\\s*for.*\\b(?:sh|bash)\\s+in\\b/.test(line)) return 'benign';\n  if (dp.name === 'shell-interpreter' && /^(?:py|python[\\d.]*)$/.test(context.language)")),
+    ('script-launcher-documentary', SCANNER, replace("if (!context.markdown) return 'active';", "if (!context.markdown && dp.name === 'shell-interpreter') return 'documentary';\n  if (!context.markdown) return 'active';")),
     ('documentary-floor-removed', SCANNER, replace("const verdict = activeVerdict === 'allow' && findings.some(f => f.documentary) ? 'review' : activeVerdict;", 'const verdict = activeVerdict;')),
     ('agent-documentary-critical-accepted', 'src/skills/agent-importer.ts', replace("scan.findings = scan.findings.map(f => f.severity === 'critical' || f.severity === 'high' ? { ...f, documentary: false } : f);", '')),
 ]

@@ -11,6 +11,7 @@ import { logger } from '../utils/logger.js';
 import {
   deobfuscateForScanWindows,
   deobfuscateSafeForScanWindows,
+  foldUnicodeForScan,
   sliceScanWindows,
 } from './text-deobfuscation.js';
 
@@ -259,7 +260,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'PHP backtick process execution', name: 'php-backtick', capability: 'shell' },
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'Shell backtick process execution', name: 'shell-backtick', capability: 'shell' },
 
-  { pattern: /(?:^|[ \t;&|(])['"]?(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:bash|sh|zsh|dash|ksh|fish)(?:\.exe)?['"]?[ \t]+(?:-(?:[A-Za-z]+|-[A-Za-z][\w-]*)(?=[ \t]|$)|['"]?(?:\.\.?\/|\/|~\/|\$)[^\s;&|]+|['"]?[A-Za-z_][\w.-]*\b)/i, severity: 'high', description: 'Shell interpreter invocation can execute a copied payload', name: 'shell-interpreter', capability: 'shell' },
+  { pattern: /(?:^|[ \t;&|(])['"]?(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:bash|sh|zsh|dash|ksh|fish)(?:\.exe)?['"]?[ \t]+(?:['"]?[-+][^\s;&|()]*|['"]?(?:\.\.?\/|\/|~\/|\$)[^\s;&|]+|['"]?[A-Za-z_][\w.-]*\b)/i, severity: 'high', description: 'Shell interpreter invocation can execute a copied payload', name: 'shell-interpreter', capability: 'shell' },
   { pattern: /\b[\w$]*(?:api_?key|secret|password|token)[\w$]*['"]?\s*[:=]\s*['"`][^'"`\r\n]+['"`]/i, severity: 'critical', description: 'Literal credential assignment requires quarantine in copied code', name: 'embedded-secret', capability: 'secrets' },
 
   // File system dangers
@@ -463,6 +464,12 @@ function classifyMention(dp: DangerousPattern, line: string, context: ScanContex
   if (dp.name === 'shell-backtick' && (!hasShellBackticks(context) ||
       (SHELL_LANGUAGES.has(context.language) && (context.shellLiteral || shellPosition(line, offset).literal)))) return 'benign';
   if (context.markdown && ['php-backtick', 'shell-backtick'].includes(dp.name) && /^\s*(?:`{3,}|~{3,})/.test(line)) return 'benign';
+  // In Python this occurrence binds a loop variable; it does not launch it.
+  // Match the occurrence, so a second call or a quoted command stays visible.
+  if (dp.name === 'shell-interpreter' && /^(?:py|python[\d.]*)$/.test(context.language)
+      && /^\s*(?:async\s+)?for(?:\s+[A-Za-z_]\w*\s*,)*$/.test(line.slice(0, offset))
+      && /^[ \t](?:bash|sh|zsh|dash|ksh|fish)[ \t]+in\b/.test(line.slice(offset, offset + length))
+      && /^\s*(?:async\s+)?for\s+(?:[A-Za-z_]\w*\s*,\s*)*(?:bash|sh|zsh|dash|ksh|fish)\s+in\s+.+:\s*(?:#.*)?$/.test(line)) return 'benign';
   // No prose, secret-token, or documentary exception may authorize copied code.
   if (!context.markdown) return 'active';
   // A Python loop variable inside a quoted diagnostic heredoc is data, not
@@ -806,7 +813,7 @@ function collectDeobfuscatedFindings(
   // Rebuild language and literal contexts after NFKC, including folded fences.
   {
     // Minimum interpreter framing is mandatory even when extended decoding is off.
-    const folded = content.normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '');
+    const folded = foldUnicodeForScan(content);
     if (folded !== content) {
       const foldedContexts = scanContexts(folded, filePath, !contexts[0]?.markdown);
       const launcher = DANGEROUS_PATTERNS.find(dp => dp.name === 'shell-interpreter')!;
@@ -836,6 +843,9 @@ function collectDeobfuscatedFindings(
   for (const dp of patterns) {
     // Interpreter backticks were folded and checked with language context above.
     if (dp.name === 'php-backtick' || dp.name === 'shell-backtick') continue;
+    // A contextual launcher finding is authoritative; don't flatten it again.
+    // Keep extended decoding for previously unseen, obfuscated launchers.
+    if (dp.name === 'shell-interpreter' && (existing.some(f => f.pattern === dp.name) || extra.some(f => f.pattern === dp.name))) continue;
     const isInjection = dp.capability === 'prompt-injection';
     if (!isInjection && !deobAll) continue;
     if (existing.some(f => f.pattern === dp.name && !f.documentary)) continue;
