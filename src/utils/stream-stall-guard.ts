@@ -93,6 +93,8 @@ export interface StallGuardOptions {
   firstTokenTimeoutMs?: number | (() => number);
   /** Resolve after each chunk so a provider handoff uses the effective target. */
   inactivityTimeoutMs?: () => number;
+  /** Abort the current provider request when its inactivity budget expires. */
+  onStall?: (error: LlmStallError) => void;
 }
 
 /**
@@ -143,10 +145,14 @@ export async function* withStallGuard<T>(
       yield result.value;
     }
   } catch (error) {
-    // Close the underlying stream (aborts the network request when the
-    // provider wires return() to its AbortController). Best effort.
+    // Async generators queue return() behind a pending next(). Abort the
+    // request first, and do not let that queued cleanup hide the deadline.
+    if (error instanceof LlmStallError) {
+      try { options?.onStall?.(error); } catch { /* preserve the stall error */ }
+    }
     try {
-      await iterator.return?.();
+      const closing = iterator.return?.();
+      if (closing) void Promise.resolve(closing).catch(() => { /* already dead */ });
     } catch {
       /* already dead */
     }

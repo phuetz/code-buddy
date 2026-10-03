@@ -3792,3 +3792,35 @@ describe('génération locale avec arguments outils mis en tampon', () => {
     } finally { vi.useRealTimers(); vi.unstubAllEnvs(); }
   });
 });
+
+describe('annulation de la tentative réseau expirée', () => {
+  it('transmet et annule un signal propre à la tentative', async () => {
+    vi.stubEnv('CODEBUDDY_LLM_STALL_TIMEOUT_MS', '20');
+    let release!: () => void;
+    let started!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    const signals: Array<AbortSignal | undefined> = [];
+    const deps = createMockDeps();
+    (deps.client.chatStream as jest.Mock).mockImplementation(async function* (
+      _messages: unknown, _tools: unknown, options: { signal?: AbortSignal },
+    ) {
+      signals.push(options.signal);
+      options.signal?.addEventListener('abort', () => release(), { once: true });
+      yield { choices: [{ delta: { reasoning_content: 'Preparing.' } }] };
+      started();
+      await pending;
+      yield { choices: [{ delta: { content: 'late' } }] };
+    });
+    try {
+      const turn = new AgentExecutor(deps, createMockConfig()).processUserMessage('hello', [], [], Date.now())
+        .catch(error => error);
+      await ready;
+      await new Promise<void>(resolve => setTimeout(resolve, 80));
+      const abortedBeforeRelease = signals[0]?.aborted ?? false;
+      release();
+      await turn;
+      expect(abortedBeforeRelease).toBe(true);
+    } finally { release(); vi.unstubAllEnvs(); }
+  });
+});

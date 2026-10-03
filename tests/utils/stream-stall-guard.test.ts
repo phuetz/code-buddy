@@ -151,3 +151,37 @@ describe('budget de génération des arguments outils locaux', () => {
     }
   });
 });
+
+describe('fermeture après expiration du garde', () => {
+  it('rend le délai observable sans attendre un retour de générateur bloqué', async () => {
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    async function* blocked() { await pending; yield 'too late'; }
+    let settled = false;
+    const result = withStallGuard(blocked(), 20).next().then(
+      () => { settled = true; return null; },
+      error => { settled = true; return error; },
+    );
+    await new Promise<void>(resolve => setTimeout(resolve, 80));
+    const beforeRelease = settled;
+    release();
+    expect(await result).toBeInstanceOf(LlmStallError);
+    expect(beforeRelease).toBe(true);
+  });
+
+  it('annule la requête avant de demander au générateur de se fermer', async () => {
+    const controller = new AbortController();
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    controller.signal.addEventListener('abort', () => release(), { once: true });
+    async function* blocked() { await pending; yield 'too late'; }
+    const result = withStallGuard(blocked(), 20, {
+      onStall: () => controller.abort(),
+    }).next().catch(error => error);
+    await new Promise<void>(resolve => setTimeout(resolve, 80));
+    const aborted = controller.signal.aborted;
+    release();
+    expect(await result).toBeInstanceOf(LlmStallError);
+    expect(aborted).toBe(true);
+  });
+});

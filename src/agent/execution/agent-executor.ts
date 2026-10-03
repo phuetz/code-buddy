@@ -11,6 +11,7 @@ import { bindFactsMemorySession } from '../../memory/facts-memory.js';
  * @module agent/execution
  */
 
+import { combineAbortSignals } from '../../codebuddy/abort-signal.js';
 import { BoundedOutput } from '../../utils/bounded-output.js';
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../../codebuddy/client.js";
 import { resolveFirstTokenStallTimeoutMs, resolveStallTimeoutMs, withStallGuard } from "../../utils/stream-stall-guard.js";
@@ -1773,45 +1774,50 @@ export class AgentExecutor {
         // hangs FOREVER (turns stuck for hours in Cowork and headless waves).
         // Fail fast with a clear error instead; the caller/user retries.
         const progress = startHeadlessPromptProgress();
-        const streamFactory = () => withStallGuard(this.deps.client.chatStream(
-          preparedMessages,
-          tools,
-          {
-            streamRetry: false,
-            retryOwner: 'caller',
-            contextScope: {
-              workDir: this.deps.toolHandler.getWorkingDirectory?.() ?? process.cwd(),
-              sessionId: this.deps.toolHandler.getRecoverySessionId?.(),
+        const streamFactory = () => {
+          const attemptController = new AbortController();
+          const requestSignal = combineAbortSignals(abortController?.signal, attemptController.signal);
+          return withStallGuard(this.deps.client.chatStream(
+            preparedMessages,
+            tools,
+            {
+              streamRetry: false,
+              retryOwner: 'caller',
+              contextScope: {
+                workDir: this.deps.toolHandler.getWorkingDirectory?.() ?? process.cwd(),
+                sessionId: this.deps.toolHandler.getRecoverySessionId?.(),
+              },
+              // An explicit request to inspect implementation needs an observation
+              // before an answer. Only the confined self_describe reader is exposed.
+              ...(codeResearch && toolRounds === 0 && tools.length ? { tool_choice: 'required' as const } : {}),
+              turnMetrics: {
+                recorder: getTurnMetricsRecorder(),
+                inputTokens,
+                getOutputTokens: () => this.deps.streamingHandler.getTokenCount() || 0,
+              },
+              ...(requestSignal ? { signal: requestSignal } : {}),
             },
-            // An explicit request to inspect implementation needs an observation
-            // before an answer. Only the confined self_describe reader is exposed.
-            ...(codeResearch && toolRounds === 0 && tools.length ? { tool_choice: 'required' as const } : {}),
-            turnMetrics: {
-              recorder: getTurnMetricsRecorder(),
-              inputTokens,
-              getOutputTokens: () => this.deps.streamingHandler.getTokenCount() || 0,
-            },
-            ...(abortController?.signal ? { signal: abortController.signal } : {}),
-          },
-          this.config.isGrokModel() &&
-            this.deps.toolSelectionStrategy.shouldUseSearchFor(turnQueryText)
-            ? { search_parameters: { mode: "auto" } }
-            : { search_parameters: { mode: "off" } },
-        ), resolveStallTimeoutMs(), {
-          firstTokenTimeoutMs: () => resolveFirstTokenStallTimeoutMs(inputTokens, process.env, {
-            targetIsLocal: this.deps.client.isEffectiveTargetLocal?.(),
-          }),
-          inactivityTimeoutMs: () => {
-            const configuredOutput = Number(process.env.CODEBUDDY_MAX_TOKENS);
-            return resolveStallTimeoutMs(process.env, {
+            this.config.isGrokModel() &&
+              this.deps.toolSelectionStrategy.shouldUseSearchFor(turnQueryText)
+              ? { search_parameters: { mode: "auto" } }
+              : { search_parameters: { mode: "off" } },
+          ), resolveStallTimeoutMs(), {
+            onStall: error => attemptController.abort(error),
+            firstTokenTimeoutMs: () => resolveFirstTokenStallTimeoutMs(inputTokens, process.env, {
               targetIsLocal: this.deps.client.isEffectiveTargetLocal?.(),
-              toolOutputTokens: tools.length > 0
-                ? (Number.isFinite(configuredOutput) && configuredOutput > 0
-                  ? configuredOutput : modelToolConfig.maxOutputTokens)
-                : 0,
-            });
-          },
-        });
+            }),
+            inactivityTimeoutMs: () => {
+              const configuredOutput = Number(process.env.CODEBUDDY_MAX_TOKENS);
+              return resolveStallTimeoutMs(process.env, {
+                targetIsLocal: this.deps.client.isEffectiveTargetLocal?.(),
+                toolOutputTokens: tools.length > 0
+                  ? (Number.isFinite(configuredOutput) && configuredOutput > 0
+                    ? configuredOutput : modelToolConfig.maxOutputTokens)
+                  : 0,
+              });
+            },
+          });
+        };
         try {
         for await (const streamEvent of withLlmStreamRetry(streamFactory, {
           maxRetries: 2,
