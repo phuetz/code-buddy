@@ -6,7 +6,7 @@
  */
 import { streamOllamaNative } from '../../../src/codebuddy/providers/ollama-native-transport.js';
 import { StreamingHandler } from '../../../src/agent/streaming/streaming-handler.js';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { AgentExecutor, ExecutorDependencies, ExecutorConfig } from '../../../src/agent/execution/agent-executor';
@@ -270,6 +270,49 @@ describe('R23 AgentExecutor — faux succès', () => {
         expect(deps.toolHandler.executeTool).not.toHaveBeenCalled();
       } finally { streaming.dispose(); }
     });
+  });
+
+  it('actualise les observations CLI seulement quand les réglages changent, y compris après compaction', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'cb-runtime-observations-'));
+    const home = path.join(root, '_qa/harnais-opus/home');
+    await mkdir(home, { recursive: true });
+    const keys = ['HOME', 'USERPROFILE', 'CODEBUDDY_HOME'] as const;
+    const prior = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+    process.env.HOME = home; process.env.USERPROFILE = home;
+    process.env.CODEBUDDY_HOME = path.join(home, '.codebuddy');
+    const messages: CodeBuddyMessage[] = [];
+    const history: ChatEntry[] = [];
+    const observations = () => messages.filter(message => message.role === 'system'
+      && typeof message.content === 'string' && message.content.startsWith('<runtime_settings'));
+    const turn = async () => {
+      const prompt = 'Explique le résultat.';
+      messages.push({ role: 'user', content: prompt });
+      setupLLMFlow(deps, [{ content: 'Résultat expliqué.' }]);
+      await executor.processUserMessage(prompt, history, messages, Date.now(), undefined, false, 'cli');
+    };
+    try {
+      await turn(); await turn();
+      expect(observations()).toHaveLength(1);
+      expect(observations()[0]?.content).toContain('"model":"test-model"');
+      (deps.client.getCurrentModel as jest.Mock).mockReturnValue('test-model-updated');
+      await turn();
+      expect(observations()).toHaveLength(2);
+      expect(observations()[1]?.content).toContain('"model":"test-model-updated"');
+      // Simulate a compaction removing both observations. The current settings
+      // must be restored, with the human request still the last user message.
+      for (let index = messages.length - 1; index >= 0; index--) {
+        if (observations().includes(messages[index]!)) messages.splice(index, 1);
+      }
+      await turn();
+      expect(observations()).toHaveLength(1);
+      expect(observations()[0]?.content).toContain('"model":"test-model-updated"');
+      expect(messages.findLast(message => message.role === 'user')?.content).toBe('Explique le résultat.');
+    } finally {
+      for (const key of keys) {
+        if (prior[key] === undefined) delete process.env[key]; else process.env[key] = prior[key];
+      }
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   describe('réflexion native complète sans réponse après un outil', () => {

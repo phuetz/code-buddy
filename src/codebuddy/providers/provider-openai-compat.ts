@@ -230,7 +230,10 @@ function messageContentToText(content: CodeBuddyMessage['content']): string {
  * percentage, todo list, discovered context) then rewrote message 0, and
  * Ollama re-evaluated the WHOLE prompt on every such request (~33 s each on a
  * 27K prompt). Folded next to where it was injected, the note only changes the
- * tail of the conversation and the cached prefix survives.
+ * tail of the conversation. That preserves the leading prefix, but moving
+ * the note between tool results can still rewind a hybrid/recurrent cache.
+ * The executor therefore retains unchanged runtime-settings observations at
+ * their original position; this transform alone cannot guarantee cache reuse.
  *
  * It is a no-op (returns the same array reference) when the list
  * already has at most one system message and it is already at index 0, so

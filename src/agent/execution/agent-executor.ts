@@ -1441,6 +1441,10 @@ export class AgentExecutor {
     const maxEmptyRetries = parseRecoveryBudget(process.env.CODEBUDDY_MAX_EMPTY_RETRIES, 0);
     let lengthContinuations = 0;
     let emptyRetries = 0;
+    const previousRuntimeObservation = messages.findLast(message => message.role === 'system'
+      && typeof message.content === 'string' && message.content.startsWith('<runtime_settings ephemeral="true">'));
+    let lastRuntimeSettingsContext = typeof previousRuntimeObservation?.content === 'string'
+      ? previousRuntimeObservation.content : undefined;
 
     try {
       getProgressTracker().start(maxToolRounds);
@@ -1676,6 +1680,24 @@ export class AgentExecutor {
             }
           : undefined;
 
+        if (surface === 'cli') {
+          const { formatRuntimeSettingsContext } = await import('../../services/runtime-settings-context.js');
+          const observedSettings = formatRuntimeSettingsContext({
+            surface, model: activeModelName, provider: providerName, maxToolRounds,
+          });
+          // Preserve the observation at its original position. Moving an
+          // unchanged note from the previous tool to the next rewinds Qwen's
+          // recurrent cache, despite a long common prefix. Changes append a
+          // fresh observation; compaction may require restoring the current one.
+          const retained = messages.some(message => message.role === 'system'
+            && typeof message.content === 'string' && message.content.includes(observedSettings));
+          if (lastRuntimeSettingsContext !== observedSettings || !retained) {
+            messages.push({ role: 'system', content: observedSettings });
+            lastRuntimeSettingsContext = observedSettings;
+            incrementalTokenCounter.invalidate();
+          }
+        }
+
         let preparedMessages: CodeBuddyMessage[];
         try {
           preparedMessages = prepareTurnMessages(this.deps.contextManager, messages, {
@@ -1703,12 +1725,7 @@ export class AgentExecutor {
           preparedMessages.push({ role: 'system', content:
             'Research your actual implementation using self_describe: operation=list/read/search, relative src/ paths (source checkout) or dist/ paths (installed package). Search literal symbols, read relevant code, and cite paths and line numbers. Only this confined read-only tool is exposed for this turn. Do not mistake the user project for your implementation. Do not claim a code graph is available without evidence.' });
         }
-        if (surface === 'cli') {
-          const { formatRuntimeSettingsContext } = await import('../../services/runtime-settings-context.js');
-          preparedMessages.push({ role: 'system', content: formatRuntimeSettingsContext({
-            surface, model: activeModelName, provider: providerName, maxToolRounds,
-          }) });
-        } else {
+        if (surface !== 'cli') {
           // P5: other surfaces have no runtime_settings block; only a non-default
           // code_exec policy needs its short guidance.
           const { resolveCodeExecPolicy, CODE_EXEC_PREFER_HINT, CODE_EXEC_OFF_NOTICE } = await import('../../config/code-exec-policy.js');
