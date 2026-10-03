@@ -26,12 +26,12 @@ import { Disposable, registerDisposable } from '../../utils/disposable.js';
 import {
   bashToolSchemas,
   validateWithSchema,
-  validateCommand as validateCommandSafety,
   sanitizeForShell
 } from '../../utils/input-validator.js';
 import { getRipgrepPath } from '../../utils/ripgrep-path.js';
 import { getShellConfiguration, shellListFilesCommand, shellWorkingDirectoryCommand } from '../../utils/shell-configuration.js';
 import { validateCommand, getFilteredEnv } from './command-validator.js';
+import { validateShellCommandSafety as validateCommandSafety } from './command-safety.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
 import { parseBashCommand } from '../../security/bash-parser.js';

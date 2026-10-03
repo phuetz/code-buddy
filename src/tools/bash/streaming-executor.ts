@@ -12,7 +12,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { BoundedOutput } from '../../utils/bounded-output.js';
 import { ToolResult } from '../../types/index.js';
 import { ConfirmationService } from '../../utils/confirmation-service.js';
-import { validateCommand as validateCommandSafety } from '../../utils/input-validator.js';
+import { validateShellCommandSafety as validateCommandSafety } from './command-safety.js';
 import { validateCommand } from './command-validator.js';
 import { getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';

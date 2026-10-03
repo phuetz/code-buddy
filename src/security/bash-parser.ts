@@ -120,7 +120,10 @@ function literalHeredocPolicyInput(root: HeredocSyntaxNode, input: string, onlyF
         const body = parent?.children.find(child => child.type === 'command' || child.type === 'list');
         const command = body?.type === 'list' ? body.children.at(-1) : body;
         const writesFile = parent?.children.some(child => child.type === 'file_redirect' && /^>\s*[^>&]/.test(child.text));
-        if (inPipeline || parent?.type !== 'redirected_statement' || !writesFile
+        // Tree-sitter can attach a trailing `| command` to the heredoc
+        // header itself, rather than making it an ancestor of the redirect.
+        const headerPipeline = node.children.some(child => child.type === 'pipeline');
+        if (inPipeline || headerPipeline || parent?.type !== 'redirected_statement' || !writesFile
           || command?.type !== 'command' || command.children.length !== 1
           || command.children[0]?.type !== 'command_name' || command.children[0].text !== 'cat') return;
       }
