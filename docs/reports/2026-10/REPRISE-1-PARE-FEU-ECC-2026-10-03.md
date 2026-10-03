@@ -1,5 +1,7 @@
 # Reprise 1 — pare-feu ECC, 03/10/2026
 
+**Validation de sécurité invalidée par les contre-revues Grok et Opus.** La barrière sur `17ca8f374` passait, mais elle ne couvrait pas les portes documentaires du registre ni les appels indirects simples. Voir la [reprise 2](REPRISE-2-PARE-FEU-ECC-2026-10-03.md). Les mesures ci-dessous restent historiques.
+
 Les deux bloquants sont acceptés et corrigés. La réserve sur les substitutions Markdown était également un défaut : elle est corrigée. Les nouveaux tests reproduisent les trous de la tête relue avant correction ; huit mutations sont tuées par assertion. La barrière ciblée passe avec les rapports suivis ; le rejeu après les commits est joint au reçu de livraison.
 
 Branche `fix/pare-feu-import-ecc-2026-10-03`, départ `8ec6ff16b3c9a1740da28dbf69021a8b7f1c65b2`, Linux / Node 24.14.1. Relecture adverse et mission d'origine lues intégralement. Rapport créé dans le dépôt avant les corrections ; copie destinée à `Partage/20261003-cb-pare-feu-ecc/reprise-1/sol61/RAPPORT.md`. Les preuves de reprise sont sous `_qa/pare-feu-ecc/reprise-1/` et seront recopiées avec le rapport. Les anciens livrables du partage sont conservés.
