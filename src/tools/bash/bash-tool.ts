@@ -603,8 +603,9 @@ export class BashTool implements Disposable {
         if (parsed.isTestOutput && parsed.data) {
           // Return structured test data as JSON for the renderer
           return {
-            success: true,
-            output: JSON.stringify(parsed.data),
+            success: parsed.data.summary.failed === 0,
+            ...(parsed.data.summary.failed > 0 ? { error: `Tests: ${parsed.data.summary.failed} failed despite process exit 0` } : {}),
+            output: JSON.stringify({ ...parsed.data, rawOutput: toolOutput }),
             data: { type: 'test-results', framework: parsed.data.framework },
           };
         }
@@ -658,8 +659,9 @@ export class BashTool implements Disposable {
       const parsed = parseTestOutput(output);
       if (parsed.isTestOutput && parsed.data) {
         return {
-          success: true,
-          output: JSON.stringify(parsed.data),
+          success: parsed.data.summary.failed === 0,
+          ...(parsed.data.summary.failed > 0 ? { error: `Tests: ${parsed.data.summary.failed} failed despite process exit 0` } : {}),
+          output: JSON.stringify({ ...parsed.data, rawOutput: output }),
           data: { type: 'test-results', framework: parsed.data.framework },
         };
       }

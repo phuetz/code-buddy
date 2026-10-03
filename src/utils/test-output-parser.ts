@@ -21,7 +21,16 @@ export interface ParseResult {
 // Jest Parser
 // ============================================================================
 
-const JEST_SUMMARY_REGEX = /Tests:\s*(\d+)\s*passed(?:,\s*(\d+)\s*failed)?(?:,\s*(\d+)\s*skipped)?(?:,\s*(\d+)\s*total)?/i;
+/** Counters are keyed by their labels, never their display order. */
+function summaryCounts(line: string) {
+  const count = (label: string) => Number(line.match(new RegExp(`\\b(\\d+)\\s+${label}\\b`, 'i'))?.[1] ?? 0);
+  const passed = count('passed');
+  const failed = count('failed');
+  const skipped = count('skipped') + count('todo');
+  return { total: count('total') || passed + failed + skipped, passed, failed, skipped };
+}
+
+const JEST_SUMMARY_REGEX = /^\s*Tests:\s*([^\r\n]*\d+\s+(?:passed|failed|skipped|todo)[^\r\n]*)/im;
 const JEST_PASS_REGEX = /✓\s+(.+?)(?:\s+\((\d+)\s*m?s\))?$/gm;
 const JEST_FAIL_REGEX = /✕\s+(.+?)(?:\s+\((\d+)\s*m?s\))?$/gm;
 const JEST_SKIP_REGEX = /○\s+skipped\s+(.+)$/gm;
@@ -34,10 +43,7 @@ function parseJestOutput(output: string): ParseResult {
     return { isTestOutput: false, rawOutput: output };
   }
 
-  const passed = parseInt(summaryMatch[1] || '0', 10);
-  const failed = parseInt(summaryMatch[2] || '0', 10);
-  const skipped = parseInt(summaryMatch[3] || '0', 10);
-  const total = parseInt(summaryMatch[4] || '0', 10) || (passed + failed + skipped);
+  const { total, passed, failed, skipped } = summaryCounts(summaryMatch[1]!);
 
   const tests: TestCase[] = [];
 
@@ -96,7 +102,7 @@ function parseJestOutput(output: string): ParseResult {
 // Vitest Parser
 // ============================================================================
 
-const VITEST_SUMMARY_REGEX = /Tests\s+(\d+)\s+passed(?:\s*\|\s*(\d+)\s+failed)?/i;
+const VITEST_SUMMARY_REGEX = /^\s*Tests\s+([^\r\n]*\d+\s+(?:passed|failed|skipped|todo)[^\r\n]*)/im;
 const VITEST_DURATION_REGEX = /Duration\s+([\d.]+)s/i;
 
 function parseVitestOutput(output: string): ParseResult {
@@ -105,9 +111,7 @@ function parseVitestOutput(output: string): ParseResult {
     return { isTestOutput: false, rawOutput: output };
   }
 
-  const passed = parseInt(summaryMatch[1] || '0', 10);
-  const failed = parseInt(summaryMatch[2] || '0', 10);
-  const total = passed + failed;
+  const { total, passed, failed, skipped } = summaryCounts(summaryMatch[1]!);
 
   const tests: TestCase[] = [];
 
@@ -139,7 +143,7 @@ function parseVitestOutput(output: string): ParseResult {
 
   const data: TestResultsData = {
     type: 'test-results',
-    summary: { total, passed, failed, skipped: 0 },
+    summary: { total, passed, failed, skipped },
     tests,
     framework: 'vitest',
     duration,
@@ -221,20 +225,15 @@ function parseMochaOutput(output: string): ParseResult {
 // Pytest Parser
 // ============================================================================
 
-const PYTEST_SUMMARY_REGEX = /=+\s*(\d+)\s+passed(?:,\s*(\d+)\s+failed)?(?:,\s*(\d+)\s+skipped)?.*in\s+([\d.]+)s/i;
-const PYTEST_SHORT_REGEX = /(\d+)\s+passed(?:,\s*(\d+)\s+failed)?/i;
+const PYTEST_SUMMARY_REGEX = /^\s*(?:=+\s*)?((?:\d+\s+(?:passed|failed|skipped|xfailed|xpassed|errors?)(?:,\s*)?)+)(?:\s+in\s+([\d.]+)s)?(?:\s*=+)?\s*$/im;
 
 function parsePytestOutput(output: string): ParseResult {
-  const summaryMatch = output.match(PYTEST_SUMMARY_REGEX) || output.match(PYTEST_SHORT_REGEX);
+  const summaryMatch = output.match(PYTEST_SUMMARY_REGEX);
   if (!summaryMatch) {
     return { isTestOutput: false, rawOutput: output };
   }
-
-  const passed = parseInt(summaryMatch[1] || '0', 10);
-  const failed = parseInt(summaryMatch[2] || '0', 10);
-  const skipped = parseInt(summaryMatch[3] || '0', 10);
-  const total = passed + failed + skipped;
-  const duration = summaryMatch[4] ? parseFloat(summaryMatch[4]) * 1000 : undefined;
+  const { total, passed, failed, skipped } = summaryCounts(summaryMatch[1]!);
+  const duration = summaryMatch[2] ? parseFloat(summaryMatch[2]) * 1000 : undefined;
 
   // Parse test lines
   const tests: TestCase[] = [];
@@ -403,9 +402,9 @@ export function parseTestOutput(output: string): ParseResult {
  */
 export function isLikelyTestOutput(output: string): boolean {
   const testIndicators = [
-    /Tests:\s*\d+/i,
+    /^\s*Tests:?\s*\d+/im,
     /\d+\s+passing/i,
-    /\d+\s+passed/i,
+    /\d+\s+(?:passed|failed|skipped)/i,
     /---\s+(PASS|FAIL):/,
     /PASSED|FAILED/,
     /✓|✕|○/,

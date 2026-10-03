@@ -136,15 +136,15 @@ export function mapProviderError(rawMessage: string, provider?: string): string 
   const prefix = `CodeBuddy API error: ${msg}`;
 
   // Authentication / authorization
-  if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('invalid api key') || lower.includes('authentication')) {
+  if (/\b401\b/.test(lower) || lower.includes('unauthorized') || lower.includes('invalid api key') || lower.includes('authentication')) {
     return `${prefix} — Hint: API key invalid or revoked. Run: buddy config set ${configKey} <your-key>`;
   }
-  if (lower.includes('403') || lower.includes('forbidden') || lower.includes('permission denied')) {
+  if (/\b403\b/.test(lower) || lower.includes('forbidden') || lower.includes('permission denied')) {
     return `${prefix} — Hint: API access forbidden; your key may lack permissions for this model. Run: buddy config set ${configKey} <key-with-access>`;
   }
 
   // Rate limiting
-  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('quota')) {
+  if (/\b429\b/.test(lower) || lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('quota')) {
     return `${prefix} — Hint: rate limit hit. Wait 30–60s, upgrade your plan, or run /switch to another model.`;
   }
 
@@ -169,7 +169,7 @@ export function mapProviderError(rawMessage: string, provider?: string): string 
   }
 
   // Server errors
-  if (lower.includes('500') || lower.includes('502') || lower.includes('503') || lower.includes('504') || lower.includes('server error')) {
+  if (/\b500\b/.test(lower) || /\b502\b/.test(lower) || /\b503\b/.test(lower) || /\b504\b/.test(lower) || lower.includes('server error')) {
     return `${prefix} — Hint: service is currently unavailable. Try again in a few minutes or run /switch.`;
   }
 

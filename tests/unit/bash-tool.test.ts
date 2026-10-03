@@ -1153,7 +1153,7 @@ describe('BashTool', () => {
       (isLikelyTestOutput as ReturnType<typeof vi.fn>).mockReturnValueOnce(true);
       (parseTestOutput as ReturnType<typeof vi.fn>).mockReturnValueOnce({
         isTestOutput: true,
-        data: { framework: 'jest', passed: 10, failed: 0 },
+        data: { type: 'test-results', framework: 'jest', summary: { total: 10, passed: 10, failed: 0, skipped: 0 }, tests: [] },
       });
 
       const mockProcess = createMockChildProcess();

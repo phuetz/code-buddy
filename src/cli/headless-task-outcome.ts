@@ -1,3 +1,4 @@
+import { parseTestOutput } from '../utils/test-output-parser.js';
 import { checkHeadlessDeliverable } from './headless-deliverable.js';
 import { stripVTControlCharacters } from 'node:util';
 import { TOOL_METADATA } from '../tools/metadata.js';
@@ -62,6 +63,10 @@ function repositoryActionClauses(prompt: string): string[] {
     return outputVerb && (outputObject || /\b(?:only|alone|just)\b/.test(clause)) && !physical;
   };
   return clauses.filter((clause, index) => {
+    // A requested means of delivery remains an obligation even when the
+    // leading verb only asks to show or explain. Negated means stay read-only.
+    if (/\b(?:by|en)\s+(?:editing|writing|saving|creating|replacing|changing|updating|deleting|modifiant|ecrivant|creant|remplacant|changeant|supprimant)\b/.test(clause)
+      && /\b(?:file_target|files?|source|module|script|fichiers?)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause)) return true;
     // Auxiliary-led interrogatives ask for an observation, not an imperative.
     // Each subsequent independent clause is still checked separately.
     if (/^(?:does|did|is|are|was|were|has|had|will|would|could)\b|^(?:do|have|can)\s+(?:you|we|they|i|it|this|these|those)\b|^est-ce\s+que\b/.test(clause)) return false;
@@ -140,6 +145,16 @@ function hasRedVerification(entry: TaskEvidenceEntry, name: string, command?: st
   if (!verifies) return false;
   if (command && (echoedCheckStatus(entry, command)?.code ?? 0) > 0) return true;
   const output = stripVTControlCharacters([entry.toolResult?.output, entry.toolResult?.error, entry.content].filter(Boolean).join('\n'));
+  // Bash may render a successful process as structured test results. A zero
+  // process status cannot erase failing assertions in either representation.
+  for (const text of [entry.toolResult?.output, entry.content]) {
+    if (!text) continue;
+    try {
+      const data = JSON.parse(text);
+      if (data?.type === 'test-results' && typeof data.summary?.failed === 'number' && data.summary.failed > 0) return true;
+    } catch { /* Plain output is parsed below. */ }
+  }
+  if ((parseTestOutput(output).data?.summary.failed ?? 0) > 0) return true;
   return /^\s*# fail [1-9]\d*\b/m.test(output)
     || /^\s*not ok \d+\b/m.test(output)
     || /\b(?:Test Files|Tests|Test Suites):?\s+[1-9]\d*\s+failed\b/i.test(output)
