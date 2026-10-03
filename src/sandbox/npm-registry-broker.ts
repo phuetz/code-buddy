@@ -169,9 +169,10 @@ if (!['audit','view','pack','install','update'].includes(argv[0] ?? '')) {
  const child=spawn(${JSON.stringify(process.execPath)},[${JSON.stringify(npmCli)},...argv],{stdio:'inherit'});
  child.on('close',(code)=>{process.exitCode=code??1});child.on('error',(error)=>{process.stderr.write(error.message);process.exitCode=1});
 } else {
+ // npm pack reports notices before its final archive path, also with 2>&1.
  const request=http.request({socketPath:${JSON.stringify(socket)},path:'/npm',method:'POST'},response=>{
  let text='';response.on('data',part=>text+=part);response.on('end',()=>{
- try {const result=JSON.parse(text);process.stdout.write(result.stdout);process.stderr.write(result.stderr);process.exitCode=result.exitCode}
+ try {const result=JSON.parse(text);process.stderr.write(result.stderr);process.stdout.write(result.stdout);process.exitCode=result.exitCode}
  catch(error){process.stderr.write(error.message);process.exitCode=1}
  });});
  request.on('error',error=>{process.stderr.write(error.message);process.exitCode=1});request.end(JSON.stringify(argv));
