@@ -1435,10 +1435,9 @@ export class AgentExecutor {
       return Number.isFinite(n) && n >= 0 ? n : dflt;
     };
     const maxLengthContinuations = parseRecoveryBudget(process.env.CODEBUDDY_MAX_LENGTH_CONTINUATIONS, 3);
-    // Length-continuation ships ON (default 3, real-tested). The post-tool
-    // empty-response re-prompt is harder to trigger deterministically with a
-    // real model, so it ships OFF by default (no untested-by-default behaviour
-    // in the hot loop) — opt in with CODEBUDDY_MAX_EMPTY_RETRIES=N.
+    // Length-continuation ships ON (default 3). Truly empty responses still
+    // require opt-in. A completed native thinking-only reply after tools gets
+    // one recovery below, unless the operator explicitly sets this budget.
     const maxEmptyRetries = parseRecoveryBudget(process.env.CODEBUDDY_MAX_EMPTY_RETRIES, 0);
     let lengthContinuations = 0;
     let emptyRetries = 0;
@@ -1984,17 +1983,26 @@ export class AgentExecutor {
 
         // D1: empty provider response (no tools, no length truncation).
         // Retry is bounded and opt-in via CODEBUDDY_MAX_EMPTY_RETRIES, including
-        // the first turn. Exhaustion throws so the caller and transcript get an
+        // the first turn. A-4B (03/10) also returned done:stop with 89 thinking
+        // tokens after 26 successful tools, without text or a call. Give that
+        // completed native reply one recovery; never replay the completed tools
+        // or persist the abandoned thinking as a usable answer. An explicit 0
+        // keeps the old immediate failure. Exhaustion throws so the caller gets an
         // honest failure — never an empty or fabricated assistant message.
         if (!hasToolCalls && !content.trim() && streamFinishReason !== 'length') {
-          if (!abortController?.signal.aborted && emptyRetries < maxEmptyRetries) {
+          const emptyRetryBudget = process.env.CODEBUDDY_MAX_EMPTY_RETRIES === undefined
+            && toolRounds > 0 && Boolean(accumulatedMessage.ollama_thinking?.trim())
+            ? 1 : maxEmptyRetries;
+          if (!abortController?.signal.aborted && emptyRetries < emptyRetryBudget) {
             emptyRetries++;
             logger.warn('[agent-executor] empty provider response, retrying', {
               attempt: emptyRetries,
-              max: maxEmptyRetries,
+              max: emptyRetryBudget,
             });
             messages.push({
-              role: 'user',
+              // A recovery instruction is not a new human task: keep the real
+              // last user message protected by context compaction after tools.
+              role: toolRounds > 0 ? 'system' : 'user',
               content: toolRounds > 0
                 ? 'Your last response was empty. Use the results of the tool calls you just made to continue the task and produce your answer.'
                 : 'Your last response was empty. Please produce your answer now.',

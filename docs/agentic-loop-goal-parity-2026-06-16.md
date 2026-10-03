@@ -109,6 +109,11 @@ verdict with Pause/Clear.
    real model, ships **OFF by default** (`CODEBUDDY_MAX_EMPTY_RETRIES=0`) — no untested-by-default behaviour
    in the hot loop; opt in by setting it `>0`. Only the length-continuation path (default 3) is on by
    default, and it is the one proven end-to-end with a real model.
+   Update 2026-10-03: harness A-4B captured a completed native `done:stop` with 89 thinking
+   tokens and no answer after 26 successful tools. That specific post-tool thinking-only
+   case now gets one recovery by default; an explicit `CODEBUDDY_MAX_EMPTY_RETRIES=0`
+   disables it. The instruction preserves the last human request and never replays
+   completed tools. Repeated empty replies still fail. Truly empty replies remain opt-in.
 6. **Desktop-adapter goal loop proven multi-turn *directly*** (was only "by composition"). A real
    `CodeBuddyEngineAdapter.runSession` drives a real Ollama actor + real Ollama judge against a goal that
    can't finish in a 2-turn budget; the captured `goal_status` events climb `turnsUsed` `0→1→2` and end

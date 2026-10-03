@@ -272,6 +272,63 @@ describe('R23 AgentExecutor — faux succès', () => {
     });
   });
 
+  describe('réflexion native complète sans réponse après un outil', () => {
+    async function replay(disableRetry = false, repeatedEmpty = false) {
+      if (disableRetry) process.env.CODEBUDDY_MAX_EMPTY_RETRIES = '0';
+      const streaming = new StreamingHandler({ trackTokens: false });
+      deps.streamingHandler = streaming;
+      executor = new AgentExecutor(deps, config);
+      const stream = deps.client.chatStream as jest.Mock;
+      const native = (message: Record<string, unknown>) => streamOllamaNative(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ message, done: true, done_reason: 'stop',
+            prompt_eval_count: 18141, eval_count: 89 }) + '\n'));
+          controller.close();
+        },
+      }), 'qwen3.5:4b');
+      stream.mockImplementationOnce(() => native({ role: 'assistant', content: '', tool_calls: [
+        { id: 'completed-read', function: { name: 'view_file', arguments: { path: 'module.ts' } } },
+      ] }));
+      const empty = { role: 'assistant', content: '', thinking: 'Je dois vérifier les types et ajouter un logger.warn.' };
+      stream.mockImplementationOnce(() => native(empty));
+      stream.mockImplementationOnce(() => native(repeatedEmpty ? empty : { role: 'assistant', content: 'Vérification terminée.' }));
+      const messages: CodeBuddyMessage[] = [{ role: 'user', content: 'Examine les types et explique le résultat.' }];
+      const history: ChatEntry[] = [];
+      try {
+        const entries = await executor.processUserMessage('Examine les types et explique le résultat.', history, messages);
+        return { entries, messages, history, calls: stream.mock.calls.length };
+      } finally { streaming.dispose(); }
+    }
+
+    it('reprend une fois le done:stop avec réflexion seule sans rejouer l’outil terminé', async () => {
+      const result = await replay();
+      expect(result.calls).toBe(3);
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledTimes(1);
+      expect(result.entries.map(entry => entry.content).join('\n')).toContain('Vérification terminée.');
+      expect(result.entries.map(entry => entry.content).join('\n')).not.toContain('Empty provider response');
+      expect(result.messages.some(message => message.ollama_thinking?.includes('Je dois vérifier'))).toBe(false);
+      expect(result.history.filter(entry => entry.type === 'tool_result')).toHaveLength(1);
+      // A synthetic recovery is not a new human mission. The budgeter's
+      // protected last user query must remain the actual request.
+      expect(result.messages.findLast(message => message.role === 'user')?.content)
+        .toBe('Examine les types et explique le résultat.');
+    });
+
+    it('échoue honnêtement si la reprise reste dans la réflexion', async () => {
+      const result = await replay(false, true);
+      expect(result.calls).toBe(3);
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledTimes(1);
+      expect(result.entries.map(entry => entry.content).join('\n')).toContain('Empty provider response');
+    });
+
+    it('respecte le refus explicite de reprise', async () => {
+      const result = await replay(true);
+      expect(result.calls).toBe(2);
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledTimes(1);
+      expect(result.entries.map(entry => entry.content).join('\n')).toContain('Empty provider response');
+    });
+  });
+
   describe('D2 — retry après un fragment déjà rendu', () => {
     function pipeVisibleDeltas(): void {
       (deps.streamingHandler.accumulateChunk as jest.Mock).mockImplementation((chunk: {
