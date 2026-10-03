@@ -31,6 +31,7 @@ import {
   parseCliPermissionMode,
 } from './cli/permission-mode-option.js';
 import { preloadRequestedProfile } from './cli/preload-profile.js';
+import { isReadOnlyHookImport } from './cli/read-only-hook-import.js';
 import { registerBackupCommand } from './commands/cli/backup-command.js';
 import { registerSensoryCommand } from './commands/cli/sensory-command.js';
 import { getConfigManager } from './config/toml-config.js';
@@ -228,7 +229,7 @@ const isMetaOnlyInvocation =
     metaOnlyArgv[0] === '-h' ||
     metaOnlyArgv[0] === '--version' ||
     metaOnlyArgv[0] === '-V');
-if (!isMetaOnlyInvocation) {
+if (!isMetaOnlyInvocation && !isReadOnlyHookImport()) {
   sweepStaleCodebuddyTemp();
 }
 
@@ -1585,6 +1586,7 @@ async function processPromptHeadless(
       try { interactionLogger.endSession(); } catch (e) { logger.debug('Failed to end headless interaction logger session', { error: String(e) }); }
     }
     if (agent) {
+      try { await agent.finishSessionHooks(); } catch (e) { logger.warn(`Headless session hooks failed: ${String(e)}`); }
       try { agent.dispose({ skipSessionLearning: true }); } catch (e) { logger.debug('Headless agent cleanup skipped', { error: String(e) }); }
     }
     try {
@@ -4058,6 +4060,12 @@ addLazyCommandGroup(program, 'cron', 'Author and manage scheduled cron jobs', as
 addLazyCommandGroup(program, 'skills', 'Browse and manage installed skill packages', async () => {
   const { registerSkillsCommands } = await import('./commands/skills-cli/index.js');
   registerSkillsCommands(program);
+});
+
+// External hooks — report, disabled installation, explicit activation and quarantine.
+addLazyCommandGroup(program, 'hooks', 'Import and manage external hooks behind the skill firewall', async () => {
+  const { registerHooksCommands } = await import('./commands/cli/hooks-commands.js');
+  registerHooksCommands(program);
 });
 
 // DM pairing — approve, revoke, list, pending

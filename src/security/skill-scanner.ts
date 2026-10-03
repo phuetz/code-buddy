@@ -380,43 +380,48 @@ export function scanFile(filePath: string): ScanResult {
   try {
     const content = readTextForScan(filePath);
     if (content === null) return refusalResult(filePath);
-    const findings: ScanFinding[] = [];
-    const lines = content.split('\n');
-    const patterns = getDangerousPatterns();
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line === undefined) continue;
-      const lineNum = i + 1;
-
-      // Skip markdown comments and frontmatter delimiters
-      if (line.trim().startsWith('<!--') || line.trim() === '---') continue;
-
-      for (const dp of patterns) {
-        if (dp.pattern.test(line)) {
-          findings.push({
-            severity: dp.severity,
-            pattern: dp.name,
-            description: dp.description,
-            file: filePath,
-            line: lineNum,
-            evidence: line.trim().slice(0, 120),
-          });
-        }
-      }
-    }
-
-    // Prompt-injection patterns also run over the FULL document. The line loop
-    // skips `<!-- … -->` (to avoid flagging example `eval()` in comments) and
-    // cannot see a jailbreak split across lines — that's how a no-shell
-    // override slipped through on 2026-09-03. Dotall matching here catches
-    // both without re-enabling those comment false positives for eval/shell.
-    findings.push(...collectPromptInjectionFindings(content, filePath, findings));
-    return { file: filePath, findings, scannedAt: Date.now(), textRead: true };
+    return scanSkillText(content, filePath);
   } catch (error) {
     logger.debug(`Failed to scan file: ${filePath}`, { error });
     return { file: filePath, findings: [], scannedAt: Date.now(), textRead: false };
   }
+}
+
+/** Scan an immutable text snapshot with the same rules as scanFile (no I/O). */
+export function scanSkillText(content: string, filePath: string): ScanResult {
+  const findings: ScanFinding[] = [];
+  const lines = content.split('\n');
+  const patterns = getDangerousPatterns();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) continue;
+    const lineNum = i + 1;
+
+    // Skip markdown comments and frontmatter delimiters
+    if (line.trim().startsWith('<!--') || line.trim() === '---') continue;
+
+    for (const dp of patterns) {
+      if (dp.pattern.test(line)) {
+        findings.push({
+          severity: dp.severity,
+          pattern: dp.name,
+          description: dp.description,
+          file: filePath,
+          line: lineNum,
+          evidence: line.trim().slice(0, 120),
+        });
+      }
+    }
+  }
+
+  // Prompt-injection patterns also run over the FULL document. The line loop
+  // skips `<!-- … -->` (to avoid flagging example `eval()` in comments) and
+  // cannot see a jailbreak split across lines — that's how a no-shell
+  // override slipped through on 2026-09-03. Dotall matching here catches
+  // both without re-enabling those comment false positives for eval/shell.
+  findings.push(...collectPromptInjectionFindings(content, filePath, findings));
+  return { file: filePath, findings, scannedAt: Date.now(), textRead: true };
 }
 
 /**

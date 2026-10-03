@@ -196,7 +196,7 @@ describe('UserHooksManager', () => {
   // ── timeout ──────────────────────────────────────────────────────────────────
 
   describe('command handler — timeout', () => {
-    it('times out gracefully and returns allowed (non-blocking)', async () => {
+    it('times out within its budget and blocks an unevaluated guard', async () => {
       const isWin = process.platform === 'win32';
       const cmd = isWin ? 'timeout /t 10 /nobreak > nul' : 'sleep 10';
       writeHooksJson(tmpDir, {
@@ -208,8 +208,7 @@ describe('UserHooksManager', () => {
       const start = Date.now();
       const result = await mgr.executeHooks('PreToolUse', { toolName: 'bash' });
       expect(Date.now() - start).toBeLessThan(3000);
-      // Timeout is non-blocking — does not deny the action
-      expect(result.allowed).toBe(true);
+      expect(result.allowed).toBe(false);
     }, 5000);
   });
 

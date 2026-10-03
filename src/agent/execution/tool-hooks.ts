@@ -13,6 +13,8 @@
 
 import type { CodeBuddyMessage } from '../../codebuddy/client.js';
 import { getUserHooksManager } from '../../hooks/user-hooks.js';
+import { classifySecretPath, formatSecretRefusal } from '../../security/secret-files.js';
+import { hookCommandUpdateRefusal } from '../../hooks/hook-command-update-policy.js';
 // Phase (d).2 V0.4.1 — eager import so concurrent tool emits don't get
 // serialized through dynamic-import promise chains (same fix as (d).3
 // for workflow events). fleet-bridge stays lean; it lazy-imports its
@@ -97,25 +99,55 @@ export interface PreHookResult {
   allowed: boolean;
   /** Hook-supplied message when blocked (may be undefined). */
   feedback?: string;
+  additionalContext?: string;
 }
 
 /**
- * Run PreToolUse hooks for a tool call. Hook errors are swallowed
- * (non-critical) and treated as "allowed".
+ * Run PreToolUse hooks for a tool call. A guard that cannot be evaluated blocks.
  */
 export async function runPreToolUseHook(
   cwd: string,
-  toolCall: { function: { name: string; arguments?: string } }
+  toolCall: { id?: string; function: { name: string; arguments?: string } },
+  sessionId?: string,
 ): Promise<PreHookResult> {
   try {
     const toolArgs = JSON.parse(toolCall.function.arguments || '{}');
     const r = await getUserHooksManager(cwd).executeHooks('PreToolUse', {
       toolName: toolCall.function.name,
       toolInput: toolArgs,
+      toolUseId: toolCall.id,
+      sessionId,
     });
-    return { allowed: r.allowed, feedback: r.feedback };
-  } catch {
-    return { allowed: true };
+    if (r.allowed && r.updatedInput) {
+      const updated = { ...r.updatedInput };
+      for (const key of ['command', 'initial_command']) {
+        if (!Object.hasOwn(updated, key)) continue;
+        const command = updated[key];
+        if (typeof command === 'string') {
+          const { findCredentialPathInCommand } = await import('../../tools/bash/command-validator.js');
+          const credentialPath = findCredentialPathInCommand(command);
+          if (credentialPath) return { allowed: false, feedback: `Hook-supplied command targets credential/secret storage: ${credentialPath}` };
+        }
+        const refusal = hookCommandUpdateRefusal(command);
+        if (refusal) return { allowed: false, feedback: `Hook-supplied command is not proven safe: ${refusal}` };
+      }
+      for (const key of ['path', 'file_path', 'filePath', 'target_file', 'filename']) {
+        const value = updated[key];
+        if (typeof value === 'string') {
+          const verdict = classifySecretPath(value, cwd);
+          if (verdict.secret) return { allowed: false, feedback: formatSecretRefusal(value, verdict) };
+        }
+      }
+      // Claude uses file_path; Code Buddy tools commonly use path.
+      if (updated.file_path !== undefined && toolArgs.path !== undefined) {
+        updated.path = updated.file_path;
+        delete updated.file_path;
+      }
+      toolCall.function.arguments = JSON.stringify({ ...toolArgs, ...updated });
+    }
+    return { allowed: r.allowed, feedback: r.feedback, additionalContext: r.additionalContext };
+  } catch (error) {
+    return { allowed: false, feedback: `PreToolUse guard failed: ${error}` };
   }
 }
 
@@ -141,16 +173,22 @@ export function pushBlockedToolMessage(
  */
 export async function runPostToolUseHook(
   cwd: string,
-  toolCall: { function: { name: string } },
-  result: { success: boolean; output?: string }
-): Promise<void> {
+  toolCall: { id?: string; function: { name: string; arguments?: string } },
+  result: { success: boolean; output?: string; error?: string },
+  sessionId?: string,
+): Promise<string | undefined> {
   try {
     const event = result.success ? 'PostToolUse' : 'PostToolUseFailure';
-    await getUserHooksManager(cwd).executeHooks(event, {
+    const hook = await getUserHooksManager(cwd).executeHooks(event, {
       toolName: toolCall.function.name,
-      toolResult: { success: result.success, output: result.output },
+      toolInput: JSON.parse(toolCall.function.arguments || '{}'),
+      toolUseId: toolCall.id,
+      sessionId,
+      toolResult: { success: result.success, output: result.output, error: result.error },
     });
+    return hook.additionalContext ?? hook.feedback;
   } catch { /* user hooks are non-critical */ }
+  return undefined;
 }
 
 /**

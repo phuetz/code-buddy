@@ -10,6 +10,7 @@
  * - NO_COLOR=1: Disable colored output
  */
 
+import { isReadOnlyHookImport } from '../cli/read-only-hook-import.js';
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -508,6 +509,7 @@ let defaultLogger: Logger | null = null;
  * Returns undefined in test environment to avoid file I/O
  */
 function getDefaultLogFile(): string | undefined {
+  if (isReadOnlyHookImport()) return undefined;
   if (process.env.NODE_ENV === 'test') return undefined;
   // Respect explicit LOG_FILE env var (including empty string to disable)
   if (process.env.LOG_FILE !== undefined) return process.env.LOG_FILE || undefined;

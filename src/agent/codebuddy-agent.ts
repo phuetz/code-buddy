@@ -377,6 +377,7 @@ export class CodeBuddyAgent extends BaseAgent {
     // changent le plafond après la construction de l'exécuteur.
     const readMaxToolRounds = (): number => this.maxToolRounds;
     this.executor = new AgentExecutor({
+      sessionIdProvider: () => this.sessionStore.getCurrentSessionId() ?? undefined,
       client: this.codebuddyClient,
       toolHandler: this.toolHandler,
       toolSelectionStrategy: this.toolSelectionStrategy,
@@ -651,8 +652,10 @@ export class CodeBuddyAgent extends BaseAgent {
       apiKey,
     );
 
-    // Fire SessionStart user hook (non-blocking)
-    getUserHooksManager(initialWorkingDirectory).executeHooks('SessionStart', {}).catch(
+    // Start once; both entry paths await completion before the first model turn.
+    this.sessionStartHooksReady = getUserHooksManager(initialWorkingDirectory).executeHooks('SessionStart', {
+      sessionId: this.sessionStore.getCurrentSessionId() ?? undefined,
+    }).then((result) => { this.sessionStartHookContext = result.additionalContext; }).catch(
       (err) => logger.debug(`[user-hooks] SessionStart error: ${err}`)
     );
 
@@ -745,6 +748,16 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
   /** Resolves when the system prompt has been loaded (or failed gracefully). */
   public systemPromptReady: Promise<void>;
+  private sessionStartHooksReady: Promise<void>;
+  private sessionStartHookContext?: string;
+  private sessionEndHooksReady?: Promise<void>;
+
+  private consumeSessionStartHookContext(context?: string): string | undefined {
+    if (!this.sessionStartHookContext) return context;
+    const hookContext = `<hook_context>\n${this.sessionStartHookContext}\n</hook_context>`;
+    this.sessionStartHookContext = undefined;
+    return [context, hookContext].filter(Boolean).join('\n');
+  }
   /** Resolves when the asynchronous skill registry startup has settled. */
   private skillsReady: Promise<void> = Promise.resolve();
 
@@ -1390,6 +1403,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // See processUserMessageStream — the system prompt builds async and a
     // first turn must not race it (embedded hosts don't await it themselves).
     await this.systemPromptReady;
+    await this.sessionStartHooksReady;
 
     if (!readOnlySelfInspection) {
       // These global/context services are irrelevant to the deterministic,
@@ -1418,7 +1432,8 @@ Look at the screenshot and find the element matching the user's intent. Output o
       this.chatHistory,
       this.messages,
       turnStartedAt,
-      options.transientContext,
+      !readOnlySelfInspection && options.relationshipSafety !== true
+        ? this.consumeSessionStartHookContext(options.transientContext) : options.transientContext,
       options.relationshipSafety === true,
       options.surface,
       options.introspectionText,
@@ -1509,6 +1524,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // (observed live: 23-77 input tokens, "je ne peux pas générer d'image").
     // Await here so every host is covered; resolved-promise cost is ~zero.
     await this.systemPromptReady;
+    await this.sessionStartHooksReady;
 
     if (!readOnlySelfInspection) {
       // Keep mutable decision/tool context out of deterministic self-reports.
@@ -1597,7 +1613,8 @@ Look at the screenshot and find the element matching the user's intent. Output o
         this.messages,
         this.abortController,
         turnStartedAt,
-        options.transientContext,
+        !readOnlySelfInspection && options.relationshipSafety !== true
+          ? this.consumeSessionStartHookContext(options.transientContext) : options.transientContext,
         options.relationshipSafety === true,
         options.surface,
         options.introspectionText,
@@ -2568,12 +2585,19 @@ Look at the screenshot and find the element matching the user's intent. Output o
    * Clean up all resources
    * Should be called when the agent is no longer needed
    */
-  dispose(options: { skipSessionLearning?: boolean } = {}): void {
-    // Fire SessionEnd user hook (non-blocking). Shutdown errors should be
-    // visible (warn, not debug) — silent debug logs masked prior bugs.
-    getUserHooksManager(process.cwd()).executeHooks('SessionEnd', {}).catch(
+  /** Awaitable close boundary for hosts which exit immediately after disposal. */
+  async finishSessionHooks(): Promise<void> {
+    await this.sessionStartHooksReady;
+    this.sessionEndHooksReady ??= getUserHooksManager(process.cwd()).executeHooks('SessionEnd', {
+      sessionId: this.sessionStore.getCurrentSessionId() ?? undefined,
+    }).then(() => undefined).catch(
       (err) => logger.warn(`[user-hooks] SessionEnd error: ${err instanceof Error ? err.message : String(err)}`)
     );
+    await this.sessionEndHooksReady;
+  }
+
+  dispose(options: { skipSessionLearning?: boolean } = {}): void {
+    this.finishSessionHooks().catch((err) => logger.warn(`[user-hooks] SessionEnd error: ${err}`));
     const headlessProcess =
       process.env.CODEBUDDY_HEADLESS === 'true' ||
       process.env.CODEBUDDY_HEADLESS === '1';

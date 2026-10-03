@@ -160,6 +160,7 @@ const SAFE_TOOL_RESULT = 'Résultat traité en interne par Lisa.';
 const MAX_PARALLEL_TOOL_CALLS = 5;
 
 interface ToolExecutionOutcome {
+  hookContext?: string;
   result?: ToolResult;
   blockedContent?: string;
   startedAt: number;
@@ -472,6 +473,7 @@ export function setDecisionContextProvider(
  * Dependencies injected into the AgentExecutor
  */
 export interface ExecutorDependencies {
+  sessionIdProvider?: () => string | undefined;
   /** API client for LLM communication */
   client: CodeBuddyClient;
   /** Dispatcher for tool execution */
@@ -2099,7 +2101,7 @@ export class AgentExecutor {
                   };
                 }
 
-                const streamPreHook = await runPreToolUseHook(process.cwd(), toolCall);
+                const streamPreHook = await runPreToolUseHook(process.cwd(), toolCall, this.deps.sessionIdProvider?.());
                 if (!streamPreHook.allowed) {
                   return {
                     blockedContent: streamPreHook.feedback ?? 'Action blocked by PreToolUse hook',
@@ -2122,7 +2124,7 @@ export class AgentExecutor {
                   abortController?.signal,
                   startedAt,
                 );
-                return { ...execution, startedAt };
+                return { ...execution, startedAt, hookContext: streamPreHook.additionalContext };
               },
               (error) => ({
                 result: {
@@ -2141,6 +2143,9 @@ export class AgentExecutor {
               const toolCall = batch[outcomeIndex];
               const outcome = outcomes[outcomeIndex];
               if (!toolCall || !outcome) continue;
+              if (outcome.hookContext) {
+                messages.push({ role: 'system', content: `<hook_context>\n${outcome.hookContext}\n</hook_context>` });
+              }
 
               if (outcome.blockedContent) {
                 const relationshipBlocked = relationshipSafety &&
@@ -2215,7 +2220,10 @@ export class AgentExecutor {
             }
 
             // --- User hooks: PostToolUse / PostToolUseFailure (streaming path) ---
-            await runPostToolUseHook(process.cwd(), toolCall, result);
+            const postHookContext = await runPostToolUseHook(process.cwd(), toolCall, result, this.deps.sessionIdProvider?.());
+            if (postHookContext) {
+              messages.push({ role: 'system', content: `<hook_context>\n${postHookContext}\n</hook_context>` });
+            }
             // --- Per-tool metrics (streaming path, DeepWiki gap #3) ---
             await recordToolMetric(
               toolCall.function.name,

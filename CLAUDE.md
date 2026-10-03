@@ -241,6 +241,8 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 
 ## Config Files
 
+Import de hooks externes : `buddy hooks import --file <settings.json> [--apply]`, désactivés par défaut, pare-feu des skills relancé à chaque exécution ; scripts et résolution Node non prouvés sûrs en quarantaine, commandes supervisées sous Linux/Python3 (descendants `setsid` inclus), PreToolUse échoue fermé ; voir [docs/import-hooks.md](docs/import-hooks.md).
+
 - `src/config/model-tools.ts` — **start here for model-specific behavior**. Per-model caps with glob matching.
 - `src/config/model-price-data.ts` — sole versioned price table (USD per million uncached text tokens), with source, verification date and scope per row; unverified legacy estimates are marked. Explicit catalogue prices can override it for a configured model.
 - `src/config/constants.ts` — `SUPPORTED_MODELS`, `TOKEN_LIMITS`
