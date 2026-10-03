@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { repoScratchRoot } from '../helpers/tmp.js';
 
+// Let the owned CLI watchdog fire and clean up before Vitest times out.
 const CLI_TIMEOUT_MS = 45_000;
 
 interface CliResult {
@@ -168,7 +169,7 @@ describe('headless output file and schema flags', () => {
 
     expect(result.exitCode).toBe(0);
     expect(fs.readFileSync(target, 'utf8')).toBe(responseText);
-  });
+  }, CLI_TIMEOUT_MS + 15_000);
 
   it('creates missing parent directories for -o', async () => {
     const target = path.join(tempDir, 'nested', 'deep', 'answer.txt');
@@ -176,7 +177,7 @@ describe('headless output file and schema flags', () => {
 
     expect(result.exitCode).toBe(0);
     expect(fs.readFileSync(target, 'utf8')).toBe(responseText);
-  });
+  }, CLI_TIMEOUT_MS + 15_000);
 
   it('accepts a conforming final JSON response with --output-schema', async () => {
     const schemaPath = writeSchema({
@@ -191,7 +192,7 @@ describe('headless output file and schema flags', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe(`${responseText}\n`);
-  });
+  }, CLI_TIMEOUT_MS + 15_000);
 
   it('rejects a final JSON response that does not conform to the schema', async () => {
     const schemaPath = writeSchema({
@@ -206,7 +207,7 @@ describe('headless output file and schema flags', () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('Output schema validation failed');
     expect(result.stderr).toContain('missing required property "answer"');
-  });
+  }, CLI_TIMEOUT_MS + 15_000);
 
   it('rejects a non-JSON final assistant response with --output-schema', async () => {
     const schemaPath = writeSchema({ type: 'object' });
@@ -215,7 +216,7 @@ describe('headless output file and schema flags', () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('Output schema validation failed');
     expect(result.stderr).toContain('not valid JSON');
-  });
+  }, CLI_TIMEOUT_MS + 15_000);
 
   it('does not alter the output file when combined validation fails', async () => {
     const target = path.join(tempDir, 'answer.txt');
@@ -235,7 +236,7 @@ describe('headless output file and schema flags', () => {
 
     expect(result.exitCode).toBe(1);
     expect(fs.readFileSync(target, 'utf8')).toBe(originalContent);
-  });
+  }, CLI_TIMEOUT_MS + 15_000);
 
   it('fails with code 1 for an invalid schema file', async () => {
     const schemaPath = path.join(tempDir, 'invalid-schema.json');
@@ -244,5 +245,5 @@ describe('headless output file and schema flags', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('Failed to load or parse schema');
-  });
+  }, CLI_TIMEOUT_MS + 15_000);
 });
