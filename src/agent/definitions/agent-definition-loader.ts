@@ -40,7 +40,10 @@ function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: s
 }
 
 export function parseAgentFile(filePath: string): AgentDefinition {
-  const content = fs.readFileSync(filePath, 'utf-8');
+  return parseAgentMarkdown(fs.readFileSync(filePath, 'utf-8'), filePath);
+}
+
+export function parseAgentMarkdown(content: string, filePath: string): AgentDefinition {
   const { meta, body } = parseFrontmatter(content);
 
   if (meta.disabled === true) throw new Error('Agent disabled pending review');

@@ -15,6 +15,7 @@ import fsPromises from 'fs/promises';
 import path from 'path';
 import TOML from '@iarna/toml';
 import * as yaml from 'yaml';
+import { parseAgentMarkdown } from '../definitions/agent-definition-loader.js';
 import { parseAgentTools } from '../agent-tools.js';
 import {
   normalizeDispatchProfile,
@@ -39,7 +40,7 @@ export interface CustomAgentConfig {
   systemPrompt: string;
   /** Model to use (optional, defaults to current model) */
   model?: string;
-  /** Tools this agent can use (empty = all tools) */
+  /** Allowed tool patterns: absent inherits defaults; an explicit empty array denies all. */
   tools?: string[];
   /** Tools this agent cannot use */
   disabledTools?: string[];
@@ -69,7 +70,7 @@ export interface CustomAgentFile {
   /** File path */
   path: string;
   /** File format */
-  format: 'toml' | 'yaml' | 'json';
+  format: 'toml' | 'yaml' | 'json' | 'md';
   /** Parsed configuration */
   config: CustomAgentConfig;
   /** Last modified time */
@@ -81,7 +82,6 @@ export interface CustomAgentFile {
 // ============================================================================
 
 // Use GROK_HOME/agents/ directory (supports GROK_HOME env var)
-const AGENTS_DIR = getAgentsDir();
 
 const EXAMPLE_AGENT_TOML = `# Example Custom Agent Configuration
 # Place this file in ~/.codebuddy/agents/
@@ -177,7 +177,7 @@ export class CustomAgentLoader {
   private lastScan: number = 0;
   private scanInterval: number = 5000; // 5 seconds cache
 
-  constructor(agentsDir: string = AGENTS_DIR) {
+  constructor(agentsDir: string = getAgentsDir()) {
     this.agentsDir = agentsDir;
     this.ensureAgentsDirectory();
   }
@@ -242,11 +242,12 @@ export class CustomAgentLoader {
       if (!stats.isFile()) continue;
 
       const ext = path.extname(file).toLowerCase();
-      let format: 'toml' | 'yaml' | 'json' | null = null;
+      let format: 'toml' | 'yaml' | 'json' | 'md' | null = null;
 
       if (ext === '.toml') format = 'toml';
       else if (ext === '.yaml' || ext === '.yml') format = 'yaml';
       else if (ext === '.json') format = 'json';
+      else if (ext === '.md') format = 'md';
       else continue;
 
       try {
@@ -298,11 +299,12 @@ export class CustomAgentLoader {
       if (!stats.isFile()) continue;
 
       const ext = path.extname(file).toLowerCase();
-      let format: 'toml' | 'yaml' | 'json' | null = null;
+      let format: 'toml' | 'yaml' | 'json' | 'md' | null = null;
 
       if (ext === '.toml') format = 'toml';
       else if (ext === '.yaml' || ext === '.yml') format = 'yaml';
       else if (ext === '.json') format = 'json';
+      else if (ext === '.md') format = 'md';
       else continue;
 
       try {
@@ -344,7 +346,7 @@ export class CustomAgentLoader {
   /**
    * Parse an agent configuration file (async version)
    */
-  private async parseAgentFileAsync(filePath: string, format: 'toml' | 'yaml' | 'json'): Promise<CustomAgentConfig | null> {
+  private async parseAgentFileAsync(filePath: string, format: 'toml' | 'yaml' | 'json' | 'md'): Promise<CustomAgentConfig | null> {
     const content = await fsPromises.readFile(filePath, 'utf-8');
     return this.parseAgentContent(content, filePath, format);
   }
@@ -352,7 +354,7 @@ export class CustomAgentLoader {
   /**
    * Parse an agent configuration file (sync version)
    */
-  private parseAgentFile(filePath: string, format: 'toml' | 'yaml' | 'json'): CustomAgentConfig | null {
+  private parseAgentFile(filePath: string, format: 'toml' | 'yaml' | 'json' | 'md'): CustomAgentConfig | null {
     const content = fs.readFileSync(filePath, 'utf-8');
     return this.parseAgentContent(content, filePath, format);
   }
@@ -360,12 +362,19 @@ export class CustomAgentLoader {
   /**
    * Parse agent content (shared logic)
    */
-  private parseAgentContent(content: string, filePath: string, format: 'toml' | 'yaml' | 'json'): CustomAgentConfig | null {
+  private parseAgentContent(content: string, filePath: string, format: 'toml' | 'yaml' | 'json' | 'md'): CustomAgentConfig | null {
     const fileName = path.basename(filePath, path.extname(filePath));
 
     let parsed: Record<string, unknown>;
 
     switch (format) {
+      case 'md': {
+        const definition = parseAgentMarkdown(content, filePath);
+        parsed = { name: definition.name, description: definition.description,
+          systemPrompt: definition.systemPrompt, tools: definition.tools,
+          disabledTools: definition.disallowedTools };
+        break;
+      }
       case 'toml':
         parsed = TOML.parse(content) as Record<string, unknown>;
         break;
@@ -426,7 +435,11 @@ export class CustomAgentLoader {
    * Simple YAML parser for basic key-value pairs and multiline strings
    */
   private parseSimpleYaml(content: string): Record<string, unknown> {
-    const parsed: unknown = yaml.parse(content);
+    // Legacy descriptive scalars may contain an unquoted colon. Repair only
+    // description, never an unreadable security policy.
+    const compatible = content.replace(/^(description:\s+)([^'"|>\n][^\n]*: [^\n]*)$/gm,
+      (_line, prefix: string, value: string) => prefix + JSON.stringify(value));
+    const parsed: unknown = yaml.parse(compatible);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid agent YAML');
     return parsed as Record<string, unknown>;
   }

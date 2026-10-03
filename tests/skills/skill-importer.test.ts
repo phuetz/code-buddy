@@ -78,8 +78,13 @@ describe('skill-importer — discovery', () => {
     const home = tmp();
     const originalHome = process.env.HOME;
     const originalProfile = process.env.USERPROFILE;
+    const originalBuddyHome = process.env.CODEBUDDY_HOME;
+    const originalGrokHome = process.env.GROK_HOME;
     process.env.HOME = home;
     process.env.USERPROFILE = home;
+    // Exercise the fallback independently of the profile set by HOME isolation.
+    delete process.env.CODEBUDDY_HOME;
+    delete process.env.GROK_HOME;
     try {
       writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY);
 
@@ -93,6 +98,10 @@ describe('skill-importer — discovery', () => {
       else process.env.HOME = originalHome;
       if (originalProfile === undefined) delete process.env.USERPROFILE;
       else process.env.USERPROFILE = originalProfile;
+      if (originalBuddyHome === undefined) delete process.env.CODEBUDDY_HOME;
+      else process.env.CODEBUDDY_HOME = originalBuddyHome;
+      if (originalGrokHome === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = originalGrokHome;
       fs.rmSync(home, { recursive: true, force: true });
     }
   });

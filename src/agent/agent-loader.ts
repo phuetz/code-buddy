@@ -20,8 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { homedir } from 'os';
 import * as yaml from 'yaml';
-import { TOOL_ALIASES } from '../tools/registry/tool-alias-map.js';
-import { parseAgentTools } from './agent-tools.js';
+import { parseAgentTools, resolveAgentTool } from './agent-tools.js';
 import { logger } from '../utils/logger.js';
 
 // ============================================================================
@@ -182,16 +181,16 @@ export function listCustomAgents(projectRoot?: string): Array<{ name: string; de
  * Check if a tool is allowed for a custom agent.
  */
 export function isToolAllowedForAgent(agent: MarkdownAgentDefinition, toolName: string): boolean {
-  const normalized = (TOOL_ALIASES[toolName] ?? toolName).toLowerCase();
+  const normalized = resolveAgentTool(toolName).toLowerCase();
 
   // If disallowedTools is set, check it first
-  if (agent.disallowedTools?.some(t => (TOOL_ALIASES[t] ?? t).toLowerCase() === normalized)) {
+  if (agent.disallowedTools?.some(t => resolveAgentTool(t).toLowerCase() === normalized)) {
     return false;
   }
 
   // If tools is set, only those tools are allowed
   if (agent.tools) {
-    return agent.tools.some(t => (TOOL_ALIASES[t] ?? t).toLowerCase() === normalized);
+    return agent.tools.some(t => resolveAgentTool(t).toLowerCase() === normalized);
   }
 
   // No restrictions

@@ -14,9 +14,9 @@
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { createHash } from 'crypto';
 import * as yaml from 'yaml';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import { scanSkillFirewall } from '../security/skill-scanner.js';
 import { parseSkillFile, validateSkill } from './parser.js';
 import { importAgents, type AgentImportReport } from './agent-importer.js';
@@ -69,7 +69,7 @@ export interface ImportReport {
 }
 
 function defaultDestRoot(): string {
-  return path.join(os.homedir(), '.codebuddy', 'skills');
+  return getCodeBuddyPath('skills');
 }
 
 /** Recursively find skill directories (those containing a SKILL.md). Skips operational dirs. */
@@ -254,30 +254,47 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
   const pinByDefault = options.pinByDefault ?? true;
   const report: ImportReport = { imported: [], quarantined: [], review: [], skipped: [], total: 0, dryRun };
 
+  // Resolve the actual spelling. A reserved canonical root that is a link
+  // or a special file is a refusal, never a switch to importing all roots.
+  if (!fs.existsSync(sourceDir)) throw new Error(`Skill source root does not exist: ${sourceDir}`);
+  const roots = fs.readdirSync(sourceDir).filter(name => name.toLowerCase() === 'skills');
+  if (roots.length > 1) throw new Error('Ambiguous canonical skills root');
+  const canonical = roots.length ? path.join(sourceDir, roots[0]!) : sourceDir;
+  const hasCanonical = roots.length > 0;
+  if (hasCanonical) {
+    const stat = fs.lstatSync(canonical);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Canonical skills root must be a regular directory, not a symbolic link');
+    report.canonicalRoot = path.relative(sourceDir, canonical);
+  }
   const allDirs = findSkillDirs(sourceDir);
   report.total = allDirs.length;
-  const canonical = path.join(sourceDir, 'skills');
-  const hasCanonical = fs.existsSync(canonical) && fs.lstatSync(canonical).isDirectory() && !fs.lstatSync(canonical).isSymbolicLink();
-  if (hasCanonical) report.canonicalRoot = path.relative(sourceDir, canonical);
   const candidates = allDirs.filter(dir => {
-    if (!hasCanonical || dir.startsWith(canonical + path.sep)) return true;
+    const relative = path.relative(canonical, dir);
+    if (!hasCanonical || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative))) return true;
     report.skipped.push({ sourcePath: path.relative(sourceDir, dir), reason: 'outside canonical skills/ root (documentation, translation or alternate integration copy)' });
     return false;
   });
-  const locale = (dir: string): boolean => path.relative(hasCanonical ? canonical : sourceDir, dir).split(path.sep).slice(0, -1)
-    .some(part => /^(?:en|es|fr|de|ja|ko|zh|pt|ru|it|tr|ar|hi)(?:[-_][A-Za-z]{2,4})?$/.test(part));
   const skillDirs: string[] = [];
   const baseSlugs = new Map<string, string>();
-  const originals = new Map<string, string>();
-  for (const dir of candidates.sort((a, b) => Number(locale(a)) - Number(locale(b)) || a.localeCompare(b))) {
+  for (const dir of candidates.sort()) {
     const base = baseSlugForDir(dir);
     baseSlugs.set(dir, base);
-    const original = originals.get(base);
-    if (original && (locale(dir) || locale(original))) {
-      report.skipped.push({ sourcePath: path.relative(sourceDir, dir), reason: `duplicate translation of ${path.relative(sourceDir, original)}` });
-      continue;
+    const parts = path.relative(canonical, dir).split(path.sep);
+    // A category called it/de/etc is not evidence of translation. Require
+    // the same relative path without the locale and identical manifest bytes.
+    const original = path.join(canonical, ...parts.slice(1));
+    const isLocale = parts.length > 1 && /^(?:en|es|fr|de|ja|ko|zh|pt|ru|it|tr|ar|hi)(?:[-_][A-Za-z]{2,4})?$/.test(parts[0]!);
+    if (isLocale && candidates.includes(original)) {
+      const fw = scanSkillFirewall(dir);
+      if (fw.verdict === 'quarantine') {
+        report.quarantined.push({ sourcePath: path.relative(sourceDir, dir), reason: fw.summary, verdict: fw.verdict });
+        continue;
+      }
+      if (fs.readFileSync(resolveSkillFile(dir)).equals(fs.readFileSync(resolveSkillFile(original)))) {
+        report.skipped.push({ sourcePath: path.relative(sourceDir, dir), reason: `duplicate translation of ${path.relative(sourceDir, original)}; ${fw.summary}`, verdict: fw.verdict });
+        continue;
+      }
     }
-    originals.set(base, dir);
     skillDirs.push(dir);
   }
 

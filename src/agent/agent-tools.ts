@@ -11,10 +11,10 @@ const CLAUDE_TOOLS: Record<string, string> = {
 export function parseAgentTools(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
   const tools = typeof value === 'string' ? value.split(',').map(t => t.trim()) : value;
-  if (!Array.isArray(tools) || tools.some(t => typeof t !== 'string' || !/^[A-Za-z][\w.*:-]*$/.test(t))) {
+  if (!Array.isArray(tools) || tools.some(t => typeof t !== 'string' || !/^!?[A-Za-z*?][\w.*?:-]*$/.test(t))) {
     throw new Error('Unreadable agent tool allowlist');
   }
-  return [...new Set((tools as string[]).map(t => CLAUDE_TOOLS[t] ?? t))];
+  return [...new Set((tools as string[]).map(t => Object.hasOwn(CLAUDE_TOOLS, t) ? CLAUDE_TOOLS[t]! : t))];
 }
 
 /** External Claude tools must have an explicit mapping; unknowns fail closed. */
@@ -24,4 +24,10 @@ export function translateClaudeTools(value: unknown): string[] {
     throw new Error('Missing, unreadable or unsupported Claude tool allowlist');
   }
   return parseAgentTools(raw)!;
+}
+
+/** Policy equivalence includes the persistent shell; prototype keys are never aliases. */
+export function resolveAgentTool(name: string): string {
+  if (name === 'interactive_shell') return 'bash';
+  return Object.hasOwn(TOOL_ALIASES, name) ? TOOL_ALIASES[name]! : name;
 }
