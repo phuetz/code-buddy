@@ -758,6 +758,7 @@ describe('V1.2-saga — disk persistence', () => {
       path.join(storeTmpDir, 'sess_replay.json'),
       JSON.stringify({
         sessionId: 'sess_replay',
+        ownerId: 'test-conn',
         systemPrompt: 'system',
         model: undefined,
         messages: [
@@ -786,6 +787,23 @@ describe('V1.2-saga — disk persistence', () => {
     expect(sentMessages[1].content).toBe('historic q');
     expect(sentMessages[2].content).toBe('historic a');
     expect(sentMessages[3].content).toBe('follow up q');
+  });
+
+  it('keeps a legacy persisted session inaccessible without admin scope', async () => {
+    const now = Date.now();
+    fs.writeFileSync(path.join(storeTmpDir, 'sess_legacy.json'), JSON.stringify({
+      sessionId: 'sess_legacy', systemPrompt: 'private', messages: [],
+      createdAt: now, lastUsedAt: now,
+    }));
+    await wirePeerSessionBridge(() => makeClient().client as never);
+    const user = baseCtx({ principalId: 'key:other' });
+    expect((await dispatch('peer.chat-session.list', {}, user)).payload)
+      .toMatchObject({ count: 0 });
+    expect((await dispatch('peer.chat-session.continue', {
+      sessionId: 'sess_legacy', prompt: 'read',
+    }, user)).error?.message).toContain('SESSION_NOT_FOUND');
+    expect((await dispatch('peer.chat-session.list', {}, baseCtx({ scopes: ['peer:invoke', 'admin'] }))).payload)
+      .toMatchObject({ count: 1 });
   });
 });
 
@@ -1223,6 +1241,49 @@ describe('peer.chat-session.list', () => {
     expect(r.ok).toBe(true);
     expect((r.payload as { count: number }).count).toBe(0);
     expect((r.payload as { sessions: unknown[] }).sessions).toEqual([]);
+  });
+
+  it('ne liste que les sessions du propriétaire appelant', async () => {
+    const { client } = makeClient(['A1', 'A2']);
+    await wirePeerSessionBridge(() => client as never);
+
+    const ctxA = { ...baseCtx(), connectionId: 'conn-A' };
+    const ctxB = { ...baseCtx(), connectionId: 'conn-B' };
+
+    // Start as A
+    const s1 = await dispatch('peer.chat-session.start', {}, ctxA);
+
+    // List as B
+    const rB = await dispatch('peer.chat-session.list', {}, ctxB);
+    expect((rB.payload as { count: number }).count).toBe(0);
+
+    // List as A
+    const rA = await dispatch('peer.chat-session.list', {}, ctxA);
+    expect((rA.payload as { count: number }).count).toBe(1);
+  });
+
+  it('keeps authenticated ownership across reconnects and denies other session methods', async () => {
+    const { client } = makeClient(['A1', 'A2']);
+    await wirePeerSessionBridge(() => client as never);
+    const owner = baseCtx({ connectionId: 'conn-A', principalId: 'key:owner' });
+    const reconnected = baseCtx({ connectionId: 'conn-A2', principalId: 'key:owner' });
+    const other = baseCtx({ connectionId: 'conn-B', principalId: 'key:other' });
+    const started = await dispatch('peer.chat-session.start', {}, owner);
+    const sessionId = (started.payload as { sessionId: string }).sessionId;
+
+    expect((await dispatch('peer.chat-session.list', {}, other)).payload).toMatchObject({ count: 0 });
+    expect((await dispatch('peer.chat-session.list', {}, reconnected)).payload).toMatchObject({ count: 1 });
+    for (const method of ['continue', 'continue-stream', 'goal']) {
+      const response = await dispatch(`peer.chat-session.${method}`, {
+        sessionId, prompt: 'read secret', action: 'status',
+      }, other);
+      expect(response.ok).toBe(false);
+      expect(response.error?.message).toContain('SESSION_NOT_FOUND');
+    }
+    expect((await dispatch('peer.chat-session.end', { sessionId }, other)).payload)
+      .toMatchObject({ closed: false });
+    expect((await dispatch('peer.chat-session.end', { sessionId }, reconnected)).payload)
+      .toMatchObject({ closed: true });
   });
 
   it('lists open sessions with metadata only (sessionId, turnCount, model, age)', async () => {

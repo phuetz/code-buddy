@@ -49,6 +49,7 @@ export interface PersistedChatMessage {
 
 export interface PersistedChatSession {
   sessionId: string;
+  ownerId?: string;
   systemPrompt: string;
   /** Exact backend pinned for this session. Absent in legacy records. */
   provider?: string;

@@ -1722,6 +1722,9 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
     },
     {
       connectionId: state.id,
+      principalId: state.keyId ? `key:${state.keyId}`
+        : state.userId ? `user:${state.userId}`
+        : state.deviceId ? `device:${state.deviceId}` : undefined,
       scopes: state.scopes,
       // Placeholders — the dispatcher resolves traceId/depth from the
       // FRAME (so propagation is end-to-end) and overwrites these.

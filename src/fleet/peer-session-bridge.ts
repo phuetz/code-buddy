@@ -38,7 +38,7 @@ import {
 } from './peer-chat-client-factory.js';
 import { beginFleetWork } from './fleet-load.js';
 import { executeCostCappedFleetCall } from './fleet-cost-cap.js';
-import { registerPeerMethod, unregisterPeerMethod } from '../server/websocket/peer-rpc.js';
+import { registerPeerMethod, unregisterPeerMethod, type PeerMethodContext } from '../server/websocket/peer-rpc.js';
 import {
   broadcastChatSessionEnd,
   broadcastChatSessionGoal,
@@ -91,6 +91,7 @@ interface ChatSessionMessage {
 
 interface ChatSession {
   sessionId: string;
+  ownerId: string;
   systemPrompt: string;
   provider?: PeerChatProviderId;
   model?: string;
@@ -113,6 +114,15 @@ const DEFAULT_SYSTEM_PROMPT =
 const DEFAULT_IDLE_MS = 30 * 60 * 1000;
 
 const sessions = new Map<string, ChatSession>();
+
+function peerOwnerId(ctx: PeerMethodContext): string {
+  return ctx.principalId ?? ctx.connectionId;
+}
+
+function canAccessSession(session: ChatSession, ctx: PeerMethodContext): boolean {
+  return ctx.scopes.includes('admin') || session.ownerId === peerOwnerId(ctx);
+}
+
 let cachedGetter: PeerChatClientGetter | null = null;
 let cachedProviderInfo: PeerChatProviderInfo | null = null;
 let cachedResolver: PeerSessionClientResolver | null = null;
@@ -322,6 +332,7 @@ async function purgeExpired(now: number, idleMs: number): Promise<void> {
 function snapshot(session: ChatSession): PersistedChatSession {
   return {
     sessionId: session.sessionId,
+    ownerId: session.ownerId,
     systemPrompt: session.systemPrompt,
     provider: session.provider,
     model: session.model,
@@ -463,6 +474,7 @@ export async function wirePeerSessionBridge(
       const persistedProvider = normalizePeerChatProviderId(p.provider);
       sessions.set(p.sessionId, {
         sessionId: p.sessionId,
+        ownerId: p.ownerId ?? 'legacy',
         systemPrompt: p.systemPrompt,
         ...(persistedProvider ? { provider: persistedProvider } : {}),
         model: p.model,
@@ -505,6 +517,7 @@ export async function wirePeerSessionBridge(
     const sessionId = newSessionId();
     const session: ChatSession = {
       sessionId,
+      ownerId: peerOwnerId(ctx),
       systemPrompt,
       provider,
       model,
@@ -565,7 +578,7 @@ export async function wirePeerSessionBridge(
     await purgeExpired(now, idleMs);
 
     const session = sessions.get(sessionId);
-    if (!session) {
+    if (!session || !canAccessSession(session, ctx)) {
       throw new Error(`SESSION_NOT_FOUND: no session with id "${sessionId}"`);
     }
     if (now - session.lastUsedAt > idleMs) {
@@ -714,7 +727,7 @@ export async function wirePeerSessionBridge(
     await purgeExpired(now, idleMs);
 
     const session = sessions.get(sessionId);
-    if (!session) {
+    if (!session || !canAccessSession(session, ctx)) {
       throw new Error(`SESSION_NOT_FOUND: no session with id "${sessionId}"`);
     }
     if (now - session.lastUsedAt > idleMs) {
@@ -851,7 +864,7 @@ export async function wirePeerSessionBridge(
     // Drop expired entries before reporting so the caller doesn't
     // see ghosts that will vanish on the next dispatch.
     await purgeExpired(now, idleMs);
-    const items = Array.from(sessions.values()).map((s) => ({
+    const items = Array.from(sessions.values()).filter(s => canAccessSession(s, ctx)).map((s) => ({
       sessionId: s.sessionId,
       turnCount: Math.floor(s.messages.length / 2),
       model: s.model,
@@ -884,7 +897,7 @@ export async function wirePeerSessionBridge(
       throw new Error('peer.chat-session.goal: sessionId is required (string)');
     }
     const session = sessions.get(sessionId);
-    if (!session) {
+    if (!session || !canAccessSession(session, ctx)) {
       throw new Error(`SESSION_NOT_FOUND: no session with id "${sessionId}"`);
     }
 
@@ -1028,7 +1041,8 @@ export async function wirePeerSessionBridge(
     if (!sessionId) {
       throw new Error('peer.chat-session.end: sessionId is required (string)');
     }
-    const closed = sessions.delete(sessionId);
+    const session = sessions.get(sessionId);
+    const closed = Boolean(session && canAccessSession(session, ctx) && sessions.delete(sessionId));
     if (closed) {
       try {
         await getPeerSessionStore().delete(sessionId);

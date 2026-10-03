@@ -716,4 +716,33 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       expect(getDispatchState('run-safe-accepted')?.traceId).toBe('trace-from-frame');
     });
   });
+
+  it('dispatchStatus ne renvoie pas le résultat si le propriétaire diffère', async () => {
+    const { client } = makeMockClient(vi.fn(async () => {
+      return {
+        choices: [{ message: { role: 'assistant', content: 'secret lm answer' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      };
+    }));
+    await wirePeerChatBridge(() => client as never);
+    const ctxA = { ...baseCtx, connectionId: 'conn-A' };
+    const ctxB = { ...baseCtx, connectionId: 'conn-B' };
+
+    // Lance avec A
+    await dispatchPeerRequest(
+      { id: '1', method: 'peer.dispatch', params: { id: 'run-secret', prompt: 'hello' } },
+      ctxA,
+    );
+
+    await waitFor(() => {
+      const state = getDispatchState('run-secret');
+      return state?.status === 'completed';
+    });
+
+    // Interroge avec B (doit être false)
+    const statusB = await dispatchPeerRequest({ id: '2', method: 'peer.dispatchStatus', params: { runId: 'run-secret' } }, ctxB);
+    expect(statusB.payload).toMatchObject({ found: false });
+    const statusA = await dispatchPeerRequest({ id: '3', method: 'peer.dispatchStatus', params: { runId: 'run-secret' } }, ctxA);
+    expect(statusA.payload).toMatchObject({ found: true, result: 'secret lm answer' });
+  });
 });

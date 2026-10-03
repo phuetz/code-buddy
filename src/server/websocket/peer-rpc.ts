@@ -254,6 +254,7 @@ function registerBuiltInMethods(): void {
     // Returns immediately — the bridge owns the async lifecycle.
     void dispatchPeerTask({
       runId: dispatchId,
+      ownerId: ctx.principalId ?? ctx.connectionId,
       prompt,
       model,
       provider: resolvedProvider,
@@ -279,7 +280,7 @@ function registerBuiltInMethods(): void {
   // The remote peer streams via the existing fleet WS event channel,
   // but a poll-based fallback keeps things simple when the dispatcher
   // hasn't subscribed to those events yet.
-  registerPeerMethod('peer.dispatchStatus', async (params) => {
+  registerPeerMethod('peer.dispatchStatus', async (params, ctx) => {
     const runId = (params ?? {}).runId;
     if (typeof runId !== 'string' || runId.length === 0) {
       throw new Error('peer.dispatchStatus: missing string runId');
@@ -287,6 +288,10 @@ function registerBuiltInMethods(): void {
     const { getDispatchState } = await import('../../fleet/peer-chat-bridge.js');
     const state = getDispatchState(runId);
     if (!state) {
+      return { found: false };
+    }
+    const callerId = ctx.principalId ?? ctx.connectionId;
+    if (state.ownerId !== callerId && !ctx.scopes.includes('admin')) {
       return { found: false };
     }
     return {

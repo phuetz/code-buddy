@@ -8,6 +8,8 @@ import { logger } from '../../utils/logger.js';
 export interface PeerMethodContext {
   /** WS connection id of the caller. */
   connectionId: string;
+  /** Stable authenticated identity, when available, for persisted peer resources. */
+  principalId?: string;
   /** Scopes held by the caller's authenticated session. */
   scopes: string[];
   /** Call-chain trace id for loop detection. */

@@ -385,6 +385,7 @@ export function _unwireForTests(): void {
  */
 interface DispatchState {
   runId: string;
+  ownerId: string;
   prompt: string;
   model?: string;
   provider?: PeerChatProviderId;
@@ -447,6 +448,7 @@ function pruneDispatchedTasks(now: number = Date.now()): void {
  */
 export function dispatchPeerTask(input: {
   runId: string;
+  ownerId?: string;
   prompt: string;
   model?: string;
   provider?: PeerChatProviderId;
@@ -461,6 +463,7 @@ export function dispatchPeerTask(input: {
   );
   const state: DispatchState = {
     runId: input.runId,
+    ownerId: input.ownerId ?? 'internal',
     prompt: input.prompt,
     model: input.model,
     provider: input.provider,
