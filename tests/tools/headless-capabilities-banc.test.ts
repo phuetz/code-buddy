@@ -117,3 +117,24 @@ it.each(['git log --oneline -1', 'git status --short', 'git diff --stat', 'node 
     expect(fs.existsSync(path.join(cwd, '.git/index'))).toBe(false);
   } finally { tool.dispose(); }
 });
+
+it.each([
+  '-c user.name=Test -c user.email=test@example.invalid commit -m fixture',
+  '-cuser.name=Test commit -m fixture',
+  '-c core.hooksPath=/tmp/forbidden-hooks commit -m fixture',
+  '-c user.name=Test add package.json',
+])('explique le refus des options globales de configuration Git : %s', async operation => {
+  const cwd = fixture();
+  const tool = new BashTool();
+  try {
+    const command = `cd '${cwd}' && git ${operation}`;
+    const decision = await evaluateShellExecution(command, cwd);
+    expect(decision.capabilityRefusal).toContain('without global -c');
+    const result = await tool.execute(command, 30000, cwd);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('git commit');
+    expect(result.error).toContain('No command was executed');
+    expect(result.error).not.toContain('Read-only file system');
+    expect(fs.existsSync(path.join(cwd, '.git/index'))).toBe(false);
+  } finally { tool.dispose(); }
+});

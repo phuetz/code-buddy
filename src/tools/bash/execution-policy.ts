@@ -222,6 +222,19 @@ export async function evaluateShellExecution(
   const grants = shellCapabilities();
   const withoutPrompt = getPermissionModeManager().getMode() === 'dontAsk';
   if (withoutPrompt && grants.has('git-local') && evaluation.action !== 'deny'
+    && evaluation.parsedSegments.some(argv => {
+      if (argv[0] !== 'git') return false;
+      let index = 1;
+      // Only inspect leading -c options; never interpret commit messages or
+      // paths as configuration. Other global options keep their own policy.
+      while (argv[index] === '-c' || argv[index]?.startsWith('-c')) {
+        index += argv[index] === '-c' ? 2 : 1;
+      }
+      return index > 1 && ['add', 'commit'].includes(argv[index] ?? '');
+    })) {
+    return { ...evaluation, action: 'ask', capabilityRefusal: 'CAPABILITY_DENIED: git-local permits git add and git commit without global -c configuration overrides. Use the existing repository identity and a plain git commit command; if no identity is configured, report that missing prerequisite. Configuration and hook overrides are outside this grant. No command was executed.' };
+  }
+  if (withoutPrompt && grants.has('git-local') && evaluation.action !== 'deny'
     && evaluation.parsedSegments.some(argv => argv[0] === 'git' && ['add', 'commit'].includes(argv[1] ?? ''))
     && !evaluation.parsedSegments.every((argv, index) =>
       (index === 0 && argv[0] === 'cd' && argv.length === 2)
