@@ -63,13 +63,13 @@ function repositoryActionClauses(prompt: string): string[] {
     return outputVerb && (outputObject || /\b(?:only|alone|just)\b/.test(clause)) && !physical;
   };
   return clauses.filter((clause, index) => {
+    // Auxiliary-led interrogatives ask for an observation, not an imperative.
+    // Each subsequent independent clause is still checked separately.
+    if (/^(?:does|did|is|are|was|were|has|had|will|would|could)\b|^(?:do|have|can)\s+(?:you|we|they|i|it|this|these|those)\b|^est-ce\s+que\b/.test(clause)) return false;
     // A requested means of delivery remains an obligation even when the
     // leading verb only asks to show or explain. Negated means stay read-only.
     if (/\b(?:by|en)\s+(?:editing|writing|saving|creating|replacing|changing|updating|deleting|modifiant|ecrivant|creant|remplacant|changeant|supprimant)\b/.test(clause)
       && /\b(?:file_target|files?|source|module|script|fichiers?)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause)) return true;
-    // Auxiliary-led interrogatives ask for an observation, not an imperative.
-    // Each subsequent independent clause is still checked separately.
-    if (/^(?:does|did|is|are|was|were|has|had|will|would|could)\b|^(?:do|have|can)\s+(?:you|we|they|i|it|this|these|those)\b|^est-ce\s+que\b/.test(clause)) return false;
     // A courtesy question takes the infinitive in French.
     if (/^(?:expliquer|decrire|resumer|analyser|comparer|auditer|lire|identifier|reperer|consulter|indiquer|montrer|lister|repondre)\b/.test(clause)) return false;
     // French ne…que restricts a positive request; it does not prohibit it.

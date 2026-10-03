@@ -81,7 +81,7 @@ export function checkHeadlessDeliverable(
   const reasons: string[] = [];
   if (reading && /^(?:please\s+)?(?:read|lis|lire|consult|consulte|inspect|inspecte)\b/.test(text)
     && !/\b(?:sentence|paragraph|poem|phrase|paragraphe)\b/.test(text) && !files.size) reasons.push('source_evidence_missing');
-  const sourceTargets = [...query.matchAll(/(?:[\w.-]+\/)*[\w.-]+\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh)\b/g)]
+  const sourceTargets = [...query.matchAll(/\/?(?:[\w.-]+\/)*[\w.-]+\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh)\b/g)]
     .map(match => path.relative(process.cwd(), path.resolve(match[0])).replaceAll('\\', '/'));
   const refersToObservedInterface = /\b(?:its|their)\s+(?:inputs?|outputs?)\b/.test(text);
   if (reading && (sourceTargets.some(target => !files.has(target)) || refersToObservedInterface && !files.size)
