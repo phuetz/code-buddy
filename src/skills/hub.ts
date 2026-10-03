@@ -542,11 +542,12 @@ export class SkillsHub extends EventEmitter {
   private cacheTimestamp: number = 0;
   private readonly cacheTtlMs: number = 5 * 60 * 1000; // 5 minutes
 
-  constructor(config: Partial<HubConfig> = {}) {
+  constructor(config: Partial<HubConfig> = {}, options: { initializeDirectories?: boolean } = {}) {
     super();
     this.config = { ...defaultHubConfig(), ...config };
     this.lockfile = this.readLockfile();
-    this.ensureDirectories();
+    // Status readers do not need to create caches or installation directories.
+    if (options.initializeDirectories !== false) this.ensureDirectories();
   }
 
   // ==========================================================================

@@ -149,7 +149,7 @@ export function buildHermesSkillPackageSummary(
   options: HermesSkillPackageSummaryOptions = {},
 ): HermesSkillPackageSummary {
   const root = path.resolve(workDir);
-  const { cacheDir, hub, lockfilePath, skillRoot } = buildWorkspaceSkillsHub(workDir);
+  const { cacheDir, hub, lockfilePath, skillRoot } = buildWorkspaceSkillsHub(workDir, false);
   const allPackages = hub
     .list()
     .map((skill) => summarizeInstalledSkill(
@@ -678,7 +678,7 @@ function buildFirewallPreview(
   }
 }
 
-function buildWorkspaceSkillsHub(workDir: string): {
+function buildWorkspaceSkillsHub(workDir: string, initializeDirectories = true): {
   cacheDir: string;
   hub: SkillsHub;
   lockfilePath: string;
@@ -692,7 +692,7 @@ function buildWorkspaceSkillsHub(workDir: string): {
     cacheDir,
     lockfilePath,
     skillsDir: skillRoot,
-  });
+  }, { initializeDirectories });
   return { cacheDir, hub, lockfilePath, skillRoot };
 }
 
