@@ -51,6 +51,10 @@ function runAudit() {
 const today = new Date().toISOString().slice(0, 10);
 const allow = loadAllowlist();
 const audit = runAudit();
+if (audit.error || !audit.vulnerabilities || !audit.metadata?.vulnerabilities) {
+  console.error('audit-gate: FAIL — npm did not return a complete vulnerability report');
+  process.exit(1);
+}
 const vulns = audit.vulnerabilities ?? {};
 const meta = audit.metadata?.vulnerabilities ?? {};
 
@@ -58,6 +62,23 @@ const failures = [];
 const accepted = [];
 const usedAllow = new Set();
 const moderates = [];
+
+// npm propagates advisory severity to parent packages, sometimes through cycles.
+// An exception must name ALL actual advisories, including inherited ones, so a
+// newly published advisory cannot silently reuse an unrelated package exception.
+function advisoryUrls(name, seen = new Set()) {
+  if (seen.has(name)) return [];
+  seen.add(name);
+  const vulnerability = vulns[name];
+  if (!vulnerability || !Array.isArray(vulnerability.via)) {
+    throw new Error(`missing advisory details for ${name}`);
+  }
+  return vulnerability.via.flatMap((via) => {
+    if (typeof via === 'string') return advisoryUrls(via, seen);
+    if (typeof via?.url !== 'string') throw new Error(`missing advisory URL for ${name}`);
+    return [via.url];
+  });
+}
 
 for (const [name, v] of Object.entries(vulns)) {
   if (!BLOCK.has(v.severity)) {
@@ -72,6 +93,21 @@ for (const [name, v] of Object.entries(vulns)) {
   const entry = allow.get(name);
   if (!entry) {
     failures.push(`${name} [high] — not in audit-allowlist.json (review and either fix or document it)`);
+    continue;
+  }
+  let urls;
+  try {
+    urls = [...new Set(advisoryUrls(name))];
+  } catch (error) {
+    failures.push(`${name} [high] — ${error.message}`);
+    continue;
+  }
+  if (!urls.length || urls.some((url) => !entry.advisories?.includes(url))) {
+    failures.push(`${name} [high] — advisory outside the allowlisted scope: ${urls.join(', ')}`);
+    continue;
+  }
+  if (!entry.reason?.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(entry.reviewedOn ?? '') || entry.reviewedOn > today) {
+    failures.push(`${name} [high] — exception needs a rationale and a dated review`);
     continue;
   }
   // A tooling-only exception must never hide a vulnerable runtime instance.

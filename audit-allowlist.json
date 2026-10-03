@@ -1,117 +1,632 @@
 {
-  "$comment": "Documented exceptions for scripts/ci-audit-gate.mjs. The gate BLOCKS on any critical, and on any high-severity advisory whose package is NOT listed here. Each entry must carry a real reason and a reviewBy date; an expired entry FAILS the gate so the list cannot rot silently. Moderates/lows are tracked, non-blocking. Revisit and shrink this list whenever upstream ships a fix.",
+  "$comment": "Exceptions examinées le 03/10/2026, par paquet, avis et copie installée. Voir docs/reports/2026-10/AUDIT-DEPENDANCES-2026-10-03.md. Le gate refuse tout avis nouveau, copie nouvelle, critical ou exception expirée.",
   "allow": [
     {
-      "package": "metro",
+      "package": "@jest/environment",
       "severity": "high",
       "advisories": [
-        "https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"
-      ],
-      "reason": "React Native bundler pulled transitively via alasql -> react-native-fs (optional peer); never invoked by the Node CLI. Dev-time DoS only. Cleared with the RN cluster prune.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "metro-config",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"
-      ],
-      "reason": "Part of the Metro bundler cluster (see 'metro'); transitive via alasql -> react-native-fs, never executed. Cleared with the RN cluster prune.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "metro-transform-worker",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"
-      ],
-      "reason": "Part of the Metro bundler cluster (see 'metro'); transitive via alasql -> react-native-fs, never executed. Cleared with the RN cluster prune.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "sharp",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-54xq-cgqr-rpm3"
-      ],
-      "reason": "Inherited libvips CVEs (CVE-2026-33327/33328/35590/35591); no fixed sharp release on npm yet. sharp only decodes local/agent-generated image files, never attacker-controlled network streams. Bump as soon as a patched sharp ships.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "@huggingface/transformers",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-54xq-cgqr-rpm3"
-      ],
-      "reason": "High severity is inherited from its own sharp / onnxruntime-node sub-deps (no independent fix available). Local embeddings/inference over trusted model files; not on an untrusted-network path. Cleared when sharp/onnxruntime ship patches.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "@xenova/transformers",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-54xq-cgqr-rpm3"
-      ],
-      "reason": "High inherited from its bundled sharp; the only 'fix' npm offers is a downgrade to 1.4.2 (semver-major, would break the embeddings pipeline). Local-only inference over trusted models. Cleared when sharp patches upstream.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "onnxruntime-node",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-mhpq-9hf6-jfp3"
-      ],
-      "reason": "High inherited from adm-zip (4GB-allocation DoS) used only to unpack the ONNX runtime's own trusted release archive at install; no fixed onnxruntime-node release available. Not reachable from untrusted input at runtime.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "adm-zip",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-mhpq-9hf6-jfp3"
-      ],
-      "reason": "Crafted-ZIP memory-allocation DoS, no upstream fix. Reached only transitively (onnxruntime-node install unpacking its own release archive); Code Buddy never feeds untrusted ZIPs to it. Bump when adm-zip ships a fix.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "pptxgenjs",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-wvhm-4hhf-97x9"
-      ],
-      "reason": "High inherited from its bundled image-size; the only npm 'fix' is a downgrade to pptxgenjs@1.1.5 (semver-major, a multi-year regression that drops core PPTX features). PPTX generation renders local/agent-supplied images only. Track pptxgenjs for a forward fix.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "image-size",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-wvhm-4hhf-97x9"
-      ],
-      "reason": "ICNS/JXL/HEIF parser infinite-loop DoS, bundled by pptxgenjs (see 'pptxgenjs'); no in-range fix without the breaking pptxgenjs downgrade. Only parses local/generated image files. Cleared when pptxgenjs updates its image-size pin.",
-      "reviewBy": "2026-11-19"
-    },
-    {
-      "package": "undici",
-      "severity": "high",
-      "advisories": [
-        "https://github.com/advisories/GHSA-rfgv-xxqx-mfg5"
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
       ],
       "nodes": [
-        "node_modules/npm/node_modules/undici"
+        "node_modules/@jest/environment"
       ],
-      "reason": "Only the bundled undici 6.28.0 in dev-only semantic-release -> @semantic-release/npm -> npm 11.19.1 -> node-gyp 12.4.0. npm 11.20.0 and 12.1.0 still bundle 6.28.0; npm overrides do not replace bundled files. node-gyp uses undici fetch to download Node headers during native builds, not its vulnerable WebSocket client. Not shipped in production installs; runtime undici 6.29.0 and @semantic-release/github undici 7.29.1 are patched. No runtime path is exempted: the gate restricts this exception to the listed node. Remove when npm ships a patched bundle; re-review within two weeks.",
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @jest/environment; copies strictement listées. Gravité héritée via @jest/fake-timers. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → jest-environment-node@29.7.0 → @jest/environment@29.7.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@jest/fake-timers",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/@jest/fake-timers"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @jest/fake-timers; copies strictement listées. Gravité héritée via jest-message-util. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → jest-environment-node@29.7.0 → @jest/fake-timers@29.7.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@jest/transform",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/@jest/transform"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @jest/transform; copies strictement listées. Gravité héritée via jest-haste-map, micromatch. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → babel-jest@29.7.0 → @jest/transform@29.7.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@npmcli/arborist",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/@npmcli/arborist"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @npmcli/arborist; copies strictement listées. Gravité héritée via @npmcli/metavuln-calculator, npm-registry-fetch, pacote. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → @npmcli/arborist@9.9.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@npmcli/metavuln-calculator",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/@npmcli/metavuln-calculator"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @npmcli/metavuln-calculator; copies strictement listées. Gravité héritée via pacote. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → @npmcli/metavuln-calculator@9.0.3. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@react-native/community-cli-plugin",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/@react-native/community-cli-plugin",
+        "node_modules/react-native/node_modules/react-native/node_modules/@react-native/community-cli-plugin"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @react-native/community-cli-plugin; copies strictement listées. Gravité héritée via metro, metro-config. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/community-cli-plugin@0.84.0 ; Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/virtualized-lists@0.84.0 → react-native@0.86.0 → @react-native/community-cli-plugin@0.86.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@react-native/virtualized-lists",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/react-native/node_modules/react-native/node_modules/@react-native/virtualized-lists"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @react-native/virtualized-lists; copies strictement listées. Gravité héritée via react-native. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/virtualized-lists@0.84.0 → react-native@0.86.0 → @react-native/virtualized-lists@0.86.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@semantic-release/changelog",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/@semantic-release/changelog"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @semantic-release/changelog; copies strictement listées. Gravité héritée via semantic-release. Chemin(s): Code Buddy → @semantic-release/changelog@6.0.3. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@semantic-release/commit-analyzer",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/@semantic-release/commit-analyzer"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @semantic-release/commit-analyzer; copies strictement listées. Gravité héritée via micromatch, semantic-release. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/commit-analyzer@13.0.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@semantic-release/git",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/@semantic-release/git"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @semantic-release/git; copies strictement listées. Gravité héritée via micromatch, semantic-release. Chemin(s): Code Buddy → @semantic-release/git@10.0.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@semantic-release/github",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/@semantic-release/github"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @semantic-release/github; copies strictement listées. Gravité héritée via semantic-release. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/github@12.0.8. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@semantic-release/npm",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/@semantic-release/npm"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @semantic-release/npm; copies strictement listées. Gravité héritée via npm, semantic-release. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@semantic-release/release-notes-generator",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/@semantic-release/release-notes-generator"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @semantic-release/release-notes-generator; copies strictement listées. Gravité héritée via semantic-release. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/release-notes-generator@14.1.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@sigstore/sign",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/@sigstore/sign"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @sigstore/sign; copies strictement listées. Gravité héritée via make-fetch-happen. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmpublish@11.2.0 → sigstore@4.1.1 → @sigstore/sign@4.1.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "@sigstore/tuf",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/@sigstore/tuf"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de @sigstore/tuf; copies strictement listées. Gravité héritée via tuf-js. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → @sigstore/tuf@4.0.2. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "babel-jest",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/babel-jest"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de babel-jest; copies strictement listées. Gravité héritée via @jest/transform. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → babel-jest@29.7.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
       "reviewBy": "2026-10-14"
     },
     {
       "package": "brace-expansion",
       "severity": "high",
       "advisories": [
+        "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
         "https://github.com/advisories/GHSA-q2hr-2g5m-vwhr",
-        "https://github.com/advisories/GHSA-qhr7-859c-m2p7",
-        "https://github.com/advisories/GHSA-6j4f-fj2g-mc7p"
+        "https://github.com/advisories/GHSA-qhr7-859c-m2p7"
       ],
-      "reason": "Every reachable copy is upgraded to a fixed release (1.1.21 / 2.1.7). The only remaining vulnerable copy is brace-expansion 5.0.9 bundled inside npm 11.19.1, which dev-only semantic-release -> @semantic-release/npm ships as a bundleDependency: an override cannot reach it and it only expands glob patterns written by the release workflow, never user input. Remove when @semantic-release/npm bundles an npm with brace-expansion >= 5.0.12.",
+      "nodes": [
+        "node_modules/npm/node_modules/brace-expansion"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de brace-expansion; copies strictement listées. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → minimatch@10.2.5 → brace-expansion@5.0.9. Même copie npm dev 5.0.9; correctif 5.0.10, donc 5.0.12 couvre aussi cet avis. Les motifs de publication du workflow sont constants, sans liste de virgules récursive. Voir preuve bundle et globs de release du rapport. brace-expansion 5.0.9 embarqué par npm 11.19.1, dev-only. Version corrigée 5.0.12; un override ne remplace pas le bundle. npm 11.21.0 inspecté conserve cette copie. Seuls les globs de fichiers de publication du workflow sont transmis à ce npm, aucun motif fourni par un utilisateur distant. Retirer lorsque le bundle est corrigé. Même copie npm dev 5.0.9; correctif 5.0.11, donc 5.0.12 couvre aussi cet avis. Les motifs de publication ne contiennent pas de groupes imbriqués; aucune entrée réseau. Voir preuve bundle et globs de release du rapport.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "braces",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/braces"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de braces; copies strictement listées. Chemin(s): Code Buddy → fast-glob@3.3.3 → micromatch@4.0.8 → braces@3.0.3. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "fast-glob",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/fast-glob"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de fast-glob; copies strictement listées. Gravité héritée via micromatch. Chemin(s): Code Buddy → fast-glob@3.3.3. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "http-cache-semantics",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/http-cache-semantics"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de http-cache-semantics; copies strictement listées. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → make-fetch-happen@15.0.6 → http-cache-semantics@4.2.0. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "jest-environment-node",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/jest-environment-node"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de jest-environment-node; copies strictement listées. Gravité héritée via @jest/environment, @jest/fake-timers. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → jest-environment-node@29.7.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "jest-haste-map",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/jest-haste-map"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de jest-haste-map; copies strictement listées. Gravité héritée via micromatch. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → babel-jest@29.7.0 → @jest/transform@29.7.0 → jest-haste-map@29.7.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "jest-message-util",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/jest-message-util"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de jest-message-util; copies strictement listées. Gravité héritée via micromatch. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → jest-environment-node@29.7.0 → @jest/fake-timers@29.7.0 → jest-message-util@29.7.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "libnpmaccess",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/libnpmaccess"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de libnpmaccess; copies strictement listées. Gravité héritée via npm-registry-fetch. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmaccess@10.0.3. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "libnpmdiff",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/libnpmdiff"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de libnpmdiff; copies strictement listées. Gravité héritée via @npmcli/arborist, pacote. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmdiff@8.1.12. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "libnpmexec",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/libnpmexec"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de libnpmexec; copies strictement listées. Gravité héritée via @npmcli/arborist, pacote. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmexec@10.3.2. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "libnpmfund",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/libnpmfund"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de libnpmfund; copies strictement listées. Gravité héritée via @npmcli/arborist. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmfund@7.0.26. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "libnpmorg",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/libnpmorg"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de libnpmorg; copies strictement listées. Gravité héritée via npm-registry-fetch. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmorg@8.0.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "libnpmpack",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/libnpmpack"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de libnpmpack; copies strictement listées. Gravité héritée via @npmcli/arborist, pacote. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmpack@9.1.13. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "libnpmpublish",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/libnpmpublish"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de libnpmpublish; copies strictement listées. Gravité héritée via npm-registry-fetch, sigstore. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmpublish@11.2.0. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "libnpmsearch",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/libnpmsearch"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de libnpmsearch; copies strictement listées. Gravité héritée via npm-registry-fetch. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmsearch@9.0.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "libnpmteam",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/libnpmteam"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de libnpmteam; copies strictement listées. Gravité héritée via npm-registry-fetch. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmteam@8.0.2. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "make-fetch-happen",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/make-fetch-happen"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de make-fetch-happen; copies strictement listées. Gravité héritée via http-cache-semantics. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → make-fetch-happen@15.0.6. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "metro",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/metro",
+        "node_modules/react-native/node_modules/metro"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de metro; copies strictement listées. Gravité héritée via metro-config, metro-file-map, metro-transform-worker. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/community-cli-plugin@0.84.0 → metro@0.83.3 ; Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/virtualized-lists@0.84.0 → react-native@0.86.0 → @react-native/community-cli-plugin@0.86.0 → metro@0.84.4. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "metro-config",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/metro-config",
+        "node_modules/react-native/node_modules/metro-config"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de metro-config; copies strictement listées. Gravité héritée via metro. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/community-cli-plugin@0.84.0 → metro-config@0.83.3 ; Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/virtualized-lists@0.84.0 → react-native@0.86.0 → @react-native/community-cli-plugin@0.86.0 → metro-config@0.84.4. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "metro-file-map",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/metro-file-map",
+        "node_modules/react-native/node_modules/metro-file-map"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de metro-file-map; copies strictement listées. Gravité héritée via micromatch. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/community-cli-plugin@0.84.0 → metro@0.83.3 → metro-file-map@0.83.3 ; Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/virtualized-lists@0.84.0 → react-native@0.86.0 → @react-native/community-cli-plugin@0.86.0 → metro@0.84.4 → metro-file-map@0.84.4. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "metro-transform-worker",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/metro-transform-worker",
+        "node_modules/react-native/node_modules/metro-transform-worker"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de metro-transform-worker; copies strictement listées. Gravité héritée via metro. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/community-cli-plugin@0.84.0 → metro@0.83.3 → metro-transform-worker@0.83.3 ; Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/virtualized-lists@0.84.0 → react-native@0.86.0 → @react-native/community-cli-plugin@0.86.0 → metro@0.84.4 → metro-transform-worker@0.84.4. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "micromatch",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/micromatch"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de micromatch; copies strictement listées. Gravité héritée via braces. Chemin(s): Code Buddy → fast-glob@3.3.3 → micromatch@4.0.8. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "npm",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de npm; copies strictement listées. Gravité héritée via @npmcli/arborist, @npmcli/metavuln-calculator, @sigstore/tuf, libnpmaccess, libnpmdiff, libnpmexec, libnpmfund, libnpmorg, libnpmpack, libnpmpublish, libnpmsearch, libnpmteam, make-fetch-happen, npm-profile, npm-registry-fetch, pacote. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "npm-profile",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/npm-profile"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de npm-profile; copies strictement listées. Gravité héritée via npm-registry-fetch. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → npm-profile@12.0.2. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "npm-registry-fetch",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/npm-registry-fetch"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de npm-registry-fetch; copies strictement listées. Gravité héritée via make-fetch-happen. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → npm-registry-fetch@19.1.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "pacote",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/pacote"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de pacote; copies strictement listées. Gravité héritée via npm-registry-fetch, sigstore. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → pacote@21.5.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "react-native",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/react-native",
+        "node_modules/react-native/node_modules/react-native"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de react-native; copies strictement listées. Gravité héritée via @react-native/community-cli-plugin, @react-native/virtualized-lists, babel-jest, jest-environment-node. Chemin(s): Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 ; Code Buddy → alasql@4.17.0 → react-native-fs@2.20.0 → react-native@0.84.0 → @react-native/virtualized-lists@0.84.0 → react-native@0.86.0. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "semantic-release",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+        "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm"
+      ],
+      "nodes": [
+        "node_modules/semantic-release"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de semantic-release; copies strictement listées. Gravité héritée via @semantic-release/commit-analyzer, @semantic-release/github, @semantic-release/npm, @semantic-release/release-notes-generator, micromatch. Chemin(s): Code Buddy → semantic-release@25.0.9. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm. Pas de release corrigée de braces. CLI: les neuf imports fast-glob passent par src/utils/safe-fast-glob.ts, qui refuse avant parsing les motifs/ignore de plus de 4096 caractères ou 64 groupes, et plus de 1024 motifs (tests/security/safe-fast-glob.test.ts). Metro/Jest: uniquement la chaîne optionnelle alasql → react-native-fs; aucun bundler RN lancé par le CLI Node. semantic-release: motifs du workflow .releaserc.json, non alimentés par des requêtes réseau. Réexaminer à la première release braces corrigée.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "sigstore",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/sigstore"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de sigstore; copies strictement listées. Gravité héritée via @sigstore/sign, @sigstore/tuf. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → libnpmpublish@11.2.0 → sigstore@4.1.1. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "tuf-js",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-ch52-4w7c-c8xp"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/tuf-js"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de tuf-js; copies strictement listées. Gravité héritée via make-fetch-happen. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → @sigstore/tuf@4.0.2 → tuf-js@4.1.0. Pas de release corrigée de http-cache-semantics. Seule copie: bundle npm 11.19.1 de semantic-release (dev). make-fetch-happen/lib/cache/policy.js instancie CacheSemantics avec shared:false; cache npm privé, aucune route HTTP Code Buddy ne partage ce cache ni ne lui transmet un Cache-Control client. Le chemin de fuite de sessions dans un cache partagé avec max-stale est absent. Retirer à la première release corrigée dans npm.",
+      "reviewBy": "2026-10-14"
+    },
+    {
+      "package": "undici",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-3wwx-pv8p-q78v",
+        "https://github.com/advisories/GHSA-r53p-7pc4-xj5r",
+        "https://github.com/advisories/GHSA-rfgv-xxqx-mfg5"
+      ],
+      "nodes": [
+        "node_modules/npm/node_modules/undici"
+      ],
+      "reviewedOn": "2026-10-03",
+      "reason": "Revue 2026-10-03 de undici; copies strictement listées. Chemin(s): Code Buddy → semantic-release@25.0.9 → @semantic-release/npm@13.1.5 → npm@11.19.1 → node-gyp@12.4.0 → undici@6.28.0. Avis modéré sur la même copie npm dev undici 6.28.0 : décompression WebSocket jamais utilisée par node-gyp (fetch HTTP uniquement). Avis faible sur la même copie npm dev undici 6.28.0 : node-gyp utilise fetch avec RetryAgent pour télécharger des fichiers; aucune réponse de ce client ne sert de réponse HTTP à un utilisateur, donc aucun proxy HTTP sortant basé sur ce bundle. undici 6.28.0 embarqué par npm 11.19.1 → node-gyp (dev). Correctif 6.28.1; npm 11.21.0 conserve 6.28.0, override sans effet sur ce bundle. node-gyp utilise fetch pour les en-têtes Node, jamais WebSocket. Code Buddy runtime utilise 6.29.0 corrigé. Retirer avec le bundle npm corrigé.",
       "reviewBy": "2026-10-14"
     }
   ]
