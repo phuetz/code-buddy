@@ -48,7 +48,8 @@ function runWithIsolationSetup(fixtureLines: string[], env: NodeJS.ProcessEnv = 
     );
     const run = spawnSync(
       process.execPath,
-      [path.join(REPO_ROOT, 'node_modules', 'vitest', 'vitest.mjs'), 'run', '--config', config],
+      // The fixture shares read-only dependencies; keep config loading independent of their cache.
+      [path.join(REPO_ROOT, 'node_modules', 'vitest', 'vitest.mjs'), 'run', '--configLoader', 'runner', '--config', config],
       { cwd: REPO_ROOT, encoding: 'utf8', timeout: 60_000, env },
     );
     const witnessPath = path.join(dir, 'body-witness.txt');

@@ -118,6 +118,7 @@ describe('CodeBuddyClient', () => {
           apiKey: mockApiKey,
           baseURL: 'https://api.x.ai/v1',
           timeout: 360000,
+          maxRetries: 0,
         });
       });
 

@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "counts": {
     "total": 338,
-    "passed": 45,
+    "passed": 42,
     "failed": 9,
-    "unavailable": 293
+    "unavailable": 296
   },
   "features": [
     {
@@ -749,7 +749,7 @@
     {
       "id": "memory-ckg",
       "status": "not-proven-here",
-      "reason": "La sortie capturée rappelle seulement ollamalocal ; aucun lien de graphe, aucun rappel de la proposition complète.",
+      "reason": "La sortie capturée rappelle seulement ollamalocal ; aucun lien de graphe, aucun rappel de la proposition complète. Preuve ancienne ou révision courante inconnue.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p6-memory-ckg.log"
@@ -975,8 +975,8 @@
     },
     {
       "id": "tool:bash",
-      "status": "proven",
-      "reason": "Qualification documentaire de la trace P9 conservée : stdout 42 après node -e. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "status": "not-proven-here",
+      "reason": "Qualification documentaire de la trace P9 conservée : stdout 42 après node -e. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution. Preuve ancienne ou révision courante inconnue.",
       "scope": {
         "fr": "Appel direct du composant bash dans le scénario capturé : stdout 42 après node -e. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
         "en": "Direct bash component call in the captured scenario: stdout 42 after node -e. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
@@ -2349,8 +2349,8 @@
     },
     {
       "id": "tool:self_describe",
-      "status": "proven",
-      "reason": "Qualification documentaire de la trace P9 conservée : identité @phuetz/code-buddy et version2.3.0. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "status": "not-proven-here",
+      "reason": "Qualification documentaire de la trace P9 conservée : identité @phuetz/code-buddy et version2.3.0. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution. Preuve ancienne ou révision courante inconnue.",
       "scope": {
         "fr": "Appel direct du composant self_describe dans le scénario capturé : identité @phuetz/code-buddy et version2.3.0. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
         "en": "Direct self_describe component call in the captured scenario: @phuetz/code-buddy identity and version2.3.0. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
@@ -2555,8 +2555,8 @@
     },
     {
       "id": "tool:terminal",
-      "status": "proven",
-      "reason": "Qualification documentaire de la trace P9 conservée : stdout42 après node -e. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution.",
+      "status": "not-proven-here",
+      "reason": "Qualification documentaire de la trace P9 conservée : stdout42 après node -e. Champs retournés et clauses spécifiques examinés, empreinte source encore valide ; ce n’est pas une nouvelle exécution. Preuve ancienne ou révision courante inconnue.",
       "scope": {
         "fr": "Appel direct du composant terminal dans le scénario capturé : stdout42 après node -e. Date et révision d’origine conservées. Fixture temporaire d’origine non livrée ; pas de tour modèle, pas d’installation neuve ni de validation générale du bénéfice.",
         "en": "Direct terminal component call in the captured scenario: stdout42 after node -e. Original date and revision retained. Original temporary fixture not shipped; no model turn, fresh installation or general benefit validation."
@@ -2605,7 +2605,7 @@
     {
       "id": "tool:todo_update",
       "status": "not-proven-here",
-      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
+      "reason": "Observations auxiliaires à rattacher aux lectures ou fichiers bruts avant qualification du bénéfice complet. Preuve ancienne ou révision courante inconnue. Trace nouvelle ou modifiée depuis la qualification documentaire : à examiner.",
       "scope": null,
       "latestRunFailed": false,
       "trace": "docs/preuves/p9r1-tool-todo_update-2026-09-30.log"

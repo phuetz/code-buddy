@@ -12,8 +12,8 @@ outils. Les fournisseurs cloud sont optionnels.
 <!-- proven-features:start -->
 ## État des fonctionnalités
 
-[`PROUVÉES 45/338 | NON PROUVÉES ICI 293 | DONT DERNIERS ESSAIS EN ÉCHEC 9`](docs/FONCTIONNALITES-PROUVEES.md)
-**45/338 fonctionnalités prouvées** ; 293 non prouvées ici, avec raison (dont 9 derniers essais en échec, historiques si l’empreinte est périmée).
+[`PROUVÉES 42/338 | NON PROUVÉES ICI 296 | DONT DERNIERS ESSAIS EN ÉCHEC 9`](docs/FONCTIONNALITES-PROUVEES.md)
+**42/338 fonctionnalités prouvées** ; 296 non prouvées ici, avec raison (dont 9 derniers essais en échec, historiques si l’empreinte est périmée).
 Chaque état « prouvée » est limité au composant et au scénario capturés, avec la limite du scénario lorsqu’elle est consignée. Ce total ne valide pas une installation neuve.
 [Statuts, raisons et traces par domaine](docs/FONCTIONNALITES-PROUVEES.md) · [English: feature status](docs/PROVEN-FEATURES.md)
 <!-- proven-features:end -->
