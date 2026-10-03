@@ -1400,7 +1400,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
       /** Exact current user utterance when `message` contains a transport preamble. */
       introspectionText?: string;
       /** Observe durable entries as they are produced, without changing the turn. */
-      onEntry?: (entry: ChatEntry) => void;
+      onEntry?: (entry: ChatEntry) => void | Promise<void>;
     } = {},
   ): Promise<ChatEntry[]> {
     const turnStartedAt = Date.now();
@@ -1435,7 +1435,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // Trim history to prevent memory bloat
     this.trimHistory();
 
-    options.onEntry?.(userEntry);
+    await options.onEntry?.(userEntry);
     const newEntries = await this.executor.processUserMessage(
       message,
       this.chatHistory,
@@ -1878,7 +1878,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
   /**
    * Persist the interactive (TUI) conversation after a completed turn.
    *
-   * The headless path creates its session up front and saves once; the TUI
+   * The headless path creates its session up front and checkpoints entries; the TUI
    * used to do neither, so interactive turns never reached the session file
    * and `--resume` had nothing to continue. The first turn with a user message
    * creates the session (named from that message); every later turn rewrites

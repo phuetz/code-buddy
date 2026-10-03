@@ -3716,3 +3716,44 @@ describe('AgentExecutor', () => {
     });
   });
 });
+
+
+describe('durable sequential entry observers', () => {
+  it('awaits persistence before advancing to the next model round', async () => {
+    const executor = Object.create(AgentExecutor.prototype) as AgentExecutor;
+    const history: ChatEntry[] = [];
+    let release!: () => void;
+    const saved = new Promise<void>(resolve => { release = resolve; });
+    let advanced = false;
+    Object.defineProperty(executor, 'runMeasuredTurn', { value: async function* () {
+      history.push({ type: 'assistant', content: 'completed step', timestamp: new Date() });
+      yield { type: 'content', content: 'completed step' };
+      advanced = true;
+    } });
+    const finished = executor.processUserMessage('task', history, [], Date.now(), undefined,
+      false, 'cli', undefined, () => saved);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    const advancedBeforeSave = advanced;
+    release();
+    await finished;
+    expect(advancedBeforeSave).toBe(false);
+    expect(advanced).toBe(true);
+  });
+
+  it('awaits the final entry even when the producer throws', async () => {
+    const executor = Object.create(AgentExecutor.prototype) as AgentExecutor;
+    const history: ChatEntry[] = [];
+    let saved = false;
+    Object.defineProperty(executor, 'runMeasuredTurn', { value: async function* () {
+      yield { type: 'content', content: '' };
+      history.push({ type: 'assistant', content: 'last durable entry', timestamp: new Date() });
+      throw new Error('interrupted provider');
+    } });
+    await expect(executor.processUserMessage('task', history, [], Date.now(), undefined,
+      false, 'cli', undefined, async () => {
+        await new Promise<void>(resolve => setImmediate(resolve));
+        saved = true;
+      })).rejects.toThrow('interrupted provider');
+    expect(saved).toBe(true);
+  });
+});

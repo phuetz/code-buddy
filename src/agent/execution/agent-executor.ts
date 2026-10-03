@@ -995,14 +995,14 @@ export class AgentExecutor {
     relationshipSafety = false,
     surface?: string,
     introspectionText?: string,
-    onEntry?: (entry: ChatEntry) => void,
+    onEntry?: (entry: ChatEntry) => void | Promise<void>,
   ): Promise<ChatEntry[]> {
     const initialHistoryLength = history.length;
     let emittedLength = initialHistoryLength;
-    const emitEntries = () => {
+    const emitEntries = async () => {
       while (emittedLength < history.length) {
         const entry = history[emittedLength++]!;
-        onEntry?.(entry);
+        await onEntry?.(entry);
       }
     };
     try {
@@ -1022,11 +1022,11 @@ export class AgentExecutor {
           history.push({ type: 'assistant', content, timestamp: new Date() });
           messages.push({ role: 'assistant', content });
         }
-        emitEntries();
+        await emitEntries();
         // Other entries are pushed by runTurnLoop itself. Progress-only events
         // have no durable sequential representation and are intentionally dropped.
       }
-    } finally { emitEntries(); }
+    } finally { await emitEntries(); }
     return history.slice(initialHistoryLength);
   }
 

@@ -1351,12 +1351,18 @@ async function processPromptHeadless(
     // Process the user message
     const { headlessMessage } = await import('./cli/headless-message.js');
     const incrementalJson = ['stream-json', 'streaming'].includes(outputFormat.toLowerCase());
-    const chatEntries = await agent.processUserMessage(prompt, {
+    const headlessAgent = agent;
+    const chatEntries = await headlessAgent.processUserMessage(prompt, {
       surface: 'cli',
-      ...(incrementalJson ? { onEntry: (entry: import('./agent/types.js').ChatEntry) => {
-        const message = headlessMessage(entry);
-        if (message) process.stdout.write(JSON.stringify(message) + '\n');
-      } } : {}),
+      onEntry: async (entry: import('./agent/types.js').ChatEntry) => {
+        // Persist completed work before acknowledging it or starting another
+        // model round. A killed headless turn must not leave an empty session.
+        if (!sessionStore.isEphemeral()) await headlessAgent.saveCurrentSession();
+        if (incrementalJson) {
+          const message = headlessMessage(entry);
+          if (message) process.stdout.write(JSON.stringify(message) + '\n');
+        }
+      },
     });
     if (!sessionStore.isEphemeral()) {
       await agent.saveCurrentSession();
