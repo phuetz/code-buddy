@@ -1,3 +1,4 @@
+import { admitOllamaCompactRequest } from './ollama-native-token-count.js';
 import { compactOllamaRequest } from './compact-request-budget.js';
 import { isHeadlessPromptCompact } from '../../config/headless-local-prompt.js';
 import { assertOllamaRequestBound, checkOllamaRequest, probeOllamaContext } from './ollama-request-preflight.js';
@@ -766,6 +767,8 @@ export class OpenAICompatProvider implements Provider {
     const native = toOllamaNativeRequest(payload, numCtx);
     const body = isHeadlessPromptCompact() ? compactOllamaRequest(native) : native;
     assertOllamaRequestBound(body);
+    const origin = ollamaNativeChatUrl(this.baseURL).replace(/\/api\/chat$/, '');
+    await admitOllamaCompactRequest(origin, body, fetch, signal);
     logger.debug('Ollama native chat', {
       source: 'OpenAICompatProvider',
       model: payload.model,
@@ -788,7 +791,6 @@ export class OpenAICompatProvider implements Provider {
       throw error;
     }
 
-    const origin = ollamaNativeChatUrl(this.baseURL).replace(/\/api\/chat$/, '');
     if (payload.stream === true) return this.checkedOllamaStream(response.body, payload.model, origin, body, signal);
     const data = await response.json() as Parameters<typeof fromOllamaNativeResponse>[0];
     logger.debug('Ollama real assembled request admission', await checkOllamaRequest(origin, body, data.prompt_eval_count, fetch, signal, process.env.CODEBUDDY_HEADLESS !== 'true'));

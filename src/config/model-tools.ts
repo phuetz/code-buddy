@@ -16,6 +16,8 @@ export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'ma
 export interface ModelToolConfig {
   /** Model name pattern (glob-like matching) */
   model: string;
+  /** Verified native Ollama request tokenizer/renderer protocol, when available. */
+  nativePromptCounter?: 'qwen35';
   /**
    * Strengths the booleans cannot express (code, thinking, french, fast,
    * cheap). reasoning/vision/tool-calling/long-context are DERIVED from the
@@ -461,6 +463,7 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   // qui en sert moins abaisse la valeur via la découverte Ollama/LM Studio.
   {
     model: 'qwen3.5*',
+    nativePromptCounter: 'qwen35',
     supportsReasoning: true,
     supportsToolCalls: true,
     supportsVision: false,
