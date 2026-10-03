@@ -2563,6 +2563,34 @@ describe('AgentExecutor', () => {
       const contextWarnChunk = chunks.find(c => c.content?.includes('Context warning here'));
       expect(contextWarnChunk).toBeDefined();
     });
+
+    // Banc harnais 2026-10-03: the archivist call evicted Ollama's single KV
+    // slot and the next agent request re-read ~60K prompt tokens (71-117 s).
+    describe('pre-compaction flush on a local runtime', () => {
+      const priorTurns = (): CodeBuddyMessage[] => [
+        { role: 'user', content: 'Corrige le bug.' },
+        { role: 'assistant', content: 'Je lis le code.' },
+        { role: 'user', content: 'Le test échoue toujours.' },
+        { role: 'assistant', content: 'Je regarde le test.' },
+      ];
+
+      beforeEach(() => {
+        vi.stubEnv('CODEBUDDY_PROVIDER', 'ollama');
+        (deps.contextManager.shouldWarn as jest.Mock).mockReturnValue({ warn: true, message: 'Contexte presque plein' });
+      });
+      afterEach(() => { vi.unstubAllEnvs(); });
+
+      it('does not spend an auxiliary chat() call by default', async () => {
+        await collectChunks(executor.processUserMessageStream('Continue', [], priorTurns(), null));
+        expect(deps.client.chat).not.toHaveBeenCalled();
+      });
+
+      it('still flushes when CODEBUDDY_PRECOMPACTION_FLUSH=true', async () => {
+        vi.stubEnv('CODEBUDDY_PRECOMPACTION_FLUSH', 'true');
+        await collectChunks(executor.processUserMessageStream('Continue', [], priorTurns(), null));
+        expect(deps.client.chat).toHaveBeenCalled();
+      });
+    });
   });
 
   // =========================================================================

@@ -1745,22 +1745,28 @@ export class AgentExecutor {
             yield { type: "content", content: `\n${contextWarning.message}\n` };
 
             // --- Native Engine pre-compaction memory flush (streaming path) ---
+            // Skipped by default on a local runtime: the auxiliary call evicts
+            // the single KV slot and the next agent request re-reads the whole
+            // prompt (see shouldRunPrecompactionFlush).
             try {
-              const { getPrecompactionFlusher } = await import('../../context/precompaction-flush.js');
-              const flusher = getPrecompactionFlusher();
-              await flusher.flush(
-                preparedMessages.filter(m => m.role !== 'system').map(m => ({
-                  role: m.role as 'user' | 'assistant',
-                  content: typeof m.content === 'string' ? m.content : '',
-                })),
-                async (flushMsgs) => {
-                  const r = await this.deps.client.chat(
-                    flushMsgs.map(m => ({ role: m.role, content: m.content })),
-                    [],
-                  );
-                  return r.choices[0]?.message?.content ?? 'NO_REPLY';
-                }
-              );
+              const { getPrecompactionFlusher, shouldRunPrecompactionFlush } = await import('../../context/precompaction-flush.js');
+              const { isLocalLlmProvider } = await import('../../config/headless-local-prompt.js');
+              if (shouldRunPrecompactionFlush(process.env, isLocalLlmProvider)) {
+                const flusher = getPrecompactionFlusher();
+                await flusher.flush(
+                  preparedMessages.filter(m => m.role !== 'system').map(m => ({
+                    role: m.role as 'user' | 'assistant',
+                    content: typeof m.content === 'string' ? m.content : '',
+                  })),
+                  async (flushMsgs) => {
+                    const r = await this.deps.client.chat(
+                      flushMsgs.map(m => ({ role: m.role, content: m.content })),
+                      [],
+                    );
+                    return r.choices[0]?.message?.content ?? 'NO_REPLY';
+                  }
+                );
+              }
             } catch {
               // non-critical
             }

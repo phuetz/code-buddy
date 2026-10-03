@@ -67,6 +67,31 @@ SKIP if: small talk, debugging tangents, transient data, already-known facts.`;
 // PrecompactionFlusher
 // ============================================================================
 
+/**
+ * Should the agent loop spend an auxiliary LLM call on the pre-compaction
+ * memory flush?
+ *
+ * Measured on the harness bench (2026-10-03, qwen3.8:27b via Ollama): the
+ * archivist call is a completely different prompt sent to the same model.
+ * A local runtime keeps a single KV slot per model, so this call evicts the
+ * agent conversation prefix and the NEXT agent request re-evaluates ~60K
+ * tokens from scratch (71 s and 117 s observed, twice per mission). Cloud
+ * providers cache per prefix and are unaffected.
+ *
+ * - `CODEBUDDY_PRECOMPACTION_FLUSH=true|1|on`  → always flush;
+ * - `CODEBUDDY_PRECOMPACTION_FLUSH=false|0|off` → never flush;
+ * - unset → flush except on a local runtime (Ollama, vLLM, LM Studio).
+ */
+export function shouldRunPrecompactionFlush(
+  env: NodeJS.ProcessEnv,
+  isLocal: (env: NodeJS.ProcessEnv) => boolean,
+): boolean {
+  const raw = env.CODEBUDDY_PRECOMPACTION_FLUSH?.trim().toLowerCase();
+  if (raw === 'true' || raw === '1' || raw === 'on') return true;
+  if (raw === 'false' || raw === '0' || raw === 'off') return false;
+  return !isLocal(env);
+}
+
 export class PrecompactionFlusher {
   /**
    * Build the full flush system prompt, including decision extraction
