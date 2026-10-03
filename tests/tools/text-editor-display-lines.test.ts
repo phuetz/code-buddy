@@ -51,6 +51,8 @@ describe('display line labels are not approximate source text', () => {
   it.each([
     "1: const title='initial';\n2: const status='ready';\n3: console.log(title,status);",
     "1: const title='initial';",
+    "1. const title='initial';\n2. const status='ready';\n3. console.log(title,status);",
+    "1) const title='initial';\n2) const status='ready';",
     "  1 | const title = 'initial';\n  2 | const status = 'ready';",
   ])('rejects entirely drifted display labels: %s', async decorated => {
     const file = join(directory, 'sample.js');
@@ -60,12 +62,12 @@ describe('display line labels are not approximate source text', () => {
     expect(result.error).toMatch(/line numbers|line labels/i);
     expect(readFileSync(file, 'utf8')).toBe(source);
   });
-  it('still edits real numbered records literally', async () => {
+  it.each([':', '|', '.', ')'])('still edits real numbered records literally (%s)', async label => {
     const file = join(directory, 'records.txt');
-    writeFileSync(file, '1: first\n2: second\n');
-    const result = await editor.strReplace(file, '2: second', '2: changed');
+    writeFileSync(file, `1${label} first\n2${label} second\n`);
+    const result = await editor.strReplace(file, `2${label} second`, `2${label} changed`);
     expect(result.success).toBe(true);
-    expect(readFileSync(file, 'utf8')).toBe('1: first\n2: changed\n');
+    expect(readFileSync(file, 'utf8')).toBe(`1${label} first\n2${label} changed\n`);
   });
   it('still supports a normal literal edit after a rejected display copy', async () => {
     const file = join(directory, 'sample.js');
