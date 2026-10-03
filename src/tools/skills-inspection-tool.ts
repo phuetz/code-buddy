@@ -85,37 +85,45 @@ export async function executeSkillViewTool(input: SkillViewToolInput): Promise<T
 
   try {
     const { getSkillsHub } = await import('../skills/hub.js');
+    const hub = getSkillsHub();
     const candidates = skillNameCandidates(requested);
     let name = requested;
-    let result: ReturnType<ReturnType<typeof getSkillsHub>['info']> = null;
-    for (const candidate of candidates) {
-      result = getSkillsHub().info(candidate);
-      if (result) { name = candidate; break; }
-    }
-    const resolution = name !== requested ? { requestedName: requested, resolvedName: name } : {};
+    let result = hub.info(requested);
     if (!result) {
       const { readLocalSkillInventory, readLocalSkillContent } = await import('../skills/local-inventory.js');
-      const inventory = await readLocalSkillInventory(getSkillsHub().listWithIntegrity());
+      const installed = hub.listWithIntegrity();
+      const inventory = await readLocalSkillInventory(installed);
       let skill: (typeof inventory.entries)[number] | undefined;
       for (const candidate of candidates) {
+        result = hub.info(candidate);
+        if (result) { name = candidate; break; }
         skill = inventory.entries.find((entry) => entry.name === candidate);
-        if (skill) { name = candidate; break; }
+        // An imported SKILL.md can declare the bare name. Keep its hub
+        // identity/integrity evidence rather than treating the same file as
+        // an independent exact-name skill. A distinct workspace skill wins.
+        if (skill && !installed.some((entry) => entry.name !== candidate && entry.path === skill?.path)) {
+          name = candidate;
+          break;
+        }
+        skill = undefined;
       }
-      if (!skill) return { success: false, error: `skill_view: skill not found: ${requested}` };
-      await recordView(name);
-      return serializePayload({
-        action: 'skill_view',
-        ...(name !== requested ? { requestedName: requested, resolvedName: name } : {}),
-        skill,
-        ...(input.include_content !== false ? { content: await readLocalSkillContent(skill) } : {}),
-      });
+      if (skill) {
+        await recordView(name);
+        return serializePayload({
+          action: 'skill_view',
+          ...(name !== requested ? { requestedName: requested, resolvedName: name } : {}),
+          skill,
+          ...(input.include_content !== false ? { content: await readLocalSkillContent(skill) } : {}),
+        });
+      }
+      if (!result) return { success: false, error: `skill_view: skill not found: ${requested}` };
     }
 
     const includeContent = input.include_content !== false;
     await recordView(name);
     return serializePayload({
       action: 'skill_view',
-      ...resolution,
+      ...(name !== requested ? { requestedName: requested, resolvedName: name } : {}),
       installed: result.installed,
       integrityOk: result.integrityOk,
       ...(includeContent ? { content: result.content ?? '' } : {}),
