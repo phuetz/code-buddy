@@ -23,6 +23,8 @@ export interface ScanFinding {
   file: string;
   line: number;
   evidence: string;
+  /** Documentary risk retained for review, never an executable authorization. */
+  documentary?: boolean;
 }
 
 export interface ScanResult {
@@ -243,13 +245,18 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
     justification: 'Hex escape sequences in printf/echo piped into shells reconstruct binary or shell payloads stealthily',
   },
   { pattern: /\beval\s+\$\(\s*[^)]*\)/i, severity: 'critical', description: 'Dynamic evaluation of shell command substitution', name: 'eval-command-substitution', capability: 'shell' },
-  { pattern: /\beval\s*\(/, severity: 'critical', description: 'Dynamic code execution via eval()', name: 'eval', capability: 'dynamic-code' },
+  { pattern: /(?:(?<![\w$.])eval|\b(?:globalThis|window|global|builtins)\s*\.\s*eval)\s*\(/, severity: 'critical', description: 'Dynamic code execution via eval()', name: 'eval', capability: 'dynamic-code' },
   { pattern: /\bnew\s+Function\s*\(/, severity: 'critical', description: 'Dynamic function creation', name: 'new-function', capability: 'dynamic-code' },
   { pattern: /\bchild_process\b/, severity: 'high', description: 'Child process module usage', name: 'child_process', capability: 'shell' },
   { pattern: /\bexecSync\s*\(/, severity: 'high', description: 'Synchronous command execution', name: 'execSync', capability: 'shell' },
   { pattern: /\bexecFile\s*\(/, severity: 'high', description: 'File execution', name: 'execFile', capability: 'shell' },
   { pattern: /\bspawn\s*\(/, severity: 'medium', description: 'Process spawning', name: 'spawn', capability: 'shell' },
   { pattern: /\bexec\s*\(/, severity: 'high', description: 'Command execution', name: 'exec', capability: 'shell' },
+
+  { pattern: /\b(?:(?:import\s+subprocess\b|subprocess\s*\.)|from\s+subprocess\s+import\b|from\s+os\s+import\s+[^\n]*(?:system|popen|spawn|exec)\b|import\s+os\s+as\s+\w+|os\s*\.\s*(?:system|popen|spawn\w*|exec\w*)\s*\()/, severity: 'high', description: 'Python process execution capability', name: 'python-process', capability: 'shell' },
+  { pattern: /\b(?:(?:[A-Za-z_]\w*\s*\.\s*)?rmtree\s*\(|from\s+shutil\s+import\s+[^\n]*\brmtree\b)|\b(?:rmSync|rm|rmdirSync|rmdir)\s*\([^;]*\brecursive\s*:\s*true/s, severity: 'critical', description: 'Recursive deletion in executable code', name: 'script-recursive-delete', capability: 'filesystem' },
+
+  { pattern: /\b(?:exec\s*\.\s*Command(?:Context)?|Command\s*::\s*new|ProcessBuilder|shell_exec|system|popen|spawnSync|execFileSync)\s*\(|\bStart-Process\b/, severity: 'high', description: 'Native process execution', name: 'native-process', capability: 'shell' },
 
   // File system dangers
   { pattern: /\brm\s+-rf\b/, severity: 'critical', description: 'Recursive force delete', name: 'rm-rf', capability: 'filesystem' },
@@ -293,7 +300,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
 
   // Environment/secrets
   { pattern: /process\.env\[/, severity: 'low', description: 'Dynamic environment variable access', name: 'env-dynamic', capability: 'secrets' },
-  { pattern: /\b(API_KEY|SECRET|PASSWORD|TOKEN)\b/i, severity: 'info', description: 'Possible secret reference', name: 'secret-ref', capability: 'secrets' },
+  { pattern: /\b(?:[A-Z][A-Z0-9]*_)*(?:API_KEY|SECRET|PASSWORD|TOKEN)(?:_[A-Z0-9]+)*\b/i, severity: 'info', description: 'Possible secret reference', name: 'secret-ref', capability: 'secrets' },
   {
     pattern: /(?<!\bssh-keygen\b[^\n]*)(?:~|\$HOME|\/home\/[^/\s]+)\/\.ssh\/id_(?:rsa|ecdsa|ed25519|dsa)\b(?!\.pub\b)/i,
     severity: 'high',
@@ -318,6 +325,8 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
     capability: 'secrets',
     justification: 'Accessing ~/.aws/credentials or ~/.codebuddy/*.env compromises infrastructure and agent secrets',
   },
+
+  { pattern: /\b[A-Z][A-Z0-9]*_(?:[A-Z0-9]+_)*(?:API_KEY|SECRET|PASSWORD|TOKEN)(?:_[A-Z0-9]+)*\b/i, severity: 'medium', description: 'Prefixed credential reference requires review', name: 'prefixed-secret', capability: 'secrets' },
 
   // Prototype pollution
   { pattern: /__proto__/, severity: 'high', description: 'Prototype pollution risk', name: 'proto', capability: 'prototype-pollution' },
@@ -373,10 +382,51 @@ function getDangerousPatterns(): DangerousPattern[] {
   });
 }
 
+interface ScanContext { markdown: boolean; language: string; watched: boolean }
+function scanContexts(content: string, filePath: string, executableContext = false): ScanContext[] {
+  const markdown = /\.md$/i.test(filePath) && !executableContext && !content.startsWith('#!');
+  let language = '';
+  let fence = '';
+  let watched = false;
+  return content.split('\n').map(line => {
+    const delimiter = markdown ? line.match(/^\s*(`{3,}|~{3,})([\w-]*)/) : null;
+    if (delimiter) {
+      if (fence && delimiter[1]![0] === fence[0]) { fence = ''; language = ''; watched = false; }
+      else if (!fence) { fence = delimiter[1]!; language = delimiter[2]!.toLowerCase(); }
+    }
+    if (markdown && fence && !language && /^Watched patterns:\s*$/i.test(line.trim())) watched = true;
+    return { markdown, language, watched };
+  });
+}
+function classifyMention(dp: DangerousPattern, line: string, context: ScanContext, offset: number, length: number): 'active' | 'benign' | 'documentary' {
+  if (!context.markdown) return 'active';
+  if (dp.name === 'dynamic-require' && ['kotlin', 'kt', 'solidity'].includes(context.language)) {
+    // These languages use require as an assertion. A JS-style module load
+    // remains suspicious even inside a misleading fence.
+    if (/^require\s*\([^)]*(?:isNotBlank\(|\.value|\[|>=|<=|>|<| in )/.test(line.slice(offset))) return 'benign';
+    return 'documentary';
+  }
+  // Substitution is syntax, not proof of injection. In documentation retain
+  // it for review without cumulative quarantine; nested dangerous commands
+  // still hit their own blocking patterns. Scripts keep the stricter verdict.
+  if (dp.name === 'shell-subst') return 'documentary';
+  const documentaryPatterns = ['prompt-override', 'remote-download-pipe-shell', 'rm-rf'];
+  if (!documentaryPatterns.includes(dp.name) || /<!--/.test(line)) return 'active';
+  // Require an explicit refusal referring to quoted input, or a catalogued
+  // command. A warning elsewhere never grants permission to an active line.
+  if (dp.name === 'rm-rf' && context.watched && offset === line.indexOf('rm') && /^\s*-\s+rm\s+-rf\b/.test(line)) return 'documentary';
+  if (context.language && !['text', 'plaintext'].includes(context.language)) return 'active';
+  if (dp.name === 'rm-rf' && /^description:.*intercepts dangerous commands.*confirmation/i.test(line)) return 'documentary';
+  const prefix = line.slice(0, offset);
+  const quoted = ((prefix.match(/`/g)?.length ?? 0) % 2 === 1) || ((prefix.match(/"/g)?.length ?? 0) % 2 === 1);
+  if (quoted && !/["`]/.test(line.slice(offset, offset + length)) && /must be rejected|is an attack, not a repro|content to (?:quote and flag|report), not to (?:obey|execute)/i.test(line)) return 'documentary';
+  return 'active';
+}
+
 /**
  * Scan a single file for dangerous patterns.
  */
-export function scanFile(filePath: string): ScanResult {
+export function scanFile(filePath: string, executableContext = false): ScanResult {
   try {
     const content = readTextForScan(filePath);
     if (content === null) return refusalResult(filePath);
@@ -384,34 +434,28 @@ export function scanFile(filePath: string): ScanResult {
     const lines = content.split('\n');
     const patterns = getDangerousPatterns();
 
+    const contexts = scanContexts(content, filePath, executableContext);
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (line === undefined) continue;
-      const lineNum = i + 1;
-
-      // Skip markdown comments and frontmatter delimiters
       if (line.trim().startsWith('<!--') || line.trim() === '---') continue;
-
       for (const dp of patterns) {
-        if (dp.pattern.test(line)) {
+        for (const match of line.matchAll(new RegExp(dp.pattern.source, dp.pattern.flags.replace('g', '') + 'g'))) {
+          const kind = classifyMention(dp, line, contexts[i]!, match.index, match[0].length);
+          if (kind === 'benign') continue;
           findings.push({
-            severity: dp.severity,
-            pattern: dp.name,
-            description: dp.description,
-            file: filePath,
-            line: lineNum,
-            evidence: line.trim().slice(0, 120),
+            severity: kind === 'documentary' && dp.name !== 'shell-subst' ? 'info' : dp.severity,
+            pattern: dp.name, description: dp.description, file: filePath,
+            line: i + 1, evidence: line.trim().slice(0, 120),
+            ...(kind === 'documentary' ? { documentary: true } : {}),
           });
         }
       }
     }
-
-    // Prompt-injection patterns also run over the FULL document. The line loop
-    // skips `<!-- … -->` (to avoid flagging example `eval()` in comments) and
-    // cannot see a jailbreak split across lines — that's how a no-shell
-    // override slipped through on 2026-09-03. Dotall matching here catches
-    // both without re-enabling those comment false positives for eval/shell.
-    findings.push(...collectPromptInjectionFindings(content, filePath, findings));
+    // Apply the same context decisions to the full-document deobfuscation
+    // pass. Only the matched span is masked; hidden/multiline/encoded attacks
+    // and other patterns on the same line remain visible.
+    findings.push(...collectPromptInjectionFindings(content, filePath, findings, contexts));
     return { file: filePath, findings, scannedAt: Date.now(), textRead: true };
   } catch (error) {
     logger.debug(`Failed to scan file: ${filePath}`, { error });
@@ -474,7 +518,7 @@ export function scanDirectory(dirPath: string, withinScripts = false): ScanResul
       || isScannableSkillFile(entry.name)
       || isExecutableOrShebang(fullPath)
     ) {
-      const result = scanFile(fullPath);
+      const result = scanFile(fullPath, withinScripts || isExecutableOrShebang(fullPath));
       if (result.textRead !== true) {
         results.push(result.findings.length > 0 ? result : unreadFinding(fullPath, 'file'));
       } else if (result.findings.length > 0) {
@@ -546,8 +590,12 @@ export function buildSkillFirewallReport(
   const findings = results.flatMap((result) => result.findings);
   const findingCounts = countFindings(findings);
   const capabilities = inferCapabilities(findings);
-  const score = computeFirewallScore(findingCounts);
-  const verdict = determineFirewallVerdict(findingCounts, capabilities, score);
+  const score = computeFirewallScore(countFindings(findings.filter(f => !f.documentary)));
+  const activeCounts = countFindings(findings.filter(f => !f.documentary));
+  const activeScore = computeFirewallScore(activeCounts);
+  const activeCapabilities = inferCapabilities(findings.filter(f => !f.documentary));
+  const activeVerdict = determineFirewallVerdict(activeCounts, activeCapabilities, activeScore);
+  const verdict = activeVerdict === 'allow' && findings.some(f => f.documentary) ? 'review' : activeVerdict;
 
   return {
     schemaVersion: 1,
@@ -607,6 +655,7 @@ function collectDeobfuscatedFindings(
   content: string,
   filePath: string,
   existing: ScanFinding[],
+  contexts: ScanContext[],
 ): ScanFinding[] {
   const extra: ScanFinding[] = [];
   const seen = new Set(existing.map((finding) => finding.pattern));
@@ -614,14 +663,22 @@ function collectDeobfuscatedFindings(
   const deobAll = isDeobAllEnabled();
   const patterns = getDangerousPatterns();
 
-  const rawWindows = sliceScanWindows(content);
+  const originalRawWindows = sliceScanWindows(content);
   let safeWindows: string[] | null = null;
   let aggressiveWindows: string[] | null = null;
 
   for (const dp of patterns) {
     const isInjection = dp.capability === 'prompt-injection';
     if (!isInjection && !deobAll) continue;
-    if (seen.has(dp.name)) continue;
+    if (existing.some(f => f.pattern === dp.name && !f.documentary)) continue;
+    const contextualContent = content.split('\n').map((line, i) => {
+      return line.replace(new RegExp(dp.pattern.source, dp.pattern.flags.replace('g', '') + 'g'), (...args: unknown[]) => {
+        const match = args[0] as string;
+        const offset = args[args.length - 2] as number;
+        return classifyMention(dp, line, contexts[i]!, offset, match.length) === 'active' ? match : ' '.repeat(match.length);
+      });
+    }).join('\n');
+    const rawWindows = contextualContent === content ? originalRawWindows : sliceScanWindows(contextualContent);
 
     const flags = isInjection && !dp.pattern.flags.includes('s')
       ? `${dp.pattern.flags}s`
@@ -651,8 +708,12 @@ function collectDeobfuscatedFindings(
     }
 
     const targetWindows = isInjection
-      ? (aggressiveWindows ??= deobfuscateForScanWindows(content))
-      : (safeWindows ??= deobfuscateSafeForScanWindows(content));
+      ? contextualContent === content
+        ? (aggressiveWindows ??= deobfuscateForScanWindows(content))
+        : deobfuscateForScanWindows(contextualContent)
+      : contextualContent === content
+        ? (safeWindows ??= deobfuscateSafeForScanWindows(content))
+        : deobfuscateSafeForScanWindows(contextualContent);
 
     for (const win of targetWindows) {
       const normMatch = re.exec(win);
