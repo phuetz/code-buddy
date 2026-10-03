@@ -1684,8 +1684,6 @@ export class AgentExecutor {
         }
 
         inputTokens = incrementalTokenCounter.count(messages);
-        totalInputTokensForCost += inputTokens;
-
         // Context warning — always check regardless of pipeline state
         {
           const contextWarning = this.deps.contextManager.shouldWarn(preparedMessages);
@@ -1779,6 +1777,11 @@ export class AgentExecutor {
           if (abortController?.signal.aborted) {
             yield { type: "content", content: "\n\n[Operation cancelled by user]" };
             yield { type: "done" };
+            // Count this round if it produced a visible response before cancellation.
+            if ((streamEmittedVisibleDelta || streamObservedToolCalls) && inputTokens > 0) {
+              totalInputTokensForCost += inputTokens;
+            }
+
             return;
           }
 
@@ -1821,6 +1824,9 @@ export class AgentExecutor {
         }
         } finally {
           progress.stop();
+        }
+        if (inputTokens > 0) {
+          totalInputTokensForCost += inputTokens;
         }
 
         const trailingDisplayContent = this.deps.streamingHandler.flushDisplayContent?.() ?? '';
