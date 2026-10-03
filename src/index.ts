@@ -1113,13 +1113,12 @@ async function loadCustomAgentForCli(
   const agentConfig = loader.getAgent(agentName);
 
   if (!agentConfig) {
-    logger.error(`Agent not found: ${agentName}`);
     const agents = loader.listAgents();
+    let msg = `Agent not found: ${agentName}`;
     if (agents.length > 0) {
-      cli.error('\nAvailable agents:');
-      agents.forEach(a => cli.error(`   - ${a.id}`));
+      msg += '\nAvailable agents:\n' + agents.map(a => `   - ${a.id}`).join('\n');
     }
-    process.exit(1);
+    throw new Error(msg);
   }
 
   if (announce) {
@@ -1553,14 +1552,8 @@ async function processPromptHeadless(
       cli.error(`Error: ${errorMessage}`);
     } else {
       // JSON error envelope also goes to stdout so piping stays consistent.
-      cli.stdout(
-        JSON.stringify({
-          error: errorMessage,
-          result: null,
-          cost: { total: 0 },
-          model: model || process.env.GROK_MODEL || 'unknown',
-        })
-      );
+      const { buildHeadlessErrorEnvelope } = await import('./cli/headless-options.js');
+      cli.stdout(JSON.stringify(buildHeadlessErrorEnvelope(errorMessage, model || process.env.GROK_MODEL || 'unknown')));
     }
     return 1;
   } finally {
@@ -2189,6 +2182,15 @@ program
         if (!recoveredProvider) {
           const { NO_PROVIDER_GUIDANCE } = await import('./cli/first-run.js');
           logger.error(NO_PROVIDER_GUIDANCE);
+          const { resolveHeadlessOutputFormat, buildHeadlessErrorEnvelope } = await import('./cli/headless-options.js');
+          const isHeadlessCommand = Boolean(options.print || options.prompt || options.output || options.outputFormat || process.env.CODEBUDDY_HEADLESS || !process.stdin.isTTY);
+          if (isHeadlessCommand) {
+            const format = resolveHeadlessOutputFormat(options as any).toLowerCase();
+            if (format !== 'text' && format !== 'markdown') {
+              const errorMessage = 'No AI provider configured.\n      buddy login';
+              cli.stdout(JSON.stringify(buildHeadlessErrorEnvelope(errorMessage, options.model || process.env.GROK_MODEL || 'unknown')));
+            }
+          }
           process.exit(1);
         }
       }

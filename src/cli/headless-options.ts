@@ -150,3 +150,12 @@ export function resolveHeadlessTurnExitCode(
   }
   return resolveHeadlessResultExitCode(resultText);
 }
+
+export function buildHeadlessErrorEnvelope(message: string, model: string): Record<string, unknown> {
+  return {
+    error: message,
+    result: null,
+    cost: { total: 0 },
+    model,
+  };
+}
