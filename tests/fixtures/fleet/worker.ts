@@ -2,6 +2,7 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
 
 const name = process.env.CODEBUDDY_FLEET_HOSTNAME!;
 const model = createServer(async (req, res) => {
@@ -25,7 +26,17 @@ const model = createServer(async (req, res) => {
 });
 model.listen(0, '127.0.0.1');
 await once(model, 'listening');
-process.env.LMSTUDIO_HOST = `http://127.0.0.1:${(model.address() as AddressInfo).port}/v1`;
+const modelBaseUrl = `http://127.0.0.1:${(model.address() as AddressInfo).port}`;
+process.env.LMSTUDIO_HOST = modelBaseUrl + '/v1';
+process.env.CODEBUDDY_PROVIDER = 'lmstudio';
+// peer.describe probes optional runtimes too. Keep discovery inside this
+// fixture instead of invoking the operator's CLIs or local model services.
+process.env.AGY_CLI_PATH = path.join(process.cwd(), 'unconfigured-agy');
+process.env.GEMINI_CLI_PATH = path.join(process.cwd(), 'unconfigured-gemini');
+process.env.OLLAMA_BASE_URL = modelBaseUrl;
+process.env.LM_STUDIO_BASE_URL = modelBaseUrl;
+process.env.LEMONADE_HOST = modelBaseUrl;
+process.env.OMNIROUTE_BASE_URL = modelBaseUrl;
 process.env.GROK_BASE_URL = process.env.LMSTUDIO_HOST;
 const { startServer, stopServer } = await import('../../../src/server/index.js');
 const { getPeerChatProviderInfo } = await import('../../../src/fleet/peer-chat-bridge.js');
