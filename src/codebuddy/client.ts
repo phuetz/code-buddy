@@ -26,7 +26,7 @@ import {
   resolveRuntimeFallbackProviders,
   type RuntimeFallbackProvider,
 } from "../providers/provider-fallback.js";
-import { isLocalLlmProvider } from "../config/headless-local-prompt.js";
+import { isLocalRequestUrl } from "../config/headless-local-prompt.js";
 import {
   classifyFailoverKind,
   extractResetsInSeconds,
@@ -702,7 +702,7 @@ export class CodeBuddyClient {
       const first = this.fallbackProviders[0] ?? this.credentialPoolProviders[0];
       if (first) return isLocalFailoverCandidate(first);
     }
-    return isLocalLlmProvider();
+    return isLocalRequestUrl(this.getCurrentBaseUrl());
   }
 
   /**

@@ -57,22 +57,45 @@ function isLocalNoCostModel(model: string): boolean {
 /**
  * Resolve the billing/pricing classification for a model.
  *
- * When `context` is provided it is authoritative: `subscription` only if the
- * request actually goes through a flat-fee backend or a local runtime.
- * Otherwise we fall back to the historical slug heuristic for callers that
- * have no provider context.
+ * When `context` is provided it is authoritative. `subscription` means a
+ * flat-fee backend (ChatGPT OAuth / Codex, Gemini CLI, Antigravity CLI) and
+ * nothing else. A local runtime is a known $0 tariff (`pay-per-use` /
+ * `known`), not a forfait. Without context, the historical slug heuristic
+ * still applies, with the same distinction.
  */
 export function resolveCostBilling(
   model: string,
   context?: CostBillingContext,
 ): { billing: 'subscription' | 'pay-per-use'; pricing: 'known' | 'unknown' | 'subscription' } {
-  const subscription = context
-    ? Boolean(context.subscriptionAuth || context.localTarget)
-    : isChatGptSubscriptionModel(model) || isLocalNoCostModel(model);
-  if (subscription) {
+  if (context) {
+    if (context.subscriptionAuth) {
+      return { billing: 'subscription', pricing: 'subscription' };
+    }
+    if (context.localTarget) {
+      return { billing: 'pay-per-use', pricing: 'known' };
+    }
+    return { billing: 'pay-per-use', pricing: hasModelPricing(model) ? 'known' : 'unknown' };
+  }
+  if (isChatGptSubscriptionModel(model)) {
     return { billing: 'subscription', pricing: 'subscription' };
   }
+  if (isLocalNoCostModel(model)) {
+    return { billing: 'pay-per-use', pricing: 'known' };
+  }
   return { billing: 'pay-per-use', pricing: hasModelPricing(model) ? 'known' : 'unknown' };
+}
+
+/**
+ * Counters and, when the provider sends one, the dollar amount it billed.
+ * OpenRouter puts that amount in `usage.cost`. A finite value ≥ 0 wins over
+ * the price table. Cached prompt tokens are priced at half only when no
+ * invoice is present — a provider cache discount is not always 50 %.
+ */
+export interface ProviderReportedUsage {
+  promptTokens: number;
+  completionTokens: number;
+  cachedTokens?: number;
+  reportedCostUsd?: number;
 }
 
 export interface TokenUsage {
@@ -117,6 +140,86 @@ export interface ExtendedCostInfo {
   inputTokens: number;
   /** Output tokens used for this cost calculation */
   outputTokens: number;
+}
+
+function finiteNonNegative(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/** `prompt - cached + cached * 0.5`, with cached clamped to [0, prompt]. */
+function discountedPromptTokens(promptTokens: number, cachedTokens: number): number {
+  const prompt = finiteNonNegative(promptTokens) ?? 0;
+  const cached = Math.min(finiteNonNegative(cachedTokens) ?? 0, prompt);
+  return prompt - cached + cached * 0.5;
+}
+
+function isKnownZeroTariff(model: string, context: CostBillingContext | undefined): boolean {
+  if (context) return Boolean(context.localTarget) && !context.subscriptionAuth;
+  return isLocalNoCostModel(model);
+}
+
+/**
+ * One quote for both `calculateCost` and `calculateCostExtended`.
+ * Order: flat-fee → local $0 tariff → provider invoice → price table.
+ */
+function quoteTurnCost(
+  inputTokens: number,
+  outputTokens: number,
+  model: string,
+  cachedTokens: number,
+  providerUsage: ProviderReportedUsage | undefined,
+  context: CostBillingContext | undefined,
+): ExtendedCostInfo {
+  const verdict = resolveCostBilling(model, context);
+  const prompt = providerUsage?.promptTokens ?? inputTokens;
+  const completion = finiteNonNegative(providerUsage?.completionTokens ?? outputTokens) ?? 0;
+  const cached = providerUsage?.cachedTokens ?? cachedTokens;
+  const effectiveInput = discountedPromptTokens(prompt, cached);
+  const estimated = providerUsage === undefined;
+
+  if (verdict.billing === 'subscription') {
+    return {
+      total: 0,
+      estimated,
+      pricing: 'subscription',
+      billing: 'subscription',
+      inputTokens: effectiveInput,
+      outputTokens: completion,
+    };
+  }
+
+  if (isKnownZeroTariff(model, context)) {
+    return {
+      total: 0,
+      estimated,
+      pricing: 'known',
+      billing: 'pay-per-use',
+      inputTokens: effectiveInput,
+      outputTokens: completion,
+    };
+  }
+
+  const reported = finiteNonNegative(providerUsage?.reportedCostUsd);
+  if (reported !== undefined) {
+    return {
+      total: reported,
+      estimated: false,
+      pricing: 'known',
+      billing: 'pay-per-use',
+      inputTokens: finiteNonNegative(prompt) ?? 0,
+      outputTokens: completion,
+    };
+  }
+
+  const pricing = getPricingPer1k(model);
+  return {
+    total: (effectiveInput / 1000) * pricing.inputPer1k + (completion / 1000) * pricing.outputPer1k,
+    estimated,
+    pricing: verdict.pricing,
+    billing: 'pay-per-use',
+    inputTokens: effectiveInput,
+    outputTokens: completion,
+  };
 }
 
 export interface CostConfig {
@@ -240,20 +343,6 @@ export class CostTracker extends EventEmitter {
   }
 
   /**
-   * Determine billing type for a model
-   */
-  private determineBillingType(model: string, context?: CostBillingContext): 'subscription' | 'pay-per-use' {
-    return resolveCostBilling(model, context).billing;
-  }
-
-  /**
-   * Determine pricing status for a model
-   */
-  private determinePricingStatus(model: string, context?: CostBillingContext): 'known' | 'unknown' | 'subscription' {
-    return resolveCostBilling(model, context).pricing;
-  }
-
-  /**
    * Calculate cost for token usage.
    *
    * Returns 0 for ChatGPT subscription auth (`gpt-5.2`, `gpt-5.5*`, `gpt-5*-codex`,
@@ -262,28 +351,21 @@ export class CostTracker extends EventEmitter {
    * per-token API platform balance. Reporting a fictitious USD cost is
    * misleading and shows up in dashboards as "spend" that doesn't exist.
    *
-   * When providerUsage is provided (provider-reported tokens), it takes precedence
-   * over local estimates. This ensures accuracy when the provider returns usage
-   * in the SSE stream (OpenAI-compatible APIs with include_usage option).
+   * A local runtime also returns 0: that is a known tariff, not a forfait.
+   * Provider-reported tokens take precedence over the local estimate. A finite
+   * `reportedCostUsd` (OpenRouter `usage.cost`) wins over the price table,
+   * except on a flat-fee subscription or a local runtime, which stay at 0.
+   * Without an invoice, cached prompt tokens are charged at half.
    */
   calculateCost(
     inputTokens: number,
     outputTokens: number,
     model: string,
     cachedTokens: number = 0,
-    providerUsage?: { promptTokens: number; completionTokens: number },
+    providerUsage?: ProviderReportedUsage,
     context?: CostBillingContext
   ): number {
-    // Use provider-reported tokens when available
-    const effectiveInput = providerUsage?.promptTokens ?? (inputTokens - cachedTokens + (cachedTokens * 0.5));
-    const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
-
-    if (this.determineBillingType(model, context) === 'subscription') {
-      return 0;
-    }
-    const pricing = getPricingPer1k(model);
-    return (effectiveInput / 1000) * pricing.inputPer1k +
-           (effectiveOutput / 1000) * pricing.outputPer1k;
+    return quoteTurnCost(inputTokens, outputTokens, model, cachedTokens, providerUsage, context).total;
   }
 
   /**
@@ -296,41 +378,30 @@ export class CostTracker extends EventEmitter {
     outputTokens: number,
     model: string,
     cachedTokens: number = 0,
-    providerUsage?: { promptTokens: number; completionTokens: number },
+    providerUsage?: ProviderReportedUsage,
     context?: CostBillingContext
   ): ExtendedCostInfo {
-    const billing = this.determineBillingType(model, context);
-    const pricingStatus = this.determinePricingStatus(model, context);
-    const estimated = providerUsage === undefined;
-
-    // Use provider-reported tokens when available
-    const effectiveInput = providerUsage?.promptTokens ?? (inputTokens - cachedTokens + (cachedTokens * 0.5));
-    const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
-
-    let total = 0;
-    if (billing === 'subscription') {
-      total = 0;
-    } else {
-      const pricing = getPricingPer1k(model);
-      total = (effectiveInput / 1000) * pricing.inputPer1k +
-              (effectiveOutput / 1000) * pricing.outputPer1k;
-    }
-
-    return {
-      total,
-      estimated,
-      pricing: pricingStatus,
-      billing,
-      inputTokens: effectiveInput,
-      outputTokens: effectiveOutput,
-    };
+    return quoteTurnCost(inputTokens, outputTokens, model, cachedTokens, providerUsage, context);
   }
 
   /**
    * Record token usage
    */
-  recordUsage(inputTokens: number, outputTokens: number, model: string, context?: CostBillingContext): TokenUsage {
-    const cost = this.calculateCost(inputTokens, outputTokens, model, 0, undefined, context);
+  recordUsage(
+    inputTokens: number,
+    outputTokens: number,
+    model: string,
+    context?: CostBillingContext,
+    providerUsage?: ProviderReportedUsage,
+  ): TokenUsage {
+    const cost = this.calculateCost(
+      inputTokens,
+      outputTokens,
+      model,
+      providerUsage?.cachedTokens ?? 0,
+      providerUsage,
+      context,
+    );
     const usage: TokenUsage = {
       inputTokens,
       outputTokens,

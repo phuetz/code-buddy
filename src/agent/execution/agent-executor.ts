@@ -76,6 +76,7 @@ import { getTurnMetricsRecorder } from '../../observability/turn-metrics.js';
 import type { ICMBridge } from "../../memory/icm-bridge.js";
 import { shouldCompactBeforeToolExec, estimateToolResultTokens } from "../../context/proactive-compaction.js";
 import { formatTokenUsage, estimateCost } from "../../utils/token-display.js";
+import type { ProviderReportedUsage } from "../../utils/cost-tracker.js";
 import { classifyQuery } from "./query-classifier.js";
 import { getModelToolConfig } from "../../config/model-tools.js";
 import { getLatencyOptimizer, getStreamingOptimizer } from "../../optimization/latency-optimizer.js";
@@ -524,7 +525,11 @@ export interface ExecutorConfig {
   /** Returns true if current model is a Grok model (enables web search) */
   isGrokModel: () => boolean;
   /** Records token usage for cost tracking (additive — call once per turn) */
-  recordSessionCost: (input: number, output: number, providerUsage?: { promptTokens: number; completionTokens: number }) => void;
+  recordSessionCost: (
+    input: number,
+    output: number,
+    providerUsage?: ProviderReportedUsage,
+  ) => number | void;
   /**
    * Optional: publishes the counters the PROVIDER reported for the turn, summed
    * over every round. Called exactly once per turn — with `undefined` when no
@@ -534,7 +539,7 @@ export interface ExecutorConfig {
    * measured number from a guessed one.
    */
   recordTurnProviderUsage?: (
-    usage: { promptTokens: number; completionTokens: number } | undefined,
+    usage: ProviderReportedUsage | undefined,
   ) => void;
   /** Returns true if session cost limit has been reached */
   isSessionCostLimitReached: () => boolean;
@@ -1352,32 +1357,44 @@ export class AgentExecutor {
     let totalInputTokensForCost = 0;
     let providerPromptTokens = 0;
     let providerCompletionTokens = 0;
+    let providerCachedTokens = 0;
+    let providerReportedCostUsd = 0;
+    let providerUsageRounds = 0;
+    let providerCostRounds = 0;
     let providerUsageSeen = false;
     let sessionCostRecorded = false;
+    let recordedTurnCost: number | undefined;
+    const turnProviderUsage = (): ProviderReportedUsage | undefined => {
+      if (!providerUsageSeen) return undefined;
+      // A partial invoice (one round billed, another not) is not a total.
+      // Fall back to the price table instead of summing only the rounds that
+      // happened to carry `usage.cost`.
+      const invoiceComplete = providerUsageRounds > 0 && providerCostRounds === providerUsageRounds;
+      return {
+        promptTokens: providerPromptTokens,
+        completionTokens: providerCompletionTokens,
+        ...(providerCachedTokens > 0 ? { cachedTokens: providerCachedTokens } : {}),
+        ...(invoiceComplete ? { reportedCostUsd: providerReportedCostUsd } : {}),
+      };
+    };
     const recordTurnCost = (): void => {
       if (sessionCostRecorded) return;
       sessionCostRecorded = true;
+      const providerUsage = turnProviderUsage();
       try {
-        // Pass provider usage when available (takes precedence over local estimates)
-        const providerUsage = providerUsageSeen
-          ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
-          : undefined;
         // Only pass provider usage when the provider reported one, so the
         // historical two-argument call (and its tests) stays byte-identical.
-        if (providerUsage) {
-          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens, providerUsage);
-        } else {
-          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
+        const recorded = providerUsage
+          ? this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens, providerUsage)
+          : this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
+        if (typeof recorded === 'number' && Number.isFinite(recorded)) {
+          recordedTurnCost = recorded;
         }
       } catch (error) {
         logger.warn('Failed to record session cost', { error: getErrorMessage(error) });
       }
       try {
-        this.config.recordTurnProviderUsage?.(
-          providerUsageSeen
-            ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
-            : undefined,
-        );
+        this.config.recordTurnProviderUsage?.(providerUsage);
       } catch (error) {
         logger.warn('Failed to record provider turn usage', { error: getErrorMessage(error) });
       }
@@ -1961,8 +1978,24 @@ export class AgentExecutor {
         const roundProviderUsage = this.deps.streamingHandler.getProviderUsage?.();
         if (roundProviderUsage) {
           providerUsageSeen = true;
+          providerUsageRounds += 1;
           providerPromptTokens += roundProviderUsage.promptTokens ?? 0;
           providerCompletionTokens += roundProviderUsage.completionTokens ?? 0;
+          if (
+            typeof roundProviderUsage.cachedTokens === 'number'
+            && Number.isFinite(roundProviderUsage.cachedTokens)
+            && roundProviderUsage.cachedTokens > 0
+          ) {
+            providerCachedTokens += roundProviderUsage.cachedTokens;
+          }
+          if (
+            typeof roundProviderUsage.reportedCostUsd === 'number'
+            && Number.isFinite(roundProviderUsage.reportedCostUsd)
+            && roundProviderUsage.reportedCostUsd >= 0
+          ) {
+            providerReportedCostUsd += roundProviderUsage.reportedCostUsd;
+            providerCostRounds += 1;
+          }
         }
         yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
@@ -2709,7 +2742,10 @@ export class AgentExecutor {
       // (ChatGPT OAuth / Codex, Gemini CLI) or a local runtime yields $0.
       // A paid aggregator model such as `deepseek/…` on OpenRouter must be
       // estimated, not presented as a free subscription.
-      const streamTurnCost = estimateCost(
+      // The recorded figure already applied the invoice, the cache discount
+      // and the forfait/local rules. estimateCost is only the fallback when
+      // recording returned nothing (partial test doubles).
+      const streamTurnCost = recordedTurnCost ?? estimateCost(
         totalInputTokensForCost,
         totalOutputTokens,
         undefined,

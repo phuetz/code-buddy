@@ -18,7 +18,7 @@ import { BaseAgent } from "./base-agent.js";
 import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastructure/index.js";
 import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
 import type { Session, SessionStore } from "../persistence/session-store.js";
-import type { CostTracker, ExtendedCostInfo, CostBillingContext } from "../utils/cost-tracker.js";
+import type { CostTracker, ExtendedCostInfo, CostBillingContext, ProviderReportedUsage } from "../utils/cost-tracker.js";
 import { resolveCostBilling } from "../utils/cost-tracker.js";
 import { getLaneQueue } from "../concurrency/lane-queue.js";
 import type { RouteAgentConfig } from "../channels/peer-routing.js";
@@ -159,7 +159,7 @@ export class CodeBuddyAgent extends BaseAgent {
    * over its rounds. `null` when the provider reported none — the caller must
    * then say so rather than pass an estimate off as a measurement.
    */
-  private lastTurnProviderUsage: { promptTokens: number; completionTokens: number } | null = null;
+  private lastTurnProviderUsage: ProviderReportedUsage | null = null;
 
   private toolSelectionStrategy: ToolSelectionStrategy;
 
@@ -1823,11 +1823,18 @@ Look at the screenshot and find the element matching the user's intent. Output o
 
     // Get billing and pricing status from the real provider, not the slug.
     const { billing, pricing } = resolveCostBilling(model, this.getCostBillingContext());
+    // An invoice (`usage.cost`) is a known price for this call even when the
+    // slug is absent from the local table. A flat-fee backend stays a forfait.
+    const invoice = lastProviderUsage?.reportedCostUsd;
+    const pricedByInvoice = billing !== 'subscription'
+      && typeof invoice === 'number'
+      && Number.isFinite(invoice)
+      && invoice >= 0;
 
     return {
       total: this.sessionCost,
       estimated,
-      pricing,
+      pricing: pricedByInvoice ? 'known' : pricing,
       billing,
       inputTokens: report.sessionTokens.input,
       outputTokens: report.sessionTokens.output,
@@ -2306,18 +2313,25 @@ Look at the screenshot and find the element matching the user's intent. Output o
   private recordSessionCost(
     inputTokens: number,
     outputTokens: number,
-    providerUsage?: { promptTokens: number; completionTokens: number }
-  ): void {
+    providerUsage?: ProviderReportedUsage,
+  ): number {
     const model = this.codebuddyClient.getCurrentModel();
     const billingContext = this.getCostBillingContext();
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage, billingContext);
+    const cost = this.costTracker.calculateCost(
+      inputTokens,
+      outputTokens,
+      model,
+      providerUsage?.cachedTokens ?? 0,
+      providerUsage,
+      billingContext,
+    );
     this.sessionCost += cost;
     this.routingFacade?.addSessionCost(cost);
 
     // Record usage with effective tokens (provider if available, otherwise local estimate)
     const effectiveInput = providerUsage?.promptTokens ?? inputTokens;
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
-    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model, billingContext);
+    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model, billingContext, providerUsage);
 
     // Store provider usage for extended cost info retrieval
     if (providerUsage) {
@@ -2340,6 +2354,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     if (this.sessionCostLimit !== Infinity) {
       this.budgetAlertManager.check(this.sessionCost, this.sessionCostLimit);
     }
+    return cost;
   }
 
   /**
@@ -2348,7 +2363,14 @@ Look at the screenshot and find the element matching the user's intent. Output o
    */
   protected override estimateSessionCostAfter(inputTokens: number, outputTokens: number): number {
     const model = this.codebuddyClient.getCurrentModel();
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model);
+    const cost = this.costTracker.calculateCost(
+      inputTokens,
+      outputTokens,
+      model,
+      0,
+      undefined,
+      this.getCostBillingContext(),
+    );
     return this.sessionCost + cost;
   }
 
