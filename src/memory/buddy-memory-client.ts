@@ -109,6 +109,12 @@ export class BuddyMemoryClient {
     this.child.stdin.on('error', () => this.fail());
     this.child.stdout.on('error', () => this.fail());
     this.child.on('exit', () => this.fail());
+    // Le sidecar ne doit JAMAIS retenir le processus hôte : enfant et pipes sont « unref ».
+    // Une requête en cours reste protégée par son minuteur d'expiration (non unref, voir
+    // call()), qui garde la boucle d'événements vivante jusqu'à la réponse ou l'expiration.
+    this.child.unref();
+    (this.child.stdin as unknown as { unref?: () => void }).unref?.();
+    (this.child.stdout as unknown as { unref?: () => void }).unref?.();
     this.rl = createInterface({ input: this.child.stdout });
     this.rl.on('line', (line) => this.onLine(line));
   }
