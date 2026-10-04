@@ -13,6 +13,16 @@ ne suffit pas à éliminer un skill. Une racine canonique liée ou ambiguë refu
 l’import ; la casse réelle du nom du répertoire est conservée. Le rapport donne chaque chemin ignoré et sa raison. Deux skills
 indépendants portant le même nom conservent chacun un nom d'import distinct.
 
+**Refus par défaut des exécutables (reprise 13).** Une liste de motifs ne fermera jamais la classe « un script contourne l'analyse » (douze reprises, autant de contournements). Un skill importé qui embarque un fichier exécutable ou interprétable est donc mis en **quarantaine quel que soit son contenu** : script shell, `.py`, `.js`/`.mjs`/`.cjs`/`.ts`, `.pl`, `.rb`, `.php`, `.lua`, `.tcl`, `.awk`, `.ps1`/`.bat`/`.cmd`, `Makefile`/`*.mk`/`*.make`, binaire ou bibliothèque (ELF, PE, Mach-O, WebAssembly, `.jar`, `.so`, `.dll`), tout fichier au bit exécutable ou commençant par `#!`, et tout lien symbolique. Le nom ne cache rien : les premiers octets sont lus même sous un nom de donnée. Un skill texte seul (Markdown, JSON, texte, images) est inchangé.
+
+Seule une **liste blanche explicite** lève ce refus, fichier par fichier : `~/.codebuddy/skill-exec-allowlist.json`, absente donc vide par défaut. Chaque exécutable du skill doit y figurer, sinon le skill reste en quarantaine.
+
+```json
+{ "entries": [ { "source": "hermes", "path": "productivity/maps/scripts/maps_client.py", "sha256": "<64 hex>" } ] }
+```
+
+`source` est l'étiquette de l'import (`--source <nom>`, ou le nom du dossier pour `--dir`), `path` le chemin du fichier relatif au dossier source (séparateurs `/`), `sha256` l'empreinte du contenu ; un fichier modifié n'est plus autorisé. La raison de quarantaine affiche le chemin et l'empreinte à copier après relecture humaine du fichier. Un fichier de configuration invalide est ignoré (liste vide, avertissement) : jamais d'autorisation par défaut. L'autorisation ne dispense pas de l'analyse par motifs, qui reste la seconde couche pour les scripts autorisés et la seule couche pour `SKILL.md` (injection de prompt). Code : `src/security/skill-executable-gate.ts`, branché dans `src/skills/skill-importer.ts`.
+
 Le pare-feu analyse le manifeste et tous les fichiers copiés, sans exclure les charges `.txt`, les suffixes inconnus ou les scripts sans extension. Le shebang fournit le langage ; un langage inconnu impose une revue ou une quarantaine pour un opérateur de processus. Les processus Python/Node
 et autres appels natifs, les suppressions récursives et les références de secrets sont
 signalés, y compris les modules préfixés (`SAFE_subprocess`, `SAFE_child_process`), les affectations de secrets littéraux (`apiKey`, `secret`), les lanceurs shell et les appels de suppression déstructurés ou optionnels (`rm?.(...)`) et les backticks shell.

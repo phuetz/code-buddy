@@ -17,7 +17,8 @@ import path from 'path';
 import { createHash } from 'crypto';
 import * as yaml from 'yaml';
 import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
-import { scanSkillFirewall } from '../security/skill-scanner.js';
+import { scanSkillFirewall, type SkillFirewallReport } from '../security/skill-scanner.js';
+import { checkExecutablePayloads, loadExecAllowlist, type ExecAllowlistEntry } from '../security/skill-executable-gate.js';
 import { parseSkillFile, validateSkill } from './parser.js';
 import { importAgents, type AgentImportReport } from './agent-importer.js';
 import { logger } from '../utils/logger.js';
@@ -45,6 +46,12 @@ export interface ImportOptions {
   category?: string;
   /** Pin imported skills so curation leaves them alone (default true). */
   pinByDefault?: boolean;
+  /**
+   * Explicit allowlist of executable/interpretable files (source + path relative to the
+   * source dir + sha256). Default: `~/.codebuddy/skill-exec-allowlist.json`, empty when absent.
+   * Without an entry, any skill that ships such a file is quarantined whatever its content.
+   */
+  execAllowlist?: ExecAllowlistEntry[];
 }
 
 export interface ImportedSkill {
@@ -246,6 +253,21 @@ function copySupportDirs(srcDir: string, destDir: string): void {
   }
 }
 
+/**
+ * Firewall for an imported skill. Layer 1 (default refusal): any executable or
+ * interpretable file not explicitly allowlisted quarantines the skill, whatever it
+ * contains. Layer 2: the pattern scan, still run on everything (alone for SKILL.md).
+ */
+function firewallForImport(
+  skillDir: string,
+  gate: { sourceRoot: string; source: string; allowlist: readonly ExecAllowlistEntry[] | (() => readonly ExecAllowlistEntry[]) },
+): SkillFirewallReport {
+  const report = scanSkillFirewall(skillDir);
+  const exec = checkExecutablePayloads(skillDir, gate);
+  if (!exec.blocked) return report;
+  return { ...report, verdict: 'quarantine', quarantineRequired: true, summary: exec.reason };
+}
+
 /** Import skills from a directory. Pure-ish: writes nothing when dryRun. */
 export async function importSkills(sourceDir: string, options: ImportOptions = {}): Promise<ImportReport> {
   const destRoot = options.destRoot ?? defaultDestRoot();
@@ -253,6 +275,7 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
   const dryRun = options.dryRun ?? false;
   const pinByDefault = options.pinByDefault ?? true;
   const report: ImportReport = { imported: [], quarantined: [], review: [], skipped: [], total: 0, dryRun };
+  const execGate = { sourceRoot: sourceDir, source, allowlist: options.execAllowlist ?? (() => loadExecAllowlist()) };
 
   // Resolve the actual spelling. A reserved canonical root that is a link
   // or a special file is a refusal, never a switch to importing all roots.
@@ -285,7 +308,7 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
     const original = path.join(canonical, ...parts.slice(1));
     const isLocale = parts.length > 1 && /^(?:en|es|fr|de|ja|ko|zh|pt|ru|it|tr|ar|hi)(?:[-_][A-Za-z]{2,4})?$/.test(parts[0]!);
     if (isLocale && candidates.includes(original)) {
-      const fw = scanSkillFirewall(dir);
+      const fw = firewallForImport(dir, execGate);
       if (fw.verdict === 'quarantine') {
         report.quarantined.push({ sourcePath: path.relative(sourceDir, dir), reason: fw.summary, verdict: fw.verdict });
         continue;
@@ -341,7 +364,7 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
     }
 
     // Firewall gate (scans SKILL.md + scripts/support files recursively).
-    const fw = scanSkillFirewall(skillDir);
+    const fw = firewallForImport(skillDir, execGate);
     if (fw.quarantineRequired) {
       report.quarantined.push({ sourcePath: rel, reason: fw.summary, verdict: String(fw.verdict) });
       continue;

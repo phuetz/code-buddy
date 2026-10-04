@@ -4,6 +4,12 @@ import os from 'os';
 import path from 'path';
 import { scanSkillContent, scanSkillFirewall } from '../../src/security/skill-scanner.js';
 import { importSkills } from '../../src/skills/skill-importer.js';
+import { findExecutablePayloads } from '../../src/security/skill-executable-gate.js';
+
+/** Couche 2 seule : on autorise explicitement les scripts pour juger l'analyse par motifs. */
+function allowScripts(root: string, source = 'import') {
+  return findExecutablePayloads(root).map(f => ({ source, path: f.relPath, sha256: f.sha256 }));
+}
 
 /**
  * Reprise 10 : le pare-feu ne tient plus une liste d'orthographes interdites.
@@ -125,7 +131,8 @@ describe('Skill Firewall ECC reprise 10 : mot de commande, fermé par défaut', 
   it('n\'applique pas la règle aux scripts ordinaires (arguments non littéraux permis)', async () => {
     for (const body of ORDINAIRES) {
       expect(activeHigh(body).filter(f => ['non-literal-command-word', 'interpreter-command-word', 'unparseable-shell'].includes(f.pattern)), JSON.stringify(body)).toEqual([]);
-      const report = await importSkills(skillWithScript(body), { dryRun: true });
+      const root = skillWithScript(body);
+      const report = await importSkills(root, { dryRun: true, execAllowlist: allowScripts(root) });
       expect(report.quarantined.length, `ne doit pas être en quarantaine: ${JSON.stringify(body)}`).toBe(0);
     }
   });

@@ -4,6 +4,12 @@ import os from 'os';
 import path from 'path';
 import { scanSkillFirewall } from '../../src/security/skill-scanner.js';
 import { importSkills } from '../../src/skills/skill-importer.js';
+import { findExecutablePayloads } from '../../src/security/skill-executable-gate.js';
+
+/** Couche 2 seule : on autorise explicitement les scripts pour juger l'analyse par motifs. */
+function allowScripts(root: string, source = 'import') {
+  return findExecutablePayloads(root).map(f => ({ source, path: f.relPath, sha256: f.sha256 }));
+}
 
 /**
  * Familles du banc de Grok Bot (100 skills piégés) qui passaient `allow` sur
@@ -79,7 +85,7 @@ describe('Skill Firewall ECC reprise 11 : familles du banc Grok Bot', () => {
     for (const [name, body] of INERTES) {
       const root = skillWith('scripts/run.sh', body);
       expect(scanSkillFirewall(path.join(root, 'skills', 'probe')).verdict, name).not.toBe('quarantine');
-      const report = await importSkills(root, { dryRun: true });
+      const report = await importSkills(root, { dryRun: true, execAllowlist: allowScripts(root) });
       expect(report.quarantined.length, name).toBe(0);
     }
   });
