@@ -396,4 +396,48 @@ describe('reprise 1 — le remplacement est épissé à la fenêtre trouvée, pa
     expect(r.error).toMatch(/Edit #2.*2 occurrences/);
     expect(readText('e.txt')).toBe('one\na b\na b\n');
   });
+
+  const refuse = async (name: string, content: string, old: string) => {
+    write(name, content);
+    const r = await editor.strReplace(file(name), old, 'OK');
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/2 occurrences/);
+    expect(readText(name)).toBe(content);
+  };
+
+  it('flexible CRLF + LF cherché : deux fenêtres identiques = refus', async () => {
+    await refuse('a.ts', 'alpha();\r\nbeta();\r\nalpha();\r\nbeta();\r\n', 'alpha();\nbeta();');
+  });
+
+  it('flexible CRLF + BOM : deux fenêtres identiques = refus', async () => {
+    await refuse('a.ts', '\uFEFFalpha();\r\nbeta();\r\nalpha();\r\nbeta();\r\n', 'alpha();\nbeta();');
+  });
+
+  it('flexible LF, indentations différentes : fenêtres équivalentes = refus', async () => {
+    await refuse('a.ts', '  a();\n  b();\n    a();\n    b();\n', 'a();\nb();');
+  });
+
+  it('regex : deux motifs équivalents = refus', async () => {
+    await refuse('a.ts', 'doThing( alpha , beta )\nmid\ndoThing( alpha , beta )\n', 'doThing(alpha,beta)');
+  });
+
+  it('unicode : deux occurrences équivalentes = refus', async () => {
+    await refuse('a.ts', 'say "hi"\nsay "hi"\n', 'say \u201Chi\u201D');
+  });
+
+  it('fuzzy : deux fenêtres à égalité = refus', async () => {
+    await refuse('a.ts', 'function helloWorld()\nfunction helloWorld()\n', 'function helloWorlX()');
+  });
+
+  it('LCS : deux lignes à égalité = refus', async () => {
+    const gap = ' '.repeat(30);
+    await refuse('a.txt', `foo${gap}bar\nfoo${gap}bar\n`, 'foo bar');
+  });
+
+  it('approximatif mais unique (CRLF + BOM) : toujours appliqué', async () => {
+    write('a.ts', '\uFEFFalpha();\r\nbeta();\r\ngamma();\r\n');
+    const r = await editor.strReplace(file('a.ts'), 'alpha();\nbeta();', 'OK');
+    expect(r.success).toBe(true);
+    expect(readText('a.ts')).toBe('\uFEFFOK\r\ngamma();\r\n');
+  });
 });

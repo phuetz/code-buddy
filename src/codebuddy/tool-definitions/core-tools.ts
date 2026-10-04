@@ -105,7 +105,7 @@ export const STR_REPLACE_EDITOR_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "str_replace_editor",
-    description: "Replace specific text in a file. Use this for single line edits only. After editing, verify the change with view_file.",
+    description: "Replace specific text in a file. old_str must identify ONE place in the file (add surrounding context if it occurs several times, or set replace_all). After editing, verify the change with view_file.",
     parameters: {
       type: "object",
       properties: {
@@ -123,7 +123,7 @@ export const STR_REPLACE_EDITOR_TOOL: CodeBuddyTool = {
         },
         old_str: {
           type: "string",
-          description: "Text to replace (must match exactly, or will use fuzzy matching for multi-line strings)",
+          description: "Text to replace (must identify a single place; whitespace/typography differences are tolerated, but several matching places are refused)",
         },
         old_text: {
           type: "string",

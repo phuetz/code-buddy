@@ -26,6 +26,13 @@ export interface MatchResult {
    * which is not necessarily the window the strategy found.
    */
   index: number;
+  /**
+   * How many equivalent places this strategy could have matched (>= 1): equal
+   * windows once whitespace/typography is ignored, regex hits, ties for the
+   * best fuzzy score. More than one = ambiguous: the caller must not pick
+   * silently (same rule as an exact text found several times).
+   */
+  candidates: number;
 }
 
 /** Offset of the start of line `lineIdx` when `source` is split on '\n'. */
@@ -41,7 +48,7 @@ function lineOffset(lines: string[], lineIdx: number): number {
 
 function exactMatch(source: string, search: string): MatchResult | null {
   if (source.includes(search)) {
-    return { matched: search, strategy: 'exact', confidence: 1.0, index: source.indexOf(search) };
+    return { matched: search, strategy: 'exact', confidence: 1.0, index: source.indexOf(search), candidates: source.split(search).length - 1 };
   }
   return null;
 }
@@ -70,7 +77,16 @@ function flexibleMatch(source: string, search: string): MatchResult | null {
     if (isMatch) {
       // Return the original source lines (preserving indentation)
       const matched = sourceLines.slice(i, i + searchLines.length).join('\n');
-      return { matched, strategy: 'flexible', confidence: 0.95, index: lineOffset(sourceLines, i) };
+      // Count the other equivalent (non-overlapping) windows below this one.
+      let candidates = 1;
+      for (let k = i + searchLines.length; k <= sourceLines.length - searchLines.length; k++) {
+        const same = searchLinesStripped.every((l, idx) => (sourceLines[k + idx] as string).trim() === l);
+        if (same) {
+          candidates++;
+          k += searchLines.length - 1;
+        }
+      }
+      return { matched, strategy: 'flexible', confidence: 0.95, index: lineOffset(sourceLines, i), candidates };
     }
   }
 
@@ -105,7 +121,7 @@ function regexMatch(source: string, search: string): MatchResult | null {
     const match = source.match(regex);
 
     if (match && match[0]) {
-      return { matched: match[0], strategy: 'regex', confidence: 0.85, index: match.index ?? source.indexOf(match[0]) };
+      return { matched: match[0], strategy: 'regex', confidence: 0.85, index: match.index ?? source.indexOf(match[0]), candidates: source.match(new RegExp(pattern, 'gm'))?.length ?? 1 };
     }
   } catch {
     // Invalid regex — skip
@@ -159,6 +175,8 @@ function unicodeNormalizedMatch(source: string, search: string): MatchResult | n
   if (normalizedSearch.length === 0) return null;
   const { norm, origin } = normalizeWithMap(source);
 
+  let first: MatchResult | null = null;
+  let count = 0;
   let idx = norm.indexOf(normalizedSearch);
   while (idx !== -1) {
     const end = idx + normalizedSearch.length;
@@ -169,12 +187,15 @@ function unicodeNormalizedMatch(source: string, search: string): MatchResult | n
     if (startOk && endOk) {
       const from = origin[idx] as number;
       const to = end === norm.length ? source.length : (origin[end] as number);
-      return { matched: source.substring(from, to), strategy: 'unicode', confidence: 0.92, index: from };
+      count++;
+      first ??= { matched: source.substring(from, to), strategy: 'unicode', confidence: 0.92, index: from, candidates: 1 };
+      idx = norm.indexOf(normalizedSearch, end);
+      continue;
     }
     idx = norm.indexOf(normalizedSearch, idx + 1);
   }
 
-  return null;
+  return first ? { ...first, candidates: count } : null;
 }
 
 // ============================================================================
@@ -240,6 +261,7 @@ function fuzzyMatch(source: string, search: string): MatchResult | null {
   let bestScore = Infinity;
   let bestMatch = '';
   let bestStartLine = -1;
+  const scored: Array<{ score: number; start: number }> = [];
 
   // Slide a window of N lines (±2 lines tolerance)
   for (let winSize = Math.max(1, searchLines.length - 2); winSize <= searchLines.length + 2; winSize++) {
@@ -262,6 +284,7 @@ function fuzzyMatch(source: string, search: string): MatchResult | null {
       const weightedDist = dNorm + (dRaw - dNorm) * WHITESPACE_PENALTY_FACTOR;
       const score = weightedDist / searchBlock.length;
 
+      if (score <= FUZZY_MATCH_THRESHOLD) scored.push({ score, start: i });
       if (score < bestScore && score <= FUZZY_MATCH_THRESHOLD) {
         bestScore = score;
         bestMatch = window;
@@ -276,6 +299,8 @@ function fuzzyMatch(source: string, search: string): MatchResult | null {
       strategy: 'fuzzy',
       confidence: 1 - bestScore,
       index: lineOffset(sourceLines, bestStartLine),
+      // Distinct start lines that tie for the best score.
+      candidates: new Set(scored.filter((c) => c.score - bestScore < 1e-9).map((c) => c.start)).size,
     };
   }
 
@@ -301,10 +326,16 @@ export function multiStrategyMatch(
   // Un motif multi-ligne est découpé sur '\n' : dans un fichier CRLF, la
   // dernière ligne retenue garderait son '\r' final et le remplacement
   // l'avalerait. Le '\r' appartient à la fin de ligne, pas au texte apparié.
-  if (result.matched.endsWith('\r') && !search.endsWith('\r')) {
-    return { ...result, matched: result.matched.slice(0, -1) };
+  let out = result;
+  if (out.matched.endsWith('\r') && !search.endsWith('\r')) {
+    out = { ...out, matched: out.matched.slice(0, -1) };
   }
-  return result;
+  // Idem le BOM en tête de fichier : `trim()` le traite comme un blanc, la
+  // fenêtre de la première ligne l'inclurait et le remplacement l'avalerait.
+  if (out.matched.startsWith('\uFEFF') && !search.startsWith('\uFEFF')) {
+    out = { ...out, matched: out.matched.slice(1), index: out.index + 1 };
+  }
+  return out;
 }
 
 function runCascade(

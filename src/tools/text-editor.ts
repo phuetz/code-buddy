@@ -170,7 +170,7 @@ export class TextEditorTool implements Disposable {
    * @param filePath - Path to the file to edit
    * @param oldStr - Text to find and replace
    * @param newStr - Replacement text
-   * @param replaceAll - If true, replaces all occurrences; otherwise only first
+   * @param replaceAll - If true, replaces all occurrences; otherwise old_str must be unique (several matches are refused)
    * @returns Unified diff showing the changes, or error with suggestions
    *
    * @example
@@ -221,6 +221,7 @@ export class TextEditorTool implements Disposable {
       // which would rewrite the first copy of the text, maybe elsewhere).
       let matchIndex = -1;
       let approximate = false;
+      let candidates = 1;
       const strategyResult = multiStrategyMatch(content, oldStr);
 
       if (!strategyResult) {
@@ -235,6 +236,7 @@ export class TextEditorTool implements Disposable {
             : lcsResult.match;
           matchIndex = lcsResult.startIndex;
           approximate = true;
+          candidates = lcsResult.ties ?? 1;
         } else {
           const suggestions = suggestWhitespaceFixes(oldStr, content);
           let errorMessage = `String not found in file: "${oldStr.substring(0, 100)}${oldStr.length > 100 ? '...' : ''}"`;
@@ -261,6 +263,7 @@ export class TextEditorTool implements Disposable {
       } else {
         matchIndex = strategyResult.index;
       }
+      if (strategyResult) candidates = strategyResult.candidates;
 
       // Approximate matches locate ONE window; "all occurrences" would have to
       // guess the others. Refuse rather than rewrite the wrong places.
@@ -278,8 +281,12 @@ export class TextEditorTool implements Disposable {
       }
       // Ambiguïté (match exact) : sans replace_all, plusieurs occurrences = on ne devine pas
       // laquelle viser (comme Claude Code : demander plus de contexte).
-      const occurrences = content.split(oldStr).length - 1;
-      if (!approximate && occurrences > 1 && !replaceAll) {
+      // Exact: occurrences of the text. Approximate: equivalent windows found
+      // by the strategy (equal ignoring whitespace/line endings/typography,
+      // regex hits, fuzzy ties) — the matched text itself may sit elsewhere
+      // inside a longer line without being a candidate.
+      const occurrences = approximate ? candidates : content.split(oldStr).length - 1;
+      if (occurrences > 1 && !replaceAll) {
         return {
           success: false,
           error: `${occurrences} occurrences de old_str : ajoute du contexte pour la rendre unique, ou utilise replace_all. Le fichier n'a pas été modifié.`,
