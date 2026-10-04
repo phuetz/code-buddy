@@ -69,7 +69,11 @@ function toolCall(hit: number, stream: boolean): string {
   return `${pieces.map((piece) => `data: ${JSON.stringify(piece)}\n\n`).join('')}data: [DONE]\n\n`;
 }
 
-const hits = { count: 0 };
+// Tours de la boucle d'agent, séparés du flush de fin de session.
+// Leçons (« REUSABLE PROCEDURAL LESSONS ») et mémoire (« durable declarative
+// long-term memory ») postent sur le client de session : les compter comme
+// des tours relèverait le plafond [middleware] de 2.
+const hits = { turns: 0, flush: 0 };
 let server: http.Server | undefined;
 let port = 0;
 let homeDir = '';
@@ -81,8 +85,9 @@ function run(
   extra: string[],
   env: Record<string, string> = {},
   home = homeDir,
-): Promise<{ exitCode: number | null; stderr: string; hits: number }> {
-  hits.count = 0;
+): Promise<{ exitCode: number | null; stderr: string; hits: number; flush: number }> {
+  hits.turns = 0;
+  hits.flush = 0;
   const args = [
     path.resolve('node_modules/tsx/dist/cli.mjs'),
     path.resolve('src/index.ts'),
@@ -126,7 +131,12 @@ function run(
       stderr += chunk;
     });
     child.on('error', reject);
-    child.on('close', (exitCode) => resolve({ exitCode, stderr, hits: hits.count }));
+    child.on('close', (exitCode) => resolve({
+      exitCode,
+      stderr,
+      hits: hits.turns,
+      flush: hits.flush,
+    }));
   });
 }
 
@@ -142,13 +152,17 @@ beforeAll(async () => {
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
       if (req.method === 'POST' && (req.url ?? '').includes('/chat/completions')) {
-        hits.count += 1;
+        const body = Buffer.concat(chunks).toString('utf8');
+        const sessionEndFlush = body.includes('REUSABLE PROCEDURAL LESSONS')
+          || body.includes('durable declarative long-term memory');
+        if (sessionEndFlush) hits.flush += 1;
+        else hits.turns += 1;
         let stream = false;
         try {
-          stream = (JSON.parse(Buffer.concat(chunks).toString('utf8')) as { stream?: boolean }).stream === true;
+          stream = (JSON.parse(body) as { stream?: boolean }).stream === true;
         } catch { /* corps illisible : réponse simple */ }
         res.writeHead(200, { 'content-type': stream ? 'text/event-stream' : 'application/json' });
-        res.end(toolCall(hits.count, stream));
+        res.end(toolCall(hits.turns + hits.flush, stream));
         return;
       }
       res.writeHead(404);
@@ -180,22 +194,26 @@ describe('--resume / --continue depuis un autre projet', () => {
   it('le premier tour dans B s\'arrête sur les 3 tours de B', async () => {
     const first = await run(dirB, []);
     expect(first.hits, first.stderr).toBe(3);
+    expect(first.flush, first.stderr).toBe(2);
     sessionId();
   }, 180_000);
 
   it('--resume depuis A garde les 3 tours de B, pas les 8 de A', async () => {
     const resumed = await run(dirA, ['--resume', sessionId()]);
     expect(resumed.hits, resumed.stderr).toBe(3);
+    expect(resumed.flush, resumed.stderr).toBe(2);
   }, 180_000);
 
   it('--continue depuis A garde les 3 tours de B, pas les 8 de A', async () => {
     const continued = await run(dirA, ['--continue']);
     expect(continued.hits, continued.stderr).toBe(3);
+    expect(continued.flush, continued.stderr).toBe(2);
   }, 180_000);
 
   it('--max-tool-rounds reste prioritaire sur le fichier de B', async () => {
     const forced = await run(dirA, ['--resume', sessionId(), '--max-tool-rounds', '2']);
     expect(forced.hits, forced.stderr).toBe(2);
+    expect(forced.flush, forced.stderr).toBe(2);
   }, 180_000);
 });
 
@@ -218,7 +236,9 @@ describe('--continue depuis un autre projet : stratégie du projet de la session
     const env = { CODEBUDDY_SELF_IMPROVE_STRATEGIES: 'true' };
     const first = await run(dirC, [], env, home);
     expect(first.hits, first.stderr).toBe(2);
+    expect(first.flush, first.stderr).toBe(2);
     const continued = await run(dirA, ['--continue'], env, home);
     expect(continued.hits, continued.stderr).toBe(2);
+    expect(continued.flush, continued.stderr).toBe(2);
   }, 180_000);
 });
