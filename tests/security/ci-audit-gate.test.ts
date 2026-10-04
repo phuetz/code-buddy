@@ -11,6 +11,7 @@ const input = vi.hoisted(() => ({
   allowedUrls: ['https://github.com/advisories/GHSA-rfgv-xxqx-mfg5'] as string[] | undefined,
   inherited: false,
   error: false,
+  names: {} as Record<string, string>,
 }));
 
 vi.mock('node:child_process', () => ({
@@ -20,9 +21,9 @@ vi.mock('node:child_process', () => ({
     vulnerabilities: {
       undici: {
         severity: input.severity, nodes: input.nodes,
-        via: input.inherited ? ['child'] : input.urls.map((url) => ({ url })),
+        via: input.inherited ? ['child'] : input.urls.map((url) => ({ url, name: input.names[url] })),
       },
-      ...(input.inherited ? { child: { severity: 'moderate', via: input.urls.map((url) => ({ url })) } } : {}),
+      ...(input.inherited ? { child: { severity: 'moderate', via: input.urls.map((url) => ({ url, name: input.names[url] })) } } : {}),
     },
   }),
 }));
@@ -48,6 +49,7 @@ describe('audit-gate : exception limitée à une copie d’outillage', () => {
     input.allowedUrls = [...input.urls];
     input.inherited = false;
     input.error = false;
+    input.names = {};
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('audit refusé'); });
@@ -114,5 +116,45 @@ describe('audit-gate : exception limitée à une copie d’outillage', () => {
     if (field === 'avis') input.allowedUrls = undefined;
     if (field === 'erreur npm') input.error = true;
     await expect(runGate()).rejects.toThrow('audit refusé');
+  });
+
+  describe('exactitude de la liste d’avis d’une exception', () => {
+    const A = 'https://github.com/advisories/GHSA-aaaa-aaaa-aaaa';
+    const B = 'https://github.com/advisories/GHSA-bbbb-bbbb-bbbb';
+
+    beforeEach(() => {
+      input.names = { [A]: 'pkg-a', [B]: 'pkg-b' };
+      input.urls = [A, B];
+      input.allowedUrls = [A, B];
+    });
+
+    it('accepte un motif qui nomme chaque avis, par identifiant ou par nom de paquet', async () => {
+      input.reason = 'Avis GHSA-aaaa-aaaa-aaaa et paquet pkg-b : exposition nulle.';
+      await runGate();
+      expect(process.exit).not.toHaveBeenCalled();
+    });
+
+    it('refuse un motif non vide qui ne nomme pas l’un des avis listés', async () => {
+      input.reason = 'Avis GHSA-aaaa-aaaa-aaaa seulement : exposition nulle.';
+      await expect(runGate()).rejects.toThrow('audit refusé');
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('reason must explicitly name advisory GHSA-bbbb-bbbb-bbbb or package pkg-b'),
+      );
+    });
+
+    it('refuse un avis listé que l’audit ne rattache pas à cette entrée, même si le motif le nomme', async () => {
+      input.urls = [A];
+      input.reason = 'Avis GHSA-aaaa-aaaa-aaaa et GHSA-bbbb-bbbb-bbbb : exposition nulle.';
+      await expect(runGate()).rejects.toThrow('audit refusé');
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('allowlisted advisory not live on this entry (remove it): GHSA-bbbb-bbbb-bbbb'),
+      );
+    });
+
+    it('accepte la liste exacte quand chaque avis listé est vivant et nommé', async () => {
+      input.reason = 'GHSA-aaaa-aaaa-aaaa et GHSA-bbbb-bbbb-bbbb : exposition nulle.';
+      await runGate();
+      expect(process.exit).not.toHaveBeenCalled();
+    });
   });
 });

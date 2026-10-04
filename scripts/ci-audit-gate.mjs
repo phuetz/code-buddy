@@ -115,6 +115,14 @@ for (const [name, v] of Object.entries(vulns)) {
     failures.push(`${name} [high] — advisory outside the allowlisted scope: ${urls.join(', ')}`);
     continue;
   }
+  // Exact scope, other direction: an entry may list ONLY advisories that npm audit
+  // really attaches to this package. A listed-but-not-live advisory is a claim the
+  // audit does not support (the 2026-10-04 review found one on seven entries).
+  const notLive = (entry.advisories ?? []).filter((url) => !urls.includes(url));
+  if (notLive.length) {
+    failures.push(`${name} [high] — allowlisted advisory not live on this entry (remove it): ${notLive.map((url) => url.split('/').pop()).join(', ')}`);
+    continue;
+  }
   if (!entry.reason?.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(entry.reviewedOn ?? '') || entry.reviewedOn > today) {
     failures.push(`${name} [high] — exception needs a rationale and a dated review`);
     continue;
