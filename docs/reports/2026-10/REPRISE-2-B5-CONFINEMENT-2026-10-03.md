@@ -1,6 +1,6 @@
 # Seconde reprise B5 — confinement avec revue éteinte
 
-Worktree `/data/patrice/DEV/cb-write-file-2026-10-03`, branche `fix/write-file-existant-2026-10-03`, départ `3f6940412`. Revue `reprise-1/revue/RAPPORT.md` et mission `reprise-1/sol61/MISSION.md` lues intégralement. Correctif : **`a65a9ab790f14d6daf7d404eec070ed58400c52b`**. Réservation et rapport de mission dans le dépôt créés avant les modifications fonctionnelles.
+Worktree `<worktree>`, branche `fix/write-file-existant-2026-10-03`, départ `3f6940412`. Revue `reprise-1/revue/RAPPORT.md` et mission `reprise-1/sol61/MISSION.md` lues intégralement. Correctif : **`a65a9ab790f14d6daf7d404eec070ed58400c52b`**. Réservation et rapport de mission dans le dépôt créés avant les modifications fonctionnelles.
 
 | Bloquant / défaut | Traitement | Preuve |
 |---|---|---|
@@ -52,7 +52,7 @@ Comme dans les reprises précédentes, le plafond retire write_file et patch du 
 
 Les traces contiennent commandes/environnement minimal, stdout/stderr, événements et résultats bruts d’outils, vérificateurs, fichiers produits et résumés. Les dix SHA-256 source capturés avant **l’essai final** correspondent au correctif committé (`traces/sources-finales-verifiees.json`). Les runners n’observent aucun groupe de processus résiduel ; tous les sous-processus de cette reprise sont attendus. Aucun push ni tâche de fond lancé ; entretien automatique Git désactivé lors des commits et git init de recette.
 
-Rejeu des mutations : depuis le worktree, `python3 /home/patrice/Videos/Partage/20261003-cb-write-file/reprise-1/reprise-1/sol61/REJOUER-MUTATIONS.py`. Rejeu CLI : définir `B5_REPO` sur ce worktree, puis exécuter `REJOUER-B5.py` avec un nouveau label absent de `_qa/write-file`. `REJOUER-B5-CREATION.py` conserve la variante auxiliaire. Les journaux précédents n’ont pas été écrasés ; dans ce dossier, les journaux des mutants correspondent au dernier rejeu sur le candidat corrigé.
+Rejeu des mutations : depuis le worktree, `python3 <partage-flotte>/20261003-cb-write-file/reprise-1/reprise-1/sol61/REJOUER-MUTATIONS.py`. Rejeu CLI : définir `B5_REPO` sur ce worktree, puis exécuter `REJOUER-B5.py` avec un nouveau label absent de `_qa/write-file`. `REJOUER-B5-CREATION.py` conserve la variante auxiliaire. Les journaux précédents n’ont pas été écrasés ; dans ce dossier, les journaux des mutants correspondent au dernier rejeu sur le candidat corrigé.
 
 ## Ce que je n'ai pas pu vérifier
 

@@ -1,6 +1,6 @@
 # Reprise B5 — traitement des contre-revues, 3 octobre 2026
 
-Worktree `/data/patrice/DEV/cb-write-file-2026-10-03`, branche `fix/write-file-existant-2026-10-03`, départ `94f316319`. Correctif de reprise : `2c34baba8`. Mission initiale, rapport `revue/RAPPORT.md` et contre-revue Gemini lus **intégralement**. La première revue conclut effectivement « PRÊT À FUSIONNER » ; Gemini conclut « REFUSÉ ». Réservation et rapport de mission créés avant modification fonctionnelle. Aucun push ; aucune tâche de fond lancée dans cette reprise ; entretien automatique Git désactivé pour les commits.
+Worktree `<worktree>`, branche `fix/write-file-existant-2026-10-03`, départ `94f316319`. Correctif de reprise : `2c34baba8`. Mission initiale, rapport `revue/RAPPORT.md` et contre-revue Gemini lus **intégralement**. La première revue conclut effectivement « PRÊT À FUSIONNER » ; Gemini conclut « REFUSÉ ». Réservation et rapport de mission créés avant modification fonctionnelle. Aucun push ; aucune tâche de fond lancée dans cette reprise ; entretien automatique Git désactivé pour les commits.
 
 | Bloquant / réserve | Traitement | Preuve |
 |---|---|---|
@@ -55,7 +55,7 @@ Correction du récit initial : le plafond compact retire **write_file et patch**
 
 Captures : `traces/reprise-b5-final-command.json`, `*-stdout.log`, `*-stderr.log`, `*-runs/`, `*-tool-results/`, `*-diff-reviews.jsonl`, `*-answer.txt`, `*-summary.json`. Les SHA-256 des dix sources capturées avant le dernier essai ont été comparés au candidat final : tous identiques (`sources-finales-verifiees.json`).
 
-Pour rejouer : depuis le worktree, `python3 /home/patrice/Videos/Partage/20261003-cb-write-file/reprise-1/sol61/REJOUER-MUTATIONS.py`. Recette : définir `B5_REPO` sur ce worktree, puis lancer `REJOUER-RECETTE.py` avec un **nouveau label** (le dossier doit être absent). Les journaux de cette livraison sont archivés, sans écraser ceux de la mission précédente.
+Pour rejouer : depuis le worktree, `python3 <partage-flotte>/20261003-cb-write-file/reprise-1/sol61/REJOUER-MUTATIONS.py`. Recette : définir `B5_REPO` sur ce worktree, puis lancer `REJOUER-RECETTE.py` avec un **nouveau label** (le dossier doit être absent). Les journaux de cette livraison sont archivés, sans écraser ceux de la mission précédente.
 
 ## Ce que je n'ai pas pu vérifier
 
