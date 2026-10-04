@@ -266,31 +266,66 @@ describe('reprise 15 : lecture puis lancement, make nu, chemin assemblé (bash r
     await expectGuarded(`cd ${path.join(skill, 'scripts')} && make`);
   });
 
-  it('chemin assemblé dans le shell : variable, substitution, concaténation node, glob, xargs', async () => {
-    await installProbe({ 'scripts/run.sh': writer(), 'scripts/run.js': `require('fs').writeFileSync(${JSON.stringify(marker)}, 'RAN')\n` });
+  it('find -exec/-execdir/-ok, xargs, parallel, make sur un dossier qui contient ou recouvre le skill', async () => {
+    await installProbe({ 'scripts/run.sh': writer(), 'scripts/Makefile': `all:\n\techo RAN > ${JSON.stringify(marker)}\n` });
     refuse();
-    const d = skill;
-    await expectGuarded(`D=$(printf '%s' '${d}'); bash "$D/scripts/run.sh"`);
-    await expectGuarded(`D=${d}; bash "$D/scripts/run.sh"`);
-    await expectGuarded(`node -e 'require("/"+"${path.join(skill, 'scripts', 'run.js').slice(1)}")'`);
-    await expectGuarded(`bash ${skillsRoot}/imported-*/scripts/run.sh`);
-    await expectGuarded(`echo ${path.join(skill, 'scripts', 'run.sh')} | xargs bash`);
+    await expectGuarded('find . -name run.sh -exec bash {} +');
+    await expectGuarded('find . -name run.sh -execdir bash {} \\;');
+    await expectGuarded('find . -name run.sh -ok bash {} \\;');
+    await expectGuarded(`find ${workspace} -name run.sh -exec bash {} +`);
+    await expectGuarded('find . -name run.sh | xargs bash');
+    await expectGuarded('echo run.sh | xargs -I{} bash {}');
+    await expectGuarded('echo run.sh | parallel bash {}');
+    await expectGuarded(`make -C ${workspace}`);
+    await expectGuarded('make', workspace);
+    // depuis un sous-dossier du skill ou du projet englobant : même résultat
+    await expectGuarded('find .. -name run.sh -exec bash {} +', path.join(skill, 'scripts'));
   });
 
-  it('pas de faux positif : commandes ordinaires, ou aucun skill à scripts installé', async () => {
+  it('chemin en flux (executeStreaming, celui de Cowork) : find . -exec confirmé aussi', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    bridge(() => false);
+    const gen = new BashTool().executeStreaming('find . -name run.sh -exec bash {} +', 15000, workspace);
+    let step = await gen.next();
+    while (!step.done) step = await gen.next();
+    expect(step.value.success).toBe(false);
+    expect(guardCalls()).toHaveLength(1);
+    expect(ran()).toBe(false);
+  });
+
+  it('assignation littérale du dossier du skill : toujours confirmée', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
     refuse();
-    const a = await run('D=/tmp; ls "$D"; echo $HOME');
-    expect(a.success, a.error).toBe(true);
-    const b = await run('X=1; bash -c "echo $X"');
-    expect(b.success, b.error).toBe(true); // aucun skill importé installé : rien à protéger
+    await expectGuarded(`D=${skill}; bash "$D/scripts/run.sh"`);
+  });
+
+  it('pas de faux positif : variables, find sans -exec, xargs/make hors du skill, skill sans script', async () => {
+    refuse();
+    expect((await run('D=/tmp; ls "$D"; echo $HOME')).success).toBe(true);
+    await installProbe({ 'scripts/run.sh': writer() });
+    // Heuristiques retirées (reprise 16) : variable, substitution, glob, concaténation ne demandent plus.
+    for (const cmd of ['X=1; bash -c "echo $X"', 'D=/tmp; python3 -c "print(1)"', `find . -name '*.sh' -print`, 'echo hello', 'python3 -c "print(1+1)"']) {
+      const r = await run(cmd);
+      expect(r.success, `${cmd}: ${r.error}`).toBe(true);
+    }
+    // xargs / find -exec / make dans un dossier qui ne touche pas le skill
+    const elsewhere = mk('pf15-else-');
+    for (const cmd of ['echo a | xargs echo', 'find . -name x -exec echo {} +']) {
+      const r = await run(cmd, elsewhere);
+      expect(r.success, `${cmd}: ${r.error}`).toBe(true);
+    }
     expect(guardCalls()).toHaveLength(0);
+  });
+
+  it('skill sans script : aucune règle ne se déclenche', async () => {
     await installProbe({ 'references/n.md': '# only documents' });
-    const c = await run('X=1; bash -c "echo $X"');
-    expect(c.success, c.error).toBe(true); // un skill sans script ne déclenche pas la règle dynamique
+    refuse();
+    const r = await run('find . -name x -exec echo {} +');
+    expect(r.success, r.error).toBe(true);
     expect(guardCalls()).toHaveLength(0);
   });
 
-  it('tous les scripts autorisés : la règle « nom calculé » ne demande plus', async () => {
+  it('tous les scripts autorisés : find -exec sur le dossier ne demande plus', async () => {
     const entry = { source: 'src1', path: 'cat/probe/scripts/run.sh', sha256: sha(writer()) };
     await installProbe({ 'scripts/run.sh': writer() }, [entry]);
     const home = mk('pf15-home-');
@@ -299,7 +334,7 @@ describe('reprise 15 : lecture puis lancement, make nu, chemin assemblé (bash r
     fs.writeFileSync(path.join(home, 'skill-exec-allowlist.json'), JSON.stringify({ entries: [entry] }));
     try {
       refuse();
-      const r = await run('X=1; bash -c "echo $X"');
+      const r = await run('find . -name run.sh -exec echo {} +');
       expect(r.success, r.error).toBe(true);
       expect(guardCalls()).toHaveLength(0);
     } finally {
@@ -319,17 +354,6 @@ describe('reprise 15 : outils qui exécutent du code (execute_code, code_exec, s
     ConfirmationService.getInstance().setSessionFlag('allOperations', true);
     const r = await new ExecuteCodeTool().execute({ code: py(), language: 'python' }, { cwd: workspace } as never);
     expect(r.success).toBe(false);
-    expect(ran()).toBe(false);
-  });
-
-  it('execute_code : chemin construit (concaténation, base64) refusé aussi', async () => {
-    await installProbe({ 'scripts/run.py': PY_BODY() });
-    bridge(() => false);
-    const p = path.join(skill, 'scripts', 'run.py');
-    const code = `import os\nexec(open("/"+${JSON.stringify(p.slice(1))}).read())`;
-    const r = await new ExecuteCodeTool().execute({ code, language: 'python' }, { cwd: workspace } as never);
-    expect(r.success).toBe(false);
-    expect(guardCalls()).toHaveLength(1);
     expect(ran()).toBe(false);
   });
 

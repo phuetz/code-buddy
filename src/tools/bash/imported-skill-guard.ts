@@ -11,14 +11,15 @@
  * de la liste blanche (source + chemin + sha256 du fichier COURANT, recalculé
  * ici à chaque exécution) passe sans confirmation.
  *
- * L'analyse est lexicale, donc elle est fermée par défaut (reprise 15) : une
- * commande ou un programme qui lance quelque chose avec un nom de fichier calculé
- * à l'exécution (variable, substitution, concaténation, glob, `xargs`) demande
- * aussi, tant qu'un skill importé porte des scripts non autorisés ; une lecture
- * d'un SCRIPT (`cat run.sh > x`) en est un lancement différé ; une commande qui
- * part d'un dossier de skill (`make` nu) vise ses scripts. Limites : un nom
- * calculé à partir de données hors du texte de la commande, et la réécriture à
- * la main d'un script par l'agent, ne sont pas vus.
+ * Frontière garantie (reprise 16) : (a) scripts importés inertes ; (b) confirmation
+ * fermée pour tout lancement DIRECT d'un fichier du skill par un outil d'exécution
+ * (chemin littéral, interpréteur + chemin, cwd sous le skill, `find -exec` /
+ * `xargs` / `parallel` / `make` sur un dossier qui le contient ou le recouvre) ;
+ * (c) sha256 recalculé avant le lancement. LIMITE ASSUMÉE : recopier ou
+ * reconstruire le script ailleurs puis le lancer (`cp`, `cat`, `printf`, nom
+ * assemblé par octets, `os.environ`, `sys.argv`…) équivaut à le réécrire à la
+ * main, ce que n'importe quel agent qui peut écrire un fichier sait faire. Ce
+ * n'est pas chassé par motifs.
  *
  * @module tools/bash/imported-skill-guard
  */
@@ -27,7 +28,6 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import * as yaml from 'yaml';
-import { getCodeBuddyPath } from '../../utils/codebuddy-home.js';
 import { ConfirmationService } from '../../utils/confirmation-service.js';
 import {
   importedSkillRoots,
@@ -68,8 +68,8 @@ export interface ImportedScriptHit {
   warnings: string[];
   /** `-c` / `-e` lancé depuis le dossier du skill : pas de fichier à épingler. */
   inline?: boolean;
-  /** Chemin construit à l'exécution (variable, substitution, concaténation) alors qu'un skill importé à scripts non vérifiés est installé : le fichier visé est inconnu. */
-  dynamic?: boolean;
+  /** `find -exec`, `xargs`, `parallel`, `make` lancés sur un dossier qui contient ou recouvre un skill à scripts non autorisés. */
+  covering?: string;
 }
 
 export { importedSkillRoots };
@@ -170,19 +170,6 @@ const LAUNCHERS = new Set([
   'julia', 'tsx', 'ts-node', 'pwsh', 'powershell', 'osascript', 'expect', 'busybox', 'command', 'builtin', 'time', 'strace',
   'cargo', 'go', 'gcc', 'cc', 'tcl', 'groovy', 'ld.so',
 ]);
-
-/** Expansions qui ne cachent pas un chemin : `$HOME`, `$PWD`, codes de retour. */
-const BENIGN_EXPANSION = /\$\{?(?:HOME|PWD|OLDPWD|USER|\?|#|\$|!)\}?/g;
-
-/** Chemin construit par le shell : substitution, variable, accolades, quote ANSI-C, process substitution. */
-function shellDynamic(rawSegment: string): boolean {
-  const t = rawSegment.replace(BENIGN_EXPANSION, '');
-  return /\$\(|`|\$\{|\$[A-Za-z_]|\$'|\$"|<\(|\{[^{}\s]*,[^{}\s]*\}/.test(t);
-}
-
-/** Programme (execute_code, code_exec, cellule…) : indices d'un nom de fichier ou d'un module calculé à l'exécution. */
-const CODE_COMPUTES_NAME = /["'`]\s*\+\s*["'`]|["'`]\s*\.\s*["'`]|\.join\(|\bbase64\b|\batob\b|b64decode|fromCharCode|\bchr\(|getattr\(|__import__|importlib|runpy|\beval\(|\bexec\(|\bcompile\(|\bFunction\(|new Function|\$\{|\bf["']|\.format\(|%s|path\.(?:join|resolve)|os\.path\.join|\bglob\b|readdir|listdir|\bwalk\(|constructor\._load|\brequire\(\s*[^"'`\s)]|\bimport\(\s*[^"'`\s)]|open\(\s*[^"'`\s)]/;
-const CODE_HAS_FACILITY = /\bopen\(|readFile|require\(|import\(|\bimport\b|\bexec|\bspawn|system\(|subprocess|child_process|Popen|\bsource\b|\bbash\b|\bsh\b|runpy|importlib|\beval\b/;
 
 function launcherName(word: string): string {
   const base = path.basename(word);
@@ -286,13 +273,11 @@ export function findImportedScriptHits(
     return manifestOf(sd).scripts.has(rel) || classifyFile(abs, rel) !== null;
   };
 
-  let launches = mode === 'code';
   for (const seg of segments) {
     const firstIndex = seg.findIndex(w => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
     const first = seg[firstIndex < 0 ? 0 : firstIndex]!;
     const firstName = launcherName(first);
     const readOnly = mode === 'shell' && READ_ONLY_COMMANDS.has(path.basename(first));
-    if (!readOnly && (LAUNCHERS.has(firstName) || /^\.{0,2}\//.test(first) || first.includes('/'))) launches = true;
     // `bash -c`, `python -c`, `node -e`… started from a skill directory: no file to pin.
     if (!readOnly) {
       const flag = INLINE_FLAGS[firstName] ?? INLINE_FLAGS[path.basename(first)];
@@ -351,36 +336,40 @@ export function findImportedScriptHits(
     hits.push({ file: skillDir, skillDir, sha256: '', allowed: false, warnings: [], inline: true });
   }
 
-  // File names that the command computes at run time cannot be resolved lexically, so the rule is
-  // fail-closed: if something is launched with a computed name and any imported skill still carries
-  // unverified scripts, a human decides. (Computing the name from data outside the command text,
-  // or rewriting a script by hand, remains out of reach: documented limit.)
-  let dynamic = false;
-  if (launches) {
-    if (mode === 'shell') {
-      const raw = command.split(/[;&|\n]+/);
-      dynamic = raw.some((seg) => {
-        const trimmed = seg.trim().replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, '');
-        const first = trimmed.split(/\s+/)[0] ?? '';
-        const name = launcherName(first.replace(/["'\\]/g, ''));
-        if (READ_ONLY_COMMANDS.has(path.basename(first))) return false;
-        if (!(LAUNCHERS.has(name) || first.includes('/'))) return false;
-        const args = trimmed.split(/\s+/).slice(1).join(' ');
-        const globbedPath = /[*?]/.test(args) && args.includes('/');
-        const inlineFlag = INLINE_FLAGS[name];
-        const inlineComputed = inlineFlag !== undefined
-          && trimmed.split(/\s+/).slice(1).some(w => inlineFlag.test(w))
-          && CODE_COMPUTES_NAME.test(trimmed) && CODE_HAS_FACILITY.test(trimmed);
-        return shellDynamic(seg) || name === 'xargs' || name === 'parallel' || globbedPath || inlineComputed;
-      });
-    } else {
-      dynamic = CODE_COMPUTES_NAME.test(command) && CODE_HAS_FACILITY.test(command);
-    }
-  }
-  if (dynamic) {
-    const pending = skillsWithPendingScripts(roots, list);
-    if (pending.length > 0) {
-      hits.push({ file: pending[0]!, skillDir: pending[0]!, sha256: '', allowed: false, warnings: [], dynamic: true });
+  // Generic, path-based rule (no pattern list): `find -exec/-execdir/-ok`, `xargs`, `parallel` and `make`
+  // run what they are pointed at. While an imported skill still has an unauthorised script, they ask when
+  // the working directory or a path argument CONTAINS or OVERLAPS a skill directory (`find . -exec bash {} +`
+  // from the project that holds the skill, `make -C ..`). Approval is not content-bound for these hits.
+  if (mode === 'shell') {
+    let pendingSkills: string[] | null = null;
+    for (const seg of segments) {
+      const firstIndex = seg.findIndex(w => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+      const name = launcherName(seg[firstIndex < 0 ? 0 : firstIndex]!);
+      const relevant = (name === 'find' && seg.some(w => /^-(?:exec|execdir|ok|okdir)$/.test(w)))
+        || name === 'xargs' || name === 'parallel' || name === 'make' || name === 'gmake';
+      if (!relevant) continue;
+      pendingSkills ??= skillsWithPendingScripts(roots, list);
+      if (pendingSkills.length === 0) break;
+      const targets = new Set<string>([path.resolve(cwd)]);
+      for (const w of seg) {
+        for (const c of candidatesOf(w)) {
+          const expanded = expandToken(c);
+          if (expanded && !expanded.startsWith('-')) targets.add(path.resolve(cwd, expanded));
+        }
+      }
+      for (const target of targets) {
+        const t = realOrSame(target);
+        const overlap = pendingSkills.find((sd) => {
+          const rs = realOrSame(sd);
+          const down = path.relative(t, rs);
+          const up = path.relative(rs, t);
+          return (!down.startsWith('..') && !path.isAbsolute(down)) || (!up.startsWith('..') && !path.isAbsolute(up));
+        });
+        if (overlap) {
+          hits.push({ file: overlap, skillDir: overlap, sha256: '', allowed: false, warnings: [], covering: `${name} over ${target}` });
+          break;
+        }
+      }
     }
   }
   return hits;
@@ -416,8 +405,12 @@ export async function confirmImportedSkillScripts(
   try {
     hits = findImportedScriptHits(command, cwd, undefined, process.env, mode);
   } catch {
-    // Une analyse qui échoue ne doit pas bloquer tout bash : le reste des gardes s'applique.
+    // Analysis failure: fail closed only while some imported skill still has unauthorised scripts.
     hits = [];
+    try {
+      const pending = skillsWithPendingScripts(importedSkillRoots(), loadExecAllowlist());
+      if (pending.length > 0) hits = [{ file: pending[0]!, skillDir: pending[0]!, sha256: '', allowed: false, warnings: [], covering: 'analysis failed for this command' }];
+    } catch { /* nothing to protect or nothing readable */ }
   }
   if (hits.length === 0) return null;
   const verifyUnchanged = (): string | null => {
@@ -436,8 +429,8 @@ export async function confirmImportedSkillScripts(
   const pending = hits.filter(h => !h.allowed);
   if (pending.length === 0) return { confirmed: true, verifyUnchanged };
   const shown = pending.slice(0, 5).map(h =>
-    h.dynamic
-      ? `a file name computed at run time (variable, substitution, concatenation, glob) while imported skill ${h.skillDir} still has unverified scripts`
+    h.covering
+      ? `${h.covering}, which contains or overlaps imported skill ${h.skillDir} (unverified scripts)`
       : h.inline
       ? `inline code (-c/-e) run from ${h.file}`
       : `${h.file} (sha256 ${h.sha256 || 'unreadable'})${h.warnings.length ? `\n    pattern warnings: ${h.warnings.join(' | ')}` : ''}`,

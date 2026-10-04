@@ -917,6 +917,8 @@ export function registerSkillsCommands(program: Command): void {
       if (withScripts.length) {
         console.log(`  ⚠️  ${withScripts.length} skill${withScripts.length > 1 ? 's' : ''} ${report.dryRun ? 'would be imported' : 'imported'} with INERT scripts (execute bit removed, flagged scriptsUnverified).`);
         console.log('     Running any file of these skills asks for a confirmation every time (never auto-approved, refused when no human is there).');
+        console.log('     Guaranteed: scripts inert, every DIRECT launch of one of their files asks (find -exec/xargs/make over their folder too), sha256 re-checked.');
+        console.log('     NOT guaranteed (assumed limit): if the agent copies or rebuilds a script elsewhere and runs the copy, that is the same as rewriting it by hand and is not detected.');
         console.log('     After reading a script, allow it without confirmation by adding its exact line to ~/.codebuddy/skill-exec-allowlist.json  ({ "entries": [ ... ] }):');
         for (const s of withScripts.slice(0, 10)) {
           for (const script of s.inertScripts!.slice(0, 5)) {
