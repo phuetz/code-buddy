@@ -69,8 +69,11 @@ const RUNTIMES: ReadonlyArray<readonly [RegExp, RuntimeSpec]> = [
 const EXEMPT_ARG_COMMANDS = new Set([
   'echo', 'printf', 'which', 'type', 'whereis', 'ls', 'stat', 'file', 'grep', 'egrep', 'fgrep', 'rg', 'man', 'test', '[',
   'apt', 'apt-get', 'aptitude', 'apk', 'yum', 'dnf', 'brew', 'pip', 'pip3', 'npm', 'dpkg', 'rpm', 'readlink', 'realpath',
-  'basename', 'dirname', 'cat', 'head', 'tail', 'wc', 'diff', 'cmp', 'sha256sum', 'sha1sum', 'md5sum', 'find',
+  'basename', 'dirname', 'wc', 'diff', 'cmp', 'sha256sum', 'sha1sum', 'md5sum', 'find',
 ]);
+
+/** Commandes dont les arguments `NOM=valeur` sont des affectations, pas des arguments de programme. */
+const ASSIGNING_BUILTINS = new Set(['export', 'declare', 'local', 'readonly', 'typeset']);
 
 /** Primitives de copie et de lien : un nom de fichier construit par substitution y est suspect. */
 const COPY_PRIMITIVES = new Set(['cp', 'mv', 'ln', 'install', 'hash', 'rsync', 'dd']);
@@ -78,7 +81,7 @@ const COPY_PRIMITIVES = new Set(['cp', 'mv', 'ln', 'install', 'hash', 'rsync', '
 /** Options qui reçoivent du CODE shell : le mot suivant est analysé comme une liste de commandes. */
 const CODE_OPTS: Record<string, readonly string[]> = {
   script: ['-c', '--command'], su: ['-c', '--command'], runuser: ['-c', '--command'], flock: ['-c', '--command'],
-  sg: ['-c'], env: ['-S', '--split-string'],
+  sg: ['-c'], env: ['-S', '--split-string'], docker: ['--entrypoint'], podman: ['--entrypoint'], nerdctl: ['--entrypoint'],
 };
 
 /** `find … -exec CMD`, `gdb --args CMD` : le mot qui suit une de ces options est une commande. */
@@ -88,18 +91,21 @@ const TRIGGERS: Record<string, ReadonlySet<string>> = {
   lldb: new Set(['--']),
 };
 
+/** `print … > fichier` dans un programme awk : le programme écrit où il veut (hors flux standard). */
+const AWK_REDIRECT = /\bprintf?\b[^;}()\n]*>>?\s*(?!"?\/dev\/(?:stderr|stdout|null)"?)\S/;
+const GIT_EXEC_KEYS = /^(?:core\.(?:sshcommand|pager|editor|fsmonitor|askpass|hookspath)|sequence\.editor|credential\.helper|diff\.external|gpg\.(?:\w+\.)?program|filter\..*\.(?:clean|smudge|process)|uploadpack\.packobjectshook)$/i;
 const GIT_EXEC_CONFIG = /^(?:alias\.[^=]*=!|core\.(?:sshcommand|pager|editor|fsmonitor|askpass|hookspath)=|sequence\.editor=|credential\.helper=!|diff\.external=|gpg\.(?:\w+\.)?program=|filter\.[^=]*\.(?:clean|smudge|process)=|uploadpack\.packobjectshook=)/i;
 
 /** Programmes qui exécutent du code reçu en argument : règles par commande. Renvoie une raison ou null. */
 const ARG_RULES: Record<string, (raw: string, value: string, prev: string) => boolean> = {
   make: (raw) => raw === '-f' || raw === '--file' || raw === '--makefile' || /^-f./.test(raw) || /^--(?:file|makefile)=/.test(raw),
   gmake: (raw) => raw === '-f' || raw === '--file' || /^-f./.test(raw) || /^--(?:file|makefile)=/.test(raw),
-  sed: (_r, v) => /(?:^|[;{}\s])e(?:\s|;|$|\})|\/[gIiMmp0-9]*e[gIiMmp0-9]*(?:;|\s|$|\})/.test(v),
-  gsed: (_r, v) => /(?:^|[;{}\s])e(?:\s|;|$|\})|\/[gIiMmp0-9]*e[gIiMmp0-9]*(?:;|\s|$|\})/.test(v),
-  awk: (_r, v) => /\bsystem\s*\(|\|\s*getline|\|&|\bprintf?\b[^;}]*\|\s*["$A-Za-z]/.test(v),
-  gawk: (_r, v) => /\bsystem\s*\(|\|\s*getline|\|&|\bprintf?\b[^;}]*\|\s*["$A-Za-z]/.test(v),
-  mawk: (_r, v) => /\bsystem\s*\(|\|\s*getline|\bprintf?\b[^;}]*\|\s*["$A-Za-z]/.test(v),
-  git: (raw, v, prev) => (prev === '-c' && GIT_EXEC_CONFIG.test(v)) || /^--(?:upload-pack|receive-pack|exec)(?:=|$)/.test(raw) || (/^-c.+/.test(raw) && GIT_EXEC_CONFIG.test(v.slice(2))),
+  sed: (r, v) => /^-[A-Za-z]*f$|^--file(?:=|$)/.test(r) ||  /(?:^|[;{}\s])e(?:\s|;|$|\})|\/[gIiMmp0-9]*e[gIiMmp0-9]*(?:;|\s|$|\})/.test(v),
+  gsed: (r, v) => /^-[A-Za-z]*f$|^--file(?:=|$)/.test(r) ||  /(?:^|[;{}\s])e(?:\s|;|$|\})|\/[gIiMmp0-9]*e[gIiMmp0-9]*(?:;|\s|$|\})/.test(v),
+  awk: (r, v) => /^-[A-Za-z]*f$|^--file(?:=|$)/.test(r) || AWK_REDIRECT.test(v) || /\bsystem\s*\(|\|\s*getline|\|&|\bprintf?\b[^;}]*\|\s*["$A-Za-z]/.test(v),
+  gawk: (r, v) => /^-[A-Za-z]*f$|^--file(?:=|$)/.test(r) || AWK_REDIRECT.test(v) || /\bsystem\s*\(|\|\s*getline|\|&|\bprintf?\b[^;}]*\|\s*["$A-Za-z]/.test(v),
+  mawk: (r, v) => /^-[A-Za-z]*f$|^--file(?:=|$)/.test(r) || AWK_REDIRECT.test(v) || /\bsystem\s*\(|\|\s*getline|\bprintf?\b[^;}]*\|\s*["$A-Za-z]/.test(v),
+  git: (raw, v, prev) => (/^alias\./i.test(prev) && v.startsWith('!')) || GIT_EXEC_KEYS.test(prev) || (prev === '-c' && GIT_EXEC_CONFIG.test(v)) || /^--(?:upload-pack|receive-pack|exec)(?:=|$)/.test(raw) || (/^-c.+/.test(raw) && GIT_EXEC_CONFIG.test(v.slice(2))),
   ssh: (_r, v) => /(?:ProxyCommand|LocalCommand)\s*[= ]/i.test(v),
   scp: (_r, v) => /(?:ProxyCommand|LocalCommand)\s*[= ]/i.test(v),
   sftp: (_r, v) => /(?:ProxyCommand|LocalCommand)\s*[= ]/i.test(v),
@@ -114,6 +120,7 @@ const ARG_RULES: Record<string, (raw: string, value: string, prev: string) => bo
   nvim: (_r, v) => /(?:^|:)!|system\(|\bterminal\b/.test(v),
   ex: (_r, v) => /(?:^|:)!|system\(/.test(v),
   hash: (raw) => raw === '-p',
+  capsh: (raw) => raw === '--' || /^--(?:shell|exec)/.test(raw),
 };
 
 /** Mots-clés après lesquels un mot de commande commence encore. */
@@ -124,6 +131,8 @@ interface WrapperSpec {
   optArg: readonly string[];
   /** Options qui consomment les DEUX mots suivants. */
   optArg2?: readonly string[];
+  /** Options connues qui ne consomment rien. Toute autre option exacte est d'arité inconnue. */
+  noArg?: readonly string[];
   /** Mots positionnels avant la commande (durée de timeout, masque de taskset…). */
   positional: number;
   /** Accepte des affectations `VAR=valeur` avant la commande. */
@@ -131,34 +140,33 @@ interface WrapperSpec {
 }
 
 const WRAPPERS: Record<string, WrapperSpec> = {
-  sudo: { optArg: ['-u', '-g', '-h', '-p', '-C', '-T', '-r', '-t', '-U', '-D', '--user', '--group', '--host', '--prompt'], positional: 0, assign: true },
+  sudo: { noArg: ['-n', '-E', '-H', '-S', '-k', '-K', '-b', '-s', '-i', '-A', '-B', '-P', '--non-interactive', '--preserve-env', '--login', '--shell', '--stdin', '--background', '--reset-timestamp', '--set-home', '--askpass'], optArg: ['-u', '-g', '-h', '-p', '-C', '-T', '-r', '-t', '-U', '-D', '--user', '--group', '--host', '--prompt'], positional: 0, assign: true },
   doas: { optArg: ['-u', '-C'], positional: 0 },
-  env: { optArg: ['-u', '-C', '--unset', '--chdir'], positional: 0, assign: true },
-  nice: { optArg: ['-n', '--adjustment'], positional: 0 },
-  ionice: { optArg: ['-c', '-n', '-p', '-P', '-t'], positional: 0 },
+  env: { noArg: ['-i', '-0', '-v', '--ignore-environment', '--null', '--debug'], optArg: ['-u', '-C', '--unset', '--chdir'], positional: 0, assign: true },
+  nice: { noArg: [], optArg: ['-n', '--adjustment'], positional: 0 },
   nohup: { optArg: [], positional: 0 },
   setsid: { optArg: [], positional: 0 },
-  stdbuf: { optArg: ['-i', '-o', '-e'], positional: 0 },
-  time: { optArg: ['-f', '-o', '--format', '--output'], positional: 0 },
-  timeout: { optArg: ['-s', '-k', '--signal', '--kill-after'], positional: 1 },
-  exec: { optArg: ['-a'], positional: 0 },
+  stdbuf: { optArg: ['-i', '-o', '-e', '--input', '--output', '--error'], positional: 0 },
+  time: { noArg: ['-p', '-v', '-a', '--portability', '--verbose', '--append'], optArg: ['-f', '-o', '--format', '--output'], positional: 0 },
+  timeout: { noArg: ['--foreground', '--preserve-status', '-v', '--verbose'], optArg: ['-s', '-k', '--signal', '--kill-after'], positional: 1 },
+  exec: { noArg: ['-c', '-l'], optArg: ['-a'], positional: 0 },
   builtin: { optArg: [], positional: 0 },
-  command: { optArg: [], positional: 0 },
-  xargs: { optArg: ['-I', '-n', '-P', '-L', '-s', '-d', '-E', '-a', '-J', '-R', '-S', '--max-args', '--max-procs', '--delimiter', '--arg-file', '--replace'], positional: 0 },
-  watch: { optArg: ['-n', '--interval'], positional: 0 },
+  command: { noArg: ['-p'], optArg: [], positional: 0 },
+  xargs: { noArg: ['-0', '-r', '-t', '-p', '-x', '-o', '--null', '--no-run-if-empty', '--verbose', '--interactive', '--exit', '--open-tty'], optArg: ['-I', '-n', '-P', '-L', '-s', '-d', '-E', '-a', '-J', '-R', '-S', '--max-args', '--max-procs', '--delimiter', '--arg-file', '--replace', '--max-chars', '--max-lines', '--process-slot-var', '--eof', '--max-procs'], positional: 0 },
+  watch: { noArg: ['-b', '-c', '-d', '-e', '-g', '-p', '-t', '-x', '--beep', '--color', '--differences', '--errexit', '--chgexit', '--precise', '--no-title', '--exec'], optArg: ['-n', '--interval'], positional: 0 },
   taskset: { optArg: [], positional: 1 },
   chroot: { optArg: ['--userspec', '--groups'], positional: 1 },
-  flock: { optArg: ['-w', '-E', '--timeout'], positional: 1 },
+  flock: { noArg: ['-n', '-x', '-s', '-u', '-o', '--nonblock', '--exclusive', '--shared', '--unlock', '--close'], optArg: ['-w', '-E', '--timeout'], positional: 1 },
   unbuffer: { optArg: [], positional: 0 },
-  strace: { optArg: ['-e', '-o', '-p', '-s', '-u', '-E'], positional: 0 },
+  strace: { noArg: ['-f', '-ff', '-c', '-C', '-t', '-tt', '-ttt', '-T', '-v', '-x', '-xx', '-y', '-yy', '-q', '-qq', '-r', '-i', '-d', '-D', '-F'], optArg: ['-e', '-o', '-p', '-s', '-u', '-E'], positional: 0 },
   ltrace: { optArg: ['-e', '-o', '-p', '-s', '-u'], positional: 0 },
   valgrind: { optArg: [], positional: 0 },
   nsenter: { optArg: ['-t', '--target', '-S', '--setuid', '-G', '--setgid'], positional: 0 },
   unshare: { optArg: ['-w', '--wd', '-R', '--root', '-S', '--setuid', '-G', '--setgid', '--map-user', '--map-group', '--map-users', '--map-groups', '--setgroups', '--propagation', '--monotonic', '--boottime'], positional: 0 },
-  setpriv: { optArg: ['--reuid', '--regid', '--groups', '--inh-caps', '--bounding-set'], positional: 0 },
+  setpriv: { noArg: ['--init-groups', '--clear-groups', '--keep-groups', '--no-new-privs', '--dump', '--list-caps'], optArg: ['--pdeathsig', '--ruid', '--euid', '--rgid', '--egid', '--reuid', '--regid', '--groups', '--inh-caps', '--bounding-set', '--ambient-caps', '--securebits', '--selinux-label', '--apparmor-profile'], positional: 0 },
   runuser: { optArg: ['-u', '--user', '-g', '--group', '-G', '--supp-group'], positional: 0 },
   'systemd-run': { optArg: ['-p', '-u', '--property', '--unit', '--slice'], positional: 0 },
-  numactl: { optArg: ['--cpunodebind', '--membind', '--physcpubind', '-C', '-m', '-N'], positional: 0 },
+  numactl: { optArg: ['--cpunodebind', '--membind', '--physcpubind', '--interleave', '--preferred', '-C', '-m', '-N', '-i', '-p'], noArg: ['-l', '--localalloc', '-H', '-s', '--show', '--hardware'], positional: 0 },
   fakeroot: { optArg: [], positional: 0 },
   faketime: { optArg: [], positional: 1 },
   proxychains: { optArg: ['-f'], positional: 0 },
@@ -167,7 +175,8 @@ const WRAPPERS: Record<string, WrapperSpec> = {
   rlwrap: { optArg: ['-a', '-C', '-f', '-H', '-s'], positional: 0 },
   firejail: { optArg: [], positional: 0 },
   bwrap: {
-    optArg: ['--chdir', '--dev', '--proc', '--tmpfs', '--mqueue', '--uid', '--gid', '--hostname', '--unsetenv', '--dir', '--remount-ro', '--perms', '--size', '--cap-add', '--cap-drop', '--seccomp', '--sync-fd', '--info-fd', '--block-fd', '--userns-block-fd', '--lock-file', '--exec-label', '--file-label', '--userns', '--userns2', '--pidns', '--args'],
+    noArg: ['--unshare-all', '--unshare-user', '--unshare-ipc', '--unshare-pid', '--unshare-net', '--unshare-uts', '--unshare-cgroup', '--share-net', '--die-with-parent', '--new-session', '--as-pid-1', '--clearenv', '--help', '--version', '--disable-userns', '--assert-userns-disabled'],
+    optArg: ['--argv0', '--chdir', '--dev', '--proc', '--tmpfs', '--mqueue', '--uid', '--gid', '--hostname', '--unsetenv', '--dir', '--remount-ro', '--perms', '--size', '--cap-add', '--cap-drop', '--seccomp', '--sync-fd', '--info-fd', '--block-fd', '--userns-block-fd', '--lock-file', '--exec-label', '--file-label', '--userns', '--userns2', '--pidns', '--args'],
     optArg2: ['--bind', '--bind-try', '--ro-bind', '--ro-bind-try', '--dev-bind', '--dev-bind-try', '--symlink', '--setenv', '--file', '--bind-data', '--ro-bind-data', '--chmod'],
     positional: 0,
   },
@@ -185,6 +194,11 @@ const WRAPPERS: Record<string, WrapperSpec> = {
   'ssh-agent': { optArg: ['-t', '-a', '-E', '-P'], positional: 0 },
   'xvfb-run': { optArg: ['-e', '-f', '-n', '-p', '-s', '--error-file', '--auth-file', '--server-num', '--server-args'], positional: 0 },
   chrt: { optArg: ['-p'], positional: 1 },
+  prlimit: { noArg: [], optArg: [], positional: 0 },
+  setarch: { noArg: ['-R', '-3', '-B', '-F', '-I', '-L', '-S', '-T', '-U', '-X', '-Z'], optArg: [], positional: 1 },
+  chcon: { noArg: [], optArg: [], positional: 0 },
+  runcon: { noArg: [], optArg: [], positional: 1 },
+  ionice: { noArg: ['-t', '--ignore'], optArg: ['-c', '-n', '-p', '-P', '-u', '--class', '--classdata', '--pid', '--pgid', '--uid'], positional: 0 },
 };
 
 /** Imbrication maximale de `$(…)`, sous-shells et eval ; au-delà, texte refusé. */
@@ -252,6 +266,8 @@ interface CmdState {
   runtime: RuntimeState | null;
   prev: string;
   coproc: boolean;
+  /** Après une option d'arité inconnue : les deux prochains mots non-option peuvent être la commande. */
+  uncertain: number;
 }
 
 class ShellCommandParser {
@@ -262,7 +278,15 @@ class ShellCommandParser {
   private pendingHeredocs: Heredoc[] = [];
   readonly findings: ShellWordFinding[] = [];
 
-  constructor(private readonly s: string, private readonly baseLine: number, private readonly runtimes = true) {
+  /**
+   * Valeurs littérales jamais affectées à chaque variable (union, jamais retirées :
+   * fermé). `c=bash` puis `"$c"` désigne bash où que `$c` apparaisse.
+   */
+  private readonly vars: Map<string, Set<string>>;
+  private collect: string[] | null = null;
+
+  constructor(private readonly s: string, private readonly baseLine: number, private readonly runtimes = true, vars?: Map<string, Set<string>>) {
+    this.vars = vars ?? new Map();
     for (let i = 0; i < s.length; i++) if (s[i] === '\n') this.lineStarts.push(i + 1);
   }
 
@@ -335,16 +359,18 @@ class ShellCommandParser {
     let redirectTarget = false;
     const st: CmdState = {
       wrapper: null, code: null, codeNext: false, triggers: null, trigger: false, base: '', exempt: false,
-      runtime: null, prev: '', coproc: false,
+      runtime: null, prev: '', coproc: false, uncertain: 0,
     };
     let dbracket = false;
     let headArgs = false; // après for/select/case : les mots sont des arguments
     let caseHead = false;
+    let forStage = 0;
+    let forVar: string | null = null;
     const cases: CaseFrame[] = [];
     const reset = (): void => {
       this.endCommand(st);
       st.wrapper = null; st.code = null; st.codeNext = false; st.triggers = null; st.trigger = false;
-      st.base = ''; st.exempt = false; st.runtime = null; st.prev = ''; st.coproc = false; redirectTarget = false;
+      st.base = ''; st.exempt = false; st.runtime = null; st.prev = ''; st.coproc = false; st.uncertain = 0; redirectTarget = false;
     };
     const arm = (r: CommandWordResult): void => {
       st.wrapper = r.wrapper ?? null;
@@ -488,12 +514,21 @@ class ShellCommandParser {
       if (/^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=$/.test(raw) && s[this.pos] === '(' && !inPattern) {
         // Tableau `nom=( … )`, en tête ou après readonly/declare/local/export.
         this.pos++;
+        const saved = this.collect;
+        this.collect = [];
         this.parseList(true, true);
+        for (const w of this.collect) this.recordAssignment(raw.slice(0, -1), w);
+        this.collect = saved;
         redirectTarget = false;
         continue;
       }
 
-      if (redirectTarget) { redirectTarget = false; continue; }
+      if (redirectTarget) {
+        redirectTarget = false;
+        // `tee x < /bin/bash`, `cat /bin/bash > x` : un shell lu ou écrit par redirection.
+        if (!st.exempt && this.valuesOf(raw).some(v => looksLikeShellName(v.value ?? raw, v.dynamic))) this.flag('interpreter-command-word', start, raw);
+        continue;
+      }
 
       if (inPattern) {
         if (raw === 'esac') { cases.pop(); expectCommand = false; }
@@ -501,6 +536,11 @@ class ShellCommandParser {
       }
 
       if (headArgs) {
+        if (!caseHead) {
+          if (forStage === 1) { forVar = raw; forStage = 2; continue; }
+          if (forStage === 2 && raw === 'in') { forStage = 3; continue; }
+          if (forStage === 3 && forVar) { this.recordAssignment(forVar, raw); continue; }
+        }
         if (caseHead && raw === 'in') {
           caseHead = false;
           headArgs = false;
@@ -509,6 +549,7 @@ class ShellCommandParser {
         continue;
       }
 
+      if (argsOnly && this.collect) this.collect.push(raw);
       if (!expectCommand) {
         // Arguments d'une commande déjà identifiée.
         if (st.codeNext) {
@@ -532,8 +573,23 @@ class ShellCommandParser {
         if (opts) {
           // `-c`, mais aussi une grappe d'options dont la dernière est `-c` (`script -qec CMD`).
           if (opts.includes(raw) || opts.some(o => /^-[A-Za-z]$/.test(o) && new RegExp(`^-[A-Za-z]+${o[1]}$`).test(raw))) { st.codeNext = true; continue; }
-          const inline = /^--(?:command|split-string)=(.*)$/s.exec(raw);
+          const inline = /^--(?:command|split-string|entrypoint)=(.*)$/s.exec(raw);
           if (inline) { this.analyzeCodeWord(inline[1]!, start); continue; }
+        }
+        if (ASSIGNING_BUILTINS.has(st.base)) {
+          const asg = /^([A-Za-z_]\w*(?:\[[^\]]*\])?\+?)=([\s\S]*)$/.exec(raw);
+          if (asg) {
+            this.recordAssignment(asg[1]!, asg[2]!);
+            if (raw.endsWith('=') && s[this.pos] === '(') {
+              this.pos++;
+              const saved = this.collect;
+              this.collect = [];
+              this.parseList(true, true);
+              for (const w of this.collect) this.recordAssignment(asg[1]!, w);
+              this.collect = saved;
+            }
+            continue;
+          }
         }
         this.checkArgument(raw, start, st);
         if (st.runtime && !st.runtime.decided) {
@@ -559,6 +615,7 @@ class ShellCommandParser {
           st.triggers = st.triggers ?? triggers;
           continue;
         }
+        if (!st.wrapper && st.uncertain > 0 && !raw.startsWith('-')) { st.uncertain--; this.checkCommandWord(raw, start); }
         const w = st.wrapper;
         if (w) {
           if (w.skip > 0) { w.skip--; continue; }
@@ -566,18 +623,26 @@ class ShellCommandParser {
             if (raw === '--') continue;
             if (w.spec.optArg.includes(raw)) { w.skip = 1; continue; }
             if (w.spec.optArg2?.includes(raw)) { w.skip = 2; continue; }
+            // `-n1`, `-P4` : valeur attachée d'une option courte connue.
+            if (!raw.startsWith('--') && raw.length > 2 && (w.spec.optArg.includes(raw.slice(0, 2)) || w.spec.noArg?.includes(raw.slice(0, 2)))) continue;
+            // Option exacte, ni connue ni sans argument : elle peut consommer le mot suivant.
+            if (/^--?[A-Za-z][\w-]*$/.test(raw) && !w.spec.noArg?.includes(raw) && w.name !== 'command') st.uncertain = 2;
             if (w.name === 'command' && (raw === '-v' || raw === '-V')) { st.wrapper = null; st.exempt = true; continue; }
             continue;
           }
           if (w.spec.assign && /^[A-Za-z_]\w*=/.test(raw)) continue;
           if (w.positional > 0) { w.positional--; continue; }
+          if (st.uncertain > 0) { st.uncertain--; this.checkCommandWord(raw, start); }
           arm(this.commandWord(raw, start));
         }
         continue;
       }
 
       // Position de commande : affectations en tête.
-      if (/^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=/.test(raw)) continue;
+      {
+        const asg = /^([A-Za-z_]\w*(?:\[[^\]]*\])?\+?)=([\s\S]*)$/.exec(raw);
+        if (asg) { this.recordAssignment(asg[1]!, asg[2]!); continue; }
+      }
       if (st.coproc) {
         st.coproc = false;
         // `coproc NOM { … }` / `coproc NOM ( … )` : NOM n'est pas la commande, le corps l'est.
@@ -586,7 +651,7 @@ class ShellCommandParser {
       if (raw === 'coproc') { st.coproc = true; continue; }
       if (raw === 'esac' && cases.length > 0) { cases.pop(); expectCommand = false; continue; }
       if (COMMAND_RESERVED.has(raw)) continue;
-      if (raw === 'for' || raw === 'select') { headArgs = true; expectCommand = false; continue; }
+      if (raw === 'for' || raw === 'select') { headArgs = true; expectCommand = false; forStage = 1; forVar = null; continue; }
       if (raw === 'case') { headArgs = true; caseHead = true; expectCommand = false; continue; }
       if (raw === 'function') {
         // `function nom` : le nom n'est pas une commande.
@@ -622,6 +687,30 @@ class ShellCommandParser {
     return { base, exempt };
   }
 
+  /** Mémorise `NOM=valeur` (valeur statique, expansions connues résolues). */
+  private recordAssignment(name: string, rawValue: string): void {
+    const clean = name.replace(/\[[^\]]*\]$/, '').replace(/\+$/, '');
+    const values = this.valuesOf(rawValue);
+    if (values.every(v => v.dynamic)) return;
+    const set = this.vars.get(clean) ?? new Set<string>();
+    for (const v of values) if (v.value !== null) set.add(v.value);
+    this.vars.set(clean, set);
+  }
+
+  /** Valeurs statiques possibles d'un mot : quotes décodées, variables connues substituées (produit borné). */
+  private valuesOf(raw: string): Array<{ value: string | null; dynamic: boolean }> {
+    const referenced = new Set<string>();
+    staticWordValue(raw, false, (n) => { if (this.vars.has(n)) referenced.add(n); return undefined; });
+    if (referenced.size === 0) return [staticWordValue(raw, false)];
+    let combos: Array<Map<string, string>> = [new Map()];
+    for (const name of referenced) {
+      const next: Array<Map<string, string>> = [];
+      for (const combo of combos) for (const v of this.vars.get(name)!) { if (next.length < 32) next.push(new Map(combo).set(name, v)); }
+      combos = next;
+    }
+    return combos.map(c => staticWordValue(raw, false, (n) => c.get(n)));
+  }
+
   /** Fin d'une commande simple : un interpréteur de langage qui n'a reçu ni option sûre ni argument lit son code sur stdin. */
   private endCommand(st: CmdState): void {
     if (st.runtime && !st.runtime.decided) {
@@ -632,20 +721,27 @@ class ShellCommandParser {
 
   /** Argument d'une commande : nom de shell écrit sous n'importe quelle forme, règles par commande. */
   private checkArgument(raw: string, at: number, st: CmdState): void {
-    const sv = staticWordValue(raw, false);
+    const candidates = this.valuesOf(raw);
+    const sv = candidates[0]!;
     const value = sv.value ?? raw;
     const prev = st.prev;
     st.prev = value;
     if (st.exempt) return;
-    if (braceAlternatives(value).some(alt => looksLikeShellName(alt, sv.dynamic))) {
-      this.flag('interpreter-command-word', at, raw);
-      return;
+    // Toutes les valeurs possibles (variables littérales connues), et la partie après `=` (`dd if=/bin/bash`).
+    for (const cand of candidates) {
+      const text = cand.value ?? raw;
+      const eq = text.indexOf('=');
+      const parts = eq > 0 ? [text, text.slice(eq + 1)] : [text];
+      if (parts.some(part => looksLikeShellName(part, cand.dynamic) || braceAlternatives(part).some(alt => looksLikeShellName(alt, cand.dynamic)))) {
+        this.flag('interpreter-command-word', at, raw);
+        return;
+      }
     }
     const marked = COPY_PRIMITIVES.has(st.base) ? staticWordValue(raw, 'mark').value : null;
     const markedBase = marked === null ? '' : marked.slice(marked.lastIndexOf('/') + 1);
     // Nom construit par substitution dont les lettres écrites sont une sous-suite d'un nom de shell (`$(printf s)h`).
     const builtByCommand = markedBase.includes('\uE000') && [...SHELL_NAMES].some(n => isSubsequence(markedBase.replace(/\uE000/g, '').toLowerCase(), n));
-    if (looksLikeShellName(value, sv.dynamic) || builtByCommand) {
+    if (builtByCommand) {
       this.flag('interpreter-command-word', at, raw);
       return;
     }
@@ -660,7 +756,7 @@ class ShellCommandParser {
       this.flag('non-literal-command-word', at, raw);
       return;
     }
-    const inner = new ShellCommandParser(value, this.lineOf(at), this.runtimes);
+    const inner = new ShellCommandParser(value, this.lineOf(at), this.runtimes, this.vars);
     inner.run();
     this.findings.push(...inner.findings);
   }
@@ -772,7 +868,7 @@ class ShellCommandParser {
       }
       if (c === '`') {
         this.pos++;
-        const sub = new ShellCommandParser(inner, this.lineOf(start), this.runtimes);
+        const sub = new ShellCommandParser(inner, this.lineOf(start), this.runtimes, this.vars);
         sub.run();
         this.findings.push(...sub.findings);
         return s.slice(start, this.pos);
@@ -969,12 +1065,18 @@ function expansionEnd(raw: string, i: number): number {
  * nom écrit avec des morceaux vides : `ba${e}sh` → `bash`).
  * `value` vaut `null` si une quote n'est pas fermée.
  */
-function staticWordValue(raw: string, mode: boolean | 'mark'): { value: string | null; dynamic: boolean } {
+function staticWordValue(raw: string, mode: boolean | 'mark', lookup?: (name: string) => string | undefined): { value: string | null; dynamic: boolean } {
   const keep = mode === true;
   let out = '';
   let dynamic = false;
   let i = 0;
   const expansion = (): void => {
+    // `$nom` / `${nom}` d'une variable dont la valeur littérale est connue.
+    const bare = /^\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/.exec(raw.slice(i));
+    if (bare && lookup && !keep) {
+      const known = lookup(bare[1] ?? bare[2]!);
+      if (known !== undefined) { out += known; i += bare[0].length; return; }
+    }
     dynamic = true;
     if (mode === 'mark' && (raw[i] === '`' || (raw[i] === '$' && raw[i + 1] === '('))) out += '\uE000';
     if (raw[i] === '$' && raw[i + 1] !== '(' && raw[i + 1] !== '{') {
@@ -1039,3 +1141,36 @@ export function analyzeShellCommandWords(source: string, baseLine = 1, options: 
   parser.run();
   return parser.findings;
 }
+
+const MAKE_TOOLS: Record<string, string> = {
+  CC: 'cc', CXX: 'c++', CPP: 'cpp', LD: 'ld', AR: 'ar', RM: 'rm', MAKE: 'make', INSTALL: 'install', CP: 'cp', MKDIR: 'mkdir',
+  MV: 'mv', LN: 'ln', SED: 'sed', PYTHON: 'python3', PYTHON3: 'python3', NODE: 'node', NPM: 'npm', GO: 'go', CARGO: 'cargo',
+};
+
+/**
+ * Les recettes d'un Makefile sont des commandes shell : on les extrait (mêmes
+ * numéros de ligne, le reste est vidé) en traduisant la syntaxe make
+ * (`$(shell …)`, `$(CC)`, `$$HOME`) vers du shell, pour les juger comme un script.
+ */
+export function makefileRecipeText(content: string): string {
+  const out: string[] = [];
+  let continued = false;
+  for (const line of content.split('\n')) {
+    const recipe = line.startsWith('\t');
+    if (!recipe && !continued) { out.push(''); continued = false; continue; }
+    let text = (recipe && !continued ? line.slice(1) : line).replace(/^\s*[@+-]+\s*/, '');
+    continued = /\\\r?$/.test(line);
+    text = text
+      .replace(/\$\$/g, '\u0001')
+      .replace(/\$[({]([A-Za-z_][\w.-]*)[)}]/g, (_m, name: string) => MAKE_TOOLS[name] ?? `\u0003${name.replace(/\W/g, '_')}`)
+      .replace(/\$\(shell\s+([^()]*)\)/g, '\u0002($1)')
+      .replace(/\$\([^)]*\)/g, '\u0003MAKEFN')
+      .replace(/\$[@<^+?*%|]/g, '\u0003AUTO')
+      .replace(/\u0001/g, '$')
+      .replace(/\u0002/g, '$')
+      .replace(/\u0003/g, '$');
+    out.push(text);
+  }
+  return out.join('\n');
+}
+

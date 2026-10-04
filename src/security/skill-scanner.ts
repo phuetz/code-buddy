@@ -14,7 +14,7 @@ import {
   foldUnicodeForScan,
   sliceScanWindows,
 } from './text-deobfuscation.js';
-import { analyzeShellCommandWords, type ShellWordFindingKind } from './shell-command-words.js';
+import { analyzeShellCommandWords, makefileRecipeText, type ShellWordFindingKind } from './shell-command-words.js';
 
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
@@ -258,6 +258,9 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /\b(?:exec\s*\.\s*Command(?:Context)?|Command\s*::\s*new|ProcessBuilder|shell_exec|system|popen|spawnSync|execFileSync)\s*\(|\bStart-Process\b/, severity: 'high', description: 'Native process execution', name: 'native-process', capability: 'shell' },
 
   { pattern: /\bos\s*\[\s*['"](?:system|popen|posix_spawn|exec\w*|spawn\w*)['"]\s*\]\s*\(|\bgetattr\s*\(\s*os\s*,\s*['"](?:system|popen|posix_spawn|exec\w*|spawn\w*)['"]\s*\)\s*\(|\b(?:create_subprocess_(?:shell|exec)|posix_spawn|execv(?:e|p|pe)?|passthru|proc_open|execa)\s*\(|\b(?:pty\s*\.\s*spawn|Open3\s*\.\s*capture\w*|syscall\s*\.\s*Exec|os\s*\.\s*StartProcess|Deno\s*\.\s*Command)\s*\(|\bInvoke-Expression\b|\$\s*`|%x[({/]/, severity: 'high', description: 'Process execution including quoted APIs and language-native launchers', name: 'extended-process', capability: 'shell' },
+  { pattern: /\b(?:require|import)\s*\(\s*['"][^'"\n]*['"]\s*\+/, severity: 'high', description: 'Module name built by string concatenation', name: 'string-built-module', capability: 'dynamic-code' },
+  { pattern: /\[\s*['"][^'"\]\n]*['"]\s*\+\s*['"][^'"\]\n]*['"]\s*\]|\bgetattr\s*\([^)\n]*['"]\s*\+\s*['"]|\bglobal(?:This)?\s*\[|\bprocess\s*\.\s*binding\s*\(|\.\s*constructor\s*(?:\)\s*)?\(\s*['"]?|(?<![\w.$])Function\s*\(\s*['"]/, severity: 'high', description: 'Member or global resolved from a built string', name: 'string-built-member', capability: 'dynamic-code' },
+  { pattern: /\b(?:exec|system)\s*\{|\bqx\s*[({\[\/!|]|\bopen\s*\([^)\n]*['"]\s*\||&\s*\$\w+\s*\(/, severity: 'high', description: 'Perl process execution', name: 'perl-process', capability: 'shell' },
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'PHP backtick process execution', name: 'php-backtick', capability: 'shell' },
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'Shell backtick process execution', name: 'shell-backtick', capability: 'shell' },
 
@@ -739,6 +742,10 @@ function collectShellCommandWordFindings(content: string, filePath: string, cont
   if (!first) return [];
   if (!first.markdown) {
     const extension = path.extname(filePath).toLowerCase();
+    // A Makefile recipe is shell: `make` runs it, so it is read as one.
+    if (/^(?:gnu)?makefile$/i.test(path.basename(filePath)) || extension === '.mk') {
+      regions.push({ from: 1, text: makefileRecipeText(content) });
+    }
     // An executable file without extension nor known shebang is
     // run by the shell when execve refuses it: read it as shell too.
     if (SHELL_LANGUAGES.has(first.language) || SHELL_EXTENSIONS_WITHOUT_LANGUAGE.has(extension)
