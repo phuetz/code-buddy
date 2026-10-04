@@ -711,6 +711,13 @@ const STRUCTURAL_SHELL_DESCRIPTIONS: Record<ShellWordFindingKind, string> = {
   'interpreter-command-word': 'Shell command word is an interpreter or a file-sourcing builtin that can execute a copied payload',
   'unparseable-shell': 'Shell text cannot be split safely into simple commands (fail closed)',
 };
+function hasExecuteBit(filePath: string): boolean {
+  try {
+    return (fs.statSync(filePath).mode & 0o111) !== 0;
+  } catch {
+    return false;
+  }
+}
 const SHELL_EXTENSIONS_WITHOUT_LANGUAGE = new Set(['.ksh', '.fish', '.dash', '.ash', '.csh', '.tcsh']);
 
 /**
@@ -725,7 +732,10 @@ function collectShellCommandWordFindings(content: string, filePath: string, cont
   if (!first) return [];
   if (!first.markdown) {
     const extension = path.extname(filePath).toLowerCase();
-    if (SHELL_LANGUAGES.has(first.language) || SHELL_EXTENSIONS_WITHOUT_LANGUAGE.has(extension)) {
+    // An executable file of unknown kind (no extension, no known shebang) is
+    // run by the shell when execve refuses it: read it as shell too.
+    if (SHELL_LANGUAGES.has(first.language) || SHELL_EXTENSIONS_WITHOUT_LANGUAGE.has(extension)
+        || (first.language === 'unknown' && hasExecuteBit(filePath))) {
       regions.push({ from: 1, text: content });
     }
   } else {

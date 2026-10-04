@@ -150,4 +150,41 @@ describe('Skill Firewall ECC reprise 10 : mot de commande, fermé par défaut', 
     const notShell = '```python\n$cmd x\n```\n';
     expect(scanSkillContent(notShell, 'SKILL.md').findings.filter(f => f.pattern === 'non-literal-command-word')).toEqual([]);
   });
+
+  it('lit comme du shell un fichier exécutable de nature inconnue, pas un fichier inerte', () => {
+    const root = skillWithScript('$cmd x\n', 'run');
+    const file = path.join(root, 'skills', 'probe', 'scripts', 'run');
+    expect(scanSkillFirewall(path.join(root, 'skills', 'probe')).verdict).toBe('allow');
+    fs.chmodSync(file, 0o755);
+    expect(scanSkillFirewall(path.join(root, 'skills', 'probe')).verdict).toBe('quarantine');
+  });
+
+  it('quarantaine pour 600 orthographes aléatoires de bash/sh/dash, dans 28 positions de commande', () => {
+    // Même générateur que le banc différentiel contre un vrai Bash (_qa, 1761
+    // exécutions réelles, 0 manquée) ; ici sans exécuter, donc portable.
+    let seed = 7;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; };
+    const pick = <T,>(a: T[]): T => a[Math.floor(rnd() * a.length)]!;
+    const hex = (c: string) => c.charCodeAt(0).toString(16).padStart(2, '0');
+    const oct = (c: string) => c.charCodeAt(0).toString(8).padStart(3, '0');
+    const spell = (c: string): string => pick([
+      () => c, () => `\\${c}`, () => `'${c}'`, () => `"${c}"`, () => `$'\\x${hex(c)}'`, () => `$'\\${oct(c)}'`, () => `$'\\u00${hex(c)}'`,
+      () => `\${e}${c}`, () => `$(printf ${c})`, () => '`printf ' + c + '`', () => `''${c}`, () => `\${e:-${c}}`, () => `$e${c}`,
+    ])();
+    const wraps: Array<(c: string) => string> = [
+      c => c, c => `true && ${c}`, c => `false || ${c}`, c => `true; ${c}`, c => `echo x | ${c}`, c => `if ${c}; then :; fi`, c => `(${c})`,
+      c => `{ ${c}; }`, c => `x=$(${c})`, c => `echo "$(${c})"`, c => `command ${c}`, c => `exec ${c}`, c => `env A=1 ${c}`, c => `nohup ${c}`,
+      c => `time ${c}`, c => `xargs -I{} ${c}`, c => `for i in 1; do ${c}; done`, c => `f() { ${c}; }; f`, c => `case 1 in 1) ${c};; esac`,
+      c => `eval '${c}'`, c => `eval "${c}"`, c => `find . -maxdepth 0 -exec ${c} \x5c;`, c => `while ${c}; do break; done`, c => `[[ 1 ]] && ${c}`,
+      c => `! ${c}`, c => `a=b ${c}`, c => `echo <(${c})`, c => `cat <<EOF\n$(${c})\nEOF`,
+    ];
+    for (let i = 0; i < 600; i++) {
+      const name = pick(['bash', 'sh', 'dash']);
+      const spelled = pick(['', '/bin/', '/usr/bin/']) + [...name].map(spell).join('');
+      const body = 'e=\n' + pick(wraps)(`${spelled} ../payload.txt`) + '\n';
+      const verdict = scanSkillFirewall(path.join(skillWithScript(body), 'skills', 'probe')).verdict;
+      expect(verdict, JSON.stringify(body)).toBe('quarantine');
+      fs.rmSync(dirs.pop()!, { recursive: true, force: true });
+    }
+  });
 });

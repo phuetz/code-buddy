@@ -75,9 +75,33 @@ const WRAPPERS: Record<string, WrapperSpec> = {
   chroot: { optArg: ['--userspec', '--groups'], positional: 1 },
   flock: { optArg: ['-w', '-E', '--timeout'], positional: 1 },
   unbuffer: { optArg: [], positional: 0 },
+  strace: { optArg: ['-e', '-o', '-p', '-s', '-u', '-E'], positional: 0 },
+  ltrace: { optArg: ['-e', '-o', '-p', '-s', '-u'], positional: 0 },
+  valgrind: { optArg: [], positional: 0 },
+  nsenter: { optArg: ['-t', '-S', '-G', '--target'], positional: 0 },
+  unshare: { optArg: [], positional: 0 },
+  setpriv: { optArg: ['--reuid', '--regid', '--groups', '--inh-caps', '--bounding-set'], positional: 0 },
+  runuser: { optArg: ['-u', '-g', '-G'], positional: 0 },
+  'systemd-run': { optArg: ['-p', '-u', '--property', '--unit', '--slice'], positional: 0 },
+  numactl: { optArg: ['--cpunodebind', '--membind', '--physcpubind', '-C', '-m', '-N'], positional: 0 },
+  fakeroot: { optArg: [], positional: 0 },
+  faketime: { optArg: [], positional: 1 },
+  proxychains: { optArg: ['-f'], positional: 0 },
+  proxychains4: { optArg: ['-f'], positional: 0 },
+  torsocks: { optArg: [], positional: 0 },
+  rlwrap: { optArg: ['-a', '-C', '-f', '-H', '-s'], positional: 0 },
+  firejail: { optArg: [], positional: 0 },
+  bwrap: { optArg: [], positional: 0 },
+  eatmydata: { optArg: [], positional: 0 },
+  caffeinate: { optArg: ['-t', '-w'], positional: 0 },
+  'dbus-run-session': { optArg: [], positional: 0 },
+  cpulimit: { optArg: ['-l', '-p', '-e'], positional: 0 },
 };
 
 /** `find … -exec CMD` : le mot qui suit est une commande. */
+/** Imbrication maximale de `$(…)`, sous-shells et eval ; au-delà, texte refusé. */
+const MAX_DEPTH = 100;
+
 const FIND_EXEC = new Set(['-exec', '-execdir', '-ok', '-okdir']);
 
 export function isLiteralCommandWord(word: string): boolean {
@@ -122,6 +146,8 @@ interface CommandWordResult {
 
 class ShellCommandParser {
   private pos = 0;
+  private depth = 0;
+  private work = 0;
   private readonly lineStarts: number[] = [0];
   private pendingHeredocs: Heredoc[] = [];
   readonly findings: ShellWordFinding[] = [];
@@ -135,8 +161,10 @@ class ShellCommandParser {
       this.parseList(false);
       if (this.pos < this.s.length) throw new Unparseable(this.pos, 'parenthèse fermante sans ouvrante');
     } catch (error) {
-      if (!(error instanceof Unparseable)) throw error;
-      this.findings.push({ kind: 'unparseable-shell', line: this.lineOf(error.at), word: error.message });
+      // Tout ce qui n'est pas une lecture réussie échoue fermé, y compris un débordement de pile.
+      const at = error instanceof Unparseable ? error.at : this.pos;
+      const reason = error instanceof Unparseable ? error.message : 'analyse interrompue';
+      this.findings.push({ kind: 'unparseable-shell', line: this.lineOf(at), word: reason });
     }
   }
 
@@ -183,6 +211,15 @@ class ShellCommandParser {
    * `a=( … )`, des mots sans commandes.
    */
   private parseList(nested: boolean, argsOnly = false): void {
+    if (++this.depth > MAX_DEPTH) this.fail(this.pos, 'imbrication trop profonde');
+    try {
+      this.parseListBody(nested, argsOnly);
+    } finally {
+      this.depth--;
+    }
+  }
+
+  private parseListBody(nested: boolean, argsOnly: boolean): void {
     const s = this.s;
     let expectCommand = !argsOnly;
     let redirectTarget = false;
@@ -559,6 +596,8 @@ class ShellCommandParser {
     const s = this.s;
     let depth = 2;
     for (let i = from; i < s.length; i++) {
+      // Borne le travail total : `$((` répété sans fermeture ne doit pas être quadratique.
+      if (++this.work > 4 * s.length + 100_000) this.fail(from, 'analyse trop coûteuse');
       const c = s[i]!;
       if (c === '(') depth++;
       else if (c === ')') {

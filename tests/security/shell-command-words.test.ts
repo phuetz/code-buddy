@@ -95,4 +95,17 @@ describe('shell-command-words : découpage en commandes simples', () => {
     expect(found).toEqual([{ kind: 'non-literal-command-word', line: 13, word: '$x' }]);
     expect(words('a\\\nb x')).toEqual([]);
   });
+
+  it('suit aussi les lanceurs de commandes moins courants', () => {
+    for (const body of ['strace -f $c', 'nsenter -t 1 $c', 'unshare $c', 'systemd-run -u x $c', 'faketime 2020 $c', 'fakeroot $c', 'rlwrap $c', 'bwrap $c']) {
+      expect(kinds(body), body).toContain('non-literal-command-word');
+    }
+  });
+
+  it('échoue fermé sur une imbrication démesurée ou un travail quadratique', () => {
+    expect(kinds('echo ' + '$('.repeat(500) + 'x' + ')'.repeat(500))).toContain('unparseable-shell');
+    const started = Date.now();
+    expect(kinds('echo ' + '$(('.repeat(20000))).toContain('unparseable-shell');
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
 });
