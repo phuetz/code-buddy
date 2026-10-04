@@ -4,8 +4,10 @@
  * The preferred transport is the local HTTP sidecar. When it is unavailable,
  * Code Buddy falls back to the `lm-resizer tool-output` CLI (the argv form of
  * 0.2.x, or the older `--request-json` form when the binary advertises it), sending the
- * complete request through stdin. User queries, commands and tool output are
- * therefore never exposed in the process argument list.
+ * captured text through stdin. Tool output and user queries are never exposed
+ * in the process argument list. The argv form of 0.2.x does carry the command
+ * line that produced the output (`--command=`, truncated to 4096 characters),
+ * visible to local users in the process table for the duration of the call.
  *
  * Every public operation is best-effort and never throws. Callers always retain
  * the unmodified observation as their fallback.
@@ -14,9 +16,9 @@
  */
 
 import { spawn } from 'child_process';
-import { existsSync, readFileSync, statSync } from 'fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync } from 'fs';
 import { homedir } from 'os';
-import { delimiter, join } from 'path';
+import { delimiter, dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
 
 const DEFAULT_HTTP_URL = 'http://127.0.0.1:8787';
@@ -265,9 +267,40 @@ export function resolveLmResizerServerToken(
 }
 
 function resolveStorePath(options: LmResizerClientOptions): string {
-  return options.storePath
+  const path = options.storePath
     || process.env.CODEBUDDY_LM_RESIZER_STORE
     || join(homedir(), '.codebuddy', 'lm-resizer.db');
+  ensurePrivateStore(path);
+  return path;
+}
+
+const privateStores = new Set<string>();
+
+/**
+ * The CCR store holds complete command outputs: keep it private (files 0600,
+ * directories 0700). Created with those modes; an existing store file that we
+ * own, and the default `~/.codebuddy` directory, are tightened. Never throws;
+ * POSIX only.
+ */
+function ensurePrivateStore(storePath: string): void {
+  if (process.platform === 'win32' || privateStores.has(storePath)) return;
+  privateStores.add(storePath);
+  try {
+    const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
+    const owned = (path: string): boolean => uid === undefined || statSync(path).uid === uid;
+    const dir = dirname(storePath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+    else if (dir === join(homedir(), '.codebuddy') && owned(dir) && (statSync(dir).mode & 0o077) !== 0) {
+      chmodSync(dir, 0o700);
+    }
+    if (!existsSync(storePath)) closeSync(openSync(storePath, 'a', 0o600));
+    for (const file of [storePath, `${storePath}-wal`, `${storePath}-shm`]) {
+      if (existsSync(file) && owned(file) && (statSync(file).mode & 0o077) !== 0) chmodSync(file, 0o600);
+    }
+  } catch (error) {
+    privateStores.delete(storePath);
+    logFailureOnce('store:private', `[lm-resizer] could not make the CCR store private (${storePath}): ${msg(error)}`);
+  }
 }
 
 /** Memory safety ceiling for the input handed to lm-resizer (default 16 MiB). */
@@ -275,7 +308,8 @@ export const DEFAULT_LM_RESIZER_MAX_INPUT_CHARS = 16 * 1024 * 1024;
 
 /**
  * Largest tool output kept whole for lm-resizer when it is enabled
- * (`CODEBUDDY_LM_RESIZER_MAX_INPUT_BYTES`, default 16 MiB). Above it the usual
+ * (`CODEBUDDY_LM_RESIZER_MAX_INPUT_BYTES`, default 16 Mi — counted in UTF-16 code
+ * units, not bytes, despite the name). Above it the usual
  * provider truncation applies, whatever lm-resizer would have done.
  */
 export function resolveLmResizerMaxInputChars(): number {
@@ -454,6 +488,7 @@ export function resetLmResizerCircuitBreakers(): void {
   }
   sidecarCapabilityCache.clear();
   toolOutputModeCache.clear();
+  privateStores.clear();
   warnedKeys.clear();
   cachedTokenFile = null;
 }

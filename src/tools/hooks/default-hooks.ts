@@ -103,10 +103,13 @@ export function registerDefaultHooks(): void {
       };
 
       // Sanitize result based on current provider
-      // With lm-resizer enabled the model view is reduced downstream (the exact
-      // output stays recoverable by hash), so the provider cap (~100 KB) must not
-      // cut the text first: only a memory ceiling applies here. The executor
-      // re-applies the provider cap to the display copy and to the fallback path.
+      // With lm-resizer enabled the model view is reduced downstream, so the
+      // provider cap (~100 KB) must not cut the text first: only a memory ceiling
+      // applies here (16 Mi UTF-16 units; the tail beyond it is lost to lm-resizer).
+      // Recovery: a CCR hash exists only when lm-resizer accepted the output;
+      // otherwise the exact output is read back with restore_context(callId).
+      // The executor re-applies the provider cap to the display copy and to the
+      // fallback path.
       // Disabled (default): identical to the historical behaviour.
       const lmMax = isLmResizerEnabled() ? resolveLmResizerMaxInputChars() : undefined;
       const sanitized = lmMax !== undefined

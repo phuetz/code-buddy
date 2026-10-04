@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import type { spawn } from 'child_process';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { PassThrough } from 'stream';
@@ -301,6 +301,40 @@ describe('robust lm-resizer client', () => {
     });
     expect(result?.transport).toBe('cli');
     expect(fetchImpl).toHaveBeenCalledTimes(1); // /health only, no POST
+  });
+
+  it.skipIf(process.platform === 'win32')('creates the CCR store private (0600 file, 0700 directory) even under a permissive umask', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'lmr-store-'));
+    const previousUmask = process.umask(0o002);
+    try {
+      const store = join(base, 'nouveau', 'ccr.db');
+      const runtime = fakeSpawn(() => ({ stdout: REPORT_024 }), HELP_ARGV);
+      await optimizeToolOutputWithLmResizer({ content: 'x\n'.repeat(3_000), toolName: 'bash', command: 'journalctl' }, {
+        httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl, storePath: store,
+      });
+      expect(existsSync(store)).toBe(true);
+      expect(statSync(store).mode & 0o777).toBe(0o600);
+      expect(statSync(join(base, 'nouveau')).mode & 0o777).toBe(0o700);
+    } finally {
+      process.umask(previousUmask);
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('tightens an existing 0644 store file that we own', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'lmr-store-'));
+    try {
+      const store = join(base, 'ccr.db');
+      writeFileSync(store, '', { mode: 0o644 });
+      chmodSync(store, 0o644);
+      const runtime = fakeSpawn(() => ({ stdout: REPORT_024 }), HELP_ARGV);
+      await optimizeToolOutputWithLmResizer({ content: 'x\n'.repeat(3_000), toolName: 'bash', command: 'journalctl' }, {
+        httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl, storePath: store,
+      });
+      expect(statSync(store).mode & 0o777).toBe(0o600);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 
   it('discovers tool-output-v1 and reads the sidecar token from a private file', async () => {

@@ -102,7 +102,10 @@ describe('truncation vs lm-resizer order', () => {
       toolName: 'bash', toolCallId: 'call_fb', content: log, success: true, workspaceRoot: ws,
     });
     expect(obs.optimized).toBe(false);
-    expect(obs.content.length).toBeLessThanOrEqual(100_000);
+    expect(obs.content.length).toBeLessThanOrEqual(100_000 + 200);
+    // The promise is exact: no CCR hash here, the model is told how to read the original.
+    expect(obs.content).not.toContain('lm-resizer CCR');
+    expect(obs.content).toContain('restore_context({"identifier":"call_fb"})');
   });
 
   const bin = resolveLmResizerBin();
@@ -128,5 +131,28 @@ describe('truncation vs lm-resizer order', () => {
     const cut = await throughHooks(log);
     const seenOld = await optimizeToolOutputWithLmResizer(request(cut), opts);
     expect(`${seenOld?.compressed ?? cut}`).not.toContain('marqueur-9f3a');
+  }, 60_000);
+
+  it.skipIf(!hasBin)('REAL binary: a large FAILED command keeps its marker and gets a recoverable hash', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lmr-order-fail-'));
+    dirs.push(dir);
+    const store = join(dir, 'ccr.db');
+    process.env.CODEBUDDY_LM_RESIZER = 'true';
+    const { ToolObservationOptimizer } = await import('../../../src/context/tool-observation-optimizer.js');
+    const optimizer = new ToolObservationOptimizer({
+      enabled: true,
+      clientOptions: { httpUrl: null, bin, storePath: store, timeoutMs: 30_000 },
+    });
+    const result = await optimizer.optimize({
+      toolName: 'bash', toolCallId: 'call_real_fail', command: 'journalctl -u service',
+      output: await throughHooks(log), success: false, exitCode: 1,
+    });
+    expect(result.optimized).toBe(true);
+    expect(result.content).toContain('marqueur-9f3a');
+    const hash = /lm-resizer CCR ([0-9a-f]+)/.exec(result.content)?.[1];
+    expect(hash).toBeTruthy();
+    const back = await run(bin, ['retrieve', '--store', store, hash!], { maxBuffer: 64 * 1024 * 1024 });
+    expect(back.stdout).toContain('marqueur-9f3a');
+    expect(back.stdout.length).toBe(log.length);
   }, 60_000);
 });

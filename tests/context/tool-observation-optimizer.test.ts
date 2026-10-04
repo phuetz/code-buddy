@@ -128,6 +128,35 @@ describe('ToolObservationOptimizer', () => {
     expect(runner).not.toHaveBeenCalled();
   });
 
+  it('sends a LARGE failed output to lm-resizer without raw-on-failure, so it gets a hash', async () => {
+    const big = `${'ligne ok\n'.repeat(20_000)}ERROR: marqueur-fail\n${'ligne ok\n'.repeat(20_000)}`;
+    const runner = vi.fn(async () => ({
+      compressed: 'ERROR: marqueur-fail', originalBytes: big.length, compressedBytes: 20, bytesSaved: big.length - 20,
+      hash: 'abc123', toolName: 'bash', command: 'npm test', exitCode: 1, filter: 'x', filteredBytes: 20,
+      savingsRatio: 1, candidateBytes: 20, candidateDeltaBytes: 0, compressionSteps: [], cacheKeys: ['abc123'],
+      accepted: true, transport: 'cli' as const,
+    }));
+    const optimizer = new ToolObservationOptimizer({ enabled: true, lmResizer: runner });
+    const result = await optimizer.optimize({
+      toolName: 'bash', toolCallId: 'call_big_fail', command: 'npm test', output: big, success: false, exitCode: 1,
+    });
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(runner.mock.calls[0]![0]).toMatchObject({ exitCode: 1, rawOnFailure: false });
+    expect(result.optimized).toBe(true);
+    expect(result.content).toContain('ERROR: marqueur-fail');
+    expect(result.content).toContain('lm-resizer CCR abc123');
+  });
+
+  it('keeps even a large failure raw when compressLargeFailures is false', async () => {
+    const runner = vi.fn();
+    const optimizer = new ToolObservationOptimizer({ enabled: true, lmResizer: runner, compressLargeFailures: false });
+    const result = await optimizer.optimize({
+      toolName: 'bash', toolCallId: 'c', output: 'x\n'.repeat(60_000), success: false, exitCode: 1,
+    });
+    expect(result.reason).toBe('error-raw');
+    expect(runner).not.toHaveBeenCalled();
+  });
+
   it('never optimizes restore_context output', async () => {
     const runner = vi.fn();
     const optimizer = new ToolObservationOptimizer({ enabled: true, lmResizer: runner });

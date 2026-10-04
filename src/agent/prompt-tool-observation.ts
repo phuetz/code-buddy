@@ -121,12 +121,15 @@ export function commandFromToolArguments(args: unknown): string | undefined {
  */
 function capUnreducedObservation(content: string, input: PromptToolObservationInput): string {
   if (!isLmResizerEnabled()) return content;
-  return sanitizeResult(getCurrentProvider(), {
+  const capped = sanitizeResult(getCurrentProvider(), {
     toolCallId: input.toolCallId,
     toolName: input.toolName,
     success: true,
     output: content,
   }).output ?? content;
+  if (capped === content || input.allowOptimization === false) return capped;
+  // The exact text was persisted just before (0600); tell the model how to read it.
+  return `${capped}\n\n[Full exact observation: restore_context({"identifier":${JSON.stringify(input.toolCallId)}})]`;
 }
 
 export async function prepareToolObservationForPrompt(

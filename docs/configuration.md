@@ -189,7 +189,7 @@ remote endpoint's retention policy.
 | `CODEBUDDY_RTK_REWRITE` | Alias flag for RTK shell command rewriting | false |
 | `CODEBUDDY_RTK_TIMEOUT_MS` | Timeout for `rtk rewrite` before fallback | 1000 |
 | `CODEBUDDY_LM_RESIZER` | Enable recoverable post-execution compression of large tool outputs | false (Cowork: auto) |
-| `CODEBUDDY_LM_RESIZER_MAX_INPUT_BYTES` | Memory ceiling for a tool output handed whole to lm-resizer (the provider cap of ~100 KB is only applied afterwards, as a fallback and to the display copy); ignored when `CODEBUDDY_LM_RESIZER` is off | `16777216` |
+| `CODEBUDDY_LM_RESIZER_MAX_INPUT_BYTES` | Memory ceiling (UTF-16 units, despite the name) for a tool output handed whole to lm-resizer (the provider cap of ~100 KB is only applied afterwards, as a fallback and to the display copy); ignored when `CODEBUDDY_LM_RESIZER` is off | `16777216` |
 | `CODEBUDDY_LM_RESIZER_BIN` | Override path to the `lm-resizer` binary | local release build, then PATH |
 | `CODEBUDDY_LM_RESIZER_STORE` | Override the CCR SQLite store used by Code Buddy | `~/.codebuddy/lm-resizer.db` |
 | `CODEBUDDY_LM_RESIZER_URL` / `LM_RESIZER_URL` | HTTP sidecar URL (preferred low-latency transport; CLI is the fallback) | `http://127.0.0.1:8787` |

@@ -8,7 +8,7 @@
  */
 import { execFile, spawn, type ChildProcess } from 'child_process';
 import { createServer } from 'net';
-import { existsSync, mkdtempSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, rmSync, statSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { promisify } from 'util';
@@ -70,6 +70,8 @@ describe.skipIf(!hasBin)('lm-resizer contract (real binary)', () => {
       maxBuffer: 64 * 1024 * 1024,
     });
     expect(recovered.stdout).toBe(original);
+    // The store holds whole command outputs: the real binary must not widen the modes we set.
+    if (process.platform !== 'win32') expect(statSync(store).mode & 0o077).toBe(0);
   }, 60_000);
 
   describe('HTTP sidecar (`lm-resizer serve` on a free port, never the robot\'s 8787)', () => {
