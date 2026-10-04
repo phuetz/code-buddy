@@ -328,3 +328,52 @@ describe('cas proches', () => {
     expect(read('b.bin').equals(BIN)).toBe(true);
   });
 });
+
+describe('reprise 1 — le remplacement est épissé à la fenêtre trouvée, pas à la première copie', () => {
+  const trapLf = 'export const value = 1;\n  return value;\nconst value = 1;\n  return value;\n';
+
+  it('flexible LF : la vraie fenêtre (2e bloc) est réécrite, le 1er reste intact', async () => {
+    write('t.ts', trapLf);
+    const r = await editor.strReplace(file('t.ts'), 'const value = 1;\nreturn value;', 'let value = 2;\nreturn value;');
+    expect(r.success).toBe(true);
+    expect(readText('t.ts')).toBe('export const value = 1;\n  return value;\nlet value = 2;\nreturn value;\n');
+  });
+
+  it('flexible CRLF : idem, fins de ligne conservées', async () => {
+    write('t.ts', trapLf.replace(/\n/g, '\r\n'));
+    const r = await editor.strReplace(file('t.ts'), 'const value = 1;\nreturn value;', 'let value = 2;\nreturn value;');
+    expect(r.success).toBe(true);
+    expect(readText('t.ts')).toBe('export const value = 1;\r\n  return value;\r\nlet value = 2;\r\nreturn value;\r\n');
+  });
+
+  it('replace_all en stratégie non exacte : refus explicite, fichier intact', async () => {
+    write('t.ts', trapLf);
+    const r = await editor.strReplace(file('t.ts'), 'const value = 1;\nreturn value;', 'let value = 2;\nreturn value;', true);
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/replace_all/);
+    expect(readText('t.ts')).toBe(trapLf);
+  });
+
+  it('fuzzy : la 2e fonction (la fenêtre) est réécrite, pas le suffixe de la 1re', async () => {
+    write('f.ts', 'xxxxfunction helloWorld()\nfunction helloWorld()\n');
+    const r = await editor.strReplace(file('f.ts'), 'function helloWorlX()', 'function helloOK()');
+    expect(r.success).toBe(true);
+    expect(readText('f.ts')).toBe('xxxxfunction helloWorld()\nfunction helloOK()\n');
+  });
+
+  it('repli LCS : la ligne 2 (similarité 1) est réécrite, la ligne 1 non tronquée', async () => {
+    const gap = ' '.repeat(30);
+    const l1 = `xxxxfoo${gap}bar`;
+    write('l.txt', `${l1}\nfoo${gap}bar\n`);
+    const r = await editor.strReplace(file('l.txt'), 'foo bar', 'OK');
+    expect(r.success).toBe(true);
+    expect(readText('l.txt')).toBe(`${l1}\nOK\n`);
+  });
+
+  it('exact : le comportement reste celui de la première occurrence', async () => {
+    write('e.txt', 'a b a b\n');
+    const r = await editor.strReplace(file('e.txt'), 'a b', 'X');
+    expect(r.success).toBe(true);
+    expect(readText('e.txt')).toBe('X a b\n');
+  });
+});

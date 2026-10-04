@@ -19,6 +19,20 @@ export interface MatchResult {
   strategy: 'exact' | 'flexible' | 'unicode' | 'regex' | 'fuzzy';
   /** Confidence score (0-1) */
   confidence: number;
+  /**
+   * Offset in `source` where `matched` STARTS: `source.slice(index, index +
+   * matched.length) === matched`. The edit must be spliced here — a
+   * `String.replace(matched, …)` would rewrite the FIRST copy of that text,
+   * which is not necessarily the window the strategy found.
+   */
+  index: number;
+}
+
+/** Offset of the start of line `lineIdx` when `source` is split on '\n'. */
+function lineOffset(lines: string[], lineIdx: number): number {
+  let off = 0;
+  for (let k = 0; k < lineIdx; k++) off += (lines[k] as string).length + 1;
+  return off;
 }
 
 // ============================================================================
@@ -27,7 +41,7 @@ export interface MatchResult {
 
 function exactMatch(source: string, search: string): MatchResult | null {
   if (source.includes(search)) {
-    return { matched: search, strategy: 'exact', confidence: 1.0 };
+    return { matched: search, strategy: 'exact', confidence: 1.0, index: source.indexOf(search) };
   }
   return null;
 }
@@ -56,7 +70,7 @@ function flexibleMatch(source: string, search: string): MatchResult | null {
     if (isMatch) {
       // Return the original source lines (preserving indentation)
       const matched = sourceLines.slice(i, i + searchLines.length).join('\n');
-      return { matched, strategy: 'flexible', confidence: 0.95 };
+      return { matched, strategy: 'flexible', confidence: 0.95, index: lineOffset(sourceLines, i) };
     }
   }
 
@@ -91,7 +105,7 @@ function regexMatch(source: string, search: string): MatchResult | null {
     const match = source.match(regex);
 
     if (match && match[0]) {
-      return { matched: match[0], strategy: 'regex', confidence: 0.85 };
+      return { matched: match[0], strategy: 'regex', confidence: 0.85, index: match.index ?? source.indexOf(match[0]) };
     }
   } catch {
     // Invalid regex — skip
@@ -155,7 +169,7 @@ function unicodeNormalizedMatch(source: string, search: string): MatchResult | n
     if (startOk && endOk) {
       const from = origin[idx] as number;
       const to = end === norm.length ? source.length : (origin[end] as number);
-      return { matched: source.substring(from, to), strategy: 'unicode', confidence: 0.92 };
+      return { matched: source.substring(from, to), strategy: 'unicode', confidence: 0.92, index: from };
     }
     idx = norm.indexOf(normalizedSearch, idx + 1);
   }
@@ -261,6 +275,7 @@ function fuzzyMatch(source: string, search: string): MatchResult | null {
       matched: bestMatch,
       strategy: 'fuzzy',
       confidence: 1 - bestScore,
+      index: lineOffset(sourceLines, bestStartLine),
     };
   }
 

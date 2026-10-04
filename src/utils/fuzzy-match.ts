@@ -12,6 +12,8 @@ export interface FuzzyMatchResult {
   similarity: number;
   /** Line number where match starts (1-indexed) */
   startLine: number;
+  /** Character offset in the content where `match` starts */
+  startIndex: number;
   /** Line number where match ends (1-indexed) */
   endLine: number;
   /** Human-readable similarity percentage */
@@ -127,6 +129,7 @@ export function findFuzzyMatches(
         match: candidate,
         similarity,
         startLine: startLine + 1, // Convert to 1-indexed
+        startIndex: lines.slice(0, startLine).reduce((n, l) => n + l.length + 1, 0),
         endLine: startLine + searchLineCount,
         similarityPercent: `${Math.round(similarity * 100)}%`,
       });

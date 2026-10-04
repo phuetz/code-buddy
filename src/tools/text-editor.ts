@@ -215,7 +215,12 @@ export class TextEditorTool implements Disposable {
       }
       const content = readResult.text;
 
-      // Multi-strategy matching: exact → flexible → regex → fuzzy
+      // Multi-strategy matching: exact → flexible → unicode → regex → fuzzy,
+      // then an LCS fallback. Every strategy reports WHERE it found the text:
+      // the edit is spliced at that offset (never `String.replace(matched)`,
+      // which would rewrite the first copy of the text, maybe elsewhere).
+      let matchIndex = -1;
+      let approximate = false;
       const strategyResult = multiStrategyMatch(content, oldStr);
 
       if (!strategyResult) {
@@ -224,7 +229,12 @@ export class TextEditorTool implements Disposable {
         if (lcsResult) {
           const fuzzyDiff = generateFuzzyDiff(oldStr, lcsResult.match, filePath, lcsResult);
           logger.debug("LCS fuzzy match applied", { diff: fuzzyDiff });
-          oldStr = lcsResult.match;
+          // A '\r' ending the last window line belongs to the line ending.
+          oldStr = lcsResult.match.endsWith("\r") && !oldStr.endsWith("\r")
+            ? lcsResult.match.slice(0, -1)
+            : lcsResult.match;
+          matchIndex = lcsResult.startIndex;
+          approximate = true;
         } else {
           const suggestions = suggestWhitespaceFixes(oldStr, content);
           let errorMessage = `String not found in file: "${oldStr.substring(0, 100)}${oldStr.length > 100 ? '...' : ''}"`;
@@ -246,7 +256,30 @@ export class TextEditorTool implements Disposable {
         // Used a non-exact strategy — log and use the matched text
         logger.debug(`Edit match via ${strategyResult.strategy} strategy (confidence: ${strategyResult.confidence.toFixed(2)})`);
         oldStr = strategyResult.matched;
+        matchIndex = strategyResult.index;
+        approximate = true;
+      } else {
+        matchIndex = strategyResult.index;
       }
+
+      // Approximate matches locate ONE window; "all occurrences" would have to
+      // guess the others. Refuse rather than rewrite the wrong places.
+      if (approximate && replaceAll) {
+        return {
+          success: false,
+          error: "replace_all needs an exact match: old_str only matched approximately (whitespace, typographic characters or fuzzy). Provide the exact text, or edit the occurrences one by one.",
+        };
+      }
+      if (matchIndex < 0 || content.slice(matchIndex, matchIndex + oldStr.length) !== oldStr) {
+        return {
+          success: false,
+          error: "Internal error: the matched text is not at the reported offset. Nothing was changed.",
+        };
+      }
+      const applyEdit = (): string =>
+        replaceAll
+          ? content.split(oldStr).join(newStr)
+          : content.slice(0, matchIndex) + newStr + content.slice(matchIndex + oldStr.length);
 
       // Fins de ligne : un new_str en LF dans une zone CRLF doit devenir CRLF.
       newStr = adaptNewStrEol(newStr, oldStr, content);
@@ -266,9 +299,7 @@ export class TextEditorTool implements Disposable {
       if (!sessionFlags.fileOperations && !sessionFlags.allOperations) {
         // Function replacement so the preview matches the actual write below
         // (and doesn't expand `$`-patterns in newStr — see the write path).
-        const previewContent = replaceAll
-          ? content.split(oldStr).join(newStr)
-          : content.replace(oldStr, () => newStr);
+        const previewContent = applyEdit();
         const oldLines = content.split("\n");
         const newLines = previewContent.split("\n");
         const diffContent = this.generateDiff(oldLines, newLines, filePath);
@@ -298,9 +329,7 @@ export class TextEditorTool implements Disposable {
       // insert the matched text and "$`" the whole preceding file, corrupting
       // the edit. `() => newStr` inserts it verbatim. (split/join is already
       // literal for replaceAll.)
-      const newContent = replaceAll
-        ? content.split(oldStr).join(newStr)
-        : content.replace(oldStr, () => newStr);
+      const newContent = applyEdit();
 
       // Diff-review gate — the matching cascade above resolved the fragment
       // to FULL resulting content, which is exactly what the gate reviews.
