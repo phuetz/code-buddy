@@ -163,9 +163,9 @@ fautives). Aucune réponse fausse ou incomplète n'est donc imputable à l'outil
 
 - **Écriture vers le partage** : les outils de fichiers du sandbox (bash,
   `view_file`/`create_file`) sont confinés au dossier de travail ; le partage
-  `/home/patrice/Videos/Partage` n'y est pas monté. La livraison de ce rapport a
+  `<partage>` n'y est pas monté. La livraison de ce rapport a
   nécessité le canal d'exécution hôte (`execute_code`), seul point d'accès en
-  écriture au partage. Reproductible : `ls /home/patrice/Videos/Partage` échoue en
+  écriture au partage. Reproductible : `ls <partage>` échoue en
   bash, réussit en `execute_code`.
 
 ---
