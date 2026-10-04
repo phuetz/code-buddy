@@ -911,13 +911,6 @@ function looksLikeShellName(value: string, dynamic: boolean): boolean {
   return dynamic && base.length >= 2 && [...SHELL_NAMES].some(n => isSubsequence(base, n));
 }
 
-/** Nom de shell (nom de base, sans `.exe`) ; `source` et `.` exclus : comme arguments ils sont ordinaires. */
-function shellNameOf(value: string): string | null {
-  const slash = value.lastIndexOf('/');
-  const base = (slash >= 0 ? value.slice(slash + 1) : value).replace(/\.exe$/i, '').toLowerCase();
-  return SHELL_NAMES.has(base) ? base : null;
-}
-
 /** Décode le contenu d'une chaîne ANSI-C `$'…'` (sans les quotes). */
 function decodeAnsiC(body: string): string {
   let out = '';
