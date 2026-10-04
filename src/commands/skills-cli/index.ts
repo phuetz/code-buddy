@@ -132,6 +132,12 @@ function buildSkillListHealth(
 }
 
 /** Count SKILL.md packages and `.skill.md` files in the bundled skills directory. */
+const INERT_SCRIPTS_GUARANTEE =
+  'Guaranteed: scripts are inert (no execute bit) and a launch of one of their files asks for a human confirmation when the command spells its path, '
+  + 'or the shell parser resolves it (globs, braces, wrappers like env/timeout, sub-shells, find -exec/xargs/make over their folder), or the text cannot be parsed; sha256 re-checked before launch.';
+const INERT_SCRIPTS_LIMIT =
+  'NOT guaranteed (assumed limit): a copy or reconstruction of a script made elsewhere (cp, cat, printf, bytes, os.environ, create_file) then run is the same as the agent rewriting it by hand and is not detected.';
+
 export function countBundledSkillEntries(dir: string): number {
   if (!dir || !fs.existsSync(dir)) {
     return 0;
@@ -893,7 +899,8 @@ export function registerSkillsCommands(program: Command): void {
         getSkillRegistry().stopWatching();
       }
       if (opts.json) {
-        console.log(JSON.stringify({ source: label, report }, null, 2));
+        const hasInert = report.imported.some((i) => i.inertScripts?.length);
+        console.log(JSON.stringify({ source: label, report, ...(hasInert ? { notice: { guarantee: INERT_SCRIPTS_GUARANTEE, limit: INERT_SCRIPTS_LIMIT } } : {}) }, null, 2));
         return;
       }
       console.log(report.dryRun ? `Dry run (use --apply to install) — "${label}"` : `Imported from "${label}"`);
@@ -917,8 +924,8 @@ export function registerSkillsCommands(program: Command): void {
       if (withScripts.length) {
         console.log(`  ⚠️  ${withScripts.length} skill${withScripts.length > 1 ? 's' : ''} ${report.dryRun ? 'would be imported' : 'imported'} with INERT scripts (execute bit removed, flagged scriptsUnverified).`);
         console.log('     Running any file of these skills asks for a confirmation every time (never auto-approved, refused when no human is there).');
-        console.log('     Guaranteed: scripts inert, every DIRECT launch of one of their files asks (find -exec/xargs/make over their folder too), sha256 re-checked.');
-        console.log('     NOT guaranteed (assumed limit): if the agent copies or rebuilds a script elsewhere and runs the copy, that is the same as rewriting it by hand and is not detected.');
+        console.log(`     ${INERT_SCRIPTS_GUARANTEE}`);
+        console.log(`     ${INERT_SCRIPTS_LIMIT}`);
         console.log('     After reading a script, allow it without confirmation by adding its exact line to ~/.codebuddy/skill-exec-allowlist.json  ({ "entries": [ ... ] }):');
         for (const s of withScripts.slice(0, 10)) {
           for (const script of s.inertScripts!.slice(0, 5)) {

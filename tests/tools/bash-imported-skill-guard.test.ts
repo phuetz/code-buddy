@@ -390,3 +390,89 @@ describe('reprise 15 : outils qui exécutent du code (execute_code, code_exec, s
     expect(ran()).toBe(false);
   });
 });
+
+/**
+ * Reprise 17 : contre-revue n° 7. La segmentation par regex est remplacée par le vrai analyseur
+ * (tree-sitter-bash) ; enveloppes, glob/accolades du fichier d'origine, `execute_code` (shell et programme).
+ */
+describe('reprise 17 : vrai analyseur shell, enveloppes, glob, execute_code', () => {
+  const refuse = () => bridge(() => false);
+  const expectGuarded = async (cmd: string, cwd = workspace) => {
+    calls = [];
+    const r = await run(cmd, cwd);
+    expect(r.success, cmd).toBe(false);
+    expect(guardCalls().length, cmd).toBeGreaterThanOrEqual(1);
+    expect(ran(), cmd).toBe(false);
+  };
+
+  it('parenthèses, sous-shell, substitution et continuation de ligne ne séparent plus find de -exec', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    await expectGuarded('find . \\( -name run.sh -exec bash {} + \\)');
+    await expectGuarded('find . \\( -name run.sh \\) -exec bash {} +');
+    await expectGuarded('find . -name run.sh \\\n  -exec bash {} +');
+    await expectGuarded('( find . -name run.sh -exec bash {} + )');
+    // `$( )` is refused earlier by the generic command filter in BashTool: check the guard's own parse.
+    const { findImportedScriptHits } = await import('../../src/tools/bash/imported-skill-guard.js');
+    expect(findImportedScriptHits('echo $(find . -name run.sh -exec bash {} +)', workspace, []).length).toBeGreaterThan(0);
+    expect(findImportedScriptHits('echo `find . -name run.sh -exec bash {} +`', workspace, []).length).toBeGreaterThan(0);
+    await expectGuarded('true && { find . -name run.sh -exec bash {} + ; }');
+  });
+
+  it('enveloppes devant find / xargs / make : env, command, exec, time, timeout, nice, stdbuf, busybox', async () => {
+    await installProbe({ 'scripts/run.sh': writer(), 'scripts/Makefile': `all:\n\techo RAN > ${JSON.stringify(marker)}\n` });
+    refuse();
+    for (const w of ['env', 'command', 'exec', 'time', 'timeout 15', 'nice', 'nice -n 5', 'stdbuf -oL', 'busybox', 'env FOO=1']) {
+      await expectGuarded(`${w} find . -name run.sh -exec bash {} +`);
+    }
+    await expectGuarded('find . -name run.sh | env xargs bash');
+    await expectGuarded('env make', workspace);
+  });
+
+  it('glob et accolades du fichier d\'origine', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    await expectGuarded(`bash ${skillsRoot}/imported-*/scripts/run.sh`);
+    await expectGuarded(`bash ${skillsRoot}/imported-probe/scripts/r?n.sh`);
+    await expectGuarded(`bash ${skill}/scripts/{run,other}.sh`);
+    await expectGuarded('bash skills/imported-*/scripts/run.sh');
+    // un glob qui ne désigne rien du skill ne demande pas
+    calls = [];
+    const r = await run(`ls ${workspace}/*.nothing; echo ok`);
+    expect(r.success, r.error).toBe(true);
+    expect(guardCalls()).toHaveLength(0);
+  });
+
+  it('texte que l\'analyseur ne sait pas lire : fermé (confirmation) tant qu\'un skill a un script non autorisé', async () => {
+    refuse();
+    // aucun skill importé : rien à protéger, la commande part (et échoue d'elle-même)
+    calls = [];
+    await run('echo ok )');
+    expect(guardCalls()).toHaveLength(0);
+    await installProbe({ 'scripts/run.sh': writer() });
+    await expectGuarded('echo ok )');
+  });
+
+  it('execute_code : shell `env find <projet> -exec`, et programme qui épelle find/-exec en arguments', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    bridge(() => false);
+    const tool = new ExecuteCodeTool();
+    const sh = await tool.execute({ code: `env find ${workspace} -name run.sh -exec bash {} +`, language: 'shell' }, { cwd: workspace } as never);
+    expect(sh.success).toBe(false);
+    expect(guardCalls()).toHaveLength(1);
+    expect(ran()).toBe(false);
+    calls = [];
+    const py = await tool.execute({
+      code: `import subprocess\nsubprocess.check_call(["find", ${JSON.stringify(workspace)}, "-name", "run.sh", "-exec", "bash", "{}", "+"])`,
+      language: 'python',
+    }, { cwd: workspace } as never);
+    expect(py.success).toBe(false);
+    expect(guardCalls()).toHaveLength(1);
+    expect(ran()).toBe(false);
+    // un programme sans rapport ne demande pas
+    calls = [];
+    const plain = await tool.execute({ code: 'print(2+2)', language: 'python' }, { cwd: workspace } as never);
+    expect(plain.success, plain.error).toBe(true);
+    expect(guardCalls()).toHaveLength(0);
+  });
+});

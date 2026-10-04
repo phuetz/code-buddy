@@ -27,6 +27,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { createRequire } from 'module';
 import * as yaml from 'yaml';
 import { ConfirmationService } from '../../utils/confirmation-service.js';
 import {
@@ -127,14 +128,133 @@ function expandToken(token: string): string | null {
   return t;
 }
 
-/** Séparateurs de commandes simples ; les guillemets sont retirés des mots. */
-function segmentsOf(command: string): string[][] {
-  // Output redirection targets are not commands; an input redirection (`bash < run.sh`) keeps its file in the segment.
-  const noOutputTargets = command.replace(/\d*>>?[|&]?\s*\S+/g, ' ').replace(/<<?-?/g, ' ');
-  return noOutputTargets
-    .split(/[;&|\n`()]+/)
-    .map(seg => seg.split(/\s+/).map(w => w.replace(/["'\\]/g, '')).filter(Boolean))
-    .filter(words => words.length > 0);
+interface TsNode { type: string; text: string; childCount: number; child(i: number): TsNode | null; hasError?: boolean }
+type TsParser = { setLanguage(l: unknown): void; parse(s: string): { rootNode: TsNode & { hasError: boolean } } };
+let tsParser: TsParser | null | undefined;
+
+/** The real shell grammar (tree-sitter-bash, a regular dependency), loaded synchronously. */
+function shellParser(): TsParser {
+  if (tsParser === undefined) {
+    try {
+      const req = createRequire(import.meta.url);
+      const Parser = req('tree-sitter') as new () => TsParser;
+      const parser = new Parser();
+      parser.setLanguage(req('tree-sitter-bash'));
+      tsParser = parser;
+    } catch {
+      tsParser = null;
+    }
+  }
+  if (!tsParser) throw new Error('shell grammar unavailable');
+  return tsParser;
+}
+
+/**
+ * Simple commands of a shell text, one word list each, from the real parser (sub-shells,
+ * `\(`…`\)`, line continuations, quotes, `$( )`, pipes, redirections). Output redirection
+ * targets are dropped, input redirection files are kept with the command. A text the parser
+ * cannot read throws: the caller treats that as "ask" (closed).
+ */
+function parseShellSegments(command: string): string[][] {
+  const root = shellParser().parse(command).rootNode;
+  if (root.hasError) throw new Error('shell text could not be parsed');
+  const out: string[][] = [];
+  const clean = (t: string): string => t.replace(/["'\\]/g, '');
+  const walk = (n: TsNode, inputFiles: string[]): void => {
+    if (n.type === 'redirected_statement') {
+      const inputs: string[] = [];
+      for (let i = 0; i < n.childCount; i++) {
+        const c = n.child(i);
+        if (c?.type === 'file_redirect' && c.text.trimStart().startsWith('<')) {
+          for (let j = 0; j < c.childCount; j++) {
+            const d = c.child(j);
+            if (d && d.type !== '<' && d.type !== 'file_descriptor') inputs.push(clean(d.text));
+          }
+        }
+      }
+      for (let i = 0; i < n.childCount; i++) {
+        const c = n.child(i);
+        if (c && c.type !== 'file_redirect') walk(c, [...inputFiles, ...inputs]);
+      }
+      return;
+    }
+    if (n.type === 'variable_assignment') {
+      out.push([clean(n.text)]);
+      return;
+    }
+    if (n.type === 'command') {
+      const words: string[] = [];
+      for (let i = 0; i < n.childCount; i++) {
+        const c = n.child(i);
+        if (!c || c.type === 'file_redirect' || c.type === 'heredoc_redirect') continue;
+        if (c.type === 'command_substitution' || c.type === 'process_substitution') continue;
+        words.push(clean(c.text));
+      }
+      out.push([...words, ...inputFiles].filter(Boolean));
+    }
+    for (let i = 0; i < n.childCount; i++) {
+      const c = n.child(i);
+      if (c) walk(c, n.type === 'command' ? [] : inputFiles);
+    }
+  };
+  walk(root, []);
+  return out.filter(words => words.length > 0);
+}
+
+/** Enveloppes qui lancent leur argument : `env`, `time`, `timeout 15`, `nice -n 5`, `stdbuf -oL`, `busybox`… */
+const WRAPPERS = new Set(['env', 'command', 'exec', 'builtin', 'time', 'nohup', 'nice', 'ionice', 'stdbuf', 'timeout', 'busybox', 'sudo', 'doas', 'setsid', 'chrt', 'taskset', 'unbuffer', 'strace', 'ltrace']);
+
+/** Index of the word that is really run: past assignments and wrappers (with their options). */
+function commandIndex(seg: string[]): number {
+  let i = 0;
+  for (;;) {
+    while (i < seg.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(seg[i]!)) i++;
+    if (i >= seg.length) return Math.max(0, seg.length - 1);
+    if (!WRAPPERS.has(path.basename(seg[i]!))) return i;
+    i++;
+    while (i < seg.length && (seg[i]!.startsWith('-') || /^\d+(?:\.\d+)?[smhd]?$/.test(seg[i]!) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(seg[i]!))) i++;
+  }
+}
+
+/** `{a,b}` brace expansion, bounded. */
+function expandBraces(word: string, limit = 64): string[] {
+  const m = word.match(/^(.*?)\{([^{}]*,[^{}]*)\}(.*)$/s);
+  if (!m) return [word];
+  const out: string[] = [];
+  for (const alt of m[2]!.split(',')) {
+    for (const e of expandBraces(`${m[1]}${alt}${m[3]}`, limit)) {
+      out.push(e);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
+/** Minimal glob (`*`, `?`, `[..]`) over the real file system, bounded. */
+function globMatches(pattern: string, limit = 200): string[] {
+  const parts = pattern.split('/');
+  let current: string[] = [pattern.startsWith('/') ? '/' : ''];
+  for (let k = pattern.startsWith('/') ? 1 : 0; k < parts.length; k++) {
+    const part = parts[k]!;
+    const next: string[] = [];
+    for (const base of current) {
+      if (!/[*?[]/.test(part)) {
+        next.push(base === '' ? part : path.join(base, part));
+        continue;
+      }
+      const re = new RegExp(`^${part.replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')}$`);
+      let names: string[] = [];
+      try {
+        names = fs.readdirSync(base === '' ? '.' : base);
+      } catch { /* absent dir: no match */ }
+      for (const name of names) {
+        if (re.test(name) && (!name.startsWith('.') || part.startsWith('.'))) next.push(base === '' ? name : path.join(base, name));
+        if (next.length >= limit) break;
+      }
+    }
+    current = next.slice(0, limit);
+  }
+  return current;
 }
 
 function candidatesOf(word: string): string[] {
@@ -145,12 +265,17 @@ function candidatesOf(word: string): string[] {
 }
 
 function resolveCandidate(raw: string, bases: string[]): string[] {
-  const expanded = expandToken(raw);
-  if (expanded === null || expanded === '') return [];
-  // Un motif de fichier : on garde le dossier qui le précède.
-  const glob = expanded.search(/[*?[]/);
-  const base = glob >= 0 ? expanded.slice(0, Math.max(0, expanded.lastIndexOf('/', glob)) + 1) || '.' : expanded;
-  return path.isAbsolute(base) ? [path.resolve(base)] : bases.map(b => path.resolve(b, base));
+  const out: string[] = [];
+  for (const braced of expandBraces(raw)) {
+    const expanded = expandToken(braced);
+    if (expanded === null || expanded === '') continue;
+    const abs = path.isAbsolute(expanded) ? [expanded] : bases.map(b => path.resolve(b, expanded));
+    for (const a of abs) {
+      if (/[*?[]/.test(a)) out.push(...globMatches(a));
+      else out.push(path.resolve(a));
+    }
+  }
+  return out;
 }
 
 function realOrSame(p: string): string {
@@ -225,7 +350,7 @@ export function findImportedScriptHits(
   const roots = importedSkillRoots(env);
   const list = typeof allowlist === 'function' ? allowlist() : allowlist;
   const segments = mode === 'shell'
-    ? segmentsOf(command)
+    ? parseShellSegments(command)
     // A program: every quoted string and every whitespace word is a path candidate, one big segment.
     : [[
         ...[...command.matchAll(/(["'`])((?:\\.|(?!\1)[^\\\n])*?)\1/g)].map(m => m[2]!),
@@ -266,6 +391,7 @@ export function findImportedScriptHits(
   const files = new Set<string>();
   const inline = new Set<string>();
   const addDir = (dir: string): void => {
+    if (!fs.existsSync(dir)) return;
     for (const f of findExecutablePayloads(dir, dir).slice(0, 200)) files.add(path.join(dir, ...f.relPath.split('/')));
   };
   const isScriptFile = (abs: string, sd: string): boolean => {
@@ -274,10 +400,11 @@ export function findImportedScriptHits(
   };
 
   for (const seg of segments) {
-    const firstIndex = seg.findIndex(w => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
-    const first = seg[firstIndex < 0 ? 0 : firstIndex]!;
+    const firstIndex = commandIndex(seg);
+    const first = seg[firstIndex]!;
     const firstName = launcherName(first);
-    const readOnly = mode === 'shell' && READ_ONLY_COMMANDS.has(path.basename(first));
+    const assignmentsOnly = seg.every(w => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+    const readOnly = mode === 'shell' && (assignmentsOnly || READ_ONLY_COMMANDS.has(path.basename(first)));
     // `bash -c`, `python -c`, `node -e`… started from a skill directory: no file to pin.
     if (!readOnly) {
       const flag = INLINE_FLAGS[firstName] ?? INLINE_FLAGS[path.basename(first)];
@@ -340,21 +467,16 @@ export function findImportedScriptHits(
   // run what they are pointed at. While an imported skill still has an unauthorised script, they ask when
   // the working directory or a path argument CONTAINS or OVERLAPS a skill directory (`find . -exec bash {} +`
   // from the project that holds the skill, `make -C ..`). Approval is not content-bound for these hits.
-  if (mode === 'shell') {
+  {
     let pendingSkills: string[] | null = null;
-    for (const seg of segments) {
-      const firstIndex = seg.findIndex(w => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
-      const name = launcherName(seg[firstIndex < 0 ? 0 : firstIndex]!);
-      const relevant = (name === 'find' && seg.some(w => /^-(?:exec|execdir|ok|okdir)$/.test(w)))
-        || name === 'xargs' || name === 'parallel' || name === 'make' || name === 'gmake';
-      if (!relevant) continue;
+    const EXEC_FLAG = /^-(?:exec|execdir|ok|okdir)$/;
+    const covered = (name: string, seg: string[]): void => {
       pendingSkills ??= skillsWithPendingScripts(roots, list);
-      if (pendingSkills.length === 0) break;
+      if (pendingSkills.length === 0) return;
       const targets = new Set<string>([path.resolve(cwd)]);
       for (const w of seg) {
         for (const c of candidatesOf(w)) {
-          const expanded = expandToken(c);
-          if (expanded && !expanded.startsWith('-')) targets.add(path.resolve(cwd, expanded));
+          for (const r of resolveCandidate(c, [cwd])) if (!c.startsWith('-')) targets.add(r);
         }
       }
       for (const target of targets) {
@@ -367,9 +489,23 @@ export function findImportedScriptHits(
         });
         if (overlap) {
           hits.push({ file: overlap, skillDir: overlap, sha256: '', allowed: false, warnings: [], covering: `${name} over ${target}` });
-          break;
+          return;
         }
       }
+    };
+    if (mode === 'shell') {
+      for (const seg of segments) {
+        const name = launcherName(seg[commandIndex(seg)]!);
+        const relevant = (name === 'find' && seg.some(w => EXEC_FLAG.test(w)))
+          || name === 'xargs' || name === 'parallel' || name === 'make' || name === 'gmake';
+        if (relevant) covered(name, seg);
+      }
+    } else {
+      // A program that spells the tool and its arguments as strings (`subprocess.run(["find", root, "-exec", …])`, `os.system("make")`).
+      const all = segments[0] ?? [];
+      const name = all.includes('find') && all.some(w => EXEC_FLAG.test(w)) ? 'find'
+        : (['xargs', 'parallel', 'make', 'gmake'] as const).find(n => all.includes(n));
+      if (name) covered(name, all);
     }
   }
   return hits;
