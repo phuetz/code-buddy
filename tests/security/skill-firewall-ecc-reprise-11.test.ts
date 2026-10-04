@@ -19,6 +19,8 @@ const BLOQUANT_1_COPROC = [
   `coproc XP\n{ $'\\x62ash' ${P}; }`,
   `coproc XP ( $'\\x62ash' ${P} )`,
   `coproc $'\\x62ash' ${P}`,
+  `coproc XP { $c x; }`,
+  `coproc XP { $(echo b)ash ${P}; }`,
 ];
 
 const BLOQUANT_2_RENOMMER = [
@@ -46,6 +48,10 @@ const BLOQUANT_3_OPTIONS = [
   `nsenter -t 1 -w /tmp $'\\x62ash' ${P}`,
   `runuser --user "$(id -un)" -- $'\\x62ash' ${P}`,
   `unshare --map-user 1000 $c ${P}`,
+  `unshare -w /tmp $c x`,
+  `bwrap --bind / / --dev /dev $c x`,
+  `bwrap --ro-bind / / --setenv A B --tmpfs /tmp $c x`,
+  `nsenter -t 1 $c x`,
 ];
 
 const BLOQUANT_4_LANCEURS = [
