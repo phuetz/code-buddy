@@ -2705,15 +2705,21 @@ export class AgentExecutor {
       // (e.g. gpt-5.5 via ChatGPT Codex backend) — flat-fee, not per token.
       // Optional call: the real client always implements this, but test doubles
       // may be partial mocks — fall through to estimateCost when it's absent.
-      const streamTurnCost = this.deps.client.isSubscriptionAuth?.()
-        ? 0
-        : estimateCost(
-            totalInputTokensForCost,
-            totalOutputTokens,
-            undefined,
-            undefined,
-            this.deps.client.getCurrentModel(),
-          );
+      // Provider context is authoritative: only a real flat-fee backend
+      // (ChatGPT OAuth / Codex, Gemini CLI) or a local runtime yields $0.
+      // A paid aggregator model such as `deepseek/…` on OpenRouter must be
+      // estimated, not presented as a free subscription.
+      const streamTurnCost = estimateCost(
+        totalInputTokensForCost,
+        totalOutputTokens,
+        undefined,
+        undefined,
+        this.deps.client.getCurrentModel(),
+        {
+          subscriptionAuth: this.deps.client.isSubscriptionAuth?.() ?? false,
+          localTarget: this.deps.client.isEffectiveTargetLocal?.() ?? false,
+        },
+      );
       const streamUsageDisplay = formatTokenUsage({
         inputTokens: totalInputTokensForCost,
         outputTokens: totalOutputTokens,

@@ -7,6 +7,23 @@ import { MODEL_PRICE_DATA, SUBSCRIPTION_MODEL_IDS, LOCAL_NO_COST_MODEL_IDS } fro
 import { getPricingPer1k, hasModelPricing } from '../config/model-pricing.js';
 
 /**
+ * Provider-level context that decides whether a request is truly billed as a
+ * flat-fee subscription (ChatGPT OAuth / Codex Responses, Gemini CLI,
+ * Antigravity CLI) or served by a local runtime (Ollama, LM Studio, vLLM).
+ *
+ * The model slug alone is NOT a reliable signal: `deepseek/deepseek-v4.1-flash`
+ * looks "local" by prefix (`deepseek`) but is a paid OpenRouter model. When this
+ * context is supplied by the agent (derived from the real client), it is
+ * authoritative and overrides the slug heuristic.
+ */
+export interface CostBillingContext {
+  /** The request is served by a local runtime (Ollama / LM Studio / vLLM). */
+  localTarget?: boolean;
+  /** The request goes through a flat-fee subscription backend (ChatGPT OAuth, Gemini CLI…). */
+  subscriptionAuth?: boolean;
+}
+
+/**
  * Detect models served EXCLUSIVELY via the ChatGPT subscription auth
  * (Codex backend). These are billed against the user's flat-fee
  * ChatGPT Plus/Pro plan, NOT per token, so cost tracking should report
@@ -28,10 +45,34 @@ function isChatGptSubscriptionModel(model: string): boolean {
 
 function isLocalNoCostModel(model: string): boolean {
   const id = model.toLowerCase();
-  return Boolean(id) && (
-    LOCAL_NO_COST_MODEL_IDS.exact.includes(id) ||
-    LOCAL_NO_COST_MODEL_IDS.prefixes.some(prefix => id.startsWith(prefix))
-  );
+  if (!id) return false;
+  // Namespaced slugs (`deepseek/…`, `qwen/…`, `meta-llama/…`) are hosted
+  // aggregator models (OpenRouter, Together, Fireworks…) billed per token, not
+  // local runtimes — except the explicit `ollama/…` namespace.
+  if (id.includes('/') && !id.startsWith('ollama/')) return false;
+  return LOCAL_NO_COST_MODEL_IDS.exact.includes(id)
+    || LOCAL_NO_COST_MODEL_IDS.prefixes.some(prefix => id.startsWith(prefix));
+}
+
+/**
+ * Resolve the billing/pricing classification for a model.
+ *
+ * When `context` is provided it is authoritative: `subscription` only if the
+ * request actually goes through a flat-fee backend or a local runtime.
+ * Otherwise we fall back to the historical slug heuristic for callers that
+ * have no provider context.
+ */
+export function resolveCostBilling(
+  model: string,
+  context?: CostBillingContext,
+): { billing: 'subscription' | 'pay-per-use'; pricing: 'known' | 'unknown' | 'subscription' } {
+  const subscription = context
+    ? Boolean(context.subscriptionAuth || context.localTarget)
+    : isChatGptSubscriptionModel(model) || isLocalNoCostModel(model);
+  if (subscription) {
+    return { billing: 'subscription', pricing: 'subscription' };
+  }
+  return { billing: 'pay-per-use', pricing: hasModelPricing(model) ? 'known' : 'unknown' };
 }
 
 export interface TokenUsage {
@@ -201,20 +242,15 @@ export class CostTracker extends EventEmitter {
   /**
    * Determine billing type for a model
    */
-  private determineBillingType(model: string): 'subscription' | 'pay-per-use' {
-    return isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)
-      ? 'subscription'
-      : 'pay-per-use';
+  private determineBillingType(model: string, context?: CostBillingContext): 'subscription' | 'pay-per-use' {
+    return resolveCostBilling(model, context).billing;
   }
 
   /**
    * Determine pricing status for a model
    */
-  private determinePricingStatus(model: string): 'known' | 'unknown' | 'subscription' {
-    if (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
-      return 'subscription';
-    }
-    return hasModelPricing(model) ? 'known' : 'unknown';
+  private determinePricingStatus(model: string, context?: CostBillingContext): 'known' | 'unknown' | 'subscription' {
+    return resolveCostBilling(model, context).pricing;
   }
 
   /**
@@ -235,13 +271,14 @@ export class CostTracker extends EventEmitter {
     outputTokens: number,
     model: string,
     cachedTokens: number = 0,
-    providerUsage?: { promptTokens: number; completionTokens: number }
+    providerUsage?: { promptTokens: number; completionTokens: number },
+    context?: CostBillingContext
   ): number {
     // Use provider-reported tokens when available
     const effectiveInput = providerUsage?.promptTokens ?? (inputTokens - cachedTokens + (cachedTokens * 0.5));
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
 
-    if (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)) {
+    if (this.determineBillingType(model, context) === 'subscription') {
       return 0;
     }
     const pricing = getPricingPer1k(model);
@@ -259,10 +296,11 @@ export class CostTracker extends EventEmitter {
     outputTokens: number,
     model: string,
     cachedTokens: number = 0,
-    providerUsage?: { promptTokens: number; completionTokens: number }
+    providerUsage?: { promptTokens: number; completionTokens: number },
+    context?: CostBillingContext
   ): ExtendedCostInfo {
-    const billing = this.determineBillingType(model);
-    const pricingStatus = this.determinePricingStatus(model);
+    const billing = this.determineBillingType(model, context);
+    const pricingStatus = this.determinePricingStatus(model, context);
     const estimated = providerUsage === undefined;
 
     // Use provider-reported tokens when available
@@ -291,8 +329,8 @@ export class CostTracker extends EventEmitter {
   /**
    * Record token usage
    */
-  recordUsage(inputTokens: number, outputTokens: number, model: string): TokenUsage {
-    const cost = this.calculateCost(inputTokens, outputTokens, model);
+  recordUsage(inputTokens: number, outputTokens: number, model: string, context?: CostBillingContext): TokenUsage {
+    const cost = this.calculateCost(inputTokens, outputTokens, model, 0, undefined, context);
     const usage: TokenUsage = {
       inputTokens,
       outputTokens,
