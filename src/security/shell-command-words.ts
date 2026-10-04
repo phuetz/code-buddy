@@ -1161,16 +1161,15 @@ export function makefileRecipeText(content: string): string {
     let text = (recipe && !continued ? line.slice(1) : line).replace(/^\s*[@+-]+\s*/, '');
     continued = /\\\r?$/.test(line);
     text = text
-      .replace(/\$\$/g, '\u0001')
-      .replace(/\$[({]([A-Za-z_][\w.-]*)[)}]/g, (_m, name: string) => MAKE_TOOLS[name] ?? `\u0003${name.replace(/\W/g, '_')}`)
-      .replace(/\$\(shell\s+([^()]*)\)/g, '\u0002($1)')
-      .replace(/\$\([^)]*\)/g, '\u0003MAKEFN')
-      .replace(/\$[@<^+?*%|]/g, '\u0003AUTO')
-      .replace(/\u0001/g, '$')
-      .replace(/\u0002/g, '$')
-      .replace(/\u0003/g, '$');
+      .replace(/\$\$/g, '\uE001')
+      .replace(/\$[({]([A-Za-z_][\w.-]*)[)}]/g, (_m, name: string) => MAKE_TOOLS[name] ?? `\uE003${name.replace(/\W/g, '_')}`)
+      .replace(/\$\(shell\s+([^()]*)\)/g, '\uE002($1)')
+      .replace(/\$\([^)]*\)/g, '\uE003MAKEFN')
+      .replace(/\$[@<^+?*%|]/g, '\uE003AUTO')
+      .replace(/\uE001/g, '$')
+      .replace(/\uE002/g, '$')
+      .replace(/\uE003/g, '$');
     out.push(text);
   }
   return out.join('\n');
 }
-
