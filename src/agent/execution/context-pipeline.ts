@@ -148,6 +148,10 @@ async function buildOptionalContextBlock(
  * Phase 1 — Slim large observations, compact only if still necessary, and
  * repair only when the transcript is dirty. The canonical fast path returns
  * the original array without replaying compaction or transcript repair.
+ *
+ * Replacing the transcript here (or via `compactTurnMessagesInPlace`) is the
+ * only supported rewrite of a prefix already sent to the model. Append-only
+ * context must add a message, never edit an earlier one.
  */
 export function prepareTurnMessages(
   contextManager: ContextManagerV2,
@@ -250,6 +254,9 @@ function withoutPendingPlaceholders(
  * placeholders are removed while every other repair — historical orphans,
  * id-less calls, duplicates, ordering — is kept. The provider frontier stays
  * `prepareTurnMessages`, which still closes any call left unanswered.
+ *
+ * This in-place replacement is the only supported rewrite of a prefix already
+ * sent to the model.
  */
 export function compactTurnMessagesInPlace(
   contextManager: ContextManagerV2,

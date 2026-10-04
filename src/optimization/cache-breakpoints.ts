@@ -12,7 +12,9 @@
  * This module provides:
  * 1. `injectAnthropicCacheBreakpoints(messages)` — mark the last system
  *    message of the leading run (before the first non-system message) with
- *    cache_control. A later system message is the volatile tail.
+ *    cache_control, and also the last message that is not an
+ *    `ephemeral="true"` tail. The head marker stays put when the committed
+ *    tail grows. A trailing runtime block marked ephemeral is not a breakpoint.
  * 2. `buildStableDynamicSplit(systemPrompt)` — split a system prompt into
  *    stable prefix (identity/tools/instructions) and dynamic suffix (time,
  *    todos, memory). The split point is the first line beginning with a
@@ -80,15 +82,27 @@ export function buildStableDynamicSplit(systemPrompt: string): StableDynamicSpli
 // Anthropic cache_control injection
 // ============================================================================
 
+function isEphemeralTailMessage(message: CodeBuddyMessage | undefined): boolean {
+  const content = message?.content;
+  return typeof content === 'string' && content.includes('ephemeral="true"');
+}
+
 /**
  * Inject `cache_control: {type: "ephemeral"}` onto the last system message
- * of the leading run, before the first user or assistant message. Anthropic
- * caches everything up to that marker. A system message after the user
- * (`runtime_settings`, workspace, the moved environment block) is volatile
- * and must not carry the marker — it changes between turns and folders.
+ * of the leading run, before the first user or assistant message, and onto
+ * the last message that is not an `ephemeral="true"` tail when that message
+ * is further down the request.
  *
- * When every message is a system message, the last one is marked (there is
- * no volatile tail to exclude).
+ * Anthropic caches everything up to each marker. The head marker is the
+ * stable anchor. The second marker follows the committed transcript (the
+ * environment block, the user turn, a changed todo) so the cached prefix
+ * grows instead of being rewritten. A trailing `<runtime_settings
+ * ephemeral="true">` stays unmarked: it is allowed to change without moving
+ * the previous breakpoint.
+ *
+ * When every message is a system message and none is an ephemeral tail, the
+ * last one is marked once. An array with no system message is copied
+ * unchanged.
  *
  * Call this **only** when the active provider is Anthropic (detected by model
  * name containing "claude" or provider being "anthropic").
@@ -119,6 +133,21 @@ export function injectAnthropicCacheBreakpoints(
     ...lastSystemMessage,
     cache_control: { type: 'ephemeral' },
   };
+
+  let stableTail = -1;
+  for (let i = result.length - 1; i >= 0; i--) {
+    if (!isEphemeralTailMessage(result[i])) {
+      stableTail = i;
+      break;
+    }
+  }
+  const stableMessage = stableTail === -1 ? undefined : result[stableTail];
+  if (stableTail !== -1 && stableTail !== lastSystemIdx && stableMessage !== undefined) {
+    result[stableTail] = {
+      ...stableMessage,
+      cache_control: { type: 'ephemeral' },
+    };
+  }
 
   return result;
 }

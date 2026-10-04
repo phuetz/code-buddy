@@ -2787,6 +2787,7 @@ describe('AgentExecutor', () => {
       });
       expect(deps.client.chatStream).toHaveBeenCalledTimes(2);
       expect(messages.map((entry) => [entry.role, entry.content])).toEqual([
+        ['system', '<context type="lessons">\nPHASE_A_LESSONS_SENTINEL\n</context>'],
         ['assistant', 'Partial answer'],
         ['user', 'Redirect the answer'],
         ['assistant', 'Redirected answer'],
@@ -2933,8 +2934,10 @@ describe('AgentExecutor', () => {
 
       await executor.processUserMessage('start', [], messages);
 
-      // Round 1 sees one message; round 2 sees assistant call + result too.
-      expect(config.recordSessionCost).toHaveBeenCalledWith(1 + 3, 100);
+      // Round 1 sees the user message only (context is sealed after the count).
+      // Round 2 also sees that sealed lessons block, the assistant call and
+      // its result: 4 messages. Cumulative input is 1 + 4.
+      expect(config.recordSessionCost).toHaveBeenCalledWith(1 + 4, 100);
     });
 
     it('should record session cost after processing', async () => {
