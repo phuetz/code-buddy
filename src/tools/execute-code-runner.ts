@@ -142,7 +142,7 @@ export async function executeCode(
 
   // A program that launches a file of an imported skill is a launch like any other:
   // forced human confirmation, never auto-approved, content-bound (reprise 15).
-  const importedGuard = await confirmImportedSkillCode(code, rootDir, language);
+  const importedGuard = await confirmImportedSkillCode(code, runDir, language);
   if (importedGuard && !importedGuard.confirmed) {
     throw new Error(importedGuard.error ?? 'Imported skill script not approved');
   }

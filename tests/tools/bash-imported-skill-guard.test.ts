@@ -650,3 +650,73 @@ describe('reprise 19 : here-documents, here-strings, entrée redirigée, tubes',
     expect(guardCalls()).toHaveLength(0);
   });
 });
+
+/**
+ * Reprise 20 : contre-revue n° 10. tree-sitter place `| env bash` DANS le here-document de `cat` :
+ * le texte lu doit être rattaché à la commande réelle (après enveloppes), et execute_code en shell passe
+ * par la même analyse que BashTool.
+ */
+describe('reprise 20 : cat <<EOF | consommateur, et une seule analyse pour BashTool et execute_code', () => {
+  const refuse = () => bridge(() => false);
+  const f = () => path.join(skill, 'scripts', 'run.sh');
+  const BODY = () => `bash ${f()}`;
+
+  it('BashTool : cat <<EOF | env bash / python3 / node / nice / timeout / stdbuf / flock', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    for (const consumer of ['env bash', 'env -u FOO bash', 'nice -n 5 sh', 'timeout 5 bash', 'stdbuf -oL bash', 'flock -n /tmp/pf20.lock bash', 'python3', 'node', 'env python3 -', 'tee /dev/null | env bash']) {
+      calls = [];
+      const r = await run(`cat <<'EOF' | ${consumer}\n${BODY()}\nEOF`);
+      expect(r.success, consumer).toBe(false);
+      expect(guardCalls().length, consumer).toBeGreaterThanOrEqual(1);
+      expect(ran(), consumer).toBe(false);
+    }
+    // plusieurs étages après le délimiteur
+    await (async () => {
+      calls = [];
+      const r = await run(`cat <<EOF | tr a b | env sh && echo done\n${BODY()}\nEOF`);
+      expect(r.success).toBe(false);
+      expect(guardCalls().length).toBeGreaterThanOrEqual(1);
+      expect(ran()).toBe(false);
+    })();
+  });
+
+  it('execute_code (shell) : mêmes compositions, y compris | bash que le filtre de BashTool bloque seul', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    const tool = new ExecuteCodeTool();
+    for (const consumer of ['bash', 'env bash', 'python3', 'node', 'sh']) {
+      calls = [];
+      const r = await tool.execute({ code: `cat <<'EOF' | ${consumer}\n${BODY()}\nEOF`, language: 'shell' }, { cwd: workspace } as never);
+      expect(r.success, consumer).toBe(false);
+      expect(guardCalls(), consumer).toHaveLength(1);
+      expect(ran(), consumer).toBe(false);
+    }
+  });
+
+  it('une seule analyse : BashTool et execute_code (shell) demandent sur les mêmes commandes, et se taisent sur les mêmes', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    const tool = new ExecuteCodeTool();
+    const must = [`bash ${f()}`, `bash -c "bash ${f()}"`, `bash <<EOF\n${BODY()}\nEOF`, `cat <<'EOF' | env python3\n${BODY()}\nEOF`, `env -u X nice -n 5 bash ${f()}`,
+      `find ${workspace} -name run.sh -exec bash {} +`, `for p in ${f()}; do bash "$p"; done`];
+    const mustNot = ['echo hello', 'ls', 'cat <<EOF\nhello\nEOF', 'bash <<EOF\necho hi\nEOF', 'echo hi | cat'];
+    for (const cmd of must) {
+      calls = [];
+      await run(cmd);
+      const viaBash = guardCalls().length;
+      calls = [];
+      await tool.execute({ code: cmd, language: 'shell' }, { cwd: workspace } as never);
+      const viaExec = guardCalls().length;
+      expect(viaBash, `bash: ${cmd}`).toBeGreaterThanOrEqual(1);
+      expect(viaExec, `execute_code: ${cmd}`).toBeGreaterThanOrEqual(1);
+    }
+    for (const cmd of mustNot) {
+      calls = [];
+      await run(cmd, mk('pf20-else-'));
+      const viaBash = guardCalls().length;
+      await tool.execute({ code: cmd, language: 'shell' }, { cwd: workspace } as never);
+      expect(viaBash + guardCalls().length, cmd).toBe(0);
+    }
+  });
+});

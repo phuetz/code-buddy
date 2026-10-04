@@ -11,14 +11,17 @@
  * de la liste blanche (source + chemin + sha256 du fichier COURANT, recalculé
  * ici à chaque exécution) passe sans confirmation.
  *
- * Ce qui est garanti (reprise 18) : (a) scripts importés inertes ; (b) tant qu'un skill a
+ * Ce qui est garanti (reprise 20) : (a) scripts importés inertes ; (b) tant qu'un skill a
  * un script non autorisé, une confirmation forcée dès que l'analyse (tree-sitter-bash,
- * récursive sur `-c`/`eval`/`env -S`, enveloppes et leurs options à argument, globs
- * POSIX, accolades, listes `for`) fait apparaître un fichier du skill, que `find
- * -exec`/`xargs`/`parallel`/`make` couvrent son dossier, ou que le texte ou le mot de
- * commande n'est pas résolu avec certitude ; (c) sha256 recalculé avant le lancement.
- * NON garanti : recopier ou reconstruire le script ailleurs puis le lancer (`cp`,
- * `printf`, octets, `os.environ`, `sys.argv`…) équivaut à le réécrire à la main.
+ * récursive sur `-c`/`eval`/`env -S` ET sur le texte lu sur l'entrée standard —
+ * here-document, here-string, tube, y compris `cat <<EOF | env bash` —, enveloppes et
+ * leurs options à argument, globs POSIX, accolades, listes `for`) fait apparaître un
+ * fichier du skill, que `find -exec`/`xargs`/`parallel`/`make` couvrent son dossier, ou
+ * que le texte ou le mot de commande n'est pas résolu avec certitude ; (c) sha256
+ * recalculé avant le lancement. Une seule fonction d'analyse sert tous les outils
+ * (BashTool, execute_code en shell…). NON garanti : recopier ou reconstruire le script
+ * ailleurs puis le lancer (`cp`, `printf`, octets, `os.environ`, `sys.argv`…) équivaut
+ * à le réécrire à la main.
  *
  * @module tools/bash/imported-skill-guard
  */
@@ -217,6 +220,16 @@ function parseShellSegments(command: string): string[][] {
       for (let i = 0; i < n.childCount; i++) {
         const c = n.child(i);
         if (c && c.type !== 'file_redirect' && c.type !== 'heredoc_redirect') walk(c, [...inputFiles, ...inputs], [...stdin, ...here]);
+        // tree-sitter nests what follows the here-document delimiter (`cat <<'EOF' | env bash`, `| tr a b | sh && …`) INSIDE
+        // heredoc_redirect: those commands read what the producer wrote, i.e. the here-document body.
+        if (c?.type === 'heredoc_redirect') {
+          for (let j = 0; j < c.childCount; j++) {
+            const d = c.child(j);
+            if (d && !['<<', '<<-', 'heredoc_start', 'heredoc_body', 'heredoc_end'].includes(d.type)) {
+              walk(d, [...inputFiles, ...inputs], [...stdin, ...here]);
+            }
+          }
+        }
       }
       return;
     }
