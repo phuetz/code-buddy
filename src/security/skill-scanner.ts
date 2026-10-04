@@ -260,7 +260,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'PHP backtick process execution', name: 'php-backtick', capability: 'shell' },
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'Shell backtick process execution', name: 'shell-backtick', capability: 'shell' },
 
-  { pattern: /(?:^|[ \t;&|(])['"]?(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:bash|sh|zsh|dash|ksh|fish)(?:\.exe)?['"]?[ \t]+(?:['"]?[-+][^\s;&|()]*|['"]?(?:\.\.?\/|\/|~\/|\$)[^\s;&|]+|['"]?[A-Za-z_][\w.-]*\b)/i, severity: 'high', description: 'Shell interpreter invocation can execute a copied payload', name: 'shell-interpreter', capability: 'shell' },
+  { pattern: /(?:^|[ \t;&|(])['"]?(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:bash|sh|zsh|dash|ksh|fish)(?:\.exe)?['"]?[ \t]+(?:(?:['"\\])*[-+][^\s;&|()]*|(?:['"\\])*(?:\.\.?\/|\/|~\/|\$)[^\s;&|]+|(?:['"\\])*[A-Za-z_][\w.-]*\b)/i, severity: 'high', description: 'Shell interpreter invocation can execute a copied payload', name: 'shell-interpreter', capability: 'shell' },
   { pattern: /\b[\w$]*(?:api_?key|secret|password|token)[\w$]*['"]?\s*[:=]\s*['"`][^'"`\r\n]+['"`]/i, severity: 'critical', description: 'Literal credential assignment requires quarantine in copied code', name: 'embedded-secret', capability: 'secrets' },
 
   // File system dangers
@@ -564,17 +564,27 @@ export function scanSkillContent(content: string, filePath: string, executableCo
 
   const contexts = scanContexts(content, filePath, executableContext);
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line === undefined) continue;
-    if (line.trim() === '---') continue;
+    const originalLine = lines[i];
+    if (originalLine === undefined) continue;
+    if (originalLine.trim() === '---') continue;
+
+    let matchLine = originalLine.endsWith('\r') ? originalLine.slice(0, -1) : originalLine;
+    let j = i;
+    while (matchLine.endsWith('\\') && j + 1 < lines.length) {
+      let nextLine = lines[j + 1]!;
+      if (nextLine.endsWith('\r')) nextLine = nextLine.slice(0, -1);
+      matchLine = matchLine.slice(0, -1) + nextLine;
+      j++;
+    }
+
     for (const dp of patterns) {
-      for (const match of line.matchAll(new RegExp(dp.pattern.source, dp.pattern.flags.replace('g', '') + 'g'))) {
-        const kind = classifyMention(dp, line, contexts[i]!, match.index, match[0].length);
+      for (const match of matchLine.matchAll(new RegExp(dp.pattern.source, dp.pattern.flags.replace('g', '') + 'g'))) {
+        const kind = classifyMention(dp, matchLine, contexts[i]!, match.index, match[0].length);
         if (kind === 'benign') continue;
         findings.push({
           severity: dp.severity,
           pattern: dp.name, description: dp.description, file: filePath,
-          line: i + 1, evidence: line.trim().slice(0, 120),
+          line: i + 1, evidence: originalLine.trim().slice(0, 120),
           ...(kind === 'documentary' ? { documentary: true } : {}),
         });
       }
