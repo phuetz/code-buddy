@@ -34,31 +34,60 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 
-/** Taille maximale d'un fichier dont le contenu est analysé (5 Mo). */
-const MAX_CONTENT_SCAN_BYTES = 5 * 1024 * 1024;
-
 /**
  * Chemin personnel : le segment de nom d'utilisateur doit commencer par un
  * caractère alphanumérique. Cela évite de flaguer des chemins techniques
  * légitimes comme `/home/.codebuddy` (segment commençant par un point) ou
- * `/home/$USER` (non résolu).
+ * `/home/$USER` (non résolu). `/home` et `C:\Users` sont insensibles à la casse ;
+ * `/Users` (macOS) reste sensible à la casse, sinon l'URL `/users/me` serait
+ * prise pour un chemin personnel.
  */
 export const PERSONAL_PATH_PATTERNS = [
-  { rule: 'forbidden-personal-path: /home/<nom>', pattern: /\/home\/[A-Za-z0-9][A-Za-z0-9._-]*/g },
-  { rule: 'forbidden-personal-path: /data/<nom>', pattern: /\/data\/[A-Za-z0-9][A-Za-z0-9._-]*/g },
+  { rule: 'forbidden-personal-path: /home/<nom>', pattern: /\/home\/[A-Za-z0-9][A-Za-z0-9._-]*/gi },
+  { rule: 'forbidden-personal-path: /data/<nom>', pattern: /\/data\/[A-Za-z0-9][A-Za-z0-9._-]*/gi },
   { rule: 'forbidden-personal-path: /Users/<nom>', pattern: /\/Users\/[A-Za-z0-9][A-Za-z0-9._-]*/g },
-  { rule: 'forbidden-personal-path: C:\\Users\\<nom>', pattern: /C:\\Users\\[A-Za-z0-9][A-Za-z0-9._-]*/gi },
+  { rule: 'forbidden-personal-path: C:\\Users\\<nom>', pattern: /C:[\\/]+Users[\\/]+[A-Za-z0-9][A-Za-z0-9._-]*/gi },
 ];
+
+/**
+ * Frontière de chemin : le `/` (ou `C:`) ne compte que s'il ouvre un segment
+ * absolu. Un `/home` précédé d'une lettre (`prospects/data/items`), d'un
+ * antislash (source de regex `\/home`) ou d'un slash (`file:///home/user`)
+ * n'est pas un chemin absolu fuité.
+ */
+const PATH_BOUNDARY = '(?<![\\w.\\-/\\\\])';
+
+/**
+ * Règles de chemin personnel appliquées au CONTENU (frontière + normalisation).
+ * Séparées de `PERSONAL_PATH_PATTERNS` : un NOM de fichier `docs/home/…` reste
+ * refusé sans exiger de frontière.
+ */
+export const CONTENT_PATH_PATTERNS = [
+  { rule: 'forbidden-personal-path: /home/<nom>', pattern: new RegExp(PATH_BOUNDARY + '\\/home\\/[A-Za-z0-9][A-Za-z0-9._-]*', 'gi') },
+  { rule: 'forbidden-personal-path: /data/<nom>', pattern: new RegExp(PATH_BOUNDARY + '\\/data\\/[A-Za-z0-9][A-Za-z0-9._-]*', 'gi') },
+  { rule: 'forbidden-personal-path: /Users/<nom>', pattern: new RegExp(PATH_BOUNDARY + '\\/Users\\/[A-Za-z0-9][A-Za-z0-9._-]*', 'g') },
+  { rule: 'forbidden-personal-path: C:\\Users\\<nom>', pattern: new RegExp(PATH_BOUNDARY + 'C:[\\\\\\/]+Users[\\\\\\/]+[A-Za-z0-9][A-Za-z0-9._-]*', 'gi') },
+];
+
+/**
+ * Normalise le texte avant la recherche de chemins : `/home/./x` et `/home//x`
+ * deviennent `/home/x`, et un double antislash `C:\\Users` devient `C:\Users`.
+ */
+export function normalizePathText(text) {
+  return String(text)
+    .replace(/\/(home|data|Users)\/(?:\.\/|\/)+/gi, '/$1/')
+    .replace(/\\\\/g, '\\');
+}
 
 /**
  * Règles sur le NOM du fichier (chemin relatif normalisé en `/`).
  */
 export const FILENAME_RULES = [
   { rule: 'forbidden-extension: *.map', test: (f) => /\.map$/i.test(f) },
-  { rule: 'forbidden-pattern: .env*', test: (f) => /(^|\/)\.env(\.|$)/i.test(f) },
+  { rule: 'forbidden-pattern: .env*', test: (f) => /(^|\/)[^/]*\.env(?:rc|\.|$)/i.test(f) },
   { rule: 'forbidden-file: *.private.json', test: (f) => /\.private\.json$/i.test(f) },
-  { rule: 'forbidden-file: auth.json', test: (f) => /(^|\/)auth\.json$/i.test(f) },
-  { rule: 'forbidden-directory: _qa/', test: (f) => /(^|\/)_qa(\/|$)/.test(f) },
+  { rule: 'forbidden-file: auth.json', test: (f) => /(^|\/)\.?auth\.json$/i.test(f) },
+  { rule: 'forbidden-directory: _qa/', test: (f) => /(^|\/)_qa(\/|$)/i.test(f) },
   {
     rule: 'forbidden-personal-path',
     test: (f) => PERSONAL_PATH_PATTERNS.some((p) => new RegExp(p.pattern.source, p.pattern.flags.replace('g', '')).test(f)),
@@ -226,7 +255,7 @@ export function scanFileContents(absPath, relPath, secretPatterns) {
   } catch {
     return violations; // fichier absent du disque (ex. liste simulée) : rien à scanner
   }
-  if (!stat.isFile() || stat.size > MAX_CONTENT_SCAN_BYTES) return violations;
+  if (!stat.isFile()) return violations;
 
   let buf;
   try {
@@ -234,11 +263,11 @@ export function scanFileContents(absPath, relPath, secretPatterns) {
   } catch {
     return violations;
   }
-  // Binaire : un octet NUL dans les 8 premiers Ko.
-  if (buf.subarray(0, 8192).includes(0)) return violations;
-  const text = buf.toString('utf8');
+  // Aucun rejet binaire ni plafond de taille : un secret caché derrière un octet
+  // NUL ou dans un fichier de plus de 5 Mo doit rester détectable.
+  const text = normalizePathText(buf.toString('utf8'));
 
-  for (const { rule, pattern } of PERSONAL_PATH_PATTERNS) {
+  for (const { rule, pattern } of CONTENT_PATH_PATTERNS) {
     const rx = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
     if (rx.test(text)) violations.push({ file: relPath, rule });
   }
@@ -250,10 +279,36 @@ export function scanFileContents(absPath, relPath, secretPatterns) {
     } catch {
       continue; // motif non compilable : ignoré (ne doit pas faire passer la garde)
     }
-    if (rx.test(text)) violations.push({ file: relPath, rule: `forbidden-secret: ${p.type}` });
+    let m;
+    let found = false;
+    while ((m = rx.exec(text)) !== null) {
+      if (m[0] === '') {
+        rx.lastIndex += 1; // évite une boucle infinie sur un motif vide
+        continue;
+      }
+      const matched = m[0];
+      if (matched.includes('${')) continue; // interpolation de modèle, pas un littéral
+      if (p.type === 'private_key' && !isRealPemBody(text, m.index + matched.length)) continue;
+      found = true;
+      break;
+    }
+    if (found) violations.push({ file: relPath, rule: `forbidden-secret: ${p.type}` });
   }
 
   return violations;
+}
+
+/**
+ * Distingue une vraie clé PEM de la SOURCE d'un motif de détection (ex.
+ * `/-----BEGIN RSA PRIVATE KEY-----[\s\S]*?…/`). Après l'en-tête `-----`,
+ * une vraie clé enchaîne un saut de ligne puis du base64 ; la source, elle,
+ * enchaîne un métacaractère de regex (`[`, `(`, `*`…).
+ */
+function isRealPemBody(text, nextIndex) {
+  const next = text[nextIndex];
+  if (next === '\n' || next === '\r') return true;
+  if (next === '\\' && text[nextIndex + 1] === 'n') return true; // « \n » échappé dans une chaîne
+  return /[A-Za-z0-9+/=]/.test(next ?? '');
 }
 
 /**

@@ -7,7 +7,7 @@
  * règle fait disparaître la violation correspondante).
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -186,5 +186,167 @@ describe('check-npm-package — chaque règle est porteuse', () => {
       patternsRoot: PROJECT_ROOT,
     });
     expect(notScanned.ok).toBe(true);
+  });
+});
+
+describe('check-npm-package — contournements fermés', () => {
+  it('refuse un _qa/ quelle que soit la casse', () => {
+    const result = auditPackageFiles(
+      ['package.json', '_QA/report.html', 'foo/_Qa/bar.html'],
+      { cwd: PROJECT_ROOT, scanContents: false, patternsRoot: PROJECT_ROOT },
+    );
+    expect(result.ok).toBe(false);
+    const rules = result.violations.map((v) => `${v.file}::${v.rule}`);
+    expect(rules).toContain('_QA/report.html::forbidden-directory: _qa/');
+    expect(rules).toContain('foo/_Qa/bar.html::forbidden-directory: _qa/');
+  });
+
+  it('refuse .auth.json (fichier caché)', () => {
+    const result = auditPackageFiles(['package.json', '.auth.json'], {
+      cwd: PROJECT_ROOT,
+      scanContents: false,
+      patternsRoot: PROJECT_ROOT,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.violations.map((v) => `${v.file}::${v.rule}`)).toContain(
+      '.auth.json::forbidden-file: auth.json',
+    );
+  });
+
+  it('refuse .envrc et *.env (extensions voisines de .env)', () => {
+    const result = auditPackageFiles(['package.json', 'dist/.envrc', 'dist/my.env'], {
+      cwd: PROJECT_ROOT,
+      scanContents: false,
+      patternsRoot: PROJECT_ROOT,
+    });
+    expect(result.ok).toBe(false);
+    const rules = result.violations.map((v) => `${v.file}::${v.rule}`);
+    expect(rules).toContain('dist/.envrc::forbidden-pattern: .env*');
+    expect(rules).toContain('dist/my.env::forbidden-pattern: .env*');
+  });
+
+  it('refuse /HOME/<nom> et les chemins Windows quelle que soit la casse', () => {
+    const result = auditPackageFiles(
+      [
+        'docs/HOME/testuser/x.md',
+        'C:\\Users\\testuser\\x.txt',
+        'c:/users/testuser/x.txt',
+        'c:\\users\\testuser\\y.txt',
+      ],
+      { cwd: PROJECT_ROOT, scanContents: false, patternsRoot: PROJECT_ROOT },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.violations.filter((v) => v.rule === 'forbidden-personal-path').length).toBe(4);
+  });
+
+  it('refuse /home/./<nom> et /home//<nom> (segments normalisés) dans le CONTENU', () => {
+    const dir = tracked(makeFakePackage());
+    writeFileSync(
+      join(dir, 'dist', 'p.js'),
+      'const a = "/home/./testuser/x";\nconst b = "/home//testuser/x";\n',
+    );
+    const result = auditPackageFiles(['dist/p.js'], { cwd: dir, patternsRoot: PROJECT_ROOT });
+    expect(result.ok).toBe(false);
+    expect(result.violations).toContainEqual({
+      file: 'dist/p.js',
+      rule: 'forbidden-personal-path: /home/<nom>',
+    });
+  });
+
+  it('refuse C:\\\\Users\\\\<nom> (double antislash) dans le CONTENU', () => {
+    const dir = tracked(makeFakePackage());
+    writeFileSync(join(dir, 'dist', 'w.js'), 'const p = "C:\\\\Users\\\\testuser\\\\x";\n');
+    const result = auditPackageFiles(['dist/w.js'], { cwd: dir, patternsRoot: PROJECT_ROOT });
+    expect(result.ok).toBe(false);
+    expect(result.violations).toContainEqual({
+      file: 'dist/w.js',
+      rule: 'forbidden-personal-path: C:\\Users\\<nom>',
+    });
+  });
+
+  it('refuse un secret caché derrière un octet NUL ou une grande taille', () => {
+    const dir = tracked(makeFakePackage());
+    writeFileSync(join(dir, 'dist', 'nul.js'), 'const x = 1;\u0000\nconst key = "AKIAIOSFODNN7EXAMPLE";\n');
+    writeFileSync(
+      join(dir, 'dist', 'big.js'),
+      'x'.repeat(5 * 1024 * 1024 + 1) + '\nconst key = "AKIAIOSFODNN7EXAMPLE";\n',
+    );
+    const result = auditPackageFiles(['dist/nul.js', 'dist/big.js'], {
+      cwd: dir,
+      patternsRoot: PROJECT_ROOT,
+    });
+    expect(result.ok).toBe(false);
+    const rules = result.violations.map((v) => `${v.file}::${v.rule}`);
+    expect(rules).toContain('dist/nul.js::forbidden-secret: aws_key');
+    expect(rules).toContain('dist/big.js::forbidden-secret: aws_key');
+  });
+});
+
+describe('check-npm-package — précision sur du code compilé (aucun faux positif)', () => {
+  it('accepte un littéral de regex /home, un exemple /home/user et une liste /data/mot', () => {
+    const dir = tracked(makeFakePackage());
+    writeFileSync(
+      join(dir, 'dist', 'code.js'),
+      [
+        'const re = /_qa\\/\\S+\\/home/i;',
+        '/** files, e.g. `file:///home/user/.aws/credentials` */',
+        'const msg = "leads/prospects/data/items/results";',
+        'const agents = "(pdf/excel/data/sql/archive)";',
+        '',
+      ].join('\n'),
+    );
+    const result = auditPackageFiles(['dist/code.js'], { cwd: dir, patternsRoot: PROJECT_ROOT });
+    expect(result.violations).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepte les expressions modèles (GitHub Actions, URL interpolée)', () => {
+    const dir = tracked(makeFakePackage());
+    writeFileSync(
+      join(dir, 'dist', 'ci.js'),
+      [
+        "password: '${{ secrets.GITHUB_TOKEN }}',",
+        'const uri = `PGRST_DB_URI=postgres://app:${encodeURIComponent(password)}@postgres:5432/app`;',
+        '',
+      ].join('\n'),
+    );
+    const result = auditPackageFiles(['dist/ci.js'], { cwd: dir, patternsRoot: PROJECT_ROOT });
+    expect(result.violations).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepte la source d’un motif de clé privée (pas une clé)', () => {
+    const dir = tracked(makeFakePackage());
+    writeFileSync(
+      join(dir, 'dist', 'redact.js'),
+      'pattern: /-----BEGIN RSA PRIVATE KEY-----[\\s\\S]*?-----END RSA PRIVATE KEY-----/g,\n',
+    );
+    const result = auditPackageFiles(['dist/redact.js'], { cwd: dir, patternsRoot: PROJECT_ROOT });
+    expect(result.violations).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuse quand même une vraie clé privée PEM dans un fichier empaqueté', () => {
+    const dir = tracked(makeFakePackage());
+    writeFileSync(
+      join(dir, 'dist', 'key.js'),
+      'const k = "-----BEGIN RSA PRIVATE KEY-----\\nMIIEowIBAAKCAQEA...";\n',
+    );
+    const result = auditPackageFiles(['dist/key.js'], { cwd: dir, patternsRoot: PROJECT_ROOT });
+    expect(result.ok).toBe(false);
+    expect(result.violations).toContainEqual({
+      file: 'dist/key.js',
+      rule: 'forbidden-secret: private_key',
+    });
+  });
+
+  it('accepte l’arbre RÉELLEMENT compilé (dist/ présent) s’il existe', () => {
+    const distDir = join(PROJECT_ROOT, 'dist');
+    if (!existsSync(distDir)) return; // pas de build dans cet environnement
+    const files = collectPackagedFiles(PROJECT_ROOT);
+    expect(files.some((f) => f.startsWith('dist/'))).toBe(true);
+    const result = auditPackageFiles(files, { cwd: PROJECT_ROOT, patternsRoot: PROJECT_ROOT });
+    expect(result.violations).toEqual([]);
+    expect(result.ok).toBe(true);
   });
 });
