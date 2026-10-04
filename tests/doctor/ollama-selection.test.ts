@@ -19,7 +19,7 @@ describe('doctor Ollama selection', () => {
 
     expect(selection.model).toBe('qwen3:4b-instruct');
     expect(selection.reason).toContain('tool-calling');
-    expect(selection.reason).toContain('4.0 GiB < 20.0 GiB');
+    expect(selection.reason).toContain('needs ≈ 5.8 GiB');
   });
 
   it('returns no choice when every installed model is unsuitable or too large', () => {
@@ -33,7 +33,7 @@ describe('doctor Ollama selection', () => {
     );
 
     expect(selection.model).toBeNull();
-    expect(selection.reason).toContain('no installed model meets');
+    expect(selection.reason).toContain('no installed model meets tool-calling, non-embed/rag/vision-only, known-size (with runtime overhead)');
   });
 
   it('rejects a stale default model and selects an advertised tag', () => {
@@ -50,5 +50,63 @@ describe('doctor Ollama selection', () => {
 
     expect(isOllamaSelectionCurrent(models, settings)).toBe(true);
     expect(resolveOllamaModel([], settings)).toBeUndefined();
+  });
+
+  it('rejects a model when available RAM is too low with overhead margin', () => {
+    const gibibyte = 1024 ** 3;
+    // 4.9 GiB model, 5.5 GiB free -> should be rejected due to runtime overhead
+    const selection = selectOllamaModel(
+      [
+        { name: 'qwen3:7b-instruct', sizeBytes: 4.9 * gibibyte },
+      ],
+      5.5 * gibibyte,
+    );
+
+    expect(selection.model).toBeNull();
+    expect(selection.reason).toContain('runtime overhead');
+  });
+
+  it('accepts a model when available RAM is enough with overhead margin', () => {
+    const gibibyte = 1024 ** 3;
+    // 1 GiB model, 8 GiB free -> should be selected
+    const selection = selectOllamaModel(
+      [
+        { name: 'qwen3:1.5b-instruct', sizeBytes: 1 * gibibyte },
+      ],
+      8 * gibibyte,
+    );
+
+    expect(selection.model).toBe('qwen3:1.5b-instruct');
+    expect(selection.reason).toContain('runtime overhead');
+  });
+
+  it('rejects exactly on the limit margin', () => {
+    const gibibyte = 1024 ** 3;
+    // factor=1.2, reserve=1 GiB. 4.9 * 1.2 + 1 = 6.88 GiB required.
+    const required = 4.9 * 1.2 + 1;
+    const selection = selectOllamaModel(
+      [
+        { name: 'qwen3:7b-instruct', sizeBytes: 4.9 * gibibyte },
+      ],
+      required * gibibyte, // exactly the limit, should reject since < is strictly used
+    );
+
+    expect(selection.model).toBeNull();
+  });
+
+  it('ignores a margin override that would admit a model larger than free RAM', () => {
+    const previous = process.env.CODEBUDDY_OLLAMA_RAM_MARGIN;
+    process.env.CODEBUDDY_OLLAMA_RAM_MARGIN = '-1,-1';
+    try {
+      const gibibyte = 1024 ** 3;
+      const selection = selectOllamaModel(
+        [{ name: 'qwen3:7b-instruct', sizeBytes: 4.9 * gibibyte }],
+        5.5 * gibibyte,
+      );
+      expect(selection.model).toBeNull();
+    } finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_OLLAMA_RAM_MARGIN;
+      else process.env.CODEBUDDY_OLLAMA_RAM_MARGIN = previous;
+    }
   });
 });

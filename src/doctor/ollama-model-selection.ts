@@ -3,6 +3,23 @@ import type { OllamaModelCandidate } from '../wizard/environment-detection.js';
 
 const NON_AGENT_MODEL_NAME = /(?:^|[-_.:/])(?:embed(?:ding)?|rag|vision(?:[-_]?only)?)(?:$|[-_.:/])/i;
 const CODING_MODEL_NAME = /(?:code|coder|coding|instruct|instruction)/i;
+const DEFAULT_OLLAMA_RAM_MARGIN_FACTOR = 1.2;
+const DEFAULT_OLLAMA_RAM_RESERVE_BYTES = 1024 ** 3;
+
+function getOllamaRamMargin() {
+  const envVar = process.env.CODEBUDDY_OLLAMA_RAM_MARGIN;
+  if (envVar) {
+    const parts = envVar.split(',');
+    if (parts.length === 2) {
+      const factor = Number(parts[0]);
+      const reserve = Number(parts[1]);
+      if (Number.isFinite(factor) && factor >= 1 && Number.isFinite(reserve) && reserve >= 0) {
+        return { factor, reserve };
+      }
+    }
+  }
+  return { factor: DEFAULT_OLLAMA_RAM_MARGIN_FACTOR, reserve: DEFAULT_OLLAMA_RAM_RESERVE_BYTES };
+}
 
 export interface OllamaModelSelection {
   model: string | null;
@@ -32,6 +49,11 @@ function isCodingModel(candidate: OllamaModelCandidate): boolean {
  * currently free host RAM; then an instruct/coder family wins, with size as a
  * stable final tie-breaker. Embedding, RAG, and vision-only names never enter
  * the candidate pool.
+ *
+ * The required RAM includes a runtime overhead margin calculated as
+ * `sizeBytes * factor + reserve`. The default factor is 1.2 and the default
+ * reserve is 1 GiB. These can be overridden via the `CODEBUDDY_OLLAMA_RAM_MARGIN`
+ * environment variable (format: `factor,reserveInBytes`).
  */
 export function selectOllamaModel(
   candidates: readonly OllamaModelCandidate[],
@@ -40,18 +62,20 @@ export function selectOllamaModel(
   const availableMemory = Number.isFinite(availableMemoryBytes) && availableMemoryBytes > 0
     ? availableMemoryBytes
     : 0;
+  const { factor, reserve } = getOllamaRamMargin();
+
   const normalized = candidates
     .map((candidate) => ({ ...candidate, name: candidate.name.trim() }))
     .filter((candidate) => candidate.name.length > 0)
     .filter((candidate) => !NON_AGENT_MODEL_NAME.test(candidate.name))
     .filter((candidate) => findModelToolConfig(candidate.name)?.supportsToolCalls === true)
     .filter(hasKnownSize)
-    .filter((candidate) => candidate.sizeBytes < availableMemory);
+    .filter((candidate) => candidate.sizeBytes * factor + reserve < availableMemory);
 
   if (normalized.length === 0) {
     return {
       model: null,
-      reason: `no installed model meets tool-calling, non-embed/rag/vision-only, known-size < ${formatGiB(availableMemory)} free RAM`,
+      reason: `no installed model meets tool-calling, non-embed/rag/vision-only, known-size (with runtime overhead) < ${formatGiB(availableMemory)} free RAM`,
     };
   }
 
@@ -66,6 +90,6 @@ export function selectOllamaModel(
   const family = isCodingModel(selected) ? ', instruct/coder family' : '';
   return {
     model: selected.name,
-    reason: `tool-calling, ${formatGiB(selected.sizeBytes)} < ${formatGiB(availableMemory)} free RAM${family}`,
+    reason: `tool-calling, needs ≈ ${formatGiB(selected.sizeBytes * factor + reserve)} with runtime overhead, ${formatGiB(availableMemory)} free RAM${family}`,
   };
 }
