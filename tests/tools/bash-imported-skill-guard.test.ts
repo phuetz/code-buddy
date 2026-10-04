@@ -476,3 +476,106 @@ describe('reprise 17 : vrai analyseur shell, enveloppes, glob, execute_code', ()
     expect(guardCalls()).toHaveLength(0);
   });
 });
+
+/**
+ * Reprise 18 : contre-revue n° 8, régressions de la reprise 17 par rapport à 58e0dfc6.
+ * Chaque cas que le parent arrêtait (bash -c d'un chemin, liste `for`, classe POSIX) a son test ;
+ * `find -exec` sous -c/eval/enveloppes à option à argument aussi.
+ */
+describe('reprise 18 : récursion -c/eval, listes for, classes POSIX, enveloppes à arguments', () => {
+  const refuse = () => bridge(() => false);
+  const expectGuarded = async (cmd: string, cwd = workspace) => {
+    calls = [];
+    const r = await run(cmd, cwd);
+    expect(r.success, cmd).toBe(false);
+    expect(guardCalls().length, cmd).toBeGreaterThanOrEqual(1);
+    expect(ran(), cmd).toBe(false);
+  };
+
+  it('régression 1 : le corps de bash -c / sh -c / eval est réanalysé (chemin littéral)', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    const f = path.join(skill, 'scripts', 'run.sh');
+    await expectGuarded(`bash -c "bash ${f}"`);
+    await expectGuarded(`sh -c 'bash ${f}'`);
+    await expectGuarded(`bash -lc "bash ${f}"`);
+    await expectGuarded(`eval 'bash ${f}'`);
+    await expectGuarded(`env -S 'bash ${f}'`);
+    await expectGuarded(`env -u FOO bash -c "bash ${f}"`);
+    await expectGuarded(`flock -n . sh -c 'bash ${f}'`);
+    await expectGuarded(`nice -n +5 bash -c "bash ${f}"`);
+    await expectGuarded(`stdbuf -o L bash -c "bash ${f}"`);
+    await expectGuarded(`bash -c "bash -c 'bash ${f}'"`);
+    // `python -c "…subprocess…"` is refused earlier by BashTool's generic filter: check the guard's own recursion.
+    const { findImportedScriptHits } = await import('../../src/tools/bash/imported-skill-guard.js');
+    expect(findImportedScriptHits(`python3 -c "import subprocess; subprocess.call(['bash', '${f}'])"`, workspace, []).length).toBeGreaterThan(0);
+  });
+
+  it('régression 1 : liste for dont un littéral est un fichier du skill', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    const f = path.join(skill, 'scripts', 'run.sh');
+    await expectGuarded(`for f in "${f}"; do bash "$f"; done`);
+    await expectGuarded(`for f in ${f} /tmp/x; do bash "$f"; done`);
+    await expectGuarded(`for f in ${skillsRoot}/imported-*/scripts/*.sh; do bash "$f"; done`);
+  });
+
+  it('régression 2 : classes POSIX et négations dans un glob du fichier d\'origine', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    await expectGuarded(`bash ${skill}/scripts/r[[:alpha:]]n.sh`);
+    await expectGuarded(`bash ${skill}/scripts/r[[:lower:]]n.sh`);
+    await expectGuarded(`bash ${skill}/scripts/r[!0-9]n.sh`);
+    await expectGuarded(`bash ${skill}/scripts/[[:alnum:]][[:alpha:]]?.sh`);
+    await expectGuarded(`bash ${skill}/**/run.sh`);
+  });
+
+  it('find -exec depuis le projet sous -c, sh -c, eval, env -u, nice -n +5, stdbuf -o L, flock -n .', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    const F = 'find . -name run.sh -exec bash {} +';
+    await expectGuarded(`bash -c '${F}'`);
+    await expectGuarded(`sh -c '${F}'`);
+    await expectGuarded(`eval '${F}'`);
+    await expectGuarded(`env -u FOO ${F}`);
+    await expectGuarded(`env -i -u FOO ${F}`);
+    await expectGuarded(`nice -n +5 ${F}`);
+    await expectGuarded(`nice -n 5 ${F}`);
+    await expectGuarded(`stdbuf -o L ${F}`);
+    await expectGuarded(`stdbuf -oL ${F}`);
+    await expectGuarded(`flock -n . ${F}`);
+    await expectGuarded(`timeout -s KILL 5 ${F}`);
+    await expectGuarded(`ionice -c 3 ${F}`);
+    await expectGuarded(`sudo -u nobody ${F}`);
+  });
+
+  it('enveloppe inconnue : find -exec / make / xargs sont vus où qu\'ils soient dans la commande', async () => {
+    await installProbe({ 'scripts/run.sh': writer(), 'scripts/Makefile': `all:\n\techo RAN > ${JSON.stringify(marker)}\n` });
+    refuse();
+    await expectGuarded('systemd-run --user find . -name run.sh -exec bash {} +');
+    await expectGuarded('weirdwrap --opt value make', workspace);
+    await expectGuarded('nosuchtool a b | weirdwrap xargs bash');
+  });
+
+  it('mot de commande que l\'analyseur ne résout pas : fermé tant qu\'un skill a un script non autorisé', async () => {
+    refuse();
+    // sans skill : rien à protéger
+    calls = [];
+    await run('cmd=echo; $cmd ok');
+    expect(guardCalls()).toHaveLength(0);
+    await installProbe({ 'scripts/run.sh': writer() });
+    await expectGuarded('cmd=echo; $cmd ok');
+    await expectGuarded('e?ho ok');
+  });
+
+  it('pas de faux positif ajouté : -c sans skill visé, for sans skill, wrappers ordinaires', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    for (const cmd of ['bash -c "echo hello"', 'sh -c "ls /tmp"', 'eval "echo ok"', 'for f in a b c; do echo $f; done',
+      'env -u FOO echo hi', 'nice -n 5 echo hi', 'stdbuf -o L echo hi', 'timeout 5 echo hi', 'flock -n /tmp/x.lock echo hi']) {
+      const r = await run(cmd, mk('pf18-else-'));
+      expect(r.success, `${cmd}: ${r.error}`).toBe(true);
+    }
+    expect(guardCalls()).toHaveLength(0);
+  });
+});

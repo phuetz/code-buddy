@@ -11,15 +11,14 @@
  * de la liste blanche (source + chemin + sha256 du fichier COURANT, recalculé
  * ici à chaque exécution) passe sans confirmation.
  *
- * Frontière garantie (reprise 16) : (a) scripts importés inertes ; (b) confirmation
- * fermée pour tout lancement DIRECT d'un fichier du skill par un outil d'exécution
- * (chemin littéral, interpréteur + chemin, cwd sous le skill, `find -exec` /
- * `xargs` / `parallel` / `make` sur un dossier qui le contient ou le recouvre) ;
- * (c) sha256 recalculé avant le lancement. LIMITE ASSUMÉE : recopier ou
- * reconstruire le script ailleurs puis le lancer (`cp`, `cat`, `printf`, nom
- * assemblé par octets, `os.environ`, `sys.argv`…) équivaut à le réécrire à la
- * main, ce que n'importe quel agent qui peut écrire un fichier sait faire. Ce
- * n'est pas chassé par motifs.
+ * Ce qui est garanti (reprise 18) : (a) scripts importés inertes ; (b) tant qu'un skill a
+ * un script non autorisé, une confirmation forcée dès que l'analyse (tree-sitter-bash,
+ * récursive sur `-c`/`eval`/`env -S`, enveloppes et leurs options à argument, globs
+ * POSIX, accolades, listes `for`) fait apparaître un fichier du skill, que `find
+ * -exec`/`xargs`/`parallel`/`make` couvrent son dossier, ou que le texte ou le mot de
+ * commande n'est pas résolu avec certitude ; (c) sha256 recalculé avant le lancement.
+ * NON garanti : recopier ou reconstruire le script ailleurs puis le lancer (`cp`,
+ * `printf`, octets, `os.environ`, `sys.argv`…) équivaut à le réécrire à la main.
  *
  * @module tools/bash/imported-skill-guard
  */
@@ -42,6 +41,7 @@ import {
 const IMPORTED_PREFIX = 'imported-';
 
 /** Commandes qui, lancées depuis un dossier de skill, ne peuvent pas exécuter son contenu. */
+const SHELL_NAMES = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash', 'fish', 'csh', 'tcsh']);
 const LAUNCHER_FREE = new Set(['git', 'rm', 'mv', 'mkdir', 'rmdir', 'touch', 'chmod', 'chown', 'ln', 'sleep', 'date', 'which', 'whoami', 'id', 'uname']);
 
 /** Commandes qui ne font que lire ou se déplacer : citer un script ne le lance pas. */
@@ -159,6 +159,20 @@ function parseShellSegments(command: string): string[][] {
   const root = shellParser().parse(command).rootNode;
   if (root.hasError) throw new Error('shell text could not be parsed');
   const out: string[][] = [];
+  // Text of a shell word as the shell would hand it over (quotes and escapes resolved), so `bash -c "…"` can be re-parsed.
+  const wordText = (n: TsNode): string => {
+    switch (n.type) {
+      case 'string': return n.text.replace(/^"|"$/g, '').replace(/\\(["\\$`])/g, '$1');
+      case 'raw_string': return n.text.replace(/^'|'$/g, '');
+      case 'concatenation': {
+        let t = '';
+        for (let i = 0; i < n.childCount; i++) { const c = n.child(i); if (c) t += wordText(c); }
+        return t;
+      }
+      case 'word': return n.text.replace(/\\(.)/gs, '$1');
+      default: return n.text;
+    }
+  };
   const clean = (t: string): string => t.replace(/["'\\]/g, '');
   const walk = (n: TsNode, inputFiles: string[]): void => {
     if (n.type === 'redirected_statement') {
@@ -168,7 +182,7 @@ function parseShellSegments(command: string): string[][] {
         if (c?.type === 'file_redirect' && c.text.trimStart().startsWith('<')) {
           for (let j = 0; j < c.childCount; j++) {
             const d = c.child(j);
-            if (d && d.type !== '<' && d.type !== 'file_descriptor') inputs.push(clean(d.text));
+            if (d && d.type !== '<' && d.type !== 'file_descriptor') inputs.push(wordText(d));
           }
         }
       }
@@ -182,13 +196,26 @@ function parseShellSegments(command: string): string[][] {
       out.push([clean(n.text)]);
       return;
     }
+    if (n.type === 'for_statement') {
+      // `for f in "<path>"; do bash "$f"; done` : the literals of the list are paths in play.
+      const values: string[] = [];
+      let afterIn = false;
+      for (let i = 0; i < n.childCount; i++) {
+        const c = n.child(i);
+        if (!c) continue;
+        if (c.type === 'in') { afterIn = true; continue; }
+        if (c.type === 'do_group' || c.type === ';') break;
+        if (afterIn) values.push(wordText(c));
+      }
+      if (values.length > 0) out.push(['for', ...values]);
+    }
     if (n.type === 'command') {
       const words: string[] = [];
       for (let i = 0; i < n.childCount; i++) {
         const c = n.child(i);
         if (!c || c.type === 'file_redirect' || c.type === 'heredoc_redirect') continue;
         if (c.type === 'command_substitution' || c.type === 'process_substitution') continue;
-        words.push(clean(c.text));
+        words.push(wordText(c));
       }
       out.push([...words, ...inputFiles].filter(Boolean));
     }
@@ -201,19 +228,79 @@ function parseShellSegments(command: string): string[][] {
   return out.filter(words => words.length > 0);
 }
 
-/** Enveloppes qui lancent leur argument : `env`, `time`, `timeout 15`, `nice -n 5`, `stdbuf -oL`, `busybox`… */
-const WRAPPERS = new Set(['env', 'command', 'exec', 'builtin', 'time', 'nohup', 'nice', 'ionice', 'stdbuf', 'timeout', 'busybox', 'sudo', 'doas', 'setsid', 'chrt', 'taskset', 'unbuffer', 'strace', 'ltrace']);
+/**
+ * Enveloppes qui lancent leur argument, avec leurs options À ARGUMENT (`env -u X`, `nice -n +5`,
+ * `stdbuf -o L`, `timeout -s KILL 5`…) et le nombre d'arguments positionnels avant la commande
+ * (`timeout <durée>`, `flock <fichier>`, `taskset <masque>`, `chrt <priorité>`).
+ */
+const WRAPPERS: Record<string, { optArgs: string[]; positionals: number }> = {
+  env: { optArgs: ['-u', '--unset', '-C', '--chdir', '-S', '--split-string'], positionals: 0 },
+  command: { optArgs: [], positionals: 0 },
+  exec: { optArgs: ['-a'], positionals: 0 },
+  builtin: { optArgs: [], positionals: 0 },
+  time: { optArgs: ['-f', '--format', '-o', '--output'], positionals: 0 },
+  nohup: { optArgs: [], positionals: 0 },
+  nice: { optArgs: ['-n', '--adjustment'], positionals: 0 },
+  ionice: { optArgs: ['-c', '-n', '-p', '-P', '-u', '--class', '--classdata'], positionals: 0 },
+  stdbuf: { optArgs: ['-i', '-o', '-e', '--input', '--output', '--error'], positionals: 0 },
+  timeout: { optArgs: ['-s', '--signal', '-k', '--kill-after'], positionals: 1 },
+  flock: { optArgs: ['-w', '-E', '--timeout', '--wait', '--conflict-exit-code'], positionals: 1 },
+  busybox: { optArgs: [], positionals: 0 },
+  sudo: { optArgs: ['-u', '-g', '-C', '-D', '-h', '-p', '-r', '-t', '-U', '-R'], positionals: 0 },
+  doas: { optArgs: ['-u', '-C'], positionals: 0 },
+  setsid: { optArgs: [], positionals: 0 },
+  chrt: { optArgs: [], positionals: 1 },
+  taskset: { optArgs: ['-c', '--cpu-list'], positionals: 0 },
+  unbuffer: { optArgs: [], positionals: 0 },
+  strace: { optArgs: ['-o', '-e', '-p', '-s', '-u', '-E'], positionals: 0 },
+  ltrace: { optArgs: ['-o', '-e', '-p', '-s', '-u'], positionals: 0 },
+};
 
-/** Index of the word that is really run: past assignments and wrappers (with their options). */
-function commandIndex(seg: string[]): number {
+interface CommandPosition {
+  /** Index of the word that is really run (past assignments and wrappers). */
+  index: number;
+  /** Text handed to the shell by `env -S`. */
+  splitString?: string;
+}
+
+function commandPosition(seg: string[]): CommandPosition {
   let i = 0;
+  let splitString: string | undefined;
   for (;;) {
     while (i < seg.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(seg[i]!)) i++;
-    if (i >= seg.length) return Math.max(0, seg.length - 1);
-    if (!WRAPPERS.has(path.basename(seg[i]!))) return i;
+    if (i >= seg.length) return { index: Math.max(0, seg.length - 1), ...(splitString ? { splitString } : {}) };
+    const name = path.basename(seg[i]!);
+    const wrapper = WRAPPERS[name];
+    if (!wrapper) return { index: i, ...(splitString ? { splitString } : {}) };
     i++;
-    while (i < seg.length && (seg[i]!.startsWith('-') || /^\d+(?:\.\d+)?[smhd]?$/.test(seg[i]!) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(seg[i]!))) i++;
+    let positionals = wrapper.positionals;
+    let usedCpuList = false;
+    while (i < seg.length) {
+      const w = seg[i]!;
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) { i++; continue; }
+      if (w === '--') { i++; break; }
+      if (w.startsWith('-') && w.length > 1) {
+        if (wrapper.optArgs.includes(w)) {
+          if ((w === '-S' || w === '--split-string') && seg[i + 1] !== undefined) splitString = seg[i + 1];
+          if (name === 'taskset' && (w === '-c' || w === '--cpu-list')) usedCpuList = true;
+          i += 2;
+        } else {
+          i++;
+        }
+        continue;
+      }
+      // `nice -n +5` consumed above; a bare `+5` / duration / mask is positional.
+      if (/^[-+]?\d+(?:\.\d+)?[smhd]?$/.test(w) && name !== 'nohup') { i++; if (positionals > 0) positionals--; continue; }
+      if (positionals > 0 && !(name === 'taskset' && usedCpuList)) { positionals--; i++; continue; }
+      break;
+    }
+    if (name === 'taskset' && !usedCpuList && i < seg.length && /^(?:0x)?[0-9a-fA-F]+$/.test(seg[i]!)) i++;
   }
+}
+
+/** Même sens que l'ancien index, pour les appelants qui n'ont besoin que de la position. */
+function commandIndex(seg: string[]): number {
+  return commandPosition(seg).index;
 }
 
 /** `{a,b}` brace expansion, bounded. */
@@ -230,7 +317,41 @@ function expandBraces(word: string, limit = 64): string[] {
   return out;
 }
 
-/** Minimal glob (`*`, `?`, `[..]`) over the real file system, bounded. */
+const POSIX_CLASSES: Record<string, string> = {
+  alpha: 'a-zA-Z', digit: '0-9', alnum: 'a-zA-Z0-9', upper: 'A-Z', lower: 'a-z', space: '\\s', blank: ' \\t',
+  punct: '!-\\/:-@\\[-`{-~', xdigit: '0-9A-Fa-f', word: '\\w', cntrl: '\\x00-\\x1f', print: ' -~', graph: '!-~',
+};
+
+/** One glob path segment (`*`, `?`, `[..]` with POSIX classes and `!`/`^` negation) as a RegExp. */
+function globSegmentToRegExp(part: string): RegExp {
+  let re = '^';
+  for (let i = 0; i < part.length; i++) {
+    const ch = part[i]!;
+    if (ch === '*') re += '[^/]*';
+    else if (ch === '?') re += '[^/]';
+    else if (ch === '[') {
+      let j = i + 1;
+      let cls = '';
+      if (part[j] === '!' || part[j] === '^') { cls += '^'; j++; }
+      if (part[j] === ']') { cls += '\\]'; j++; }
+      let closed = false;
+      for (; j < part.length; j++) {
+        if (part[j] === '[' && part[j + 1] === ':') {
+          const end = part.indexOf(':]', j + 2);
+          if (end > 0) { cls += POSIX_CLASSES[part.slice(j + 2, end)] ?? ''; j = end + 1; continue; }
+        }
+        if (part[j] === ']') { closed = true; break; }
+        cls += part[j] === '\\' || part[j] === '^' && cls.length > 0 ? `\\${part[j]}` : part[j];
+      }
+      if (!closed) { re += '\\['; continue; }
+      re += `[${cls}]`;
+      i = j;
+    } else re += ch.replace(/[.+^${}()|\\\]/]/g, '\\$&');
+  }
+  return new RegExp(`${re}$`);
+}
+
+/** Minimal glob over the real file system, bounded. */
 function globMatches(pattern: string, limit = 200): string[] {
   const parts = pattern.split('/');
   let current: string[] = [pattern.startsWith('/') ? '/' : ''];
@@ -242,7 +363,12 @@ function globMatches(pattern: string, limit = 200): string[] {
         next.push(base === '' ? part : path.join(base, part));
         continue;
       }
-      const re = new RegExp(`^${part.replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')}$`);
+      let re: RegExp;
+      try {
+        re = globSegmentToRegExp(part);
+      } catch {
+        continue;
+      }
       let names: string[] = [];
       try {
         names = fs.readdirSync(base === '' ? '.' : base);
@@ -271,7 +397,12 @@ function resolveCandidate(raw: string, bases: string[]): string[] {
     if (expanded === null || expanded === '') continue;
     const abs = path.isAbsolute(expanded) ? [expanded] : bases.map(b => path.resolve(b, expanded));
     for (const a of abs) {
-      if (/[*?[]/.test(a)) out.push(...globMatches(a));
+      if (/[*?[]/.test(a)) {
+        out.push(...globMatches(a));
+        // What the matcher cannot be sure about (`**`, odd classes): the directory before the first wildcard is in play too.
+        const cut = a.search(/[*?[]/);
+        out.push(path.resolve(a.slice(0, Math.max(0, a.lastIndexOf('/', cut)) + 1) || '.'));
+      }
       else out.push(path.resolve(a));
     }
   }
@@ -346,7 +477,9 @@ export function findImportedScriptHits(
   allowlist: readonly ExecAllowlistEntry[] | (() => readonly ExecAllowlistEntry[]) = () => loadExecAllowlist(),
   env: NodeJS.ProcessEnv = process.env,
   mode: GuardMode = 'shell',
+  depth = 0,
 ): ImportedScriptHit[] {
+  if (depth > 4) throw new Error('shell nesting too deep');
   const roots = importedSkillRoots(env);
   const list = typeof allowlist === 'function' ? allowlist() : allowlist;
   const segments = mode === 'shell'
@@ -399,12 +532,31 @@ export function findImportedScriptHits(
     return manifestOf(sd).scripts.has(rel) || classifyFile(abs, rel) !== null;
   };
 
+  const nested: Array<{ text: string; mode: GuardMode }> = [];
   for (const seg of segments) {
-    const firstIndex = commandIndex(seg);
+    const position = commandPosition(seg);
+    const firstIndex = position.index;
     const first = seg[firstIndex]!;
     const firstName = launcherName(first);
     const assignmentsOnly = seg.every(w => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
     const readOnly = mode === 'shell' && (assignmentsOnly || READ_ONLY_COMMANDS.has(path.basename(first)));
+    // The text handed to `bash -c`, `sh -c`, `eval`, `env -S`, `python -c`… is analysed again, recursively.
+    if (!readOnly && mode === 'shell') {
+      const rest = seg.slice(firstIndex + 1);
+      const base = path.basename(first);
+      if (SHELL_NAMES.has(launcherName(first))) {
+        const j = rest.findIndex(w => /^-[A-Za-z]*c[A-Za-z]*$/.test(w));
+        const text = j >= 0 ? rest.slice(j + 1).find(w => !w.startsWith('-')) : undefined;
+        if (text) nested.push({ text, mode: 'shell' });
+      } else if (base === 'eval') {
+        nested.push({ text: rest.join(' '), mode: 'shell' });
+      } else {
+        const flag = INLINE_FLAGS[firstName];
+        const j = flag ? rest.findIndex(w => flag.test(w)) : -1;
+        if (j >= 0 && rest[j + 1] !== undefined) nested.push({ text: rest[j + 1]!, mode: 'code' });
+      }
+      if (position.splitString) nested.push({ text: position.splitString, mode: 'shell' });
+    }
     // `bash -c`, `python -c`, `node -e`… started from a skill directory: no file to pin.
     if (!readOnly) {
       const flag = INLINE_FLAGS[firstName] ?? INLINE_FLAGS[path.basename(first)];
@@ -463,6 +615,8 @@ export function findImportedScriptHits(
     hits.push({ file: skillDir, skillDir, sha256: '', allowed: false, warnings: [], inline: true });
   }
 
+  for (const n of nested) hits.push(...findImportedScriptHits(n.text, cwd, list, env, n.mode, depth + 1));
+
   // Generic, path-based rule (no pattern list): `find -exec/-execdir/-ok`, `xargs`, `parallel` and `make`
   // run what they are pointed at. While an imported skill still has an unauthorised script, they ask when
   // the working directory or a path argument CONTAINS or OVERLAPS a skill directory (`find . -exec bash {} +`
@@ -493,12 +647,25 @@ export function findImportedScriptHits(
         }
       }
     };
+    const askIfPending = (reason: string): void => {
+      pendingSkills ??= skillsWithPendingScripts(roots, list);
+      if (pendingSkills.length > 0) {
+        hits.push({ file: pendingSkills[0]!, skillDir: pendingSkills[0]!, sha256: '', allowed: false, warnings: [], covering: reason });
+      }
+    };
     if (mode === 'shell') {
       for (const seg of segments) {
-        const name = launcherName(seg[commandIndex(seg)]!);
-        const relevant = (name === 'find' && seg.some(w => EXEC_FLAG.test(w)))
-          || name === 'xargs' || name === 'parallel' || name === 'make' || name === 'gmake';
-        if (relevant) covered(name, seg);
+        const effective = seg[commandIndex(seg)]!;
+        const isAssignments = seg.every(w => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+        if (isAssignments || seg[0] === 'for' || READ_ONLY_COMMANDS.has(path.basename(effective))) continue;
+        // The tool or wrapper may be anywhere in the segment (`flock -n . find …`, `systemd-run make`): look at every word.
+        const names = seg.map(w => launcherName(w));
+        const name = names.includes('find') && seg.some(w => EXEC_FLAG.test(w)) ? 'find'
+          : (['xargs', 'parallel', 'make', 'gmake'] as const).find(n => names.includes(n));
+        if (name) covered(name, seg);
+        // Whatever the analyser cannot classify with certainty (a command word that is a variable, a glob or an option):
+        // ask while a skill still has an unauthorised script.
+        if (/[$`*?]/.test(effective) || /^[-+]/.test(effective)) askIfPending(`command word not resolvable (${effective})`);
       }
     } else {
       // A program that spells the tool and its arguments as strings (`subprocess.run(["find", root, "-exec", …])`, `os.system("make")`).

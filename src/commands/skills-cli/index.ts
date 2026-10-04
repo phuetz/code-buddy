@@ -133,8 +133,9 @@ function buildSkillListHealth(
 
 /** Count SKILL.md packages and `.skill.md` files in the bundled skills directory. */
 const INERT_SCRIPTS_GUARANTEE =
-  'Guaranteed: scripts are inert (no execute bit) and a launch of one of their files asks for a human confirmation when the command spells its path, '
-  + 'or the shell parser resolves it (globs, braces, wrappers like env/timeout, sub-shells, find -exec/xargs/make over their folder), or the text cannot be parsed; sha256 re-checked before launch.';
+  'Guaranteed: scripts are inert (no execute bit). While one of them is not allowlisted, a human confirmation is required when a command or program run by an agent tool '
+  + 'shows one of their files after analysis (spelled path, glob/brace expansion, for-loop literal, body of bash -c / sh -c / eval, known wrappers with their options), '
+  + 'when find -exec / xargs / parallel / make covers their folder, or when the text or the command word cannot be resolved; the sha256 of a designated file is re-checked before launch.';
 const INERT_SCRIPTS_LIMIT =
   'NOT guaranteed (assumed limit): a copy or reconstruction of a script made elsewhere (cp, cat, printf, bytes, os.environ, create_file) then run is the same as the agent rewriting it by hand and is not detected.';
 
