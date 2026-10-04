@@ -758,7 +758,7 @@ function collectShellCommandWordFindings(content: string, filePath: string, cont
   }
   const findings: ScanFinding[] = [];
   for (const region of regions) {
-    for (const item of analyzeShellCommandWords(region.text, region.from)) {
+    for (const item of analyzeShellCommandWords(region.text, region.from, { runtimes: !first.markdown })) {
       if (!first.markdown && existing.some(f => !f.documentary && f.line === item.line && f.pattern === 'shell-interpreter')) continue;
       findings.push({
         severity: 'high',

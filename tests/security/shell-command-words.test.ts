@@ -63,7 +63,7 @@ describe('shell-command-words : découpage en commandes simples', () => {
       '(cd "$d" && make)', 'f() { echo hi; }\nf', 'function g { echo hi; }\ng', 'arr=(a "b c" $d)\necho "${arr[@]}"',
       'readonly O=(--fail --silent)', 'declare -a x=(1 2)', 'echo a>b 2>&1; ls &>/dev/null', 'exec > >(tee log) 2>&1',
       'cat <<\'EOF\'\n$c\nEOF\necho done', 'cat <<-EOF\n\thello $USER\n\tEOF', 'git commit -m "x" && git push', '~/bin/tool --x',
-      'if ! command -v git >/dev/null; then exit 1; fi', 'python3 x.py "$@"', 'node -e "1"', '# $c\necho ok', 'echo # $c',
+      'if ! command -v git >/dev/null; then exit 1; fi', 'python3 x.py "$@"', 'node x.js "$@"', 'python3 -m pytest -x tests', 'python3 --version', 'echo bash', 'command -v bash', 'which sh', 'grep -r bash .', 'apt-get install -y bash', 'cp "$a" "$b"', 'git commit -m "fix"', 'chmod +x scripts/run.sh', '# $c\necho ok', 'echo # $c',
     ]) {
       expect(analyzeShellCommandWords(body), body).toEqual([]);
     }

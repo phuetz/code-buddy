@@ -30,20 +30,99 @@ export interface ShellWordFinding {
 const LITERAL_WORD = /^(?:~\/)?[A-Za-z0-9_./+:@%,-]+$/;
 const LITERAL_BUILTINS = new Set(['[', '[[', ':']);
 
-const SHELL_INTERPRETERS = new Set([
+/** Noms de shells et d'interpréteurs qui exécutent leur argument comme du code. */
+const SHELL_NAMES = new Set([
   'bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'ash', 'csh', 'tcsh', 'mksh', 'pdksh', 'rbash', 'busybox',
   'pwsh', 'powershell', 'osascript',
+]);
+const SHELL_INTERPRETERS = new Set([
+  ...SHELL_NAMES,
   // `source f` / `. f` exécutent f comme du shell, exactement comme `bash f` : même traitement,
   // quelle que soit la cible (suffixe .sh compris, nom dynamique compris).
   'source', '.',
 ]);
 
+/**
+ * Interpréteurs de langage : un mot de commande de ce nom est suspect quand il
+ * reçoit du code (`-c`, `-e`, `-`, stdin) ou un fichier ; `-m module`,
+ * `--version`, `--help` restent permis.
+ */
+interface RuntimeSpec {
+  /** Extension de ses propres scripts : le fichier est alors lu par le pare-feu comme un script de ce langage. */
+  own?: RegExp;
+  code: RegExp;
+  safe: RegExp;
+  optArg: readonly string[];
+}
+const RUNTIMES: ReadonlyArray<readonly [RegExp, RuntimeSpec]> = [
+  [/^(?:python|pypy)[\d.]*$/, { own: /\.pyw?$/i, code: /^-[A-Za-z]*c$/, safe: /^(?:-[A-Za-z]*m|--version|-V+|-h|--help|-\?)$/, optArg: ['-W', '-X', '-Q'] }],
+  [/^(?:node|nodejs)$/, { own: /\.(?:[cm]?js)$/i, code: /^(?:-e|--eval|-p|--print|-pe|-i|--interactive)$/, safe: /^(?:--version|-v|-h|--help|-c|--check)$/, optArg: ['-r', '--require', '--loader', '--import', '--experimental-loader', '--env-file'] }],
+  [/^perl[\d.]*$/, { own: /\.p[lm]$/i, code: /^-[A-Za-z]*[eE]/, safe: /^(?:-v|-V|-h|--version|-c)$/, optArg: ['-I'] }],
+  [/^ruby[\d.]*$/, { own: /\.rb$/i, code: /^(?:-[A-Za-z]*e|--eval)$/, safe: /^(?:-v|--version|-h|--help|-c)$/, optArg: ['-r', '-I'] }],
+  [/^php[\d.]*$/, { own: /\.php$/i, code: /^-[rRBEF]$/, safe: /^(?:-v|--version|-h|--help|-l|-m|-i)$/, optArg: ['-d', '-c'] }],
+  [/^(?:lua|luajit)[\d.]*$/, { own: /\.lua$/i, code: /^-e$/, safe: /^(?:-v|--version)$/, optArg: ['-l'] }],
+  [/^(?:tclsh|wish|expect|Rscript|julia|groovy|at|batch)[\d.]*$/, { code: /^(?:-c|-e|-E|--eval|--command)$/, safe: /^(?:-v|--version|-h|--help)$/, optArg: [] }],
+];
+
+/** Commandes dont l'argument ne désigne qu'un nom (jamais un programme à lancer). */
+const EXEMPT_ARG_COMMANDS = new Set([
+  'echo', 'printf', 'which', 'type', 'whereis', 'ls', 'stat', 'file', 'grep', 'egrep', 'fgrep', 'rg', 'man', 'test', '[',
+  'apt', 'apt-get', 'aptitude', 'apk', 'yum', 'dnf', 'brew', 'pip', 'pip3', 'npm', 'dpkg', 'rpm', 'readlink', 'realpath',
+  'basename', 'dirname', 'cat', 'head', 'tail', 'wc', 'diff', 'cmp', 'sha256sum', 'sha1sum', 'md5sum', 'find',
+]);
+
+/** Primitives de copie et de lien : un nom de fichier construit par substitution y est suspect. */
+const COPY_PRIMITIVES = new Set(['cp', 'mv', 'ln', 'install', 'hash', 'rsync', 'dd']);
+
+/** Options qui reçoivent du CODE shell : le mot suivant est analysé comme une liste de commandes. */
+const CODE_OPTS: Record<string, readonly string[]> = {
+  script: ['-c', '--command'], su: ['-c', '--command'], runuser: ['-c', '--command'], flock: ['-c', '--command'],
+  sg: ['-c'], env: ['-S', '--split-string'],
+};
+
+/** `find … -exec CMD`, `gdb --args CMD` : le mot qui suit une de ces options est une commande. */
+const TRIGGERS: Record<string, ReadonlySet<string>> = {
+  find: new Set(['-exec', '-execdir', '-ok', '-okdir']),
+  gdb: new Set(['--args', '-args']),
+  lldb: new Set(['--']),
+};
+
+const GIT_EXEC_CONFIG = /^(?:alias\.[^=]*=!|core\.(?:sshcommand|pager|editor|fsmonitor|askpass|hookspath)=|sequence\.editor=|credential\.helper=!|diff\.external=|gpg\.(?:\w+\.)?program=|filter\.[^=]*\.(?:clean|smudge|process)=|uploadpack\.packobjectshook=)/i;
+
+/** Programmes qui exécutent du code reçu en argument : règles par commande. Renvoie une raison ou null. */
+const ARG_RULES: Record<string, (raw: string, value: string, prev: string) => boolean> = {
+  make: (raw) => raw === '-f' || raw === '--file' || raw === '--makefile' || /^-f./.test(raw) || /^--(?:file|makefile)=/.test(raw),
+  gmake: (raw) => raw === '-f' || raw === '--file' || /^-f./.test(raw) || /^--(?:file|makefile)=/.test(raw),
+  sed: (_r, v) => /(?:^|[;{}\s])e(?:\s|;|$|\})|\/[gIiMmp0-9]*e[gIiMmp0-9]*(?:;|\s|$|\})/.test(v),
+  gsed: (_r, v) => /(?:^|[;{}\s])e(?:\s|;|$|\})|\/[gIiMmp0-9]*e[gIiMmp0-9]*(?:;|\s|$|\})/.test(v),
+  awk: (_r, v) => /\bsystem\s*\(|\|\s*getline|\|&|\bprintf?\b[^;}]*\|\s*["$A-Za-z]/.test(v),
+  gawk: (_r, v) => /\bsystem\s*\(|\|\s*getline|\|&|\bprintf?\b[^;}]*\|\s*["$A-Za-z]/.test(v),
+  mawk: (_r, v) => /\bsystem\s*\(|\|\s*getline|\bprintf?\b[^;}]*\|\s*["$A-Za-z]/.test(v),
+  git: (raw, v, prev) => (prev === '-c' && GIT_EXEC_CONFIG.test(v)) || /^--(?:upload-pack|receive-pack|exec)(?:=|$)/.test(raw) || (/^-c.+/.test(raw) && GIT_EXEC_CONFIG.test(v.slice(2))),
+  ssh: (_r, v) => /(?:ProxyCommand|LocalCommand)\s*[= ]/i.test(v),
+  scp: (_r, v) => /(?:ProxyCommand|LocalCommand)\s*[= ]/i.test(v),
+  sftp: (_r, v) => /(?:ProxyCommand|LocalCommand)\s*[= ]/i.test(v),
+  rsync: (raw) => raw === '-e' || /^-e./.test(raw) || /^--rsh(?:=|$)/.test(raw),
+  tar: (raw) => /^--(?:to-command|checkpoint-action|use-compress-program|rsh-command)(?:=|$)/.test(raw) || /^-I./.test(raw),
+  nc: (raw) => /^(?:-e|-c|--exec|--sh-exec)$/.test(raw),
+  ncat: (raw) => /^(?:-e|-c|--exec|--sh-exec)$/.test(raw),
+  netcat: (raw) => /^(?:-e|-c|--exec|--sh-exec)$/.test(raw),
+  socat: (_r, v) => /(?:EXEC|SYSTEM):/i.test(v),
+  vim: (_r, v) => /(?:^|:)!|system\(|\bterminal\b/.test(v),
+  vi: (_r, v) => /(?:^|:)!|system\(|\bterminal\b/.test(v),
+  nvim: (_r, v) => /(?:^|:)!|system\(|\bterminal\b/.test(v),
+  ex: (_r, v) => /(?:^|:)!|system\(/.test(v),
+  hash: (raw) => raw === '-p',
+};
+
 /** Mots-clés après lesquels un mot de commande commence encore. */
-const COMMAND_RESERVED = new Set(['!', '{', '}', 'if', 'then', 'elif', 'else', 'fi', 'while', 'until', 'do', 'done', 'esac', 'coproc']);
+const COMMAND_RESERVED = new Set(['!', '{', '}', 'if', 'then', 'elif', 'else', 'fi', 'while', 'until', 'do', 'done', 'esac']);
 
 interface WrapperSpec {
   /** Options (forme exacte) qui consomment le mot suivant. */
   optArg: readonly string[];
+  /** Options qui consomment les DEUX mots suivants. */
+  optArg2?: readonly string[];
   /** Mots positionnels avant la commande (durée de timeout, masque de taskset…). */
   positional: number;
   /** Accepte des affectations `VAR=valeur` avant la commande. */
@@ -73,10 +152,10 @@ const WRAPPERS: Record<string, WrapperSpec> = {
   strace: { optArg: ['-e', '-o', '-p', '-s', '-u', '-E'], positional: 0 },
   ltrace: { optArg: ['-e', '-o', '-p', '-s', '-u'], positional: 0 },
   valgrind: { optArg: [], positional: 0 },
-  nsenter: { optArg: ['-t', '-S', '-G', '--target'], positional: 0 },
-  unshare: { optArg: [], positional: 0 },
+  nsenter: { optArg: ['-t', '--target', '-S', '--setuid', '-G', '--setgid'], positional: 0 },
+  unshare: { optArg: ['-w', '--wd', '-R', '--root', '-S', '--setuid', '-G', '--setgid', '--map-user', '--map-group', '--map-users', '--map-groups', '--setgroups', '--propagation', '--monotonic', '--boottime'], positional: 0 },
   setpriv: { optArg: ['--reuid', '--regid', '--groups', '--inh-caps', '--bounding-set'], positional: 0 },
-  runuser: { optArg: ['-u', '-g', '-G'], positional: 0 },
+  runuser: { optArg: ['-u', '--user', '-g', '--group', '-G', '--supp-group'], positional: 0 },
   'systemd-run': { optArg: ['-p', '-u', '--property', '--unit', '--slice'], positional: 0 },
   numactl: { optArg: ['--cpunodebind', '--membind', '--physcpubind', '-C', '-m', '-N'], positional: 0 },
   fakeroot: { optArg: [], positional: 0 },
@@ -86,18 +165,29 @@ const WRAPPERS: Record<string, WrapperSpec> = {
   torsocks: { optArg: [], positional: 0 },
   rlwrap: { optArg: ['-a', '-C', '-f', '-H', '-s'], positional: 0 },
   firejail: { optArg: [], positional: 0 },
-  bwrap: { optArg: [], positional: 0 },
+  bwrap: {
+    optArg: ['--chdir', '--dev', '--proc', '--tmpfs', '--mqueue', '--uid', '--gid', '--hostname', '--unsetenv', '--dir', '--remount-ro', '--perms', '--size', '--cap-add', '--cap-drop', '--seccomp', '--sync-fd', '--info-fd', '--block-fd', '--userns-block-fd', '--lock-file', '--exec-label', '--file-label', '--userns', '--userns2', '--pidns', '--args'],
+    optArg2: ['--bind', '--bind-try', '--ro-bind', '--ro-bind-try', '--dev-bind', '--dev-bind-try', '--symlink', '--setenv', '--file', '--bind-data', '--ro-bind-data', '--chmod'],
+    positional: 0,
+  },
   eatmydata: { optArg: [], positional: 0 },
   caffeinate: { optArg: ['-t', '-w'], positional: 0 },
   'dbus-run-session': { optArg: [], positional: 0 },
   cpulimit: { optArg: ['-l', '-p', '-e'], positional: 0 },
+  parallel: { optArg: ['-j', '-n', '-N', '-L', '-S', '-a', '-I', '--jobs', '--arg-file', '--sshlogin'], positional: 0 },
+  gosu: { optArg: [], positional: 1 },
+  'su-exec': { optArg: [], positional: 1 },
+  tini: { optArg: [], positional: 0 },
+  'dumb-init': { optArg: [], positional: 0 },
+  pkexec: { optArg: ['--user'], positional: 0 },
+  sshpass: { optArg: ['-p', '-f', '-d', '-P'], positional: 0 },
+  'ssh-agent': { optArg: ['-t', '-a', '-E', '-P'], positional: 0 },
+  'xvfb-run': { optArg: ['-e', '-f', '-n', '-p', '-s', '--error-file', '--auth-file', '--server-num', '--server-args'], positional: 0 },
+  chrt: { optArg: ['-p'], positional: 1 },
 };
 
-/** `find … -exec CMD` : le mot qui suit est une commande. */
 /** Imbrication maximale de `$(…)`, sous-shells et eval ; au-delà, texte refusé. */
 const MAX_DEPTH = 100;
-
-const FIND_EXEC = new Set(['-exec', '-execdir', '-ok', '-okdir']);
 
 export function isLiteralCommandWord(word: string): boolean {
   return LITERAL_WORD.test(word) || LITERAL_BUILTINS.has(word);
@@ -130,13 +220,37 @@ interface WrapperState {
   name: string;
   spec: WrapperSpec;
   positional: number;
-  skip: boolean;
+  skip: number;
+}
+
+interface RuntimeState {
+  spec: RuntimeSpec;
+  decided: boolean;
+  skip: number;
+  at: number;
+  word: string;
 }
 
 interface CommandWordResult {
   wrapper?: WrapperState;
   code?: 'eval' | 'trap';
-  isFind?: boolean;
+  triggers?: ReadonlySet<string>;
+  base?: string;
+  exempt?: boolean;
+  runtime?: RuntimeState;
+}
+
+interface CmdState {
+  wrapper: WrapperState | null;
+  code: 'eval' | 'trap' | null;
+  codeNext: boolean;
+  triggers: ReadonlySet<string> | null;
+  trigger: boolean;
+  base: string;
+  exempt: boolean;
+  runtime: RuntimeState | null;
+  prev: string;
+  coproc: boolean;
 }
 
 class ShellCommandParser {
@@ -147,7 +261,7 @@ class ShellCommandParser {
   private pendingHeredocs: Heredoc[] = [];
   readonly findings: ShellWordFinding[] = [];
 
-  constructor(private readonly s: string, private readonly baseLine: number) {
+  constructor(private readonly s: string, private readonly baseLine: number, private readonly runtimes = true) {
     for (let i = 0; i < s.length; i++) if (s[i] === '\n') this.lineStarts.push(i + 1);
   }
 
@@ -218,19 +332,29 @@ class ShellCommandParser {
     const s = this.s;
     let expectCommand = !argsOnly;
     let redirectTarget = false;
-    const st: { wrapper: WrapperState | null; code: 'eval' | 'trap' | null; isFind: boolean; findExec: boolean } =
-      { wrapper: null, code: null, isFind: false, findExec: false };
+    const st: CmdState = {
+      wrapper: null, code: null, codeNext: false, triggers: null, trigger: false, base: '', exempt: false,
+      runtime: null, prev: '', coproc: false,
+    };
     let dbracket = false;
     let headArgs = false; // après for/select/case : les mots sont des arguments
     let caseHead = false;
     const cases: CaseFrame[] = [];
     const reset = (): void => {
-      st.wrapper = null; st.code = null; st.isFind = false; st.findExec = false; redirectTarget = false;
+      this.endCommand(st);
+      st.wrapper = null; st.code = null; st.codeNext = false; st.triggers = null; st.trigger = false;
+      st.base = ''; st.exempt = false; st.runtime = null; st.prev = ''; st.coproc = false; redirectTarget = false;
     };
     const arm = (r: CommandWordResult): void => {
       st.wrapper = r.wrapper ?? null;
       st.code = r.code ?? null;
-      st.isFind = r.isFind ?? false;
+      st.triggers = r.triggers ?? null;
+      st.trigger = false;
+      st.base = r.base ?? '';
+      st.exempt = r.exempt ?? false;
+      st.runtime = r.runtime ?? null;
+      st.codeNext = false;
+      st.prev = '';
     };
 
     for (;;) {
@@ -238,6 +362,7 @@ class ShellCommandParser {
       if (this.pos >= s.length) {
         if (nested) this.fail(this.pos, 'substitution ou sous-shell non fermé');
         if (dbracket) this.fail(this.pos, 'crochets [[ non fermés');
+        this.endCommand(st);
         return;
       }
       const c = s[this.pos]!;
@@ -282,7 +407,7 @@ class ShellCommandParser {
           const rawDelim = this.readWord(false);
           if (rawDelim === '') this.fail(start, 'délimiteur de heredoc absent');
           this.pendingHeredocs.push({
-            delimiter: unquoteWord(rawDelim) ?? rawDelim,
+            delimiter: staticWordValue(rawDelim, false).value ?? rawDelim,
             stripTabs: op === '<<-',
             quoted: /['"\\]/.test(rawDelim),
           });
@@ -350,7 +475,7 @@ class ShellCommandParser {
           expectCommand = !argsOnly;
           continue;
         }
-        if (nested) { this.pos++; return; }
+        if (nested) { this.pos++; this.endCommand(st); return; }
         this.fail(this.pos, 'parenthèse fermante sans ouvrante');
       }
 
@@ -385,27 +510,64 @@ class ShellCommandParser {
 
       if (!expectCommand) {
         // Arguments d'une commande déjà identifiée.
-        if (st.code) {
-          this.analyzeCodeWord(raw, start, st.code);
-          st.code = null;
+        if (st.codeNext) {
+          st.codeNext = false;
+          this.analyzeCodeWord(raw, start);
           continue;
         }
-        if (st.isFind && FIND_EXEC.has(raw)) { st.findExec = true; st.wrapper = null; continue; }
-        if (st.findExec) {
-          st.findExec = false;
+        if (st.code) {
+          const kind = st.code;
+          st.code = null;
+          if (!(kind === 'trap' && raw.startsWith('-'))) this.analyzeCodeWord(raw, start);
+          else st.code = kind;
+          continue;
+        }
+        if (st.base === 'alias') {
+          const eq = raw.indexOf('=');
+          if (eq > 0) this.analyzeCodeWord(raw.slice(eq + 1), start);
+          continue;
+        }
+        const opts = CODE_OPTS[st.base];
+        if (opts) {
+          // `-c`, mais aussi une grappe d'options dont la dernière est `-c` (`script -qec CMD`).
+          if (opts.includes(raw) || opts.some(o => /^-[A-Za-z]$/.test(o) && new RegExp(`^-[A-Za-z]+${o[1]}$`).test(raw))) { st.codeNext = true; continue; }
+          const inline = /^--(?:command|split-string)=(.*)$/s.exec(raw);
+          if (inline) { this.analyzeCodeWord(inline[1]!, start); continue; }
+        }
+        this.checkArgument(raw, start, st);
+        if (st.runtime && !st.runtime.decided) {
+          const rt = st.runtime;
+          const value = staticWordValue(raw, false).value ?? raw;
+          if (rt.skip > 0) { rt.skip--; continue; }
+          if (rt.spec.safe.test(value)) rt.decided = true;
+          else if (rt.spec.code.test(value) || value === '-') { this.flag('interpreter-command-word', start, `${rt.word} ${raw}`); rt.decided = true; }
+          else if (value.startsWith('-')) { if (rt.spec.optArg.includes(value)) rt.skip = 1; }
+          else {
+            // Un fichier du langage lui-même est scanné comme tel ; toute autre cible (donnée, nom dynamique) ne l'est pas.
+            if (!(rt.spec.own && rt.spec.own.test(value))) this.flag('interpreter-command-word', start, `${rt.word} ${raw}`);
+            rt.decided = true;
+          }
+          continue;
+        }
+        if (st.runtime) continue;
+        if (st.triggers && st.triggers.has(raw)) { st.trigger = true; st.wrapper = null; continue; }
+        if (st.trigger) {
+          st.trigger = false;
+          const triggers = st.triggers;
           arm(this.commandWord(raw, start));
-          st.isFind = true;
+          st.triggers = st.triggers ?? triggers;
           continue;
         }
         const w = st.wrapper;
         if (w) {
+          if (w.skip > 0) { w.skip--; continue; }
           if (raw.startsWith('-')) {
-            if (raw === '--') { w.skip = false; continue; }
-            if (w.spec.optArg.includes(raw)) { w.skip = true; continue; }
-            if (w.name === 'command' && (raw === '-v' || raw === '-V')) { st.wrapper = null; continue; }
+            if (raw === '--') continue;
+            if (w.spec.optArg.includes(raw)) { w.skip = 1; continue; }
+            if (w.spec.optArg2?.includes(raw)) { w.skip = 2; continue; }
+            if (w.name === 'command' && (raw === '-v' || raw === '-V')) { st.wrapper = null; st.exempt = true; continue; }
             continue;
           }
-          if (w.skip) { w.skip = false; continue; }
           if (w.spec.assign && /^[A-Za-z_]\w*=/.test(raw)) continue;
           if (w.positional > 0) { w.positional--; continue; }
           arm(this.commandWord(raw, start));
@@ -415,6 +577,12 @@ class ShellCommandParser {
 
       // Position de commande : affectations en tête.
       if (/^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=/.test(raw)) continue;
+      if (st.coproc) {
+        st.coproc = false;
+        // `coproc NOM { … }` / `coproc NOM ( … )` : NOM n'est pas la commande, le corps l'est.
+        if (/^[A-Za-z_]\w*$/.test(raw) && /^\s*[{(]/.test(s.slice(this.pos, this.pos + 80))) continue;
+      }
+      if (raw === 'coproc') { st.coproc = true; continue; }
       if (raw === 'esac' && cases.length > 0) { cases.pop(); expectCommand = false; continue; }
       if (COMMAND_RESERVED.has(raw)) continue;
       if (raw === 'for' || raw === 'select') { headArgs = true; expectCommand = false; continue; }
@@ -434,28 +602,61 @@ class ShellCommandParser {
     }
   }
 
-  /** Mot de commande : vérification, puis arme les enveloppes (sudo, env…), eval/trap et find. */
+  /** Mot de commande : vérification, puis arme les enveloppes (sudo, env…), eval/trap, find/gdb et les runtimes. */
   private commandWord(raw: string, at: number): CommandWordResult {
     this.checkCommandWord(raw, at);
     if (!LITERAL_WORD.test(raw)) return {};
     const slash = raw.lastIndexOf('/');
-    const base = slash >= 0 ? raw.slice(slash + 1) : raw;
-    if (base === 'eval') return { code: 'eval' };
-    if (base === 'trap') return { code: 'trap' };
-    if (base === 'find') return { isFind: true };
+    const base = (slash >= 0 ? raw.slice(slash + 1) : raw).replace(/\.exe$/i, '');
+    const exempt = EXEMPT_ARG_COMMANDS.has(base);
+    if (base === 'eval') return { code: 'eval', base };
+    if (base === 'trap') return { code: 'trap', base };
+    const triggers = TRIGGERS[base];
+    if (triggers) return { triggers, base, exempt };
     const spec = WRAPPERS[base];
-    return spec ? { wrapper: { name: base, spec, positional: spec.positional, skip: false } } : {};
+    if (spec) return { wrapper: { name: base, spec, positional: spec.positional, skip: 0 }, base };
+    for (const [pattern, runtime] of this.runtimes ? RUNTIMES : []) {
+      if (pattern.test(base)) return { base, runtime: { spec: runtime, decided: false, skip: 0, at, word: raw } };
+    }
+    return { base, exempt };
   }
 
-  /** Argument d'`eval`/`trap` : du code. On l'analyse comme une liste de commandes. */
-  private analyzeCodeWord(raw: string, at: number, kind: 'eval' | 'trap'): void {
-    if (kind === 'trap' && /^-/.test(raw)) return;
-    const content = unquoteWord(raw, true);
-    if (content === null) {
+  /** Fin d'une commande simple : un interpréteur de langage qui n'a reçu ni option sûre ni argument lit son code sur stdin. */
+  private endCommand(st: CmdState): void {
+    if (st.runtime && !st.runtime.decided) {
+      this.flag('interpreter-command-word', st.runtime.at, `${st.runtime.word} (code lu sur stdin)`);
+      st.runtime.decided = true;
+    }
+  }
+
+  /** Argument d'une commande : nom de shell écrit sous n'importe quelle forme, règles par commande. */
+  private checkArgument(raw: string, at: number, st: CmdState): void {
+    const sv = staticWordValue(raw, false);
+    const value = sv.value ?? raw;
+    const prev = st.prev;
+    st.prev = value;
+    if (st.exempt) return;
+    if (braceAlternatives(value).some(alt => looksLikeShellName(alt, sv.dynamic))) {
+      this.flag('interpreter-command-word', at, raw);
+      return;
+    }
+    const marked = COPY_PRIMITIVES.has(st.base) ? staticWordValue(raw, 'mark').value : null;
+    if (looksLikeShellName(value, sv.dynamic) || (marked !== null && marked.slice(marked.lastIndexOf('/') + 1).includes('\uE000'))) {
+      this.flag('interpreter-command-word', at, raw);
+      return;
+    }
+    const rule = ARG_RULES[st.base];
+    if (rule && rule(raw, value, prev)) this.flag('interpreter-command-word', at, `${st.base} ${raw}`);
+  }
+
+  /** Argument qui est du CODE (eval, trap, alias, -c d'un lanceur) : analysé comme une liste de commandes. */
+  private analyzeCodeWord(raw: string, at: number): void {
+    const { value } = staticWordValue(raw, true);
+    if (value === null) {
       this.flag('non-literal-command-word', at, raw);
       return;
     }
-    const inner = new ShellCommandParser(content, this.lineOf(at));
+    const inner = new ShellCommandParser(value, this.lineOf(at), this.runtimes);
     inner.run();
     this.findings.push(...inner.findings);
   }
@@ -567,7 +768,7 @@ class ShellCommandParser {
       }
       if (c === '`') {
         this.pos++;
-        const sub = new ShellCommandParser(inner, this.lineOf(start));
+        const sub = new ShellCommandParser(inner, this.lineOf(start), this.runtimes);
         sub.run();
         this.findings.push(...sub.findings);
         return s.slice(start, this.pos);
@@ -665,49 +866,170 @@ class ShellCommandParser {
   }
 }
 
-/**
- * Retire les quotes d'un mot pour en lire le contenu. `forCode` : renvoie
- * `null` si le mot n'est pas un texte entièrement connu (substitution, variable
- * nue sans quotes) ; sinon le texte brut (les `$var` internes sont conservés,
- * ils seront jugés par l'analyse du code).
- */
-function unquoteWord(raw: string, forCode = false): string | null {
-  let out = '';
-  let i = 0;
-  while (i < raw.length) {
-    const c = raw[i]!;
-    if (c === '\\' && i + 1 < raw.length) { out += raw[i + 1]!; i += 2; continue; }
-    if (c === "'") {
-      const end = raw.indexOf("'", i + 1);
-      if (end === -1) return forCode ? null : raw;
-      out += raw.slice(i + 1, end);
-      i = end + 1;
-      continue;
-    }
-    if (c === '"') {
-      let j = i + 1;
-      let chunk = '';
-      while (j < raw.length && raw[j] !== '"') {
-        if (raw[j] === '\\' && /["\\$`]/.test(raw[j + 1] ?? '')) { chunk += raw[j + 1]!; j += 2; continue; }
-        chunk += raw[j]!;
-        j++;
-      }
-      out += chunk;
-      i = j + 1;
-      continue;
-    }
-    if (c === '$' && raw[i + 1] === "'") {
-      // ANSI-C : le contenu n'est pas décodé ici ; pour du code, on refuse (fermé).
-      if (forCode) return null;
-      const end = raw.indexOf("'", i + 2);
-      out += end === -1 ? raw.slice(i) : raw.slice(i + 2, end);
-      i = end === -1 ? raw.length : end + 1;
-      continue;
-    }
-    out += c;
-    i++;
+/** Développement d'accolades `a{b,c}d` (un niveau, imbrication par récursion, borné). */
+function braceAlternatives(value: string, budget = { n: 64 }): string[] {
+  const m = /\{([^{}]*,[^{}]*)\}/.exec(value);
+  if (!m || budget.n <= 0) return [];
+  const out: string[] = [];
+  for (const alt of m[1]!.split(',')) {
+    const next = value.slice(0, m.index) + alt + value.slice(m.index + m[0].length);
+    budget.n--;
+    out.push(next, ...braceAlternatives(next, budget));
   }
   return out;
+}
+
+function isSubsequence(small: string, big: string): boolean {
+  let i = 0;
+  for (const ch of big) if (i < small.length && small[i] === ch) i++;
+  return i === small.length;
+}
+
+/**
+ * Le mot, une fois ses quotes décodées, désigne-t-il un shell ? Trois cas :
+ * un chemin littéral dont le nom de base est un shell ; un motif de glob dont
+ * le nom de base peut le désigner (`/bin/ba?h`, `/???/sh`) ; un nom dont des
+ * morceaux sont des expansions (`b$(printf a)sh`) et dont les lettres restantes
+ * sont une sous-suite d'un nom de shell.
+ */
+function looksLikeShellName(value: string, dynamic: boolean): boolean {
+  const slash = value.lastIndexOf('/');
+  const base = (slash >= 0 ? value.slice(slash + 1) : value).replace(/\.exe$/i, '').toLowerCase();
+  if (!/[\s=]/.test(value) && SHELL_NAMES.has(base)) return true;
+  if (/[*?[]/.test(base) && base.replace(/[*?[\]]/g, '').length >= 2) {
+    try {
+      const re = new RegExp('^' + base.replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+      if ([...SHELL_NAMES].some(n => re.test(n))) return true;
+    } catch {
+      return true;
+    }
+  }
+  return dynamic && base.length >= 2 && [...SHELL_NAMES].some(n => isSubsequence(base, n));
+}
+
+/** Nom de shell (nom de base, sans `.exe`) ; `source` et `.` exclus : comme arguments ils sont ordinaires. */
+function shellNameOf(value: string): string | null {
+  const slash = value.lastIndexOf('/');
+  const base = (slash >= 0 ? value.slice(slash + 1) : value).replace(/\.exe$/i, '').toLowerCase();
+  return SHELL_NAMES.has(base) ? base : null;
+}
+
+/** Décode le contenu d'une chaîne ANSI-C `$'…'` (sans les quotes). */
+function decodeAnsiC(body: string): string {
+  let out = '';
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i]!;
+    if (c !== '\\' || i + 1 >= body.length) { out += c; continue; }
+    const n = body[++i]!;
+    const simple: Record<string, string> = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', v: '\v', '\\': '\\', "'": "'", '"': '"', '?': '?' };
+    if (n in simple) { out += simple[n]!; continue; }
+    if (n === 'x') {
+      const m = /^[0-9a-fA-F]{1,2}/.exec(body.slice(i + 1));
+      if (m) { out += String.fromCharCode(parseInt(m[0], 16)); i += m[0].length; } else out += '\\x';
+      continue;
+    }
+    if (n === 'u' || n === 'U') {
+      const m = new RegExp(`^[0-9a-fA-F]{1,${n === 'u' ? 4 : 8}}`).exec(body.slice(i + 1));
+      if (m) { out += String.fromCodePoint(Math.min(parseInt(m[0], 16), 0x10ffff)); i += m[0].length; } else out += '\\' + n;
+      continue;
+    }
+    if (/[0-7]/.test(n)) {
+      const m = /^[0-7]{1,3}/.exec(body.slice(i));
+      out += String.fromCharCode(parseInt(m![0], 8) & 0xff);
+      i += m![0].length - 1;
+      continue;
+    }
+    if (n === 'c' && i + 1 < body.length) { out += String.fromCharCode(body[++i]!.charCodeAt(0) & 0x1f); continue; }
+    out += '\\' + n;
+  }
+  return out;
+}
+
+/** Fin (exclusive) de l'expansion `$(…)`, `${…}` ou `` `…` `` qui commence en `i` ; approximation sans quotes imbriquées. */
+function expansionEnd(raw: string, i: number): number {
+  if (raw[i] === '`') {
+    for (let j = i + 1; j < raw.length; j++) {
+      if (raw[j] === '\\') j++;
+      else if (raw[j] === '`') return j + 1;
+    }
+    return raw.length;
+  }
+  const open = raw[i + 1] === '(' ? '(' : '{';
+  const close = open === '(' ? ')' : '}';
+  let depth = 0;
+  for (let j = i + 1; j < raw.length; j++) {
+    if (raw[j] === '\\') { j++; continue; }
+    if (raw[j] === open) depth++;
+    else if (raw[j] === close && --depth === 0) return j + 1;
+  }
+  return raw.length;
+}
+
+/**
+ * Valeur statique d'un mot : quotes, antislashs et `$'…'` décodés.
+ * `keep` : les expansions (`$x`, `${…}`, `$(…)`) sont conservées telles quelles
+ * (pour analyser du code) ; sinon elles sont supprimées (pour reconnaître un
+ * nom écrit avec des morceaux vides : `ba${e}sh` → `bash`).
+ * `value` vaut `null` si une quote n'est pas fermée.
+ */
+function staticWordValue(raw: string, mode: boolean | 'mark'): { value: string | null; dynamic: boolean } {
+  const keep = mode === true;
+  let out = '';
+  let dynamic = false;
+  let i = 0;
+  const expansion = (): void => {
+    dynamic = true;
+    if (mode === 'mark' && (raw[i] === '`' || (raw[i] === '$' && raw[i + 1] === '('))) out += '\uE000';
+    if (raw[i] === '$' && raw[i + 1] !== '(' && raw[i + 1] !== '{') {
+      const m = /^\$(?:[A-Za-z_]\w*|[0-9@*#?$!-])/.exec(raw.slice(i));
+      const text = m ? m[0] : '$';
+      if (keep) out += text;
+      i += text.length;
+      return;
+    }
+    const end = expansionEnd(raw, i);
+    if (keep) out += raw.slice(i, end);
+    else {
+      // `${x:-b}` : on retient la valeur par défaut (cas le plus défavorable pour qui lit un nom).
+      const def = /^\$\{[A-Za-z_]\w*:?[-+=]([^}$`"'\\]*)\}$/.exec(raw.slice(i, end));
+      if (def) out += def[1]!;
+    }
+    i = end;
+  };
+  while (i < raw.length) {
+    const c = raw[i]!;
+    if (c === '\\') {
+      if (i + 1 < raw.length && raw[i + 1] !== '\n') out += raw[i + 1]!;
+      i += 2;
+    } else if (c === "'") {
+      const end = raw.indexOf("'", i + 1);
+      if (end === -1) return { value: null, dynamic };
+      out += raw.slice(i + 1, end);
+      i = end + 1;
+    } else if (c === '$' && raw[i + 1] === "'") {
+      let j = i + 2;
+      while (j < raw.length && raw[j] !== "'") j += raw[j] === '\\' ? 2 : 1;
+      if (j >= raw.length) return { value: null, dynamic };
+      out += decodeAnsiC(raw.slice(i + 2, j));
+      i = j + 1;
+    } else if (c === '"' || (c === '$' && raw[i + 1] === '"')) {
+      i += c === '"' ? 1 : 2;
+      for (;;) {
+        if (i >= raw.length) return { value: null, dynamic };
+        const d = raw[i]!;
+        if (d === '"') { i++; break; }
+        if (d === '\\' && /["\\$`]/.test(raw[i + 1] ?? '')) { out += raw[i + 1]!; i += 2; }
+        else if (d === '`' || (d === '$' && (raw[i + 1] === '(' || raw[i + 1] === '{' || /[A-Za-z_0-9@*#?$!-]/.test(raw[i + 1] ?? '')))) expansion();
+        else { out += d; i++; }
+      }
+    } else if (c === '`' || (c === '$' && (raw[i + 1] === '(' || raw[i + 1] === '{' || /[A-Za-z_0-9@*#?$!-]/.test(raw[i + 1] ?? '')))) {
+      expansion();
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return { value: out, dynamic };
 }
 
 /**
@@ -715,8 +1037,8 @@ function unquoteWord(raw: string, forCode = false): string | null {
  * findings structurels. Aucune exception : un texte illisible produit un
  * finding `unparseable-shell` (échec fermé).
  */
-export function analyzeShellCommandWords(source: string, baseLine = 1): ShellWordFinding[] {
-  const parser = new ShellCommandParser(source.replace(/\r\n/g, '\n'), baseLine);
+export function analyzeShellCommandWords(source: string, baseLine = 1, options: { runtimes?: boolean } = {}): ShellWordFinding[] {
+  const parser = new ShellCommandParser(source.replace(/\r\n/g, '\n'), baseLine, options.runtimes !== false);
   parser.run();
   return parser.findings;
 }
