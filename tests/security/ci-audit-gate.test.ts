@@ -6,7 +6,7 @@ const input = vi.hoisted(() => ({
   severity: 'high',
   reviewBy: '2999-01-01',
   reviewedOn: '2026-01-01',
-  reason: 'Only build-time fetch; no WebSocket calls.',
+  reason: 'Only build-time fetch; no WebSocket calls. GHSA-rfgv-xxqx-mfg5',
   urls: ['https://github.com/advisories/GHSA-rfgv-xxqx-mfg5'],
   allowedUrls: ['https://github.com/advisories/GHSA-rfgv-xxqx-mfg5'] as string[] | undefined,
   inherited: false,
@@ -43,7 +43,7 @@ describe('audit-gate : exception limitée à une copie d’outillage', () => {
     input.severity = 'high';
     input.reviewBy = '2999-01-01';
     input.reviewedOn = '2026-01-01';
-    input.reason = 'Only build-time fetch; no WebSocket calls.';
+    input.reason = 'Only build-time fetch; no WebSocket calls. GHSA-rfgv-xxqx-mfg5';
     input.urls = ['https://github.com/advisories/GHSA-rfgv-xxqx-mfg5'];
     input.allowedUrls = [...input.urls];
     input.inherited = false;
