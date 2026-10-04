@@ -14,6 +14,10 @@ const cases: Array<{ name: string; prompt: string; calls: Call[]; success: boole
   { name: 'reminder-modifier-missing', prompt: "N'oublie surtout pas de modifier source.js", calls: [], success: false },
   { name: 'negative-question-edit', prompt: 'Can you not edit package.json', calls: [edit('package.json')], success: false, package: '{"name":"fixture","version":"2"}\n' },
   { name: 'new-string-label', prompt: 'Change value to 2 in source.js.', calls: [{ name: 'str_replace_editor', arguments: { path: 'source.js', old_str: 'export const value = 1;', new_str: '1.2 export const value = 2;' } }], success: false },
+  { name: 'courteous-reminder-missing', prompt: 'Can you not forget to edit package.json', calls: [], success: false },
+  { name: 'courteous-reminder-edit', prompt: 'Can you not fail to edit package.json', calls: [edit('package.json')], success: true, package: '{"name":"fixture","version":"2"}\n' },
+  { name: 'courteous-reminder-read-missing', prompt: 'Can you not forget to explain source.js', calls: [], success: false },
+  { name: 'strengthened-file-reminder-missing', prompt: "N'oublie vraiment pas source.js", calls: [], success: false },
 
   { name: 'reminder-read-missing', prompt: "N'oublie pas d'expliquer source.js", calls: [], success: false },
   { name: 'reminder-read-ok', prompt: 'You must not forget to explain source.js.', calls: [read], success: true, answer: 'source.js exports value, equal to 1.' },

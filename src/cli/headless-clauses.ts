@@ -23,5 +23,5 @@ export function isIncidentalHeadlessClause(clause: string, index: number): boole
   if (index <= 0 || !presence) return false;
   // Inspect the subject, not the path: means, relative clauses and modal
   // obligations cannot become incidental in either word order.
-  return !/\b(?:by|en|to|that|which|qui|que|must|shall|should|needs?|requires?|doit|doivent|faut)\b/i.test(presence[1] ?? presence[2]!);
+  return !/\b(?:by|en|par\s+modification|through\s+editing|via\s+editing|using\s+an\s+edit|to|that|which|qui|que|must|shall|should|needs?|requires?|doit|doivent|faut)\b/i.test(presence[1] ?? presence[2]!);
 }

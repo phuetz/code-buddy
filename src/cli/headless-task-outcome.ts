@@ -74,7 +74,7 @@ function repositoryActionClauses(prompt: string): string[] {
     if (/^(?:does|did|is|are|was|were|has|had|will|would|could)\b|^(?:do|have|can)\s+(?:you|we|they|i|it|this|these|those)\b|^est-ce\s+que\b/.test(clause)) return false;
     // A requested means of delivery remains an obligation even when the
     // leading verb only asks to show or explain. Negated means stay read-only.
-    if (/\b(?:by|en)\s+(?:editing|writing|saving|creating|replacing|changing|updating|deleting|modifiant|ecrivant|creant|remplacant|changeant|supprimant)\b/.test(clause)
+    if (/\b(?:(?:by|en)\s+(?:editing|writing|saving|creating|replacing|changing|updating|deleting|modifiant|ecrivant|creant|remplacant|changeant|supprimant)|par\s+modification|through\s+editing|via\s+editing|using\s+an\s+edit)\b/.test(clause)
       && /\b(?:file_target|files?|source|module|script|fichiers?)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause)) return true;
     // A courtesy question takes the infinitive in French.
     if (/^(?:expliquer|decrire|resumer|analyser|comparer|auditer|lire|identifier|reperer|consulter|indiquer|montrer|lister|repondre)\b/.test(clause)) return false;
@@ -89,7 +89,7 @@ function repositoryActionClauses(prompt: string): string[] {
     const modifierWrite = /\b(?:writing|saving|editing|creating|replacing|ecrivant|creant|modifiant)\b|\b(?:saved|written)\s+(?:to|into)\b/.test(clause)
       && /\b(?:file_target|file|source|module|script|fichier)\b|[\w/-]+\.[a-z0-9]+\b/.test(clause);
     if (dependent.test(clause) && !modifierWrite || index > 0 && nominal.test(clause)
-      && !/\b(?:must|shall|should|needs?|requires?|doit|doivent|faut|is|are|be|etre|sont|est)\b/.test(clause)) return false;
+      && !/\b(?:must|shall|should|needs?|requires?|doit|doivent|faut|is|are|be|etre|sont|est|to\s+(?:edit|modify|update|change))\b/.test(clause)) return false;
     // Negation in French need not contain "pas" (aucun/rien/jamais).
     if (/^ne\b.*\b(?:aucun\w*|rien|jamais)\b/.test(clause)) return false;
     // Following a source means tracing it or obeying its reading rules. A

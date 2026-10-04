@@ -113,6 +113,48 @@ it('retains negation after a courtesy auxiliary', () => {
   expect(evaluateHeadlessTaskOutcome(prompt, [edit('package.json'), answer]).exitCode).not.toBe(0);
 });
 
+it.each([
+  'Can you not forget to edit package.json',
+  'Can you not fail to edit package.json',
+  'Could you not hesitate to edit package.json',
+  'Would you not fail to edit package.json',
+  'Will you not forget to edit package.json',
+])('requires the edit inside a courteous negative reminder: %s', prompt => {
+  expect(requestsRepositoryAction(prompt)).toBe(true);
+  expect(evaluateHeadlessTaskOutcome(prompt, [answer]).exitCode).not.toBe(0);
+  expect(evaluateHeadlessTaskOutcome(prompt, [edit('package.json'), answer]).exitCode).toBe(0);
+});
+
+it('requires observation under a courteous negative reminder', () => {
+  const prompt = 'Can you not forget to explain source.js';
+  expect(evaluateHeadlessTaskOutcome(prompt, [answer]).exitCode).not.toBe(0);
+  expect(evaluateHeadlessTaskOutcome(prompt, [read, { ...answer, content: 'source.js exports value, equal to 1.' }]).exitCode).toBe(0);
+});
+
+it('requires observation under a strengthened bare-file reminder', () => {
+  const prompt = "N'oublie vraiment pas source.js";
+  expect(evaluateHeadlessTaskOutcome(prompt, [answer]).exitCode).not.toBe(0);
+  expect(evaluateHeadlessTaskOutcome(prompt, [read, { ...answer, content: 'source.js exports value, equal to 1.' }]).exitCode).toBe(0);
+});
+
 it.each(['en.ts', 'must.js', 'that.py'])('does not interpret the incidental path as an obligation: %s', file => {
   expect(evaluateHeadlessTaskOutcome(`Explain closures. An example exists in ${file}.`, [answer]).exitCode).toBe(0);
+});
+
+it.each([
+  'Explique les closures. Le correctif par modification de la version existe dans package.json.',
+  'Explain closures. The change through editing the version exists in package.json.',
+  'Explain closures. The change via editing the version exists in package.json.',
+  'Explain closures. The change using an edit exists in package.json.',
+])('retains an explicit alternate means of editing: %s', prompt => {
+  expect(requestsRepositoryAction(prompt)).toBe(true);
+  expect(evaluateHeadlessTaskOutcome(prompt, [answer]).exitCode).not.toBe(0);
+  expect(evaluateHeadlessTaskOutcome(prompt, [edit('package.json'), answer]).exitCode).toBe(0);
+});
+
+it('keeps the named file to edit despite a presence statement', () => {
+  const prompt = 'Explain closures. The file to edit exists in package.json.';
+  expect(requestsRepositoryAction(prompt)).toBe(true);
+  expect(evaluateHeadlessTaskOutcome(prompt, [answer]).exitCode).not.toBe(0);
+  expect(evaluateHeadlessTaskOutcome(prompt, [edit('package.json'), answer]).exitCode).toBe(0);
 });
