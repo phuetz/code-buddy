@@ -611,9 +611,10 @@ export function createMCPCommand(): Command {
     .action(async (name: string) => {
       const manager = getMCPManager();
       let connected = false;
+      let serverConfig;
       try {
         const config = loadMCPConfig();
-        const serverConfig = config.servers.find(s => s.name === name);
+        serverConfig = config.servers.find(s => s.name === name);
         
         if (!serverConfig) {
           logger.error(chalk.red(`Server ${name} not found`));
@@ -639,7 +640,17 @@ export function createMCPCommand(): Command {
         }
 
       } catch (error: unknown) {
-        logger.error(chalk.red(`✗ Failed to connect to ${name}: ${getErrorMessage(error)}`));
+        const err = error as NodeJS.ErrnoException;
+        if (err.code === 'ENOENT' && serverConfig?.transport?.type === 'stdio') {
+          const cmd = serverConfig.transport.command || serverConfig.command;
+          let msg = `Server "${name}": command "${cmd}" not found in PATH. Install it or fix the "command" field in .codebuddy/mcp.json.`;
+          if (name === 'code-explorer') {
+            msg += ' (see docs/code-explorer-integration.md)';
+          }
+          logger.error(chalk.red(msg));
+        } else {
+          logger.error(chalk.red(`✗ Failed to connect to ${name}: ${getErrorMessage(error)}`));
+        }
         process.exit(1);
       } finally {
         // Probe only: drop the client/stdio child so the CLI can exit.
