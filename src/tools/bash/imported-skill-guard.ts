@@ -48,7 +48,7 @@ const LAUNCHER_FREE = new Set(['git', 'rm', 'mv', 'mkdir', 'rmdir', 'touch', 'ch
 const READ_ONLY_COMMANDS = new Set([
   'cat', 'head', 'tail', 'less', 'more', 'ls', 'tree', 'wc', 'stat', 'file', 'grep', 'egrep', 'fgrep', 'rg',
   'sha256sum', 'sha1sum', 'md5sum', 'diff', 'cmp', 'nl', 'cd', 'pushd', 'popd', 'echo', 'printf', 'pwd',
-  'true', 'false', 'du', 'realpath', 'basename', 'dirname', 'readlink',
+  'true', 'false', 'read', 'du', 'realpath', 'basename', 'dirname', 'readlink',
 ]);
 
 /** Interpréteurs et leurs options « code en ligne ». */
@@ -155,6 +155,9 @@ function shellParser(): TsParser {
  * targets are dropped, input redirection files are kept with the command. A text the parser
  * cannot read throws: the caller treats that as "ask" (closed).
  */
+/** Text a command receives on its standard input (here-document, here-string, left side of a pipe), per segment. */
+const stdinOf = new WeakMap<string[], string[]>();
+
 function parseShellSegments(command: string): string[][] {
   const root = shellParser().parse(command).rootNode;
   if (root.hasError) throw new Error('shell text could not be parsed');
@@ -174,7 +177,31 @@ function parseShellSegments(command: string): string[][] {
     }
   };
   const clean = (t: string): string => t.replace(/["'\\]/g, '');
-  const walk = (n: TsNode, inputFiles: string[]): void => {
+  const heredocTexts = (n: TsNode): string[] => {
+    const texts: string[] = [];
+    for (let i = 0; i < n.childCount; i++) {
+      const c = n.child(i);
+      if (c?.type !== 'heredoc_redirect') continue;
+      for (let j = 0; j < c.childCount; j++) {
+        const d = c.child(j);
+        if (d?.type === 'heredoc_body') texts.push(d.text);
+      }
+    }
+    return texts;
+  };
+  const walk = (n: TsNode, inputFiles: string[], stdin: string[] = []): void => {
+    if (n.type === 'pipeline') {
+      // What a command writes is what the next one reads: its words are the next one's standard input.
+      let prev: string[] = [];
+      for (let i = 0; i < n.childCount; i++) {
+        const c = n.child(i);
+        if (!c || c.type === '|' || c.type === '|&') continue;
+        const before = out.length;
+        walk(c, inputFiles, [...stdin, ...prev]);
+        for (const seg of out.slice(before)) prev = [...prev, ...seg.slice(1)];
+      }
+      return;
+    }
     if (n.type === 'redirected_statement') {
       const inputs: string[] = [];
       for (let i = 0; i < n.childCount; i++) {
@@ -186,9 +213,10 @@ function parseShellSegments(command: string): string[][] {
           }
         }
       }
+      const here = heredocTexts(n);
       for (let i = 0; i < n.childCount; i++) {
         const c = n.child(i);
-        if (c && c.type !== 'file_redirect') walk(c, [...inputFiles, ...inputs]);
+        if (c && c.type !== 'file_redirect' && c.type !== 'heredoc_redirect') walk(c, [...inputFiles, ...inputs], [...stdin, ...here]);
       }
       return;
     }
@@ -211,17 +239,26 @@ function parseShellSegments(command: string): string[][] {
     }
     if (n.type === 'command') {
       const words: string[] = [];
+      const own: string[] = [];
       for (let i = 0; i < n.childCount; i++) {
         const c = n.child(i);
+        if (c?.type === 'herestring_redirect') {
+          const last = c.childCount > 0 ? c.child(c.childCount - 1) : null;
+          if (last && last.type !== '<<<') own.push(wordText(last));
+          continue;
+        }
         if (!c || c.type === 'file_redirect' || c.type === 'heredoc_redirect') continue;
         if (c.type === 'command_substitution' || c.type === 'process_substitution') continue;
         words.push(wordText(c));
       }
-      out.push([...words, ...inputFiles].filter(Boolean));
+      const seg = [...words, ...inputFiles].filter(Boolean);
+      const texts = [...stdin, ...own];
+      if (texts.length > 0) stdinOf.set(seg, texts);
+      out.push(seg);
     }
     for (let i = 0; i < n.childCount; i++) {
       const c = n.child(i);
-      if (c) walk(c, n.type === 'command' ? [] : inputFiles);
+      if (c) walk(c, n.type === 'command' ? [] : inputFiles, n.type === 'command' ? [] : stdin);
     }
   };
   walk(root, []);
@@ -490,7 +527,8 @@ export function findImportedScriptHits(
         ...command.split(/[\s()[\]{},;=]+/).map(w => w.replace(/["'`\\]/g, '')),
         'python',
       ].filter(Boolean)];
-  const words = segments.flat();
+  const stdinWordsOf = (seg: string[]): string[] => (stdinOf.get(seg) ?? []).flatMap(t => t.split(/[\s"'`;|&()<>]+/).filter(Boolean));
+  const words = [...segments.flat(), ...segments.flatMap(stdinWordsOf)];
   const manifests = new Map<string, SkillScriptManifest>();
   const manifestOf = (dir: string): SkillScriptManifest => {
     let m = manifests.get(dir);
@@ -540,6 +578,12 @@ export function findImportedScriptHits(
     const firstName = launcherName(first);
     const assignmentsOnly = seg.every(w => /^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
     const readOnly = mode === 'shell' && (assignmentsOnly || READ_ONLY_COMMANDS.has(path.basename(first)));
+    // A program read on standard input (`bash <<EOF`, `bash <<< "…"`, `echo "…" | sh`, `python3 <<'PY'`) is a `-c` text.
+    const stdinTexts = stdinOf.get(seg) ?? [];
+    if (!readOnly && mode === 'shell' && stdinTexts.length > 0) {
+      const lang = SHELL_NAMES.has(firstName) ? 'shell' : (INLINE_FLAGS[firstName] || /^(?:deno|bun)$/.test(firstName)) ? 'code' : null;
+      if (lang) for (const t of stdinTexts) nested.push({ text: t, mode: lang });
+    }
     // The text handed to `bash -c`, `sh -c`, `eval`, `env -S`, `python -c`… is analysed again, recursively.
     if (!readOnly && mode === 'shell') {
       const rest = seg.slice(firstIndex + 1);
@@ -568,7 +612,7 @@ export function findImportedScriptHits(
         for (const sd of mentioned) addDir(sd);
       }
     }
-    for (const w of seg) {
+    for (const w of readOnly ? seg : [...seg, ...stdinWordsOf(seg)]) {
       for (const c of candidatesOf(w)) {
         for (const r of resolveCandidate(c, bases)) {
           const real = realOrSame(r);

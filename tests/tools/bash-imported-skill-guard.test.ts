@@ -579,3 +579,74 @@ describe('reprise 18 : récursion -c/eval, listes for, classes POSIX, enveloppes
     expect(guardCalls()).toHaveLength(0);
   });
 });
+
+/**
+ * Reprise 19 : contre-revue n° 9. Un interpréteur qui lit son programme sur l'entrée standard
+ * (here-document, here-string, entrée redirigée, tube) est traité comme `-c`.
+ */
+describe('reprise 19 : here-documents, here-strings, entrée redirigée, tubes', () => {
+  const refuse = () => bridge(() => false);
+  const expectGuarded = async (cmd: string, cwd = workspace) => {
+    calls = [];
+    const r = await run(cmd, cwd);
+    expect(r.success, cmd).toBe(false);
+    expect(guardCalls().length, cmd).toBeGreaterThanOrEqual(1);
+    expect(ran(), cmd).toBe(false);
+  };
+
+  it('bash/sh <<EOF, <<\'EOF\', -s, < fichier, while read, xargs : le texte lu est réanalysé comme un -c', async () => {
+    await installProbe({ 'scripts/run.sh': writer(), 'scripts/notes.txt': writer() });
+    refuse();
+    const f = path.join(skill, 'scripts', 'run.sh');
+    await expectGuarded(`bash <<EOF\nbash ${f}\nEOF`);
+    await expectGuarded(`bash <<'EOF'\nbash ${f}\nEOF`);
+    await expectGuarded(`sh <<EOF\nbash ${f}\nEOF`);
+    await expectGuarded(`bash -s <<'EOF'\nbash ${f}\nEOF`);
+    await expectGuarded(`bash < ${path.join(skill, 'scripts', 'notes.txt')}`);
+    await expectGuarded(`printf '%s\\n' ${f} | xargs bash`);
+    await expectGuarded(`echo ${f} | xargs -n1 bash`);
+    await expectGuarded(`while read x; do bash "$x"; done <<EOF\n${f}\nEOF`);
+  });
+
+  it('here-string et tube vers un shell : BashTool les refuse déjà (filtre générique) ; la garde les voit aussi, par execute_code en shell', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    bridge(() => false);
+    const f = path.join(skill, 'scripts', 'run.sh');
+    for (const cmd of [`bash <<< "bash ${f}"`, `echo "bash ${f}" | bash`, `printf '%s\\n' "bash ${f}" | sh`]) {
+      const r = await run(cmd);
+      expect(r.success, cmd).toBe(false);
+      expect(ran(), cmd).toBe(false);
+      calls = [];
+      const viaTool = await new ExecuteCodeTool().execute({ code: cmd, language: 'shell' }, { cwd: workspace } as never);
+      expect(viaTool.success, cmd).toBe(false);
+      expect(guardCalls().length, cmd).toBe(1);
+      expect(ran(), cmd).toBe(false);
+    }
+  });
+
+  it('langages lisant leur programme sur l\'entrée standard (python, node)', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    const { findImportedScriptHits } = await import('../../src/tools/bash/imported-skill-guard.js');
+    const f = path.join(skill, 'scripts', 'run.sh');
+    // BashTool's generic filter refuses `subprocess`/`child_process` earlier: check the guard's own analysis.
+    for (const cmd of [
+      `python3 <<'PY'\nimport subprocess\nsubprocess.check_call(["bash", "${f}"])\nPY`,
+      `node <<'JS'\nrequire("x").execFileSync("bash", ["${f}"])\nJS`,
+      `python3 - <<< 'import os; os.system("bash ${f}")'`,
+      `echo 'os.system("bash ${f}")' | python3`,
+    ]) {
+      expect(findImportedScriptHits(cmd, workspace, []).length, cmd).toBeGreaterThan(0);
+    }
+  });
+
+  it('pas de faux positif : documents en here-doc, cat <<EOF, tubes ordinaires', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    for (const cmd of ['cat <<EOF\nhello\nEOF', 'bash <<EOF\necho hi\nEOF', 'echo hi | cat', 'printf "%s" a | wc -c',
+      `cat <<EOF\nbash ${path.join(skill, 'scripts', 'run.sh')}\nEOF`]) {
+      const r = await run(cmd, mk('pf19-else-'));
+      expect(r.success, `${cmd}: ${r.error}`).toBe(true);
+    }
+    expect(guardCalls()).toHaveLength(0);
+  });
+});

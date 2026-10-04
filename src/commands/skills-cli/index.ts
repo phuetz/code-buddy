@@ -134,7 +134,7 @@ function buildSkillListHealth(
 /** Count SKILL.md packages and `.skill.md` files in the bundled skills directory. */
 const INERT_SCRIPTS_GUARANTEE =
   'Guaranteed: scripts are inert (no execute bit). While one of them is not allowlisted, a human confirmation is required when a command or program run by an agent tool '
-  + 'shows one of their files after analysis (spelled path, glob/brace expansion, for-loop literal, body of bash -c / sh -c / eval, known wrappers with their options), '
+  + 'shows one of their files after analysis (spelled path, glob/brace expansion, for-loop literal, body of bash -c / sh -c / eval, text read on standard input by a shell or interpreter: here-document, here-string, pipe, known wrappers with their options), '
   + 'when find -exec / xargs / parallel / make covers their folder, or when the text or the command word cannot be resolved; the sha256 of a designated file is re-checked before launch.';
 const INERT_SCRIPTS_LIMIT =
   'NOT guaranteed (assumed limit): a copy or reconstruction of a script made elsewhere (cp, cat, printf, bytes, os.environ, create_file) then run is the same as the agent rewriting it by hand and is not detected.';
@@ -924,7 +924,7 @@ export function registerSkillsCommands(program: Command): void {
       const withScripts = report.imported.filter((s) => s.inertScripts?.length);
       if (withScripts.length) {
         console.log(`  ⚠️  ${withScripts.length} skill${withScripts.length > 1 ? 's' : ''} ${report.dryRun ? 'would be imported' : 'imported'} with INERT scripts (execute bit removed, flagged scriptsUnverified).`);
-        console.log('     Running any file of these skills asks for a confirmation every time (never auto-approved, refused when no human is there).');
+        console.log('     When analysis of a command or program shows one of their files, a confirmation is asked every time (never auto-approved, refused when no human is there); see the exact rules below.');
         console.log(`     ${INERT_SCRIPTS_GUARANTEE}`);
         console.log(`     ${INERT_SCRIPTS_LIMIT}`);
         console.log('     After reading a script, allow it without confirmation by adding its exact line to ~/.codebuddy/skill-exec-allowlist.json  ({ "entries": [ ... ] }):');
