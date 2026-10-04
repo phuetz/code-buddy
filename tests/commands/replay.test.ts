@@ -17,6 +17,7 @@ describe('buddy replay', () => {
   let previousSessionsDir: string | undefined;
   let logSpy: ReturnType<typeof vi.spyOn>;
   let exitSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'buddy-replay-'));
@@ -63,11 +64,13 @@ describe('buddy replay', () => {
       filesTouched: [],
     });
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
   });
 
   afterEach(async () => {
     logSpy.mockRestore();
+    errorSpy.mockRestore();
     exitSpy.mockRestore();
     if (previousSessionsDir === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR;
     else process.env.CODEBUDDY_SESSIONS_DIR = previousSessionsDir;
@@ -88,6 +91,16 @@ describe('buddy replay', () => {
     expect(output()).toContain('write_file:ok');
     expect(output()).toContain('src/first.ts');
     expect(output()).toContain('second answer');
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('exits with code 1 and error message for unknown session id without timeline', async () => {
+    await createReplayCommand({ timeline })
+      .exitOverride()
+      .parseAsync(['node', 'replay', 'unknown-session-id']);
+
+    expect(errorSpy).toHaveBeenCalledWith('Session unknown-session-id not found or has no timeline entries');
+    expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
   it('shows --at state and restores its checkpoint only after confirmation', async () => {

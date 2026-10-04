@@ -41,7 +41,6 @@ function renderTools(entry: TimelineEntry): string {
 }
 
 function renderTimeline(entries: TimelineEntry[]): string {
-  if (entries.length === 0) return 'No timeline entries found.';
   const rows = entries.map((entry) => ({
     turn: String(entry.turn),
     time: new Date(entry.ts).toLocaleTimeString(),
@@ -100,7 +99,13 @@ export function createReplayCommand(deps: ReplayCommandDependencies = {}): Comma
       }
 
       if (options.at === undefined) {
-        console.log(renderTimeline(await timeline.list(sessionId)));
+        const entries = await timeline.list(sessionId);
+        if (entries.length === 0) {
+          console.error(`Session ${sessionId} not found or has no timeline entries`);
+          process.exit(1);
+          return;
+        }
+        console.log(renderTimeline(entries));
         return;
       }
 
