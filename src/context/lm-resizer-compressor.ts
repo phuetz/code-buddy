@@ -290,8 +290,12 @@ function ensurePrivateStore(storePath: string): void {
     const owned = (path: string): boolean => uid === undefined || statSync(path).uid === uid;
     const dir = dirname(storePath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
-    else if (dir === join(homedir(), '.codebuddy') && owned(dir) && (statSync(dir).mode & 0o077) !== 0) {
-      chmodSync(dir, 0o700);
+    // `mkdir -p` only applies the mode to the last component: tighten the
+    // ~/.codebuddy root too when the store lives anywhere beneath it.
+    const root = join(homedir(), '.codebuddy');
+    if (existsSync(root) && (dir === root || dir.startsWith(`${root}/`))
+      && owned(root) && (statSync(root).mode & 0o077) !== 0) {
+      chmodSync(root, 0o700);
     }
     if (!existsSync(storePath)) closeSync(openSync(storePath, 'a', 0o600));
     for (const file of [storePath, `${storePath}-wal`, `${storePath}-shm`]) {

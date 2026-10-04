@@ -5,6 +5,7 @@
  * as they arrive from the spawned process.
  */
 
+import { isLmResizerEnabled } from '../../context/lm-resizer-compressor.js';
 import { spawn } from 'child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { BoundedOutput } from '../../utils/bounded-output.js';
@@ -111,10 +112,18 @@ export async function* executeStreaming(
         if (stderr) yield stderr;
         return exitCode === 0
           ? { success: true, output: (stdout || stderr || 'Command executed successfully (no output)').trim() }
-          : {
-              success: false,
-              error: `${(stderr || stdout || `Command exited with code ${exitCode}`).trim()}\n[sandbox:${backend}; exit code ${exitCode}]`,
-            };
+          : isLmResizerEnabled() && stdout.trim() && stderr.trim()
+            // Both channels matter: `stderr || stdout` used to drop the whole log
+            // when the command also wrote one line on stderr. lm-resizer on only.
+            ? {
+                success: false,
+                output: stdout.trim(),
+                error: `${stderr.trim()}\n[sandbox:${backend}; exit code ${exitCode}]`,
+              }
+            : {
+                success: false,
+                error: `${(stderr || stdout || `Command exited with code ${exitCode}`).trim()}\n[sandbox:${backend}; exit code ${exitCode}]`,
+              };
       }
       requiresDirectApproval = true;
       escalationReason = `Sandbox boundary denied the command: ${stderr || stdout}`;

@@ -9,6 +9,7 @@
  * the recovery note.
  */
 
+import { annotateSuccessLines, failureHeaderFor } from './failure-view.js';
 import {
   isLmResizerEnabled,
   optimizeToolOutputWithLmResizer,
@@ -217,49 +218,6 @@ function thresholdFor(
   return Math.max(floor, Math.floor(base * pressureFactor));
 }
 
-const FAILURE_LINE = /\b(?:error|erreur|fail(?:ed|ure|ures|s)?|[ée]chec|panic(?:ked)?|exception|fatal|traceback|segfault|abort(?:ed)?|denied|refus\w*|timed? ?out|cannot|not found)\b|[\w@./\\-]+\.[A-Za-z]{1,6}:\d+/i;
-const FAILURE_MAX_CHARS = 6_000;
-const FAILURE_LINE_MAX_CHARS = 400;
-
-/**
- * A failed command must NEVER look like a success to the model. lm-resizer's
- * reduced view may drop the very line that explains the failure (measured:
- * `make: completed` for a failing `make test` whose cause sat in the middle).
- * So the view always starts with the exit status, followed by the error-looking
- * lines (and one line of context for the first ones) that the reduced view does
- * not already show.
- */
-export function failureHeaderFor(raw: string, view: string, exitCode: number | string): string {
-  const lines = raw.split('\n');
-  const matches: number[] = [];
-  for (let i = 0; i < lines.length && matches.length < 40; i++) {
-    const line = lines[i]!.trim();
-    if (line && FAILURE_LINE.test(line) && !view.includes(line.slice(0, FAILURE_LINE_MAX_CHARS))) matches.push(i);
-  }
-  const header = `[command failed: exit ${exitCode}]\n`;
-  if (matches.length === 0) return header;
-  const keep = new Set<number>();
-  matches.forEach((index, rank) => {
-    keep.add(index);
-    if (rank < 12) {
-      if (index > 0) keep.add(index - 1);
-      if (index + 1 < lines.length) keep.add(index + 1);
-    }
-  });
-  const out: string[] = [];
-  let chars = 0;
-  let previous = -2;
-  for (const index of [...keep].sort((a, b) => a - b)) {
-    const text = lines[index]!.slice(0, FAILURE_LINE_MAX_CHARS);
-    if (chars + text.length > FAILURE_MAX_CHARS) { out.push('…'); break; }
-    if (index !== previous + 1 && out.length > 0) out.push('…');
-    out.push(`${index + 1}: ${text}`);
-    chars += text.length + 1;
-    previous = index;
-  }
-  return `${header}[failure lines from the full output, not in the reduced view below]\n${out.join('\n')}\n\n`;
-}
-
 function recoveryNote(rawRef: string, report: LmResizerToolOutputResult): string {
   const hash = report.hash ? `; lm-resizer CCR ${report.hash}` : '';
   return `\n\n[lm-resizer: raw observation available with restore_context(identifier=${JSON.stringify(rawRef)})${hash}]`;
@@ -367,10 +325,10 @@ export class ToolObservationOptimizer {
       };
     }
 
-    const failureHeader = failed
-      ? failureHeaderFor(rawContent, report.compressed, input.exitCode ?? 1)
-      : '';
-    const content = `${failureHeader}${report.compressed}${recoveryNote(input.toolCallId, report)}`;
+    const failureExit = input.exitCode !== undefined && input.exitCode !== 0 ? input.exitCode : 1;
+    const failureView = failed ? annotateSuccessLines(report.compressed, failureExit).text : report.compressed;
+    const failureHeader = failed ? failureHeaderFor(rawContent, failureView, failureExit) : '';
+    const content = `${failureHeader}${failureView}${recoveryNote(input.toolCallId, report)}`;
     const finalBytes = Buffer.byteLength(content);
     const originalTokens = estimateTokens(rawContent);
     const finalTokens = estimateTokens(content);
@@ -423,3 +381,5 @@ export async function optimizeToolObservation(
 ): Promise<ToolObservationOptimizationResult> {
   return getToolObservationOptimizer().optimize(input);
 }
+
+export { failureHeaderFor } from './failure-view.js';

@@ -108,6 +108,19 @@ describe('truncation vs lm-resizer order', () => {
     expect(obs.content).toContain('restore_context({"identifier":"call_fb"})');
   });
 
+  it('enabled, lm-resizer unavailable, FAILED command: the capped view still opens with the failure and its cause', async () => {
+    process.env.CODEBUDDY_LM_RESIZER = 'true';
+    const ws = mkdtempSync(join(tmpdir(), 'lmr-order-failcap-'));
+    dirs.push(ws);
+    const failedLog = `${log}make: completed\n`;
+    const obs = await prepareToolObservationForPrompt({
+      toolName: 'bash', toolCallId: 'call_failcap', content: failedLog, success: false, exitCode: 2, workspaceRoot: ws,
+    });
+    expect(obs.content).toMatch(/\[command failed: exit 2\]/);
+    expect(obs.content).toContain('marqueur-9f3a');
+    expect(obs.content).toContain('restore_context({"identifier":"call_failcap"})');
+  });
+
   const bin = resolveLmResizerBin();
   const hasBin = bin.includes('/') && existsSync(bin);
   it.skipIf(!hasBin)('REAL binary: the model-facing text keeps the marker enabled, loses it disabled', async () => {

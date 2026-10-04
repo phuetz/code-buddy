@@ -14,6 +14,7 @@ import {
   optimizeToolObservation,
   type ToolObservationOptimizationReason,
 } from '../context/tool-observation-optimizer.js';
+import { ensureFailureVisible, exitCodeFromText } from '../context/failure-view.js';
 import { isLmResizerEnabled } from '../context/lm-resizer-compressor.js';
 import { getCurrentProvider } from '../tools/hooks/default-hooks.js';
 import { sanitizeResult } from '../tools/hooks/result-sanitizer.js';
@@ -127,9 +128,14 @@ function capUnreducedObservation(content: string, input: PromptToolObservationIn
     success: true,
     output: content,
   }).output ?? content;
-  if (capped === content || input.allowOptimization === false) return capped;
-  // The exact text was persisted just before (0600); tell the model how to read it.
-  return `${capped}\n\n[Full exact observation: restore_context({"identifier":${JSON.stringify(input.toolCallId)}})]`;
+  const failed = input.success === false || (input.exitCode ?? 0) !== 0;
+  const exit = failed ? exitCodeFromText(content, input.exitCode && input.exitCode !== 0 ? input.exitCode : 1) : 0;
+  let view = capped;
+  if (capped !== content && input.allowOptimization !== false) {
+    // The exact text was persisted just before (0600); tell the model how to read it.
+    view = `${capped}\n\n[Full exact observation: restore_context({"identifier":${JSON.stringify(input.toolCallId)}})]`;
+  }
+  return failed ? ensureFailureVisible(view, content, exit, capped !== content) : view;
 }
 
 export async function prepareToolObservationForPrompt(

@@ -61,7 +61,8 @@ import type { MiddlewarePipeline, MiddlewareContext } from "../middleware/index.
 import { extractEditedFilesFromHistory } from "../middleware/changed-files.js";
 import type { MessageQueue } from "../message-queue.js";
 import { semanticTruncate } from "../../utils/head-tail-truncation.js";
-import { failureHeaderFor, optimizeToolObservation } from '../../context/tool-observation-optimizer.js';
+import { optimizeToolObservation } from '../../context/tool-observation-optimizer.js';
+import { ensureFailureVisible, exitCodeFromText } from '../../context/failure-view.js';
 import { isLmResizerEnabled } from '../../context/lm-resizer-compressor.js';
 import { getCurrentProvider } from '../../tools/hooks/default-hooks.js';
 import { sanitizeResult as sanitizeResultForProvider } from '../../tools/hooks/result-sanitizer.js';
@@ -2343,7 +2344,7 @@ export class AgentExecutor {
               toolCallId: toolCall.id || `tool_${Date.now()}`,
               content: modelObservation,
               success: result?.success,
-              exitCode: result?.success ? 0 : 1,
+              exitCode: result?.success ? 0 : exitCodeFromText(modelObservation),
               command: logicalCommand,
               query: message ?? '',
               workspaceRoot: toolWorkspace,
@@ -2371,15 +2372,19 @@ export class AgentExecutor {
                     ? `\n\n[Full exact observation: restore_context({"identifier":${JSON.stringify(toolCall.id)}})]`
                     : '';
                   modelStreamContent = `${truncated.output}${recoveryNote}`;
-                  // A failed command must stay visibly failed, with its cause: the
-                  // cap above keeps head/tail and may drop the error line from the
-                  // middle (lm-resizer on only; off = unchanged).
-                  if (isLmResizerEnabled() && result?.success === false) {
-                    const exitLabel = /exit code (-?\d+)/.exec(rawForRecovery)?.[1] ?? 'non-zero';
-                    modelStreamContent = `${failureHeaderFor(rawForRecovery, modelStreamContent, exitLabel)}${modelStreamContent}`;
-                  }
                 }
               }
+            }
+            // A failed command must stay visibly failed, with its cause, and no
+            // success-looking line may contradict it (lm-resizer on only; off =
+            // unchanged). Runs on whatever the model is about to read.
+            if (isLmResizerEnabled() && result?.success === false && toolCall.function.name !== 'restore_context') {
+              modelStreamContent = ensureFailureVisible(
+                modelStreamContent,
+                rawForRecovery,
+                exitCodeFromText(rawForRecovery),
+                observationShortened,
+              );
             }
 
             const observationMetadata = {

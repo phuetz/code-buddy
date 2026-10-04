@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import type { spawn } from 'child_process';
-import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { PassThrough } from 'stream';
@@ -318,6 +318,26 @@ describe('robust lm-resizer client', () => {
     } finally {
       process.umask(previousUmask);
       rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('tightens ~/.codebuddy itself when the store lives in a sub-directory of it', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'lmr-home-'));
+    const previousHome = process.env.HOME;
+    try {
+      process.env.HOME = home;
+      mkdirSync(join(home, '.codebuddy'), { mode: 0o775 });
+      chmodSync(join(home, '.codebuddy'), 0o775);
+      const runtime = fakeSpawn(() => ({ stdout: REPORT_024 }), HELP_ARGV);
+      await optimizeToolOutputWithLmResizer({ content: 'x\n'.repeat(3_000), toolName: 'bash', command: 'journalctl' }, {
+        httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl,
+        storePath: join(home, '.codebuddy', 'sous', 'nest.db'),
+      });
+      expect(statSync(join(home, '.codebuddy')).mode & 0o777).toBe(0o700);
+      expect(statSync(join(home, '.codebuddy', 'sous')).mode & 0o777).toBe(0o700);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+      rmSync(home, { recursive: true, force: true });
     }
   });
 

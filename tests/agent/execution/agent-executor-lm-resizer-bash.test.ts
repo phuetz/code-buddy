@@ -202,4 +202,58 @@ describe.skipIf(!hasBin || process.platform === 'win32')('real loop: streaming b
     expect(toolMessage).toContain('restore_context({"identifier":"call_fail_reduced"})');
     expect(getRestorableCompressor().restore('call_fail_reduced', workspace, sessionId).found).toBe(true);
   }, 90_000);
+
+  // --- Reprise Grok 3: never contradicted, always visible ------------------------------------------
+  const failing = (cause: string, count = 8_000, tail = 'make: completed'): string => {
+    const base = lines(cause, count).trimEnd();
+    return `${base}\n${tail}\n`;
+  };
+  const exitOf = (message: string): number => message.indexOf('[command failed: exit 2]');
+
+  it('never contradicted: a success line is annotated and comes AFTER the failure header (real exit code 2)', async () => {
+    writeScript('make', failing('echec: connexion refusee (src/db/pool.ts:412)'), 2);
+    const { toolMessage } = await playTurn('./make test', 'call_contra');
+    const header = exitOf(toolMessage);
+    expect(header).toBeGreaterThanOrEqual(0); // real code 2, not the constant 1
+    const success = toolMessage.indexOf('make: completed');
+    expect(success).toBeGreaterThan(header);
+    expect(toolMessage).toMatch(/make: completed {2}\(despite exit 2: the command FAILED\)/);
+    expect(toolMessage).toContain('echec: connexion refusee (src/db/pool.ts:412)');
+  }, 90_000);
+
+  it('visible: a crash line without any "error" keyword is shown', async () => {
+    writeScript('make', failing('1 test, 0 passed, 1 crashed'), 2);
+    const { toolMessage } = await playTurn('./make test', 'call_crash');
+    expect(toolMessage).toContain('1 test, 0 passed, 1 crashed');
+    expect(exitOf(toolMessage)).toBeGreaterThanOrEqual(0);
+  }, 90_000);
+
+  it('visible: 45 decoy "ok file:line" lines do not push the real cause out', async () => {
+    const decoys = Array.from({ length: 45 }, (_, i) => `ok src/pass${i}.ts:${i + 1}`).join('\n');
+    const body = lines('echec: vraie cause (src/db/pool.ts:412)', 8_000).replace(/^/, `${decoys}\n`);
+    writeScript('make', body, 2);
+    const { toolMessage } = await playTurn('./make test', 'call_decoy');
+    expect(toolMessage).toContain('echec: vraie cause (src/db/pool.ts:412)');
+  }, 90_000);
+
+  it('visible: a cause after 400 characters of noise on the same line is not cut off', async () => {
+    writeScript('make', lines(`${'x'.repeat(450)} echec: connexion refusee (src/db/pool.ts:412)`, 8_000), 2);
+    const { toolMessage } = await playTurn('./make test', 'call_long');
+    expect(toolMessage).toContain('src/db/pool.ts:412');
+  }, 90_000);
+
+  it('sandbox: stdout log + one stderr line, exit 2 -> cause and the whole log are kept (landlock path on this host)', async () => {
+    const data = join(workspace, 'split.data');
+    const log = lines('echec: la vraie cause sur stdout (src/db/pool.ts:412)', 8_000);
+    writeFileSync(data, log);
+    const script = join(workspace, 'make');
+    writeFileSync(script, `#!/bin/bash\ncat '${data}'\necho 'Error: summary only' >&2\nexit 2\n`);
+    chmodSync(script, 0o755);
+    const { toolMessage, sessionId } = await playTurn('./make test', 'call_split');
+    expect(toolMessage).toContain('echec: la vraie cause sur stdout (src/db/pool.ts:412)');
+    expect(toolMessage).toContain('Error: summary only');
+    const restored = getRestorableCompressor().restore('call_split', workspace, sessionId);
+    expect(restored.found && restored.content).toContain('echec: la vraie cause sur stdout');
+    expect(restored.found && restored.content).toContain('Error: summary only');
+  }, 90_000);
 });
