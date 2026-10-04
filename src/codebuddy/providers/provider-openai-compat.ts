@@ -1154,6 +1154,9 @@ export class OpenAICompatProvider implements Provider {
       if (usage) {
         usageInputTokens = usage.prompt_tokens;
         usageOutputTokens = usage.completion_tokens;
+        // Streaming (the only path of headless `-p`) used to drop the provider's
+        // cached-token count: only the non-streaming chat() fed the cache stats.
+        this.trackPromptCache(usage as { prompt_tokens?: number; cached_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } });
       }
     };
     const markMessageComplete = (): void => {
