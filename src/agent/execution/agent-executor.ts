@@ -1982,6 +1982,14 @@ export class AgentExecutor {
 
         if (toolCalls && toolCalls.length > 0) {
           toolRounds++;
+          // Progress is measured in tool ROUNDS — the same unit as the
+          // denominator (`maxToolRounds`). Counting one update per tool CALL
+          // made the numerator (calls) diverge from the denominator (rounds)
+          // whenever a round carried several parallel calls, reporting
+          // >100% and a negative ETA (journal 2026-10-04: 225/150 done).
+          try {
+            getProgressTracker().update(`round-${toolRounds}`, 'completed');
+          } catch { /* progress optional */ }
 
           // Pre-check cost limit before executing tools (estimate only — no side effects)
           if (this.config.estimateSessionCostLimitReached(inputTokens, totalOutputTokens)) {
@@ -2239,13 +2247,8 @@ export class AgentExecutor {
               });
             } catch { /* notification optional */ }
             // Phase (d).21 ship 4 — progress update.
-            try {
-              getProgressTracker().update(
-                toolCall.id,
-                result.success ? 'completed' : 'failed',
-                toolCall.function.name,
-              );
-            } catch { /* progress optional */ }
+            // Progress is advanced once per tool ROUND at the `toolRounds++`
+            // boundary above, never per tool call (see the comment there).
 
             // --- Track file access for code graph context (streaming, incremental update) ---
             try {
