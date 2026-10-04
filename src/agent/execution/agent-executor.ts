@@ -61,7 +61,7 @@ import type { MiddlewarePipeline, MiddlewareContext } from "../middleware/index.
 import { extractEditedFilesFromHistory } from "../middleware/changed-files.js";
 import type { MessageQueue } from "../message-queue.js";
 import { semanticTruncate } from "../../utils/head-tail-truncation.js";
-import { optimizeToolObservation } from '../../context/tool-observation-optimizer.js';
+import { failureHeaderFor, optimizeToolObservation } from '../../context/tool-observation-optimizer.js';
 import { isLmResizerEnabled } from '../../context/lm-resizer-compressor.js';
 import { getCurrentProvider } from '../../tools/hooks/default-hooks.js';
 import { sanitizeResult as sanitizeResultForProvider } from '../../tools/hooks/result-sanitizer.js';
@@ -2371,6 +2371,13 @@ export class AgentExecutor {
                     ? `\n\n[Full exact observation: restore_context({"identifier":${JSON.stringify(toolCall.id)}})]`
                     : '';
                   modelStreamContent = `${truncated.output}${recoveryNote}`;
+                  // A failed command must stay visibly failed, with its cause: the
+                  // cap above keeps head/tail and may drop the error line from the
+                  // middle (lm-resizer on only; off = unchanged).
+                  if (isLmResizerEnabled() && result?.success === false) {
+                    const exitLabel = /exit code (-?\d+)/.exec(rawForRecovery)?.[1] ?? 'non-zero';
+                    modelStreamContent = `${failureHeaderFor(rawForRecovery, modelStreamContent, exitLabel)}${modelStreamContent}`;
+                  }
                 }
               }
             }

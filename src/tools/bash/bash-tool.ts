@@ -13,6 +13,7 @@
  * Self-healing can be disabled via --no-self-heal flag.
  */
 
+import { isLmResizerEnabled, resolveLmResizerMaxInputChars } from '../../context/lm-resizer-compressor.js';
 import { spawn, SpawnOptions, ChildProcess } from 'child_process';
 import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -158,6 +159,9 @@ export class BashTool implements Disposable {
       getSandboxManager: () => this.sandboxManager,
       getRunningProcesses: () => this.runningProcesses,
       refuseUnconfinedEscalation: options?.refuseUnconfinedEscalation === true,
+      // With lm-resizer enabled the whole output must reach it (head+tail of
+      // 256 KiB would drop the middle of a long log before any reduction).
+      ...(isLmResizerEnabled() ? { maxOutputBytes: resolveLmResizerMaxInputChars() } : {}),
     }, signal);
   }
 

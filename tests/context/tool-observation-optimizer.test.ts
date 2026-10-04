@@ -147,6 +147,26 @@ describe('ToolObservationOptimizer', () => {
     expect(result.content).toContain('lm-resizer CCR abc123');
   });
 
+  it('a reduced view that says "make: completed" for a failed command still shows exit status and the cause', async () => {
+    const big = `${'ligne ok\n'.repeat(8_000)}echec: connexion refusee (src/db/pool.ts:412)\n${'ligne ok\n'.repeat(8_000)}`;
+    const runner = vi.fn(async () => ({
+      compressed: 'make: completed', originalBytes: big.length, compressedBytes: 15, bytesSaved: big.length - 15,
+      hash: 'h1', toolName: 'bash', command: 'make test', exitCode: 2, filter: 'make', filteredBytes: 15,
+      savingsRatio: 1, candidateBytes: 15, candidateDeltaBytes: 0, compressionSteps: [], cacheKeys: ['h1'],
+      accepted: true, transport: 'cli' as const,
+    }));
+    const optimizer = new ToolObservationOptimizer({ enabled: true, lmResizer: runner });
+    const failed = await optimizer.optimize({
+      toolName: 'bash', toolCallId: 'c1', command: 'make test', output: big, success: false, exitCode: 2,
+    });
+    expect(failed.content).toMatch(/^\[command failed: exit 2\]/);
+    expect(failed.content).toContain('echec: connexion refusee (src/db/pool.ts:412)');
+    expect(failed.content).toContain('make: completed');
+    // A success is never decorated.
+    const ok = await optimizer.optimize({ toolName: 'bash', toolCallId: 'c2', command: 'make test', output: big, success: true });
+    expect(ok.content).not.toContain('[command failed');
+  });
+
   it('keeps even a large failure raw when compressLargeFailures is false', async () => {
     const runner = vi.fn();
     const optimizer = new ToolObservationOptimizer({ enabled: true, lmResizer: runner, compressLargeFailures: false });
