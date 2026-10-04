@@ -163,7 +163,7 @@ export const STR_REPLACE_EDITOR_TOOL: CodeBuddyTool = {
         },
         replace_all: {
           type: "boolean",
-          description: "Replace all occurrences (default: false, only replaces first occurrence)",
+          description: "Replace all occurrences (default: false; then old_str must be unique in the file, otherwise the edit is refused)",
         },
       },
       required: ["path", "old_str", "new_str"],

@@ -118,7 +118,18 @@ export class MultiEditTool {
         };
       }
 
-      // Replace only the first occurrence (native Edit-tool semantics). Use a
+      const occurrences = content.split(old_string).length - 1;
+      if (occurrences > 1) {
+        return {
+          success: false,
+          error: `Edit #${i + 1} failed: ${occurrences} occurrences de old_string : ajoute du contexte pour la rendre unique.\n` +
+            `  old_string: "${old_string.length > 80 ? old_string.slice(0, 80) + '...' : old_string}"\n` +
+            `  file: ${filePath}\n` +
+            `No changes were applied (atomic rollback).`,
+        };
+      }
+
+      // Exactly one occurrence here (ambiguity refused above). Use a
       // replacement FUNCTION so `$`-patterns in new_string ($&, $$, $`, $', $n)
       // are inserted verbatim — passing it as a string would let String.replace
       // expand them and corrupt the edit (e.g. "$&" would insert the matched

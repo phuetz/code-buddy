@@ -370,10 +370,30 @@ describe('reprise 1 — le remplacement est épissé à la fenêtre trouvée, pa
     expect(readText('l.txt')).toBe(`${l1}\nOK\n`);
   });
 
-  it('exact : le comportement reste celui de la première occurrence', async () => {
+  it('exact : plusieurs occurrences sans replace_all = refus explicite, fichier intact', async () => {
     write('e.txt', 'a b a b\n');
     const r = await editor.strReplace(file('e.txt'), 'a b', 'X');
-    expect(r.success).toBe(true);
-    expect(readText('e.txt')).toBe('X a b\n');
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/2 occurrences/);
+    expect(readText('e.txt')).toBe('a b a b\n');
+  });
+
+  it('exact : replace_all reste permis, et une occurrence unique aussi', async () => {
+    write('e.txt', 'a b a b\n');
+    expect((await editor.strReplace(file('e.txt'), 'a b', 'X', true)).success).toBe(true);
+    expect(readText('e.txt')).toBe('X X\n');
+    expect((await editor.strReplace(file('e.txt'), 'X X', 'Y')).success).toBe(true);
+    expect(readText('e.txt')).toBe('Y\n');
+  });
+
+  it('multi_edit : une édition ambiguë annule tout, y compris les précédentes', async () => {
+    write('e.txt', 'one\na b\na b\n');
+    const r = await multi.execute(file('e.txt'), [
+      { old_string: 'one', new_string: 'ONE' },
+      { old_string: 'a b', new_string: 'X' },
+    ]);
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/Edit #2.*2 occurrences/);
+    expect(readText('e.txt')).toBe('one\na b\na b\n');
   });
 });

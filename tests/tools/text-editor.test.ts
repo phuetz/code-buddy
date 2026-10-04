@@ -242,15 +242,16 @@ describe('TextEditorTool', () => {
       expect(content).toBe('Hello Universe');
     });
 
-    it('should replace first occurrence by default', async () => {
+    it('should refuse several occurrences without replaceAll', async () => {
       const filePath = path.join(tmpDir, 'multi-replace.txt');
       await fs.writeFile(filePath, 'foo bar foo baz foo');
 
       const result = await editor.strReplace(filePath, 'foo', 'qux');
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('3 occurrences');
 
       const content = await fs.readFile(filePath, 'utf-8');
-      expect(content).toBe('qux bar foo baz foo');
+      expect(content).toBe('foo bar foo baz foo');
     });
 
     it('should replace all occurrences when replaceAll is true', async () => {

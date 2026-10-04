@@ -276,6 +276,15 @@ export class TextEditorTool implements Disposable {
           error: "Internal error: the matched text is not at the reported offset. Nothing was changed.",
         };
       }
+      // Ambiguïté (match exact) : sans replace_all, plusieurs occurrences = on ne devine pas
+      // laquelle viser (comme Claude Code : demander plus de contexte).
+      const occurrences = content.split(oldStr).length - 1;
+      if (!approximate && occurrences > 1 && !replaceAll) {
+        return {
+          success: false,
+          error: `${occurrences} occurrences de old_str : ajoute du contexte pour la rendre unique, ou utilise replace_all. Le fichier n'a pas été modifié.`,
+        };
+      }
       const applyEdit = (): string =>
         replaceAll
           ? content.split(oldStr).join(newStr)
@@ -293,7 +302,6 @@ export class TextEditorTool implements Disposable {
         };
       }
 
-      const occurrences = (content.match(new RegExp(oldStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
 
       const sessionFlags = this.confirmationService.getSessionFlags();
       if (!sessionFlags.fileOperations && !sessionFlags.allOperations) {
