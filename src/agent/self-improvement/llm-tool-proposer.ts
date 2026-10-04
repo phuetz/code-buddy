@@ -111,15 +111,8 @@ export class LlmToolProposer implements ToolProposer {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
         try {
-          const { detectProviderFromEnv } = await import('../../utils/provider-detector.js');
-          const { CodeBuddyClient } = await import('../../codebuddy/client.js');
-          const detected = detectProviderFromEnv();
-          if (!detected) return null;
-          return new CodeBuddyClient(
-            detected.apiKey,
-            detected.defaultModel,
-            detected.baseURL,
-          ) as unknown as MinimalClient;
+          const { createAuxiliaryClient } = await import('../../providers/auxiliary-llm.js');
+          return createAuxiliaryClient('tools') as unknown as MinimalClient;
         } catch {
           return null;
         }

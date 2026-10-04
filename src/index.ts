@@ -25,6 +25,7 @@ import {
 } from './cli/command-routing.js';
 import { attachUnknownOptionHint } from './cli/unknown-option-hint.js';
 import { parseListenPort } from './cli/listen-port.js';
+import { detachHeadlessSwitchFromFollowingOption } from './cli/headless-argv.js';
 import {
   hoistPermissionModeOption,
   installPermissionModeActionHook,
@@ -1341,7 +1342,7 @@ async function processPromptHeadless(
       const { runSessionEndFlush } = await import('./agent/session-end-flush.js');
       const flushTimeoutMs = parseInt(process.env.CODEBUDDY_SESSION_END_FLUSH_TIMEOUT_MS || '15000', 10);
       await Promise.race([
-        runSessionEndFlush({ chatHistory: chatEntries }),
+        runSessionEndFlush({ chatHistory: chatEntries, client: agent.getClient() }),
         new Promise<void>((resolve) => setTimeout(resolve, flushTimeoutMs).unref()),
       ]);
     } catch (e) {
@@ -1854,10 +1855,16 @@ program
     "--channel <name>",
     "Start with a messaging channel (telegram, discord, slack, …)"
   )
+  .addOption(
+    new Option(
+      "--headless",
+      "process the positional message and exit; used when -p would otherwise swallow the next option",
+    ).hideHelp(),
+  )
   .action(async (message, options) => {
     const unknownCommand = getNonInteractiveUnknownCommand({
       positionalArgs: Array.isArray(message) ? message : undefined,
-      hasExplicitPrompt: Boolean(options.prompt || options.print),
+      hasExplicitPrompt: Boolean(options.prompt || options.print || options.headless),
       stdinIsTTY: process.stdin.isTTY,
       stdoutIsTTY: process.stdout.isTTY,
     });
@@ -2132,7 +2139,7 @@ program
         // model, and TTS choices before seeing the coding agent work.
         const interactive =
           Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY) &&
-          !options.prompt && !options.print &&
+          !options.prompt && !options.print && !options.headless &&
           process.env.CI !== 'true' && process.env.GITHUB_ACTIONS !== 'true';
 
         const { recoverFirstRunWithChatGpt } = await import('./cli/first-run.js');
@@ -2309,8 +2316,12 @@ program
       }
 
       // Merge --print alias into --prompt
-      const promptArg = options.prompt || options.print;
-      const hasExplicitPrompt = Boolean(promptArg || (Array.isArray(message) && message.length > 0));
+      const promptArg = [options.prompt, options.print].find(
+        (value): value is string => typeof value === 'string' && value.trim().length > 0,
+      );
+      const hasExplicitPrompt = Boolean(
+        promptArg || options.headless || (Array.isArray(message) && message.length > 0),
+      );
 
       // Check for piped input (like mistral-vibe: cat file.txt | grok)
       // Avoid blocking on stdin when an explicit prompt is already provided
@@ -2333,7 +2344,7 @@ program
       ].filter(Boolean).join('\n\n');
 
       // Headless mode: process prompt and exit (if prompt, message, or piped input provided)
-      if (combinedPrompt && (promptArg || pipedInput)) {
+      if (combinedPrompt && (promptArg || pipedInput || options.headless)) {
         // `--compact` asks for the shortest possible prompt, whatever the
         // provider. The mode already existed but was only reachable against a
         // local runtime. Measured on a one-sentence question against a remote
@@ -2667,7 +2678,10 @@ program
             void (async () => {
               try {
                 await Promise.race([
-                  sessionEndFlush.runSessionEndFlush({ chatHistory: agent.getChatHistory() }),
+                  sessionEndFlush.runSessionEndFlush({
+                    chatHistory: agent.getChatHistory(),
+                    client: agent.getClient(),
+                  }),
                   new Promise<void>((resolve) => setTimeout(resolve, 8000).unref()),
                 ]);
               } catch (_err) { /* never block exit on the flush */ }
@@ -4536,7 +4550,7 @@ installPermissionModeActionHook(program, async (mode) => {
 
 // Apply the profile before parsing so it governs root chat, lazy subcommands,
 // slash-command menus, tool selection, and `buddy --help` consistently.
-process.argv = hoistPermissionModeOption(process.argv);
+process.argv = detachHeadlessSwitchFromFollowingOption(hoistPermissionModeOption(process.argv));
 preloadRequestedProfile(process.argv);
 
 function isRootHelpRequest(argv: readonly string[]): boolean {

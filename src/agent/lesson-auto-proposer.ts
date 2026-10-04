@@ -14,7 +14,7 @@
  */
 
 import { CodeBuddyClient } from '../codebuddy/client.js';
-import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { selectAuxiliaryClient } from '../providers/auxiliary-llm.js';
 import type { ChatEntry } from './types.js';
 import {
   getLessonCandidateQueue,
@@ -78,16 +78,10 @@ export async function proposeLessonsFromSession(
 ): Promise<LessonCandidate[]> {
   if (!chatHistory || chatHistory.length === 0) return [];
 
-  let llm: CodeBuddyClient;
-  if (client) {
-    llm = client;
-  } else {
-    const detected = detectProviderFromEnv();
-    if (!detected) {
-      logger.debug('[lesson-auto-proposer] no provider configured; skipping');
-      return [];
-    }
-    llm = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+  const llm = selectAuxiliaryClient('lessons', client);
+  if (!llm) {
+    logger.debug('[lesson-auto-proposer] no provider configured; skipping');
+    return [];
   }
 
   let reply: string;

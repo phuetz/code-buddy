@@ -3,6 +3,7 @@ import {
   CHATGPT_RESPONSES_BASE_URL,
   CodeBuddyClient,
 } from '../codebuddy/client.js';
+import { isAuxiliaryLocalOnly } from '../providers/auxiliary-llm.js';
 
 export interface GoalJudgeProviderInfo {
   apiKey: string;
@@ -33,6 +34,7 @@ export function shouldUseStandaloneChatGptJudge(
   agentProvider?: GoalJudgeProviderInfo,
   currentClient?: GoalJudgeClientLike | null
 ): boolean {
+  if (isAuxiliaryLocalOnly()) return false;
   if (!isChatGptJudgeModel(judgeModel)) return false;
   if (isChatGptProvider(agentProvider)) return false;
   const currentModel = currentClient?.getCurrentModel?.();

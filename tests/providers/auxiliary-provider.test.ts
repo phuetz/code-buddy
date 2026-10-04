@@ -1,10 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   createAuxiliaryChatOptions,
   createAuxiliaryCodeBuddyClient,
   resolveRuntimeAuxiliaryProvider,
 } from '../../src/providers/auxiliary-provider.js';
 import { resolveProviderFromCatalog } from '../../src/providers/provider-catalog.js';
+import { setSessionLlmRoute } from '../../src/providers/session-llm-route.js';
+
+afterEach(() => {
+  setSessionLlmRoute(null);
+});
 
 describe('runtime auxiliary provider resolution', () => {
   it('uses the main provider for auto auxiliary tasks by default', () => {
@@ -32,6 +37,38 @@ describe('runtime auxiliary provider resolution', () => {
       model: 'gpt-4o-mini',
       timeoutMs: 120_000,
     });
+  });
+
+  it('keeps auto vision on the session instead of a connected OpenRouter key', () => {
+    setSessionLlmRoute({
+      apiKey: 'sk-session',
+      model: 'deepseek/deepseek-v4.1-flash',
+      baseURL: 'https://openrouter.ai/api/v1',
+      provider: 'grok',
+    });
+
+    const resolved = resolveRuntimeAuxiliaryProvider({
+      task: 'vision',
+      hasChatGptOAuth: true,
+      env: { OPENROUTER_API_KEY: 'openrouter-key' },
+    });
+
+    expect(resolved).toMatchObject({
+      provider: 'grok',
+      apiKey: 'sk-session',
+      model: 'deepseek/deepseek-v4.1-flash',
+      baseURL: 'https://openrouter.ai/api/v1',
+    });
+  });
+
+  it('does not send auto compression to ChatGPT when local-only is set', () => {
+    const resolved = resolveRuntimeAuxiliaryProvider({
+      task: 'compression',
+      hasChatGptOAuth: true,
+      env: { CODEBUDDY_LOCAL_ONLY: 'true' },
+    });
+
+    expect(resolved).toBeNull();
   });
 
   it('prefers OpenRouter for auto vision when OpenRouter is configured', () => {

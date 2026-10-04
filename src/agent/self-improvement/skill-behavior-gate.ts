@@ -76,11 +76,10 @@ export async function evaluateSkillBehavior(content: string, tasks: readonly Ski
   const cases: SkillBehaviorResult['cases'] = [];
   if (!tasks.length) return { accepted: false, wins: 0, losses: 0, tested: 0, cases, error: 'No curated behavioral tasks for this scenario' };
   if (!client) {
-    const { detectProviderFromEnv } = await import('../../utils/provider-detector.js');
-    const provider = detectProviderFromEnv();
-    if (!provider) return { accepted: false, wins: 0, losses: 0, tested: 0, cases, error: 'Behavioral validation requires a configured provider' };
-    const { CodeBuddyClient } = await import('../../codebuddy/client.js');
-    client = new CodeBuddyClient(provider.apiKey, provider.defaultModel, provider.baseURL) as unknown as SkillBehaviorClient;
+    const { createAuxiliaryClient } = await import('../../providers/auxiliary-llm.js');
+    const resolved = createAuxiliaryClient('skills');
+    if (!resolved) return { accepted: false, wins: 0, losses: 0, tested: 0, cases, error: 'Behavioral validation requires a configured provider' };
+    client = resolved as unknown as SkillBehaviorClient;
   }
   for (const task of tasks) {
     const before = await runArm(client, task);

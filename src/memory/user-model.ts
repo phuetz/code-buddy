@@ -29,7 +29,7 @@ import path from 'path';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { CodeBuddyClient } from '../codebuddy/client.js';
-import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { createAuxiliaryClient } from '../providers/auxiliary-llm.js';
 import {
   isBackgroundWritesEnabled,
   promoteObservations,
@@ -474,12 +474,12 @@ export async function runUserDialecticInference(
   if (client) {
     llmClient = client;
   } else {
-    const detected = detectProviderFromEnv();
-    if (!detected) {
+    const resolved = createAuxiliaryClient('user_model');
+    if (!resolved) {
       logger.warn('[user-model] No LLM provider configuration found. Skipping dialectic inference.');
       return [];
     }
-    llmClient = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+    llmClient = resolved;
   }
 
   // Format transcript for the prompt

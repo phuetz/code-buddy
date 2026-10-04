@@ -69,7 +69,8 @@ export function buildTrailerPlannerUserPrompt(
 
 async function defaultProvider(system: string, user: string): Promise<string> {
   const { resolveCommandProvider } = await import('../../commands/llm-provider-resolution.js');
-  const resolved = resolveCommandProvider({});
+  const { overrideAuxiliaryCommandProvider } = await import('../../providers/auxiliary-llm.js');
+  const resolved = overrideAuxiliaryCommandProvider('trailer', resolveCommandProvider({}));
   if (!resolved) {
     throw new Error(
       'Aucun modèle LLM configuré pour planifier la bande-annonce. Lancez `buddy login` ou configurez un provider.',

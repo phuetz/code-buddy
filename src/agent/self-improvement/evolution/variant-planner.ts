@@ -155,11 +155,9 @@ export async function planVariant(
 function makeDefaultChat(model?: string): PlanChat {
   return async (prompt: string): Promise<string | null> => {
     try {
-      const { detectProviderFromEnv } = await import('../../../utils/provider-detector.js');
-      const { CodeBuddyClient } = await import('../../../codebuddy/client.js');
-      const detected = detectProviderFromEnv();
-      if (!detected) return null;
-      const client = new CodeBuddyClient(detected.apiKey, model ?? detected.defaultModel, detected.baseURL);
+      const { createAuxiliaryClient } = await import('../../../providers/auxiliary-llm.js');
+      const client = createAuxiliaryClient('variant', model);
+      if (!client) return null;
       const resp = await client.chat(
         [
           { role: 'system', content: 'Tu es un planificateur d\'amélioration de code. Réponds uniquement en JSON.' },

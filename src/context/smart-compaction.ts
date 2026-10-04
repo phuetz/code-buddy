@@ -566,19 +566,22 @@ export class SmartCompactionEngine extends EventEmitter {
     // it can't be crowded out (whether the body is extractive or LLM-rewritten).
     const failuresSection = this.buildFailedToolAttemptsSection(messages);
 
-    // Try to use LLM for a better summary if we can dynamically load a simple client
+    // Résumé LLM uniquement sur la session ou un rôle explicite. Une clé Gemini
+    // présente dans l'environnement ne doit pas emporter l'historique ailleurs.
     try {
-        const { GoogleGenerativeAI } = await import('@google/generative-ai');
-        const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-        if (API_KEY) {
-            const genAI = new GoogleGenerativeAI(API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const { clientFromDecision, resolveAuxiliaryLlm } = await import('../providers/auxiliary-llm.js');
+        const decision = resolveAuxiliaryLlm({ role: 'compression', allowAmbient: false });
+        const client = clientFromDecision(decision);
+        if (client) {
             const prompt = `Summarize the following chat history densely in one short paragraph. Focus on the core problem, tools used, and final resolution. Do not include pleasantries. If a "Failed tool attempts (do not retry)" section is present, preserve it verbatim at the end.\n\nChat History:\n${basicSummary}`;
-            const result = await model.generateContent(prompt);
-            const llmSummary = result.response.text().trim();
-            // Deterministically re-attach failures so preservation never depends
-            // on the LLM honouring the instruction.
-            return failuresSection ? `${llmSummary}\n${failuresSection}` : llmSummary;
+            const result = await client.chat([
+              { role: 'user', content: prompt },
+            ]);
+            const raw = result.choices[0]?.message?.content;
+            const llmSummary = typeof raw === 'string' ? raw.trim() : '';
+            if (llmSummary) {
+              return failuresSection ? `${llmSummary}\n${failuresSection}` : llmSummary;
+            }
         }
     } catch (_e) {
         logger.debug("LLM summarization failed, falling back to basic summary");

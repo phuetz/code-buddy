@@ -55,7 +55,8 @@ function buildUser(kind: string, sample: unknown, brief?: string): string {
 async function defaultChat(env: NodeJS.ProcessEnv): Promise<WidgetChat | null> {
   try {
     const { resolveCommandProvider } = await import('../commands/llm-provider-resolution.js');
-    const resolved = resolveCommandProvider({});
+    const { overrideAuxiliaryCommandProvider } = await import('../providers/auxiliary-llm.js');
+    const resolved = overrideAuxiliaryCommandProvider('widgets', resolveCommandProvider({}));
     if (!resolved) return null;
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
     const client = new CodeBuddyClient(resolved.apiKey, resolved.model, resolved.baseURL);

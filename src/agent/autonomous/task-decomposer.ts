@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { CodeBuddyClient, CodeBuddyMessage } from '../../codebuddy/client.js';
-import { detectProviderFromEnv } from '../../utils/provider-detector.js';
+import { createAuxiliaryClient } from '../../providers/auxiliary-llm.js';
 import { AgenticCodingTaskContract } from './agentic-coding-contract.js';
 import { extractJson } from './edit-proposal-producer.js';
 
@@ -37,11 +37,11 @@ export async function decomposeTask(
   if (customClient) {
     client = customClient;
   } else {
-    const detected = detectProviderFromEnv();
-    if (!detected) {
+    const resolved = createAuxiliaryClient('decompose');
+    if (!resolved) {
       throw new Error('No LLM provider configuration found in environment.');
     }
-    client = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+    client = resolved;
   }
 
   const systemPrompt = `You are a Senior software architect who decomposes large, complex coding tasks into a sequence of smaller, independent, and verifiable sub-tasks.

@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { CodeBuddyClient } from '../codebuddy/client.js';
-import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { createAuxiliaryClient } from '../providers/auxiliary-llm.js';
 import { AgenticCodingTaskContract } from './autonomous/agentic-coding-contract.js';
 
 const execFileAsync = promisify(execFile);
@@ -203,11 +203,7 @@ async function evaluateScopeForContract(
 }
 
 function createEnvClient(): CodeBuddyClient | null {
-  const detected = detectProviderFromEnv();
-  if (!detected) {
-    return null;
-  }
-  return new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+  return createAuxiliaryClient('scope');
 }
 
 async function evaluateRulesSemantically(

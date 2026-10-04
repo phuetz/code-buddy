@@ -114,7 +114,8 @@ function normalizeGeneratedIntent(raw: unknown, description: string): GeneratedI
 
 async function defaultChat(system: string, user: string, model?: string): Promise<string> {
   const { resolveCommandProvider } = await import('../commands/llm-provider-resolution.js');
-  const resolved = resolveCommandProvider(model ? { explicitModel: model } : {});
+  const { overrideAuxiliaryCommandProvider } = await import('../providers/auxiliary-llm.js');
+  const resolved = overrideAuxiliaryCommandProvider('intents', resolveCommandProvider(model ? { explicitModel: model } : {}), model);
   if (!resolved) {
     throw new Error(
       'No LLM provider is configured. Run `buddy login` or configure a provider API key.',
