@@ -14,6 +14,7 @@ import {
   foldUnicodeForScan,
   sliceScanWindows,
 } from './text-deobfuscation.js';
+import { analyzeShellCommandWords, type ShellWordFindingKind } from './shell-command-words.js';
 
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
@@ -697,10 +698,74 @@ export function scanSkillContent(content: string, filePath: string, executableCo
   // and other patterns on the same line remain visible.
   findings.push(...collectMultilineBackticks(content, filePath, contexts, findings));
   findings.push(...collectPromptInjectionFindings(content, filePath, findings, contexts));
+  // Last: a launcher already reported on its line by the spelling-based
+  // detectors counts once, not twice.
+  findings.push(...collectShellCommandWordFindings(content, filePath, contexts, findings));
   return { file: filePath, findings, scannedAt: Date.now(), textRead: true };
 }
 
 /** Backticks are interpreter syntax; decoding prose must not manufacture them. */
+const STRUCTURAL_SHELL_PATTERNS = new Set<string>(['non-literal-command-word', 'interpreter-command-word', 'unparseable-shell']);
+const STRUCTURAL_SHELL_DESCRIPTIONS: Record<ShellWordFindingKind, string> = {
+  'non-literal-command-word': 'Shell command word is not a plain literal (expansion, quote, escape, glob or substitution): the executed program cannot be known statically',
+  'interpreter-command-word': 'Shell command word is an interpreter or a file-sourcing builtin that can execute a copied payload',
+  'unparseable-shell': 'Shell text cannot be split safely into simple commands (fail closed)',
+};
+const SHELL_EXTENSIONS_WITHOUT_LANGUAGE = new Set(['.ksh', '.fish', '.dash', '.ash', '.csh', '.tcsh']);
+
+/**
+ * Structural, closed-by-default check: every word in COMMAND position of a
+ * shell script (or of a fenced shell block) must be a plain literal, and a
+ * literal must not be an interpreter. No list of forbidden spellings.
+ */
+function collectShellCommandWordFindings(content: string, filePath: string, contexts: ScanContext[], existing: ScanFinding[]): ScanFinding[] {
+  const lines = content.split('\n');
+  const regions: Array<{ from: number; text: string }> = [];
+  const first = contexts[0];
+  if (!first) return [];
+  if (!first.markdown) {
+    const extension = path.extname(filePath).toLowerCase();
+    if (SHELL_LANGUAGES.has(first.language) || SHELL_EXTENSIONS_WITHOUT_LANGUAGE.has(extension)) {
+      regions.push({ from: 1, text: content });
+    }
+  } else {
+    let current: { from: number; lines: string[] } | null = null;
+    const flush = (): void => {
+      if (current) regions.push({ from: current.from, text: current.lines.join('\n') });
+      current = null;
+    };
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      const isFence = /^\s*(?:`{3,}|~{3,})/.test(line);
+      if (!isFence && SHELL_LANGUAGES.has(contexts[i]!.language)) {
+        if (!current) current = { from: i + 1, lines: [] };
+        current.lines.push(line);
+      } else {
+        flush();
+      }
+    }
+    flush();
+  }
+  const findings: ScanFinding[] = [];
+  for (const region of regions) {
+    for (const item of analyzeShellCommandWords(region.text, region.from)) {
+      if (!first.markdown && existing.some(f => !f.documentary && f.line === item.line && f.pattern === 'shell-interpreter')) continue;
+      findings.push({
+        severity: 'high',
+        pattern: item.kind,
+        description: STRUCTURAL_SHELL_DESCRIPTIONS[item.kind],
+        file: filePath,
+        line: item.line,
+        evidence: `${(lines[item.line - 1] ?? '').trim().slice(0, 100)} [${item.word}]`.slice(0, 120),
+        // Same policy as every launcher finding: a fenced block of a document
+        // is guidance kept for review; a copied script is an active quarantine.
+        ...(first.markdown ? { documentary: true } : {}),
+      });
+    }
+  }
+  return findings;
+}
+
 function collectMultilineBackticks(content: string, filePath: string, contexts: ScanContext[], existing: ScanFinding[]): ScanFinding[] {
   const lines = content.split('\n');
   const findings: ScanFinding[] = [];
@@ -1063,6 +1128,7 @@ function inferCapabilities(findings: ScanFinding[]): SkillFirewallCapability[] {
   for (const finding of findings) {
     const pattern = DANGEROUS_PATTERNS.find((item) => item.name === finding.pattern);
     if (pattern) capabilities.add(pattern.capability);
+    else if (STRUCTURAL_SHELL_PATTERNS.has(finding.pattern)) capabilities.add('shell');
   }
   return [...capabilities].sort();
 }
