@@ -63,6 +63,15 @@ const accepted = [];
 const usedAllow = new Set();
 const moderates = [];
 
+const urlToPkg = new Map();
+for (const v of Object.values(vulns)) {
+  for (const via of v.via || []) {
+    if (typeof via === 'object' && via.url) {
+      urlToPkg.set(via.url, via.name);
+    }
+  }
+}
+
 // npm propagates advisory severity to parent packages, sometimes through cycles.
 // An exception must name ALL actual advisories, including inherited ones, so a
 // newly published advisory cannot silently reuse an unrelated package exception.
@@ -108,6 +117,17 @@ for (const [name, v] of Object.entries(vulns)) {
   }
   if (!entry.reason?.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(entry.reviewedOn ?? '') || entry.reviewedOn > today) {
     failures.push(`${name} [high] — exception needs a rationale and a dated review`);
+    continue;
+  }
+  const missingCoverage = entry.advisories?.find(url => {
+    const ghsa = url.split('/').pop();
+    const pkg = urlToPkg.get(url) || '';
+    return !entry.reason.includes(ghsa) && (!pkg || !entry.reason.includes(pkg));
+  });
+  if (missingCoverage) {
+    const ghsa = missingCoverage.split('/').pop();
+    const pkg = urlToPkg.get(missingCoverage) || 'unknown';
+    failures.push(`${name} [high] — reason must explicitly name advisory ${ghsa} or package ${pkg}`);
     continue;
   }
   // A tooling-only exception must never hide a vulnerable runtime instance.
