@@ -96,17 +96,18 @@ describe('contexte en ajout seul', () => {
     expect(String(messages[3]?.content)).toContain('/tmp/beta');
   });
 
-  it('oublie un todo identique et garde le premier, sans persister le ton du tour', () => {
+  it('n’ajoute pas un todo identique au dernier bloc, et laisse le ton du tour hors historique', () => {
+    const todo = '<context type="todo">\n<todo_context>\nfaire\n</todo_context>\n</context>';
     const history = [
       { role: 'system' as const, content: 'stable' },
       { role: 'user' as const, content: 'premier' },
-      { role: 'system' as const, content: '<context type="todo">\n<todo_context>\nfaire\n</todo_context>\n</context>' },
+      { role: 'system' as const, content: todo },
     ];
     const outbound = [
       ...history,
       { role: 'assistant' as const, content: 'ok' },
       { role: 'user' as const, content: 'suite' },
-      { role: 'system' as const, content: '<context type="todo">\n<todo_context>\nfaire\n</todo_context>\n</context>' },
+      { role: 'system' as const, content: todo },
       { role: 'system' as const, content: '<interaction_context ephemeral="true">\ncalme\n</interaction_context>' },
     ];
     const provider = sealAppendOnlyTranscript(history, outbound);
@@ -116,8 +117,80 @@ describe('contexte en ajout seul', () => {
     expect(JSON.stringify(provider.slice(0, 3))).toBe(JSON.stringify([
       { role: 'system', content: 'stable' },
       { role: 'user', content: 'premier' },
-      { role: 'system', content: '<context type="todo">\n<todo_context>\nfaire\n</todo_context>\n</context>' },
+      { role: 'system', content: todo },
     ]));
+  });
+
+  it('laisse A en dernier quand le todo revient de A,B à A', () => {
+    const todo = (body: string) =>
+      `<context type="todo">\n<todo_context>\n${body}\n</todo_context>\n</context>`;
+    const history = [
+      { role: 'system' as const, content: 'stable' },
+      { role: 'user' as const, content: 't1' },
+      { role: 'system' as const, content: todo('A') },
+    ];
+    const first = sealAppendOnlyTranscript(history, history);
+    const firstCount = first.length;
+    const firstJson = JSON.stringify(first);
+
+    history.push(
+      { role: 'assistant' as const, content: 'ok' },
+      { role: 'user' as const, content: 't2' },
+      { role: 'system' as const, content: todo('A\nB') },
+    );
+    const second = sealAppendOnlyTranscript(history, history);
+    expect(JSON.stringify(second.slice(0, firstCount))).toBe(firstJson);
+    const secondCount = second.length;
+    const secondJson = JSON.stringify(second);
+
+    history.push(
+      { role: 'assistant' as const, content: 'ok' },
+      { role: 'user' as const, content: 't3' },
+      { role: 'system' as const, content: todo('A') },
+    );
+    const third = sealAppendOnlyTranscript(history, history);
+    expect(JSON.stringify(third.slice(0, secondCount))).toBe(secondJson);
+    const todos = third.filter(message => String(message.content).includes('<todo_context>'));
+    expect(todos.map(message => message.content)).toEqual([
+      todo('A'),
+      todo('A\nB'),
+      todo('A'),
+    ]);
+    expect(String(third.at(-1)?.content)).toBe(todo('A'));
+  });
+
+  it('ne répète pas une leçon inchangée quand le todo change, et réémet un JIT revenu en arrière', () => {
+    const lesson = '<context type="lessons">\n<lessons_context>\nL\n</lessons_context>\n</context>';
+    const todo = (body: string) =>
+      `<context type="todo">\n<todo_context>\n${body}\n</todo_context>\n</context>`;
+    const jit = (body: string) => `--- Discovered Context ---\n${body}\n--- End Context ---`;
+    const kept = dedupeContextMessages([
+      { role: 'system' as const, content: lesson },
+      { role: 'system' as const, content: todo('A') },
+      { role: 'system' as const, content: jit('v1') },
+      { role: 'system' as const, content: lesson },
+      { role: 'system' as const, content: todo('A\nB') },
+      { role: 'system' as const, content: jit('v2') },
+      { role: 'system' as const, content: jit('v1') },
+    ]);
+    expect(kept.filter(message => String(message.content).includes('lessons'))).toHaveLength(1);
+    expect(kept.filter(message => String(message.content).includes('<todo_context>')).map(message => message.content))
+      .toEqual([todo('A'), todo('A\nB')]);
+    expect(kept.filter(message => String(message.content).includes('Discovered Context')).map(message => message.content))
+      .toEqual([jit('v1'), jit('v2'), jit('v1')]);
+  });
+
+  it('réémet une mémoire revenue à un texte déjà vu', () => {
+    const memory = (note: string) => `<persistent_memory>\nNote: ${note}\n</persistent_memory>`;
+    const messages = [
+      { role: 'system' as const, content: `Consignes stables.\n\n${memory('memoire-stable')}` },
+    ];
+    expect(appendMemoryIfChanged(messages, memory('memoire-apres-changement'))).toBe(true);
+    expect(appendMemoryIfChanged(messages, memory('memoire-stable'))).toBe(true);
+    expect(String(messages[0]?.content)).toContain('memoire-stable');
+    expect(String(messages[0]?.content)).not.toContain('memoire-apres-changement');
+    expect(String(messages.at(-1)?.content)).toBe(memory('memoire-stable'));
+    expect(messages.filter(message => String(message.content).includes('memoire-apres-changement'))).toHaveLength(1);
   });
 
   it('ne déduplique pas deux messages utilisateur identiques', () => {

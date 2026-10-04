@@ -228,21 +228,52 @@ export function appendMemoryIfChanged<T extends TextMessage>(
   if (!found) return false;
   const next = normalizeMemory(found[0]);
   if (!next.includes('<persistent_memory>')) return false;
-  for (const message of messages) {
-    const content = textOf(message);
-    if (message.role !== 'system' || content === null) continue;
-    if (memoryBlocks(content).includes(next)) return false;
-  }
+  if (lastNormalizedMemory(messages) === next) return false;
   messages.push({ role: 'system', content: next } as T);
   return true;
 }
 
+/** Dernière mémoire déjà envoyée, pas une copie plus ancienne. */
+function lastNormalizedMemory(messages: readonly TextMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    const content = textOf(message);
+    if (!message || message.role !== 'system' || content === null) continue;
+    const last = memoryBlocks(content).at(-1);
+    if (last && last.includes('<persistent_memory>')) return last;
+  }
+  return null;
+}
+
 /**
- * Oublie un doublon exact de contexte déjà présent plus tôt. La première
- * occurrence reste : la requête précédente demeure un préfixe.
+ * Marqueur du bloc. Chaque flux (todo, leçon, JIT…) garde son propre dernier
+ * état : un voisin différent ne doit pas faire répéter un bloc inchangé.
+ */
+function contextSlot(content: string): string {
+  const start = content.trimStart();
+  const typed = start.match(/^<context\s+type="([^"]+)"/);
+  if (typed?.[1]) return `type:${typed[1]}`;
+  if (start.startsWith(ENVIRONMENT_OPEN)) return 'environment';
+  if (start.startsWith('<workspace_context>')) return 'workspace';
+  if (start.startsWith('<runtime_settings')) return 'runtime_settings';
+  if (start.startsWith('<persistent_memory>')) return 'persistent_memory';
+  if (start.startsWith('<user_model_context>')) return 'user_model';
+  if (start.startsWith('--- Discovered Context ---')) return 'jit';
+  if (start.startsWith('<code_exec_policy')) return 'code_exec_policy';
+  if (start.startsWith('<context>')) return 'context';
+  for (const marker of CONTEXT_MARKERS) {
+    if (content.includes(marker)) return `marker:${marker}`;
+  }
+  return 'context';
+}
+
+/**
+ * Oublie un contexte seulement s'il répète le dernier bloc déjà retenu pour
+ * le même marqueur. Une valeur identique à un bloc plus ancien est ajoutée :
+ * c'est l'état courant, et l'ajout en fin ne réécrit pas le préfixe.
  */
 export function dedupeContextMessages<T extends TextMessage>(messages: readonly T[]): T[] {
-  const seen = new Set<string>();
+  const lastBySlot = new Map<string, string>();
   const kept: T[] = [];
   for (const message of messages) {
     const content = textOf(message);
@@ -252,8 +283,9 @@ export function dedupeContextMessages<T extends TextMessage>(messages: readonly 
       && isAppendOnlyContext(content)
       && !isUnpersistedTail(content)
     ) {
-      if (seen.has(content)) continue;
-      seen.add(content);
+      const slot = contextSlot(content);
+      if (lastBySlot.get(slot) === content) continue;
+      lastBySlot.set(slot, content);
     }
     kept.push(message);
   }
