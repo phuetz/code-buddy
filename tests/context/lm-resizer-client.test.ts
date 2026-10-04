@@ -269,6 +269,40 @@ describe('robust lm-resizer client', () => {
     expect(warn.mock.calls.filter(([m]) => String(m).includes('supports neither'))).toHaveLength(1);
   });
 
+  it('uses POST /compress on a 0.2.4 sidecar whose /health is a bare {"ok":true}, after the CLI is unavailable', async () => {
+    const content = '{"a":1}\n'.repeat(2_000);
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      urls.push(`${init?.method} ${url}`);
+      if (url.endsWith('/health')) return new Response('{"ok":true}', { status: 200 });
+      expect(JSON.parse(String(init?.body))).toEqual({ content, query: '' });
+      return new Response(JSON.stringify({
+        output: 'short', original_bytes: Buffer.byteLength(content), compressed_bytes: 5,
+        bytes_saved: Buffer.byteLength(content) - 5, cache_keys: ['abc123'],
+      }), { status: 200 });
+    }) as typeof fetch;
+    const runtime = fakeSpawn(() => ({ code: 2 }), 'Usage: lm-resizer tool-output\n');
+
+    const result = await optimizeToolOutputWithLmResizer({ content, toolName: 'bash' }, {
+      httpUrl: 'http://127.0.0.1:8787', fetchImpl, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl,
+    });
+
+    expect(urls).toEqual(['GET http://127.0.0.1:8787/health', 'POST http://127.0.0.1:8787/compress']);
+    expect(result).toMatchObject({ transport: 'http', accepted: true, hash: 'abc123', filter: 'compress' });
+  });
+
+  it('prefers the command-aware CLI over a compress-only sidecar', async () => {
+    const content = 'noise\n'.repeat(2_000);
+    const fetchImpl = vi.fn(async () => new Response('{"ok":true}', { status: 200 })) as typeof fetch;
+    const runtime = fakeSpawn(() => ({ stdout: REPORT_024 }), HELP_ARGV);
+    const result = await optimizeToolOutputWithLmResizer({ content, toolName: 'bash', command: 'journalctl' }, {
+      httpUrl: 'http://127.0.0.1:8787', fetchImpl, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl,
+    });
+    expect(result?.transport).toBe('cli');
+    expect(fetchImpl).toHaveBeenCalledTimes(1); // /health only, no POST
+  });
+
   it('discovers tool-output-v1 and reads the sidecar token from a private file', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'lmr-token-'));
     const tokenFile = join(dir, 'server-token');

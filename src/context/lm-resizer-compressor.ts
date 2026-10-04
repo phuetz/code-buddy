@@ -42,7 +42,15 @@ const circuitStates: Record<Transport, CircuitState> = {
   'compress-cli': { failures: 0, openUntil: 0 },
 };
 
-const sidecarCapabilityCache = new Map<string, number>();
+/**
+ * What a sidecar offers. lm-resizer 0.2.4 `serve` answers `GET /health` with a
+ * bare `{"ok":true}` (no capability list) and only routes /compress, /retrieve,
+ * /stats: it is `compress-only`. A sidecar advertising `tool-output-v1` has the
+ * command-aware POST /tool-output route.
+ */
+export type SidecarKind = 'tool-output' | 'compress-only';
+
+const sidecarCapabilityCache = new Map<string, { until: number; kind: SidecarKind }>();
 
 /** How the installed binary expects `tool-output` to be driven. */
 export type ToolOutputCliMode = 'request-json' | 'argv' | 'unsupported';
@@ -437,11 +445,11 @@ export function resetLmResizerCircuitBreakers(): void {
   cachedTokenFile = null;
 }
 
-function endpointForSidecar(baseUrl: string, route: 'health' | 'tool-output'): string | null {
+function endpointForSidecar(baseUrl: string, route: 'health' | 'tool-output' | 'compress'): string | null {
   try {
     const url = new URL(baseUrl);
     const basePath = url.pathname
-      .replace(/\/(?:health|tool-output)\/?$/, '')
+      .replace(/\/(?:health|tool-output|compress)\/?$/, '')
       .replace(/\/$/, '');
     url.pathname = `${basePath}/${route}`;
     url.search = '';
@@ -504,12 +512,12 @@ async function discoverSidecar(
   fetchImpl: typeof fetch,
   token: string | undefined,
   options: LmResizerClientOptions,
-): Promise<boolean> {
+): Promise<SidecarKind | null> {
   const now = (options.now ?? Date.now)();
-  const cachedUntil = sidecarCapabilityCache.get(baseUrl) ?? 0;
-  if (cachedUntil > now) return true;
+  const cached = sidecarCapabilityCache.get(baseUrl);
+  if (cached && cached.until > now) return cached.kind;
   const endpoint = endpointForSidecar(baseUrl, 'health');
-  if (!endpoint) return false;
+  if (!endpoint) return null;
 
   const scope = abortScope(options.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS, options.signal);
   try {
@@ -520,23 +528,18 @@ async function discoverSidecar(
       headers,
       signal: scope.signal,
     });
-    if (!response.ok) return false;
+    if (!response.ok) return null;
     const raw = await readBoundedResponse(response, 64 * 1024);
-    if (raw === null) return false;
+    if (raw === null) return null;
     const health = JSON.parse(raw) as { ok?: unknown; capabilities?: unknown };
     const capabilities = stringArray(health.capabilities);
-    if (health.ok !== true || !capabilities.includes('tool-output-v1')) {
-      logFailureOnce(
-        'http:capability',
-        `[lm-resizer] HTTP sidecar at ${baseUrl} does not advertise tool-output-v1 (capabilities: ${capabilities.join(',') || 'none'})`,
-      );
-      return false;
-    }
-    sidecarCapabilityCache.set(baseUrl, now + SIDECAR_CAPABILITY_TTL_MS);
-    return true;
+    if (health.ok !== true) return null;
+    const kind: SidecarKind = capabilities.includes('tool-output-v1') ? 'tool-output' : 'compress-only';
+    sidecarCapabilityCache.set(baseUrl, { until: now + SIDECAR_CAPABILITY_TTL_MS, kind });
+    return kind;
   } catch (error) {
     logger.debug(`[lm-resizer] sidecar discovery failed: ${msg(error)}`);
-    return false;
+    return null;
   } finally {
     scope.cleanup();
   }
@@ -545,6 +548,7 @@ async function discoverSidecar(
 async function requestHttp(
   request: WireToolOutputRequest,
   options: LmResizerClientOptions,
+  want: SidecarKind,
 ): Promise<LmResizerToolOutputResult | null> {
   const baseUrl = options.httpUrl === undefined ? resolveLmResizerHttpUrl() : options.httpUrl;
   if (baseUrl === null || !circuitAllows('http', options)) return null;
@@ -552,7 +556,7 @@ async function requestHttp(
   if (process.env.NODE_ENV === 'test' && options.fetchImpl === undefined && options.httpUrl === undefined) {
     return null;
   }
-  const endpoint = endpointForSidecar(baseUrl, 'tool-output');
+  const endpoint = endpointForSidecar(baseUrl, want === 'tool-output' ? 'tool-output' : 'compress');
   if (!endpoint) {
     recordCircuitFailure('http', options);
     return null;
@@ -561,10 +565,13 @@ async function requestHttp(
   if (typeof fetchImpl !== 'function') return null;
 
   const token = resolveLmResizerServerToken(options);
-  if (!await discoverSidecar(baseUrl, fetchImpl, token, options)) {
+  const kind = await discoverSidecar(baseUrl, fetchImpl, token, options);
+  if (kind === null) {
     recordCircuitFailure('http', options);
     return null;
   }
+  // A compress-only sidecar is not a failure: the caller picks another transport.
+  if (kind !== want) return null;
 
   const scope = abortScope(options.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS, options.signal);
   try {
@@ -573,7 +580,9 @@ async function requestHttp(
     const response = await fetchImpl(endpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify(request),
+      body: want === 'tool-output'
+        ? JSON.stringify(request)
+        : JSON.stringify({ content: request.content, query: request.query }),
       signal: scope.signal,
     });
     if (!response.ok) {
@@ -584,17 +593,50 @@ async function requestHttp(
       response,
       options.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES,
     );
-    const parsed = raw === null ? null : parseToolOutputReport(raw, request, 'http');
+    const parsed = raw === null
+      ? null
+      : want === 'tool-output'
+        ? parseToolOutputReport(raw, request, 'http')
+        : compressToToolOutput(parseCompressReport(raw, request.content), request, 'http');
     if (parsed) recordCircuitSuccess('http');
     else recordCircuitFailure('http', options);
     return parsed;
   } catch (error) {
-    logger.debug(`[lm-resizer] HTTP sidecar unavailable: ${msg(error)}`);
+    logFailureOnce('http:request', `[lm-resizer] HTTP sidecar request failed: ${msg(error)}`);
     recordCircuitFailure('http', options);
     return null;
   } finally {
     scope.cleanup();
   }
+}
+
+/** Lift a generic `compress` report into the tool-output shape (savings floor applied here). */
+function compressToToolOutput(
+  report: LmResizerResult | null,
+  original: WireToolOutputRequest,
+  transport: 'http' | 'cli',
+): LmResizerToolOutputResult | null {
+  if (!report) return null;
+  const ratio = report.originalBytes === 0 ? 0 : report.bytesSaved / report.originalBytes;
+  const accepted = report.compressedBytes < report.originalBytes
+    && report.bytesSaved >= original.min_savings_bytes
+    && ratio >= original.min_savings_ratio;
+  return {
+    ...report,
+    toolName: original.tool_name,
+    command: original.command,
+    exitCode: original.exit_code,
+    filter: 'compress',
+    filteredBytes: report.originalBytes,
+    savingsRatio: ratio,
+    candidateBytes: report.compressedBytes,
+    candidateDeltaBytes: report.compressedBytes - report.originalBytes,
+    compressionSteps: [],
+    cacheKeys: report.hash ? [report.hash] : [],
+    accepted,
+    ...(accepted ? {} : { rejectionReason: 'savings below the requested minimum' }),
+    transport,
+  };
 }
 
 interface CliRunResult {
@@ -737,9 +779,20 @@ export async function optimizeToolOutputWithLmResizer(
 ): Promise<LmResizerToolOutputResult | null> {
   if (typeof request.content !== 'string') return null;
   const normalized = normalizeRequest(request);
-  const viaHttp = await requestHttp(normalized, options);
+  const viaHttp = await requestHttp(normalized, options, 'tool-output');
   if (viaHttp) return viaHttp;
 
+  const viaCli = await requestToolOutputCli(normalized, options);
+  if (viaCli) return viaCli;
+
+  // Last resort: a 0.2.4 sidecar only offers the generic POST /compress.
+  return requestHttp(normalized, options, 'compress-only');
+}
+
+async function requestToolOutputCli(
+  normalized: WireToolOutputRequest,
+  options: LmResizerClientOptions,
+): Promise<LmResizerToolOutputResult | null> {
   const mode = await detectToolOutputCliMode(options);
   if (mode === null) return null;
   if (mode === 'unsupported') {

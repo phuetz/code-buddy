@@ -6,7 +6,8 @@
  * 0.2.4 rejected `tool-output --request-json` (exit 2) and every fake-based
  * test stayed green. This test drives the real executable end to end.
  */
-import { execFile } from 'child_process';
+import { execFile, spawn, type ChildProcess } from 'child_process';
+import { createServer } from 'net';
 import { existsSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -70,4 +71,50 @@ describe.skipIf(!hasBin)('lm-resizer contract (real binary)', () => {
     });
     expect(recovered.stdout).toBe(original);
   }, 60_000);
+
+  describe('HTTP sidecar (`lm-resizer serve` on a free port, never the robot\'s 8787)', () => {
+    let server: ChildProcess | undefined;
+    let url = '';
+
+    beforeAll(async () => {
+      const port = await new Promise<number>((resolve, reject) => {
+        const probe = createServer();
+        probe.once('error', reject);
+        probe.listen(0, '127.0.0.1', () => {
+          const { port: free } = probe.address() as { port: number };
+          probe.close(() => resolve(free));
+        });
+      });
+      url = `http://127.0.0.1:${port}`;
+      server = spawn(bin, ['serve', '--bind', `127.0.0.1:${port}`, '--store', join(dir, 'serve.db')], { stdio: 'ignore' });
+      for (let i = 0; i < 100; i++) {
+        try {
+          if ((await fetch(`${url}/health`)).ok) return;
+        } catch { /* not listening yet */ }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error('lm-resizer serve did not come up');
+    }, 20_000);
+    afterAll(() => { server?.kill('SIGTERM'); });
+
+    it('is used although /health carries no capability list (0.2.4: {"ok":true})', async () => {
+      const original = JSON.stringify(Array.from({ length: 5_000 }, (_, i) => ({ id: i, name: 'xxxxxxxxxx', status: 'ok', v: i % 3 })));
+      const result = await optimizeToolOutputWithLmResizer({
+        content: original, toolName: 'bash', command: 'curl api', minSavingsBytes: 1,
+      }, {
+        httpUrl: url,
+        // No usable CLI: forces the HTTP transport.
+        bin: join(dir, 'absent-lm-resizer'),
+        timeoutMs: 20_000,
+        httpTimeoutMs: 20_000,
+      });
+      expect(result).not.toBeNull();
+      expect(result!.transport).toBe('http');
+      expect(result!.accepted).toBe(true);
+      expect(result!.compressedBytes).toBeLessThan(result!.originalBytes / 2);
+      expect(result!.hash).toBeTruthy();
+      const back = await (await fetch(`${url}/retrieve/${result!.hash}`)).json() as { content: string };
+      expect(back.content).toBe(original);
+    }, 60_000);
+  });
 });
