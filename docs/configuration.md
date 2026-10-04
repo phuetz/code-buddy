@@ -192,6 +192,7 @@ remote endpoint's retention policy.
 | `CODEBUDDY_LM_RESIZER_BIN` | Override path to the `lm-resizer` binary | local release build, then PATH |
 | `CODEBUDDY_LM_RESIZER_STORE` | Override the CCR SQLite store used by Code Buddy | `~/.codebuddy/lm-resizer.db` |
 | `CODEBUDDY_LM_RESIZER_URL` / `LM_RESIZER_URL` | HTTP sidecar URL (preferred low-latency transport; CLI is the fallback) | `http://127.0.0.1:8787` |
+| *(contrat CLI, 04/10/2026)* | Le repli CLI exige `lm-resizer` >= 0.2.4 : `tool-output --command <cmd> --exit-code <n> --json --store <db>` avec le texte sur stdin (la forme `--request-json` des anciennes branches est reconnue si l'aide l'annonce). La forme est détectée une fois par processus (`tool-output --help`). Un échec est journalisé en `warn` une seule fois, puis la sortie reste brute. `buddy doctor --integrations` signale un binaire incompatible. Le sidecar HTTP de 0.2.4 n'annonce pas `tool-output-v1` : le CLI sert alors de transport. Une commande de lecture (`cat`, `view_file`) reste littérale par conception ; la compression porte sur les sorties de journaux, de builds, de tests. | — |
 | `CODEBUDDY_LM_RESIZER_TOKEN_FILE` | Private sidecar-token file; rejected when group/world-readable on Unix | `~/.codebuddy/lm-resizer/server-token` |
 | `CODEBUDDY_LM_RESIZER_SERVER_TOKEN` / `CODEBUDDY_LM_RESIZER_TOKEN` | Direct sidecar-token override (sensitive; prefer the token file) | unset |
 | `CODEBUDDY_FALLBACK_PROVIDERS` | Comma-separated provider/model fallbacks, for example `openai:gpt-4o,glm:glm-5-code` | unset |

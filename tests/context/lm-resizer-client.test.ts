@@ -5,7 +5,10 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { PassThrough } from 'stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '../../src/utils/logger.js';
 import {
+  buildArgvToolOutputArgs,
+  classifyToolOutputHelp,
   buildLmResizerSubprocessEnv,
   optimizeToolOutputWithLmResizer,
   resetLmResizerCircuitBreakers,
@@ -50,14 +53,24 @@ function toolReport(original: string, output = 'short result'): string {
   });
 }
 
+/** `lm-resizer tool-output --help` of the published 0.2.4 binary (argv form). */
+const HELP_ARGV =
+  'Usage: lm-resizer tool-output [OPTIONS] --command <COMMAND>\n      --command <COMMAND>  Command that produced the supplied text\n      --json  Emit JSON\n';
+/** Older binaries that read a JSON request on stdin. */
+const HELP_REQUEST_JSON =
+  'Usage: lm-resizer tool-output [OPTIONS]\n      --request-json  Read a JSON request from stdin\n      --json  Emit JSON\n';
+
 function fakeSpawn(
   responder: (call: FakeSpawnCall) => FakeSpawnResponse,
+  help: string = HELP_REQUEST_JSON,
 ): {
   spawnImpl: typeof spawn;
+  probes: FakeSpawnCall[];
   calls: FakeSpawnCall[];
   kills: ReturnType<typeof vi.fn>[];
 } {
   const calls: FakeSpawnCall[] = [];
+  const probes: FakeSpawnCall[] = [];
   const kills: ReturnType<typeof vi.fn>[] = [];
   const spawnImpl = vi.fn((command: string, args: readonly string[], options: Record<string, unknown>) => {
     const child = new EventEmitter() as EventEmitter & {
@@ -77,8 +90,9 @@ function fakeSpawn(
     });
     child.stdin.on('end', () => {
       const call = { command, args: [...args], options, stdin };
-      calls.push(call);
-      const response = responder(call);
+      const isProbe = args.includes('--help');
+      (isProbe ? probes : calls).push(call);
+      const response = isProbe ? { stdout: help } : responder(call);
       queueMicrotask(() => {
         if (response.stdout) child.stdout.write(response.stdout);
         if (response.stderr) child.stderr.write(response.stderr);
@@ -87,7 +101,7 @@ function fakeSpawn(
     });
     return child;
   }) as unknown as typeof spawn;
-  return { spawnImpl, calls, kills };
+  return { spawnImpl, probes, calls, kills };
 }
 
 describe('robust lm-resizer client', () => {
@@ -139,6 +153,120 @@ describe('robust lm-resizer client', () => {
       workspace_root: '/tmp/workspace',
       token_budget: 512,
     });
+  });
+
+  /** Verbatim shape rendered by lm-resizer 0.2.4 (`tool-output --json`), output shortened. */
+  const REPORT_024 = JSON.stringify({
+    tokenizer: 'tiktoken-rs/o200k_base',
+    token_count_method: 'exact',
+    original_tokens: 539987,
+    compressed_tokens: 34,
+    tokens_saved: 539953,
+    command: 'journalctl -u x',
+    exit_code: 0,
+    filter: 'journalctl',
+    original_bytes: 1359978,
+    filtered_bytes: 78,
+    compressed_bytes: 97,
+    bytes_saved: 1359881,
+    compression_steps: [],
+    cache_keys: ['363823ea1a6dfbf6b35e4865'],
+    tee_hint: '[raw: f563cbacfa8a]',
+    output: 'ERROR: connexion refusee vers db-7 (code 111)\n19999 INFO lines; raw: tee list\n[tee:f563cbacfa8a]\n',
+  });
+
+  it('drives lm-resizer 0.2.4 through argv + stdin, without --request-json, probing once', async () => {
+    const content = 'noisy\n'.repeat(2_000);
+    const query = 'private user query that must not enter argv';
+    const runtime = fakeSpawn(() => ({ stdout: REPORT_024 }), HELP_ARGV);
+    const options = { httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl, storePath: '/tmp/s.db' };
+
+    const first = await optimizeToolOutputWithLmResizer({
+      content, toolName: 'bash', command: 'journalctl -u x', query, exitCode: 0,
+    }, options);
+    await optimizeToolOutputWithLmResizer({ content, toolName: 'bash', command: 'journalctl -u x' }, options);
+
+    expect(runtime.probes).toHaveLength(1);
+    expect(runtime.calls).toHaveLength(2);
+    const call = runtime.calls[0]!;
+    expect(call.args).toEqual([
+      'tool-output', '--command=journalctl -u x', '--exit-code=0', '--json', '--store', '/tmp/s.db',
+    ]);
+    expect(call.args).not.toContain('--request-json');
+    expect(call.args.join(' ')).not.toContain(query);
+    expect(call.stdin).toBe(content);
+    expect(first).toMatchObject({
+      transport: 'cli',
+      accepted: true,
+      hash: '363823ea1a6dfbf6b35e4865',
+      filter: 'journalctl',
+      originalBytes: 1359978,
+      compressedBytes: 97,
+      bytesSaved: 1359881,
+    });
+    expect(first?.compressed).toContain('ERROR: connexion refusee');
+  });
+
+  it('keeps the legacy --request-json form when the binary advertises it', async () => {
+    const content = 'noisy\n'.repeat(2_000);
+    const runtime = fakeSpawn(() => ({ stdout: toolReport(content) }), HELP_REQUEST_JSON);
+    await optimizeToolOutputWithLmResizer({ content, toolName: 'bash' }, {
+      httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl,
+    });
+    expect(runtime.calls[0]!.args).toContain('--request-json');
+  });
+
+  it('applies the savings floor itself when 0.2.4 reports no `accepted`', async () => {
+    const content = 'x'.repeat(1_000);
+    const small = JSON.stringify({ original_bytes: 1000, compressed_bytes: 990, bytes_saved: 10, output: 'y'.repeat(990) });
+    const runtime = fakeSpawn(() => ({ stdout: small }), HELP_ARGV);
+    const result = await optimizeToolOutputWithLmResizer({
+      content, toolName: 'bash', command: 'make', minSavingsBytes: 100,
+    }, { httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl });
+    expect(result?.accepted).toBe(false);
+  });
+
+  it('builds a safe argv: option-looking command, NUL bytes, failed command with raw-on-failure', () => {
+    const args = buildArgvToolOutputArgs({
+      content: 'x', tool_name: 'bash', command: '--help\0 now', query: 'q', exit_code: 2,
+      raw_on_failure: true, min_savings_bytes: 1, min_savings_ratio: 0,
+    }, '/s.db');
+    expect(args).toContain('--command=--help now');
+    expect(args).toContain('--exit-code=2');
+    expect(args).toContain('--raw-on-failure');
+  });
+
+  it('classifies the tool-output help text', () => {
+    expect(classifyToolOutputHelp(HELP_ARGV)).toBe('argv');
+    expect(classifyToolOutputHelp(HELP_REQUEST_JSON)).toBe('request-json');
+    expect(classifyToolOutputHelp('Usage: lm-resizer tool-output\n')).toBe('unsupported');
+  });
+
+  it('warns once, then stays at debug level, when the CLI fails (no silent failure)', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const runtime = fakeSpawn(() => ({ code: 2, stderr: 'error: unexpected argument\n' }), HELP_ARGV);
+    const options = {
+      httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl, circuitFailureThreshold: 99,
+    };
+    const content = 'noise\n'.repeat(1_000);
+    expect(await optimizeToolOutputWithLmResizer({ content, toolName: 'bash' }, options)).toBeNull();
+    expect(await optimizeToolOutputWithLmResizer({ content, toolName: 'bash' }, options)).toBeNull();
+    const failures = warn.mock.calls.filter(([m]) => String(m).includes('tool-output-cli failed'));
+    expect(failures).toHaveLength(1);
+    expect(String(failures[0]![0])).toContain('exit 2');
+    expect(String(failures[0]![0])).toContain('unexpected argument');
+  });
+
+  it('reports an incompatible binary once and never runs the request', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const runtime = fakeSpawn(() => ({ stdout: REPORT_024 }), 'Usage: lm-resizer tool-output\n');
+    const options = { httpUrl: null, bin: '/fake/lm-resizer', spawnImpl: runtime.spawnImpl };
+    const content = 'noise\n'.repeat(1_000);
+    expect(await optimizeToolOutputWithLmResizer({ content, toolName: 'bash' }, options)).toBeNull();
+    expect(await optimizeToolOutputWithLmResizer({ content, toolName: 'bash' }, options)).toBeNull();
+    expect(runtime.calls).toHaveLength(0);
+    expect(runtime.probes).toHaveLength(1);
+    expect(warn.mock.calls.filter(([m]) => String(m).includes('supports neither'))).toHaveLength(1);
   });
 
   it('discovers tool-output-v1 and reads the sidecar token from a private file', async () => {
@@ -215,7 +343,8 @@ describe('robust lm-resizer client', () => {
     });
 
     expect(result).toBeNull();
-    expect(runtime.kills[0]).toHaveBeenCalledWith('SIGTERM');
+    expect(runtime.calls).toHaveLength(1);
+    expect(runtime.kills.at(-1)).toHaveBeenCalledWith('SIGTERM');
   });
 
   it('honours AbortSignal and terminates an in-flight CLI request', async () => {
@@ -235,7 +364,7 @@ describe('robust lm-resizer client', () => {
     controller.abort();
 
     await expect(pending).resolves.toBeNull();
-    expect(runtime.kills[0]).toHaveBeenCalledWith('SIGTERM');
+    expect(runtime.kills.at(-1)).toHaveBeenCalledWith('SIGTERM');
   });
 
   it('times out and terminates an unresponsive CLI request', async () => {
@@ -256,7 +385,7 @@ describe('robust lm-resizer client', () => {
       await vi.advanceTimersByTimeAsync(26);
 
       await expect(pending).resolves.toBeNull();
-      expect(runtime.kills[0]).toHaveBeenCalledWith('SIGTERM');
+      expect(runtime.kills.at(-1)).toHaveBeenCalledWith('SIGTERM');
     } finally {
       vi.useRealTimers();
     }

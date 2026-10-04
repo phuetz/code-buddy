@@ -2,7 +2,8 @@
  * Safe client for the Rust `lm-resizer`.
  *
  * The preferred transport is the local HTTP sidecar. When it is unavailable,
- * Code Buddy falls back to `lm-resizer tool-output --request-json`, sending the
+ * Code Buddy falls back to the `lm-resizer tool-output` CLI (the argv form of
+ * 0.2.x, or the older `--request-json` form when the binary advertises it), sending the
  * complete request through stdin. User queries, commands and tool output are
  * therefore never exposed in the process argument list.
  *
@@ -42,6 +43,31 @@ const circuitStates: Record<Transport, CircuitState> = {
 };
 
 const sidecarCapabilityCache = new Map<string, number>();
+
+/** How the installed binary expects `tool-output` to be driven. */
+export type ToolOutputCliMode = 'request-json' | 'argv' | 'unsupported';
+
+/** One probe per binary and per process: `<bin> tool-output --help`. */
+const toolOutputModeCache = new Map<string, Promise<ToolOutputCliMode | null>>();
+
+/** Failures are logged at warn level once per key, then at debug level. */
+const warnedKeys = new Set<string>();
+
+function logFailureOnce(key: string, message: string): void {
+  if (warnedKeys.has(key)) {
+    logger.debug(message);
+    return;
+  }
+  warnedKeys.add(key);
+  logger.warn(`${message} (further occurrences are logged at debug level; observations stay uncompressed)`);
+}
+
+/** Classify the `tool-output --help` text. Pure, exported for tests. */
+export function classifyToolOutputHelp(help: string): ToolOutputCliMode {
+  if (/--request-json\b/.test(help)) return 'request-json';
+  if (/--command\b/.test(help)) return 'argv';
+  return 'unsupported';
+}
 
 interface CachedTokenFile {
   path: string;
@@ -112,7 +138,7 @@ export interface LmResizerClientOptions {
   now?: () => number;
 }
 
-interface WireToolOutputRequest {
+export interface WireToolOutputRequest {
   content: string;
   tool_name: string;
   command: string;
@@ -317,11 +343,17 @@ function parseToolOutputReport(
     ? report.recovery_hash
     : cacheKeys[0];
 
+  // lm-resizer 0.2.x reports no `accepted`: apply the requested savings floor here.
+  const savedBytes = finiteNumber(report.bytes_saved, Math.max(0, originalBytes - compressedBytes));
+  const localAccepted = compressedBytes < originalBytes
+    && savedBytes >= original.min_savings_bytes
+    && (originalBytes === 0 ? 0 : savedBytes / originalBytes) >= original.min_savings_ratio;
+
   return {
     compressed: report.output,
     originalBytes,
     compressedBytes,
-    bytesSaved: finiteNumber(report.bytes_saved, Math.max(0, originalBytes - compressedBytes)),
+    bytesSaved: savedBytes,
     ...(recoveryHash ? { hash: recoveryHash } : {}),
     toolName: typeof report.tool_name === 'string' ? report.tool_name : original.tool_name,
     command: typeof report.command === 'string' ? report.command : original.command,
@@ -337,10 +369,12 @@ function parseToolOutputReport(
     candidateDeltaBytes: finiteNumber(report.candidate_delta_bytes, compressedBytes - originalBytes),
     compressionSteps: stringArray(report.compression_steps),
     cacheKeys,
-    accepted: typeof report.accepted === 'boolean' ? report.accepted : compressedBytes < originalBytes,
+    accepted: typeof report.accepted === 'boolean' ? report.accepted : localAccepted,
     ...(typeof report.rejection_reason === 'string'
       ? { rejectionReason: report.rejection_reason }
-      : {}),
+      : typeof report.accepted !== 'boolean' && !localAccepted
+        ? { rejectionReason: 'savings below the requested minimum' }
+        : {}),
     transport,
   };
 }
@@ -398,6 +432,8 @@ export function resetLmResizerCircuitBreakers(): void {
     state.openUntil = 0;
   }
   sidecarCapabilityCache.clear();
+  toolOutputModeCache.clear();
+  warnedKeys.clear();
   cachedTokenFile = null;
 }
 
@@ -489,7 +525,13 @@ async function discoverSidecar(
     if (raw === null) return false;
     const health = JSON.parse(raw) as { ok?: unknown; capabilities?: unknown };
     const capabilities = stringArray(health.capabilities);
-    if (health.ok !== true || !capabilities.includes('tool-output-v1')) return false;
+    if (health.ok !== true || !capabilities.includes('tool-output-v1')) {
+      logFailureOnce(
+        'http:capability',
+        `[lm-resizer] HTTP sidecar at ${baseUrl} does not advertise tool-output-v1 (capabilities: ${capabilities.join(',') || 'none'})`,
+      );
+      return false;
+    }
     sidecarCapabilityCache.set(baseUrl, now + SIDECAR_CAPABILITY_TTL_MS);
     return true;
   } catch (error) {
@@ -595,7 +637,7 @@ async function runCli(
           stdio: ['pipe', 'pipe', 'pipe'],
         });
       } catch (error) {
-        logger.debug(`[lm-resizer] CLI spawn failed: ${msg(error)}`);
+        logFailureOnce('cli:spawn', `[lm-resizer] CLI spawn failed: ${msg(error)}`);
         return null;
       }
     })();
@@ -626,7 +668,11 @@ async function runCli(
       }
     };
     const fail = (reason: string): void => {
-      logger.debug(`[lm-resizer] CLI ${transport} failed: ${reason}`);
+      const stderrText = Buffer.concat(stderrChunks).toString('utf8').replace(/\s+/g, ' ').trim().slice(0, 200);
+      logFailureOnce(
+        `cli:${transport}`,
+        `[lm-resizer] CLI ${transport} failed: ${reason}${stderrText ? ` — ${stderrText}` : ''}`,
+      );
       terminate();
       recordCircuitFailure(transport, options);
       finish(null);
@@ -694,17 +740,71 @@ export async function optimizeToolOutputWithLmResizer(
   const viaHttp = await requestHttp(normalized, options);
   if (viaHttp) return viaHttp;
 
+  const mode = await detectToolOutputCliMode(options);
+  if (mode === null) return null;
+  if (mode === 'unsupported') {
+    logFailureOnce(
+      'cli:unsupported',
+      `[lm-resizer] ${options.bin ?? resolveLmResizerBin()} supports neither \`tool-output --command\` nor \`--request-json\`: install lm-resizer >= 0.2.4`,
+    );
+    return null;
+  }
+  const args = mode === 'request-json'
+    ? ['tool-output', '--request-json', '--json', '--store', resolveStorePath(options)]
+    : buildArgvToolOutputArgs(normalized, resolveStorePath(options));
   const cli = await runCli(
-    ['tool-output', '--request-json', '--json', '--store', resolveStorePath(options)],
-    JSON.stringify(normalized),
+    args,
+    mode === 'request-json' ? JSON.stringify(normalized) : normalized.content,
     'tool-output-cli',
     options,
     normalized.workspace_root,
   );
   if (!cli || !cli.stdout.trim()) return null;
   const parsed = parseToolOutputReport(cli.stdout, normalized, 'cli');
-  if (!parsed) recordCircuitFailure('tool-output-cli', options);
+  if (!parsed) {
+    logFailureOnce('cli:parse', '[lm-resizer] tool-output returned JSON without an `output` field');
+    recordCircuitFailure('tool-output-cli', options);
+  }
   return parsed;
+}
+
+const MAX_COMMAND_ARG_CHARS = 4_096;
+
+/**
+ * lm-resizer 0.2.x argv form. The captured text travels on stdin. `--name=value`
+ * keeps a command that starts with `-` from being read as an option. The query
+ * is deliberately NOT placed in argv (visible in the process table).
+ */
+export function buildArgvToolOutputArgs(request: WireToolOutputRequest, storePath: string): string[] {
+  const command = (request.command || request.tool_name || 'generic')
+    .replace(/\0/g, '')
+    .slice(0, MAX_COMMAND_ARG_CHARS);
+  const args = [
+    'tool-output',
+    `--command=${command}`,
+    `--exit-code=${request.exit_code}`,
+    '--json',
+    '--store',
+    storePath,
+  ];
+  if (request.raw_on_failure && request.exit_code !== 0) args.push('--raw-on-failure');
+  return args;
+}
+
+async function detectToolOutputCliMode(
+  options: LmResizerClientOptions,
+): Promise<ToolOutputCliMode | null> {
+  const key = options.bin ?? resolveLmResizerBin();
+  let pending = toolOutputModeCache.get(key);
+  if (!pending) {
+    pending = runCli(['tool-output', '--help'], '', 'tool-output-cli', { ...options, maxStdoutBytes: 64 * 1024 })
+      .then((probe) => (probe ? classifyToolOutputHelp(probe.stdout) : null));
+    toolOutputModeCache.set(key, pending);
+  }
+  const mode = await pending;
+  // An inconclusive probe (spawn error, timeout, aborted) is retried later.
+  if (mode === null && toolOutputModeCache.get(key) === pending) toolOutputModeCache.delete(key);
+  return mode;
 }
 
 async function legacyCompress(
@@ -742,16 +842,19 @@ export async function compressWithLmResizer(
       query,
       minSavingsBytes: 1,
     }, options);
-    if (modern) {
-      return {
-        compressed: modern.compressed,
-        originalBytes: modern.originalBytes,
-        compressedBytes: modern.compressedBytes,
-        bytesSaved: modern.bytesSaved,
-        ...(modern.hash ? { hash: modern.hash } : {}),
-      };
-    }
-    return await legacyCompress(text, options);
+    const asResult = (m: LmResizerToolOutputResult): LmResizerResult => ({
+      compressed: m.compressed,
+      originalBytes: m.originalBytes,
+      compressedBytes: m.compressedBytes,
+      bytesSaved: m.bytesSaved,
+      ...(m.hash ? { hash: m.hash } : {}),
+    });
+    if (modern?.accepted) return asResult(modern);
+    // The command-aware filter kept the text literal (lossless) or failed: the
+    // generic `compress` pipeline may still shrink it. Keep whichever is smaller.
+    const legacy = await legacyCompress(text, options);
+    if (legacy && (!modern || legacy.compressedBytes < modern.compressedBytes)) return legacy;
+    return modern ? asResult(modern) : null;
   } catch (error) {
     logger.debug(`[lm-resizer] unexpected client failure: ${msg(error)}`);
     return null;

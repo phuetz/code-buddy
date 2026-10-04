@@ -61,7 +61,7 @@ async function lmResizerCheck(deps: IntegrationDeps): Promise<IntegrationCheck> 
       return check('lm-resizer', 'LM Resizer', 'warn', `enabled but binary unavailable (${d.binary}); observations stay raw`);
     }
     if (!d.toolOutputSupported) {
-      return check('lm-resizer', 'LM Resizer', 'warn', `enabled but ${d.binary} (${d.version}) lacks the tool-output protocol; compression is inactive — install a compatible release`);
+      return check('lm-resizer', 'LM Resizer', 'warn', `enabled but ${d.binary} (${d.version}) has no usable tool-output protocol (needs tool-output --command (lm-resizer >= 0.2.4) or the older --request-json); compression is inactive — install a compatible release`);
     }
     return check('lm-resizer', 'LM Resizer', 'ok', `tool-output protocol supported (${d.version})`);
   } catch (error) {
