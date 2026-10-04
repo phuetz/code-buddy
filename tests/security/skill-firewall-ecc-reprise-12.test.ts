@@ -25,7 +25,9 @@ const OPTIONS_INCONNUES: Case[] = [
   ['xargs --max-chars', `c=bash\necho x | xargs --max-chars 4000 "$c" ${R}`],
   ['prlimit (hors table)', `c=bash\nprlimit --nofile=1024 "$c" ${R}`],
   ['enveloppe inconnue, option inconnue', `c=bash\nmonwrapper --opt valeur "$c" ${R}`],
-  ['option inconnue sans variable connue', `stdbuf --output L "$1" ${R}`],
+  ['option inconnue sans variable connue (ionice)', `ionice --weird x "$1" ${R}`],
+  ['option inconnue sans variable connue (numactl)', `numactl --weird x "$1" ${R}`],
+  ['option courte inconnue (setpriv)', `setpriv --nothing x "$1" ${R}`],
 ];
 
 /** Bloquant 2 : copier le shell par une variable, par cat, dd if=, tee, redirection. */
