@@ -23,6 +23,7 @@ import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { getProcessTool } from './process-tool.js';
 import { isLoopbackHost, registerDevOrigin, unregisterDevOrigin } from '../security/dev-origins.js';
+import { confirmImportedSkillCode } from './bash/imported-skill-guard.js';
 
 export interface AppServerStartInput {
   /** Shell command that starts the server, e.g. "npm run dev". */
@@ -143,6 +144,13 @@ export class AppServerTool {
 
     const cwd = input.cwd ?? process.cwd();
     const timeoutMs = Math.max(1_000, input.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+
+    const importedGuard = await confirmImportedSkillCode(command, cwd, 'shell');
+    if (importedGuard && !importedGuard.confirmed) {
+      return { success: false, error: importedGuard.error ?? 'Imported skill script not approved' };
+    }
+    const importedChanged = importedGuard?.verifyUnchanged() ?? null;
+    if (importedChanged) return { success: false, error: importedChanged };
 
     const childEnv: NodeJS.ProcessEnv = { ...process.env, ...input.env };
     for (const [key, value] of Object.entries(input.env ?? {})) {

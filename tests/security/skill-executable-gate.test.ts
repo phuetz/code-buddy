@@ -255,3 +255,17 @@ describe('fichier de configuration de la liste blanche', () => {
     expect(reads).toBe(0);
   });
 });
+
+describe('bac natif : les skills importés sont masqués (reprise 15)', () => {
+  it('buildDefaultPolicy cache la racine des skills importés (bwrap : tmpfs par-dessus)', async () => {
+    const { buildDefaultPolicy, buildBwrapArgv } = await import('../../src/security/native-sandbox.js');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-hide-'));
+    dirs.push(root);
+    const policy = buildDefaultPolicy('/data/ws', { env: { CODEBUDDY_IMPORTED_SKILL_ROOTS: root }, existsSync: () => true, homedir: () => '/home/x' });
+    expect('error' in policy).toBe(false);
+    if ('error' in policy) return;
+    expect(policy.hidePaths).toContain(root);
+    const argv = buildBwrapArgv(policy, ['true']);
+    expect(argv.join(' ')).toContain(`--tmpfs ${root}`);
+  });
+});

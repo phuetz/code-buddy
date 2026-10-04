@@ -298,3 +298,20 @@ export function disarmScripts(destDir: string, relPaths: readonly string[]): voi
     } catch { /* un fichier non copié n'a rien à désarmer */ }
   }
 }
+
+/** Racines qui contiennent les skills importés (le dossier par défaut, plus l'environnement). */
+export function importedSkillRoots(env: NodeJS.ProcessEnv = process.env): string[] {
+  const roots = [getCodeBuddyPath('skills')];
+  for (const extra of (env.CODEBUDDY_IMPORTED_SKILL_ROOTS ?? '').split(path.delimiter)) {
+    if (extra.trim()) roots.push(path.resolve(extra.trim()));
+  }
+  const out = new Set<string>();
+  for (const r of roots) {
+    out.add(path.resolve(r));
+    try {
+      out.add(fs.realpathSync(r));
+    } catch { /* racine absente */ }
+  }
+  return [...out];
+}
+

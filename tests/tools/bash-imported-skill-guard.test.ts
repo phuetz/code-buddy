@@ -7,6 +7,9 @@ import { BashTool } from '../../src/tools/bash/bash-tool.js';
 import { ConfirmationService, type ConfirmationOptions } from '../../src/utils/confirmation-service.js';
 import { getPermissionModeManager, resetPermissionModeManager } from '../../src/security/permission-modes.js';
 import { importSkills } from '../../src/skills/skill-importer.js';
+import { ExecuteCodeTool } from '../../src/tools/registry/execute-code-tools.js';
+import { CodeExecTool } from '../../src/tools/code-exec-tool.js';
+import { InteractiveBashTool } from '../../src/tools/interactive-bash.js';
 
 /**
  * Chemin bash RÉEL (BashTool.execute -> garde -> ConfirmationService -> spawn),
@@ -222,5 +225,144 @@ describe('scripts de skills importés : inertes, lancement soumis à confirmatio
     const c = await run(`cat ${path.join(skill, 'SKILL.md')}`);
     expect(c.success, c.error).toBe(true);
     expect(guardCalls()).toHaveLength(0);
+  });
+});
+
+/**
+ * Reprise 15 : contre-revue n° 5. Les bloquants 2 et 3 (lecture exemptée puis lancement, `make` nu,
+ * chemin assemblé dans le shell) et le bloquant 1 (`execute_code` hors garde), par les vrais outils.
+ */
+describe('reprise 15 : lecture puis lancement, make nu, chemin assemblé (bash réel)', () => {
+  const refuse = () => bridge(() => false);
+  const expectGuarded = async (cmd: string, cwd = workspace) => {
+    calls = [];
+    const r = await run(cmd, cwd);
+    expect(r.success, cmd).toBe(false);
+    expect(guardCalls().length, cmd).toBeGreaterThanOrEqual(1);
+    expect(ran(), cmd).toBe(false);
+  };
+
+  it('cat/head/tee/grep d\'un SCRIPT puis lancement de la copie', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    refuse();
+    const f = path.join(skill, 'scripts', 'run.sh');
+    const copy = path.join(workspace, 'in-copy.sh');
+    await expectGuarded(`cat ${f} > ${copy} && bash ${copy}`);
+    await expectGuarded(`head -n 20 ${f} > ${copy} && bash ${copy}`);
+    await expectGuarded(`cat ${f} | tee ${copy} >/dev/null; bash ${copy}`);
+    await expectGuarded(`grep -h . ${f} > ${copy} && bash ${copy}`);
+    await expectGuarded(`ls ${f} | xargs -r bash`);
+    // La copie seule, lancée dans une commande ultérieure qui ne nomme plus le skill : c'est la lecture qui demande.
+    await expectGuarded(`cat ${f} > ${copy}`);
+    await expectGuarded(`cp ${f} ${copy}`);
+    const doc = await run(`cat ${path.join(skill, 'SKILL.md')}`);
+    expect(doc.success, doc.error).toBe(true);
+  });
+
+  it('`make` nu et lancements depuis le dossier du skill', async () => {
+    await installProbe({ 'scripts/Makefile': `all:\n\techo RAN > ${JSON.stringify(marker)}\n` });
+    refuse();
+    await expectGuarded('make', path.join(skill, 'scripts'));
+    await expectGuarded(`cd ${path.join(skill, 'scripts')} && make`);
+  });
+
+  it('chemin assemblé dans le shell : variable, substitution, concaténation node, glob, xargs', async () => {
+    await installProbe({ 'scripts/run.sh': writer(), 'scripts/run.js': `require('fs').writeFileSync(${JSON.stringify(marker)}, 'RAN')\n` });
+    refuse();
+    const d = skill;
+    await expectGuarded(`D=$(printf '%s' '${d}'); bash "$D/scripts/run.sh"`);
+    await expectGuarded(`D=${d}; bash "$D/scripts/run.sh"`);
+    await expectGuarded(`node -e 'require("/"+"${path.join(skill, 'scripts', 'run.js').slice(1)}")'`);
+    await expectGuarded(`bash ${skillsRoot}/imported-*/scripts/run.sh`);
+    await expectGuarded(`echo ${path.join(skill, 'scripts', 'run.sh')} | xargs bash`);
+  });
+
+  it('pas de faux positif : commandes ordinaires, ou aucun skill à scripts installé', async () => {
+    refuse();
+    const a = await run('D=/tmp; ls "$D"; echo $HOME');
+    expect(a.success, a.error).toBe(true);
+    const b = await run('X=1; bash -c "echo $X"');
+    expect(b.success, b.error).toBe(true); // aucun skill importé installé : rien à protéger
+    expect(guardCalls()).toHaveLength(0);
+    await installProbe({ 'references/n.md': '# only documents' });
+    const c = await run('X=1; bash -c "echo $X"');
+    expect(c.success, c.error).toBe(true); // un skill sans script ne déclenche pas la règle dynamique
+    expect(guardCalls()).toHaveLength(0);
+  });
+
+  it('tous les scripts autorisés : la règle « nom calculé » ne demande plus', async () => {
+    const entry = { source: 'src1', path: 'cat/probe/scripts/run.sh', sha256: sha(writer()) };
+    await installProbe({ 'scripts/run.sh': writer() }, [entry]);
+    const home = mk('pf15-home-');
+    const prev = process.env.CODEBUDDY_HOME;
+    process.env.CODEBUDDY_HOME = home;
+    fs.writeFileSync(path.join(home, 'skill-exec-allowlist.json'), JSON.stringify({ entries: [entry] }));
+    try {
+      refuse();
+      const r = await run('X=1; bash -c "echo $X"');
+      expect(r.success, r.error).toBe(true);
+      expect(guardCalls()).toHaveLength(0);
+    } finally {
+      if (prev === undefined) delete process.env.CODEBUDDY_HOME; else process.env.CODEBUDDY_HOME = prev;
+    }
+  });
+});
+
+describe('reprise 15 : outils qui exécutent du code (execute_code, code_exec, shell interactif)', () => {
+  const py = () => `exec(open(${JSON.stringify(path.join(skill, 'scripts', 'run.py'))}).read())`;
+  const PY_BODY = () => `open(${JSON.stringify(marker)}, 'w').write('RAN')\n`;
+
+  it('execute_code : refusé sans humain, même avec AUTO_CONFIRM + bypass + drapeaux de session', async () => {
+    await installProbe({ 'scripts/run.py': PY_BODY() });
+    process.env.CODEBUDDY_AUTO_CONFIRM = 'true';
+    getPermissionModeManager().setMode('bypassPermissions');
+    ConfirmationService.getInstance().setSessionFlag('allOperations', true);
+    const r = await new ExecuteCodeTool().execute({ code: py(), language: 'python' }, { cwd: workspace } as never);
+    expect(r.success).toBe(false);
+    expect(ran()).toBe(false);
+  });
+
+  it('execute_code : chemin construit (concaténation, base64) refusé aussi', async () => {
+    await installProbe({ 'scripts/run.py': PY_BODY() });
+    bridge(() => false);
+    const p = path.join(skill, 'scripts', 'run.py');
+    const code = `import os\nexec(open("/"+${JSON.stringify(p.slice(1))}).read())`;
+    const r = await new ExecuteCodeTool().execute({ code, language: 'python' }, { cwd: workspace } as never);
+    expect(r.success).toBe(false);
+    expect(guardCalls()).toHaveLength(1);
+    expect(ran()).toBe(false);
+  });
+
+  it('execute_code : humain qui approuve (forcePrompt) puis le programme tourne ; sans lien avec un skill, aucune garde', async () => {
+    await installProbe({ 'scripts/run.py': PY_BODY() });
+    bridge(() => true);
+    const r = await new ExecuteCodeTool().execute({ code: py(), language: 'python' }, { cwd: workspace } as never);
+    expect(r.success, r.error).toBe(true);
+    expect(guardCalls()).toHaveLength(1);
+    expect(guardCalls()[0]!.forcePrompt).toBe(true);
+    expect(ran()).toBe(true);
+    calls = [];
+    const plain = await new ExecuteCodeTool().execute({ code: 'print(1+1)', language: 'python' }, { cwd: workspace } as never);
+    expect(plain.success, plain.error).toBe(true);
+    expect(guardCalls()).toHaveLength(0);
+  });
+
+  it('code_exec (JS) : son bac n\'ouvre pas de fichier, mais la garde est câblée (un nom de script de skill y demande)', async () => {
+    await installProbe({ 'scripts/run.js': `require('fs').writeFileSync(${JSON.stringify(marker)}, 'RAN')\n` });
+    bridge(() => false);
+    const code = `const target = ${JSON.stringify(path.join(skill, 'scripts', 'run.js'))}; target.length`;
+    const r = await new CodeExecTool().execute({ code }, { cwd: workspace } as never);
+    expect(r.success).toBe(false);
+    expect(guardCalls()).toHaveLength(1);
+    expect(ran()).toBe(false);
+  });
+
+  it('shell interactif : refusé', async () => {
+    await installProbe({ 'scripts/run.sh': writer() });
+    bridge(() => false);
+    const out = await new InteractiveBashTool().executeInteractive(`bash ${path.join(skill, 'scripts', 'run.sh')}`, { cwd: workspace });
+    expect(out.output).toMatch(/^Error:/);
+    expect(guardCalls()).toHaveLength(1);
+    expect(ran()).toBe(false);
   });
 });
