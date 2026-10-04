@@ -270,6 +270,19 @@ function resolveStorePath(options: LmResizerClientOptions): string {
     || join(homedir(), '.codebuddy', 'lm-resizer.db');
 }
 
+/** Memory safety ceiling for the input handed to lm-resizer (default 16 MiB). */
+export const DEFAULT_LM_RESIZER_MAX_INPUT_CHARS = 16 * 1024 * 1024;
+
+/**
+ * Largest tool output kept whole for lm-resizer when it is enabled
+ * (`CODEBUDDY_LM_RESIZER_MAX_INPUT_BYTES`, default 16 MiB). Above it the usual
+ * provider truncation applies, whatever lm-resizer would have done.
+ */
+export function resolveLmResizerMaxInputChars(): number {
+  const raw = Number(process.env.CODEBUDDY_LM_RESIZER_MAX_INPUT_BYTES);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_LM_RESIZER_MAX_INPUT_CHARS;
+}
+
 /** True when the integration is opt-in enabled. */
 export function isLmResizerEnabled(): boolean {
   return process.env.CODEBUDDY_LM_RESIZER === 'true';

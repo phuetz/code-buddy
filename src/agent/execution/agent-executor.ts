@@ -62,6 +62,9 @@ import { extractEditedFilesFromHistory } from "../middleware/changed-files.js";
 import type { MessageQueue } from "../message-queue.js";
 import { semanticTruncate } from "../../utils/head-tail-truncation.js";
 import { optimizeToolObservation } from '../../context/tool-observation-optimizer.js';
+import { isLmResizerEnabled } from '../../context/lm-resizer-compressor.js';
+import { getCurrentProvider } from '../../tools/hooks/default-hooks.js';
+import { sanitizeResult as sanitizeResultForProvider } from '../../tools/hooks/result-sanitizer.js';
 import { compress as tokenJuice, isTokenJuiceEnabled, JUICE_MIN_CHARS } from "../../context/token-juice.js";
 import {
   formatToolResultForRecovery,
@@ -2381,8 +2384,22 @@ export class AgentExecutor {
               bytesSaved: Math.max(0, optimization.originalBytes - Buffer.byteLength(modelStreamContent)),
               ...(optimization.transport ? { transport: optimization.transport } : {}),
             };
+            // With lm-resizer enabled the after-hook let the whole output through so
+            // the optimizer could see it. History and UI keep the historical
+            // provider cap; the exact output stays in the recovery store.
+            let displayResult = result;
+            if (isLmResizerEnabled() && result?.output) {
+              const capped = sanitizeResultForProvider(getCurrentProvider(), {
+                toolCallId: toolCall.id || '',
+                toolName: toolCall.function.name,
+                success: result.success,
+                output: result.output,
+                error: result.error,
+              });
+              if (capped.output !== result.output) displayResult = { ...result, output: capped.output };
+            }
             result = {
-              ...result,
+              ...displayResult,
               metadata: {
                 ...(result?.metadata ?? {}),
                 contextOptimization: observationMetadata,
