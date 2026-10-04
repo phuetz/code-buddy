@@ -1,10 +1,10 @@
 # Rapport — contexte en ajout seul (2026-10-04)
 
-Agent : Grok 4.7. Worktree `/data/patrice/DEV/cb-cache-prefixe-2026-10-04`, branche `perf/cache-prefixe-2026-10-04`.
+Agent : Grok 4.7. Worktree `<dev>/cb-cache-prefixe-2026-10-04`, branche `perf/cache-prefixe-2026-10-04`.
 
 Départ `01c3452de598ef4d8ed475f028a88943964302c9` (lot préfixe de cache livré, revue « prêt à fusionner », aucun bloquant). Correctif `62336a7f33cad1a73a4ca0aaf791209e43dc8984` (`fix(cache): sceller le contexte variable en ajout seul`). Aucun push. HOME isolé : `_qa/contexte-ajout-seul/home`. Le texte des consignes au modèle n'a pas été réécrit.
 
-Le rapport détaillé (journal de sonde, tableaux complets, mesure des outils) est sous `/home/patrice/Videos/Partage/20261004-grok-contexte-ajout-seul/auteur/RAPPORT.md`. Le journal brut, sans clé, est `probe.jsonl` à côté.
+Le rapport détaillé (journal de sonde, tableaux complets, mesure des outils) est sous `<partage>/20261004-grok-contexte-ajout-seul/auteur/RAPPORT.md`. Le journal brut, sans clé, est `probe.jsonl` à côté.
 
 ## Correctif
 

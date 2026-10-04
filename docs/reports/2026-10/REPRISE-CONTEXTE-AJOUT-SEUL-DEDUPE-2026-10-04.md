@@ -1,7 +1,7 @@
 # Reprise — déduplication du contexte en ajout seul
 
-Date : 2026-10-04. Agent : Grok 4.7. Worktree `/data/patrice/DEV/cb-cache-prefixe-2026-10-04`, branche `perf/cache-prefixe-2026-10-04`.
-Revue : `/home/patrice/Videos/Partage/20261004-grok-contexte-ajout-seul/revue/RAPPORT.md` (À REPRENDRE, un bloquant).
+Date : 2026-10-04. Agent : Grok 4.7. Worktree `<dev>/cb-cache-prefixe-2026-10-04`, branche `perf/cache-prefixe-2026-10-04`.
+Revue : `<partage>/20261004-grok-contexte-ajout-seul/revue/RAPPORT.md` (À REPRENDRE, un bloquant).
 Départ relu : `b5e6a5f2e27a5951710d641c151dbc4c3891dc1e`. Aucun push.
 HOME isolé : `_qa/contexte-ajout-seul/home`.
 

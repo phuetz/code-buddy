@@ -1,8 +1,8 @@
 # Rapport — préfixe de prompt stable pour le cache (2026-10-04)
 
-Agent : Grok 4.7. Worktree `/data/patrice/DEV/cb-cache-prefixe-2026-10-04`, branche `perf/cache-prefixe-2026-10-04`.
+Agent : Grok 4.7. Worktree `<dev>/cb-cache-prefixe-2026-10-04`, branche `perf/cache-prefixe-2026-10-04`.
 
-Départ `c111cb72bb76fa1995438a041d9db493b76829d7`. Correctif `b544dc05eeca3025da9cc8fa6ac60b3e8eee0107` (`fix(cache): sortir la date et le dossier du préfixe de prompt`). Aucun push. Le rapport détaillé, avec la tête finale et la mesure des outils, est sous `/home/patrice/Videos/Partage/20261004-grok-cache-prefixe/auteur/RAPPORT.md`.
+Départ `c111cb72bb76fa1995438a041d9db493b76829d7`. Correctif `b544dc05eeca3025da9cc8fa6ac60b3e8eee0107` (`fix(cache): sortir la date et le dossier du préfixe de prompt`). Aucun push. Le rapport détaillé, avec la tête finale et la mesure des outils, est sous `<partage>/20261004-grok-cache-prefixe/auteur/RAPPORT.md`.
 
 ## Correctif
 
