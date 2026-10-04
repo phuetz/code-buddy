@@ -222,11 +222,11 @@ function isExecutableOrShebang(filePath: string): boolean {
 
 const DANGEROUS_PATTERNS: DangerousPattern[] = [
   // Code execution & droppers
-  { pattern: /\b(?:curl|wget)\b[^|\n]*\|\s*(?:sh|bash|zsh)\b/i, severity: 'critical', description: 'Remote download piped directly to a shell', name: 'remote-download-pipe-shell', capability: 'shell' },
-  { pattern: /\bbash(?:\.exe)?\s+-c\b[^\n]*\bcurl\b/i, severity: 'critical', description: 'Shell command executes a downloaded curl payload', name: 'bash-curl-command', capability: 'shell' },
+  { pattern: /\b(?:curl|wget)\b[^|\n]*\|\s*((?:['"\\]|\$)*(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:['"\\]|\$)*(?:b(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h|s(?:['"\\]|\$)*h|z(?:['"\\]|\$)*s(?:['"\\]|\$)*h)(?:['"\\]|\$|[a-zA-Z0-9_.-])*(?:\.exe)?(?:['"\\]|\$)*)\b/i, severity: 'critical', description: 'Remote download piped directly to a shell', name: 'remote-download-pipe-shell', capability: 'shell' },
+  { pattern: /(?:^|[ \t;&|()])((?:['"\\]|\$)*(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:['"\\]|\$)*(?:b(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h|s(?:['"\\]|\$)*h|z(?:['"\\]|\$)*s(?:['"\\]|\$)*h|d(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h|k(?:['"\\]|\$)*s(?:['"\\]|\$)*h|f(?:['"\\]|\$)*i(?:['"\\]|\$)*s(?:['"\\]|\$)*h)(?:['"\\]|\$|[a-zA-Z0-9_.-])*(?:\.exe)?(?:['"\\]|\$)*)\s+-c\b[^\n]*\bcurl\b/i, severity: 'critical', description: 'Shell command executes a downloaded curl payload', name: 'bash-curl-command', capability: 'shell' },
   { pattern: /\bpowershell(?:\.exe)?\s+-c(?:ommand)?\b[^\n]*\biwr\b[^|\n]*\|\s*iex\b/i, severity: 'critical', description: 'PowerShell downloads and executes a remote payload', name: 'powershell-download-execute', capability: 'shell' },
   {
-    pattern: /\b(?:base64\s+(?:-d|--decode|-D)|openssl\s+base64\s+-d)\b[^|\n]*\|\s*(?:sh|bash|zsh|dash)\b/i,
+    pattern: /\b(?:base64\s+(?:-d|--decode|-D)|openssl\s+base64\s+-d)\b[^|\n]*\|\s*((?:['"\\]|\$)*(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:['"\\]|\$)*(?:b(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h|s(?:['"\\]|\$)*h|z(?:['"\\]|\$)*s(?:['"\\]|\$)*h|d(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h)(?:['"\\]|\$|[a-zA-Z0-9_.-])*(?:\.exe)?(?:['"\\]|\$)*)\b/i,
     severity: 'critical',
     description: 'Base64 decoding piped directly to shell',
     name: 'base64-decode-pipe-shell',
@@ -234,7 +234,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
     justification: 'Base64 droppers decode obfuscated commands on the fly into an active shell interpreter',
   },
   {
-    pattern: /\b(?:printf|echo\s+-e)\s+['"][^'"]*\\x[0-9a-fA-F]{2}[^'"]*['"]\s*\|\s*(?:sh|bash|zsh|dash)\b/i,
+    pattern: /\b(?:printf|echo\s+-e)\s+['"][^'"]*\\x[0-9a-fA-F]{2}[^'"]*['"]\s*\|\s*((?:['"\\]|\$)*(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:['"\\]|\$)*(?:b(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h|s(?:['"\\]|\$)*h|z(?:['"\\]|\$)*s(?:['"\\]|\$)*h|d(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h)(?:['"\\]|\$|[a-zA-Z0-9_.-])*(?:\.exe)?(?:['"\\]|\$)*)\b/i,
     severity: 'critical',
     description: 'Hex/octal encoded payload piped directly to shell',
     name: 'hex-printf-pipe-shell',
@@ -260,7 +260,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'PHP backtick process execution', name: 'php-backtick', capability: 'shell' },
   { pattern: /`[^`\n]+`/, severity: 'high', description: 'Shell backtick process execution', name: 'shell-backtick', capability: 'shell' },
 
-  { pattern: /(?:^|[ \t;&|(])['"]?(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:bash|sh|zsh|dash|ksh|fish)(?:\.exe)?['"]?[ \t]+(?:(?:['"\\])*[-+][^\s;&|()]*|(?:['"\\])*(?:\.\.?\/|\/|~\/|\$)[^\s;&|]+|(?:['"\\])*[A-Za-z_][\w.-]*\b)/i, severity: 'high', description: 'Shell interpreter invocation can execute a copied payload', name: 'shell-interpreter', capability: 'shell' },
+  { pattern: /(?:^|[ \t;&|(])((?:['"\\]|\$)*(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:['"\\]|\$)*(?:b(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h|s(?:['"\\]|\$)*h|z(?:['"\\]|\$)*s(?:['"\\]|\$)*h|d(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h|k(?:['"\\]|\$)*s(?:['"\\]|\$)*h|f(?:['"\\]|\$)*i(?:['"\\]|\$)*s(?:['"\\]|\$)*h)(?:['"\\]|\$|[a-zA-Z0-9_.-])*(?:\.exe)?(?:['"\\]|\$)*)[ \t]+(?:(?:['"\\])*[-+][^\s;&|()]*|(?:['"\\])*(?:\.\.?\/|\/|~\/|\$)[^\s;&|]+|(?:['"\\])*[A-Za-z_][\w.-]*\b)/i, severity: 'high', description: 'Shell interpreter invocation can execute a copied payload', name: 'shell-interpreter', capability: 'shell' },
   { pattern: /\b[\w$]*(?:api_?key|secret|password|token)[\w$]*['"]?\s*[:=]\s*['"`][^'"`\r\n]+['"`]/i, severity: 'critical', description: 'Literal credential assignment requires quarantine in copied code', name: 'embedded-secret', capability: 'secrets' },
 
   // File system dangers
@@ -354,7 +354,7 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
     justification: 'HTML comments are invisible in rendered markdown but parsed by LLMs, creating a stealth prompt injection vector',
   },
   {
-    pattern: /<!--[\s\S]*?\b(?:(?:curl|wget)\b[^|\n]*\|\s*(?:sh|bash|zsh)|rm\s+-rf|base64\s+(?:-d|--decode))\b[\s\S]*?-->/i,
+    pattern: /<!--[\s\S]*?\b(?:(?:curl|wget)\b[^|\n]*\|\s*((?:['"\\]|\$)*(?:(?:\/|\.\.?\/|~\/)(?:[\w.-]+\/)*)?(?:['"\\]|\$)*(?:b(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h|s(?:['"\\]|\$)*h|z(?:['"\\]|\$)*s(?:['"\\]|\$)*h|d(?:['"\\]|\$)*a(?:['"\\]|\$)*s(?:['"\\]|\$)*h|k(?:['"\\]|\$)*s(?:['"\\]|\$)*h|f(?:['"\\]|\$)*i(?:['"\\]|\$)*s(?:['"\\]|\$)*h)(?:['"\\]|\$|[a-zA-Z0-9_.-])*(?:\.exe)?(?:['"\\]|\$)*)|rm\s+-rf|base64\s+(?:-d|--decode))\b[\s\S]*?-->/i,
     severity: 'critical',
     description: 'Dangerous shell command or dropper hidden inside HTML comment',
     name: 'html-comment-hidden-command',
@@ -459,7 +459,109 @@ function scanContexts(content: string, filePath: string, executableContext = fal
 }
 const PROSE_SYSTEM_REFERENCE = /^system\s+\(\s*(?:Linux|Windows|macOS|OS|DBMS|local\s+disk)(?:\s*,\s*(?:Linux|Windows|macOS|OS|DBMS|local\s+disk))*\s*\)/i;
 
-function classifyMention(dp: DangerousPattern, line: string, context: ScanContext, offset: number, length: number): 'active' | 'benign' | 'documentary' {
+export function deobfuscateShellWord(word: string): string | null {
+  if (!word) return '';
+  let result = '';
+  let i = 0;
+  let state = 'normal'; // normal, single, double, ansi
+
+  while (i < word.length) {
+    const c = word[i]!;
+    if (state === 'normal') {
+      if (c === '\\') {
+        if (i + 1 < word.length) {
+          result += word[i + 1]!;
+          i += 2;
+        } else {
+          result += c;
+          i++;
+        }
+      } else if (c === "'") {
+        state = 'single';
+        i++;
+      } else if (c === '"') {
+        state = 'double';
+        i++;
+      } else if (c === '$' && word[i + 1] === "'") {
+        state = 'ansi';
+        i += 2;
+      } else if (c === '$') {
+        return null;
+      } else if (c === '`') {
+        return null;
+      } else {
+        result += c;
+        i++;
+      }
+    } else if (state === 'single') {
+      if (c === "'") {
+        state = 'normal';
+      } else {
+        result += c;
+      }
+      i++;
+    } else if (state === 'double') {
+      if (c === '\\') {
+        if (i + 1 < word.length && ['"', '\\', '$', '`'].includes(word[i + 1]!)) {
+          result += word[i + 1]!;
+          i += 2;
+        } else {
+          result += '\\';
+          i++;
+        }
+      } else if (c === '"') {
+        state = 'normal';
+        i++;
+      } else if (c === '$' || c === '`') {
+        return null;
+      } else {
+        result += c;
+        i++;
+      }
+    } else if (state === 'ansi') {
+      if (c === "'") {
+        state = 'normal';
+        i++;
+      } else if (c === '\\') {
+        if (i + 1 < word.length) {
+          const next = word[i + 1]!;
+          if (next === 'n') result += '\n';
+          else if (next === 't') result += '\t';
+          else if (next === 'r') result += '\r';
+          else if (next === 'a') result += '\x07';
+          else if (next === 'b') result += '\x08';
+          else if (next === 'e' || next === 'E') result += '\x1B';
+          else if (next === 'f') result += '\x0C';
+          else if (next === 'v') result += '\x0B';
+          else if (next === '\\') result += '\\';
+          else if (next === "'") result += "'";
+          else if (next === '"') result += '"';
+          else result += next;
+          i += 2;
+        } else {
+          result += c;
+          i++;
+        }
+      } else {
+        result += c;
+        i++;
+      }
+    }
+  }
+  return result;
+}
+
+function classifyMention(dp: DangerousPattern, match: RegExpMatchArray, line: string, context: ScanContext, offset: number, length: number): 'active' | 'benign' | 'documentary' {
+  if (['remote-download-pipe-shell', 'bash-curl-command', 'base64-decode-pipe-shell', 'hex-printf-pipe-shell', 'shell-interpreter', 'html-comment-hidden-command'].includes(dp.name) && match[1]) {
+    const normalCmd = deobfuscateShellWord(match[1]);
+    if (normalCmd !== null) {
+      const base = path.basename(normalCmd).replace(/\.exe$/i, '').toLowerCase();
+      const allowed = dp.name === 'shell-interpreter' ? ['bash', 'sh', 'zsh', 'dash', 'ksh', 'fish'] :
+                      dp.name === 'remote-download-pipe-shell' ? ['sh', 'bash', 'zsh'] :
+                      ['sh', 'bash', 'zsh', 'dash'];
+      if (!allowed.includes(base)) return 'benign';
+    }
+  }
   if (dp.name === 'php-backtick' && context.language !== 'php') return 'benign';
   if (dp.name === 'shell-backtick' && (!hasShellBackticks(context) ||
       (SHELL_LANGUAGES.has(context.language) && (context.shellLiteral || shellPosition(line, offset).literal)))) return 'benign';
@@ -579,7 +681,7 @@ export function scanSkillContent(content: string, filePath: string, executableCo
 
     for (const dp of patterns) {
       for (const match of matchLine.matchAll(new RegExp(dp.pattern.source, dp.pattern.flags.replace('g', '') + 'g'))) {
-        const kind = classifyMention(dp, matchLine, contexts[i]!, match.index, match[0].length);
+        const kind = classifyMention(dp, match, matchLine, contexts[i]!, match.index, match[0].length);
         if (kind === 'benign') continue;
         findings.push({
           severity: dp.severity,
@@ -617,7 +719,7 @@ function collectMultilineBackticks(content: string, filePath: string, contexts: 
       const lineIndex = scoped.slice(0, match.index).split('\n').length - 1;
       const offset = match.index - (scoped.lastIndexOf('\n', match.index - 1) + 1);
       if (!match[0].includes('\n') && existing.some(f => f.pattern === name && f.line === lineIndex + 1)) continue;
-      const kind = classifyMention(dp, lines[lineIndex]!, contexts[lineIndex]!, offset, match[0].length);
+      const kind = classifyMention(dp, match, lines[lineIndex]!, contexts[lineIndex]!, offset, match[0].length);
       if (kind === 'benign') continue;
       findings.push({ severity: dp.severity, pattern: dp.name, description: dp.description,
         file: filePath, line: lineIndex + 1, evidence: match[0].trim().slice(0, 120),
@@ -830,7 +932,7 @@ function collectDeobfuscatedFindings(
       const launcherFindings: ScanFinding[] = [];
       for (const [index, line] of folded.split('\n').entries()) {
         for (const match of line.matchAll(new RegExp(launcher.pattern.source, 'gi'))) {
-          const kind = classifyMention(launcher, line, foldedContexts[index]!, match.index, match[0].length);
+          const kind = classifyMention(launcher, match, line, foldedContexts[index]!, match.index, match[0].length);
           if (kind === 'benign') continue;
           launcherFindings.push({ severity: launcher.severity, pattern: launcher.name, description: launcher.description,
             file: filePath, line: index + 1, evidence: line.trim().slice(0, 120),
@@ -863,7 +965,10 @@ function collectDeobfuscatedFindings(
       return line.replace(new RegExp(dp.pattern.source, dp.pattern.flags.replace('g', '') + 'g'), (...args: unknown[]) => {
         const match = args[0] as string;
         const offset = args[args.length - 2] as number;
-        return classifyMention(dp, line, contexts[i]!, offset, match.length) === 'active' ? match : ' '.repeat(match.length);
+        const fullArgs = args.slice(0, args.length - 2) as RegExpMatchArray;
+        fullArgs.index = offset;
+        fullArgs.input = line;
+        return classifyMention(dp, fullArgs, line, contexts[i]!, offset, match.length) === 'active' ? match : ' '.repeat(match.length);
       });
     }).join('\n');
     const rawWindows = contextualContent === content ? originalRawWindows : sliceScanWindows(contextualContent);
@@ -879,6 +984,16 @@ function collectDeobfuscatedFindings(
       for (const win of rawWindows) {
         const match = re.exec(win);
         if (match && match.index !== undefined) {
+          if (['remote-download-pipe-shell', 'bash-curl-command', 'base64-decode-pipe-shell', 'hex-printf-pipe-shell', 'shell-interpreter', 'html-comment-hidden-command'].includes(dp.name) && match[1]) {
+            const normalCmd = deobfuscateShellWord(match[1]);
+            if (normalCmd !== null) {
+              const base = path.basename(normalCmd).replace(/\.exe$/i, '').toLowerCase();
+              const allowed = dp.name === 'shell-interpreter' ? ['bash', 'sh', 'zsh', 'dash', 'ksh', 'fish'] :
+                              dp.name === 'remote-download-pipe-shell' ? ['sh', 'bash', 'zsh'] :
+                              ['sh', 'bash', 'zsh', 'dash'];
+              if (!allowed.includes(base)) continue;
+            }
+          }
           seen.add(dp.name);
           extra.push({
             severity: dp.severity,
@@ -906,6 +1021,16 @@ function collectDeobfuscatedFindings(
     for (const win of targetWindows) {
       const normMatch = re.exec(win);
       if (!normMatch || normMatch.index === undefined) continue;
+      if (['remote-download-pipe-shell', 'bash-curl-command', 'base64-decode-pipe-shell', 'hex-printf-pipe-shell', 'shell-interpreter', 'html-comment-hidden-command'].includes(dp.name) && normMatch[1]) {
+        const normalCmd = deobfuscateShellWord(normMatch[1]);
+        if (normalCmd !== null) {
+          const base = path.basename(normalCmd).replace(/\.exe$/i, '').toLowerCase();
+          const allowed = dp.name === 'shell-interpreter' ? ['bash', 'sh', 'zsh', 'dash', 'ksh', 'fish'] :
+                          dp.name === 'remote-download-pipe-shell' ? ['sh', 'bash', 'zsh'] :
+                          ['sh', 'bash', 'zsh', 'dash'];
+          if (!allowed.includes(base)) continue;
+        }
+      }
       seen.add(dp.name);
       extra.push({
         severity: dp.severity,

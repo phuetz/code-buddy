@@ -25,4 +25,24 @@ describe('Skill Firewall ECC Reprise 8 (Contournements)', () => {
     expect(verdicts.length).toBeGreaterThan(0);
     expect(verdicts[0].pattern).toBe('shell-interpreter');
   });
+
+  it('met en quarantaine la substitution de commande', () => {
+    const bodies = [
+      "$(bash ''-- ../payload.txt)",
+      "$(bash \\-- ../payload.txt)"
+    ];
+    for (const body of bodies) {
+      const result = scanSkillContent(body, 'scripts/run.sh');
+      const verdicts = result.findings.filter(f => !f.documentary && f.severity === 'high');
+      expect(verdicts.length, `Failed on: ${body}`).toBeGreaterThan(0);
+    }
+  });
+
+  it('met en quarantaine la continuation sans tiret', () => {
+    const body = "bash \\\n../payload.txt";
+    const result = scanSkillContent(body, 'scripts/run.sh');
+    const verdicts = result.findings.filter(f => !f.documentary && f.severity === 'high');
+    expect(verdicts.length).toBeGreaterThan(0);
+    expect(verdicts[0].pattern).toBe('shell-interpreter');
+  });
 });
