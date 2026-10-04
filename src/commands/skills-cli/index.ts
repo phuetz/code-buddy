@@ -907,11 +907,22 @@ export function registerSkillsCommands(program: Command): void {
       }
       if (report.quarantined.length) {
         console.log('  ⚠️  quarantined by firewall:');
-        for (const q of report.quarantined.slice(0, 15)) console.log(`     - ${q.sourcePath}`);
+        for (const q of report.quarantined.slice(0, 15)) console.log(`     - ${q.sourcePath}: ${q.reason}`);
       }
       if (report.imported.length) {
         console.log(`  ✓ ${report.dryRun ? 'would import' : 'imported'}:`);
-        for (const s of report.imported.slice(0, 30)) console.log(`     - ${s.name}`);
+        for (const s of report.imported.slice(0, 30)) console.log(`     - ${s.name}${s.inertScripts?.length ? ` (${s.inertScripts.length} inert script${s.inertScripts.length > 1 ? 's' : ''})` : ''}`);
+      }
+      const withScripts = report.imported.filter((s) => s.inertScripts?.length);
+      if (withScripts.length) {
+        console.log(`  ⚠️  ${withScripts.length} skill${withScripts.length > 1 ? 's' : ''} ${report.dryRun ? 'would be imported' : 'imported'} with INERT scripts (execute bit removed, flagged scriptsUnverified).`);
+        console.log('     Running any file of these skills asks for a confirmation every time (never auto-approved, refused when no human is there).');
+        console.log('     After reading a script, allow it without confirmation by adding its exact line to ~/.codebuddy/skill-exec-allowlist.json  ({ "entries": [ ... ] }):');
+        for (const s of withScripts.slice(0, 10)) {
+          for (const script of s.inertScripts!.slice(0, 5)) {
+            console.log(`       ${script.allowlistLine}   // ${s.name}/${script.path}${script.warnings.length ? ` — warnings: ${script.warnings.join(', ')}` : ''}`);
+          }
+        }
       }
     });
 

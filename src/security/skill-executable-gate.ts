@@ -1,15 +1,24 @@
 /**
- * Refus par défaut des fichiers exécutables ou interprétables d'un skill importé.
+ * Porte des fichiers exécutables ou interprétables d'un skill importé.
  *
- * Décision (reprise 13) : douze reprises de listes de motifs n'ont jamais fermé
- * la classe « un script contourne l'analyse ». Un skill importé qui embarque un
- * fichier exécutable ou interprétable est donc mis en quarantaine quel que soit
- * son contenu, sauf si ce fichier figure dans une liste blanche explicite
- * (source + chemin relatif + sha256). L'analyse par motifs (`skill-scanner.ts`)
- * reste une seconde couche, et reste seule juge de SKILL.md (injection de prompt).
+ * Historique : la reprise 13 mettait en quarantaine tout skill qui embarque un
+ * script (douze reprises de listes de motifs n'avaient jamais fermé la classe
+ * « un script contourne l'analyse »). Trop restrictif : on perdait des skills
+ * utiles. Reprise 14, la sanction change, pas la porte :
  *
- * Aucune lecture de contenu pour décider : l'extension, le nom, le bit exécutable
- * et les premiers octets (shebang, ELF, PE, Mach-O, WebAssembly) suffisent.
+ * - binaires (ELF, PE, Mach-O, WebAssembly, bytecode, y compris sous un nom de
+ *   donnée), liens symboliques ou physiques, fichiers spéciaux ou illisibles :
+ *   QUARANTAINE, sauf entrée explicite de la liste blanche (source + chemin + sha256) ;
+ * - scripts (extensions de script, Makefile, shebang, bit exécutable) : le skill
+ *   est IMPORTÉ, mais ses scripts sont rendus inertes (bit exécutable retiré) et
+ *   marqués `scriptsUnverified`. Les lancer passe par `ConfirmationService`
+ *   (`src/tools/bash/imported-skill-guard.ts`), sauf script listé dans la liste
+ *   blanche avec le sha256 du fichier COURANT.
+ *
+ * L'analyse par motifs (`skill-scanner.ts`) reste la seconde couche (quarantaine
+ * d'un script dangereux) et seule juge de SKILL.md (injection de prompt).
+ * Aucune lecture de contenu pour classer : extension, nom, bit exécutable et
+ * premiers octets suffisent.
  *
  * @module security/skill-executable-gate
  */
@@ -25,36 +34,63 @@ const EXECUTABLE_EXTENSIONS = new Set([
   // shells
   '.sh', '.bash', '.zsh', '.ksh', '.fish', '.dash', '.ash', '.csh', '.tcsh',
   // langages de script
-  '.py', '.pyw', '.pyc', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx',
+  '.py', '.pyw', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx',
   '.pl', '.pm', '.rb', '.php', '.phtml', '.lua', '.tcl', '.awk', '.sed', '.r', '.jl', '.groovy', '.ex', '.exs',
   // Windows
-  '.ps1', '.psm1', '.psd1', '.bat', '.cmd', '.vbs', '.vbe', '.wsf', '.hta', '.com', '.scr', '.msi',
+  '.ps1', '.psm1', '.psd1', '.bat', '.cmd', '.vbs', '.vbe', '.wsf', '.hta',
   // macOS
   '.scpt', '.applescript', '.command',
-  // binaires, bibliothèques, bytecode
-  '.exe', '.dll', '.so', '.dylib', '.bin', '.o', '.a', '.elf', '.jar', '.class', '.wasm', '.node', '.app',
   // constructeurs
   '.mk', '.make', '.mak', '.just', '.gradle',
+]);
+
+/** Binaires, bibliothèques, bytecode : jamais traités comme des scripts. */
+const BINARY_EXTENSIONS = new Set([
+  '.exe', '.dll', '.so', '.dylib', '.bin', '.o', '.a', '.elf', '.jar', '.class', '.wasm', '.node', '.app',
+  '.pyc', '.pyo', '.msi', '.scr', '.com',
+  // archives : un conteneur de code que la porte ne peut pas lire
+  '.zip', '.tar', '.tgz', '.gz', '.bz2', '.xz', '.7z', '.rar', '.zst', '.cab', '.iso', '.cpio', '.ar', '.deb', '.rpm', '.whl', '.egg',
 ]);
 
 /** Noms sans extension que `make`, `just` et consorts exécutent. */
 const EXECUTABLE_BASENAMES = /^(?:gnumakefile|makefile|justfile|rakefile)$/i;
 
-/** Premiers octets : ELF, Mach-O (32/64, fat), PE (MZ), WebAssembly, shebang, bytecode Python/Java. */
-function magicKind(prefix: Buffer): string | null {
-  if (prefix.length >= 2 && prefix[0] === 0x23 && prefix[1] === 0x21) return 'shebang';
+/** Dossiers dont le contenu est du code par convention : tout fichier y est un script. */
+const SCRIPT_DIRS = new Set(['scripts', 'bin', 'hooks', 'script']);
+
+/**
+ * Premiers octets : ELF, Mach-O, PE, WebAssembly, bytecode, archives (zip, gzip,
+ * bzip2, xz, 7z, rar, zstd, tar) ; shebang en tête, après un BOM ou des blancs.
+ */
+function magicKind(prefix: Buffer): { label: string; binary: boolean } | null {
   if (prefix.length >= 4) {
     const hex = prefix.subarray(0, 4).toString('hex');
-    if (hex === '7f454c46') return 'ELF';
-    if (['feedface', 'feedfacf', 'cefaedfe', 'cffaedfe'].includes(hex)) return 'Mach-O';
-    if (hex === 'cafebabe' || hex === 'bebafeca') return 'Mach-O fat / classe Java';
-    if (hex === '0061736d') return 'WebAssembly';
+    if (hex === '7f454c46') return { label: 'ELF', binary: true };
+    if (['feedface', 'feedfacf', 'cefaedfe', 'cffaedfe'].includes(hex)) return { label: 'Mach-O', binary: true };
+    if (hex === 'cafebabe' || hex === 'bebafeca') return { label: 'Mach-O fat / classe Java', binary: true };
+    if (hex === '0061736d') return { label: 'WebAssembly', binary: true };
+    if (hex === '504b0304' || hex === '504b0506' || hex === '504b0708') return { label: 'archive zip', binary: true };
+    if (hex.startsWith('1f8b')) return { label: 'archive gzip', binary: true };
+    if (hex === 'fd377a58') return { label: 'archive xz', binary: true };
+    if (hex === '377abcaf') return { label: 'archive 7z', binary: true };
+    if (hex === '28b52ffd') return { label: 'archive zstd', binary: true };
+    if (hex === '52617221') return { label: 'archive rar', binary: true };
+    if (prefix.subarray(0, 3).toString('latin1') === 'BZh') return { label: 'archive bzip2', binary: true };
+    if (prefix.subarray(0, 7).toString('latin1') === '!<arch>') return { label: 'archive ar', binary: true };
   }
-  if (prefix.length >= 2 && prefix[0] === 0x4d && prefix[1] === 0x5a) return 'PE (MZ)';
+  if (prefix.length >= 262 && prefix.subarray(257, 262).toString('latin1') === 'ustar') return { label: 'archive tar', binary: true };
+  if (prefix.length >= 2 && prefix[0] === 0x4d && prefix[1] === 0x5a) return { label: 'PE (MZ)', binary: true };
+  // Shebang: at the very start, after a UTF-8 BOM or leading blanks.
+  const head = prefix.subarray(0, 512).toString('latin1').replace(/^\xef\xbb\xbf/, '');
+  if (/^[\s\0]*#!/.test(head)) return { label: 'shebang', binary: false };
   return null;
 }
 
+export type ExecutableKind = 'script' | 'binary';
+
 export interface ExecutableFile {
+  /** `binary` : quarantaine du skill ; `script` : importé inerte. */
+  kind: ExecutableKind;
   /** Chemin POSIX relatif à la racine passée à `findExecutablePayloads`. */
   relPath: string;
   sha256: string;
@@ -72,12 +108,14 @@ export interface ExecAllowlistEntry {
 }
 
 export interface ExecGateResult {
-  /** Vrai si au moins un fichier exécutable n'est pas autorisé. */
+  /** Vrai si un binaire, lien ou fichier spécial n'est pas autorisé : quarantaine. */
   blocked: boolean;
   executables: ExecutableFile[];
-  /** Fichiers exécutables absents de la liste blanche. */
-  denied: ExecutableFile[];
-  /** Explication lisible, avec les empreintes à copier dans la liste blanche. */
+  /** Binaires (ou liens) absents de la liste blanche. */
+  deniedBinaries: ExecutableFile[];
+  /** Scripts absents de la liste blanche : importés inertes. */
+  unverifiedScripts: ExecutableFile[];
+  /** Motif de quarantaine (binaires), vide sinon. */
   reason: string;
 }
 
@@ -85,18 +123,62 @@ function toPosix(p: string): string {
   return p.split(path.sep).join('/');
 }
 
-function classify(name: string, mode: number, prefix: Buffer): string[] {
-  const reasons: string[] = [];
-  const ext = path.extname(name).toLowerCase();
-  if (EXECUTABLE_EXTENSIONS.has(ext)) reasons.push(`extension ${ext}`);
-  if (EXECUTABLE_BASENAMES.test(name)) reasons.push('fichier de construction');
-  if ((mode & 0o111) !== 0) reasons.push('bit exécutable');
-  const magic = magicKind(prefix);
-  if (magic) reasons.push(magic);
-  return reasons;
+/** Retire les caractères de format invisibles (U+200B, bidi…) et normalise en NFKC. */
+function normalizeName(name: string): string {
+  return name.normalize('NFKC').replace(/[\p{Cf}\u00ad]/gu, '');
 }
 
-function hashFile(filePath: string): string {
+export function classifyPrefix(name: string, mode: number, prefix: Buffer, relPath = name): { reasons: string[]; binary: boolean } {
+  const reasons: string[] = [];
+  let binary = false;
+  const clean = normalizeName(name);
+  const lower = clean.toLowerCase();
+  // Every dotted segment counts: `tool.py.txt`, `run.sh.bak`.
+  const exts = lower.split('.').slice(1).map(e => `.${e}`);
+  // Binary extensions: the LAST one only (`linear.app.md`, `stripe.com.md` are documents); real binaries are caught by magic bytes.
+  const lastExt = exts[exts.length - 1];
+  const binExt = lastExt !== undefined && BINARY_EXTENSIONS.has(lastExt) ? lastExt : undefined;
+  const scriptExt = exts.find(e => EXECUTABLE_EXTENSIONS.has(e));
+  if (binExt) { reasons.push(`extension binaire ${binExt}`); binary = true; }
+  else if (scriptExt) reasons.push(`extension ${scriptExt}`);
+  // A lookalike (full-width, Cyrillic…) or invisible character in the name: never plain data.
+  if (clean !== name || /[^ -~]/.test(clean)) reasons.push('nom avec caractères non ASCII ou invisibles');
+  if (EXECUTABLE_BASENAMES.test(clean)) reasons.push('fichier de construction');
+  if ((mode & 0o111) !== 0) reasons.push('bit exécutable');
+  const magic = magicKind(prefix);
+  if (magic) { reasons.push(magic.label); if (magic.binary) binary = true; }
+  const dirs = relPath.split('/').slice(0, -1).map(d => d.toLowerCase());
+  if (dirs.some(d => SCRIPT_DIRS.has(d))) reasons.push('dossier de scripts');
+  return { reasons, binary };
+}
+
+/**
+ * Classe un fichier ordinaire du disque (aussi utilisé à l'exécution par la
+ * garde de BashTool). `null` : ni script ni binaire. Lien, fichier spécial,
+ * illisible : binaire (refus par défaut).
+ */
+export function classifyFile(fullPath: string, relPath?: string): { reasons: string[]; binary: boolean } | null {
+  try {
+    const info = fs.lstatSync(fullPath);
+    if (info.isSymbolicLink()) return { reasons: ['lien symbolique'], binary: true };
+    if (!info.isFile()) return { reasons: ['fichier spécial'], binary: true };
+    if (info.nlink > 1) return { reasons: ['lien physique'], binary: true };
+    const fd = fs.openSync(fullPath, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW ?? 0));
+    let prefix: Buffer;
+    try {
+      prefix = Buffer.alloc(512);
+      prefix = prefix.subarray(0, fs.readSync(fd, prefix, 0, 512, 0));
+    } finally {
+      fs.closeSync(fd);
+    }
+    const c = classifyPrefix(path.basename(fullPath), info.mode, prefix, relPath ?? path.basename(fullPath));
+    return c.reasons.length > 0 ? c : null;
+  } catch {
+    return { reasons: ['fichier illisible'], binary: true };
+  }
+}
+
+export function sha256File(filePath: string): string {
   return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
@@ -106,47 +188,32 @@ function hashFile(filePath: string): string {
  * exécutable (refus par défaut).
  */
 export function findExecutablePayloads(skillDir: string, rootDir: string = skillDir): ExecutableFile[] {
+  const skillRoot = skillDir;
   const out: ExecutableFile[] = [];
   const walk = (dir: string): void => {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
-      out.push({ relPath: toPosix(path.relative(rootDir, dir)), sha256: '', reasons: ['dossier illisible'] });
+      out.push({ kind: 'binary', relPath: toPosix(path.relative(rootDir, dir)), sha256: '', reasons: ['dossier illisible'] });
       return;
     }
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       const rel = toPosix(path.relative(rootDir, full));
-      if (entry.isSymbolicLink()) {
-        // Un lien peut désigner un exécutable hors de l'arbre : refusé par défaut.
-        out.push({ relPath: rel, sha256: '', reasons: ['lien symbolique'] });
-        continue;
-      }
-      if (entry.isDirectory()) {
+      if (!entry.isSymbolicLink() && entry.isDirectory()) {
         walk(full);
         continue;
       }
-      if (!entry.isFile()) {
-        out.push({ relPath: rel, sha256: '', reasons: ['fichier spécial'] });
-        continue;
-      }
+      const c = classifyFile(full, toPosix(path.relative(skillRoot, full)));
+      if (!c) continue;
+      let sha = '';
       try {
-        const info = fs.lstatSync(full);
-        const fd = fs.openSync(full, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
-        let prefix: Buffer;
-        try {
-          prefix = Buffer.alloc(4);
-          const n = fs.readSync(fd, prefix, 0, 4, 0);
-          prefix = prefix.subarray(0, n);
-        } finally {
-          fs.closeSync(fd);
-        }
-        const reasons = classify(entry.name, info.mode, prefix);
-        if (reasons.length > 0) out.push({ relPath: rel, sha256: hashFile(full), reasons });
+        if (!c.reasons.some(r => /lien|spécial|illisible/.test(r))) sha = sha256File(full);
       } catch {
-        out.push({ relPath: rel, sha256: '', reasons: ['fichier illisible'] });
+        sha = '';
       }
+      out.push({ kind: c.binary ? 'binary' : 'script', relPath: rel, sha256: sha, reasons: c.reasons });
     }
   };
   walk(skillDir);
@@ -191,9 +258,14 @@ export function loadExecAllowlist(file: string = defaultExecAllowlistPath()): Ex
   }
 }
 
+/** Ligne exacte de liste blanche pour un fichier. */
+export function allowlistLine(source: string, sourcePath: string, sha256: string): string {
+  return JSON.stringify({ source, path: sourcePath, sha256 });
+}
+
 /**
- * Décide si les exécutables d'un skill sont tous autorisés.
- * `skillDir` est analysé ; les chemins de la liste blanche sont relatifs à `sourceRoot`.
+ * Classe les exécutables d'un skill. `skillDir` est analysé ; les chemins de
+ * la liste blanche sont relatifs à `sourceRoot`.
  */
 export function checkExecutablePayloads(
   skillDir: string,
@@ -205,12 +277,24 @@ export function checkExecutablePayloads(
   const allowed = new Set(
     list.filter(e => e.source === opts.source).map(e => `${e.path}\u0000${e.sha256}`),
   );
-  const denied = executables.filter(f => f.sha256 === '' || !allowed.has(`${f.relPath}\u0000${f.sha256}`));
-  const reason = denied.length === 0
+  const isAllowed = (f: ExecutableFile): boolean => f.sha256 !== '' && allowed.has(`${f.relPath}\u0000${f.sha256}`);
+  const deniedBinaries = executables.filter(f => f.kind === 'binary' && !isAllowed(f));
+  const unverifiedScripts = executables.filter(f => f.kind === 'script' && !isAllowed(f));
+  const reason = deniedBinaries.length === 0
     ? ''
-    : `Executable payload refused by default (${denied.length} file${denied.length > 1 ? 's' : ''}): `
-      + denied.slice(0, 5).map(f => `${f.relPath} [${f.reasons.join(', ')}${f.sha256 ? `; sha256 ${f.sha256}` : ''}]`).join('; ')
-      + (denied.length > 5 ? `; +${denied.length - 5} more` : '')
-      + `. Allow explicitly in ${defaultExecAllowlistPath()} (source, path, sha256).`;
-  return { blocked: denied.length > 0, executables, denied, reason };
+    : `Binary, link or special file refused (${deniedBinaries.length} file${deniedBinaries.length > 1 ? 's' : ''}): `
+      + deniedBinaries.slice(0, 5).map(f => `${f.relPath} [${f.reasons.join(', ')}${f.sha256 ? `; sha256 ${f.sha256}; allow with ${allowlistLine(opts.source, f.relPath, f.sha256)}` : ''}]`).join('; ')
+      + (deniedBinaries.length > 5 ? `; +${deniedBinaries.length - 5} more` : '')
+      + `. Allowlist file: ${defaultExecAllowlistPath()}.`;
+  return { blocked: deniedBinaries.length > 0, executables, deniedBinaries, unverifiedScripts, reason };
+}
+
+/** Retire le bit exécutable des scripts copiés sous `destDir` (chemins relatifs au skill, `/`). */
+export function disarmScripts(destDir: string, relPaths: readonly string[]): void {
+  for (const rel of relPaths) {
+    const copied = path.join(destDir, ...rel.split('/'));
+    try {
+      fs.chmodSync(copied, fs.statSync(copied).mode & ~0o111);
+    } catch { /* un fichier non copié n'a rien à désarmer */ }
+  }
 }
