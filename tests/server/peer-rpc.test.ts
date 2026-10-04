@@ -256,16 +256,50 @@ describe('peer-rpc — Phase (d).13', () => {
         captured = c;
         return null;
       });
-      await dispatchPeerRequest(
+
+      const r1 = await dispatchPeerRequest(
         { id: 'd4', method: 'inspect-d', depth: -5 },
         ctx,
       );
-      expect(captured?.depth).toBe(0);
-      await dispatchPeerRequest(
+      expect(r1.error?.code).toBe('INVALID_REQUEST');
+      expect(r1.error?.message).toBe('depth must be a non-negative integer');
+      expect(captured).toBeNull();
+
+      captured = null;
+      const r2 = await dispatchPeerRequest(
         { id: 'd5', method: 'inspect-d', depth: NaN },
         ctx,
       );
-      expect(captured?.depth).toBe(0);
+      expect(r2.error?.code).toBe('INVALID_REQUEST');
+      expect(r2.error?.message).toBe('depth must be a non-negative integer');
+      expect(captured).toBeNull();
+
+      captured = null;
+      const r3 = await dispatchPeerRequest(
+        { id: 'd6', method: 'inspect-d', depth: "4" } as any,
+        ctx,
+      );
+      expect(r3.error?.code).toBe('INVALID_REQUEST');
+      expect(r3.error?.message).toBe('depth must be a non-negative integer');
+      expect(captured).toBeNull();
+
+      captured = null;
+      const r4 = await dispatchPeerRequest(
+        { id: 'd7', method: 'inspect-d', depth: null } as any,
+        ctx,
+      );
+      expect(r4.error?.code).toBe('INVALID_REQUEST');
+      expect(r4.error?.message).toBe('depth must be a non-negative integer');
+      expect(captured).toBeNull();
+
+      captured = null;
+      const r5 = await dispatchPeerRequest(
+        { id: 'd8', method: 'inspect-d', depth: [] } as any,
+        ctx,
+      );
+      expect(r5.error?.code).toBe('INVALID_REQUEST');
+      expect(r5.error?.message).toBe('depth must be a non-negative integer');
+      expect(captured).toBeNull();
     });
 
     it('floors fractional depth values', async () => {
@@ -274,11 +308,13 @@ describe('peer-rpc — Phase (d).13', () => {
         captured = c;
         return null;
       });
-      await dispatchPeerRequest(
-        { id: 'd6', method: 'inspect-d', depth: 2.7 },
+      const r1 = await dispatchPeerRequest(
+        { id: 'd9', method: 'inspect-d', depth: 2.7 },
         ctx,
       );
-      expect(captured?.depth).toBe(2);
+      expect(r1.error?.code).toBe('INVALID_REQUEST');
+      expect(r1.error?.message).toBe('depth must be a non-negative integer');
+      expect(captured).toBeNull();
     });
   });
 

@@ -351,9 +351,18 @@ export async function dispatchPeerRequest(
   // Phase (d).14 — resolve trace + depth from the frame, defaulting to
   // a fresh top-level chain. Reject if depth is past the cap.
   const traceId = frame.traceId && typeof frame.traceId === 'string' ? frame.traceId : newTraceId();
-  const depth = typeof frame.depth === 'number' && Number.isFinite(frame.depth) && frame.depth >= 0
-    ? Math.floor(frame.depth)
-    : 0;
+
+  if (frame.depth !== undefined) {
+    if (typeof frame.depth !== 'number' || !Number.isFinite(frame.depth) || frame.depth < 0 || !Number.isInteger(frame.depth)) {
+      return {
+        id: frame.id,
+        ok: false,
+        error: { code: 'INVALID_REQUEST', message: 'depth must be a non-negative integer' },
+      };
+    }
+  }
+
+  const depth = frame.depth === undefined ? 0 : frame.depth;
   const maxDepth = getMaxDepth();
   if (depth > maxDepth) {
     return {
