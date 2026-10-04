@@ -35,7 +35,10 @@ jest.mock('fs-extra', () => {
   pathExists: (...args: unknown[]) => mockPathExists(...args),
   stat: (...args: unknown[]) => mockStat(...args),
   readdir: (...args: unknown[]) => mockReaddir(...args),
-  readFile: (...args: unknown[]) => mockReadFile(...args),
+  // Lecture sans encodage = lecture binaire (readFileBuffer) : on rend les octets du texte simulé.
+  readFile: (...args: unknown[]) => args.length === 1
+    ? Promise.resolve(mockReadFile(...args)).then((r: unknown) => (typeof r === 'string' ? Buffer.from(r, 'utf-8') : r))
+    : mockReadFile(...args),
   existsSync: (...args: unknown[]) => mockExistsSync(...args),
   realpathSync: (...args: unknown[]) => mockRealpathSync(...args),
   ensureDir: (...args: unknown[]) => mockEnsureDir(...args),

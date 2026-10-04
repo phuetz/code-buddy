@@ -16,7 +16,7 @@ export interface MatchResult {
   /** The actual string from the source that matched */
   matched: string;
   /** Which strategy found the match */
-  strategy: 'exact' | 'flexible' | 'regex' | 'fuzzy';
+  strategy: 'exact' | 'flexible' | 'unicode' | 'regex' | 'fuzzy';
   /** Confidence score (0-1) */
   confidence: number;
 }
@@ -123,19 +123,41 @@ function normalizeUnicode(str: string): string {
     .replace(/[\u2260]/g, '!=');                    // not-equal → !=
 }
 
+/**
+ * Normalise `str` et renvoie, pour CHAQUE caractère du résultat, l'index du
+ * caractère d'origine qui l'a produit. Plusieurs règles changent la longueur
+ * (« … » -> « ... », « → » -> « => ») : un index trouvé dans le texte
+ * normalisé n'est PAS un index du texte original, il faut cette table.
+ */
+function normalizeWithMap(str: string): { norm: string; origin: number[] } {
+  let norm = '';
+  const origin: number[] = [];
+  for (let i = 0; i < str.length; i++) {
+    const out = normalizeUnicode(str[i] as string);
+    for (let k = 0; k < out.length; k++) origin.push(i);
+    norm += out;
+  }
+  return { norm, origin };
+}
+
 function unicodeNormalizedMatch(source: string, search: string): MatchResult | null {
   const normalizedSearch = normalizeUnicode(search);
-  const normalizedSource = normalizeUnicode(source);
+  if (normalizedSearch.length === 0) return null;
+  const { norm, origin } = normalizeWithMap(source);
 
-  // Only try if normalization actually changed something
-  if (normalizedSearch === search) return null;
-
-  if (normalizedSource.includes(normalizedSearch)) {
-    // Find the original source text corresponding to the normalized match
-    const idx = normalizedSource.indexOf(normalizedSearch);
-    // Map back to original — use a simple offset approach
-    const matched = source.substring(idx, idx + normalizedSearch.length);
-    return { matched, strategy: 'flexible', confidence: 0.92 };
+  let idx = norm.indexOf(normalizedSearch);
+  while (idx !== -1) {
+    const end = idx + normalizedSearch.length;
+    // Les deux bornes doivent tomber sur une frontière de caractère ORIGINAL :
+    // sinon le motif couperait un « … » en deux, et on abîmerait le texte.
+    const startOk = idx === 0 || origin[idx] !== origin[idx - 1];
+    const endOk = end === norm.length || origin[end] !== origin[end - 1];
+    if (startOk && endOk) {
+      const from = origin[idx] as number;
+      const to = end === norm.length ? source.length : (origin[end] as number);
+      return { matched: source.substring(from, to), strategy: 'unicode', confidence: 0.92 };
+    }
+    idx = norm.indexOf(normalizedSearch, idx + 1);
   }
 
   return null;
@@ -259,6 +281,24 @@ export function multiStrategyMatch(
   source: string,
   search: string,
 ): MatchResult | null {
+  const result = runCascade(source, search);
+  if (!result || result.strategy === 'exact') return result;
+  // Un motif multi-ligne est découpé sur '\n' : dans un fichier CRLF, la
+  // dernière ligne retenue garderait son '\r' final et le remplacement
+  // l'avalerait. Le '\r' appartient à la fin de ligne, pas au texte apparié.
+  if (result.matched.endsWith('\r') && !search.endsWith('\r')) {
+    return { ...result, matched: result.matched.slice(0, -1) };
+  }
+  return result;
+}
+
+function runCascade(
+  source: string,
+  search: string,
+): MatchResult | null {
+  // Une chaîne vide « existe » partout : ce n'est pas un motif.
+  if (search.length === 0) return null;
+
   // 1. Exact
   const exact = exactMatch(source, search);
   if (exact) return exact;

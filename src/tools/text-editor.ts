@@ -13,6 +13,7 @@ import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
 import { generateDiff as sharedGenerateDiff } from "../utils/diff-generator.js";
 import { detectOmissionPlaceholders, formatOmissionError } from "./omission-placeholder-detector.js";
 import { maybeReviewGatedWrite } from "./review-gate-helper.js";
+import { adaptNewStrEol, readEditableText, usesCrlf } from "../utils/edit-safety.js";
 import { createHash } from 'crypto';
 
 /**
@@ -186,6 +187,15 @@ export class TextEditorTool implements Disposable {
     replaceAll: boolean = false
   ): Promise<ToolResult> {
     try {
+      // Une chaîne vide « se trouve » à chaque position : l'accepter insérerait
+      // new_str partout (ou au début) sans que rien ne le signale.
+      if (oldStr === "") {
+        return {
+          success: false,
+          error: "old_str must not be empty: an empty string matches at every position. Provide the exact text to replace (or use insert / create_file to add content).",
+        };
+      }
+
       const pathValidation = this.resolveForEdit(filePath);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
@@ -199,7 +209,11 @@ export class TextEditorTool implements Disposable {
         };
       }
 
-      const content = await this.vfs.readFile(resolvedPath, "utf-8");
+      const readResult = await readEditableText(this.vfs, resolvedPath, filePath);
+      if (!readResult.ok) {
+        return { success: false, error: readResult.error };
+      }
+      const content = readResult.text;
 
       // Multi-strategy matching: exact → flexible → regex → fuzzy
       const strategyResult = multiStrategyMatch(content, oldStr);
@@ -233,6 +247,9 @@ export class TextEditorTool implements Disposable {
         logger.debug(`Edit match via ${strategyResult.strategy} strategy (confidence: ${strategyResult.confidence.toFixed(2)})`);
         oldStr = strategyResult.matched;
       }
+
+      // Fins de ligne : un new_str en LF dans une zone CRLF doit devenir CRLF.
+      newStr = adaptNewStrEol(newStr, oldStr, content);
 
       // Omission placeholder detection: block edits that would delete code
       const omissionResult = detectOmissionPlaceholders(newStr, oldStr);
@@ -481,8 +498,21 @@ export class TextEditorTool implements Disposable {
         };
       }
 
-      const fileContent = await this.vfs.readFile(resolvedPath, "utf-8");
+      const readResult = await readEditableText(this.vfs, resolvedPath, filePath);
+      if (!readResult.ok) {
+        return { success: false, error: readResult.error };
+      }
+      const fileContent = readResult.text;
       const lines = fileContent.split("\n");
+      // Fichier CRLF : chaque ligne écrite porte son \r, sauf la dernière
+      // ligne du fichier qui n'a pas de terminateur.
+      const crlf = usesCrlf(fileContent);
+      const toFileLines = (text: string): string[] => {
+        const parts = text.split("\n").map((l) => (crlf ? l.replace(/\r$/, "") : l));
+        return crlf
+          ? parts.map((l, i) => (i < parts.length - 1 || endLine < lines.length ? `${l}\r` : l))
+          : parts;
+      };
       
       if (startLine < 1 || startLine > lines.length) {
         return {
@@ -501,7 +531,7 @@ export class TextEditorTool implements Disposable {
       const sessionFlags = this.confirmationService.getSessionFlags();
       if (!sessionFlags.fileOperations && !sessionFlags.allOperations) {
         const newLines = [...lines];
-        const replacementLines = newContent.split("\n");
+        const replacementLines = toFileLines(newContent);
         newLines.splice(startLine - 1, endLine - startLine + 1, ...replacementLines);
         
         const diffContent = this.generateDiff(lines, newLines, filePath);
@@ -525,7 +555,7 @@ export class TextEditorTool implements Disposable {
         }
       }
 
-      const replacementLines = newContent.split("\n");
+      const replacementLines = toFileLines(newContent);
       lines.splice(startLine - 1, endLine - startLine + 1, ...replacementLines);
       const newFileContent = lines.join("\n");
 
@@ -598,8 +628,18 @@ export class TextEditorTool implements Disposable {
         };
       }
 
-      const fileContent = await this.vfs.readFile(resolvedPath, "utf-8");
+      const readResult = await readEditableText(this.vfs, resolvedPath, filePath);
+      if (!readResult.ok) {
+        return { success: false, error: readResult.error };
+      }
+      const fileContent = readResult.text;
       const lines = fileContent.split("\n");
+      // Fichier CRLF : la ligne insérée porte son \r (sauf en toute fin, sans terminateur).
+      const crlf = usesCrlf(fileContent);
+
+      const insertedText = crlf
+        ? `${content.replace(/\r?\n/g, "\r\n").replace(/\r$/, "")}${insertLine - 1 < lines.length ? "\r" : ""}`
+        : content;
 
       // Validate insert line
       if (insertLine < 1 || insertLine > lines.length + 1) {
@@ -613,7 +653,7 @@ export class TextEditorTool implements Disposable {
       const sessionFlags = this.confirmationService.getSessionFlags();
       if (!sessionFlags.fileOperations && !sessionFlags.allOperations) {
         const previewLines = [...lines];
-        previewLines.splice(insertLine - 1, 0, content);
+        previewLines.splice(insertLine - 1, 0, insertedText);
         const diffContent = this.generateDiff(lines, previewLines, filePath);
 
         const confirmationResult =
@@ -635,7 +675,7 @@ export class TextEditorTool implements Disposable {
         }
       }
 
-      lines.splice(insertLine - 1, 0, content);
+      lines.splice(insertLine - 1, 0, insertedText);
       const newContent = lines.join("\n");
 
       // Diff-review gate — resolved to FULL content, same as str_replace/create.
