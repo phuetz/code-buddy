@@ -412,6 +412,7 @@ function shellPosition(line: string, offset: number): { quoted: boolean; literal
   }
   return { quoted: Boolean(quote), literal: escaped || quote === "'" };
 }
+const SPELLING_LAUNCHER_PATTERNS = new Set(['remote-download-pipe-shell', 'bash-curl-command', 'base64-decode-pipe-shell', 'hex-printf-pipe-shell']);
 function scanContexts(content: string, filePath: string, executableContext = false): ScanContext[] {
   const markdown = /\.md$/i.test(filePath) && !executableContext && !content.startsWith('#!');
   const supportDocument = markdown && !/^(?:skill|.*\.skill)\.md$/i.test(path.basename(filePath));
@@ -553,6 +554,12 @@ export function deobfuscateShellWord(word: string): string | null {
 }
 
 function classifyMention(dp: DangerousPattern, match: RegExpMatchArray, line: string, context: ScanContext, offset: number, length: number): 'active' | 'benign' | 'documentary' {
+  // In a shell script, text inside a single-quoted string, a comment or a
+  // quoted heredoc is DATA: Bash never runs it. A string handed to something
+  // that does (`sh -c '…'`, `eval '…'`, `su -c '…'`, `alias x='…'`, `trap`) is
+  // analysed as code by the structural pass, which sees the launcher itself.
+  if (SPELLING_LAUNCHER_PATTERNS.has(dp.name) && !context.markdown && SHELL_LANGUAGES.has(context.language)
+      && (context.shellLiteral || shellPosition(line, offset).literal)) return 'benign';
   if (['remote-download-pipe-shell', 'bash-curl-command', 'base64-decode-pipe-shell', 'hex-printf-pipe-shell', 'shell-interpreter', 'html-comment-hidden-command'].includes(dp.name) && match[1]) {
     const normalCmd = deobfuscateShellWord(match[1]);
     if (normalCmd !== null) {

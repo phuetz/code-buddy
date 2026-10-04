@@ -61,6 +61,7 @@ const RUNTIMES: ReadonlyArray<readonly [RegExp, RuntimeSpec]> = [
   [/^ruby[\d.]*$/, { own: /\.rb$/i, code: /^(?:-[A-Za-z]*e|--eval)$/, safe: /^(?:-v|--version|-h|--help|-c)$/, optArg: ['-r', '-I'] }],
   [/^php[\d.]*$/, { own: /\.php$/i, code: /^-[rRBEF]$/, safe: /^(?:-v|--version|-h|--help|-l|-m|-i)$/, optArg: ['-d', '-c'] }],
   [/^(?:lua|luajit)[\d.]*$/, { own: /\.lua$/i, code: /^-e$/, safe: /^(?:-v|--version)$/, optArg: ['-l'] }],
+  [/^crontab$/, { code: /^-$/, safe: /^(?:-[lrh]|--help)$/, optArg: ['-u'] }],
   [/^(?:tclsh|wish|expect|Rscript|julia|groovy|at|batch)[\d.]*$/, { code: /^(?:-c|-e|-E|--eval|--command)$/, safe: /^(?:-v|--version|-h|--help)$/, optArg: [] }],
 ];
 
@@ -641,7 +642,10 @@ class ShellCommandParser {
       return;
     }
     const marked = COPY_PRIMITIVES.has(st.base) ? staticWordValue(raw, 'mark').value : null;
-    if (looksLikeShellName(value, sv.dynamic) || (marked !== null && marked.slice(marked.lastIndexOf('/') + 1).includes('\uE000'))) {
+    const markedBase = marked === null ? '' : marked.slice(marked.lastIndexOf('/') + 1);
+    // Nom construit par substitution dont les lettres écrites sont une sous-suite d'un nom de shell (`$(printf s)h`).
+    const builtByCommand = markedBase.includes('\uE000') && [...SHELL_NAMES].some(n => isSubsequence(markedBase.replace(/\uE000/g, '').toLowerCase(), n));
+    if (looksLikeShellName(value, sv.dynamic) || builtByCommand) {
       this.flag('interpreter-command-word', at, raw);
       return;
     }
