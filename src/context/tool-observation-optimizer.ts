@@ -85,6 +85,8 @@ export interface ToolObservationInput {
   currentInputTokens?: number;
   responseReserveTokens?: number;
   compressErrors?: boolean;
+  /** The failure's real exit status is not known (the caller only knows "failed"): the header says `non-zero`. */
+  exitCodeUnknown?: boolean;
   alreadyOptimized?: boolean;
   signal?: AbortSignal;
 }
@@ -325,7 +327,9 @@ export class ToolObservationOptimizer {
       };
     }
 
-    const failureExit = input.exitCode !== undefined && input.exitCode !== 0 ? input.exitCode : 1;
+    const failureExit: number | string = input.exitCodeUnknown
+      ? 'non-zero'
+      : input.exitCode !== undefined && input.exitCode !== 0 ? input.exitCode : 1;
     const failureView = failed ? annotateSuccessLines(report.compressed, failureExit).text : report.compressed;
     const failureHeader = failed ? failureHeaderFor(rawContent, failureView, failureExit) : '';
     const content = `${failureHeader}${failureView}${recoveryNote(input.toolCallId, report)}`;

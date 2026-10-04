@@ -35,4 +35,18 @@ describe('failure view', () => {
     expect(ensureFailureVisible('make: completed', 'FAIL cause\nmake: completed', 2, true)).toMatch(/^\[command failed: exit 2\][\s\S]*FAIL cause[\s\S]*make: completed {2}\(despite exit 2/);
     expect(ensureFailureVisible('all fine\nok', 'all fine\nok', 1, false)).toMatch(/^\[command failed: exit 1\]/);
   });
+
+  it('a success line copied into the header as CONTEXT is annotated too', () => {
+    const raw = ['a', 'echec: cause (src/x.ts:1)', 'make: completed', 'b'].join('\n');
+    const header = failureHeaderFor(raw, 'reduced', 2);
+    expect(header).toMatch(/2: echec: cause/);
+    expect(header).toMatch(/3: make: completed {2}\(despite exit 2: the command FAILED\)/);
+  });
+
+  it('says non-zero when the source never gave a status', async () => {
+    const { exitLabelFromText, detectExitCode } = await import('../../src/context/failure-view.js');
+    expect(exitLabelFromText('Error: x')).toBe('non-zero');
+    expect(exitLabelFromText('Error: x\nExit code 4')).toBe(4);
+    expect(detectExitCode('nothing')).toBeUndefined();
+  });
 });

@@ -62,7 +62,7 @@ import { extractEditedFilesFromHistory } from "../middleware/changed-files.js";
 import type { MessageQueue } from "../message-queue.js";
 import { semanticTruncate } from "../../utils/head-tail-truncation.js";
 import { optimizeToolObservation } from '../../context/tool-observation-optimizer.js';
-import { ensureFailureVisible, exitCodeFromText } from '../../context/failure-view.js';
+import { detectExitCode, ensureFailureVisible, exitLabelFromText } from '../../context/failure-view.js';
 import { isLmResizerEnabled } from '../../context/lm-resizer-compressor.js';
 import { getCurrentProvider } from '../../tools/hooks/default-hooks.js';
 import { sanitizeResult as sanitizeResultForProvider } from '../../tools/hooks/result-sanitizer.js';
@@ -2344,7 +2344,8 @@ export class AgentExecutor {
               toolCallId: toolCall.id || `tool_${Date.now()}`,
               content: modelObservation,
               success: result?.success,
-              exitCode: result?.success ? 0 : exitCodeFromText(modelObservation),
+              exitCode: result?.success ? 0 : (detectExitCode(modelObservation) ?? 1),
+              ...(result?.success === false && detectExitCode(modelObservation) === undefined ? { exitCodeUnknown: true } : {}),
               command: logicalCommand,
               query: message ?? '',
               workspaceRoot: toolWorkspace,
@@ -2382,7 +2383,7 @@ export class AgentExecutor {
               modelStreamContent = ensureFailureVisible(
                 modelStreamContent,
                 rawForRecovery,
-                exitCodeFromText(rawForRecovery),
+                exitLabelFromText(rawForRecovery),
                 observationShortened,
               );
             }

@@ -256,4 +256,17 @@ describe.skipIf(!hasBin || process.platform === 'win32')('real loop: streaming b
     expect(restored.found && restored.content).toContain('echec: la vraie cause sur stdout');
     expect(restored.found && restored.content).toContain('Error: summary only');
   }, 90_000);
+
+  it('never contradicted, exact case: "make: completed" is the line RIGHT AFTER the error (header context copy)', async () => {
+    const all = lines('echec: connexion refusee (src/db/pool.ts:412)', 8_000).trimEnd().split('\n');
+    const at = all.findIndex((l) => l.startsWith('echec:'));
+    all.splice(at + 1, 0, 'make: completed');
+    writeScript('make', `${all.join('\n')}\n`, 2);
+    const { toolMessage } = await playTurn('./make test', 'call_adjacent');
+    const occurrences = [...toolMessage.matchAll(/make: completed(.*)/g)];
+    expect(occurrences.length).toBeGreaterThanOrEqual(1);
+    for (const hit of occurrences) expect(hit[1]).toContain('(despite exit 2');
+    expect(exitOf(toolMessage)).toBeGreaterThanOrEqual(0);
+    expect(toolMessage).toContain('echec: connexion refusee (src/db/pool.ts:412)');
+  }, 90_000);
 });

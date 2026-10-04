@@ -280,7 +280,14 @@ export async function* executeStreaming(
   const output = stdout.text();
   if (failure) return { success: false, error: failure, output };
   if (proc.exitCode !== 0) {
-    return { success: false, error: stderr.text() || `Exit code ${proc.exitCode}`, output };
+    // lm-resizer on: keep the status even when stderr has text (it used to vanish,
+    // so the model was told "exit 1" for a process that exited 2).
+    const errText = stderr.text();
+    return {
+      success: false,
+      error: isLmResizerEnabled() && errText ? `${errText}\nExit code ${proc.exitCode}` : errText || `Exit code ${proc.exitCode}`,
+      output,
+    };
   }
   return { success: true, output };
 }

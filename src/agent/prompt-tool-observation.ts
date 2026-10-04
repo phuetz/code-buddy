@@ -14,7 +14,7 @@ import {
   optimizeToolObservation,
   type ToolObservationOptimizationReason,
 } from '../context/tool-observation-optimizer.js';
-import { ensureFailureVisible, exitCodeFromText } from '../context/failure-view.js';
+import { detectExitCode, ensureFailureVisible } from '../context/failure-view.js';
 import { isLmResizerEnabled } from '../context/lm-resizer-compressor.js';
 import { getCurrentProvider } from '../tools/hooks/default-hooks.js';
 import { sanitizeResult } from '../tools/hooks/result-sanitizer.js';
@@ -129,7 +129,8 @@ function capUnreducedObservation(content: string, input: PromptToolObservationIn
     output: content,
   }).output ?? content;
   const failed = input.success === false || (input.exitCode ?? 0) !== 0;
-  const exit = failed ? exitCodeFromText(content, input.exitCode && input.exitCode !== 0 ? input.exitCode : 1) : 0;
+  // A caller-supplied 1 is the ACP/sub-agent placeholder, not a measured status.
+  const exit = failed ? (detectExitCode(content) ?? ((input.exitCode ?? 0) > 1 ? input.exitCode! : 'non-zero')) : 0;
   let view = capped;
   if (capped !== content && input.allowOptimization !== false) {
     // The exact text was persisted just before (0600); tell the model how to read it.
@@ -204,7 +205,8 @@ export async function prepareToolObservationForPrompt(
       content: rawContent,
       success: input.success,
       ...(input.error === undefined ? {} : { error: input.error }),
-      ...(input.exitCode === undefined ? {} : { exitCode: input.exitCode }),
+      ...(input.exitCode === undefined ? {} : { exitCode: detectExitCode(rawContent) ?? input.exitCode }),
+      ...((input.success === false || (input.exitCode ?? 0) !== 0) && detectExitCode(rawContent) === undefined && (input.exitCode ?? 0) <= 1 ? { exitCodeUnknown: true } : {}),
       ...(input.command === undefined ? {} : { command: input.command }),
       ...(input.query === undefined ? {} : { query: input.query }),
       workspaceRoot,

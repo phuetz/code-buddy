@@ -23,12 +23,21 @@ const MAX_WEAK = 10;
 const MAX_CHARS = 6_000;
 const LINE_WINDOW = 400;
 
-/** The real exit status when the text carries one (sandbox trailer / host message), else `fallback`. */
-export function exitCodeFromText(text: string, fallback = 1): number {
-  const all = [...text.matchAll(/exit code[: ]+(-?\d+)/gi)];
-  const last = all.at(-1)?.[1];
+/** The real exit status carried by the text (sandbox trailer / host message), if any. */
+export function detectExitCode(text: string): number | undefined {
+  const last = [...text.matchAll(/exit code[: ]+(-?\d+)/gi)].at(-1)?.[1];
   const parsed = last === undefined ? NaN : Number(last);
-  return Number.isInteger(parsed) && parsed !== 0 ? parsed : fallback;
+  return Number.isInteger(parsed) && parsed !== 0 ? parsed : undefined;
+}
+
+/** As `detectExitCode`, with a numeric fallback (for the `--exit-code` argument). */
+export function exitCodeFromText(text: string, fallback = 1): number {
+  return detectExitCode(text) ?? fallback;
+}
+
+/** The label shown to the model: the real code, or "non-zero" when the source never told us. */
+export function exitLabelFromText(text: string): number | string {
+  return detectExitCode(text) ?? 'non-zero';
 }
 
 /** A <= LINE_WINDOW slice of a long line that still contains the match. */
@@ -69,7 +78,7 @@ export function failureHeaderFor(raw: string, view: string, exitCode: number | s
   let chars = 0;
   let previous = -2;
   for (const index of [...keep].sort((a, b) => a - b)) {
-    const text = shown.get(index) ?? lines[index]!.slice(0, LINE_WINDOW);
+    const text = annotateLine(shown.get(index) ?? lines[index]!.slice(0, LINE_WINDOW), exitCode);
     if (chars + text.length > MAX_CHARS) { out.push('…'); break; }
     if (index !== previous + 1 && out.length > 0) out.push('…');
     out.push(`${index + 1}: ${text}`);
@@ -79,13 +88,18 @@ export function failureHeaderFor(raw: string, view: string, exitCode: number | s
   return `${header}[failure lines from the full output, not in the reduced view below]\n${out.join('\n')}\n\n`;
 }
 
+function annotateLine(line: string, exitCode: number | string): string {
+  if (line.length > 300 || !SUCCESS_SUMMARY.test(line) || line.includes('(despite exit')) return line;
+  return `${line}  (despite exit ${exitCode}: the command FAILED)`;
+}
+
 /** Mark success-looking lines as contradicted by the exit status. Returns the text and how many lines were marked. */
 export function annotateSuccessLines(view: string, exitCode: number | string): { text: string; marked: number } {
   let marked = 0;
   const text = view.split('\n').map((line) => {
-    if (line.length > 300 || !SUCCESS_SUMMARY.test(line) || line.includes('(despite exit')) return line;
-    marked += 1;
-    return `${line}  (despite exit ${exitCode}: the command FAILED)`;
+    const annotated = annotateLine(line, exitCode);
+    if (annotated !== line) marked += 1;
+    return annotated;
   }).join('\n');
   return { text, marked };
 }
@@ -95,7 +109,7 @@ export function annotateSuccessLines(view: string, exitCode: number | string): {
  * lines and make sure the view opens with the failure header. `shortened` says
  * the view is a reduction of the full output (a header is then always added).
  */
-export function ensureFailureVisible(view: string, raw: string, exitCode: number, shortened: boolean): string {
+export function ensureFailureVisible(view: string, raw: string, exitCode: number | string, shortened: boolean): string {
   const annotated = annotateSuccessLines(view, exitCode);
   const hasHeader = annotated.text.includes('[command failed: exit');
   if (hasHeader || (!shortened && annotated.marked === 0)) return annotated.text;

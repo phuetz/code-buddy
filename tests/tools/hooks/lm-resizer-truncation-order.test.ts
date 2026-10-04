@@ -121,6 +121,17 @@ describe('truncation vs lm-resizer order', () => {
     expect(obs.content).toContain('restore_context({"identifier":"call_failcap"})');
   });
 
+  it('ACP/sub-agent shape: a failure without any status in the text says "non-zero", never a made-up "exit 1"', async () => {
+    process.env.CODEBUDDY_LM_RESIZER = 'true';
+    const ws = mkdtempSync(join(tmpdir(), 'lmr-order-nostatus-'));
+    dirs.push(ws);
+    const obs = await prepareToolObservationForPrompt({
+      toolName: 'bash', toolCallId: 'call_nostatus', content: `${log}make: completed\n`, success: false, exitCode: 1, workspaceRoot: ws,
+    });
+    expect(obs.content).toContain('[command failed: exit non-zero]');
+    expect(obs.content).not.toContain('exit 1]');
+  });
+
   const bin = resolveLmResizerBin();
   const hasBin = bin.includes('/') && existsSync(bin);
   it.skipIf(!hasBin)('REAL binary: the model-facing text keeps the marker enabled, loses it disabled', async () => {
