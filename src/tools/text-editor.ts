@@ -19,11 +19,11 @@ import { createHash } from 'crypto';
 function hasDisplayLineLabels(text: string): boolean {
   return text.split(/\r?\n/).some(line =>
     /^\s*\d+\s*(?:[:|)\]-]|\.(?!\d))\s?/.test(line)
-    || /^\s*\d+(?:\.\d+)+[^\d.\r\n]/.test(line));
+    || /^\s*\d+(?:\.\d+)+(?:[^\d.\r\n]|\.(?!\d))/.test(line));
 }
 
 function introducesDisplayLabels(file: string, before: string, after: string): boolean {
-  return /\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh|vue|php)$/i.test(file)
+  return /\.(?:[cm]?[jt]sx?|py|rs|go|java|cs|cpp|c|rb|sh|vue|php|html|kt)$/i.test(file)
     && hasDisplayLineLabels(after) && !hasDisplayLineLabels(before);
 }
 

@@ -144,4 +144,24 @@ describe('display line labels are not approximate source text', () => {
     expect((await editor.replaceLines(file, 1, 1, "1.2 const title = 'changed';")).success).toBe(false);
     expect(readFileSync(file, 'utf8')).toBe(source);
   });
+  it.each(['1.2. const', '1.2.const'])('rejects dotted display labels in old_str: %s', async prefix => {
+    const file = join(directory, 'sample.js');
+    writeFileSync(file, source);
+    const decorated = prefix + " title = 'initial';";
+    expect((await editor.strReplace(file, decorated, decorated.replace('initial', 'changed'))).success).toBe(false);
+    expect(readFileSync(file, 'utf8')).toBe(source);
+  });
+  it('rejects a dotted label introduced only by new_str or replaceLines', async () => {
+    const file = join(directory, 'sample.js');
+    writeFileSync(file, source);
+    expect((await editor.strReplace(file, "const title = 'initial';", "1.2. const title = 'changed';")).success).toBe(false);
+    expect((await editor.replaceLines(file, 1, 1, "1.2. const title = 'changed';")).success).toBe(false);
+    expect(readFileSync(file, 'utf8')).toBe(source);
+  });
+  it.each(['html', 'kt'])('guards display-labelled insertions in .%s source', async extension => {
+    const file = join(directory, `sample.${extension}`);
+    writeFileSync(file, source);
+    expect((await editor.insert(file, 1, "1.2 const title = 'changed';")).success).toBe(false);
+    expect(readFileSync(file, 'utf8')).toBe(source);
+  });
 });
