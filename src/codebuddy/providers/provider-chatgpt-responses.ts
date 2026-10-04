@@ -24,6 +24,8 @@
  * stays unchanged.
  */
 
+import { createHash } from 'node:crypto';
+import path from 'node:path';
 import type { ChatCompletionChunk } from 'openai/resources/chat';
 import type {
   CodeBuddyMessage,
@@ -93,6 +95,22 @@ export interface ChatGptResponsesProviderOptions {
    * for tests, or when the user genuinely wants to see the raw error.
    */
   disableModelFallback?: boolean;
+  /**
+   * Directory hashed into `prompt_cache_key`. The same project keeps the
+   * same key across processes; a different directory does not. Defaults
+   * to `process.cwd()` at construction.
+   */
+  projectDir?: string;
+}
+
+/**
+ * Cache key stable for one project directory. Not random: a new process
+ * in the same folder can reuse the backend prompt cache.
+ */
+export function stableProjectPromptCacheKey(projectDir: string): string {
+  const normalized = path.normalize(path.resolve(projectDir));
+  const digest = createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+  return `cb-project-${digest}`;
 }
 
 /** Models served only by the classic OpenAI API — the ChatGPT/Codex backend
@@ -351,7 +369,7 @@ export class ChatGptResponsesProvider implements Provider {
     this.modelCatalogProvider = opts.modelCatalogProvider;
     this.currentModel = normalizeChatGptOAuthModel(opts.model);
     this.configuredModel = normalizeChatGptOAuthModel(opts.model);
-    this.promptCacheKey = `cb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    this.promptCacheKey = stableProjectPromptCacheKey(opts.projectDir ?? process.cwd());
     this.disableModelFallback = opts.disableModelFallback ?? false;
     this.defaultReasoningEffort = opts.defaultReasoningEffort;
   }

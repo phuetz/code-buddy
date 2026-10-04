@@ -21,11 +21,11 @@ describe('provider-openai-compat-hooks', () => {
       expect(lastSystem.cache_control).toEqual({ type: 'ephemeral' });
     });
 
-    it('targets the LAST system message when multiple are present', () => {
+    it('pose le repère sur le dernier message system de tête, pas sur la queue volatile', () => {
       const messages: CodeBuddyMessage[] = [
-        { role: 'system', content: 'first system' },
-        { role: 'user', content: 'hi' },
-        { role: 'system', content: 'second system' },
+        { role: 'system', content: 'prefixe stable' },
+        { role: 'user', content: 'corrige le bug' },
+        { role: 'system', content: '<runtime_settings ephemeral="true">{"cwd":"/tmp/autre"}</runtime_settings>' },
       ];
 
       const result = injectAnthropicCacheBreakpoints(messages);
@@ -33,8 +33,8 @@ describe('provider-openai-compat-hooks', () => {
       const systems = result.filter(m => m.role === 'system') as Array<
         CodeBuddyMessage & { cache_control?: { type: string } }
       >;
-      expect(systems[0].cache_control).toBeUndefined();
-      expect(systems[1].cache_control).toEqual({ type: 'ephemeral' });
+      expect(systems[0].cache_control).toEqual({ type: 'ephemeral' });
+      expect(systems[1].cache_control).toBeUndefined();
     });
 
     it('returns the array unchanged (copied) when no system message is present', () => {

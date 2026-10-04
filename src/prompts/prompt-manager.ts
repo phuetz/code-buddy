@@ -250,7 +250,10 @@ export class PromptManager {
         contextLines.push(`- Model: ${modelName}`);
       }
       contextLines.push('</context>');
-      sections.push({ id: 'context', content: contextLines.join('\n'), priority: 10 });
+      // After every other section: a date or folder change must not sit in
+      // the cached prefix. PromptBuilder still appends blocks after this
+      // string and relocates the same block to the very end.
+      sections.push({ id: 'context', content: contextLines.join('\n'), priority: 50 });
     }
 
     // 2.5 Memory section (High priority context)

@@ -447,6 +447,7 @@ export class CodeBuddyClient {
         model: model || this.currentModel,
         defaultMaxTokens: this.defaultMaxTokens,
         defaultReasoningEffort: process.env.CODEBUDDY_CODEX_REASONING_EFFORT,
+        projectDir: process.cwd(),
       });
     } else if (this.isGeminiCliProvider) {
       // Wrap the local `gemini` binary as a subprocess. The path comes

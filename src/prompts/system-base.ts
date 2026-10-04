@@ -15,6 +15,8 @@
  * 5. Environment Awareness - OS, cwd, available tools
  */
 
+import { relocateVolatileSuffix } from './cache-stable-prefix.js';
+
 // ============================================================================
 // Security Rules (OWASP recommendations)
 // ============================================================================
@@ -82,13 +84,9 @@ The above custom instructions should be followed alongside the standard instruct
     ? "\n- edit_file: High-speed file editing with Morph Fast Apply (4,500+ tokens/sec) - PREFER for large files"
     : "";
 
-  return `<identity>
-You are Code Buddy, an AI-powered terminal assistant for software development.
-You help users with file editing, code generation, system operations, and technical questions.
-CRITICAL OUTPUT RULE: You MUST be concise. Maximum 5-10 lines for simple answers. For code questions, show ONE solution only — no alternatives unless asked. No line-by-line explanations of obvious code. No filler phrases ("Bien sûr", "Certainly"). No repeating the question. Lead with the answer, not the explanation.
-</identity>
-
-<context>
+  // Date and folder change per day and per directory. They stay after the
+  // stable instructions so a prefix cache survives a different working tree.
+  const contextBlock = `<context>
 - Current date: ${today}
 - Working directory: ${cwd}
 - Platform: ${process.platform}
@@ -96,7 +94,13 @@ CRITICAL OUTPUT RULE: You MUST be concise. Maximum 5-10 lines for simple answers
 - Shell: ${process.platform === 'win32' ? 'PowerShell' : (process.env.SHELL || '/bin/bash')}
 - Node.js: ${process.version}
 - Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}${process.env.KUBERNETES_SERVICE_HOST ? '\\n- Environment: Kubernetes pod' : (process.env.container ? '\\n- Environment: Container' : '')}
-</context>
+</context>`;
+
+  return `<identity>
+You are Code Buddy, an AI-powered terminal assistant for software development.
+You help users with file editing, code generation, system operations, and technical questions.
+CRITICAL OUTPUT RULE: You MUST be concise. Maximum 5-10 lines for simple answers. For code questions, show ONE solution only — no alternatives unless asked. No line-by-line explanations of obvious code. No filler phrases ("Bien sûr", "Certainly"). No repeating the question. Lead with the answer, not the explanation.
+</identity>
 ${customInstructionsSection}
 ${SECURITY_RULES}
 
@@ -226,7 +230,9 @@ When using \`run_script\` for complex tasks, YOU MUST FOLLOW THIS LOOP:
 <confirmation_system>
 File operations and bash commands require user confirmation.
 If a user rejects an operation, acknowledge and suggest alternatives.
-</confirmation_system>`;
+</confirmation_system>
+
+${contextBlock}`;
 }
 
 // ============================================================================
@@ -321,13 +327,13 @@ export function getSystemPromptForMode(
 
   switch (mode) {
     case "yolo":
-      return basePrompt + YOLO_MODE_ADDITIONS;
+      return relocateVolatileSuffix(basePrompt + YOLO_MODE_ADDITIONS);
     case "safe":
-      return basePrompt + SAFE_MODE_ADDITIONS;
+      return relocateVolatileSuffix(basePrompt + SAFE_MODE_ADDITIONS);
     case "code":
-      return basePrompt + CODE_MODE_ADDITIONS;
+      return relocateVolatileSuffix(basePrompt + CODE_MODE_ADDITIONS);
     case "research":
-      return basePrompt + RESEARCH_MODE_ADDITIONS;
+      return relocateVolatileSuffix(basePrompt + RESEARCH_MODE_ADDITIONS);
     default:
       return basePrompt;
   }
@@ -361,16 +367,16 @@ export function getChatOnlySystemPrompt(
     day: 'numeric'
   });
 
+  const contextBlock = `<context>
+- Date actuelle: ${today}
+- Répertoire de travail: ${cwd}
+- Mode: Chat uniquement (sans outils)
+</context>`;
+
   return `<identity>
 Tu es Code Buddy, un assistant IA intelligent spécialisé dans le développement logiciel.
 Tu aides les utilisateurs avec leurs questions techniques, la programmation et la résolution de problèmes.
 </identity>
-
-<context>
-- Date actuelle: ${today}
-- Répertoire de travail: ${cwd}
-- Mode: Chat uniquement (sans outils)
-</context>
 ${customSection}
 <guidelines>
 COMPORTEMENT:
@@ -410,7 +416,9 @@ Ce que tu ne peux PAS faire dans ce mode:
 - Accéder à des données après ta date de formation
 </capabilities>
 
-Sois naturel, professionnel et concentré sur l'aide à l'utilisateur.`;
+Sois naturel, professionnel et concentré sur l'aide à l'utilisateur.
+
+${contextBlock}`;
 }
 
 // ============================================================================
@@ -435,16 +443,16 @@ export function getChatOnlySystemPromptEN(
     day: 'numeric'
   });
 
+  const contextBlock = `<context>
+- Current date: ${today}
+- Working directory: ${cwd}
+- Mode: Chat only (no tools)
+</context>`;
+
   return `<identity>
 You are Code Buddy, an intelligent AI assistant specialized in software development.
 You help users with technical questions, programming, and problem-solving.
 </identity>
-
-<context>
-- Current date: ${today}
-- Working directory: ${cwd}
-- Mode: Chat only (no tools)
-</context>
 ${customSection}
 <guidelines>
 BEHAVIOR:
@@ -484,7 +492,9 @@ What you CANNOT do in this mode:
 - Access data after your training cutoff
 </capabilities>
 
-Be natural, professional, and focused on helping the user.`;
+Be natural, professional, and focused on helping the user.
+
+${contextBlock}`;
 }
 
 export default getBaseSystemPrompt;

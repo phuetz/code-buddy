@@ -11,7 +11,8 @@
  *
  * This module provides:
  * 1. `injectAnthropicCacheBreakpoints(messages)` — mark the last system
- *    message with cache_control before sending to Anthropic.
+ *    message of the leading run (before the first non-system message) with
+ *    cache_control. A later system message is the volatile tail.
  * 2. `buildStableDynamicSplit(systemPrompt)` — split a system prompt into
  *    stable prefix (identity/tools/instructions) and dynamic suffix (time,
  *    todos, memory). The split point is the first line beginning with a
@@ -81,8 +82,13 @@ export function buildStableDynamicSplit(systemPrompt: string): StableDynamicSpli
 
 /**
  * Inject `cache_control: {type: "ephemeral"}` onto the last system message
- * in the messages array. This marks the end of the stable prefix so Anthropic
- * caches everything up to that point.
+ * of the leading run, before the first user or assistant message. Anthropic
+ * caches everything up to that marker. A system message after the user
+ * (`runtime_settings`, workspace, the moved environment block) is volatile
+ * and must not carry the marker — it changes between turns and folders.
+ *
+ * When every message is a system message, the last one is marked (there is
+ * no volatile tail to exclude).
  *
  * Call this **only** when the active provider is Anthropic (detected by model
  * name containing "claude" or provider being "anthropic").
@@ -95,21 +101,20 @@ export function injectAnthropicCacheBreakpoints(
 ): CacheBreakpointMessage[] {
   const result: CacheBreakpointMessage[] = [...messages] as CacheBreakpointMessage[];
 
-  // Find the last system message index
+  let headEnd = result.findIndex(message => message?.role !== 'system');
+  if (headEnd === -1) headEnd = result.length;
+
   let lastSystemIdx = -1;
-  let lastSystemMessage: CacheBreakpointMessage | undefined;
-  for (let i = result.length - 1; i >= 0; i--) {
-    const message = result[i];
-    if (message?.role === 'system') {
+  for (let i = headEnd - 1; i >= 0; i--) {
+    if (result[i]?.role === 'system') {
       lastSystemIdx = i;
-      lastSystemMessage = message;
       break;
     }
   }
 
+  const lastSystemMessage = lastSystemIdx === -1 ? undefined : result[lastSystemIdx];
   if (lastSystemIdx === -1 || lastSystemMessage === undefined) return result;
 
-  // Clone and add cache_control to the last system message
   result[lastSystemIdx] = {
     ...lastSystemMessage,
     cache_control: { type: 'ephemeral' },

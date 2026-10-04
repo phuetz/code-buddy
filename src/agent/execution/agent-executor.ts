@@ -38,6 +38,7 @@ import {
   sanitizeAssistantOutput,
 } from "./context-pipeline.js";
 import { extractYieldChildId, processYieldSignal } from "./yield-coordinator.js";
+import { detachVolatileContext } from "../../prompts/cache-stable-prefix.js";
 import {
   runPreToolUseHook,
   pushBlockedToolMessage,
@@ -1726,6 +1727,10 @@ export class AgentExecutor {
         // hangs FOREVER (turns stuck for hours in Cowork and headless waves).
         // Fail fast with a clear error instead; the caller/user retries.
         const progress = startHeadlessPromptProgress();
+        // Date, folder and `Project:` leave the leading system message. The
+        // provider still receives them, after the user and the ephemeral tail,
+        // so the cached prefix no longer changes with the working directory.
+        preparedMessages = detachVolatileContext(preparedMessages);
         const streamFactory = () => withStallGuard(this.deps.client.chatStream(
           preparedMessages,
           tools,
