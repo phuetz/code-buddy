@@ -79,9 +79,11 @@ describe('shell-command-words : découpage en commandes simples', () => {
     }
   });
 
-  it('laisse passer le sourcing d\'un fichier shell, analysé pour lui-même', () => {
-    expect(analyzeShellCommandWords('. "$(dirname "$0")/lib/common.sh"')).toEqual([]);
-    expect(analyzeShellCommandWords('source ./env.bash')).toEqual([]);
+  it('traite source et . comme bash : toute cible, suffixe .sh compris', () => {
+    for (const body of ['. "$(dirname "$0")/lib/common.sh"', 'source ./env.bash', 'source "$REMOTE/x.sh"', '. ./x.sh', 'sudo source x', 'if . x; then :; fi']) {
+      expect(kinds(body), body).toContain('interpreter-command-word');
+    }
+    expect(analyzeShellCommandWords('echo "source $x" . y')).toEqual([]);
   });
 
   it('refuse (échec fermé) tout texte qu\'il ne sait pas découper', () => {

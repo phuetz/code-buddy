@@ -46,7 +46,7 @@ const AUTRES_POSITIONS = [
   'c=bash\nfor i in 1; do $c x; done', 'c=bash\ncase 1 in 1) $c x;; esac', 'c=bash\n( $c x )', 'c=bash\n{ $c x; }',
   'c=bash\nf() { $c x; }\nf', 'c=bash\ncat <<EOF\n$($c x)\nEOF', 'c=bash\n[[ -f x ]] && $c x', 'c=bash\n! $c x',
   'c=bash\n"$c" x', 'c=bash\n${c} x', 'c=bash\n$(echo bash) x', 'c=bash\n`echo bash` x', 'c=bash\n$((1)) x',
-  'c=bash\ndiff <($c a) b', 'source ../payload.txt', '. ../payload.txt', 'sudo sh x', 'xargs -I{} bash {}',
+  'c=bash\ndiff <($c a) b', 'source ../payload.txt', '. ../payload.txt', 'source ./x.sh', 'source "$REMOTE/x.sh"', '. "$(dirname "$0")/lib/common.sh"', 'sudo sh x', 'xargs -I{} bash {}',
 ];
 
 /** Texte qu'on ne sait pas découper sûrement : jamais `allow`. */
@@ -59,7 +59,7 @@ const ORDINAIRES = [
   'if [[ "$x" =~ ^(a|b)$ ]]; then echo ok; fi', 'case "$1" in\n  start|stop) echo "$1";;\n  *) exit 1;;\nesac',
   'cat <<\'EOF\'\n$c\nEOF', 'x=$((1+2)); echo "$x"', 'arr=(a "b c" $d)\necho "${arr[@]}"', 'readonly O=(--fail --silent)',
   'f() { echo hi; }\nf', 'cp "$a" "$b" && git commit -m "x"', 'sudo -u "$user" cp "$a" "$b"', 'find . -name "*.sh" -exec rm {} \x5c;',
-  'trap \'cleanup "$tmp"\' EXIT', 'export PATH="$HOME/bin:$PATH"', '. "$(dirname "$0")/lib/common.sh"', 'python3 x.py "$@"',
+  'trap \'cleanup "$tmp"\' EXIT', 'export PATH="$HOME/bin:$PATH"', 'python3 x.py "$@"',
 ];
 
 const dirs: string[] = [];

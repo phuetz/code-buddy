@@ -732,10 +732,10 @@ function collectShellCommandWordFindings(content: string, filePath: string, cont
   if (!first) return [];
   if (!first.markdown) {
     const extension = path.extname(filePath).toLowerCase();
-    // An executable file of unknown kind (no extension, no known shebang) is
+    // An executable file without extension nor known shebang is
     // run by the shell when execve refuses it: read it as shell too.
     if (SHELL_LANGUAGES.has(first.language) || SHELL_EXTENSIONS_WITHOUT_LANGUAGE.has(extension)
-        || (first.language === 'unknown' && hasExecuteBit(filePath))) {
+        || (first.language === 'unknown' && extension === '' && hasExecuteBit(filePath))) {
       regions.push({ from: 1, text: content });
     }
   } else {

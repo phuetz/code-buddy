@@ -33,15 +33,10 @@ const LITERAL_BUILTINS = new Set(['[', '[[', ':']);
 const SHELL_INTERPRETERS = new Set([
   'bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'ash', 'csh', 'tcsh', 'mksh', 'pdksh', 'rbash', 'busybox',
   'pwsh', 'powershell', 'osascript',
+  // `source f` / `. f` exécutent f comme du shell, exactement comme `bash f` : même traitement,
+  // quelle que soit la cible (suffixe .sh compris, nom dynamique compris).
+  'source', '.',
 ]);
-
-/**
- * `source f` / `. f` exécutent le contenu de `f` comme du shell, comme
- * `bash f`. Un fichier au suffixe de script shell est analysé pour lui-même à
- * l'import ; tout autre argument (donnée `.txt`, nom dynamique…) ne l'est pas.
- */
-const SOURCING_BUILTINS = new Set(['source', '.']);
-const SHELL_SCRIPT_TAIL = /\.(?:sh|bash|zsh|ksh|dash)$/i;
 
 /** Mots-clés après lesquels un mot de commande commence encore. */
 const COMMAND_RESERVED = new Set(['!', '{', '}', 'if', 'then', 'elif', 'else', 'fi', 'while', 'until', 'do', 'done', 'esac', 'coproc']);
@@ -140,7 +135,7 @@ interface WrapperState {
 
 interface CommandWordResult {
   wrapper?: WrapperState;
-  code?: 'eval' | 'trap' | 'source';
+  code?: 'eval' | 'trap';
   isFind?: boolean;
 }
 
@@ -223,7 +218,7 @@ class ShellCommandParser {
     const s = this.s;
     let expectCommand = !argsOnly;
     let redirectTarget = false;
-    const st: { wrapper: WrapperState | null; code: 'eval' | 'trap' | 'source' | null; isFind: boolean; findExec: boolean } =
+    const st: { wrapper: WrapperState | null; code: 'eval' | 'trap' | null; isFind: boolean; findExec: boolean } =
       { wrapper: null, code: null, isFind: false, findExec: false };
     let dbracket = false;
     let headArgs = false; // après for/select/case : les mots sont des arguments
@@ -390,13 +385,6 @@ class ShellCommandParser {
 
       if (!expectCommand) {
         // Arguments d'une commande déjà identifiée.
-        if (st.code === 'source') {
-          if (!raw.startsWith('-')) {
-            st.code = null;
-            if (!SHELL_SCRIPT_TAIL.test(raw.replace(/["']/g, ''))) this.flag('interpreter-command-word', start, `source ${raw}`);
-          }
-          continue;
-        }
         if (st.code) {
           this.analyzeCodeWord(raw, start, st.code);
           st.code = null;
@@ -454,14 +442,13 @@ class ShellCommandParser {
     const base = slash >= 0 ? raw.slice(slash + 1) : raw;
     if (base === 'eval') return { code: 'eval' };
     if (base === 'trap') return { code: 'trap' };
-    if (SOURCING_BUILTINS.has(raw)) return { code: 'source' };
     if (base === 'find') return { isFind: true };
     const spec = WRAPPERS[base];
     return spec ? { wrapper: { name: base, spec, positional: spec.positional, skip: false } } : {};
   }
 
   /** Argument d'`eval`/`trap` : du code. On l'analyse comme une liste de commandes. */
-  private analyzeCodeWord(raw: string, at: number, kind: 'eval' | 'trap' | 'source'): void {
+  private analyzeCodeWord(raw: string, at: number, kind: 'eval' | 'trap'): void {
     if (kind === 'trap' && /^-/.test(raw)) return;
     const content = unquoteWord(raw, true);
     if (content === null) {
