@@ -2,7 +2,7 @@
 
 Branche `fix/appels-chatgpt-imprevus-2026-10-04`, worktree `cb-appels-chatgpt-2026-10-04`.
 Base `70bcab004f822bccadb73f931e9de1d932b900a5`. Correctif `064ff3a9ccc16bffb1a8164600de8213cb48e558`.
-Aucun push. Rapport de livraison : `/home/patrice/Videos/Partage/20261004-grok-appels-chatgpt/auteur/RAPPORT.md`.
+Aucun push. Rapport de livraison : `<partage>/20261004-grok-appels-chatgpt/auteur/RAPPORT.md`.
 
 ## Cause
 
@@ -24,7 +24,7 @@ La ligne de journal `Auto-detected provider: chatgpt` reste volontairement : ce 
 
 - Test qui partait vers `https://chatgpt.com/backend-api/codex` avant le correctif : `tests/providers/auxiliary-session-provider.test.ts`. Régression d'argv : `tests/cli/headless-argv.test.ts`.
 - Barrière : 297 fichiers, 3371 tests verts, 5 ignorés (`tests` touchés + `tests/memory` + `tests/agent`). `npm run typecheck` sortie 0. `npm run lint` sortie 0 (0 erreur, 2601 avertissements déjà présents).
-- Rejeu du 2026-10-04 11:56:40Z avec `/home/patrice/.local/share/flotte-pilote-opus/buddy-openrouter.sh`, `CODEBUDDY_ROOT` = ce worktree, HOME `_qa/appels-chatgpt/home` : 4 POST `openrouter.ai/api/v1/chat/completions`, modèle `deepseek/deepseek-v4.1-flash`, 0 hôte `chatgpt.com`. Marqueurs : leçons (1 373 caractères utilisateur) puis mémoire (1 517). Journal : `2 lesson candidate(s), 1 memory candidate(s)`.
+- Rejeu du 2026-10-04 11:56:40Z avec `<flotte>/buddy-openrouter.sh`, `CODEBUDDY_ROOT` = ce worktree, HOME `_qa/appels-chatgpt/home` : 4 POST `openrouter.ai/api/v1/chat/completions`, modèle `deepseek/deepseek-v4.1-flash`, 0 hôte `chatgpt.com`. Marqueurs : leçons (1 373 caractères utilisateur) puis mémoire (1 517). Journal : `2 lesson candidate(s), 1 memory candidate(s)`.
 
 ## Hors périmètre
 

@@ -3,7 +3,7 @@
 Branche `fix/appels-chatgpt-imprevus-2026-10-04`, worktree `cb-appels-chatgpt-2026-10-04`.
 Tête relue par la revue : `88999db11487613c99958be076b2e0c1a1627e13`.
 Correctif de cette reprise : `ea031e8494bc1a47599a08618848372ba4f35bed`.
-Aucun push. Rapport de livraison : `/home/patrice/Videos/Partage/20261004-grok-appels-chatgpt/reprise-1/auteur/RAPPORT.md`.
+Aucun push. Rapport de livraison : `<partage>/20261004-grok-appels-chatgpt/reprise-1/auteur/RAPPORT.md`.
 
 La revue juge le correctif produit juste. Il n'a pas été retouché (`src/providers/auxiliary-llm.ts`, `session-llm-route.ts`, `src/cli/headless-argv.ts`, `src/index.ts`, `docs/fournisseur-auxiliaire.md`, CHANGELOG).
 
