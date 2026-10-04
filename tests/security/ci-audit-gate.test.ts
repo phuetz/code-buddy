@@ -88,10 +88,10 @@ describe('audit-gate : exception limitée à une copie d’outillage', () => {
     await expect(runGate()).rejects.toThrow('audit refusé');
   });
 
-  it('conserve les exceptions historiques sans restriction de chemins', async () => {
-    input.allowedNodes = undefined;
-    await runGate();
-    expect(process.exit).not.toHaveBeenCalled();
+  it.each([undefined, [], ['']])('refuse une exception sans périmètre explicite : %s', async (nodes) => {
+    input.allowedNodes = nodes;
+    await expect(runGate()).rejects.toThrow('audit refusé');
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('outside the allowlisted scope'));
   });
 
   it('refuse un nouvel avis sur la copie déjà autorisée', async () => {
