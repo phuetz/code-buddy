@@ -2,6 +2,7 @@
 
 ### Corrigé
 
+- **perf(cache) :** les résultats d'outils anciens ne sont plus réécrits à chaque tour. Leurs stubs ne portent plus d'âge (`[Tool result expired]`), chaque étape est idempotente, et l'expiration se fait par paliers (`CODEBUDDY_TOOL_TTL_STEP`, défaut 10 tours, 1 = à chaque tour). Avant, le plus ancien résultat changeait à chaque requête et le cache LLM restait bloqué au préfixe qui le précède (≈ 12 000 jetons, 30-45 % de taux sur 90 requêtes) ; contrepartie : un résultat est réduit au plus 9 tours plus tard.
 - Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.
 - Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré.
 

@@ -47,20 +47,20 @@ export const MASKING_TAG_END = '</tool_output_masked>';
 /**
  * Generate a head/tail preview of content.
  */
-function generatePreview(content: string): string {
+function generatePreview(content: string, maxBytes: number = 4000): string {
   const lines = content.split('\n');
 
   if (lines.length <= HEAD_PREVIEW_LINES + TAIL_PREVIEW_LINES) {
     // Short enough — use char-based preview
     if (content.length <= SHORT_PREVIEW_CHARS * 2) return content;
-    return truncateOutput(content, SHORT_PREVIEW_CHARS * 2);
+    return truncateOutput(content, Math.min(SHORT_PREVIEW_CHARS * 2, maxBytes));
   }
 
   const head = lines.slice(0, HEAD_PREVIEW_LINES).join('\n');
   const tail = lines.slice(-TAIL_PREVIEW_LINES).join('\n');
   const omitted = lines.length - HEAD_PREVIEW_LINES - TAIL_PREVIEW_LINES;
 
-  return truncateOutput(`${head}\n\n... (${omitted} lines omitted) ...\n\n${tail}`, 4000);
+  return truncateOutput(`${head}\n\n... (${omitted} lines omitted) ...\n\n${tail}`, maxBytes);
 }
 
 /**
@@ -182,25 +182,56 @@ export function applyToolOutputMasking(messages: CodeBuddyMessage[]): number {
 // TTL-Based Tool Result Expiry (DeepWiki Gap #5)
 // ============================================================================
 
+/** Premiere ligne d'un resultat reduit en apercu (etape 1) : marque le fait qu'il a deja ete reduit. */
+export const AGED_PREVIEW_TAG = '[Aged tool result: preview]';
+/** Resume d'une ligne (etape 2). Aucun element variable d'un tour a l'autre : pas d'age, pas de compteur. */
+export const AGED_STUB_PREFIX = '[Aged tool result: ';
+/** Stub final (etape 3), identique pour tous les resultats expires. */
+export const EXPIRED_STUB = '[Tool result expired]';
+
+/** Pas d'expiration par defaut en conditions reelles (voir resolveToolTtlStep). */
+export const DEFAULT_TOOL_TTL_STEP = 10;
+
+/**
+ * Pas (en tours) entre deux passes d'expiration, lu dans `CODEBUDDY_TOOL_TTL_STEP`.
+ * Defaut 10 ; `1` = une passe a chaque tour (ancien rythme, mais les stubs restent stables) ; valeur invalide = defaut.
+ */
+export function resolveToolTtlStep(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CODEBUDDY_TOOL_TTL_STEP;
+  if (raw === undefined || raw.trim() === '') return DEFAULT_TOOL_TTL_STEP;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 1000 ? n : DEFAULT_TOOL_TTL_STEP;
+}
+
 /**
  * Age-based relevance decay for tool results.
  *
  * Tool results older than `maxAgeTurns` are progressively compressed:
  * - 50-75% age: truncated to head/tail preview
  * - 75-100% age: replaced with one-line stub
- * - >100% age: removed entirely
+ * - >100% age: replaced with a fixed stub
+ *
+ * Stabilite du prefixe (cache LLM) : un resultat deja reduit est identique d'un appel a l'autre (aucun age
+ * ni compteur dans les stubs, chaque etape est idempotente), et `stepTurns` > 1 quantifie le tour courant
+ * a un multiple du pas : entre deux paliers les seuils ne bougent pas, donc aucun message ancien n'est
+ * reecrit et la requete N+1 prolonge la requete N. Contrepartie : un resultat est reduit au plus
+ * `stepTurns - 1` tours plus tard qu'avec un pas de 1 (retard moyen ~ stepTurns/2 tours).
  *
  * @param messages - Mutable message array
  * @param currentTurn - Current tool round number
  * @param maxAgeTurns - Maximum age before full removal (default 20)
+ * @param stepTurns - Pas des paliers d'expiration (defaut 1 = chaque tour ; l'agent passe resolveToolTtlStep())
  * @returns Number of results expired
  */
 export function expireOldToolResults(
   messages: CodeBuddyMessage[],
   currentTurn: number,
   maxAgeTurns: number = 20,
+  stepTurns: number = 1,
 ): number {
   let expired = 0;
+  const step = Number.isInteger(stepTurns) && stepTurns > 1 ? stepTurns : 1;
+  const effectiveTurn = step > 1 ? Math.floor(currentTurn / step) * step : currentTurn;
 
   // Assign approximate turn numbers based on position
   // Each assistant+tool pair ≈ 1 turn
@@ -216,32 +247,36 @@ export function expireOldToolResults(
     const msg = messages[i];
     if (!msg || msg.role !== 'tool' || typeof msg.content !== 'string') continue;
     if (msg.content.includes(MASKING_TAG)) continue; // Already masked
+    if (msg.content === EXPIRED_STUB) continue; // Etat final : ne plus toucher
 
     const msgTurn = turnMap.get(i) ?? 0;
-    const age = currentTurn - msgTurn;
+    const age = effectiveTurn - msgTurn;
 
     if (age <= maxAgeTurns * 0.5) continue; // Fresh enough
 
     if (age > maxAgeTurns) {
-      // Full removal: replace with stub
-      msg.content = `[Tool result expired: age ${age} turns > ${maxAgeTurns} limit]`;
+      // Full removal: replace with a fixed stub
+      msg.content = EXPIRED_STUB;
       expired++;
     } else if (age > maxAgeTurns * 0.75) {
-      // Heavy compression: one-line summary
-      const firstLine = msg.content.split('\n')[0]?.substring(0, 100) ?? '';
-      msg.content = `[Aged tool result (${age} turns): ${firstLine}...]`;
+      // Heavy compression: one-line summary (jamais re-resume un resume deja fait)
+      if (msg.content.startsWith(AGED_STUB_PREFIX) && msg.content.endsWith('...]')) continue;
+      const body = msg.content.startsWith(AGED_PREVIEW_TAG) ? msg.content.slice(AGED_PREVIEW_TAG.length + 1) : msg.content;
+      const firstLine = body.split('\n')[0]?.substring(0, 100) ?? '';
+      msg.content = `${AGED_STUB_PREFIX}${firstLine}...]`;
       expired++;
     } else {
-      // Moderate compression: head/tail preview
+      // Moderate compression: head/tail preview, une seule fois
+      if (msg.content.startsWith(AGED_PREVIEW_TAG) || msg.content.startsWith(AGED_STUB_PREFIX)) continue;
       if (msg.content.length > 500) {
-        msg.content = generatePreview(msg.content);
+        msg.content = `${AGED_PREVIEW_TAG}\n${generatePreview(msg.content, 4000 - AGED_PREVIEW_TAG.length - 1)}`;
         expired++;
       }
     }
   }
 
   if (expired > 0) {
-    logger.debug(`Tool result TTL: expired ${expired} results (currentTurn=${currentTurn}, maxAge=${maxAgeTurns})`);
+    logger.debug(`Tool result TTL: expired ${expired} results (currentTurn=${currentTurn}, effective=${effectiveTurn}, maxAge=${maxAgeTurns})`);
   }
 
   return expired;
