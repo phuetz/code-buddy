@@ -132,6 +132,13 @@ function buildSkillListHealth(
 }
 
 /** Count SKILL.md packages and `.skill.md` files in the bundled skills directory. */
+const INERT_SCRIPTS_GUARANTEE =
+  'Guaranteed: scripts are inert (no execute bit). While one of them is not allowlisted, a human confirmation is required when a command or program run by an agent tool '
+  + 'shows one of their files after analysis (spelled path, glob/brace expansion, for-loop literal, body of bash -c / sh -c / eval, text read on standard input by a shell or interpreter: here-document, here-string, pipe incl. `cat <<EOF | env bash`, known wrappers with their options; same analysis for every execution tool), '
+  + 'when find -exec / xargs / parallel / make covers their folder, or when the text or the command word cannot be resolved; the sha256 of a designated file is re-checked before launch.';
+const INERT_SCRIPTS_LIMIT =
+  'NOT guaranteed (assumed limit): a copy or reconstruction of a script made elsewhere (cp, cat, printf, bytes, os.environ, create_file) then run is the same as the agent rewriting it by hand and is not detected.';
+
 export function countBundledSkillEntries(dir: string): number {
   if (!dir || !fs.existsSync(dir)) {
     return 0;
@@ -849,12 +856,13 @@ export function registerSkillsCommands(program: Command): void {
     .description('Import external skills from a directory or a named source (firewall-gated)')
     .option('--dir <path>', 'import from a local directory')
     .option('--source <name>', 'import from a named source (see `skills sources`)')
+    .option('--agents', 'also stage agents/*.md for review (never activates them)')
     .option('--apply', 'install (default is a dry run)')
     .option('--include-review', "also import skills the firewall flags as 'review'")
     .option('--overwrite', 'overwrite an already-imported skill')
     .option('--category <c>', 'only import skills whose path contains this')
     .option('--json', 'output JSON')
-    .action(async (opts: { dir?: string; source?: string; apply?: boolean; includeReview?: boolean; overwrite?: boolean; category?: string; json?: boolean }) => {
+    .action(async (opts: { dir?: string; source?: string; apply?: boolean; includeReview?: boolean; overwrite?: boolean; category?: string; json?: boolean; agents?: boolean }) => {
       const { importSkills } = await import('../../skills/skill-importer.js');
       const { getSource, resolveSourceDir } = await import('../../skills/skill-sources.js');
       let dir: string | undefined;
@@ -881,6 +889,7 @@ export function registerSkillsCommands(program: Command): void {
       }
       const report = await importSkills(dir, {
         source: label,
+        importAgents: opts.agents === true,
         dryRun: opts.apply !== true,
         includeReview: opts.includeReview === true,
         overwrite: opts.overwrite === true,
@@ -891,18 +900,39 @@ export function registerSkillsCommands(program: Command): void {
         getSkillRegistry().stopWatching();
       }
       if (opts.json) {
-        console.log(JSON.stringify({ source: label, report }, null, 2));
+        const hasInert = report.imported.some((i) => i.inertScripts?.length);
+        console.log(JSON.stringify({ source: label, report, ...(hasInert ? { notice: { guarantee: INERT_SCRIPTS_GUARANTEE, limit: INERT_SCRIPTS_LIMIT } } : {}) }, null, 2));
         return;
       }
       console.log(report.dryRun ? `Dry run (use --apply to install) — "${label}"` : `Imported from "${label}"`);
       console.log(`  ${report.dryRun ? 'would import' : 'imported'}: ${report.imported.length} · quarantined: ${report.quarantined.length} · review: ${report.review.length} · skipped: ${report.skipped.length}`);
+      if (report.skipped.length) {
+        console.log('  ignored:');
+        for (const item of report.skipped) console.log(`     - ${item.sourcePath}: ${item.reason}`);
+      }
+      if (report.agents) {
+        console.log(`  agents staged for review: ${report.agents.review.length} · quarantined: ${report.agents.quarantined.length} · skipped: ${report.agents.skipped.length}`);
+      }
       if (report.quarantined.length) {
         console.log('  ⚠️  quarantined by firewall:');
-        for (const q of report.quarantined.slice(0, 15)) console.log(`     - ${q.sourcePath}`);
+        for (const q of report.quarantined.slice(0, 15)) console.log(`     - ${q.sourcePath}: ${q.reason}`);
       }
       if (report.imported.length) {
         console.log(`  ✓ ${report.dryRun ? 'would import' : 'imported'}:`);
-        for (const s of report.imported.slice(0, 30)) console.log(`     - ${s.name}`);
+        for (const s of report.imported.slice(0, 30)) console.log(`     - ${s.name}${s.inertScripts?.length ? ` (${s.inertScripts.length} inert script${s.inertScripts.length > 1 ? 's' : ''})` : ''}`);
+      }
+      const withScripts = report.imported.filter((s) => s.inertScripts?.length);
+      if (withScripts.length) {
+        console.log(`  ⚠️  ${withScripts.length} skill${withScripts.length > 1 ? 's' : ''} ${report.dryRun ? 'would be imported' : 'imported'} with INERT scripts (execute bit removed, flagged scriptsUnverified).`);
+        console.log('     When analysis of a command or program shows one of their files, a confirmation is asked every time (never auto-approved, refused when no human is there); see the exact rules below.');
+        console.log(`     ${INERT_SCRIPTS_GUARANTEE}`);
+        console.log(`     ${INERT_SCRIPTS_LIMIT}`);
+        console.log('     After reading a script, allow it without confirmation by adding its exact line to ~/.codebuddy/skill-exec-allowlist.json  ({ "entries": [ ... ] }):');
+        for (const s of withScripts.slice(0, 10)) {
+          for (const script of s.inertScripts!.slice(0, 5)) {
+            console.log(`       ${script.allowlistLine}   // ${s.name}/${script.path}${script.warnings.length ? ` — warnings: ${script.warnings.join(', ')}` : ''}`);
+          }
+        }
       }
     });
 

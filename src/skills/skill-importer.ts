@@ -14,11 +14,13 @@
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { createHash } from 'crypto';
 import * as yaml from 'yaml';
-import { scanSkillFirewall } from '../security/skill-scanner.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
+import { scanSkillFirewall, type SkillFirewallReport } from '../security/skill-scanner.js';
+import { checkExecutablePayloads, disarmScripts, sha256File, loadExecAllowlist, allowlistLine, type ExecAllowlistEntry, type ExecutableFile } from '../security/skill-executable-gate.js';
 import { parseSkillFile, validateSkill } from './parser.js';
+import { importAgents, type AgentImportReport } from './agent-importer.js';
 import { logger } from '../utils/logger.js';
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
@@ -27,6 +29,9 @@ const SKIP_DIRS = new Set(['.git', 'index-cache', '.archive', 'node_modules', '.
 export const IMPORTED_PREFIX = 'imported-';
 
 export interface ImportOptions {
+  /** Stage external agents for human review; never activate them automatically. */
+  importAgents?: boolean;
+  agentDestRoot?: string;
   /** Tier dir to install under. Default ~/.codebuddy/skills. */
   destRoot?: string;
   /** Provenance label written to frontmatter (e.g. "hermes"). */
@@ -41,12 +46,34 @@ export interface ImportOptions {
   category?: string;
   /** Pin imported skills so curation leaves them alone (default true). */
   pinByDefault?: boolean;
+  /**
+   * Explicit allowlist of executable/interpretable files (source + path relative to the
+   * source dir + sha256). Default: `~/.codebuddy/skill-exec-allowlist.json`, empty when absent.
+   * A binary/link without an entry quarantines the skill; a script without an entry is
+   * imported inert (execute bit removed) and asks for a confirmation each time it is run.
+   */
+  execAllowlist?: ExecAllowlistEntry[];
 }
 
+/** A script copied inert (execute bit removed): running it asks for a confirmation. */
+export interface InertScript {
+  /** Path inside the installed skill directory, `/` separators. */
+  path: string;
+  /** Path relative to the imported source directory (allowlist `path`). */
+  sourcePath: string;
+  sha256: string;
+  reasons: string[];
+  /** Pattern-scan warnings kept for the confirmation dialog (the scan blocks only its dangerous class). */
+  warnings: string[];
+  /** Exact allowlist entry to add (after reading the file) to run it without confirmation. */
+  allowlistLine: string;
+}
 export interface ImportedSkill {
   name: string;
   sourcePath: string;
   verdict: string;
+  /** Present when the skill ships scripts that were not allowlisted (inert + confirmation). */
+  inertScripts?: InertScript[];
 }
 export interface SkippedSkill {
   sourcePath: string;
@@ -54,6 +81,8 @@ export interface SkippedSkill {
   verdict?: string;
 }
 export interface ImportReport {
+  canonicalRoot?: string;
+  agents?: AgentImportReport;
   imported: ImportedSkill[];
   quarantined: SkippedSkill[];
   review: SkippedSkill[];
@@ -63,7 +92,7 @@ export interface ImportReport {
 }
 
 function defaultDestRoot(): string {
-  return path.join(os.homedir(), '.codebuddy', 'skills');
+  return getCodeBuddyPath('skills');
 }
 
 /** Recursively find skill directories (those containing a SKILL.md). Skips operational dirs. */
@@ -198,7 +227,7 @@ function extractRequiresTools(rawFm: Record<string, unknown>): string[] {
 export function remapSkill(
   rawFm: Record<string, unknown>,
   body: string,
-  opts: { slug: string; source: string; pinned: boolean },
+  opts: { slug: string; source: string; pinned: boolean; scripts?: Array<{ path: string; sourcePath: string; sha256: string; warnings?: string[] }>; scriptsUnverified?: boolean },
 ): string {
   const description = String(rawFm.description ?? '').trim() || `Imported skill ${opts.slug}`;
   const tags = normalizeTags(extractTags(rawFm));
@@ -217,6 +246,7 @@ export function remapSkill(
     imported: true,
     source: opts.source,
     ...(opts.pinned ? { pinned: true } : {}),
+    ...(opts.scripts?.length ? { ...(opts.scriptsUnverified ? { scriptsUnverified: true } : {}), scripts: opts.scripts } : {}),
   };
   return `---\n${yaml.stringify(meta)}---\n\n${body.trim()}\n`;
 }
@@ -240,6 +270,40 @@ function copySupportDirs(srcDir: string, destDir: string): void {
   }
 }
 
+/**
+ * Firewall for an imported skill. Layer 1 (executable gate): a binary, link or special
+ * file quarantines the skill; scripts are imported inert (see `inertScriptsOf`).
+ * Layer 2: the pattern scan, still run on everything (a dangerous script quarantines,
+ * and it is the only judge of SKILL.md).
+ */
+function firewallForImport(
+  skillDir: string,
+  gate: { sourceRoot: string; source: string; allowlist: readonly ExecAllowlistEntry[] | (() => readonly ExecAllowlistEntry[]) },
+): { report: SkillFirewallReport; unverifiedScripts: ExecutableFile[]; executables: ExecutableFile[] } {
+  const report = scanSkillFirewall(skillDir);
+  const exec = checkExecutablePayloads(skillDir, gate);
+  if (exec.blocked) {
+    return { report: { ...report, verdict: 'quarantine', quarantineRequired: true, summary: exec.reason }, unverifiedScripts: [], executables: [] };
+  }
+  return { report, unverifiedScripts: exec.unverifiedScripts, executables: exec.executables };
+}
+
+/** Unverified scripts that will really be copied (support dirs only), as skill-relative inert entries. */
+function inertScriptsOf(skillDir: string, sourceRoot: string, source: string, scripts: ExecutableFile[], findings: SkillFirewallReport['findings']): InertScript[] {
+  const out: InertScript[] = [];
+  for (const f of scripts) {
+    const rel = path.relative(skillDir, path.join(sourceRoot, ...f.relPath.split('/'))).split(path.sep).join('/');
+    if (!SUPPORT_DIRS.includes(rel.split('/')[0]!)) continue;
+    const abs = path.join(sourceRoot, ...f.relPath.split('/'));
+    const warnings = findings
+      .filter(x => !x.documentary && path.resolve(x.file) === path.resolve(abs))
+      .slice(0, 3)
+      .map(x => `${x.pattern} (line ${x.line})`);
+    out.push({ path: rel, sourcePath: f.relPath, sha256: f.sha256, reasons: f.reasons, warnings, allowlistLine: allowlistLine(source, f.relPath, f.sha256) });
+  }
+  return out;
+}
+
 /** Import skills from a directory. Pure-ish: writes nothing when dryRun. */
 export async function importSkills(sourceDir: string, options: ImportOptions = {}): Promise<ImportReport> {
   const destRoot = options.destRoot ?? defaultDestRoot();
@@ -247,9 +311,51 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
   const dryRun = options.dryRun ?? false;
   const pinByDefault = options.pinByDefault ?? true;
   const report: ImportReport = { imported: [], quarantined: [], review: [], skipped: [], total: 0, dryRun };
+  const execGate = { sourceRoot: sourceDir, source, allowlist: options.execAllowlist ?? (() => loadExecAllowlist()) };
 
-  const skillDirs = findSkillDirs(sourceDir);
-  report.total = skillDirs.length;
+  // Resolve the actual spelling. A reserved canonical root that is a link
+  // or a special file is a refusal, never a switch to importing all roots.
+  if (!fs.existsSync(sourceDir)) throw new Error(`Skill source root does not exist: ${sourceDir}`);
+  const roots = fs.readdirSync(sourceDir).filter(name => name.toLowerCase() === 'skills');
+  if (roots.length > 1) throw new Error('Ambiguous canonical skills root');
+  const canonical = roots.length ? path.join(sourceDir, roots[0]!) : sourceDir;
+  const hasCanonical = roots.length > 0;
+  if (hasCanonical) {
+    const stat = fs.lstatSync(canonical);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Canonical skills root must be a regular directory, not a symbolic link');
+    report.canonicalRoot = path.relative(sourceDir, canonical);
+  }
+  const allDirs = findSkillDirs(sourceDir);
+  report.total = allDirs.length;
+  const candidates = allDirs.filter(dir => {
+    const relative = path.relative(canonical, dir);
+    if (!hasCanonical || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative))) return true;
+    report.skipped.push({ sourcePath: path.relative(sourceDir, dir), reason: 'outside canonical skills/ root (documentation, translation or alternate integration copy)' });
+    return false;
+  });
+  const skillDirs: string[] = [];
+  const baseSlugs = new Map<string, string>();
+  for (const dir of candidates.sort()) {
+    const base = baseSlugForDir(dir);
+    baseSlugs.set(dir, base);
+    const parts = path.relative(canonical, dir).split(path.sep);
+    // A category called it/de/etc is not evidence of translation. Require
+    // the same relative path without the locale and identical manifest bytes.
+    const original = path.join(canonical, ...parts.slice(1));
+    const isLocale = parts.length > 1 && /^(?:en|es|fr|de|ja|ko|zh|pt|ru|it|tr|ar|hi)(?:[-_][A-Za-z]{2,4})?$/.test(parts[0]!);
+    if (isLocale && candidates.includes(original)) {
+      const fw = firewallForImport(dir, execGate).report;
+      if (fw.verdict === 'quarantine') {
+        report.quarantined.push({ sourcePath: path.relative(sourceDir, dir), reason: fw.summary, verdict: fw.verdict });
+        continue;
+      }
+      if (fs.readFileSync(resolveSkillFile(dir)).equals(fs.readFileSync(resolveSkillFile(original)))) {
+        report.skipped.push({ sourcePath: path.relative(sourceDir, dir), reason: `duplicate translation of ${path.relative(sourceDir, original)}; ${fw.summary}`, verdict: fw.verdict });
+        continue;
+      }
+    }
+    skillDirs.push(dir);
+  }
 
   // Pre-pass: which base slugs are claimed by MORE THAN ONE distinct source?
   // Flattening the 1-3-level layout collapses category dirs, so two different
@@ -260,7 +366,7 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
   // path). Unique names keep the bare slug (the common case is unchanged).
   const baseSlugCounts = new Map<string, number>();
   for (const skillDir of skillDirs) {
-    const base = baseSlugForDir(skillDir);
+    const base = baseSlugs.get(skillDir)!;
     baseSlugCounts.set(base, (baseSlugCounts.get(base) ?? 0) + 1);
   }
 
@@ -294,7 +400,8 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
     }
 
     // Firewall gate (scans SKILL.md + scripts/support files recursively).
-    const fw = scanSkillFirewall(skillDir);
+    const gated = firewallForImport(skillDir, execGate);
+    const fw = gated.report;
     if (fw.quarantineRequired) {
       report.quarantined.push({ sourcePath: rel, reason: fw.summary, verdict: String(fw.verdict) });
       continue;
@@ -331,17 +438,43 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
       continue;
     }
 
+    // Every executable file is recorded (the runtime guard maps it back to its source path for the
+    // allowlist); only those without an allowlist entry are inert and flag the skill.
+    const allScripts = inertScriptsOf(skillDir, sourceDir, source, gated.executables, fw.findings);
+    const unverifiedPaths = new Set(gated.unverifiedScripts.map(f => f.relPath));
+    const inertScripts = allScripts.filter(x => unverifiedPaths.has(x.sourcePath));
     if (!dryRun) {
       try {
         fs.mkdirSync(destDir, { recursive: true });
-        fs.writeFileSync(path.join(destDir, 'SKILL.md'), remapSkill(rawFm, m[2]!, { slug, source, pinned: pinByDefault }), 'utf-8');
+        fs.writeFileSync(path.join(destDir, 'SKILL.md'), remapSkill(rawFm, m[2]!, {
+          slug, source, pinned: pinByDefault,
+          scripts: allScripts.map(({ path: p, sourcePath, sha256, warnings }) => ({ path: p, sourcePath, sha256, ...(warnings.length ? { warnings } : {}) })),
+          scriptsUnverified: inertScripts.length > 0,
+        }), 'utf-8');
         copySupportDirs(skillDir, destDir);
+        // The fingerprint was taken on the source before the copy: verify what was really written.
+        const swapped = gated.executables.find((f) => {
+          const copied = path.join(destDir, ...path.relative(skillDir, path.join(sourceDir, ...f.relPath.split('/'))).split(path.sep));
+          if (!fs.existsSync(copied)) return false;
+          try {
+            return sha256File(copied) !== f.sha256;
+          } catch {
+            return true;
+          }
+        });
+        if (swapped) {
+          fs.rmSync(destDir, { recursive: true, force: true });
+          report.quarantined.push({ sourcePath: rel, reason: `File changed while it was being copied (${swapped.relPath}); nothing installed`, verdict: 'quarantine' });
+          continue;
+        }
+        // Inert: no execute bit on a script nobody has verified.
+        disarmScripts(destDir, inertScripts.map(x => x.path));
       } catch (err) {
         report.skipped.push({ sourcePath: rel, reason: `write error: ${err instanceof Error ? err.message : String(err)}` });
         continue;
       }
     }
-    report.imported.push({ name: slug, sourcePath: rel, verdict: String(fw.verdict) });
+    report.imported.push({ name: slug, sourcePath: rel, verdict: String(fw.verdict), ...(inertScripts.length ? { inertScripts } : {}) });
   }
 
   if (!dryRun && report.imported.length > 0) {
@@ -367,5 +500,10 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
     }
   }
 
+  if (options.importAgents) {
+    report.agents = importAgents(sourceDir, {
+      source, dryRun, ...(options.agentDestRoot ? { destRoot: options.agentDestRoot } : {}),
+    });
+  }
   return report;
 }

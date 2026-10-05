@@ -26,6 +26,7 @@ import {
 } from './execution-policy.js';
 import { confineSpawn } from '../../security/native-sandbox.js';
 import { refusedUnconfinedEscalationResult } from './unconfined-escalation.js';
+import { confirmImportedSkillScripts } from './imported-skill-guard.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
@@ -93,10 +94,23 @@ export async function* executeStreaming(
     return { success: false, error: `Command blocked by execution policy: ${policy.reason}` };
   }
 
+  // Scripts shipped by an imported skill are inert and never auto-approved.
+  const importedScripts = await confirmImportedSkillScripts(executionCommand, cwd);
+  if (importedScripts && !importedScripts.confirmed) {
+    return { success: false, error: importedScripts.error ?? 'Imported skill script not approved' };
+  }
+
+  const pinChanged = (): ToolResult | null => {
+    const changed = importedScripts?.verifyUnchanged() ?? null;
+    return changed ? { success: false, error: changed } : null;
+  };
+
   let requiresDirectApproval = policy.action === 'ask';
   let escalationReason = policy.reason;
 
   if (policy.action === 'sandbox') {
+    const changedBeforeSandbox = pinChanged();
+    if (changedBeforeSandbox) return changedBeforeSandbox;
     const sandboxed = await executeInWorkspaceSandbox(executionCommand, cwd, timeout, signal);
     if (signal?.aborted) {
       return { success: false, error: 'Command aborted by user' };
@@ -173,6 +187,9 @@ export async function* executeStreaming(
       error: 'Executable identity changed after policy evaluation; retry the command for a fresh decision.',
     };
   }
+
+  const changedBeforeSpawn = pinChanged();
+  if (changedBeforeSpawn) return changedBeforeSpawn;
 
   // Spawn the process
   const isWindows = process.platform === 'win32';

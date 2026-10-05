@@ -20,6 +20,7 @@ import type { IToolExecutionContext, IValidationResult } from './registry/types.
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { ToolCallScheduler } from './tool-call-scheduler.js';
+import { confirmImportedSkillCode } from './bash/imported-skill-guard.js';
 
 // ============================================================================
 // Public runtime contract
@@ -848,6 +849,13 @@ export class CodeExecTool extends BaseTool {
     };
 
     runtime.abortSignal ??= context?.abortSignal;
+
+    const importedGuard = await confirmImportedSkillCode(code, runtime.cwd ?? process.cwd(), 'javascript');
+    if (importedGuard && !importedGuard.confirmed) {
+      return this.error(importedGuard.error ?? 'Imported skill script not approved');
+    }
+    const importedChanged = importedGuard?.verifyUnchanged() ?? null;
+    if (importedChanged) return this.error(importedChanged);
 
     let codeToRun = code;
     if (typecheck) {

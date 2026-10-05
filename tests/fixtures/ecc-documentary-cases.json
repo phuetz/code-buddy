@@ -1,0 +1,96 @@
+{
+  "provenance": "MIT; affaan-m/everything-claude-code ef648e01899ba3e8dc6371642deaaf64b4477775; excerpts of SKILL.md only",
+  "cases": [
+    {
+      "name": "clickhouse-io",
+      "body": "ClickHouse is a column-oriented database management system (DBMS) for online analytical processing (OLAP). It's optimized for fast analytical queries on large datasets.\n```typescript\n  password: process.env.CLICKHOUSE_PASSWORD\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "data-scraper-agent",
+      "body": "```python\n    api_key = os.environ.get(\"GEMINI_API_KEY\", \"\")\n```\n```python\n        _client = Client(auth=os.environ[\"NOTION_TOKEN\"])\n```\n```python\n    return bool(os.environ.get(\"GEMINI_API_KEY\"))\n```\n```python\n        print(\"[AI] Skipped — GEMINI_API_KEY not set\")\n```\n```yaml\n          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}\n```\n```yaml\n          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "django-patterns",
+      "body": "```python\nSECRET_KEY = env('DJANGO_SECRET_KEY')\n```\n```python\n        'PASSWORD': env('DB_PASSWORD'),\n```\n```python\nfrom django.contrib.auth.password_validation import validate_password\n```\n```python\n        validators=[validate_password],\n```\n```python\n        user.set_password(password)\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "django-security",
+      "body": "```python\nSECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')\n```\n```python\n    raise ImproperlyConfigured('DJANGO_SECRET_KEY environment variable is required')\n```\n```python\nAUTH_PASSWORD_VALIDATORS = [\n```\n```python\n    {% csrf_token %}\n```\n```python\nSECRET_KEY = env('DJANGO_SECRET_KEY')\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "django-verification",
+      "body": "```bash\npython -c \"import os; import environ; print('DJANGO_SECRET_KEY set' if os.environ.get('DJANGO_SECRET_KEY') else 'MISSING: DJANGO_SECRET_KEY')\"\n```\n```yaml\n          POSTGRES_PASSWORD: postgres\n```\n```yaml\n          DJANGO_SECRET_KEY: test-secret-key\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "docker-patterns",
+      "body": "```yaml\n      POSTGRES_PASSWORD: postgres\n```\n```yaml\n  db_password:\n```\n```yaml\n    file: ./secrets/db_password.txt\n```\n```yaml\n      - db_password\n```\n- Use argument arrays or `spawnSync(..., { shell: false })` for cross-platform runners. Never interpolate project paths into a shell command.",
+      "verdict": "review"
+    },
+    {
+      "name": "fastapi-patterns",
+      "body": "```python\n    access_token_expire_minutes: int = 30\n```\n```python\n    return {\"access_token\": token, \"token_type\": \"bearer\"}\n```\n```python\n            hashed_password=pwd_context.hash(payload.password),\n```\n```python\n        if user is None or not pwd_context.verify(password, user.hashed_password):\n```\n```python\n            minutes=settings.access_token_expire_minutes\n```\n```python\nasync def auth_token(client: AsyncClient, registered_user: dict) -> str:\n```\n```python\n    return resp.json()[\"access_token\"]\n```\n```python\nasync def auth_client(client: AsyncClient, auth_token: str) -> AsyncClient:\n```\n```python\n    client.headers.update({\"Authorization\": f\"Bearer {auth_token}\"})\n```\n```python\n    user = User(email=payload.email, hashed_password=hashed)\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "ito-baskets",
+      "body": "```bash\n# Keyed reads (require ITO_API_KEY in the environment):\n```\nThe client reads `ITO_API_KEY` only for keyed commands, transmits it only to",
+      "verdict": "review"
+    },
+    {
+      "name": "jira-integration",
+      "body": "```json\n      \"JIRA_API_TOKEN\": \"your-api-token\"\n```\n> **Security:** Never hardcode secrets. Prefer setting `JIRA_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` in your system environment (or a secrets manager). Only use the MCP `env` block for local, uncommitted config files.\n| `JIRA_API_TOKEN` | API token from id.atlassian.com |\n```bash\n  printf 'user = \"%s:%s\"\\n' \"$JIRA_EMAIL\" \"$JIRA_API_TOKEN\" |\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "laravel-security",
+      "body": "```bash\nDB_PASSWORD=\n```\n```bash\nSANCTUM_TOKEN_PREFIX=\n```\n```php\n'token_prefix' => env('SANCTUM_TOKEN_PREFIX', ''),\n```\n```php\n        'remember_token',\n```\n```php\n        'two_factor_secret',\n```\n```html\n<meta name=\"csrf-token\" content=\"{{ csrf_token() }}\">\n```\n```php\n    'secret' => env('AWS_SECRET_ACCESS_KEY'),\n```\n```bash\nDB_PASSWORD=secure_password\n```\n```bash\nSANCTUM_TOKEN_PREFIX=myapp_\n```\n```bash\n$secrets = ['services.stripe.key', 'services.stripe.webhook_secret'];\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "laravel-tdd",
+      "body": "```php\n            'remember_token' => Str::random(10),\n```\n```php\n    public function test_users_cannot_login_with_wrong_password(): void\n```\n```php\n    public function test_token_bearer_authenticates_requests(): void\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "lead-intelligence",
+      "body": "- **X API** — Follower/following graph, mutual analysis, recent activity (`X_BEARER_TOKEN`, plus write-context credentials such as `X_CONSUMER_KEY`, `X_CONSUMER_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`)\n```bash\nexport X_BEARER_TOKEN=\"...\"\n```\n```bash\nexport X_ACCESS_TOKEN=\"...\"\n```\n```bash\nexport X_ACCESS_TOKEN_SECRET=\"...\"\n```\n```bash\nexport X_CONSUMER_SECRET=\"...\"\n```\n```bash\nexport EXA_API_KEY=\"...\"\n```\n```bash\nexport APOLLO_API_KEY=\"...\"  # For Apollo enrichment\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "liquid-glass-design",
+      "body": "```swift\n            .font(.system(size: 36))\n```",
+      "verdict": "allow"
+    },
+    {
+      "name": "nutrient-document-processing",
+      "body": "```bash\nexport NUTRIENT_API_KEY=\"pdf_live_...\"\n```\n```bash\n  -H \"Authorization: Bearer $NUTRIENT_API_KEY\" \\\n```\n```json\n        \"NUTRIENT_DWS_API_KEY\": \"YOUR_API_KEY\",\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "quarkus-patterns",
+      "body": "```yaml\n      password: ${DB_PASSWORD}\n```\n```yaml\n    password: ${RABBITMQ_PASSWORD}\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "quarkus-security",
+      "body": "```properties\nquarkus.oidc.credentials.secret=${OIDC_SECRET}\n```\n```properties\nquarkus.datasource.password=${DB_PASSWORD}\n```\n```properties\nquarkus.oidc.credentials.secret=${OIDC_CLIENT_SECRET}\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "react-native-patterns",
+      "body": "```tsx\nawait SecureStore.setItemAsync('auth_token', token)   // Keychain / Keystore\n```\n```tsx\nconst token = await SecureStore.getItemAsync('auth_token')\n```\n```tsx\nawait AsyncStorage.setItem('auth_token', token)\n```\n```tsx\nconst STRIPE_SECRET = 'sk_live_...'\n```",
+      "verdict": "review"
+    },
+    {
+      "name": "x-api",
+      "body": "```bash\nexport X_BEARER_TOKEN=\"your-bearer-token\"\n```\n```python\nbearer = os.environ[\"X_BEARER_TOKEN\"]\n```\n```bash\nexport X_CONSUMER_SECRET=\"your-consumer-secret\"\n```\n```bash\nexport X_ACCESS_TOKEN=\"your-access-token\"\n```\n```bash\nexport X_ACCESS_TOKEN_SECRET=\"your-access-token-secret\"\n```\nLegacy aliases such as `X_API_KEY`, `X_API_SECRET`, and `X_ACCESS_SECRET` may exist in older setups. Prefer the `X_CONSUMER_*` and `X_ACCESS_TOKEN_SECRET` names when documenting or wiring new flows.\n```python\n    client_secret=os.environ[\"X_CONSUMER_SECRET\"],\n```\n```python\n    resource_owner_key=os.environ[\"X_ACCESS_TOKEN\"],\n```\n```python\n    resource_owner_secret=os.environ[\"X_ACCESS_TOKEN_SECRET\"],\n```",
+      "verdict": "review"
+    }
+  ],
+  "license": "MIT License\n\nCopyright (c) 2026 Affaan Mustafa\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+}

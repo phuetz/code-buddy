@@ -8,6 +8,7 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
 import { validateSyntax } from '../security/syntax-validator.js';
+import { confirmImportedSkillCode } from './bash/imported-skill-guard.js';
 
 export class RunScriptTool extends BaseTool {
   readonly name = 'run_script';
@@ -72,6 +73,13 @@ export class RunScriptTool extends BaseTool {
     if (!syntaxCheck.valid) {
       return this.error(`Syntax validation failed (${syntaxCheck.language}): ${syntaxCheck.errors.join('; ')}`);
     }
+
+    const importedGuard = await confirmImportedSkillCode(script, this.workspacePath, language);
+    if (importedGuard && !importedGuard.confirmed) {
+      return this.error(importedGuard.error ?? 'Imported skill script not approved');
+    }
+    const importedChanged = importedGuard?.verifyUnchanged() ?? null;
+    if (importedChanged) return this.error(importedChanged);
 
     if (!DockerSandbox.isAvailable()) {
       return this.error('Docker is not available or not running. Please install Docker and ensure it is running to use the run_script tool.');

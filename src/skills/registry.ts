@@ -24,7 +24,7 @@ import {
   skillMdToUnified,
   type LegacySkill,
 } from './adapters/index.js';
-import { scanDeniesInstall, scanFile as scanSkillFile } from '../security/skill-scanner.js';
+import { scanDeniesInstall, scanSkillFirewall, scanFile as scanSkillFile } from '../security/skill-scanner.js';
 import { getSkillsHub } from './hub.js';
 import { logger } from '../utils/logger.js';
 
@@ -239,17 +239,18 @@ export class SkillRegistry extends EventEmitter {
    * Register a skill
    */
   private registerSkill(skill: Skill): void {
-    // Block critical findings, and any scan that did not read a regular file.
+    // Automatic registration requires allow for the manifest and its scripts.
     if (skill.sourcePath && !skill.sourcePath.startsWith('legacy://') && fs.existsSync(skill.sourcePath)) {
       try {
         const scanResult = scanSkillFile(skill.sourcePath);
-        if (scanDeniesInstall(scanResult)) {
-          const criticalFindings = scanResult.findings.filter(f => f.severity === 'critical');
+        const firewall = scanSkillFirewall(path.basename(skill.sourcePath).toLowerCase() === 'skill.md' ? path.dirname(skill.sourcePath) : skill.sourcePath);
+        if (scanDeniesInstall(scanResult) || firewall.verdict !== 'allow') {
+
           const unread = scanResult.textRead !== true
             || scanResult.findings.some(f => f.pattern === 'special-file-not-read');
           const detail = unread
             ? 'the scanner did not read a regular file'
-            : `${criticalFindings.length} critical finding(s) — ${criticalFindings.map(f => f.description).join('; ')}`;
+            : firewall.summary;
           this.emit('skill:error', skill.sourcePath, new Error(
             `Skill blocked by security scanner: ${detail}`
           ));

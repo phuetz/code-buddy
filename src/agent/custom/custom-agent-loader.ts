@@ -14,6 +14,9 @@ import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 import TOML from '@iarna/toml';
+import * as yaml from 'yaml';
+import { parseAgentMarkdown } from '../definitions/agent-definition-loader.js';
+import { parseAgentTools } from '../agent-tools.js';
 import {
   normalizeDispatchProfile,
   type FleetDispatchProfile,
@@ -37,7 +40,7 @@ export interface CustomAgentConfig {
   systemPrompt: string;
   /** Model to use (optional, defaults to current model) */
   model?: string;
-  /** Tools this agent can use (empty = all tools) */
+  /** Allowed tool patterns: absent inherits defaults; an explicit empty array denies all. */
   tools?: string[];
   /** Tools this agent cannot use */
   disabledTools?: string[];
@@ -67,7 +70,7 @@ export interface CustomAgentFile {
   /** File path */
   path: string;
   /** File format */
-  format: 'toml' | 'yaml' | 'json';
+  format: 'toml' | 'yaml' | 'json' | 'md';
   /** Parsed configuration */
   config: CustomAgentConfig;
   /** Last modified time */
@@ -79,7 +82,6 @@ export interface CustomAgentFile {
 // ============================================================================
 
 // Use GROK_HOME/agents/ directory (supports GROK_HOME env var)
-const AGENTS_DIR = getAgentsDir();
 
 const EXAMPLE_AGENT_TOML = `# Example Custom Agent Configuration
 # Place this file in ~/.codebuddy/agents/
@@ -175,7 +177,7 @@ export class CustomAgentLoader {
   private lastScan: number = 0;
   private scanInterval: number = 5000; // 5 seconds cache
 
-  constructor(agentsDir: string = AGENTS_DIR) {
+  constructor(agentsDir: string = getAgentsDir()) {
     this.agentsDir = agentsDir;
     this.ensureAgentsDirectory();
   }
@@ -240,11 +242,12 @@ export class CustomAgentLoader {
       if (!stats.isFile()) continue;
 
       const ext = path.extname(file).toLowerCase();
-      let format: 'toml' | 'yaml' | 'json' | null = null;
+      let format: 'toml' | 'yaml' | 'json' | 'md' | null = null;
 
       if (ext === '.toml') format = 'toml';
       else if (ext === '.yaml' || ext === '.yml') format = 'yaml';
       else if (ext === '.json') format = 'json';
+      else if (ext === '.md') format = 'md';
       else continue;
 
       try {
@@ -296,11 +299,12 @@ export class CustomAgentLoader {
       if (!stats.isFile()) continue;
 
       const ext = path.extname(file).toLowerCase();
-      let format: 'toml' | 'yaml' | 'json' | null = null;
+      let format: 'toml' | 'yaml' | 'json' | 'md' | null = null;
 
       if (ext === '.toml') format = 'toml';
       else if (ext === '.yaml' || ext === '.yml') format = 'yaml';
       else if (ext === '.json') format = 'json';
+      else if (ext === '.md') format = 'md';
       else continue;
 
       try {
@@ -342,7 +346,7 @@ export class CustomAgentLoader {
   /**
    * Parse an agent configuration file (async version)
    */
-  private async parseAgentFileAsync(filePath: string, format: 'toml' | 'yaml' | 'json'): Promise<CustomAgentConfig | null> {
+  private async parseAgentFileAsync(filePath: string, format: 'toml' | 'yaml' | 'json' | 'md'): Promise<CustomAgentConfig | null> {
     const content = await fsPromises.readFile(filePath, 'utf-8');
     return this.parseAgentContent(content, filePath, format);
   }
@@ -350,7 +354,7 @@ export class CustomAgentLoader {
   /**
    * Parse an agent configuration file (sync version)
    */
-  private parseAgentFile(filePath: string, format: 'toml' | 'yaml' | 'json'): CustomAgentConfig | null {
+  private parseAgentFile(filePath: string, format: 'toml' | 'yaml' | 'json' | 'md'): CustomAgentConfig | null {
     const content = fs.readFileSync(filePath, 'utf-8');
     return this.parseAgentContent(content, filePath, format);
   }
@@ -358,12 +362,19 @@ export class CustomAgentLoader {
   /**
    * Parse agent content (shared logic)
    */
-  private parseAgentContent(content: string, filePath: string, format: 'toml' | 'yaml' | 'json'): CustomAgentConfig | null {
+  private parseAgentContent(content: string, filePath: string, format: 'toml' | 'yaml' | 'json' | 'md'): CustomAgentConfig | null {
     const fileName = path.basename(filePath, path.extname(filePath));
 
     let parsed: Record<string, unknown>;
 
     switch (format) {
+      case 'md': {
+        const definition = parseAgentMarkdown(content, filePath);
+        parsed = { name: definition.name, description: definition.description,
+          systemPrompt: definition.systemPrompt, tools: definition.tools,
+          disabledTools: definition.disallowedTools };
+        break;
+      }
       case 'toml':
         parsed = TOML.parse(content) as Record<string, unknown>;
         break;
@@ -371,12 +382,14 @@ export class CustomAgentLoader {
         parsed = JSON.parse(content);
         break;
       case 'yaml':
-        // Simple YAML parsing for basic cases
+        // Parse YAML strictly so unreadable tool policies cannot disappear.
         parsed = this.parseSimpleYaml(content);
         break;
       default:
         return null;
     }
+
+    if (parsed.disabled === true) return null;
 
     // Validate required fields
     if (!parsed.name || !parsed.systemPrompt) {
@@ -398,8 +411,8 @@ export class CustomAgentLoader {
       description: String(parsed.description || ''),
       systemPrompt,
       model: parsed.model ? String(parsed.model) : undefined,
-      tools: Array.isArray(parsed.tools) ? parsed.tools.map(String) : undefined,
-      disabledTools: Array.isArray(parsed.disabledTools) ? parsed.disabledTools.map(String) : undefined,
+      tools: parseAgentTools(parsed.tools),
+      disabledTools: parseAgentTools(parsed.disabledTools, 'deny'),
       fleetDispatchProfile: typeof parsed.fleetDispatchProfile === 'string'
         ? normalizeDispatchProfile(parsed.fleetDispatchProfile)
         : undefined,
@@ -422,69 +435,13 @@ export class CustomAgentLoader {
    * Simple YAML parser for basic key-value pairs and multiline strings
    */
   private parseSimpleYaml(content: string): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
-    const lines = content.split('\n');
-    let currentKey: string | null = null;
-    let multilineValue: string[] = [];
-    let inMultiline = false;
-
-    for (const line of lines) {
-      // Skip comments and empty lines (unless in multiline)
-      if (!inMultiline && (line.trim().startsWith('#') || line.trim() === '')) {
-        continue;
-      }
-
-      // Check for multiline end
-      if (inMultiline) {
-        if (line.match(/^[a-zA-Z_]/)) {
-          // New key, end multiline
-          if (currentKey) {
-            result[currentKey] = multilineValue.join('\n').trim();
-          }
-          inMultiline = false;
-          multilineValue = [];
-          currentKey = null;
-        } else {
-          multilineValue.push(line);
-          continue;
-        }
-      }
-
-      // Parse key: value
-      const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$/);
-      if (match) {
-        const [, key, value] = match;
-        if (key === undefined || value === undefined) {
-          continue;
-        }
-
-        if (value === '|' || value === '>') {
-          // Start multiline
-          currentKey = key;
-          inMultiline = true;
-          multilineValue = [];
-        } else if (value.startsWith('[') && value.endsWith(']')) {
-          // Array
-          result[key] = value
-            .slice(1, -1)
-            .split(',')
-            .map(s => s.trim().replace(/^["']|["']$/g, ''));
-        } else if (value === 'true' || value === 'false') {
-          result[key] = value === 'true';
-        } else if (!isNaN(Number(value))) {
-          result[key] = Number(value);
-        } else {
-          result[key] = value.replace(/^["']|["']$/g, '');
-        }
-      }
-    }
-
-    // Handle trailing multiline
-    if (inMultiline && currentKey) {
-      result[currentKey] = multilineValue.join('\n').trim();
-    }
-
-    return result;
+    // Legacy descriptive scalars may contain an unquoted colon. Repair only
+    // description, never an unreadable security policy.
+    const compatible = content.replace(/^(description:\s+)([^'"|>\n][^\n]*: [^\n]*)$/gm,
+      (_line, prefix: string, value: string) => prefix + JSON.stringify(value));
+    const parsed: unknown = yaml.parse(compatible);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid agent YAML');
+    return parsed as Record<string, unknown>;
   }
 
   /**

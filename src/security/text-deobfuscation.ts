@@ -139,6 +139,17 @@ function deobfuscateSafeText(text: string): string {
     .trim();
 }
 
+/** Unicode-only folding: preserves newlines, fences, comments and heredocs. */
+export function foldUnicodeForScan(text: string): string {
+  const stripped = text.replace(/\p{Cf}/gu, '');
+  const pre = applyHomoglyphs(stripped);
+  const folded = pre
+    .normalize('NFKC')
+    .normalize('NFKD')
+    .replace(/\p{Mn}/gu, '');
+  return applyHomoglyphs(folded);
+}
+
 /**
  * Safe layer of text de-obfuscation:
  * Strips format/bidi controls (\p{Cf}), applies homoglyph mappings,
@@ -148,14 +159,7 @@ function deobfuscateSafeText(text: string): string {
  * decoding Base64 or URL-percent blobs.
  */
 function foldSafeForScan(text: string): string {
-  const stripped = text.replace(/\p{Cf}/gu, '');
-  const pre = applyHomoglyphs(stripped);
-  const folded = pre
-    .normalize('NFKC')
-    .normalize('NFKD')
-    .replace(/\p{Mn}/gu, '');
-  const mapped = applyHomoglyphs(folded);
-  return deobfuscateSafeText(mapped);
+  return deobfuscateSafeText(foldUnicodeForScan(text));
 }
 
 /**

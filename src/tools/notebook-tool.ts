@@ -11,6 +11,7 @@ import { promisify } from 'util';
 import type { ToolResult } from '../types/index.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import { logger } from '../utils/logger.js';
+import { confirmImportedSkillCode } from './bash/imported-skill-guard.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -440,6 +441,14 @@ export class NotebookTool {
       return { success: false, error: `Cell ${cellIndex} is a ${cell.cell_type} cell, not a code cell` };
     }
 
+    const cellSource = Array.isArray(cell.source) ? cell.source.join('') : String(cell.source ?? '');
+    const importedGuard = await confirmImportedSkillCode(cellSource, path.dirname(path.resolve(filePath)), 'python');
+    if (importedGuard && !importedGuard.confirmed) {
+      return { success: false, error: importedGuard.error ?? 'Imported skill script not approved' };
+    }
+    const importedChanged = importedGuard?.verifyUnchanged() ?? null;
+    if (importedChanged) return { success: false, error: importedChanged };
+
     // Create a temporary notebook with just this cell
     const tempNotebook: Notebook = {
       nbformat: notebook.nbformat,
@@ -526,6 +535,17 @@ export class NotebookTool {
 
     const resolvedPath = path.resolve(filePath);
     const outputName = path.basename(resolvedPath);
+
+    const allSource = (await this.loadNotebook(filePath)).cells
+      .filter(c => c.cell_type === 'code')
+      .map(c => (Array.isArray(c.source) ? c.source.join('') : String(c.source ?? '')))
+      .join('\n');
+    const importedGuard = await confirmImportedSkillCode(allSource, path.dirname(resolvedPath), 'python');
+    if (importedGuard && !importedGuard.confirmed) {
+      return { success: false, error: importedGuard.error ?? 'Imported skill script not approved' };
+    }
+    const importedChanged = importedGuard?.verifyUnchanged() ?? null;
+    if (importedChanged) return { success: false, error: importedChanged };
 
     try {
       const args = [
