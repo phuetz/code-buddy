@@ -557,14 +557,16 @@ export function probeRuntimeSocketsFromSandbox(
   const existsSync = io.existsSync ?? realExistsSync;
   const candidates = [...KNOWN_RUNTIME_SOCKETS, ...userRuntimeSockets(io.env ?? process.env)].filter((sock) => existsSync(sock));
   if (candidates.length === 0) return { visible: [] };
-  const script = `for s in ${candidates.map((sock) => `'${sock.replace(/'/g, `'\\''`)}'`).join(' ')}; do if [ -S "$s" ]; then echo "$s"; fi; done`;
+  const shQuote = (sock: string): string => "'" + sock.split("'").join("'\\''") + "'";
+  const script = 'for s in ' + candidates.map(shQuote).join(' ') + '; do if [ -S "$s" ]; then echo "$s"; fi; done';
   const argv = buildBwrapArgv({ ...policy, network: false }, ['/bin/sh', '-c', script]);
   const key = `${bwrapPath}\0${argv.join('\0')}`;
   if (probeOkCache.has(key)) return { visible: [] };
   const run = io.spawnSync ?? realSpawnSync;
   const result = run(bwrapPath, argv, { encoding: 'utf8', timeout: 5000 });
   if (result.error || result.status !== 0) {
-    return { error: `the runtime-socket probe could not run (${result.error?.message ?? `exit ${result.status}: ${String(result.stderr ?? "").trim().slice(0, 160)}`}).` };
+    const detail = result.error?.message ?? 'exit ' + String(result.status) + ': ' + String(result.stderr ?? '').trim().slice(0, 160);
+    return { error: `the runtime-socket probe could not run (${detail}).` };
   }
   const visible = String(result.stdout ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
   if (visible.length === 0) probeOkCache.add(key);
