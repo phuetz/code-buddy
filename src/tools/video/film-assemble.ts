@@ -547,14 +547,14 @@ export function buildVideoNormalizeSegment(
   if (fit === 'cover') {
     return (
       `[${index}:v]scale=${w}:${h}:force_original_aspect_ratio=increase,` +
-      `crop=${w}:${h}:(iw-ow)/2:(ih-oh)/2,setsar=1,fps=${fps},` +
-      `format=yuv420p,setpts=PTS-STARTPTS[v${index}]`
+      `crop=${w}:${h}:(iw-ow)/2:(ih-oh)/2,setsar=1,` +
+      `format=yuv420p,setpts=PTS-STARTPTS,fps=${fps}[v${index}]`
     );
   }
   return (
     `[${index}:v]scale=${w}:${h}:force_original_aspect_ratio=decrease,` +
-    `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},` +
-    `format=yuv420p,setpts=PTS-STARTPTS[v${index}]`
+    `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,` +
+    `format=yuv420p,setpts=PTS-STARTPTS,fps=${fps}[v${index}]`
   );
 }
 

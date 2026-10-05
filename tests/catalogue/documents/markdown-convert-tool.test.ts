@@ -17,15 +17,20 @@ afterEach(async () => {
   await fs.promises.rm(tmpDir, { recursive: true, force: true });
 });
 
-test('markdown_convert tool handles document conversion gracefully when markitdown is missing', async () => {
+test('markdown_convert tool converts when markitdown is available, or fails clearly when missing', async () => {
   const inputPath = path.join(tmpDir, 'test.html');
   await fs.promises.writeFile(inputPath, '<h1>Hello World</h1><p>Test document</p>', 'utf8');
 
   const tool = new MarkdownConvertTool();
   const result = await tool.execute({ source: inputPath });
-  
-  // We expect failure locally since markitdown is not installed
-  expect(result.success).toBe(false);
-  expect(typeof result.error).toBe('string');
-  expect(result.error).toMatch(/markitdown/i);
+
+  // markitdown may or may not be installed in the environment — both paths are honest.
+  if (result.success) {
+    // ToolResult shape: { success, output } with Markdown text in `output`.
+    expect(typeof result.output).toBe('string');
+    expect((result.output ?? '').toLowerCase()).toMatch(/hello/);
+  } else {
+    expect(typeof result.error).toBe('string');
+    expect(result.error).toMatch(/markitdown/i);
+  }
 });

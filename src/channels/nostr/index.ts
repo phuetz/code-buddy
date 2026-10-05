@@ -18,6 +18,7 @@ import {
   OutboundMessage,
 } from '../core.js';
 import { ReconnectionManager } from '../reconnection-manager.js';
+import WebSocket from 'ws';
 
 export interface NostrConfig {
   privateKey?: string;
@@ -373,9 +374,17 @@ export class NostrChannel extends BaseChannel {
     this.publishTimeoutMs = config.publishTimeoutMs ?? 8000;
     this.subId = `cb-${randomBytes(6).toString('hex')}`;
 
+    // Prefer the Node global WebSocket when present (Node ≥22 / --experimental-websocket);
+    // otherwise fall back to the `ws` package so relays work on Node 20 LTS.
     this.socketFactory =
       socketFactory ??
-      ((url: string) => new (globalThis as unknown as { WebSocket: new (u: string) => RelaySocket }).WebSocket(url));
+      ((url: string) => {
+        const GlobalWS = (globalThis as unknown as { WebSocket?: new (u: string) => RelaySocket }).WebSocket;
+        if (typeof GlobalWS === 'function') {
+          return new GlobalWS(url);
+        }
+        return new WebSocket(url) as unknown as RelaySocket;
+      });
 
     this.relays = relayUrls.map((url) => ({
       url,

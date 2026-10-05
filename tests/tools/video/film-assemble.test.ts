@@ -286,8 +286,8 @@ describe('normalize segments', () => {
     const seg = buildVideoNormalizeSegment(2, { width: 1920, height: 1080, fps: 30 });
     expect(seg).toBe(
       '[2:v]scale=1920:1080:force_original_aspect_ratio=decrease,' +
-        'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,' +
-        'format=yuv420p,setpts=PTS-STARTPTS[v2]'
+        'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,' +
+        'format=yuv420p,setpts=PTS-STARTPTS,fps=30[v2]'
     );
   });
 
@@ -299,8 +299,8 @@ describe('normalize segments', () => {
     );
     expect(seg).toBe(
       '[0:v]scale=720:1280:force_original_aspect_ratio=increase,' +
-        'crop=720:1280:(iw-ow)/2:(ih-oh)/2,setsar=1,fps=30,' +
-        'format=yuv420p,setpts=PTS-STARTPTS[v0]'
+        'crop=720:1280:(iw-ow)/2:(ih-oh)/2,setsar=1,' +
+        'format=yuv420p,setpts=PTS-STARTPTS,fps=30[v0]'
     );
   });
 
@@ -457,8 +457,8 @@ describe('buildFilmArgs', () => {
     expect(plan.args).toEqual([
       '-y', '-hide_banner', '-i', '/a.mp4', '-filter_complex',
       '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,' +
-        'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,' +
-        'format=yuv420p,setpts=PTS-STARTPTS[v0];' +
+        'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,' +
+        'format=yuv420p,setpts=PTS-STARTPTS,fps=30[v0];' +
         '[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[a0];' +
         '[a0]apad=pad_dur=5[aoutp]',
       '-map', '[v0]', '-map', '[aoutp]', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',

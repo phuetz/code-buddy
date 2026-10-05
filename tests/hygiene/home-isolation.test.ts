@@ -39,6 +39,8 @@ function runWithIsolationSetup(fixtureLines: string[], env: NodeJS.ProcessEnv = 
         'export default defineConfig({ test: {',
         `  root: ${JSON.stringify(dir)},`,
         "  include: ['garde.fixture.ts'],",
+        // Vitest 4 intercepte console.* : garder le marqueur visible sur stdout enfant.
+        '  disableConsoleIntercept: true,',
         `  setupFiles: [${JSON.stringify(path.join(REPO_ROOT, 'tests', 'setup', 'home-isolation.ts'))}],`,
         '} });',
         '',

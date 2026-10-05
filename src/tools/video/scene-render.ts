@@ -180,8 +180,11 @@ export function buildFallbackStillArgs(opts: {
   outPath: string;
 }): string[] {
   const { width: w, height: h } = opts;
-  const vf =
-    `gradients=s=${w}x${h}:c0=0x${hex(opts.c0)}:c1=0x${hex(opts.c1)}:x0=0:y0=0:x1=${w}:y1=${h}:nb_colors=2,` +
+  // `gradients` is a lavfi SOURCE filter (|->V), not a V->V filter. Feeding it
+  // via `-vf` on top of `color=black` fails on ffmpeg 5+ ("expected 1 input").
+  const gradient =
+    `gradients=s=${w}x${h}:c0=0x${hex(opts.c0)}:c1=0x${hex(opts.c1)}:x0=0:y0=0:x1=${w}:y1=${h}:nb_colors=2`;
+  const draw =
     `drawtext=fontfile=${FB}:textfile=${opts.titleFile}:fontcolor=white:fontsize=76:x=(w-text_w)/2:y=(h-text_h)/2:` +
     `shadowcolor=black@0.5:shadowx=3:shadowy=3`;
   return [
@@ -192,9 +195,9 @@ export function buildFallbackStillArgs(opts: {
     '-f',
     'lavfi',
     '-i',
-    `color=black:s=${w}x${h}`,
+    gradient,
     '-vf',
-    vf,
+    draw,
     '-frames:v',
     '1',
     opts.outPath,

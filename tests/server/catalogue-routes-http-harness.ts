@@ -56,6 +56,8 @@ export interface CatalogueServer {
   baseUrl: string;
   port: number;
   token: string;
+  /** Porcelain lines already dirty before this catalogue started (suite pollution). */
+  dirtyBaseline: string[];
   restore: () => Promise<void>;
 }
 
@@ -136,6 +138,7 @@ export async function startCatalogueServer(options?: {
     const { createUserToken } = await import('../../src/server/auth/jwt.js');
     const scopes: ApiScope[] = ['admin'];
     const token = createUserToken(CATALOGUE_USER_ID, scopes, CATALOGUE_JWT_SECRET, '1h');
+    const dirtyBaseline = listUnexpectedRepoDirtyPaths(REPO_ROOT);
     const launch = options?.start ?? (await import('../../src/server/index.js')).startServer;
     started = await launch({
       port: 0,
@@ -161,6 +164,7 @@ export async function startCatalogueServer(options?: {
       baseUrl: `http://127.0.0.1:${port}`,
       port,
       token,
+      dirtyBaseline,
       restore: async () => {
         const { stopServer } = await import('../../src/server/index.js');
         try {
@@ -242,7 +246,7 @@ const ALLOWED_DIRTY = [
   'docs/reports/2026-09/REPARATION-WEBCHAT-JETON-RECONNEXION.md',
 ];
 
-export function unexpectedRepoDirtyPaths(repoRoot: string): string[] {
+export function listUnexpectedRepoDirtyPaths(repoRoot: string): string[] {
   const output = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -256,4 +260,14 @@ export function unexpectedRepoDirtyPaths(repoRoot: string): string[] {
       const filePath = line.slice(3).trim();
       return !ALLOWED_DIRTY.some((allowed) => filePath === allowed || filePath.endsWith(allowed));
     });
+}
+
+/**
+ * Paths the catalogue left dirty beyond an optional baseline snapshot.
+ * Passing `baseline` (captured at server start) ignores pre-existing suite
+ * pollution so the assertion still catches NEW dirt from this catalogue.
+ */
+export function unexpectedRepoDirtyPaths(repoRoot: string, baseline: string[] = []): string[] {
+  const baselineSet = new Set(baseline);
+  return listUnexpectedRepoDirtyPaths(repoRoot).filter((line) => !baselineSet.has(line));
 }

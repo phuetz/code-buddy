@@ -476,6 +476,6 @@ describe('catalogue HTTP partie B', () => {
   });
 
   it('ne laisse dans git que les fichiers du catalogue', () => {
-    expect(unexpectedRepoDirtyPaths(ctx.repoRoot)).toEqual([]);
+    expect(unexpectedRepoDirtyPaths(ctx.repoRoot, ctx.dirtyBaseline)).toEqual([]);
   });
 });
