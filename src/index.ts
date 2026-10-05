@@ -3034,11 +3034,24 @@ program
     }
     const { startServer } = await import("./server/index.js");
     try {
+      const wantsNoAuth = options.auth === false;
+      if (
+        wantsNoAuth &&
+        process.env.NODE_ENV === "production" &&
+        process.env.CODEBUDDY_ALLOW_NO_AUTH !== "1" &&
+        process.env.CODEBUDDY_ALLOW_NO_AUTH !== "true"
+      ) {
+        process.stderr.write(
+          "error: --no-auth is refused when NODE_ENV=production (set CODEBUDDY_ALLOW_NO_AUTH=1 to override)\n",
+        );
+        process.exit(1);
+        return;
+      }
       await startServer({
         port,
         // Loopback unless the operator asks otherwise (flag, then HOST).
         ...(options.host ? { host: String(options.host) } : {}),
-        authEnabled: options.auth !== false,
+        authEnabled: !wantsNoAuth,
       });
     } catch (error) {
       logger.error("Failed to start server", error instanceof Error ? error : new Error(String(error)));

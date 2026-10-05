@@ -29,6 +29,7 @@ try {
 }
 import type { ServerConfig } from './types.js';
 import { isOriginAllowed, DEFAULT_LOCALHOST_ORIGINS } from './origin-check.js';
+import { createHostAllowlistMiddleware, createOriginAccessMiddleware } from './middleware/host-origin-guard.js';
 import { diagnoseServerExposure } from './exposure-diagnostic.js';
 import {
   createAuthMiddleware,
@@ -173,9 +174,8 @@ const DEFAULT_CONFIG: ServerConfig = {
     10
   ),
   authEnabled:
-    process.env.NODE_ENV === 'production'
-      ? true // Auth is always enabled in production (fail-closed)
-      : process.env.AUTH_ENABLED !== 'false',
+    // Fail-closed in every NODE_ENV. Opt out only via AUTH_ENABLED=false or CLI --no-auth.
+    process.env.AUTH_ENABLED !== 'false',
   jwtSecret: process.env.JWT_SECRET || '',
   jwtExpiration: process.env.JWT_EXPIRATION || SERVER_CONFIG.DEFAULT_JWT_EXPIRATION,
   websocketEnabled: process.env.WS_ENABLED !== 'false',
@@ -242,6 +242,12 @@ function createApp(
   // Security headers middleware (CSP, X-Frame-Options, HSTS, etc.)
   app.use(createSecurityHeadersMiddleware(config));
 
+  // DNS-rebinding defense: Host allowlist (fail-closed).
+  app.use(createHostAllowlistMiddleware(config, resolveListenPort));
+
+  // Browser Origin access control for non-public routes (CLI/curl without Origin still pass).
+  app.use(createOriginAccessMiddleware(config));
+
   // Logging middleware
   if (config.logging) {
     app.use(createLoggingMiddleware(config));
@@ -259,8 +265,9 @@ function createApp(
       cors({
         // Function form so wildcard-port patterns (e.g. http://localhost:*) match and
         // non-browser clients (no Origin header) are allowed. '*' keeps legacy open behavior.
+        // Wildcard must not reflect the request Origin (CORS non-reflection).
         origin: isWildcard
-          ? true
+          ? '*'
           : (origin, cb) => cb(null, !origin || isOriginAllowed(origin, allowedOrigins)),
         credentials: !isWildcard,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

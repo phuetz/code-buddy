@@ -54,3 +54,9 @@ export {
   type SecurityHeadersConfig,
   type CSPDirectives,
 } from './security-headers.js';
+
+export {
+  createHostAllowlistMiddleware,
+  createOriginAccessMiddleware,
+  getHostAllowlistForConfig,
+} from './host-origin-guard.js';

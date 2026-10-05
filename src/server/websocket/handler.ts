@@ -9,7 +9,8 @@ import type { WebSocket, WebSocketServer, RawData } from 'ws';
 import type { ServerConfig, WebSocketMessage, WebSocketResponse } from '../types.js';
 import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
-import { isOriginAllowed } from '../origin-check.js';
+import { isOriginAllowed, DEFAULT_LOCALHOST_ORIGINS } from '../origin-check.js';
+import { buildDefaultAllowedHosts, isHostAllowed } from '../host-check.js';
 import { verifyToken } from '../auth/jwt.js';
 import { getDeviceAuthStore } from '../auth/device-store.js';
 import { withDeviceSessionIdentity } from '../auth/device-session-context.js';
@@ -1883,6 +1884,28 @@ export async function setupWebSocket(
     path: '/ws',
     maxPayload: SERVER_CONFIG.WS_MAX_PAYLOAD_BYTES,
     verifyClient: (info, cb) => {
+      // DNS-rebinding defense: require an allowed Host before any WS upgrade.
+      const allowedHosts = buildDefaultAllowedHosts({
+        bindHost: config.host,
+        extra: [
+          ...(Array.isArray(config.allowedHosts) ? config.allowedHosts : []),
+          ...((process.env.CODEBUDDY_ALLOWED_HOSTS || process.env.ALLOWED_HOSTS || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)),
+        ],
+      });
+      const listenPort =
+        typeof server.address() === 'object' && server.address()
+          ? (server.address() as { port: number }).port
+          : config.port;
+      const hostHeader = info.req.headers.host;
+      if (!isHostAllowed(typeof hostHeader === 'string' ? hostHeader : undefined, allowedHosts, listenPort)) {
+        logger.warn(`[ws] Rejected WebSocket connection from disallowed Host: ${hostHeader}`);
+        cb(false, 403, 'Forbidden Host');
+        return;
+      }
+
       // Non-browser clients (CLI, fleet peers via the `ws` library) send no Origin
       // header — allow them. Browser clients must present an allowed Origin, which
       // blocks cross-site WebSocket hijacking (CSWSH). Mirrors the Gateway WS hardening
@@ -1896,7 +1919,7 @@ export async function setupWebSocket(
         ? config.corsOrigins
         : typeof config.corsOrigins === 'string'
           ? config.corsOrigins.split(',')
-          : [];
+          : [...DEFAULT_LOCALHOST_ORIGINS];
       if (allowedOrigins.includes('*') || isOriginAllowed(origin, allowedOrigins)) {
         cb(true);
         return;

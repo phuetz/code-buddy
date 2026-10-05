@@ -20,6 +20,8 @@ export interface ServerConfig {
   cors: boolean;
   /** CORS origins (comma-separated or array) */
   corsOrigins?: string | string[];
+  /** Extra Host header values permitted (DNS-rebinding defense). */
+  allowedHosts?: string[];
   /** Enable rate limiting */
   rateLimit: boolean;
   /** Rate limit window in ms */
