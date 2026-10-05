@@ -327,6 +327,19 @@ export class CollectiveKnowledgeGraph {
     return this.engine;
   }
 
+  /** Ferme le sidecar Rust (idempotent, ne lève jamais). Le moteur est ré-ouvert à la demande
+   *  au prochain appel : sûr pour une commande CLI qui termine, sans effet sur le moteur TS. */
+  close(): void {
+    const eng = this.engine;
+    this.engine = null;
+    this.engineTried = false;
+    try {
+      eng?.close();
+    } catch {
+      /* ignore */
+    }
+  }
+
   /** Dedicated multilingual embedder (lazy; isolated from EnhancedMemory's all-MiniLM singleton). */
   private getEmbedder(): CkgEmbedder {
     if (!this.embedder) {
@@ -1452,6 +1465,11 @@ let singleton: CollectiveKnowledgeGraph | null = null;
 export function getCollectiveKnowledgeGraph(): CollectiveKnowledgeGraph {
   if (!singleton) singleton = new CollectiveKnowledgeGraph();
   return singleton;
+}
+
+/** Ferme le sidecar du singleton s'il existe (sans le créer). Idempotent, ne lève jamais. */
+export function closeCollectiveKnowledgeGraph(): void {
+  singleton?.close();
 }
 
 /** Test seam — reset the singleton. */
