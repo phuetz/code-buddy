@@ -34,7 +34,7 @@ async function rollbackFiles(repo: string, relativePaths: string[]): Promise<voi
   }
 }
 
-import { detectProviderFromEnv } from '../../utils/provider-detector.js';
+import { createAuxiliaryClient } from '../../providers/auxiliary-llm.js';
 import { getCostTracker } from '../../utils/cost-tracker.js';
 
 export async function runVerificationAndSelfCorrectionLoop(
@@ -112,11 +112,11 @@ export async function runVerificationAndSelfCorrectionLoop(
   if (customClient) {
     baseClient = customClient;
   } else {
-    const detected = detectProviderFromEnv();
-    if (!detected) {
+    const resolved = createAuxiliaryClient('verification');
+    if (!resolved) {
       throw new Error('No LLM provider configuration found in environment.');
     }
-    baseClient = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+    baseClient = resolved;
   }
 
   const tracker = getCostTracker();

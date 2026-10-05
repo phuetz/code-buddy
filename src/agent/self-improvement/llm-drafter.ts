@@ -24,17 +24,24 @@ export function createLlmDrafter(options: { explicitModel?: string } = {}): Less
     if (!clientPromise) {
       clientPromise = (async () => {
         try {
+          const { createAuxiliaryClient, isAuxiliaryLocalEndpoint, isAuxiliaryLocalOnly, resolveAuxiliaryLlm } = await import('../../providers/auxiliary-llm.js');
+          const { CodeBuddyClient } = await import('../../codebuddy/client.js');
+          const preferred = resolveAuxiliaryLlm({
+            role: 'drafter',
+            allowAmbient: false,
+            ...(options.explicitModel ? { model: options.explicitModel } : {}),
+          });
+          if (preferred.status === 'blocked') return null;
+          if (preferred.status === 'resolved') {
+            return createAuxiliaryClient('drafter', options.explicitModel) as unknown as MinimalClient;
+          }
           const { resolveCommandProvider } = await import('../../commands/llm-provider-resolution.js');
           const resolved = resolveCommandProvider(options.explicitModel ? { explicitModel: options.explicitModel } : {});
           if (resolved?.apiKey) {
-            const { CodeBuddyClient } = await import('../../codebuddy/client.js');
-            return new CodeBuddyClient(resolved.apiKey, resolved.model, resolved.baseURL) as unknown as MinimalClient;
+            if (isAuxiliaryLocalOnly() && !isAuxiliaryLocalEndpoint(resolved.providerLabel, resolved.baseURL)) return null;
+            return new CodeBuddyClient(resolved.apiKey, resolved.model, resolved.baseURL, { enableFallbacks: false }) as unknown as MinimalClient;
           }
-          const { detectProviderFromEnv } = await import('../../utils/provider-detector.js');
-          const { CodeBuddyClient } = await import('../../codebuddy/client.js');
-          const detected = detectProviderFromEnv();
-          if (!detected) return null;
-          return new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL) as unknown as MinimalClient;
+          return createAuxiliaryClient('drafter', options.explicitModel) as unknown as MinimalClient;
         } catch {
           return null;
         }

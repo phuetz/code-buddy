@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { getRipgrepPath } from '../../utils/ripgrep-path.js';
 
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from '../../codebuddy/client.js';
-import { detectProviderFromEnv } from '../../utils/provider-detector.js';
+import { createAuxiliaryClient } from '../../providers/auxiliary-llm.js';
 import {
   isPathAllowedByContract,
   resolveRepoPath,
@@ -304,11 +304,11 @@ export async function generateEditProposalWithTrace(
   if (customClient) {
     client = customClient;
   } else {
-    const detected = detectProviderFromEnv();
-    if (!detected) {
+    const resolved = createAuxiliaryClient('edit_proposal');
+    if (!resolved) {
       throw new Error('No LLM provider configuration found in environment.');
     }
-    client = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+    client = resolved;
   }
 
   // 2. Expose only the data-only tools authorized by the dispatch artifact.

@@ -33,6 +33,7 @@ import { initializeMemory, getMemoryManager } from "../memory/persistent-memory.
 import { restoreSessionHistory } from '../persistence/session-history.js';
 import { getUserHooksManager } from "../hooks/user-hooks.js";
 import { isFeatureEnabled } from "../config/feature-flags.js";
+import { clearSessionLlmRouteIfMatches, setSessionLlmRoute } from "../providers/session-llm-route.js";
 import { getActiveRunStore } from "../observability/run-store.js";
 import { recordSkillActivity } from "../skills/skill-usage-store.js";
 import { resetIdentityManager } from "../identity/identity-manager.js";
@@ -302,6 +303,7 @@ export class CodeBuddyAgent extends BaseAgent {
     this.codebuddyClient = launchOptions?.modelClient
       ? launchOptions.modelClient as unknown as CodeBuddyClient
       : new CodeBuddyClient(apiKey, modelToUse, baseURL);
+    this.publishSessionLlmRoute();
 
     // Apply thinkingLevel from settings if configured
     try {
@@ -1895,8 +1897,29 @@ Look at the screenshot and find the element matching the user's intent. Output o
     return this.codebuddyClient;
   }
 
+  /** Publie la route réelle du client pour les tâches auxiliaires du processus. */
+  private publishSessionLlmRoute(): void {
+    const client = this.codebuddyClient;
+    if (!client?.getApiKey || !client.getBaseURL || !client.getCurrentModel) return;
+    const apiKey = client.getApiKey();
+    const baseURL = client.getBaseURL();
+    const model = client.getCurrentModel();
+    if (!apiKey || !baseURL || !model) return;
+    setSessionLlmRoute({ apiKey, model, baseURL });
+  }
+
+  private clearSessionLlmRoute(): void {
+    const client = this.codebuddyClient;
+    if (!client?.getApiKey || !client.getBaseURL) return;
+    const apiKey = client.getApiKey();
+    const baseURL = client.getBaseURL();
+    if (!apiKey || !baseURL) return;
+    clearSessionLlmRouteIfMatches(baseURL, apiKey);
+  }
+
   setModel(model: string): void {
     this.codebuddyClient.setModel(model);
+    this.publishSessionLlmRoute();
     // Update token counter for new model
     this.tokenCounter.dispose();
     this.tokenCounter = createTokenCounter(model);
@@ -2635,6 +2658,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     });
     this.contextManager.stopPeriodicSnapshot?.();
     this.peerRoutingConfig = null;
+    this.clearSessionLlmRoute();
     super.dispose();
     if (headlessProcess) {
       cleanupHeadlessSingletonWatchers();

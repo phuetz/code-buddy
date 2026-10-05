@@ -8,6 +8,14 @@ import {
   resolveProviderFromCatalog,
   type ResolvedRuntimeProvider,
 } from './provider-catalog.js';
+import {
+  getSessionLlmRoute,
+} from './session-llm-route.js';
+import {
+  isAuxiliaryLocalEndpoint,
+  isAuxiliaryLocalOnly,
+  sessionRouteAsRuntime,
+} from './auxiliary-llm.js';
 
 type EnvLike = Record<string, string | undefined>;
 
@@ -129,17 +137,32 @@ function resolveAutoAuxiliaryProvider(
   // must never discover a different configured provider behind the caller's
   // back. Callers either supply the exact main route or explicitly opt in to a
   // named auxiliary provider.
+  const env = options.env ?? process.env;
+  const session = getSessionLlmRoute();
+  const localOnly = isAuxiliaryLocalOnly(env);
+
   if (options.task === 'semantic_review') {
-    return options.mainProvider
-      ? resolveFromMainProvider(options, config, timeoutMs, 'auto')
-      : null;
+    if (options.mainProvider) {
+      return rejectCloudWhenLocalOnly(resolveFromMainProvider(options, config, timeoutMs, 'auto'), localOnly);
+    }
+    if (!session) return null;
+    if (localOnly && !isAuxiliaryLocalEndpoint(session.provider, session.baseURL)) return null;
+    return finalizeAuxiliaryProvider(options.task, sessionRouteAsRuntime(session), config, timeoutMs, 'auto');
   }
 
-  if ((options.task === 'vision' || options.task === 'browser_vision') && hasEnvValue(options.env ?? process.env, 'OPENROUTER_API_KEY')) {
+  // Vision keeps its OpenRouter shortcut only when nobody chose a session or
+  // a main route. A connected key must not pull a transcript off the session.
+  if (
+    (options.task === 'vision' || options.task === 'browser_vision')
+    && !options.mainProvider
+    && !session
+    && !localOnly
+    && hasEnvValue(env, 'OPENROUTER_API_KEY')
+  ) {
     return resolveSpecificAuxiliaryProvider(
       options.task,
       'openrouter',
-      options.env ?? process.env,
+      env,
       {
         ...config,
         model: config.model || OPENROUTER_VISION_MODEL,
@@ -150,7 +173,12 @@ function resolveAutoAuxiliaryProvider(
   }
 
   if (options.mainProvider) {
-    return resolveFromMainProvider(options, config, timeoutMs, 'auto');
+    return rejectCloudWhenLocalOnly(resolveFromMainProvider(options, config, timeoutMs, 'auto'), localOnly);
+  }
+
+  if (session) {
+    if (localOnly && !isAuxiliaryLocalEndpoint(session.provider, session.baseURL)) return null;
+    return finalizeAuxiliaryProvider(options.task, sessionRouteAsRuntime(session), config, timeoutMs, 'auto');
   }
 
   const resolved = resolveProviderFromCatalog({
@@ -159,7 +187,17 @@ function resolveAutoAuxiliaryProvider(
     requireConfigured: true,
   });
   if (!resolved) return null;
+  if (localOnly && !isAuxiliaryLocalEndpoint(resolved.provider, resolved.baseURL)) return null;
   return finalizeAuxiliaryProvider(options.task, resolved, config, timeoutMs, 'auto');
+}
+
+function rejectCloudWhenLocalOnly(
+  resolved: ResolvedRuntimeAuxiliaryProvider | null,
+  localOnly: boolean,
+): ResolvedRuntimeAuxiliaryProvider | null {
+  if (!resolved) return null;
+  if (localOnly && !isAuxiliaryLocalEndpoint(resolved.provider, resolved.baseURL)) return null;
+  return resolved;
 }
 
 function resolveFromMainProvider(

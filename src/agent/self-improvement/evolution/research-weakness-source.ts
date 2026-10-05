@@ -285,11 +285,9 @@ export async function retrieveResearchMatches(args: ResearchSelectionArgs): Prom
 export function makeDefaultChat(model?: string): SynthChat {
   return async (prompt) => {
     try {
-      const { detectProviderFromEnv } = await import('../../../utils/provider-detector.js');
-      const { CodeBuddyClient } = await import('../../../codebuddy/client.js');
-      const detected = detectProviderFromEnv();
-      if (!detected) return null;
-      const client = new CodeBuddyClient(detected.apiKey, model ?? detected.defaultModel, detected.baseURL);
+      const { createAuxiliaryClient } = await import('../../../providers/auxiliary-llm.js');
+      const client = createAuxiliaryClient('research', model);
+      if (!client) return null;
       const resp = await client.chat([{ role: 'user', content: prompt }] as never, []);
       return (resp as { choices?: Array<{ message?: { content?: string | null } }> })?.choices?.[0]?.message?.content ?? null;
     } catch {
