@@ -896,8 +896,12 @@
       // Inline code
       processed = processed.replace(/`([^`]+)`/g, '<code>$1</code>');
 
-      // Links
-      processed = processed.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      // Links — fail-closed: only http(s)/mailto/# (block javascript:/data:)
+      processed = processed.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+        const raw = String(href || '').trim();
+        const safe = /^(https?:|mailto:|#)/i.test(raw) && !/[<>"'\s]/.test(raw) ? raw : '#blocked';
+        return '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+      });
 
       // Unordered lists
       processed = processed.replace(/^(\s*)[*-] (.+)$/gm, '$1<li>$2</li>');

@@ -15,6 +15,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import { logger } from '../../utils/logger.js';
+import { gateCanvasPayload } from '../../security/html-render-guard.js';
 
 // ============================================================================
 // Types
@@ -45,8 +46,20 @@ class CanvasStore {
   private idCounter = 0;
 
   push(html: string, css?: string, js?: string, metadata?: Record<string, unknown>): CanvasSnapshot {
+    // Fail-closed at the store boundary (covers canvas-publish + HTTP push).
+    const gated = gateCanvasPayload({ html, css, js });
+    if (!gated.ok) {
+      throw new Error(`Unsafe canvas payload: ${gated.reasons.join('; ')}`);
+    }
     const id = `canvas_${++this.idCounter}_${Date.now()}`;
-    const snapshot: CanvasSnapshot = { id, html, css, js, metadata, createdAt: new Date() };
+    const snapshot: CanvasSnapshot = {
+      id,
+      html: gated.html!,
+      css: gated.css,
+      // never persist model/tool js
+      metadata,
+      createdAt: new Date(),
+    };
     this.snapshots.set(id, snapshot);
     this.current = snapshot;
     return snapshot;
@@ -98,10 +111,21 @@ function isFullHtmlDocument(html: string): boolean {
 }
 
 function snapshotPage(snapshot: CanvasSnapshot): string {
-  if (isFullHtmlDocument(snapshot.html) && !snapshot.css && !snapshot.js) {
-    return snapshot.html;
+  // Re-gate on serve (covers legacy in-memory snapshots / direct store writes).
+  const gated = gateCanvasPayload({ html: snapshot.html, css: snapshot.css, js: snapshot.js });
+  if (!gated.ok) {
+    return `<!DOCTYPE html><html><body><p>Canvas content blocked (unsafe markup).</p></body></html>`;
   }
-  return buildCanvasPage(snapshot);
+  const safe: CanvasSnapshot = {
+    ...snapshot,
+    html: gated.html!,
+    css: gated.css,
+    js: undefined,
+  };
+  if (isFullHtmlDocument(safe.html) && !safe.css) {
+    return safe.html;
+  }
+  return buildCanvasPage(safe);
 }
 
 function extractHtml(payload: unknown): string | null {
@@ -128,10 +152,15 @@ function parsePushBody(raw: string | undefined, maxSize: number): {
       return { error: 'Body required and must be < 1MB' };
     }
     const record = data as { css?: unknown; js?: unknown; metadata?: unknown };
+    // Fail-closed: refuse script payloads and unsafe HTML/CSS before they hit the store.
+    const gated = gateCanvasPayload({ html, css: record.css, js: record.js });
+    if (!gated.ok) {
+      return { error: `Unsafe canvas payload: ${gated.reasons.join('; ')}` };
+    }
     return {
-      html,
-      ...(typeof record.css === 'string' ? { css: record.css } : {}),
-      ...(typeof record.js === 'string' ? { js: record.js } : {}),
+      html: gated.html!,
+      ...(gated.css ? { css: gated.css } : {}),
+      // js intentionally omitted — never served from model/tool output
       ...(record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
         ? { metadata: record.metadata as Record<string, unknown> }
         : {}),
@@ -285,16 +314,20 @@ export function createCanvasRouter(config?: Partial<CanvasRouteConfig>): Router 
       return;
     }
     const record = req.body as { css?: unknown; js?: unknown; metadata?: unknown };
-    const snapshot = canvasStore.push(
-      html,
-      typeof record.css === 'string' ? record.css : undefined,
-      typeof record.js === 'string' ? record.js : undefined,
-      record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
-        ? record.metadata as Record<string, unknown>
-        : undefined,
-    );
-    logger.debug('Canvas pushed', { id: snapshot.id });
-    res.status(200).json({ id: snapshot.id, createdAt: snapshot.createdAt });
+    try {
+      const snapshot = canvasStore.push(
+        html,
+        typeof record.css === 'string' ? record.css : undefined,
+        typeof record.js === 'string' ? record.js : undefined,
+        record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
+          ? record.metadata as Record<string, unknown>
+          : undefined,
+      );
+      logger.debug('Canvas pushed', { id: snapshot.id });
+      res.status(200).json({ id: snapshot.id, createdAt: snapshot.createdAt });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : 'Unsafe canvas payload' });
+    }
   });
 
   router.post('/canvas/reset', (_req: Request, res: Response) => {
@@ -343,20 +376,24 @@ export function createCanvasRouter(config?: Partial<CanvasRouteConfig>): Router 
 // ============================================================================
 
 function buildCanvasPage(snapshot: CanvasSnapshot): string {
+  // Defence in depth: never emit model/tool `js` into the page (fail-closed).
+  // CSS was gated on push; still omit if a scanner would reject it.
+  const cssOk = !snapshot.css || gateCanvasPayload({ html: '<div></div>', css: snapshot.css }).ok;
+  const css = cssOk ? (snapshot.css || '') : '';
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
   <title>Code Buddy Canvas</title>
   <style>
     body { margin: 0; padding: 0; font-family: system-ui, sans-serif; }
-    ${snapshot.css || ''}
+    ${css}
   </style>
 </head>
 <body>
   ${snapshot.html}
-  ${snapshot.js ? `<script>${snapshot.js}</script>` : ''}
 </body>
 </html>`;
 }

@@ -275,9 +275,14 @@
     return String(str || '').length;
   }
 
+  function isSafeDataImageUrl(dataUrl) {
+    return typeof dataUrl === 'string' &&
+      /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/]+=*$/i.test(dataUrl.trim());
+  }
+
   function constrainDataUrl(dataUrl, maxChars) {
-    if (!dataUrl) return '';
-    if (byteLen(dataUrl) <= maxChars) return dataUrl;
+    if (!dataUrl || !isSafeDataImageUrl(dataUrl)) return '';
+    if (byteLen(dataUrl) <= maxChars) return dataUrl.trim();
     return '';
   }
 
@@ -303,9 +308,10 @@
       '</div>';
   }
 
+
   function imageHtml(dataUrl) {
-    if (!dataUrl) return '';
-    return '<img class="bubble-img selfie" alt="Image" src="' + dataUrl + '">';
+    if (!dataUrl || !isSafeDataImageUrl(dataUrl)) return '';
+    return '<img class="bubble-img selfie" alt="Image" src="' + dataUrl.trim() + '">';
   }
 
   function sentImagesHtml(images) {
@@ -313,16 +319,20 @@
     var html = '<div class="bubble-photos">';
     var i;
     for (i = 0; i < images.length; i += 1) {
-      html += '<img class="bubble-img sent" alt="Photo envoyée" src="' + images[i] + '">';
+      if (!isSafeDataImageUrl(images[i])) continue;
+      html += '<img class="bubble-img sent" alt="Photo envoyée" src="' + images[i].trim() + '">';
     }
-    return html + '</div>';
+    return html === '<div class="bubble-photos">' ? '' : html + '</div>';
   }
 
   function dataUrlFromFrame(image) {
     if (!image || typeof image.data !== 'string' || typeof image.mimeType !== 'string') return '';
+    // Fail-closed: base64 payload must not break out of the src attribute.
+    if (!/^[A-Za-z0-9+/]+=*$/.test(image.data)) return '';
     var mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
       ? image.mimeType
-      : 'image/png';
+      : (image.mimeType === 'image/png' ? 'image/png' : '');
+    if (!mime) return '';
     return 'data:' + mime + ';base64,' + image.data;
   }
 
@@ -592,7 +602,9 @@
       var group = groupingFor(index, state.messages);
       var avatar = '';
       if (msg.role === 'assistant') {
-        avatar = '<img class="msg-avatar" alt="" src="' + escapeHtml(state.avatarUrl) + '">';
+        avatar = isSafeDataImageUrl(state.avatarUrl)
+          ? '<img class="msg-avatar" alt="" src="' + state.avatarUrl + '">'
+          : '';
       }
       var quote = '';
       if (msg.replyTo && msg.replyTo.text) {
@@ -687,7 +699,7 @@
 
   function restoreAvatar() {
     var saved = storeGet(STORAGE.avatar, '');
-    if (typeof saved === 'string' && saved.indexOf('data:image/') === 0 && byteLen(saved) <= MAX_AVATAR_CHARS) {
+    if (typeof saved === 'string' && isSafeDataImageUrl(saved) && byteLen(saved) <= MAX_AVATAR_CHARS) {
       state.avatarUrl = saved;
     } else {
       state.avatarUrl = DEFAULT_AVATAR;

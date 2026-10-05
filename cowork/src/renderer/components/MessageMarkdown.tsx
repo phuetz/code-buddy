@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react';
+import { memo, type MouseEvent, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
@@ -20,7 +20,32 @@ const REHYPE_PLUGINS = [[rehypeKatex, { throwOnError: false, strict: false }]] a
 // FilePreviewPane, LiveLauncherPanel, …): fenced blocks → CodeBlock (highlight +
 // copy + "open as artifact"); inline code → a styled <code>. Callers can still
 // override via the `components` prop (e.g. ContentBlockView's file-mention code).
+const SAFE_HREF_RE = /^(?:https?:|mailto:|#)/i;
+
+function isSafeHref(href: string | undefined): href is string {
+  return typeof href === 'string' && SAFE_HREF_RE.test(href) && !/[<>"'\s]/.test(href);
+}
+
 const DEFAULT_COMPONENTS = {
+  a({ href, children, ...props }: { href?: string; children?: ReactNode }) {
+    const safeHref = isSafeHref(href) ? href : undefined;
+    return (
+      <a
+        {...props}
+        href={safeHref}
+        target={safeHref?.startsWith('http') ? '_blank' : undefined}
+        rel={safeHref?.startsWith('http') ? 'noopener noreferrer' : undefined}
+        onClick={(e: MouseEvent<HTMLAnchorElement>) => {
+          if (safeHref && typeof window !== 'undefined' && window.electronAPI?.openExternal) {
+            e.preventDefault();
+            void window.electronAPI.openExternal(safeHref);
+          }
+        }}
+      >
+        {children}
+      </a>
+    );
+  },
   code({ className, children, ...props }: { className?: string; children?: ReactNode }) {
     const match = /language-([\w+#.-]+)/.exec(className || '');
     if (!match) {

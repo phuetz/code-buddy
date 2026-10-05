@@ -23,6 +23,12 @@ import type {
   UserActionMessage,
 } from './a2ui-types.js';
 import { DEFAULT_SURFACE_STYLES } from './a2ui-types.js';
+import {
+  escapeHtml as guardEscapeHtml,
+  safeUrl,
+  safeToken,
+  sanitizeCssValue,
+} from '../security/html-render-guard.js';
 
 // ============================================================================
 // A2UI Manager Events
@@ -764,13 +770,14 @@ export class A2UIManager extends EventEmitter {
     html.push(`<head>`);
     html.push(`  <meta charset="UTF-8">`);
     html.push(`  <meta name="viewport" content="width=device-width, initial-scale=1.0">`);
-    html.push(`  <title>A2UI Surface: ${surfaceId}</title>`);
+    const safeSurfaceId = this.escapeHTML(this.safeIdent(surfaceId, 'surface'));
+    html.push(`  <title>A2UI Surface: ${safeSurfaceId}</title>`);
     html.push(`  <style>`);
     html.push(this.getDefaultCSS());
     html.push(`  </style>`);
     html.push(`</head>`);
     html.push(`<body style="${this.stylesToCSS(styles)}">`);
-    html.push(`  <div class="a2ui-surface" data-surface-id="${surfaceId}">`);
+    html.push(`  <div class="a2ui-surface" data-surface-id="${safeSurfaceId}">`);
     html.push(this.renderNodeToHTML(tree, 4));
     html.push(`  </div>`);
     html.push(`  <script>`);
@@ -804,24 +811,26 @@ export class A2UIManager extends EventEmitter {
 
       case 'button': {
         const label = this.escapeHTML((node.props.label as string) || 'Button');
-        const variant = (node.props.variant as string) || 'primary';
+        const variant = this.safeIdent((node.props.variant as string) || 'primary', 'primary');
         const disabled = node.props.disabled ? ' disabled' : '';
-        const actionName = (node.props.action as { name?: string })?.name || '';
-        return `${pad}<button class="a2ui-button a2ui-button--${variant}" data-action="${actionName}" data-component-id="${node.id}" style="${styleAttr}"${disabled}>${label}</button>`;
+        const actionName = this.escapeHTML(this.safeIdent((node.props.action as { name?: string })?.name || ''));
+        const id = this.escapeHTML(this.safeIdent(node.id, 'unknown'));
+        return `${pad}<button class="a2ui-button a2ui-button--${variant}" data-action="${actionName}" data-component-id="${id}" style="${styleAttr}"${disabled}>${label}</button>`;
       }
 
       case 'textField': {
         const label = this.escapeHTML((node.props.label as string) || '');
         const value = this.escapeHTML((node.props.value as string) || '');
         const placeholder = this.escapeHTML((node.props.placeholder as string) || '');
-        const type = (node.props.type as string) || 'text';
+        const type = this.safeIdent((node.props.type as string) || 'text', 'text');
         const disabled = node.props.disabled ? ' disabled' : '';
         const required = node.props.required ? ' required' : '';
+        const id = this.escapeHTML(this.safeIdent(node.id, 'unknown'));
         let html = `${pad}<div class="a2ui-field" style="${styleAttr}">`;
         if (label) {
           html += `\n${pad}  <label class="a2ui-label">${label}</label>`;
         }
-        html += `\n${pad}  <input type="${type}" class="a2ui-input" value="${value}" placeholder="${placeholder}" data-component-id="${node.id}"${disabled}${required}>`;
+        html += `\n${pad}  <input type="${type}" class="a2ui-input" value="${value}" placeholder="${placeholder}" data-component-id="${id}"${disabled}${required}>`;
         html += `\n${pad}</div>`;
         return html;
       }
@@ -921,7 +930,7 @@ export class A2UIManager extends EventEmitter {
 
       case 'code': {
         const code = this.escapeHTML((node.props.value as string) || '');
-        const lang = (node.props.language as string) || '';
+        const lang = this.escapeHTML(this.safeIdent((node.props.language as string) || ''));
         return `${pad}<pre class="a2ui-code" data-language="${lang}" style="${styleAttr}"><code>${code}</code></pre>`;
       }
 
@@ -931,9 +940,12 @@ export class A2UIManager extends EventEmitter {
       }
 
       case 'image': {
-        const src = (node.props.src as string) || '';
+        const src = this.safeSrc((node.props.src as string) || '');
         const alt = this.escapeHTML((node.props.alt as string) || '');
-        return `${pad}<img class="a2ui-image" src="${src}" alt="${alt}" style="${styleAttr}">`;
+        if (!src) {
+          return `${pad}<span class="a2ui-image a2ui-image--blocked" style="${styleAttr}" role="img" aria-label="${alt || 'image blocked'}"></span>`;
+        }
+        return `${pad}<img class="a2ui-image" src="${this.escapeHTML(src)}" alt="${alt}" style="${styleAttr}">`;
       }
 
       case 'progress': {
@@ -952,22 +964,23 @@ export class A2UIManager extends EventEmitter {
 
       case 'badge': {
         const value = this.escapeHTML(String(node.props.value || ''));
-        const variant = (node.props.variant as string) || 'default';
+        const variant = this.safeIdent((node.props.variant as string) || 'default', 'default');
         return `${pad}<span class="a2ui-badge a2ui-badge--${variant}" style="${styleAttr}">${value}</span>`;
       }
 
       case 'chip': {
         const label = this.escapeHTML((node.props.label as string) || '');
-        const actionName = (node.props.action as { name?: string })?.name || '';
-        return `${pad}<span class="a2ui-chip" data-action="${actionName}" data-component-id="${node.id}" style="${styleAttr}">${label}</span>`;
+        const actionName = this.escapeHTML(this.safeIdent((node.props.action as { name?: string })?.name || ''));
+        const id = this.escapeHTML(this.safeIdent(node.id, 'unknown'));
+        return `${pad}<span class="a2ui-chip" data-action="${actionName}" data-component-id="${id}" style="${styleAttr}">${label}</span>`;
       }
 
       case 'avatar': {
-        const src = (node.props.src as string) || '';
+        const src = this.safeSrc((node.props.src as string) || '');
         const name = this.escapeHTML((node.props.name as string) || '');
-        const size = (node.props.size as number) || 40;
+        const size = typeof node.props.size === 'number' && Number.isFinite(node.props.size) ? node.props.size : 40;
         if (src) {
-          return `${pad}<img class="a2ui-avatar" src="${src}" alt="${name}" style="width: ${size}px; height: ${size}px; ${styleAttr}">`;
+          return `${pad}<img class="a2ui-avatar" src="${this.escapeHTML(src)}" alt="${name}" style="width: ${size}px; height: ${size}px; ${styleAttr}">`;
         }
         const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         return `${pad}<div class="a2ui-avatar a2ui-avatar--initials" style="width: ${size}px; height: ${size}px; ${styleAttr}">${initials}</div>`;
@@ -1042,62 +1055,78 @@ export class A2UIManager extends EventEmitter {
    */
   private stylesToCSS(styles: A2UIStyles): string {
     const cssProps: string[] = [];
+    const push = (prop: string, raw: unknown, asPx = false) => {
+      if (raw === undefined || raw === null) return;
+      if (typeof raw === 'number' && Number.isFinite(raw)) {
+        cssProps.push(`${prop}: ${asPx ? `${raw}px` : raw}`);
+        return;
+      }
+      const v = sanitizeCssValue(raw);
+      if (v) cssProps.push(`${prop}: ${v}`);
+    };
 
-    if (styles.width !== undefined) cssProps.push(`width: ${this.toCSSValue(styles.width)}`);
-    if (styles.height !== undefined) cssProps.push(`height: ${this.toCSSValue(styles.height)}`);
-    if (styles.minWidth !== undefined) cssProps.push(`min-width: ${this.toCSSValue(styles.minWidth)}`);
-    if (styles.minHeight !== undefined) cssProps.push(`min-height: ${this.toCSSValue(styles.minHeight)}`);
-    if (styles.maxWidth !== undefined) cssProps.push(`max-width: ${this.toCSSValue(styles.maxWidth)}`);
-    if (styles.maxHeight !== undefined) cssProps.push(`max-height: ${this.toCSSValue(styles.maxHeight)}`);
-    if (styles.padding !== undefined) cssProps.push(`padding: ${this.toCSSValue(styles.padding)}`);
-    if (styles.margin !== undefined) cssProps.push(`margin: ${this.toCSSValue(styles.margin)}`);
-    if (styles.gap !== undefined) cssProps.push(`gap: ${this.toCSSValue(styles.gap)}`);
-    if (styles.flex !== undefined) cssProps.push(`flex: ${styles.flex}`);
-    if (styles.flexGrow !== undefined) cssProps.push(`flex-grow: ${styles.flexGrow}`);
-    if (styles.flexShrink !== undefined) cssProps.push(`flex-shrink: ${styles.flexShrink}`);
-    if (styles.alignItems !== undefined) cssProps.push(`align-items: ${styles.alignItems}`);
-    if (styles.justifyContent !== undefined) cssProps.push(`justify-content: ${styles.justifyContent}`);
-    if (styles.alignSelf !== undefined) cssProps.push(`align-self: ${styles.alignSelf}`);
-    if (styles.backgroundColor !== undefined) cssProps.push(`background-color: ${styles.backgroundColor}`);
-    if (styles.color !== undefined) cssProps.push(`color: ${styles.color}`);
-    if (styles.fontSize !== undefined) cssProps.push(`font-size: ${this.toCSSValue(styles.fontSize)}`);
-    if (styles.fontWeight !== undefined) cssProps.push(`font-weight: ${styles.fontWeight}`);
-    if (styles.fontFamily !== undefined) cssProps.push(`font-family: ${styles.fontFamily}`);
-    if (styles.textAlign !== undefined) cssProps.push(`text-align: ${styles.textAlign}`);
-    if (styles.textDecoration !== undefined) cssProps.push(`text-decoration: ${styles.textDecoration}`);
-    if (styles.borderRadius !== undefined) cssProps.push(`border-radius: ${this.toCSSValue(styles.borderRadius)}`);
-    if (styles.borderColor !== undefined) cssProps.push(`border-color: ${styles.borderColor}`);
-    if (styles.borderWidth !== undefined) cssProps.push(`border-width: ${styles.borderWidth}px`);
-    if (styles.borderStyle !== undefined) cssProps.push(`border-style: ${styles.borderStyle}`);
-    if (styles.opacity !== undefined) cssProps.push(`opacity: ${styles.opacity}`);
-    if (styles.overflow !== undefined) cssProps.push(`overflow: ${styles.overflow}`);
-    if (styles.shadow !== undefined) cssProps.push(`box-shadow: ${styles.shadow}`);
-    if (styles.display !== undefined) cssProps.push(`display: ${styles.display}`);
-    if (styles.visibility !== undefined) cssProps.push(`visibility: ${styles.visibility}`);
+    push('width', styles.width, true);
+    push('height', styles.height, true);
+    push('min-width', styles.minWidth, true);
+    push('min-height', styles.minHeight, true);
+    push('max-width', styles.maxWidth, true);
+    push('max-height', styles.maxHeight, true);
+    push('padding', styles.padding, true);
+    push('margin', styles.margin, true);
+    push('gap', styles.gap, true);
+    push('flex', styles.flex);
+    push('flex-grow', styles.flexGrow);
+    push('flex-shrink', styles.flexShrink);
+    push('align-items', styles.alignItems);
+    push('justify-content', styles.justifyContent);
+    push('align-self', styles.alignSelf);
+    push('background-color', styles.backgroundColor);
+    push('color', styles.color);
+    push('font-size', styles.fontSize, true);
+    push('font-weight', styles.fontWeight);
+    push('font-family', styles.fontFamily);
+    push('text-align', styles.textAlign);
+    push('text-decoration', styles.textDecoration);
+    push('border-radius', styles.borderRadius, true);
+    push('border-color', styles.borderColor);
+    if (styles.borderWidth !== undefined && Number.isFinite(styles.borderWidth as number)) {
+      cssProps.push(`border-width: ${styles.borderWidth}px`);
+    }
+    push('border-style', styles.borderStyle);
+    push('opacity', styles.opacity);
+    push('overflow', styles.overflow);
+    push('box-shadow', styles.shadow);
+    push('display', styles.display);
+    push('visibility', styles.visibility);
 
     return cssProps.join('; ');
   }
 
   /**
-   * Convert value to CSS value string
+   * Convert value to CSS value string (fail-closed).
    */
   private toCSSValue(value: string | number): string {
     if (typeof value === 'number') {
-      return `${value}px`;
+      return Number.isFinite(value) ? `${value}px` : '';
     }
-    return value;
+    return sanitizeCssValue(value);
   }
 
   /**
    * Escape HTML special characters
    */
   private escapeHTML(str: string): string {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+    return guardEscapeHtml(str);
+  }
+
+  /** Fail-closed id / action / class token for attributes. */
+  private safeIdent(str: string, fallback = ''): string {
+    return safeToken(str, fallback);
+  }
+
+  /** Fail-closed URL for img/avatar src (http(s), relative, data:image). */
+  private safeSrc(str: string): string {
+    return safeUrl(str, { allowDataImage: true, allowRelative: true });
   }
 
   /**
@@ -1257,15 +1286,16 @@ export class A2UIManager extends EventEmitter {
    * Get client-side JavaScript for user actions
    */
   private getClientScript(surfaceId: string): string {
+    const safeId = this.safeIdent(surfaceId, 'surface');
     return `
     (function() {
-      const surface = document.querySelector('[data-surface-id="${surfaceId}"]');
+      const surface = document.querySelector('[data-surface-id="${safeId}"]');
       if (!surface) return;
 
       function sendCanvasEvent(componentId, eventType, value) {
         const event = {
           canvasEvent: {
-            surfaceId: '${surfaceId}',
+            surfaceId: '${safeId}',
             componentId: componentId,
             eventType: eventType,
             value: value,
@@ -1288,7 +1318,7 @@ export class A2UIManager extends EventEmitter {
           var action = {
             userAction: {
               name: button.dataset.action,
-              surfaceId: '${surfaceId}',
+              surfaceId: '${safeId}',
               componentId: componentId,
               context: {}
             }
