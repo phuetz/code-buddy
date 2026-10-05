@@ -65,9 +65,15 @@ export function estimateCost(
 ): number {
   // Provider context is authoritative when present: a paid aggregator model
   // (e.g. `deepseek/…` on OpenRouter) must not be zeroed out just because its
-  // slug matches a local-runtime prefix.
+  // slug matches a local-runtime prefix. The converse also holds: a loopback
+  // URL is not a tariff, so `localTarget` zeroes only a local-runtime slug.
+  // A priced model (`grok-3-latest`) keeps its table price and the session
+  // cost limit can still stop the loop.
   const zeroCost = context
-    ? Boolean(context.subscriptionAuth || context.localTarget)
+    ? Boolean(
+      context.subscriptionAuth
+      || (context.localTarget && model && isLocalNoCostModel(model)),
+    )
     : Boolean(model && (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)));
   if (zeroCost) return 0;
   const price = model ? getPricingPer1k(model) : {

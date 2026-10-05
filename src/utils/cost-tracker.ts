@@ -154,7 +154,16 @@ function discountedPromptTokens(promptTokens: number, cachedTokens: number): num
 }
 
 function isKnownZeroTariff(model: string, context: CostBillingContext | undefined): boolean {
-  if (context) return Boolean(context.localTarget) && !context.subscriptionAuth;
+  // A loopback socket is not a tariff. `localTarget` only confirms the request
+  // stayed on the machine (test double, proxy, Ollama). The session cost guard
+  // still has to price a catalogue model such as `grok-3-latest`; otherwise
+  // `max_cost` never trips. $0 remains for a slug the historical heuristic
+  // already treats as a local runtime (`llama…`, `ollama/…`), and only when
+  // the caller did not explicitly say the target is a paid provider.
+  if (context) {
+    if (context.subscriptionAuth || !context.localTarget) return false;
+    return isLocalNoCostModel(model);
+  }
   return isLocalNoCostModel(model);
 }
 
@@ -351,7 +360,10 @@ export class CostTracker extends EventEmitter {
    * per-token API platform balance. Reporting a fictitious USD cost is
    * misleading and shows up in dashboards as "spend" that doesn't exist.
    *
-   * A local runtime also returns 0: that is a known tariff, not a forfait.
+   * A local-runtime slug (`llama…`, `ollama/…`) also returns 0 when the
+   * request is local or no provider context is known: that is a known tariff,
+   * not a forfait. A priced model reached through a loopback URL keeps its
+   * table price, so a session cost limit still stops the loop.
    * Provider-reported tokens take precedence over the local estimate. A finite
    * `reportedCostUsd` (OpenRouter `usage.cost`) wins over the price table,
    * except on a flat-fee subscription or a local runtime, which stay at 0.
