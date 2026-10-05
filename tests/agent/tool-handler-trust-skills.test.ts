@@ -133,6 +133,8 @@ describe('ToolHandler trust gate — read-only skills exception', () => {
     });
     expect(result.success).toBe(false);
     expect(result.error ?? '').toContain(TRUST_ERROR);
+    // Bloquant 11: the refusal tells the model what to do instead of inviting it to edit the trust file.
+    expect(result.error ?? '').toMatch(/cannot widen the trust itself[\s\S]*INSIDE the current project directory/);
   });
 
   it('STILL BLOCKS reading credential files elsewhere in ~/.codebuddy', async () => {

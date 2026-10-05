@@ -70,6 +70,7 @@ import {
 import { recordCompactionFork } from "../../context/compaction-fork.js";
 import { getActiveRunStore } from "../../observability/run-store.js";
 import { loadToolLoopGuardOptions, ToolLoopGuard, type ToolLoopDecision } from "./tool-loop-guard.js";
+import { StagnationDetector } from "./stagnation-detector.js";
 import { getGlobalEventBus } from "../../events/event-bus.js";
 import { takeFirstUseHint } from "../../utils/first-use-hints.js";
 import { getTurnMetricsRecorder } from '../../observability/turn-metrics.js';
@@ -1347,6 +1348,9 @@ export class AgentExecutor {
     const loopGuard = new ToolLoopGuard(loadToolLoopGuardOptions());
     let pendingLoopDecision: Exclude<ToolLoopDecision, { action: 'none' }> | null = null;
     let loopGuardStopped = false;
+    // One stagnation detector per task: a single refocus hint, never a stop.
+    const stagnation = new StagnationDetector();
+    let pendingStagnationHint: string | null = null;
     let observationShortened = false;
     let totalOutputTokens = 0;
     let totalInputTokensForCost = 0;
@@ -2187,6 +2191,14 @@ export class AgentExecutor {
               pendingLoopDecision = loopDecision;
             }
 
+            // Exploration without production (same files re-read, nothing written).
+            const stagnationDecision = stagnation.observe({
+              name: toolCall.function.name,
+              argumentsJson: toolCall.function.arguments || '{}',
+              success: result.success,
+            });
+            if (stagnationDecision) pendingStagnationHint = stagnationDecision.message;
+
             // Expand the current turn's cached schema after discovery or live
             // authoring. Without this, a newly created tool is dispatchable but
             // invisible to the model until the next user turn.
@@ -2575,6 +2587,19 @@ export class AgentExecutor {
               loopGuardStopped = true;
               break;
             }
+          }
+
+          // Stagnation hint: appended at the END of the transcript (history is never
+          // rewritten, so the prompt-cache prefix stays valid), once per task.
+          if (pendingStagnationHint) {
+            const hint = pendingStagnationHint;
+            pendingStagnationHint = null;
+            logger.warn('[stagnation] refocus hint injected', { toolRounds });
+            yield { type: "content", content: `\n⚠️ ${hint}\n` };
+            messages.push({
+              role: 'system' as const,
+              content: `<context type="stagnation-hint">\n${hint}\n</context>`,
+            });
           }
 
           // Tool-call/result pairs are complete at this boundary, so a steer

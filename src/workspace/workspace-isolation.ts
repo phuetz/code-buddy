@@ -462,7 +462,7 @@ export class WorkspaceIsolation extends EventEmitter {
       return {
         valid: false,
         resolved,
-        error: `Path is read-only for agent tools: ${filePath} (outside the workspace, whitelisted for reading only)`,
+        error: `Path is read-only for agent tools: ${filePath} (outside the workspace, whitelisted for reading only). Do not try to edit it; write inside the workspace and say so in your final answer.`,
         reason: 'read_only_path',
       };
     }
@@ -473,7 +473,7 @@ export class WorkspaceIsolation extends EventEmitter {
       return {
         valid: false,
         resolved,
-        error: `Path outside workspace not allowed: ${filePath} (workspace: ${this.config.workspaceRoot})`,
+        error: `Path outside workspace not allowed: ${filePath} (workspace: ${this.config.workspaceRoot}). Write the deliverable inside the workspace and name that path in your final answer; do not search the filesystem for a way around this.`,
         reason: 'outside_workspace',
       };
     }
