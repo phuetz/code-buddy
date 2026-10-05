@@ -116,6 +116,7 @@ import { maybeAutoCommit } from '../../tools/auto-commit.js';
 import {
   applyToolOutputMasking,
   expireOldToolResults,
+  resolveToolTtlStep,
   pruneImageContent,
 } from '../../context/tool-output-masking.js';
 import { IncrementalMessageTokenCounter } from './incremental-token-counter.js';
@@ -2742,7 +2743,7 @@ export class AgentExecutor {
 
           // Apply TTL-based tool result expiry + image pruning + backward-scanned FIFO masking (streaming path)
           try {
-            expireOldToolResults(messages, toolRounds);
+            expireOldToolResults(messages, toolRounds, 20, resolveToolTtlStep());
             pruneImageContent(messages);
             applyToolOutputMasking(messages);
             incrementalTokenCounter.invalidate();
