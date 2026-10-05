@@ -1417,9 +1417,17 @@ async function processPromptHeadless(
     const effectiveModel = client.getLastEffectiveModel() ?? modelToUse ?? process.env.GROK_MODEL ?? 'unknown';
     if (isHeadlessFinalResponseEmpty(resultText)) {
       const { detectProviderFromEnv } = await import('./utils/provider-detector.js');
-      const providerLabel = process.env.CODEBUDDY_PROVIDER?.trim()
+      let providerLabel = process.env.CODEBUDDY_PROVIDER?.trim()
         || detectProviderFromEnv()?.provider
-        || 'inconnu';
+        || '';
+      if (!providerLabel && baseURL) {
+        try {
+          providerLabel = new URL(baseURL).host || baseURL;
+        } catch {
+          providerLabel = baseURL;
+        }
+      }
+      if (!providerLabel) providerLabel = 'inconnu';
       process.stderr.write(`${formatEmptyHeadlessResponseError({
         provider: providerLabel,
         model: effectiveModel,
@@ -1732,7 +1740,7 @@ program
   )
   .option(
     "--system-prompt <id>",
-    "system prompt to use: default, minimal, secure, code-reviewer, architect (or custom from ~/.codebuddy/prompts/)"
+    "system prompt to use: default, minimal, secure (or custom from ~/.codebuddy/prompts/; see --list-prompts)"
   )
   .option(
     "--list-prompts",
@@ -1918,7 +1926,7 @@ program
     if (options.init) {
       const { initCodeBuddyProject, formatInitResult } = await lazyImport.initProject();
       const result = await initCodeBuddyProject();
-      cli.info(formatInitResult(result));
+      cli.stdout(formatInitResult(result));
       process.exit(result.success ? 0 : 1);
     }
 
@@ -2200,8 +2208,12 @@ program
         }
       }
 
-      // Save API key and base URL to user settings if provided via command line
-      if (options.apiKey || options.baseUrl) {
+      // Save API key and base URL to user settings if provided via command line.
+      // A one-shot headless run (-p / --print / --ephemeral) must not rewrite
+      // the profile: -k sk-test -u http://127.0.0.1:8765/v1 persisted the base
+      // URL and wrote credentials.enc.
+      const oneShot = Boolean(options.prompt || options.print || options.ephemeral);
+      if ((options.apiKey || options.baseUrl) && !oneShot) {
         await saveCommandLineSettings(options.apiKey, options.baseUrl);
       }
 
@@ -2823,8 +2835,12 @@ gitCommand
         process.exit(1);
       }
 
-      // Save API key and base URL to user settings if provided via command line
-      if (options.apiKey || options.baseUrl) {
+      // Save API key and base URL to user settings if provided via command line.
+      // A one-shot headless run (-p / --print / --ephemeral) must not rewrite
+      // the profile: -k sk-test -u http://127.0.0.1:8765/v1 persisted the base
+      // URL and wrote credentials.enc.
+      const oneShot = Boolean(options.prompt || options.print || options.ephemeral);
+      if ((options.apiKey || options.baseUrl) && !oneShot) {
         await saveCommandLineSettings(options.apiKey, options.baseUrl);
       }
 

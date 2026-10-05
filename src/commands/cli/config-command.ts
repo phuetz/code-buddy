@@ -10,7 +10,13 @@ import type { Command } from 'commander';
 export function registerConfigCommand(program: Command): void {
   const config = program
     .command('config')
-    .description('Show environment variables and the active TOML configuration');
+    .description('Show environment variables and the active TOML configuration')
+    .action(async () => {
+      // No subcommand: `buddy config` is documented as showing the configuration.
+      // Commander otherwise prints usage and exits 1.
+      const { getEnvSummary } = await import('../../config/env-schema.js');
+      console.log('\n' + getEnvSummary() + '\n');
+    });
 
   config
     .command('show')

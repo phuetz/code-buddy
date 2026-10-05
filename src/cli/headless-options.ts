@@ -39,6 +39,10 @@ export function resolveHeadlessResultExitCode(resultText: string): number {
   if (isHeadlessFinalResponseEmpty(resultText)) {
     return 1;
   }
+  // A local compaction refusal is an assistant message, not a successful answer.
+  if (/was not sent to the model/i.test(resultText)) {
+    return 1;
+  }
   const normalized = resultText.trim().toLowerCase();
   if (normalized.startsWith('sorry, i encountered an error:')) {
     return 1;

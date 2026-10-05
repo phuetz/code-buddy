@@ -1691,7 +1691,13 @@ export class AgentExecutor {
               tokens: error.tokens,
               limit: error.limit,
             });
-            yield { type: 'content', content: `\n\n${error.message}` };
+            // Sequential callers (buddy -p, buddy try) drop streaming-only
+            // content events. Persist the refusal so the user sees that the
+            // provider was never called, instead of an empty assistant turn.
+            const refusal = error.message;
+            history.push({ type: 'assistant', content: refusal, timestamp: new Date() });
+            messages.push({ role: 'assistant', content: refusal });
+            yield { type: 'content', content: `\n\n${refusal}` };
             yield { type: 'done' };
             return;
           }

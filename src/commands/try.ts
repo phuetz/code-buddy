@@ -394,7 +394,7 @@ async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   write('Code Buddy — coding-agent demo (duration depends on the model and hardware)');
   write(`[1/3] Provider: ${provider.label}`);
   write(`[2/3] Sandbox: ${workspace}`);
-  write('      The agent is creating FizzBuzz, writing its tests, and running them…');
+  write('      Asking the model to create FizzBuzz, its tests, and to run them…');
 
   try {
     agent = await createAgent(provider, workspace);
