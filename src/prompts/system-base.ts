@@ -16,6 +16,7 @@
  */
 
 import { relocateVolatileSuffix } from './cache-stable-prefix.js';
+import { isHeadlessRuntime } from '../utils/runtime-flags.js';
 
 // ============================================================================
 // Security Rules (OWASP recommendations)
@@ -84,6 +85,24 @@ The above custom instructions should be followed alongside the standard instruct
     ? "\n- edit_file: High-speed file editing with Morph Fast Apply (4,500+ tokens/sec) - PREFER for large files"
     : "";
 
+  // Headless (`buddy -p`) auto-approves tools (cli/headless.ts) — omit the
+  // interactive confirmation contract from the base prompt so the model is
+  // not told to wait for a human that is not there (B1-INUTILE coupe #1).
+  const headless = isHeadlessRuntime();
+  const bashToolLine = headless
+    ? "- bash: Execute shell commands"
+    : "- bash: Execute shell commands (with user confirmation)";
+  const bashConfirmRule = headless
+    ? "   - Destructive commands (rm -rf, format) still need an explicit user request"
+    : "   - Commands require user confirmation before execution";
+  const confirmationSystemBlock = headless
+    ? ""
+    : `\n<confirmation_system>
+File operations and bash commands require user confirmation.
+If a user rejects an operation, acknowledge and suggest alternatives.
+</confirmation_system>
+`;
+
   // Date and folder change per day and per directory. They stay after the
   // stable instructions so a prefix cache survives a different working tree.
   const contextBlock = `<context>
@@ -112,7 +131,7 @@ FILE OPERATIONS:
 
 SEARCH & EXPLORATION:
 - search: Fast text/file search with regex support
-- bash: Execute shell commands (with user confirmation)
+${bashToolLine}
 
 PLANNING (Persistent State):
 - plan: Manage a persistent execution plan (PLAN.md). Use this to track progress on complex tasks.
@@ -149,7 +168,7 @@ CRITICAL - Follow these rules strictly:
 3. BASH COMMANDS:${process.platform === 'win32' ? '\n   - Commands run in PowerShell on this host — write PowerShell syntax, not POSIX bash' : ''}
    - Use for: git, npm, searching, navigation, system info
    - Avoid: destructive commands (rm -rf, format) without explicit request
-   - Commands require user confirmation before execution
+${bashConfirmRule}
 
 4. SEARCH:
    - Use search tool for fast code/file discovery
@@ -227,11 +246,7 @@ When using \`run_script\` for complex tasks, YOU MUST FOLLOW THIS LOOP:
 - NEVER pad responses with filler like "Bien sûr", "Certainly", "Of course", "Great question".
 </response_style>
 
-<confirmation_system>
-File operations and bash commands require user confirmation.
-If a user rejects an operation, acknowledge and suggest alternatives.
-</confirmation_system>
-
+${confirmationSystemBlock}
 ${contextBlock}`;
 }
 

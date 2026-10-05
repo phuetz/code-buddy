@@ -36,6 +36,7 @@ import {
   isHeadlessPromptCompact,
 } from "../config/headless-local-prompt.js";
 import { splitVolatileSuffix } from "../prompts/cache-stable-prefix.js";
+import { isHeadlessRuntime } from "../utils/runtime-flags.js";
 
 export interface PromptBuilderConfig {
   yoloMode: boolean;
@@ -533,7 +534,10 @@ export class PromptBuilder {
             ...(contextFileNames ? { fileNames: contextFileNames } : {}),
           });
           if (ctx.text) {
-            const workspaceBlock = '# Workspace Context\n\n' + ctx.text;
+            const workspaceText = isHeadlessRuntime()
+              ? stripHeadlessIrrelevantWorkspaceSections(ctx.text)
+              : ctx.text;
+            const workspaceBlock = '# Workspace Context\n\n' + workspaceText;
             systemPrompt = this.appendPromptBlock(
               systemPrompt,
               'workspace-context',
@@ -1189,6 +1193,31 @@ Output formatting discipline:
   updateConfig(config: Partial<PromptBuilderConfig>): void {
     this.config = { ...this.config, ...config };
   }
+}
+
+/**
+ * Drop AGENTS.md / project-instruction sections that only describe interactive
+ * or GUI surfaces. Used for `buddy -p` so the workspace-context block does not
+ * spend tokens on Cowork, Fleet hub docs, or in-session slash menus the one-shot
+ * path never presents to the model (B1-INUTILE coupe #2).
+ */
+export function stripHeadlessIrrelevantWorkspaceSections(text: string): string {
+  const titles = [
+    '## Cowork — Desktop GUI (`cowork/`)',
+    '## Fleet (Multi-AI Hub) — `src/fleet/` + `src/server/websocket/`',
+    '## CLI & Slash Commands',
+  ];
+  let out = text;
+  for (const title of titles) {
+    const idx = out.indexOf(title);
+    if (idx < 0) continue;
+    const searchFrom = idx + title.length;
+    const rest = out.slice(searchFrom);
+    const next = rest.search(/\n## (?!#)/);
+    const end = next < 0 ? out.length : searchFrom + next;
+    out = out.slice(0, idx) + out.slice(end);
+  }
+  return out;
 }
 
 /**

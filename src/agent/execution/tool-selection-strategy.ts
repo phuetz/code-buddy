@@ -38,6 +38,7 @@ import type {
   ToolSelectionResult,
   ToolSelectionMetrics,
 } from '../../tools/types.js';
+import { isHeadlessRuntime } from '../../utils/runtime-flags.js';
 import { getPromptCacheManager } from '../../optimization/prompt-cache.js';
 import { logger } from '../../utils/logger.js';
 import type { UnifiedSkill } from '../../skills/types.js';
@@ -271,7 +272,10 @@ export class ToolSelectionStrategy {
         ...mergedConfig.alwaysInclude,
         'restore_context',
         ...requiredTools,
-      ])).filter((name) => !(codeExecPolicy === 'off' && name === 'code_exec')),
+      ])).filter((name) => !(codeExecPolicy === 'off' && name === 'code_exec'))
+        // Headless one-shot: extension_forge is confirmation-gated and creates
+        // durable runtime capabilities — omit from the forced set (B1-INUTILE #3).
+        .filter((name) => !(isHeadlessRuntime() && name === 'extension_forge')),
     };
     const modelName = ToolSelectionStrategy.normalizeModelName(effectiveConfig.modelName);
     this.lastQuery = query;
