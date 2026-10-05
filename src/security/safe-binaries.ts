@@ -24,20 +24,20 @@ export const SAFE_BINARIES: readonly string[] = [
   'test', 'expr',
   'git',
   // Extra read-only / inspect (CB-PERMISSIONS-MATRICE-1005: ≥100 for plan bash)
-  'jq', 'tree', 'column', 'nl', 'od', 'hexdump', 'xxd',
+  'jq', 'column', 'nl', 'od', 'hexdump',
   'whatis', 'apropos', 'cal', 'nproc', 'arch',
   'getconf', 'lscpu', 'lsblk', 'ps', 'pgrep', 'pidof', 'lsof',
   'strings', 'size', 'nm', 'objdump', 'readelf', 'cmp', 'expand',
-  'unexpand', 'fmt', 'fold', 'pr', 'tac', 'rev', 'printf',
+  'unexpand', 'fmt', 'fold', 'pr', 'tac', 'rev',
   'namei', 'getfacl', 'zcat', 'bzcat', 'xzcat', 'lzcat',
   'sha1sum', 'sha512sum', 'cksum', 'sum', 'tsort', 'numfmt', 'pathchk',
-  'history',
   'times',
-  // Version / metadata probes — subcommand-gated in isParsedCommandSafe
-  'go', 'rustc', 'cargo', 'node', 'python3', 'python', 'php', 'ruby', 'perl',
-  'java', 'javac', 'dotnet', 'bun', 'deno',
-  'getent', 'iconv', 'base64', 'basenc', 'factor',
-  'shuf', 'look', 'users', 'who', 'w', 'last',
+  // Removed again after review (CB-PERMISSIONS-MATRICE-1005, 2.3.0 conservative pass): every
+  // interpreter/toolchain (go, rustc, cargo, node, python*, php, ruby, perl, java*, dotnet, bun,
+  // deno) and every binary able to write a file (tree, xxd, iconv, base64, basenc, shuf, history,
+  // printf -v). A flag blocklist cannot be closed reliably (go env --w, getopt abbreviations...).
+  'getent', 'factor',
+  'look', 'users', 'who', 'w', 'last',
   'lspci', 'lsusb',
   // PowerShell read-only cmdlets
   'Get-ChildItem', 'Get-Content', 'Select-String', 'Measure-Object',
@@ -406,7 +406,7 @@ export class SafeBinariesChecker {
       'status', 'diff', 'show', 'rev-parse', 'describe', 'ls-files',
       'ls-tree', 'cat-file', 'blame', 'shortlog',
     ]);
-    if (safe.has(subcommand)) return true;
+    if (safe.has(subcommand)) return !rest.some(isOutputFlag);
     if (subcommand === 'log') {
       return !rest.some(isOutputFlag);
     }

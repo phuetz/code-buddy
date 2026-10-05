@@ -17,7 +17,7 @@ describe('SAFE_BINARIES étendu : aucun binaire capable d\'exécuter ou d\'écri
     // ÉCHOUE sur l'ancienne extension : awk, man, less étaient « sûrs ».
     expect(c.isSafe(cmd)).toBe(false);
   });
-  it.each(['jq . package.json', 'ps aux', 'lsof -i', 'xxd in.bin', 'iconv -f utf8 -t latin1 in.txt', 'python3 --version', 'strings a.out', 'tree -L 2'])(
+  it.each(['jq . package.json', 'ps aux', 'lsof -i', 'strings a.out', ])(
     '%s reste sûr',
     (cmd) => {
       expect(c.isSafe(cmd)).toBe(true);
@@ -41,7 +41,7 @@ describe('reprise 2 : contournements par citation et écritures classées sûres
     // ÉCHOUE sur l'ancienne logique : ces formes étaient classées sûres (écriture / exécution en mode plan).
     expect(c.isSafe(cmd)).toBe(false);
   });
-  it.each(['go env GOPATH', 'go env', "grep 'a\\|b' file.txt", 'sort file.txt', 'find . -name "*.ts"', 'tree -L 2', 'history', 'history 20', 'ls -la'])(
+  it.each(["grep 'a\\|b' file.txt", 'sort file.txt', 'find . -name "*.ts"', , 'ls -la'])(
     '%s reste sûr',
     (cmd) => {
       expect(c.isSafe(cmd)).toBe(true);
@@ -64,10 +64,40 @@ describe('reprise 3 : abréviation, bundling, accolades, variables', () => {
     // ÉCHOUE sur l'ancienne logique : classés sûrs alors que bash/getopt écrit ou exécute.
     expect(c.isSafeChain(cmd)).toBe(false);
   });
-  it.each(['sort -k1,1 /etc/hostname', 'sort -n -r file.txt', 'sort file.txt', 'iconv -f utf-8 -t latin1 file.txt', 'find . -name "*.ts"', "grep 'a\\|b' f", 'cat "$HOME_UNSET"x'.replace('"$HOME_UNSET"x', 'file.txt')])(
+  it.each(['sort -k1,1 /etc/hostname', 'sort -n -r file.txt', 'sort file.txt', 'find . -name "*.ts"', "grep 'a\\|b' f", 'cat "$HOME_UNSET"x'.replace('"$HOME_UNSET"x', 'file.txt')])(
     '%s reste sûr',
     (cmd) => {
       expect(c.isSafeChain(cmd)).toBe(true);
+    },
+  );
+});
+
+describe('reprise 4 : version conservatrice (2.3.0)', () => {
+  const c = new SafeBinariesChecker();
+  it.each([
+    'go env --w FOO=bar',
+    'go env --u FOO',
+    'go version',
+    'node --version',
+    'python3 --version',
+    'cargo metadata',
+    'tree -L 2',
+    'xxd in.bin',
+    'iconv -f utf-8 -t latin1 file.txt',
+    'base64 file.txt',
+    'history',
+    'git diff --output=/tmp/OUT',
+    'git show --output=/tmp/OUT',
+    'git diff --out=/tmp/OUT',
+  ])('%s n\'est pas auto-approuvé', (cmd) => {
+    // ÉCHOUE sur l'ancienne logique : go/node/python/tree/xxd/iconv/base64/history étaient « sûrs »,
+    // `go env --w` écrit le fichier d'environnement Go, `git diff --output=` écrit un fichier.
+    expect(c.isSafe(cmd)).toBe(false);
+  });
+  it.each(['git diff', 'git diff --stat HEAD~1', 'git show --format=%H -s', 'git status', 'git log --oneline -5', 'sort -k1,1 file.txt'])(
+    '%s reste sûr',
+    (cmd) => {
+      expect(c.isSafe(cmd)).toBe(true);
     },
   );
 });
