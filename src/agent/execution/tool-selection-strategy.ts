@@ -340,7 +340,7 @@ export class ToolSelectionStrategy {
       };
     }
 
-    let tools: CodeBuddyTool[];
+    let tools: CodeBuddyTool[] = [];
     let selection: ToolSelectionResult | null = null;
 
     // Fixed-core mode (`CODEBUDDY_TOOLS_FIXED`). Off → the historical
