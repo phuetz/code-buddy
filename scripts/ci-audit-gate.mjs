@@ -8,7 +8,7 @@
  *   - ANY critical            -> FAIL (no exceptions; keep the count at zero)
  *   - ANY high not allowlisted -> FAIL
  *   - high listed in audit-allowlist.json with a future reviewBy -> ALLOWED (logged)
- *   - optional entry.nodes -> every vulnerable instance must be in that scope
+ *   - mandatory entry.nodes -> every vulnerable instance must be in that scope
  *   - an allowlist entry whose reviewBy has passed -> FAIL (forces periodic review)
  *   - moderate / low           -> reported, non-blocking
  *
@@ -51,6 +51,10 @@ function runAudit() {
 const today = new Date().toISOString().slice(0, 10);
 const allow = loadAllowlist();
 const audit = runAudit();
+if (audit.error || !audit.vulnerabilities || !audit.metadata?.vulnerabilities) {
+  console.error('audit-gate: FAIL — npm did not return a complete vulnerability report');
+  process.exit(1);
+}
 const vulns = audit.vulnerabilities ?? {};
 const meta = audit.metadata?.vulnerabilities ?? {};
 
@@ -58,6 +62,32 @@ const failures = [];
 const accepted = [];
 const usedAllow = new Set();
 const moderates = [];
+
+const urlToPkg = new Map();
+for (const v of Object.values(vulns)) {
+  for (const via of v.via || []) {
+    if (typeof via === 'object' && via.url) {
+      urlToPkg.set(via.url, via.name);
+    }
+  }
+}
+
+// npm propagates advisory severity to parent packages, sometimes through cycles.
+// An exception must name ALL actual advisories, including inherited ones, so a
+// newly published advisory cannot silently reuse an unrelated package exception.
+function advisoryUrls(name, seen = new Set()) {
+  if (seen.has(name)) return [];
+  seen.add(name);
+  const vulnerability = vulns[name];
+  if (!vulnerability || !Array.isArray(vulnerability.via)) {
+    throw new Error(`missing advisory details for ${name}`);
+  }
+  return vulnerability.via.flatMap((via) => {
+    if (typeof via === 'string') return advisoryUrls(via, seen);
+    if (typeof via?.url !== 'string') throw new Error(`missing advisory URL for ${name}`);
+    return [via.url];
+  });
+}
 
 for (const [name, v] of Object.entries(vulns)) {
   if (!BLOCK.has(v.severity)) {
@@ -74,8 +104,45 @@ for (const [name, v] of Object.entries(vulns)) {
     failures.push(`${name} [high] — not in audit-allowlist.json (review and either fix or document it)`);
     continue;
   }
+  let urls;
+  try {
+    urls = [...new Set(advisoryUrls(name))];
+  } catch (error) {
+    failures.push(`${name} [high] — ${error.message}`);
+    continue;
+  }
+  if (!urls.length || urls.some((url) => !entry.advisories?.includes(url))) {
+    failures.push(`${name} [high] — advisory outside the allowlisted scope: ${urls.join(', ')}`);
+    continue;
+  }
+  // Exact scope, other direction: an entry may list ONLY advisories that npm audit
+  // really attaches to this package. A listed-but-not-live advisory is a claim the
+  // audit does not support (the 2026-10-04 review found one on seven entries).
+  const notLive = (entry.advisories ?? []).filter((url) => !urls.includes(url));
+  if (notLive.length) {
+    failures.push(`${name} [high] — allowlisted advisory not live on this entry (remove it): ${notLive.map((url) => url.split('/').pop()).join(', ')}`);
+    continue;
+  }
+  if (!entry.reason?.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(entry.reviewedOn ?? '') || entry.reviewedOn > today) {
+    failures.push(`${name} [high] — exception needs a rationale and a dated review`);
+    continue;
+  }
+  const missingCoverage = entry.advisories?.find(url => {
+    const ghsa = url.split('/').pop();
+    const pkg = urlToPkg.get(url) || '';
+    return !entry.reason.includes(ghsa) && (!pkg || !entry.reason.includes(pkg));
+  });
+  if (missingCoverage) {
+    const ghsa = missingCoverage.split('/').pop();
+    const pkg = urlToPkg.get(missingCoverage) || 'unknown';
+    failures.push(`${name} [high] — reason must explicitly name advisory ${ghsa} or package ${pkg}`);
+    continue;
+  }
   // A tooling-only exception must never hide a vulnerable runtime instance.
-  if (entry.nodes && (!v.nodes?.length || v.nodes.some((node) => !entry.nodes.includes(node)))) {
+  if (!Array.isArray(entry.nodes) || !entry.nodes.length ||
+      entry.nodes.some((node) => typeof node !== 'string' || !node.trim()) ||
+      !Array.isArray(v.nodes) || !v.nodes.length ||
+      v.nodes.some((node) => !entry.nodes.includes(node))) {
     failures.push(`${name} [high] — vulnerable nodes outside the allowlisted scope: ${(v.nodes ?? []).join(', ')}`);
     continue;
   }
