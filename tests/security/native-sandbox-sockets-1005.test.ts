@@ -9,6 +9,8 @@ import {
   clearNativeSandboxCache,
   confineSpawn,
   runtimeSocketsToMask,
+  agentSocketsToMask,
+  sessionRuntimeDirs,
   detectNativeSandboxCapabilities,
 } from '../../src/security/native-sandbox.js';
 
@@ -110,6 +112,64 @@ describe('masquage des sockets de moteurs de conteneurs', () => {
     // socket présent mais non écrivable par l'utilisateur : Landlock reste utilisable
     const closed = confineSpawn({ file: '/bin/true', args: [], cwd: ws, env: {} }, { ...base, existsSync: (p: string) => p === '/var/run/docker.sock' || fs.existsSync(p), realpathSync: (p: string) => p, accessSync: () => { throw new Error('EACCES'); } });
     expect(closed.ok).toBe(true);
+  });
+
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  const sessionBus = uid === null ? undefined : `/run/user/${uid}/bus`;
+
+  it.skipIf(!bwrapOk || !sessionBus || !fs.existsSync(sessionBus))('sous bwrap réel, le bus de session et les agents (/run/user) sont masqués', () => {
+    process.env.CODEBUDDY_NATIVE_SANDBOX = 'bwrap';
+    const ws = mk('sock-ws-');
+    const res = confineSpawn(
+      {
+        file: '/bin/sh',
+        args: ['-c', `for s in ${sessionBus} /run/user/${uid}/keyring/ssh /run/user/${uid}/systemd/private; do if [ -S $s ]; then echo LEAK:$s; fi; done; [ -d /run/systemd ] && echo RUN-VISIBLE; echo done`],
+        cwd: ws,
+        env: { PATH: process.env.PATH },
+        network: true,
+      },
+      { homedir: () => mk('sock-home-') },
+    );
+    if (!res.ok) throw new Error(res.error);
+    const out = spawnSync(res.file, res.args, { env: res.env, encoding: 'utf8' }).stdout;
+    // ÉCHOUE sur l'ancienne logique : « LEAK:/run/user/<uid>/bus » (systemd-run --user = évasion).
+    expect(out).not.toContain('LEAK');
+    if (fs.existsSync('/run/systemd')) expect(out).toContain('RUN-VISIBLE');
+  });
+
+  it.skipIf(!bwrapOk)('un HOME qui contient un FICHIER secret (.npmrc) ne fait plus échouer le masquage', () => {
+    process.env.CODEBUDDY_NATIVE_SANDBOX = 'bwrap';
+    const home = mk('sock-home-');
+    fs.writeFileSync(path.join(home, '.npmrc'), '//registry/:_authToken=SECRET');
+    fs.mkdirSync(path.join(home, '.ssh'));
+    const ws = mk('sock-ws-');
+    const res = confineSpawn(
+      { file: '/bin/sh', args: ['-c', `cat ${path.join(home, '.npmrc')}; echo done`], cwd: ws, env: { PATH: process.env.PATH }, network: false },
+      { homedir: () => home },
+    );
+    // ÉCHOUE sur l'ancienne logique : « bwrap: Can't mount tmpfs on a file », donc refus (sonde) ou échec.
+    if (!res.ok) throw new Error(res.error);
+    const run = spawnSync(res.file, res.args, { env: res.env, encoding: 'utf8' });
+    expect(run.stdout).toBe('done\n');
+    expect(run.stdout).not.toContain('SECRET');
+  });
+
+  it('agentSocketsToMask : SSH_AUTH_SOCK, bus de session nommé par l\'environnement, bus système', () => {
+    const socks = agentSocketsToMask({ SSH_AUTH_SOCK: '/run/user/1000/keyring/ssh', DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1000/bus,guid=abc' });
+    expect(socks).toEqual(expect.arrayContaining(['/run/user/1000/keyring/ssh', '/run/user/1000/bus', '/run/dbus/system_bus_socket']));
+  });
+
+  it('sessionRuntimeDirs couvre /run/user, XDG_RUNTIME_DIR et /run/user/<uid>', () => {
+    expect(sessionRuntimeDirs({ XDG_RUNTIME_DIR: '/run/user/7' }, 7)).toEqual(expect.arrayContaining(['/run/user', '/run/user/7']));
+  });
+
+  it('buildBwrapArgv : un fichier à cacher est recouvert par /dev/null, pas par un tmpfs', () => {
+    const policy = buildDefaultPolicy('/var/tmp/proj', { existsSync: () => false, homedir: () => '/home/u' });
+    if ('error' in policy) throw new Error(policy.error);
+    const argv = buildBwrapArgv({ ...policy, hidePaths: ['/home/u/.npmrc', '/home/u/.ssh'], hideFiles: ['/home/u/.npmrc'] }, ['true']);
+    const i = argv.indexOf('/home/u/.npmrc');
+    expect(argv.slice(i - 2, i + 1)).toEqual(['--ro-bind', '/dev/null', '/home/u/.npmrc']);
+    expect(argv.slice(argv.indexOf('/home/u/.ssh') - 1, argv.indexOf('/home/u/.ssh') + 1)).toEqual(['--tmpfs', '/home/u/.ssh']);
   });
 
   it('seatbelt : le profil interdit la connexion aux sockets même réseau ouvert', () => {

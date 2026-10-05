@@ -8,7 +8,7 @@
 
 import { importedSkillRoots } from './skill-executable-gate.js';
 import { spawnSync as realSpawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from 'child_process';
-import { accessSync as realAccessSync, constants as fsConstants, existsSync as realExistsSync, mkdirSync as realMkdirSync, readFileSync as realReadFileSync, realpathSync as realRealpathSync } from 'fs';
+import { accessSync as realAccessSync, constants as fsConstants, existsSync as realExistsSync, statSync as realStatSync, mkdirSync as realMkdirSync, readFileSync as realReadFileSync, realpathSync as realRealpathSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -42,6 +42,8 @@ export interface NativeSandboxPolicy {
   readOnlyRoots: string[];
   /** Container-runtime control sockets present on the host, masked with /dev/null (bwrap) or denied (seatbelt). */
   maskSockets?: string[];
+  /** Subset of hidePaths that are regular files (bwrap cannot mount a tmpfs on a file: bind /dev/null). */
+  hideFiles?: string[];
 }
 
 export interface NativeSandboxCapabilities {
@@ -89,6 +91,7 @@ export interface NativeSandboxIo {
   helperPath?: string;
   realpathSync?: (target: string) => string;
   accessSync?: (target: string, mode?: number) => void;
+  isDirectory?: (target: string) => boolean;
 }
 
 let cachedCapabilities: NativeSandboxCapabilities | null = null;
@@ -320,8 +323,10 @@ export function buildBwrapArgv(policy: NativeSandboxPolicy, command: string[]): 
   argv.push('--tmpfs', '/tmp', '--remount-ro', '/tmp');
   argv.push('--bind', policy.projectRoot, policy.projectRoot);
   argv.push('--bind', policy.tmpDir, policy.tmpDir);
+  const hideFiles = new Set(policy.hideFiles ?? []);
   for (const hide of policy.hidePaths) {
-    argv.push('--tmpfs', hide, '--remount-ro', hide);
+    if (hideFiles.has(hide)) argv.push('--ro-bind', '/dev/null', hide);
+    else argv.push('--tmpfs', hide, '--remount-ro', hide);
   }
   // `--ro-bind / /` leaves the host's container-runtime sockets connectable (root on
   // the host). Mask exactly those files; /run itself stays visible (DNS needs it).
@@ -448,11 +453,33 @@ export function userRuntimeSockets(env: NodeJS.ProcessEnv = process.env, uid: nu
  * Sockets to mask: those that exist on the host, canonicalized (so /var/run/docker.sock
  * and /run/docker.sock are one mount), de-duplicated. Never throws.
  */
+/**
+ * Per-user session runtime directories (/run/user): they hold the session D-Bus
+ * (`bus`, then `systemd-run --user` starts an unconfined unit), the ssh/gpg agents
+ * (`keyring/ssh`, `gnupg/`), `systemd/private`. Nothing needed for name resolution
+ * lives there (that is /run/systemd/resolve), so the whole directory is hidden.
+ */
+export function sessionRuntimeDirs(env: NodeJS.ProcessEnv = process.env, uid: number | null = typeof process.getuid === 'function' ? process.getuid() : null): string[] {
+  const dirs = new Set<string>(['/run/user', '/var/run/user']);
+  if (env.XDG_RUNTIME_DIR) dirs.add(env.XDG_RUNTIME_DIR);
+  if (uid !== null) dirs.add(`/run/user/${uid}`);
+  return [...dirs];
+}
+
+/** Agent / bus sockets named by the environment or fixed system paths (outside /run/user). */
+export function agentSocketsToMask(env: NodeJS.ProcessEnv = process.env): string[] {
+  const out = ['/run/dbus/system_bus_socket', '/var/run/dbus/system_bus_socket'];
+  if (env.SSH_AUTH_SOCK) out.push(env.SSH_AUTH_SOCK);
+  const dbus = env.DBUS_SESSION_BUS_ADDRESS?.match(/unix:(?:[^,;]*,)*path=([^,;]+)/)?.[1];
+  if (dbus) out.push(dbus);
+  return out;
+}
+
 export function runtimeSocketsToMask(io: NativeSandboxIo = {}): string[] {
   const existsSync = io.existsSync ?? realExistsSync;
   const realpath = io.realpathSync ?? realRealpathSync;
   const out = new Set<string>();
-  for (const sock of [...KNOWN_RUNTIME_SOCKETS, ...userRuntimeSockets(io.env ?? process.env)]) {
+  for (const sock of [...KNOWN_RUNTIME_SOCKETS, ...userRuntimeSockets(io.env ?? process.env), ...agentSocketsToMask(io.env ?? process.env)]) {
     if (!existsSync(sock)) continue;
     try {
       out.add(realpath(sock));
@@ -490,15 +517,28 @@ export function buildDefaultPolicy(
     };
   }
   const tmpDir = path.join(projectRoot, '.codebuddy', 'native-sandbox-tmp');
+  const realStat = io.isDirectory ?? ((target: string) => { try { return realStatSync(target).isDirectory(); } catch { return true; } });
+  const isDirectory = (target: string) => realStat(target);
+  const realpath = io.realpathSync ?? realRealpathSync;
+  const canonical = (target: string) => { try { return realpath(target); } catch { return target; } };
+  const sessionDirs = existingPaths(sessionRuntimeDirs(io.env ?? process.env), existsSync).map(canonical);
+  // No nested mounts: bwrap cannot create a mount point inside an already read-only tmpfs.
+  const outermost = [...new Set(sessionDirs)].filter((dir) => !sessionDirs.some((other) => other !== dir && (dir === other || dir.startsWith(`${other}${path.sep}`))));
+  const hidePaths = [...new Set([
+    ...existingPaths(defaultHidePaths(homeDir, io.env ?? process.env), existsSync),
+    ...outermost,
+  ])];
   return {
     projectRoot,
     tmpDir,
     homeDir,
     chdir: projectRoot,
     network: false,
-    hidePaths: existingPaths(defaultHidePaths(homeDir, io.env ?? process.env), existsSync),
+    hidePaths,
+    hideFiles: hidePaths.filter((hide) => !isDirectory(hide)),
     readOnlyRoots: existingPaths(DEFAULT_RO_ROOTS, existsSync),
-    maskSockets: runtimeSocketsToMask(io),
+    // Sockets inside a hidden directory are already gone (and bwrap cannot mount inside a read-only tmpfs).
+    maskSockets: runtimeSocketsToMask(io).filter((sock) => !hidePaths.some((hide) => sock === hide || sock.startsWith(`${hide}${path.sep}`))),
   };
 }
 
