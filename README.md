@@ -4,7 +4,7 @@
 
 **A local-first AI coding agent that can also run as a fleet, a desktop app, and a companion.**
 It reads your repository, writes code, runs commands, and you can watch it work — on your machine,
-at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
+with a local model through [Ollama](https://ollama.com) or with a ChatGPT subscription.
 
 <p>
   <a href="https://www.npmjs.com/package/@phuetz/code-buddy"><img src="https://img.shields.io/npm/v/@phuetz/code-buddy.svg?style=flat-square&color=ff6b6b&label=version" alt="npm version"/></a>
@@ -22,9 +22,9 @@ at $0 with [Ollama](https://ollama.com) or a ChatGPT subscription.
 [Documentation](#documentation)
 
 <p>
-  <a href="docs/qa/code-buddy-studio/cowork-demo-moneyshot.mp4"><img src="docs/qa/code-buddy-studio/cowork-demo-moneyshot.gif" alt="A local model reasons, then uses a tool to create a real file — no cloud API bill" width="760"/></a>
+  <a href="docs/qa/code-buddy-studio/cowork-demo-moneyshot.mp4"><img src="docs/qa/code-buddy-studio/cowork-demo-moneyshot.gif" alt="Cowork demo recording" width="760"/></a>
   <br/>
-  <sub>A local model reasons on screen, then uses a tool to create a real file. No cloud API bill.</sub>
+  <sub>Demo recording. Illustrations are not execution evidence.</sub>
 </p>
 
 <p>
@@ -97,14 +97,13 @@ Three commands (Node.js 22 or 24 recommended; 20 is the declared minimum):
 
 ```bash
 npm i -g @phuetz/code-buddy   # the package is scoped; `code-buddy` alone is not on npm
-buddy login                   # ChatGPT subscription — no API key, $0 marginal cost
+buddy login                   # sign in with a ChatGPT subscription
 buddy                         # start chatting
 ```
 
-`buddy login` also accepts `xai`. To stay entirely local instead, skip it, start
+`buddy login` also accepts `xai`. To use a local model instead, skip it, start
 [Ollama](https://ollama.com), and run `buddy onboard`. Either way `buddy doctor` tells you in one
-line whether you are ready, and `buddy doctor --fix` can point a running Ollama at a suitable
-installed model and say why it chose it.
+line whether you are ready; `buddy doctor --fix` applies the repairs it marks `[fixable]`.
 
 The published package can lag this repository. To track the source instead:
 
@@ -124,10 +123,9 @@ The **Cowork** desktop app is a separate step needing Node.js ≥ 22: `buddy ins
 
 ## Use it from Claude Code (plugin, one command)
 
-This repository is also a Claude Code plugin marketplace. It installs a skill
-that teaches Claude Code how to drive `buddy` correctly (headless one-shot,
-provider and model pinning, permission modes, the verify loop) and a read-only
-MCP server exposing Code Buddy's tools:
+This repository is also a Claude Code plugin marketplace (`.claude-plugin/`). Its
+`code-buddy` plugin provides a skill that describes how to drive `buddy` (headless
+one-shot, provider and model pinning, permission modes, the verify loop):
 
 ```bash
 npm i -g @phuetz/code-buddy
@@ -154,7 +152,7 @@ Other paths worth knowing on day one:
 ```bash
 buddy try                             # coding demo: writes FizzBuzz + a test, runs it, verifies
 buddy -p "explain the entry point"    # one-shot, headless — good for scripts and CI
-buddy research "map this repository"  # parallel research workers
+buddy research "map this repository" --wide  # parallel research workers
 buddy cost --latency                  # measured per-model TTFT/TTFM, read-only
 ```
 
@@ -181,7 +179,7 @@ Code Buddy keeps project/user memory, retrieves relevant lessons and can propose
 
 Start with `buddy lessons candidate list`, `buddy lessons list`, `buddy improve status` and `buddy evolve list`. Council's role-based cooperation and the ToT/MCTS engine are separate mechanisms with their own execution paths and budgets. Inspiration from Manus, Sakana DGM/ShinkaEvolve/Fugu and reasoning papers is not a reproduction claim or a measured productivity gain.
 
-Read [activation conditions, source evidence and limitations](docs/learning-mechanisms.md), or the [French overview](README.fr.md). A [two-host fleet recipe](docs/reports/2026-09/fleet-two-hosts-learning-example.md) has combined a Windows RPC review, a Linux code correction and an independent five-case oracle passing on both hosts. The pilot explicitly relayed messages and files; this was not a Council run.
+Read [activation conditions, source evidence and limitations](docs/learning-mechanisms.md), or the [French overview](README.fr.md). A [two-host fleet report](docs/reports/2026-09/fleet-two-hosts-learning-example.md) describes a Windows RPC review, a Linux code correction and a five-case oracle run on both hosts. The pilot explicitly relayed messages and files; this was not a Council run.
 
 ## Opt-in
 
@@ -225,15 +223,14 @@ Honest limits for a first-time visitor:
 
 - **The npm release can lag this tree.** Releases use GitHub Actions trusted publication.
   Check `buddy --version`, the npm dist-tag and the corresponding Git tag when identifying a build.
-- **CI gates all three operating systems.** Linux, macOS and Windows run Node.js 20 and 22
-  jobs. A local pass or an earlier platform recipe does not replace the candidate’s CI results.
+- **CI runs Linux and Windows on pull requests.** macOS is added on pushes to `main` and
+  `develop`; each operating system runs Node.js 20 and 22 jobs. A local pass or an earlier
+  platform recipe does not replace the candidate’s CI results.
 - **Node ≥ 20 is the declared CLI floor** (`engines.node`); Node 22 or 24 is
   recommended when working from source. Some ancillary packages can warn about
   their own Node ≥ 22 requirement during installation. The CI runs Node 20 and 22.
 - **Cowork** is a separate install (Node.js ≥ 22, `buddy install-gui`), not part of the three
   commands above.
-- **Film production** needs `ffmpeg`; without a local voice binary, scenes stay silent rather than
-  getting a fake voice-over.
 - **`buddy loop` needs a model that really calls tools.** A very small model can stall or give up
   without ever turning the test suite green.
 - **Fleet** is two processes and a JWT, not one flag. Remote tools expose nothing until the
@@ -257,7 +254,7 @@ for the commit you intend to use before treating the full suite as green.
   <a href="docs/assets/infographic-ai-engineering-stack.webp"><img src="docs/assets/infographic-ai-engineering-stack.webp" width="900" alt="The AI engineering stack: Code Explorer understands the repository, lm-resizer protects the context budget, Code Buddy 2 acts with AI agents"/></a>
 </p>
 
-Code Buddy is the agent. Two sibling tools carry the context work around it: [lm-resizer](https://github.com/phuetz/lm-resizer) filters noisy command output before it reaches the model (Rust, Apache-2.0, `npm i @phuetz/lm-resizer`), and Code Explorer pre-indexes a repository into a queryable knowledge graph served over MCP (available as a service on private codebases — [agile-up.com](https://agile-up.com)). Understand, compress, act.
+Code Buddy is the agent. Two sibling tools carry the context work around it: [lm-resizer](https://github.com/phuetz/lm-resizer) filters noisy command output before it reaches the model (Rust, Apache-2.0, `npm i @phuetz/lm-resizer`), and [Code Explorer](https://github.com/phuetz/code-explorer) pre-indexes a repository into a queryable knowledge graph served over MCP. Understand, compress, act.
 
 ## License
 

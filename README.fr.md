@@ -6,7 +6,7 @@ Pour l’installation et les autres usages, consulter le [README principal](READ
 
 ## Versions récentes
 
-La version 2.3.0 est en préparation : ses changements intégrés et leurs limites figurent dans le [changelog](CHANGELOG.md). La version 2.2 ajoute la connexion OAuth à ElevenLabs hébergé via MCP, fiabilise les commandes en script (interruption headless en code 130, `mcp add-json --yes`) et affiche le thème effectif dans `/status` ([notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)). La version 2.1 ajoutait un catalogue explicite de ressources, la recherche RagChat avec citations de pages, l’import de configurations MCP et un pont A2A JSON-RPC limité aux échanges texte documentés. Elle corrige aussi des problèmes de sessions terminal, de mémoire par fournisseur, de diagnostic de configuration et d’interface Cowork. Les [notes de version](docs/RELEASE-NOTES-2.1.0.md) détaillent les limites : pas de reprise automatique des tâches après panne, pas de compatibilité universelle ni de garantie de qualité OCR.
+La version 2.3.0 est en préparation : ses changements intégrés et leurs limites figurent dans le [changelog](CHANGELOG.md). D’après ses notes de version, la version 2.2 ajoute la connexion OAuth à ElevenLabs hébergé via MCP, fiabilise les commandes en script (interruption headless en code 130, `mcp add-json --yes`) et affiche le thème effectif dans `/status` ([notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)). La version 2.1 ajoutait un catalogue explicite de ressources, la recherche RagChat avec citations de pages, l’import de configurations MCP et un pont A2A JSON-RPC limité aux échanges texte documentés. Elle corrige aussi des problèmes de sessions terminal, de mémoire par fournisseur, de diagnostic de configuration et d’interface Cowork. Les [notes de version](docs/RELEASE-NOTES-2.1.0.md) détaillent les limites : pas de reprise automatique des tâches après panne, pas de compatibilité universelle ni de garantie de qualité OCR.
 
 ```sh
 npm install -g @phuetz/code-buddy@latest
@@ -14,7 +14,7 @@ buddy --version
 buddy doctor --offline
 ```
 
-La CI impose Linux, macOS et Windows avec Node.js 20 et 22. Cowork reste une installation distincte du paquet npm CLI.
+La CI exécute Linux et Windows sur les pull requests, et ajoute macOS sur les pushs vers `main` et `develop`, avec Node.js 20 et 22. Cowork reste une installation distincte du paquet npm CLI.
 
 ## Ce qui reste d’une session à l’autre
 
@@ -47,7 +47,7 @@ Le Council peut répartir des rôles complémentaires, évaluer les réponses et
 
 Le moteur de raisonnement propose ToT/MCTS avec des budgets de recherche. `/think status` permet d’inspecter le réglage. Une consigne de raisonnement injectée par un middleware ne prouve pas qu’un arbre de recherche a été exécuté. Les références [ToT](https://arxiv.org/abs/2305.10601), [RethinkMCTS](https://arxiv.org/abs/2409.09584) et [MCTSr](https://arxiv.org/abs/2406.07394) sont explicitées dans le guide ; aucune équivalence de benchmark n’est annoncée.
 
-Une recette de flotte a déjà relié deux hôtes : revue du Buddy Windows par RPC, correction du Buddy Linux, puis oracle indépendant réussi sur les deux systèmes (5/5 chacun). Le relais était assuré manuellement par le pilote. [Déroulement vérifié](docs/reports/2026-09/fleet-two-hosts-learning-example.md).
+Un [compte rendu de flotte à deux hôtes](docs/reports/2026-09/fleet-two-hosts-learning-example.md) décrit une revue du Buddy Windows par RPC, une correction du Buddy Linux, puis un oracle de cinq cas exécuté sur les deux systèmes. Le relais était assuré manuellement par le pilote.
 
 Le gain se vérifie sur une tâche concrète : référence avant changement, actions capturées, résultat, coût et régressions. La présence du code, son activation et son bénéfice observé sont trois constats différents.
 
