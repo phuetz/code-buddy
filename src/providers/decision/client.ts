@@ -5,6 +5,9 @@
  * then returns before fetch. The HTTP call is the one documented by
  * `python -m kev.serve` (kev/serve.py POST /v1/systemone, body =
  * kev.api.SystemOneRequest) at fe64b1274ea7f80d4095866df90666abb03e9cf6.
+ * PRIVACY: the question AND the transcript (`texte`, e.g. what was said in the
+ * room) are POSTed to CODEBUDDY_DECISION_URL. Point it only at a server you trust;
+ * nothing restricts it to loopback. Redirects are refused.
  * No Authorization header: that file's local default is an open server
  * (KEV_API_KEY unset). This module does not load a model.
  */
@@ -152,21 +155,23 @@ export async function decide(
   const timeoutMs = options.timeoutMs ?? DEFAULT_DECISION_TIMEOUT_MS;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  let response: Response;
+  let parsed: unknown;
   try {
-    response = await fetchImpl(systemOneUrl(baseUrl), {
+    const response = await fetchImpl(systemOneUrl(baseUrl), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
       signal: ctrl.signal,
+      redirect: 'error',
     });
+    if (!response.ok) {
+      throw new DecisionHttpError(`POST /v1/systemone failed: HTTP ${response.status}`);
+    }
+    // The timer must also cover the body: headers can arrive and the body never end.
+    parsed = await response.json();
   } finally {
     clearTimeout(timer);
   }
-  if (!response.ok) {
-    throw new DecisionHttpError(`POST /v1/systemone failed: HTTP ${response.status}`);
-  }
-  const parsed: unknown = await response.json();
   if (!parsed || typeof parsed !== 'object') {
     throw new DecisionShapeError('response is not an object');
   }

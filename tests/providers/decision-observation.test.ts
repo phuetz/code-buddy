@@ -263,4 +263,33 @@ describe('decision provider observation', () => {
     await expect(decide('which', 'texte', 'choice', { baseUrl })).rejects.toThrow(/choice criteria/);
     expect(fake.hits).toHaveLength(2);
   });
+
+  it('decide() aborts within the timeout when headers arrive but the body never ends', async () => {
+    const stalled = createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.write('{"answers":');
+    });
+    await new Promise<void>((resolve) => stalled.listen(0, '127.0.0.1', () => resolve()));
+    servers.push(stalled);
+    const port = (stalled.address() as AddressInfo).port;
+    const started = Date.now();
+    await expect(
+      decide('q', 'texte', 'noul', { baseUrl: `http://127.0.0.1:${port}`, timeoutMs: 200 }),
+    ).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('decide() sends redirect: error', async () => {
+    let seen: RequestInit | undefined;
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      seen = init;
+      return new Response(
+        JSON.stringify({ answers: { q: { type: 'noul', noul: 0.5 } } }),
+        { status: 200 },
+      );
+    };
+    await expect(decide('q', 't', 'noul', { baseUrl: 'http://x', fetchImpl })).resolves.toBe(0.5);
+    expect(seen?.redirect).toBe('error');
+  });
 });
