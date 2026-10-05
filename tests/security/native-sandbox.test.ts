@@ -238,6 +238,8 @@ describe('confineSpawn', () => {
       helperPath: helper,
       existsSync: () => true,
       mkdirSync: () => undefined,
+      // no runtime socket is writable by this (mock) user
+      accessSync: () => { throw new Error('EACCES'); },
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;

@@ -95,6 +95,23 @@ describe('masquage des sockets de moteurs de conteneurs', () => {
     if (!res.ok) expect(res.error).toMatch(/container runtime socket is reachable/);
   });
 
+  it('landlock : refuse quand un socket de moteur de conteneurs est écrivable, sans changer de backend', () => {
+    const caps = { platform: 'linux', bwrapPath: null, bwrapVersion: null, bwrapUsable: false, bwrapUnusableReason: 'no', landlockAbi: 7, pythonPath: '/usr/bin/python3', sandboxExecPath: null, recommended: 'landlock', reason: 'landlock' } as never;
+    const ws = mk('sock-ws-');
+    const base = { capabilities: caps, helperPath: '/x/landlock-confine.py', homedir: () => mk('sock-home-'), env: { CODEBUDDY_NATIVE_SANDBOX: 'landlock' } };
+    const open = confineSpawn({ file: '/bin/true', args: [], cwd: ws, env: {} }, { ...base, existsSync: (p: string) => p === '/var/run/docker.sock' || fs.existsSync(p), realpathSync: (p: string) => p, accessSync: () => undefined });
+    // ÉCHOUE sur l'ancienne logique : ok:true avec le backend landlock.
+    expect(open.ok).toBe(false);
+    if (!open.ok) {
+      expect(open.error).toMatch(/docker\.sock/);
+      expect(open.error).toMatch(/CODEBUDDY_NATIVE_SANDBOX=bwrap/);
+      expect(open.error).toMatch(/docker group/);
+    }
+    // socket présent mais non écrivable par l'utilisateur : Landlock reste utilisable
+    const closed = confineSpawn({ file: '/bin/true', args: [], cwd: ws, env: {} }, { ...base, existsSync: (p: string) => p === '/var/run/docker.sock' || fs.existsSync(p), realpathSync: (p: string) => p, accessSync: () => { throw new Error('EACCES'); } });
+    expect(closed.ok).toBe(true);
+  });
+
   it('seatbelt : le profil interdit la connexion aux sockets même réseau ouvert', () => {
     const policy = buildDefaultPolicy('/Users/x/proj', { existsSync: () => false, homedir: () => '/Users/x' });
     if ('error' in policy) throw new Error(policy.error);

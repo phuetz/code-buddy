@@ -8,7 +8,7 @@
 
 import { importedSkillRoots } from './skill-executable-gate.js';
 import { spawnSync as realSpawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from 'child_process';
-import { existsSync as realExistsSync, mkdirSync as realMkdirSync, readFileSync as realReadFileSync, realpathSync as realRealpathSync } from 'fs';
+import { accessSync as realAccessSync, constants as fsConstants, existsSync as realExistsSync, mkdirSync as realMkdirSync, readFileSync as realReadFileSync, realpathSync as realRealpathSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -88,6 +88,7 @@ export interface NativeSandboxIo {
   capabilities?: NativeSandboxCapabilities;
   helperPath?: string;
   realpathSync?: (target: string) => string;
+  accessSync?: (target: string, mode?: number) => void;
 }
 
 let cachedCapabilities: NativeSandboxCapabilities | null = null;
@@ -530,6 +531,23 @@ export function probeRuntimeSocketsFromSandbox(
   return { visible };
 }
 
+/**
+ * Landlock cannot restrict connect() on a pathname Unix socket (no filesystem right
+ * covers it on current ABIs), so a reachable container-runtime socket would stay open.
+ * Returns the known sockets that exist AND are writable (connectable) by this user.
+ */
+export function connectableRuntimeSockets(io: NativeSandboxIo = {}): string[] {
+  const access = io.accessSync ?? realAccessSync;
+  return runtimeSocketsToMask(io).filter((sock) => {
+    try {
+      access(sock, fsConstants.W_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
 function refusal(reason: string): ConfineSpawnResult {
   return {
     ok: false,
@@ -616,6 +634,13 @@ export function confineSpawn(input: ConfineSpawnInput, io: NativeSandboxIo = {})
     const helperPath = io.helperPath ?? resolveLandlockHelperPath(io.existsSync ?? realExistsSync);
     if (!pythonPath) return refusal('python3 is required to apply Landlock.');
     if (!helperPath) return refusal('Landlock helper landlock-confine.py is missing.');
+    const open = connectableRuntimeSockets(io);
+    if (open.length > 0) {
+      return refusal(
+        `the Landlock backend cannot block connections to the container runtime socket ${open.join(', ')}, which this user can write to (root on the host). ` +
+        `Use ${NATIVE_SANDBOX_ENV}=bwrap (it masks these sockets), or remove the user from the docker group / stop the runtime. No other backend was substituted.`,
+      );
+    }
     logger.debug('native-sandbox: wrapping with Landlock helper');
     return {
       ok: true,
