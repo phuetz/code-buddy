@@ -7,7 +7,12 @@
  */
 
 import { EventEmitter } from "events";
-import { CostTracker, getCostTracker } from "../utils/cost-tracker.js";
+import {
+  CostTracker,
+  getCostTracker,
+  type CostBillingContext,
+  type ProviderReportedUsage,
+} from "../utils/cost-tracker.js";
 import { AgentModeManager, getAgentModeManager, AgentMode } from "./agent-mode.js";
 import { SandboxManager, getSandboxManager } from "../security/sandbox.js";
 import { ContextManagerV2, createContextManager } from "../context/context-manager-v2.js";
@@ -192,17 +197,30 @@ export class AgentState extends EventEmitter {
     inputTokens: number,
     outputTokens: number,
     model: string,
-    providerUsage?: { promptTokens: number; completionTokens: number }
+    providerUsage?: ProviderReportedUsage,
+    context?: CostBillingContext,
   ): void {
-    // Keep the historical 3-argument contract when no provider usage is known:
-    // callers and tests spy on `calculateCost(input, output, model)` exactly.
-    const cost = providerUsage
-      ? this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage)
+    // Keep the historical 3-argument contract when neither provider usage nor
+    // billing context is known: callers and tests spy on
+    // `calculateCost(input, output, model)` exactly.
+    const cost = providerUsage || context
+      ? this.costTracker.calculateCost(
+        inputTokens,
+        outputTokens,
+        model,
+        providerUsage?.cachedTokens ?? 0,
+        providerUsage,
+        context,
+      )
       : this.costTracker.calculateCost(inputTokens, outputTokens, model);
     this.sessionCost += cost;
     const effectiveInput = providerUsage?.promptTokens ?? inputTokens;
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
-    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+    if (providerUsage || context) {
+      this.costTracker.recordUsage(effectiveInput, effectiveOutput, model, context, providerUsage);
+    } else {
+      this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+    }
     this.emit("cost:recorded", { cost, total: this.sessionCost });
 
     if (this.isSessionCostLimitReached()) {
