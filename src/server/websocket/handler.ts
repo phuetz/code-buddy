@@ -10,7 +10,7 @@ import type { ServerConfig, WebSocketMessage, WebSocketResponse } from '../types
 import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
 import { isOriginAllowed, DEFAULT_LOCALHOST_ORIGINS } from '../origin-check.js';
-import { buildDefaultAllowedHosts, isHostAllowed } from '../host-check.js';
+import { buildDefaultAllowedHosts, isHostAllowed, isSameOriginAsHost } from '../host-check.js';
 import { verifyToken } from '../auth/jwt.js';
 import { getDeviceAuthStore } from '../auth/device-store.js';
 import { withDeviceSessionIdentity } from '../auth/device-session-context.js';
@@ -1921,6 +1921,12 @@ export async function setupWebSocket(
           ? config.corsOrigins.split(',')
           : [...DEFAULT_LOCALHOST_ORIGINS];
       if (allowedOrigins.includes('*') || isOriginAllowed(origin, allowedOrigins)) {
+        cb(true);
+        return;
+      }
+      // Same origin: the PWA served by this server opens /ws under a Host that
+      // already passed the allowlist above (a foreign site cannot forge it).
+      if (isSameOriginAsHost(origin, typeof hostHeader === 'string' ? hostHeader : undefined)) {
         cb(true);
         return;
       }

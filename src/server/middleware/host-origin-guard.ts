@@ -6,6 +6,7 @@ import { isOriginAllowed } from '../origin-check.js';
 import {
   buildDefaultAllowedHosts,
   isHostAllowed,
+  isSameOriginAsHost,
   isOriginExemptPublicPath,
 } from '../host-check.js';
 import type { ServerConfig } from '../types.js';
@@ -55,15 +56,6 @@ export function createHostAllowlistMiddleware(
  * non-public routes. Clients without Origin (curl, CLI, fleet peers) pass.
  * Public discovery/health routes stay CORS-only (documented SERV2 contract).
  */
-function isSameOriginAsHost(origin: string, hostHeader: string | undefined): boolean {
-  if (!hostHeader) return false;
-  try {
-    return new URL(origin).host.toLowerCase() === hostHeader.trim().toLowerCase();
-  } catch {
-    return false;
-  }
-}
-
 export function createOriginAccessMiddleware(config: ServerConfig) {
   const allowedOrigins = resolveAllowedOrigins(config);
   const wildcard = allowedOrigins.includes('*');

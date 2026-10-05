@@ -84,6 +84,37 @@ describe('CB-MCP-SERVE reprise', () => {
     expect(await rawGet(port, '/api/tools', { Host: host, Origin: 'http://evil.example' })).toBe(403);
   });
 
+  it('le WebSocket /ws accepte une Origin identique au Host autorisé et refuse une origine étrangère', async () => {
+    setEnv('CODEBUDDY_ALLOWED_HOSTS', '100.64.1.2');
+    const { startServer } = await import('../../src/server/index.js');
+    started = await startServer({
+      port: 0,
+      host: '127.0.0.1',
+      authEnabled: true,
+      jwtSecret: 'reprise-secret',
+      websocketEnabled: true,
+      logging: false,
+      rateLimit: false,
+      cors: true,
+      corsOrigins: ['http://localhost:*', 'http://127.0.0.1:*'],
+      docsEnabled: false,
+      securityHeaders: { enabled: false },
+    });
+    const port = (started.server.address() as AddressInfo).port;
+    const host = `100.64.1.2:${port}`;
+    const { default: WebSocket } = await import('ws');
+    const open = (origin: string) =>
+      new Promise<string>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { Host: host, Origin: origin } });
+        ws.once('open', () => { ws.close(); resolve('open'); });
+        ws.once('unexpected-response', (_req, res) => resolve(`http ${res.statusCode}`));
+        ws.once('error', () => resolve('error'));
+      });
+    // ÉCHOUE sur l'ancienne logique : « http 403 » (Forbidden origin).
+    expect(await open(`http://${host}`)).toBe('open');
+    expect(await open('http://evil.example')).toBe('http 403');
+  });
+
   it('en production, AUTH_ENABLED=false ne désactive pas l\'authentification', async () => {
     setEnv('NODE_ENV', 'production');
     setEnv('AUTH_ENABLED', 'false');

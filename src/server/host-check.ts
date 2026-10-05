@@ -100,3 +100,17 @@ export function isOriginExemptPublicPath(path: string): boolean {
   if (p.startsWith('/__codebuddy__/mobile')) return true;
   return false;
 }
+
+/**
+ * True when the browser `Origin` names the same host:port as the (already
+ * allowlisted) `Host` header: the page was served by this server. Must only be
+ * used behind the Host allowlist. Scheme is not compared.
+ */
+export function isSameOriginAsHost(origin: string, hostHeader: string | undefined): boolean {
+  if (!hostHeader) return false;
+  try {
+    return new URL(origin).host.toLowerCase() === hostHeader.trim().toLowerCase();
+  } catch {
+    return false;
+  }
+}
