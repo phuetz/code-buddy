@@ -174,8 +174,11 @@ const DEFAULT_CONFIG: ServerConfig = {
     10
   ),
   authEnabled:
-    // Fail-closed in every NODE_ENV. Opt out only via AUTH_ENABLED=false or CLI --no-auth.
-    process.env.AUTH_ENABLED !== 'false',
+    // Production is fail-closed: AUTH_ENABLED=false is ignored there. The only
+    // way out is the explicit CLI flag (--no-auth with CODEBUDDY_ALLOW_NO_AUTH=1).
+    process.env.NODE_ENV === 'production'
+      ? true
+      : process.env.AUTH_ENABLED !== 'false',
   jwtSecret: process.env.JWT_SECRET || '',
   jwtExpiration: process.env.JWT_EXPIRATION || SERVER_CONFIG.DEFAULT_JWT_EXPIRATION,
   websocketEnabled: process.env.WS_ENABLED !== 'false',

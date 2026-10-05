@@ -55,6 +55,15 @@ export function createHostAllowlistMiddleware(
  * non-public routes. Clients without Origin (curl, CLI, fleet peers) pass.
  * Public discovery/health routes stay CORS-only (documented SERV2 contract).
  */
+function isSameOriginAsHost(origin: string, hostHeader: string | undefined): boolean {
+  if (!hostHeader) return false;
+  try {
+    return new URL(origin).host.toLowerCase() === hostHeader.trim().toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 export function createOriginAccessMiddleware(config: ServerConfig) {
   const allowedOrigins = resolveAllowedOrigins(config);
   const wildcard = allowedOrigins.includes('*');
@@ -65,6 +74,10 @@ export function createOriginAccessMiddleware(config: ServerConfig) {
     if (!origin) return next();
     if (wildcard) return next();
     if (isOriginAllowed(origin, allowedOrigins)) return next();
+    // Same origin: the page was served by this server under a Host that already
+    // passed the allowlist (e.g. the PWA opened on a tailnet name). A foreign
+    // site cannot forge an Origin equal to the Host it is talking to.
+    if (isSameOriginAsHost(origin, req.headers.host)) return next();
     return res.status(403).json({
       ...API_ERRORS.FORBIDDEN,
       message: 'Forbidden Origin',
