@@ -41,6 +41,8 @@ async function assertInteractiveSpawn(): Promise<void> {
   const executable = shellConfiguration.shell === 'bash'
     ? resolveBashExecutable()
     : shellConfiguration.executable;
+  // The imported-skill guard is awaited before the PTY spawn: wait for the spawn instead of assuming it is synchronous.
+  await vi.waitFor(() => expect(harness.spawn).toHaveBeenCalled());
   expect(harness.spawn).toHaveBeenCalledWith(
     executable,
     [...shellConfiguration.argsPrefix, command],
