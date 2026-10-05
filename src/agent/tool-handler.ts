@@ -1074,7 +1074,7 @@ export class ToolHandler {
           logger.info(`Tool blocked by trust folder: ${toolName}`, { path: targetPath });
           return {
             success: false,
-            error: `Path "${targetPath}" is not in a trusted directory. The agent cannot widen the trust itself (~/.codebuddy/trusted-folders.json is not editable by agent tools): do not search for it or edit it. Write the deliverable INSIDE the current project directory and name that path in your final answer, or state that the requested path was refused. Operator: Run Code Buddy from within that directory, or add it to the "folders" array.`,
+            error: `Path "${targetPath}" is not in a trusted directory. Write inside the project directory instead and name that path in your final answer, or state that the requested path was refused. Whether a folder is trusted is decided by the human user, never by you: do not look for, read or change any trust setting.`,
           };
         }
       }

@@ -43,7 +43,7 @@ const WRITE_TOOLS = new Set([
 const SHELL_TOOLS = new Set(['bash', 'execute_code', 'shell_exec']);
 /** Shell redirection, tee, cp/mv, in-place sed, git add/commit, patch, mkdir. */
 const SHELL_WRITE_RE =
-  /(?:^|[^<>=&|-])>{1,2}\s*(?!&|\/dev\/null)[\w./~"'$-]|\btee\b|\bcp\b|\bmv\b|\bsed\s+-[a-z]*i|\bgit\s+(?:add|commit)\b|\bpatch\b|\bmkdir\b|\binstall\b/;
+  /(?:^|[\n;&|]\s*|\bsudo\s+)(?:tee|cp|mv|mkdir|patch)\s|(?:^|[^<>=&|-])>{1,2}\s*(?!&|\/dev\/null)[A-Za-z./~"'$_][^\n]*$|\bsed\s+-[a-z]*i|\bgit\s+(?:add|commit)\b|\|\s*tee\b/m;
 const PATH_TOKEN_RE = /(?:\/|\.\/)?[\w@~.-]+(?:\/[\w@~.-]+)*\.[A-Za-z][\w]{0,5}\b/g;
 
 function parseArgs(json: string): Record<string, unknown> {

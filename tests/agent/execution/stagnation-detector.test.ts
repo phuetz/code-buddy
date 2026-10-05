@@ -48,3 +48,23 @@ describe('StagnationDetector', () => {
     expect(r?.mostReadTarget).toBe('src/config/model-price-data.ts');
   });
 });
+
+describe('messages rendus au modèle (revue Grok, reprise 1)', () => {
+  it('le refus d espace de travail ne nomme aucun réglage de confiance', async () => {
+    const { WorkspaceIsolation } = await import('../../../src/workspace/workspace-isolation.js');
+    const iso = new WorkspaceIsolation({ workspaceRoot: process.cwd() });
+    const r = iso.validatePath('/home/someone/outside.md', 'write file', 'write');
+    expect(r.valid).toBe(false);
+    expect(r.error ?? '').not.toMatch(/trusted-folders|"folders"|\.codebuddy\/|--trust|add it to/i);
+  });
+});
+
+describe('classification des écritures shell (revue Grok : faux « écriture »)', () => {
+  it('une comparaison, le mot install ou patch dans du code lu ne comptent pas comme écriture', () => {
+    expect(isWriteCall('execute_code', JSON.stringify({ code: 'if (count > 3) { console.log("install patch cp") }' }))).toBe(false);
+    expect(isWriteCall('bash', JSON.stringify({ command: 'grep -n "npm install" README.md' }))).toBe(false);
+    expect(isWriteCall('bash', JSON.stringify({ command: 'cp a.md b.md' }))).toBe(true);
+    expect(isWriteCall('bash', JSON.stringify({ command: 'echo x | tee out.md' }))).toBe(true);
+    expect(isWriteCall('bash', JSON.stringify({ command: 'echo x >> out.md' }))).toBe(true);
+  });
+});
