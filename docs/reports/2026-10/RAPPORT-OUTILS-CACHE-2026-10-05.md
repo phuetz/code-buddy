@@ -111,6 +111,12 @@ Fichier `tests/agent/execution/tool-selection-fixed.test.ts`, **24 tests verts**
 **2 tests rougissent** (« ordre » et « true sert le noyau ») ; restauré, 24/24
 verts. Trace : `logs/` et §Mesure des outils.
 
+**Re-vérification à la reprise (2026-10-05 07:05)** :
+`npx vitest run tests/agent/execution/tool-selection-fixed.test.ts` →
+`1 passed / 24 passed` en 576 ms. L’analyse `_qa/outils-cache/analyse.json` et
+les journaux `logs/req-*.jsonl` ont été relus : les chiffres du tableau sont
+reproductibles depuis les traces brutes.
+
 ## Implémentation (tâche 2)
 
 - `CODEBUDDY_TOOLS_FIXED` : **non positionné = comportement historique**
