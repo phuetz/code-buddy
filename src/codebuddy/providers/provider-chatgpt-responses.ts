@@ -1082,6 +1082,10 @@ export async function* parseSseStream(
         if (idleTimer) clearTimeout(idleTimer);
       }
       const { value, done } = readResult;
+      // CB-SSE-1005: decode any bytes delivered with done:true before flushing.
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+      }
       if (done) {
         // TextDecoder keeps an incomplete UTF-8 sequence until its final
         // decode call. Flush it before processing the last SSE event.
@@ -1091,8 +1095,6 @@ export async function* parseSseStream(
         // close immediately after the last data line, so make the remainder
         // visible to the same parser below.
         buffer += '\n\n';
-      } else {
-        buffer += decoder.decode(value, { stream: true });
       }
 
       // Process complete SSE events. Each event is delimited by `\n\n`,

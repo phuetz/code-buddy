@@ -827,13 +827,21 @@ export class GeminiNativeProvider implements Provider {
 
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      // CB-SSE-1005: some bodies deliver the last bytes with done:true.
+      // Decode them before breaking, then flush the TextDecoder so a trailing
+      // multi-byte UTF-8 sequence is not dropped.
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+      }
+      if (done) {
+        buffer += decoder.decode();
+      }
 
-      buffer += decoder.decode(value, { stream: true });
-
-      // Split on SSE boundaries
       const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+      buffer = done ? '' : (lines.pop() || '');
+      if (done && lines.length === 0 && buffer === '') {
+        // Stream closed with nothing left — fall through to trailing check.
+      }
 
       for (const line of lines) {
         const trimmed = line.trim();
@@ -852,9 +860,14 @@ export class GeminiNativeProvider implements Provider {
           }
         }
       }
+
+      if (done) break;
     }
 
-    // Process remaining buffer
+    // Process remaining buffer (final fragment without a trailing newline).
+    // After a clean done-flush above, buffer is usually empty; keep this for
+    // the case where the last read had done:false leftovers absorbed into
+    // lines already. If anything remains (defensive), parse it.
     if (buffer.trim().startsWith('data: ')) {
       const jsonStr = buffer.trim().slice(6);
       if (jsonStr !== '[DONE]') {
@@ -887,6 +900,8 @@ export class GeminiNativeProvider implements Provider {
     // rejouer la requête après émission (duplication silencieuse), et signaler
     // une fin de stream sans finishReason (troncature possible).
     let emittedChunks = 0;
+    // CB-SSE-1005: monotonic tool_call index — hardcoding 0 merged parallel calls in reduceStreamChunk.
+    let toolCallIndex = 0;
     let sawFinishReason = false;
     let terminalFinishReason: 'stop' | 'tool_calls' | 'length' | 'content_filter' | null | undefined;
 
@@ -986,6 +1001,7 @@ export class GeminiNativeProvider implements Provider {
           if (part.functionCall) {
             const fc = part.functionCall as { name: string; args?: Record<string, unknown> };
             const streamSig = (part as { thoughtSignature?: unknown }).thoughtSignature;
+            const callIndex = toolCallIndex++;
             emittedChunks++;
             yield {
               id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
@@ -996,7 +1012,7 @@ export class GeminiNativeProvider implements Provider {
                 index: 0,
                 delta: {
                   tool_calls: [{
-                    index: 0,
+                    index: callIndex,
                     id: `call_${Date.now()}_${chunkIndex}`,
                     type: 'function' as const,
                     function: {

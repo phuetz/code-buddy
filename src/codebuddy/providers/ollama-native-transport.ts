@@ -381,13 +381,18 @@ export function toOpenAiChunk(
   data: OllamaNativeChatResponse,
   fallbackModel: string,
   isFirst: boolean,
+  /** CB-SSE-1005: base index so tool_calls across successive NDJSON lines do not all land on 0. */
+  toolCallIndexBase = 0,
 ): ChatCompletionChunk {
   const toolCalls = toOpenAiToolCalls(data.message?.tool_calls);
   const delta: Record<string, unknown> = {};
   if (isFirst || data.message?.role) delta.role = data.message?.role || 'assistant';
   if (data.message?.content) delta.content = data.message.content;
   if (toolCalls.length > 0) {
-    delta.tool_calls = toolCalls.map((call, index) => ({ index, ...call }));
+    delta.tool_calls = toolCalls.map((call, index) => ({
+      index: toolCallIndexBase + index,
+      ...call,
+    }));
   }
   return {
     id: `chatcmpl-ollama-${fallbackModel}`,
@@ -414,6 +419,7 @@ export async function* streamOllamaNative(
   const decoder = new TextDecoder();
   let buffer = '';
   let emitted = 0;
+  let toolCallIndexBase = 0;
   const emit = function* (line: string): Generator<ChatCompletionChunk> {
     if (!line.trim()) return;
     let parsed: OllamaNativeChatResponse;
@@ -422,7 +428,10 @@ export async function* streamOllamaNative(
     } catch {
       return;
     }
-    yield toOpenAiChunk(parsed, fallbackModel, emitted === 0);
+    const chunk = toOpenAiChunk(parsed, fallbackModel, emitted === 0, toolCallIndexBase);
+    const n = chunk.choices[0]?.delta?.tool_calls?.length ?? 0;
+    toolCallIndexBase += n;
+    yield chunk;
     emitted++;
   };
 
