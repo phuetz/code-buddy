@@ -468,6 +468,18 @@ export function isConversationClosing(text: string): boolean {
 
 // ── default judge (rare, only on a cue with chime-in on) ──────────────
 
+/**
+ * Same text the chime-in judge already sends. Observation forwards it as the
+ * Kev question `instructions` and does not turn the returned probability into
+ * a respond bit: kev/api.py `to_answers` exposes p(true) and applies no threshold.
+ */
+const SPONTANEOUS_CHIME_IN_INSTRUCTIONS =
+  "Tu es un robot compagnon dans une pièce où des humains parlent ENTRE EUX. Tu n'as PAS été " +
+  'interpellé par ton nom. Décide si tu devrais intervenir SPONTANÉMENT. Interviens UNIQUEMENT ' +
+  "si on pose une question ouverte à laquelle tu peux vraiment aider OU si on demande de l'aide. " +
+  "Dans le doute, n'interviens PAS (couper une conversation humaine est pire que de se taire). " +
+  "Réponds STRICTEMENT par OUI ou NON, rien d'autre.";
+
 function makeDefaultJudge(): JudgeFn {
   return async (transcript: string, context: string[]): Promise<boolean> => {
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
@@ -475,12 +487,7 @@ function makeDefaultJudge(): JudgeFn {
     const model = process.env.CODEBUDDY_SENSORY_RESPOND_DECISION_MODEL;
     const route = await resolveVoiceModel(transcript);
     const client = new CodeBuddyClient(route.apiKey, model || route.model, route.baseURL);
-    const sys =
-      "Tu es un robot compagnon dans une pièce où des humains parlent ENTRE EUX. Tu n'as PAS été " +
-      'interpellé par ton nom. Décide si tu devrais intervenir SPONTANÉMENT. Interviens UNIQUEMENT ' +
-      "si on pose une question ouverte à laquelle tu peux vraiment aider OU si on demande de l'aide. " +
-      "Dans le doute, n'interviens PAS (couper une conversation humaine est pire que de se taire). " +
-      "Réponds STRICTEMENT par OUI ou NON, rien d'autre.";
+    const sys = SPONTANEOUS_CHIME_IN_INSTRUCTIONS;
     const ctx = context.slice(-5).join('\n');
     const resp = await client.chat(
       [
@@ -510,6 +517,39 @@ async function defaultRecentContext(): Promise<string[]> {
       .filter(Boolean);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Observation only. CODEBUDDY_DECISION_URL empty → return before any import or
+ * socket. When set, POST the current transcript as a Kev `noul` question and
+ * log p(true) beside the decision this function already computed. The returned
+ * ResponseDecision is never rewritten from that probability.
+ */
+async function observeKevDecision(
+  env: NodeJS.ProcessEnv,
+  transcript: string,
+  decision: ResponseDecision,
+): Promise<void> {
+  const baseUrl = env.CODEBUDDY_DECISION_URL?.trim() ?? '';
+  if (!baseUrl) return;
+  try {
+    const { decide } = await import('../providers/decision/index.js');
+    const probability = await decide(SPONTANEOUS_CHIME_IN_INSTRUCTIONS, transcript, 'noul', {
+      baseUrl,
+      id: 'chime-in',
+    });
+    logger.info('[respond] kev observation', {
+      mode: 'observation',
+      respond: decision.respond,
+      reason: decision.reason,
+      kevType: 'noul',
+      kevProbability: probability,
+    });
+  } catch (err) {
+    logger.debug(
+      `[respond] kev observation failed (respond unchanged): ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 }
 
@@ -606,6 +646,12 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
   }
 
   async function decide(transcript: string): Promise<ResponseDecision> {
+    const decision = await decideCurrent(transcript);
+    await observeKevDecision(env, transcript, decision);
+    return decision;
+  }
+
+  async function decideCurrent(transcript: string): Promise<ResponseDecision> {
     try {
       const text = (transcript ?? '').trim();
       if (!text) return { respond: false, reason: 'empty' };
