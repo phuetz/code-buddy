@@ -20,6 +20,7 @@ import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import { scanSkillFirewall, type SkillFirewallReport } from '../security/skill-scanner.js';
 import { checkExecutablePayloads, disarmScripts, sha256File, loadExecAllowlist, allowlistLine, type ExecAllowlistEntry, type ExecutableFile } from '../security/skill-executable-gate.js';
 import { parseSkillFile, validateSkill } from './parser.js';
+import { parseFrontmatterYaml } from './frontmatter-yaml.js';
 import { importAgents, type AgentImportReport } from './agent-importer.js';
 import { logger } from '../utils/logger.js';
 
@@ -143,7 +144,7 @@ function baseSlugForDir(skillDir: string): string {
   try {
     const md = resolveSkillFile(skillDir);
     const m = fs.readFileSync(md, 'utf-8').match(FRONTMATTER_RE);
-    const name = m ? ((yaml.parse(m[1]!) ?? {}) as Record<string, unknown>).name : undefined;
+    const name = m ? ((parseFrontmatterYaml(m[1]!).data ?? {}) as Record<string, unknown>).name : undefined;
     return slugify(String(name ?? path.basename(skillDir)));
   } catch {
     return slugify(path.basename(skillDir));
@@ -419,7 +420,8 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
     }
     let rawFm: Record<string, unknown>;
     try {
-      rawFm = (yaml.parse(m[1]!) ?? {}) as Record<string, unknown>;
+      // Same Claude Code-compatible tolerance as parseSkillFile (the firewall above saw the raw bytes).
+      rawFm = (parseFrontmatterYaml(m[1]!).data ?? {}) as Record<string, unknown>;
     } catch {
       report.skipped.push({ sourcePath: rel, reason: 'unparseable frontmatter' });
       continue;

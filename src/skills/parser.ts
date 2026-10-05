@@ -6,6 +6,7 @@
  */
 
 import * as yaml from 'yaml';
+import { parseFrontmatterYaml } from './frontmatter-yaml.js';
 import type {
   Skill,
   SkillMetadata,
@@ -73,7 +74,9 @@ export function parseSkillFile(
  */
 function parseMetadata(yamlContent: string, sourcePath: string): SkillMetadata {
   try {
-    const parsed = yaml.parse(yamlContent) as Record<string, unknown>;
+    // Strict YAML first; on failure, the same repair Claude Code applies to unquoted
+    // values such as `argument-hint: [a] [b]` (see frontmatter-yaml.ts).
+    const parsed = (parseFrontmatterYaml(yamlContent).data ?? {}) as Record<string, unknown>;
 
     if (!parsed.name || typeof parsed.name !== 'string') {
       throw new Error('Skill name is required');
