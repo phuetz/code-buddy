@@ -231,6 +231,8 @@ Honest limits for a first-time visitor:
   their own Node ≥ 22 requirement during installation. The CI runs Node 20 and 22.
 - **Cowork** is a separate install (Node.js ≥ 22, `buddy install-gui`), not part of the three
   commands above.
+- **Film production** needs `ffmpeg`; without a local voice binary, scenes stay silent rather than
+  getting a fake voice-over.
 - **`buddy loop` needs a model that really calls tools.** A very small model can stall or give up
   without ever turning the test suite green.
 - **Fleet** is two processes and a JWT, not one flag. Remote tools expose nothing until the
