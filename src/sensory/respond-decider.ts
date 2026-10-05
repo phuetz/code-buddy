@@ -520,21 +520,24 @@ async function defaultRecentContext(): Promise<string[]> {
   }
 }
 
-/**
- * Observation only. CODEBUDDY_DECISION_URL empty → return before any import or
- * socket. When set, POST the current transcript as a Kev `noul` question and
- * log p(true) beside the decision this function already computed. The returned
- * ResponseDecision is never rewritten from that probability.
- */
-async function observeKevDecision(
-  env: NodeJS.ProcessEnv,
+/** Maximum observation requests in flight; beyond it the observation is dropped and logged. */
+export const MAX_KEV_OBSERVATIONS_IN_FLIGHT = 2;
+const pendingKevObservations = new Set<Promise<void>>();
+
+/** Test hook: resolves once every started observation has finished (never rejects). */
+export async function waitForKevObservations(): Promise<void> {
+  await Promise.all([...pendingKevObservations]);
+}
+
+async function runKevObservation(
+  baseUrl: string,
   transcript: string,
   decision: ResponseDecision,
 ): Promise<void> {
-  const baseUrl = env.CODEBUDDY_DECISION_URL?.trim() ?? '';
-  if (!baseUrl) return;
   try {
     const { decide } = await import('../providers/decision/index.js');
+    // The client keeps its own 1 s abort timer (headers AND body), which frees the
+    // request slot even when Kev is slow or never answers.
     const probability = await decide(SPONTANEOUS_CHIME_IN_INSTRUCTIONS, transcript, 'noul', {
       baseUrl,
       id: 'chime-in',
@@ -551,6 +554,32 @@ async function observeKevDecision(
       `[respond] kev observation failed (respond unchanged): ${err instanceof Error ? err.message : String(err)}`
     );
   }
+}
+
+/**
+ * Observation only, fire-and-forget: it NEVER delays the decision. The caller does
+ * not wait for it; at most MAX_KEV_OBSERVATIONS_IN_FLIGHT run at once, extra ones
+ * are dropped and logged. CODEBUDDY_DECISION_URL empty -> return before any import
+ * or socket. The returned ResponseDecision is never rewritten from the probability.
+ * NOTE: when the URL is set, the transcript is POSTed to it (see providers/decision/client.ts).
+ */
+function observeKevDecision(
+  env: NodeJS.ProcessEnv,
+  transcript: string,
+  decision: ResponseDecision,
+): void {
+  const baseUrl = env.CODEBUDDY_DECISION_URL?.trim() ?? '';
+  if (!baseUrl) return;
+  if (pendingKevObservations.size >= MAX_KEV_OBSERVATIONS_IN_FLIGHT) {
+    logger.debug(
+      `[respond] kev observation dropped: ${pendingKevObservations.size} already in flight (decision unchanged)`,
+    );
+    return;
+  }
+  const task = runKevObservation(baseUrl, transcript, decision).finally(() => {
+    pendingKevObservations.delete(task);
+  });
+  pendingKevObservations.add(task);
 }
 
 /**
@@ -647,7 +676,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
 
   async function decide(transcript: string): Promise<ResponseDecision> {
     const decision = await decideCurrent(transcript);
-    await observeKevDecision(env, transcript, decision);
+    observeKevDecision(env, transcript, decision);
     return decision;
   }
 

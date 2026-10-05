@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createResponseDecider } from '../../src/sensory/respond-decider.js';
+import { createResponseDecider, waitForKevObservations } from '../../src/sensory/respond-decider.js';
 import { logger } from '../../src/utils/logger.js';
 import { decide } from '../../src/providers/decision/index.js';
 
@@ -145,6 +145,7 @@ describe('decision provider observation', () => {
       judge,
     });
     const decision = await decider.decide('bonjour');
+    await waitForKevObservations();
     expect(decision).toEqual({ respond: true, reason: 'greeting' });
     expect(judge).not.toHaveBeenCalled();
     expect(fake.hits).toHaveLength(1);
@@ -191,6 +192,7 @@ describe('decision provider observation', () => {
       recentContext: async () => [],
     });
     const decision = await decider.decide('pourquoi le ciel est bleu ?');
+    await waitForKevObservations();
     expect(decision).toEqual({ respond: false, reason: 'not-warranted' });
     expect(seen[0]?.context).toMatchObject({
       respond: false,
@@ -208,8 +210,49 @@ describe('decision provider observation', () => {
       respondToGreeting: true,
     });
     const decision = await decider.decide('bonjour');
+    await waitForKevObservations();
     expect(decision).toEqual({ respond: true, reason: 'greeting' });
     expect(fake.hits).toHaveLength(1);
+  });
+
+  it('decide() rend sa réponse en moins de 50 ms même si Kev met 2 s à répondre', async () => {
+    const slow = createServer((req, res) => {
+      req.resume();
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ answers: { 'chime-in': { type: 'noul', noul: 0.5 } } }));
+      }, 2000);
+    });
+    await new Promise<void>((resolve) => slow.listen(0, '127.0.0.1', () => resolve()));
+    servers.push(slow);
+    process.env.CODEBUDDY_DECISION_URL = `http://127.0.0.1:${(slow.address() as AddressInfo).port}`;
+    const decider = createResponseDecider({ robotName: 'Buddy', respondToGreeting: true });
+    await decider.decide('bonjour'); // chauffe les imports
+    await waitForKevObservations();
+    const started = performance.now();
+    const decision = await decider.decide('salut');
+    const elapsed = performance.now() - started;
+    expect(decision.respond).toBe(true);
+    // ÉCHOUE sur l'ancienne logique : decide() attendait l'observation (>= 1 s).
+    expect(elapsed).toBeLessThan(50);
+    await waitForKevObservations();
+  });
+
+  it('au plus 2 observations en vol : les suivantes sont abandonnées sans retarder la décision', async () => {
+    const hits: number[] = [];
+    const slow = createServer((req, res) => {
+      req.resume();
+      hits.push(Date.now());
+      setTimeout(() => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); }, 300);
+    });
+    await new Promise<void>((resolve) => slow.listen(0, '127.0.0.1', () => resolve()));
+    servers.push(slow);
+    process.env.CODEBUDDY_DECISION_URL = `http://127.0.0.1:${(slow.address() as AddressInfo).port}`;
+    const decider = createResponseDecider({ robotName: 'Buddy', respondToGreeting: true });
+    for (let i = 0; i < 6; i++) await decider.decide('bonjour');
+    await new Promise((r) => setTimeout(r, 150));
+    expect(hits.length).toBeLessThanOrEqual(2);
+    await waitForKevObservations();
   });
 
   it('decide() sends nothing when the URL is empty', async () => {
