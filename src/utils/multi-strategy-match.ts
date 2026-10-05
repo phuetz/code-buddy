@@ -16,9 +16,30 @@ export interface MatchResult {
   /** The actual string from the source that matched */
   matched: string;
   /** Which strategy found the match */
-  strategy: 'exact' | 'flexible' | 'regex' | 'fuzzy';
+  strategy: 'exact' | 'flexible' | 'unicode' | 'regex' | 'fuzzy';
   /** Confidence score (0-1) */
   confidence: number;
+  /**
+   * Offset in `source` where `matched` STARTS: `source.slice(index, index +
+   * matched.length) === matched`. The edit must be spliced here — a
+   * `String.replace(matched, …)` would rewrite the FIRST copy of that text,
+   * which is not necessarily the window the strategy found.
+   */
+  index: number;
+  /**
+   * How many equivalent places this strategy could have matched (>= 1): equal
+   * windows once whitespace/typography is ignored, regex hits, ties for the
+   * best fuzzy score. More than one = ambiguous: the caller must not pick
+   * silently (same rule as an exact text found several times).
+   */
+  candidates: number;
+}
+
+/** Offset of the start of line `lineIdx` when `source` is split on '\n'. */
+function lineOffset(lines: string[], lineIdx: number): number {
+  let off = 0;
+  for (let k = 0; k < lineIdx; k++) off += (lines[k] as string).length + 1;
+  return off;
 }
 
 // ============================================================================
@@ -27,7 +48,7 @@ export interface MatchResult {
 
 function exactMatch(source: string, search: string): MatchResult | null {
   if (source.includes(search)) {
-    return { matched: search, strategy: 'exact', confidence: 1.0 };
+    return { matched: search, strategy: 'exact', confidence: 1.0, index: source.indexOf(search), candidates: source.split(search).length - 1 };
   }
   return null;
 }
@@ -56,7 +77,16 @@ function flexibleMatch(source: string, search: string): MatchResult | null {
     if (isMatch) {
       // Return the original source lines (preserving indentation)
       const matched = sourceLines.slice(i, i + searchLines.length).join('\n');
-      return { matched, strategy: 'flexible', confidence: 0.95 };
+      // Count the other equivalent (non-overlapping) windows below this one.
+      let candidates = 1;
+      for (let k = i + searchLines.length; k <= sourceLines.length - searchLines.length; k++) {
+        const same = searchLinesStripped.every((l, idx) => (sourceLines[k + idx] as string).trim() === l);
+        if (same) {
+          candidates++;
+          k += searchLines.length - 1;
+        }
+      }
+      return { matched, strategy: 'flexible', confidence: 0.95, index: lineOffset(sourceLines, i), candidates };
     }
   }
 
@@ -91,7 +121,7 @@ function regexMatch(source: string, search: string): MatchResult | null {
     const match = source.match(regex);
 
     if (match && match[0]) {
-      return { matched: match[0], strategy: 'regex', confidence: 0.85 };
+      return { matched: match[0], strategy: 'regex', confidence: 0.85, index: match.index ?? source.indexOf(match[0]), candidates: source.match(new RegExp(pattern, 'gm'))?.length ?? 1 };
     }
   } catch {
     // Invalid regex — skip
@@ -123,22 +153,49 @@ function normalizeUnicode(str: string): string {
     .replace(/[\u2260]/g, '!=');                    // not-equal → !=
 }
 
+/**
+ * Normalise `str` et renvoie, pour CHAQUE caractère du résultat, l'index du
+ * caractère d'origine qui l'a produit. Plusieurs règles changent la longueur
+ * (« … » -> « ... », « → » -> « => ») : un index trouvé dans le texte
+ * normalisé n'est PAS un index du texte original, il faut cette table.
+ */
+function normalizeWithMap(str: string): { norm: string; origin: number[] } {
+  let norm = '';
+  const origin: number[] = [];
+  for (let i = 0; i < str.length; i++) {
+    const out = normalizeUnicode(str[i] as string);
+    for (let k = 0; k < out.length; k++) origin.push(i);
+    norm += out;
+  }
+  return { norm, origin };
+}
+
 function unicodeNormalizedMatch(source: string, search: string): MatchResult | null {
   const normalizedSearch = normalizeUnicode(search);
-  const normalizedSource = normalizeUnicode(source);
+  if (normalizedSearch.length === 0) return null;
+  const { norm, origin } = normalizeWithMap(source);
 
-  // Only try if normalization actually changed something
-  if (normalizedSearch === search) return null;
-
-  if (normalizedSource.includes(normalizedSearch)) {
-    // Find the original source text corresponding to the normalized match
-    const idx = normalizedSource.indexOf(normalizedSearch);
-    // Map back to original — use a simple offset approach
-    const matched = source.substring(idx, idx + normalizedSearch.length);
-    return { matched, strategy: 'flexible', confidence: 0.92 };
+  let first: MatchResult | null = null;
+  let count = 0;
+  let idx = norm.indexOf(normalizedSearch);
+  while (idx !== -1) {
+    const end = idx + normalizedSearch.length;
+    // Les deux bornes doivent tomber sur une frontière de caractère ORIGINAL :
+    // sinon le motif couperait un « … » en deux, et on abîmerait le texte.
+    const startOk = idx === 0 || origin[idx] !== origin[idx - 1];
+    const endOk = end === norm.length || origin[end] !== origin[end - 1];
+    if (startOk && endOk) {
+      const from = origin[idx] as number;
+      const to = end === norm.length ? source.length : (origin[end] as number);
+      count++;
+      first ??= { matched: source.substring(from, to), strategy: 'unicode', confidence: 0.92, index: from, candidates: 1 };
+      idx = norm.indexOf(normalizedSearch, end);
+      continue;
+    }
+    idx = norm.indexOf(normalizedSearch, idx + 1);
   }
 
-  return null;
+  return first ? { ...first, candidates: count } : null;
 }
 
 // ============================================================================
@@ -204,6 +261,7 @@ function fuzzyMatch(source: string, search: string): MatchResult | null {
   let bestScore = Infinity;
   let bestMatch = '';
   let bestStartLine = -1;
+  const scored: Array<{ score: number; start: number }> = [];
 
   // Slide a window of N lines (±2 lines tolerance)
   for (let winSize = Math.max(1, searchLines.length - 2); winSize <= searchLines.length + 2; winSize++) {
@@ -226,6 +284,7 @@ function fuzzyMatch(source: string, search: string): MatchResult | null {
       const weightedDist = dNorm + (dRaw - dNorm) * WHITESPACE_PENALTY_FACTOR;
       const score = weightedDist / searchBlock.length;
 
+      if (score <= FUZZY_MATCH_THRESHOLD) scored.push({ score, start: i });
       if (score < bestScore && score <= FUZZY_MATCH_THRESHOLD) {
         bestScore = score;
         bestMatch = window;
@@ -239,6 +298,9 @@ function fuzzyMatch(source: string, search: string): MatchResult | null {
       matched: bestMatch,
       strategy: 'fuzzy',
       confidence: 1 - bestScore,
+      index: lineOffset(sourceLines, bestStartLine),
+      // Distinct start lines that tie for the best score.
+      candidates: new Set(scored.filter((c) => c.score - bestScore < 1e-9).map((c) => c.start)).size,
     };
   }
 
@@ -259,6 +321,30 @@ export function multiStrategyMatch(
   source: string,
   search: string,
 ): MatchResult | null {
+  const result = runCascade(source, search);
+  if (!result || result.strategy === 'exact') return result;
+  // Un motif multi-ligne est découpé sur '\n' : dans un fichier CRLF, la
+  // dernière ligne retenue garderait son '\r' final et le remplacement
+  // l'avalerait. Le '\r' appartient à la fin de ligne, pas au texte apparié.
+  let out = result;
+  if (out.matched.endsWith('\r') && !search.endsWith('\r')) {
+    out = { ...out, matched: out.matched.slice(0, -1) };
+  }
+  // Idem le BOM en tête de fichier : `trim()` le traite comme un blanc, la
+  // fenêtre de la première ligne l'inclurait et le remplacement l'avalerait.
+  if (out.matched.startsWith('\uFEFF') && !search.startsWith('\uFEFF')) {
+    out = { ...out, matched: out.matched.slice(1), index: out.index + 1 };
+  }
+  return out;
+}
+
+function runCascade(
+  source: string,
+  search: string,
+): MatchResult | null {
+  // Une chaîne vide « existe » partout : ce n'est pas un motif.
+  if (search.length === 0) return null;
+
   // 1. Exact
   const exact = exactMatch(source, search);
   if (exact) return exact;

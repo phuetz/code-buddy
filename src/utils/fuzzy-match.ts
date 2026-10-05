@@ -12,6 +12,10 @@ export interface FuzzyMatchResult {
   similarity: number;
   /** Line number where match starts (1-indexed) */
   startLine: number;
+  /** Number of windows tied for the top similarity (>1 = ambiguous) */
+  ties?: number;
+  /** Character offset in the content where `match` starts */
+  startIndex: number;
   /** Line number where match ends (1-indexed) */
   endLine: number;
   /** Human-readable similarity percentage */
@@ -127,6 +131,7 @@ export function findFuzzyMatches(
         match: candidate,
         similarity,
         startLine: startLine + 1, // Convert to 1-indexed
+        startIndex: lines.slice(0, startLine).reduce((n, l) => n + l.length + 1, 0),
         endLine: startLine + searchLineCount,
         similarityPercent: `${Math.round(similarity * 100)}%`,
       });
@@ -135,6 +140,8 @@ export function findFuzzyMatches(
 
   // Sort by similarity (highest first) and limit results
   results.sort((a, b) => b.similarity - a.similarity);
+  const top = results[0];
+  if (top) top.ties = results.filter((r) => r.similarity === top.similarity).length;
   return results.slice(0, maxResults);
 }
 

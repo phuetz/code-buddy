@@ -35,7 +35,10 @@ jest.mock('fs-extra', () => {
   pathExists: (...args: unknown[]) => mockPathExists(...args),
   stat: (...args: unknown[]) => mockStat(...args),
   readdir: (...args: unknown[]) => mockReaddir(...args),
-  readFile: (...args: unknown[]) => mockReadFile(...args),
+  // Lecture sans encodage = lecture binaire (readFileBuffer) : on rend les octets du texte simulé.
+  readFile: (...args: unknown[]) => args.length === 1
+    ? Promise.resolve(mockReadFile(...args)).then((r: unknown) => (typeof r === 'string' ? Buffer.from(r, 'utf-8') : r))
+    : mockReadFile(...args),
   existsSync: (...args: unknown[]) => mockExistsSync(...args),
   realpathSync: (...args: unknown[]) => mockRealpathSync(...args),
   ensureDir: (...args: unknown[]) => mockEnsureDir(...args),
@@ -383,15 +386,15 @@ describe('TextEditorTool', () => {
       expect(writtenContent).toBe('qux bar qux baz qux');
     });
 
-    it('should replace only first occurrence by default', async () => {
+    it('should refuse several occurrences by default', async () => {
       const contentWithMultiple = 'foo bar foo baz foo';
       mockReadFile.mockResolvedValue(contentWithMultiple);
 
       const result = await editor.strReplace(testFilePath, 'foo', 'qux', false);
 
-      expect(result.success).toBe(true);
-      const writtenContent = mockWriteFile.mock.calls[0][1] as string;
-      expect(writtenContent).toBe('qux bar foo baz foo');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('3 occurrences');
+      expect(mockWriteFile).not.toHaveBeenCalled();
     });
 
     it('should return error when string not found', async () => {
