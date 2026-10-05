@@ -3,7 +3,7 @@
 - **Mission** : `regression-cout-openrouter`
 - **Agent** : Grok 4.7
 - **Branche** : `fix/cout-openrouter-2026-10-04`
-- **Worktree** : `/data/patrice/DEV/cb-cout-openrouter-2026-10-04`
+- **Worktree** : `<dev>/cb-cout-openrouter-2026-10-04`
 - **Date** : 2026-10-05
 - **HOME isolé** : `_qa/regression-cout-openrouter/home`
 - **Correctif vérifié** : `168ecbb2c2dc411bff6db85cef64a880d361671e`
