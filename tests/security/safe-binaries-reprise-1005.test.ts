@@ -48,3 +48,26 @@ describe('reprise 2 : contournements par citation et écritures classées sûres
     },
   );
 });
+
+describe('reprise 3 : abréviation, bundling, accolades, variables', () => {
+  const c = new SafeBinariesChecker();
+  it.each([
+    'sort --out=/tmp/x /etc/hostname',
+    'sort --o /tmp/x /etc/hostname',
+    'iconv --out=/tmp/x -f utf-8 -t utf-8 /etc/hostname',
+    'sort -bo /tmp/x /etc/hostname',
+    'sort -{,o} /tmp/x /etc/hostname',
+    'printf -v x o; sort -$x /tmp/x /etc/hostname',
+    'sort -${x} /tmp/x /etc/hostname',
+    'sort --compress-prog=/bin/sh /etc/hostname',
+  ])('%s n\'est pas sûr', (cmd) => {
+    // ÉCHOUE sur l'ancienne logique : classés sûrs alors que bash/getopt écrit ou exécute.
+    expect(c.isSafeChain(cmd)).toBe(false);
+  });
+  it.each(['sort -k1,1 /etc/hostname', 'sort -n -r file.txt', 'sort file.txt', 'iconv -f utf-8 -t latin1 file.txt', 'find . -name "*.ts"', "grep 'a\\|b' f", 'cat "$HOME_UNSET"x'.replace('"$HOME_UNSET"x', 'file.txt')])(
+    '%s reste sûr',
+    (cmd) => {
+      expect(c.isSafeChain(cmd)).toBe(true);
+    },
+  );
+});

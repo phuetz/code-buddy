@@ -84,6 +84,22 @@ const SAFE_ENV_OPTIONS = new Set([
 // SafeBinariesChecker
 // ============================================================================
 
+/**
+ * GNU getopt_long accepts any unambiguous abbreviation of a long option and bundles
+ * short ones (`--out=F`, `-bo F`), so literal `-o` / `--output` comparisons are not
+ * enough. True when `arg` could be (an abbreviation of) the long option `name`.
+ */
+function isLongOptionPrefix(arg: string, name: string): boolean {
+  if (!arg.startsWith('--') || arg.length <= 2) return false;
+  const given = arg.slice(2).split('=')[0] ?? '';
+  return given.length > 0 && name.startsWith(given);
+}
+
+/** Any spelling of an output-file option: `-o`, bundled `-bo`, `-oFILE`, `--o…`, `--output[=]`. */
+function isOutputFlag(arg: string): boolean {
+  return /^-[A-Za-z]*o/.test(arg) || isLongOptionPrefix(arg, 'output');
+}
+
 export class SafeBinariesChecker {
   private static instance: SafeBinariesChecker | null = null;
 
@@ -182,12 +198,8 @@ export class SafeBinariesChecker {
       case 'sort':
         return !args.some(arg => {
           const option = arg.toLowerCase();
-          return option === '-o'
-            || /^-o.+/.test(option)
-            || option === '--output'
-            || option.startsWith('--output=')
-            || option === '--compress-program'
-            || option.startsWith('--compress-program=');
+          return isOutputFlag(arg)
+            || isLongOptionPrefix(option, 'compress-program');
         });
       case 'file':
         return !args.some(arg => arg === '-C' || arg === '--compile');
@@ -201,9 +213,9 @@ export class SafeBinariesChecker {
         return this.isGitQuery(args);
       case 'base64':
       case 'basenc':
-        return !args.some(arg => arg === '-o' || arg === '--output' || arg.startsWith('--output='));
+        return !args.some(isOutputFlag);
       case 'shuf':
-        return !args.some(arg => arg === '-o' || arg === '--output' || arg.startsWith('--output='));
+        return !args.some(isOutputFlag);
       case 'go':
         return this.isGoQuery(args);
       case 'cargo':
@@ -223,13 +235,13 @@ export class SafeBinariesChecker {
         return this.isVersionProbe(args);
       case 'tree':
         // `tree -o FILE` writes the listing to a file.
-        return !args.some(arg => arg === '-o' || arg === '--output' || arg.startsWith('--output=') || /^-[a-zA-Z]*o/.test(arg));
+        return !args.some(isOutputFlag);
       case 'history':
         // `history -w/-a/-n/-r FILE` read or write the history file; only a bare count is a read.
         return args.every(arg => /^\d+$/.test(arg));
       case 'iconv':
         // `iconv -o FILE` writes a file.
-        return !args.some(arg => arg === '-o' || arg === '--output' || arg.startsWith('--output=') || /^-[a-zA-Z]*o/.test(arg));
+        return !args.some(isOutputFlag);
       case 'xxd':
         // `xxd INFILE OUTFILE` writes OUTFILE; at most one positional argument.
         return args.filter(arg => !arg.startsWith('-')).length <= 1;
@@ -275,6 +287,9 @@ export class SafeBinariesChecker {
         return true;
       }
 
+      // Parameter expansion defeats literal flag guards (`printf -v x o; sort -$x f`).
+      if (char === '$' && next !== undefined && /[A-Za-z_{0-9@*#?!$-]/.test(next)) return true;
+
       if (quote === 'double') {
         if (char === '"') {
           quote = 'none';
@@ -294,6 +309,8 @@ export class SafeBinariesChecker {
       }
 
       if (char === '`' || (char === '$' && next === '(')) return true;
+      // Brace expansion rewrites words (`sort -{,o} OUT IN` is `sort - -o OUT IN`).
+      if (char === '{' || char === '}') return true;
       if ((char === '<' || char === '>') && next === '(') return true;
       if (char === '(' || char === ')') return true;
 
@@ -364,7 +381,7 @@ export class SafeBinariesChecker {
       return true;
     }
     if (subcommand === 'list') {
-      return !rest.some(arg => arg === '-m' && false) && !rest.includes('get');
+      return !rest.includes('get');
     }
     if (subcommand === 'doc') return true;
     return this.isVersionProbe(args);
@@ -391,7 +408,7 @@ export class SafeBinariesChecker {
     ]);
     if (safe.has(subcommand)) return true;
     if (subcommand === 'log') {
-      return !rest.some(arg => arg === '--output' || arg.startsWith('--output='));
+      return !rest.some(isOutputFlag);
     }
     if (subcommand === 'remote') {
       return rest.length === 0 || (rest.length === 1 && rest[0] === '-v');
