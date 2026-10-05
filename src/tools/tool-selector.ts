@@ -375,9 +375,9 @@ export class ToolSelector {
       }
     }
 
-    // Sort tools by score
+    // Sort tools by score (name tie-break keeps equal scores deterministic)
     const sortedTools = Array.from(scores.entries())
-      .sort((a, b) => b[1] - a[1]);
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 
     // Select top tools
     const selectedToolNames: string[] = [];

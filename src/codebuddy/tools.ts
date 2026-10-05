@@ -595,7 +595,9 @@ export function addMCPToolsToCodeBuddyTools(baseTools: CodeBuddyTool[]): CodeBud
   // If below threshold, include full schemas as before
   if (mcpTools.length <= DEFERRED_SCHEMA_THRESHOLD) {
     setDeferredMCPSchemas(null);
-    const codebuddyMCPTools = mcpTools.map(convertMCPToolToCodeBuddyTool);
+    const codebuddyMCPTools = mcpTools
+      .map(convertMCPToolToCodeBuddyTool)
+      .sort((a, b) => a.function.name.localeCompare(b.function.name));
     return [...baseTools, ...codebuddyMCPTools];
   }
 
@@ -624,6 +626,7 @@ export function addMCPToolsToCodeBuddyTools(baseTools: CodeBuddyTool[]): CodeBud
   }
 
   setDeferredMCPSchemas(deferred);
+  stubs.sort((a, b) => a.function.name.localeCompare(b.function.name));
   return [...baseTools, ...stubs];
 }
 
@@ -683,7 +686,8 @@ export function addPluginToolsToCodeBuddyTools(baseTools: CodeBuddyTool[]): Code
       return convertPluginToolToCodeBuddyTool(name, pluginToolDef);
     }
     return null;
-  }).filter((t): t is CodeBuddyTool => t !== null);
+  }).filter((t): t is CodeBuddyTool => t !== null)
+    .sort((a, b) => a.function.name.localeCompare(b.function.name));
 
   return [...baseTools, ...convertedTools];
 }

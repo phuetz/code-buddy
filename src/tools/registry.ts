@@ -77,7 +77,10 @@ export class ToolRegistry {
   public getEnabledTools(): CodeBuddyTool[] {
     return Array.from(this.tools.values())
       .filter(t => t.isEnabled())
-      .map(t => t.definition);
+      .map(t => t.definition)
+      // Insertion order of a Map is not a stable product contract across
+      // MCP/plugin registration races — sort by name for prefix-cacheable tool lists.
+      .sort((a, b) => a.function.name.localeCompare(b.function.name));
   }
 
   /**
@@ -89,7 +92,8 @@ export class ToolRegistry {
   public getEnabledToolMetadata(): ToolMetadata[] {
     return Array.from(this.tools.values())
       .filter(t => t.isEnabled())
-      .map(t => t.metadata);
+      .map(t => t.metadata)
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /**
@@ -142,7 +146,8 @@ export class ToolRegistry {
   public getFleetSafeTools(): CodeBuddyTool[] {
     return Array.from(this.tools.values())
       .filter((t) => t.isEnabled() && t.metadata.fleetSafe === true)
-      .map((t) => t.definition);
+      .map((t) => t.definition)
+      .sort((a, b) => a.function.name.localeCompare(b.function.name));
   }
 
   /**

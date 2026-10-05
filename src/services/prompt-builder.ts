@@ -501,19 +501,6 @@ export class PromptBuilder {
         }
       }
 
-      // Collective Knowledge Graph — relevance-ranked on the current query.
-      // Placed BEFORE optional blocks (knowledge/docs/skills/identity/…) so
-      // It remains its own atomic context block for priority selection.
-      if (query && process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true') {
-        try {
-          const { getCollectiveKnowledgeGraph } = await import('../memory/collective-knowledge-graph.js');
-          const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(query, 1_600);
-          if (ckgBlock) {
-            systemPrompt = this.appendPromptBlock(systemPrompt, 'collective-knowledge', 'memory', ckgBlock, PROMPT_PRIORITIES.context);
-            logger.debug('Injected collective knowledge into system prompt', { chars: ckgBlock.length });
-          }
-        } catch { /* collective graph optional */ }
-      }
 
       // Inject project-instruction context (AGENTS.md / CODEBUDDY.md / CLAUDE.md
       // / GEMINI.md / CONTEXT.md / INSTRUCTIONS.md) via the unified hierarchical
@@ -1033,6 +1020,21 @@ Output formatting discipline:
           enabledPatterns: activeToolFilter.enabledPatterns,
           disabledPatterns: activeToolFilter.disabledPatterns,
         });
+      }
+
+      // Collective Knowledge Graph — relevance-ranked on the current query.
+      // Appended AFTER stable instruction/docs blocks so a different question
+      // does not invalidate the cached system-prompt prefix. Still recorded as
+      // its own atomic block for priority truncation.
+      if (query && process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true') {
+        try {
+          const { getCollectiveKnowledgeGraph } = await import('../memory/collective-knowledge-graph.js');
+          const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(query, 1_600);
+          if (ckgBlock) {
+            systemPrompt = this.appendPromptBlock(systemPrompt, 'collective-knowledge', 'memory', ckgBlock, PROMPT_PRIORITIES.context);
+            logger.debug('Injected collective knowledge into system prompt', { chars: ckgBlock.length });
+          }
+        } catch { /* collective graph optional */ }
       }
 
       // Truncate system prompt if it exceeds the model's context budget.
