@@ -497,7 +497,7 @@ export class A2UIManager extends EventEmitter {
 
     switch (node.type) {
       case 'heading': {
-        const level = (node.props.level as number) || 1;
+        const level = this.finiteNum(node.props.level, 1);
         const text = (node.props.value as string) || '';
         const marker = '#'.repeat(level);
         lines.push(`${prefix}${marker} ${text}`.substring(0, 64).padEnd(64) + '║');
@@ -572,9 +572,9 @@ export class A2UIManager extends EventEmitter {
       }
 
       case 'slider': {
-        const value = (node.props.value as number) || 0;
-        const min = (node.props.min as number) || 0;
-        const max = (node.props.max as number) || 100;
+        const value = this.finiteNum(node.props.value, 0);
+        const min = this.finiteNum(node.props.min, 0);
+        const max = this.finiteNum(node.props.max, 100);
         const percent = ((value - min) / (max - min)) * 100;
         const barWidth = 20;
         const filled = Math.round((percent / 100) * barWidth);
@@ -589,7 +589,7 @@ export class A2UIManager extends EventEmitter {
       }
 
       case 'spacer': {
-        const size = (node.props.size as number) || 1;
+        const size = this.finiteNum(node.props.size, 1);
         for (let i = 0; i < Math.min(size, 3); i++) {
           lines.push(`${prefix}`.padEnd(64) + '║');
         }
@@ -627,8 +627,8 @@ export class A2UIManager extends EventEmitter {
       }
 
       case 'progress': {
-        const value = (node.props.value as number) || 0;
-        const max = (node.props.max as number) || 100;
+        const value = this.finiteNum(node.props.value, 0);
+        const max = this.finiteNum(node.props.max, 100);
         const percent = Math.round((value / max) * 100);
         const barWidth = 20;
         const filled = Math.round((percent / 100) * barWidth);
@@ -799,7 +799,7 @@ export class A2UIManager extends EventEmitter {
 
     switch (node.type) {
       case 'heading': {
-        const level = Math.min(6, Math.max(1, (node.props.level as number) || 1));
+        const level = Math.min(6, Math.max(1, this.finiteNum(node.props.level, 1)));
         const text = this.escapeHTML((node.props.value as string) || '');
         return `${pad}<h${level} class="a2ui-heading" style="${styleAttr}">${text}</h${level}>`;
       }
@@ -839,13 +839,13 @@ export class A2UIManager extends EventEmitter {
         const label = this.escapeHTML((node.props.label as string) || '');
         const value = this.escapeHTML((node.props.value as string) || '');
         const placeholder = this.escapeHTML((node.props.placeholder as string) || '');
-        const rows = (node.props.rows as number) || 4;
+        const rows = this.finiteNum(node.props.rows, 4);
         const disabled = node.props.disabled ? ' disabled' : '';
         let html = `${pad}<div class="a2ui-field" style="${styleAttr}">`;
         if (label) {
           html += `\n${pad}  <label class="a2ui-label">${label}</label>`;
         }
-        html += `\n${pad}  <textarea class="a2ui-textarea" rows="${rows}" placeholder="${placeholder}" data-component-id="${node.id}"${disabled}>${value}</textarea>`;
+        html += `\n${pad}  <textarea class="a2ui-textarea" rows="${rows}" placeholder="${placeholder}" data-component-id="${this.escapeHTML(this.safeIdent(node.id, 'unknown'))}"${disabled}>${value}</textarea>`;
         html += `\n${pad}</div>`;
         return html;
       }
@@ -854,21 +854,21 @@ export class A2UIManager extends EventEmitter {
         const label = this.escapeHTML((node.props.label as string) || '');
         const checked = node.props.checked ? ' checked' : '';
         const disabled = node.props.disabled ? ' disabled' : '';
-        return `${pad}<label class="a2ui-checkbox" style="${styleAttr}"><input type="checkbox" data-component-id="${node.id}"${checked}${disabled}> ${label}</label>`;
+        return `${pad}<label class="a2ui-checkbox" style="${styleAttr}"><input type="checkbox" data-component-id="${this.escapeHTML(this.safeIdent(node.id, 'unknown'))}"${checked}${disabled}> ${label}</label>`;
       }
 
       case 'switch': {
         const label = this.escapeHTML((node.props.label as string) || '');
         const checked = node.props.checked ? ' checked' : '';
         const disabled = node.props.disabled ? ' disabled' : '';
-        return `${pad}<label class="a2ui-switch" style="${styleAttr}"><input type="checkbox" data-component-id="${node.id}"${checked}${disabled}><span class="a2ui-switch-slider"></span> ${label}</label>`;
+        return `${pad}<label class="a2ui-switch" style="${styleAttr}"><input type="checkbox" data-component-id="${this.escapeHTML(this.safeIdent(node.id, 'unknown'))}"${checked}${disabled}><span class="a2ui-switch-slider"></span> ${label}</label>`;
       }
 
       case 'radio': {
         const label = this.escapeHTML((node.props.label as string) || '');
         const value = this.escapeHTML((node.props.value as string) || '');
         const disabled = node.props.disabled ? ' disabled' : '';
-        return `${pad}<label class="a2ui-radio" style="${styleAttr}"><input type="radio" value="${value}" data-component-id="${node.id}"${disabled}> ${label}</label>`;
+        return `${pad}<label class="a2ui-radio" style="${styleAttr}"><input type="radio" value="${value}" data-component-id="${this.escapeHTML(this.safeIdent(node.id, 'unknown'))}"${disabled}> ${label}</label>`;
       }
 
       case 'select': {
@@ -880,7 +880,7 @@ export class A2UIManager extends EventEmitter {
         if (label) {
           html += `\n${pad}  <label class="a2ui-label">${label}</label>`;
         }
-        html += `\n${pad}  <select class="a2ui-select" data-component-id="${node.id}"${disabled}>`;
+        html += `\n${pad}  <select class="a2ui-select" data-component-id="${this.escapeHTML(this.safeIdent(node.id, 'unknown'))}"${disabled}>`;
         for (const opt of options) {
           const selected = opt.value === value ? ' selected' : '';
           html += `\n${pad}    <option value="${this.escapeHTML(opt.value)}"${selected}>${this.escapeHTML(opt.label)}</option>`;
@@ -891,19 +891,19 @@ export class A2UIManager extends EventEmitter {
       }
 
       case 'slider': {
-        const value = (node.props.value as number) || 0;
-        const min = (node.props.min as number) || 0;
-        const max = (node.props.max as number) || 100;
-        const step = (node.props.step as number) || 1;
+        const value = this.finiteNum(node.props.value, 0);
+        const min = this.finiteNum(node.props.min, 0);
+        const max = this.finiteNum(node.props.max, 100);
+        const step = this.finiteNum(node.props.step, 1);
         const disabled = node.props.disabled ? ' disabled' : '';
-        return `${pad}<input type="range" class="a2ui-slider" value="${value}" min="${min}" max="${max}" step="${step}" data-component-id="${node.id}" style="${styleAttr}"${disabled}>`;
+        return `${pad}<input type="range" class="a2ui-slider" value="${value}" min="${min}" max="${max}" step="${step}" data-component-id="${this.escapeHTML(this.safeIdent(node.id, 'unknown'))}" style="${styleAttr}"${disabled}>`;
       }
 
       case 'divider':
         return `${pad}<hr class="a2ui-divider" style="${styleAttr}">`;
 
       case 'spacer': {
-        const size = (node.props.size as number) || 16;
+        const size = this.finiteNum(node.props.size, 16);
         return `${pad}<div class="a2ui-spacer" style="height: ${size}px;"></div>`;
       }
 
@@ -949,8 +949,8 @@ export class A2UIManager extends EventEmitter {
       }
 
       case 'progress': {
-        const value = (node.props.value as number) || 0;
-        const max = (node.props.max as number) || 100;
+        const value = this.finiteNum(node.props.value, 0);
+        const max = this.finiteNum(node.props.max, 100);
         const percent = Math.round((value / max) * 100);
         const showLabel = node.props.showLabel !== false;
         let html = `${pad}<div class="a2ui-progress" style="${styleAttr}">`;
@@ -1040,7 +1040,7 @@ export class A2UIManager extends EventEmitter {
       }
 
       default: {
-        let html = `${pad}<div class="a2ui-${node.type}" data-component-id="${node.id}" style="${styleAttr}">`;
+        let html = `${pad}<div class="a2ui-${node.type}" data-component-id="${this.escapeHTML(this.safeIdent(node.id, 'unknown'))}" style="${styleAttr}">`;
         for (const child of node.children) {
           html += '\n' + this.renderNodeToHTML(child, indent + 1);
         }
@@ -1117,6 +1117,11 @@ export class A2UIManager extends EventEmitter {
    */
   private escapeHTML(str: string): string {
     return guardEscapeHtml(str);
+  }
+
+  /** Finite, non-zero number or the fallback: a prop typed `number` may arrive as a string. */
+  private finiteNum(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) && value !== 0 ? value : fallback;
   }
 
   /** Fail-closed id / action / class token for attributes. */
