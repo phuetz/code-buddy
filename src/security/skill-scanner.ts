@@ -15,6 +15,7 @@ import {
   sliceScanWindows,
 } from './text-deobfuscation.js';
 import { analyzeShellCommandWords, makefileRecipeText, type ShellWordFindingKind } from './shell-command-words.js';
+import { findExecutablePayloads } from './skill-executable-gate.js';
 
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
@@ -27,6 +28,12 @@ export interface ScanFinding {
   evidence: string;
   /** Documentary risk retained for review, never an executable authorization. */
   documentary?: boolean;
+  /**
+   * Shell pattern found in a script that will only ever run confined by
+   * bubblewrap (no network, read-only system): kept as a warning, excluded
+   * from the verdict. Never set on prompt-injection findings nor on SKILL.md.
+   */
+  confined?: boolean;
 }
 
 export interface ScanResult {
@@ -61,6 +68,17 @@ export interface SkillFirewallReport {
   summary: string;
   target: string;
   verdict: SkillFirewallVerdict;
+  /** Shell findings downgraded to warnings because scripts run under bubblewrap. */
+  warnings?: ScanFinding[];
+}
+
+export interface SkillFirewallOptions {
+  /**
+   * The skill's scripts will run confined by bubblewrap (caller checked
+   * `isSkillScriptConfinementActive`). Shell-capability findings located in
+   * those scripts become warnings; everything else keeps its treatment.
+   */
+  confinedScripts?: boolean;
 }
 
 interface DangerousPattern {
@@ -903,7 +921,7 @@ export function scanAllSkills(projectRoot: string = process.cwd()): ScanResult[]
  * a trust score, capability flags, and an install verdict suitable for
  * marketplace/candidate quarantine flows.
  */
-export function scanSkillFirewall(targetPath: string): SkillFirewallReport {
+export function scanSkillFirewall(targetPath: string, options: SkillFirewallOptions = {}): SkillFirewallReport {
   const normalizedTarget = path.resolve(targetPath);
   let info: fs.Stats | undefined;
   try {
@@ -925,10 +943,45 @@ export function scanSkillFirewall(targetPath: string): SkillFirewallReport {
   } else if (!info.isDirectory() && !info.isFile()) {
     return buildSkillFirewallReport(normalizedTarget, [unreadFinding(normalizedTarget, 'special')]);
   }
-  const results = info.isDirectory() && !info.isSymbolicLink()
+  const isDir = info.isDirectory() && !info.isSymbolicLink();
+  const results = isDir
     ? scanDirectory(normalizedTarget)
     : [readOrRefuse(scanFile(normalizedTarget))];
+  if (options.confinedScripts && isDir) markConfinedScriptFindings(normalizedTarget, results);
   return buildSkillFirewallReport(normalizedTarget, results);
+}
+
+/** Capability of a finding, as the verdict sees it. */
+function findingCapability(finding: ScanFinding): SkillFirewallCapability | undefined {
+  const pattern = DANGEROUS_PATTERNS.find((item) => item.name === finding.pattern);
+  if (pattern) return pattern.capability;
+  return STRUCTURAL_SHELL_PATTERNS.has(finding.pattern) ? 'shell' : undefined;
+}
+
+/**
+ * Downgrade shell findings of the skill's SCRIPTS (files the executable gate
+ * classifies as scripts: those are what bubblewrap runs). SKILL.md and other
+ * documents are instructions to the agent, run outside this confinement: they
+ * keep their verdict. Prompt-injection and every non-shell capability stay.
+ */
+function markConfinedScriptFindings(skillDir: string, results: ScanResult[]): void {
+  let scripts: Set<string>;
+  try {
+    scripts = new Set(
+      findExecutablePayloads(skillDir)
+        .filter((file) => file.kind === 'script')
+        .map((file) => path.resolve(skillDir, ...file.relPath.split('/'))),
+    );
+  } catch {
+    return;
+  }
+  for (const result of results) {
+    if (result.textRead !== true || !scripts.has(path.resolve(result.file))) continue;
+    for (const finding of result.findings) {
+      if (finding.documentary) continue;
+      if (findingCapability(finding) === 'shell') finding.confined = true;
+    }
+  }
 }
 
 export function buildSkillFirewallReport(
@@ -936,14 +989,17 @@ export function buildSkillFirewallReport(
   results: ScanResult[],
 ): SkillFirewallReport {
   const findings = results.flatMap((result) => result.findings);
+  const warnings = findings.filter(f => f.confined && !f.documentary);
   const findingCounts = countFindings(findings);
   const capabilities = inferCapabilities(findings);
-  const score = computeFirewallScore(countFindings(findings.filter(f => !f.documentary)));
-  const activeCounts = countFindings(findings.filter(f => !f.documentary));
+  const blocking = findings.filter(f => !f.documentary && !f.confined);
+  const score = computeFirewallScore(countFindings(blocking));
+  const activeCounts = countFindings(blocking);
   const activeScore = computeFirewallScore(activeCounts);
-  const activeCapabilities = inferCapabilities(findings.filter(f => !f.documentary));
+  const activeCapabilities = inferCapabilities(blocking);
   const activeVerdict = determineFirewallVerdict(activeCounts, activeCapabilities, activeScore);
   const verdict = activeVerdict === 'allow' && findings.some(f => f.documentary) ? 'review' : activeVerdict;
+  const summary = summarizeFirewall(verdict, score, findingCounts, capabilities);
 
   return {
     schemaVersion: 1,
@@ -953,9 +1009,12 @@ export function buildSkillFirewallReport(
     generatedAt: new Date().toISOString(),
     quarantineRequired: verdict === 'quarantine',
     score,
-    summary: summarizeFirewall(verdict, score, findingCounts, capabilities),
+    summary: warnings.length
+      ? `${summary} ${warnings.length} shell finding${warnings.length > 1 ? 's' : ''} in scripts downgraded to warnings (scripts run under bubblewrap: no network, read-only system).`
+      : summary,
     target: targetPath,
     verdict,
+    ...(warnings.length ? { warnings } : {}),
   };
 }
 

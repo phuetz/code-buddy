@@ -8,13 +8,20 @@
 
 import { importedSkillRoots } from './skill-executable-gate.js';
 import { spawnSync as realSpawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from 'child_process';
-import { existsSync as realExistsSync, mkdirSync as realMkdirSync, readFileSync as realReadFileSync } from 'fs';
+import { existsSync as realExistsSync, mkdirSync as realMkdirSync, mkdtempSync as realMkdtempSync, readFileSync as realReadFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
 
 export const NATIVE_SANDBOX_ENV = 'CODEBUDDY_NATIVE_SANDBOX';
+/**
+ * Opt-in: scripts of imported skills run under bubblewrap (no network, read-only
+ * system, writes limited to the work dir or a dedicated tmp). Only while this
+ * confinement is usable does the skill firewall downgrade shell patterns found in
+ * those scripts to warnings (prompt-injection patterns always stay blocking).
+ */
+export const SKILL_SCRIPT_SANDBOX_ENV = 'CODEBUDDY_SKILL_SCRIPT_SANDBOX';
 
 export type NativeSandboxBackend = 'none' | 'bwrap' | 'landlock' | 'seatbelt';
 export type RequestedNativeSandboxBackend = 'auto' | 'bwrap' | 'landlock' | 'seatbelt';
@@ -23,6 +30,15 @@ const OFF_TOKENS = new Set(['', '0', 'false', 'off', 'no', 'none', 'disabled']);
 
 const DEFAULT_RO_ROOTS = ['/usr', '/bin', '/lib', '/lib64', '/sbin', '/proc', '/dev', '/opt', '/nix', '/snap'];
 const FORBIDDEN_WRITABLE_ROOTS = new Set(['/', '/etc', '/tmp', '/var', '/var/tmp', '/usr', '/bin', '/sbin', '/root', '/home']);
+/**
+ * Non-secret /etc entries re-exposed read-only to imported skill scripts (/etc
+ * itself stays hidden): Debian alternatives (awk…), dynamic loader cache, fonts,
+ * time zone, user/group names (no shadow), LibreOffice registry for office skills.
+ */
+const SKILL_SCRIPT_ETC_READ_ONLY = [
+  '/etc/alternatives', '/etc/ld.so.cache', '/etc/ld.so.conf', '/etc/ld.so.conf.d', '/etc/fonts',
+  '/etc/localtime', '/etc/passwd', '/etc/group', '/etc/nsswitch.conf', '/etc/libreoffice',
+];
 const HOME_SECRET_NAMES = ['.ssh', '.gnupg', '.codebuddy', '.aws', '.kube', '.docker', '.netrc', '.npmrc'];
 
 const LANDLOCK_ABI_PROBE = [
@@ -40,6 +56,13 @@ export interface NativeSandboxPolicy {
   network: boolean;
   hidePaths: string[];
   readOnlyRoots: string[];
+  /** Paths re-bound read-only after the writable binds and hides (bwrap only). */
+  readOnlyBinds?: string[];
+  /**
+   * bwrap only: keep the sandbox's own /tmp (a fresh, private tmpfs discarded at
+   * exit) writable. Tools such as LibreOffice need a writable /tmp for their pipes.
+   */
+  privateWritableTmp?: boolean;
 }
 
 export interface NativeSandboxCapabilities {
@@ -62,6 +85,11 @@ export interface ConfineSpawnInput {
   env: NodeJS.ProcessEnv;
   projectRoot?: string;
   network?: boolean;
+  /**
+   * The command runs files of imported skills: bubblewrap confinement is
+   * mandatory (independent of CODEBUDDY_NATIVE_SANDBOX), or the command is refused.
+   */
+  skillConfinement?: { skillDirs: string[] };
 }
 
 export type ConfineSpawnResult =
@@ -85,6 +113,8 @@ export interface NativeSandboxIo {
   kernelRelease?: () => string;
   capabilities?: NativeSandboxCapabilities;
   helperPath?: string;
+  mkdtempSync?: (prefix: string) => string;
+  tmpdir?: () => string;
 }
 
 let cachedCapabilities: NativeSandboxCapabilities | null = null;
@@ -301,6 +331,11 @@ export function formatDoctorLine(caps: NativeSandboxCapabilities): string {
   return `Native sandbox: seatbelt (${caps.sandboxExecPath}). ${enabledHint}`;
 }
 
+function isInside(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
 export function buildBwrapArgv(policy: NativeSandboxPolicy, command: string[]): string[] {
   const argv: string[] = [
     '--die-with-parent',
@@ -313,12 +348,27 @@ export function buildBwrapArgv(policy: NativeSandboxPolicy, command: string[]): 
   ];
   if (!policy.network) argv.push('--unshare-net');
   argv.push('--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc');
-  argv.push('--tmpfs', '/tmp', '--remount-ro', '/tmp');
+  // Every mount point under /tmp is created while the fresh /tmp is still
+  // writable; it turns read-only last (the remount is not recursive). bwrap
+  // cannot create a mount point in a read-only tmpfs: a project, a dedicated
+  // tmp or a hidden path under /tmp used to fail with "Can't create file".
+  argv.push('--tmpfs', '/tmp');
   argv.push('--bind', policy.projectRoot, policy.projectRoot);
   argv.push('--bind', policy.tmpDir, policy.tmpDir);
+  const roBinds = [...(policy.readOnlyBinds ?? [])];
   for (const hide of policy.hidePaths) {
-    argv.push('--tmpfs', hide, '--remount-ro', hide);
+    argv.push('--tmpfs', hide);
+    // A read-only bind nested in a hidden path needs its mount point before the remount.
+    for (let i = roBinds.length - 1; i >= 0; i--) {
+      if (isInside(roBinds[i]!, hide)) {
+        argv.push('--ro-bind', roBinds[i]!, roBinds[i]!);
+        roBinds.splice(i, 1);
+      }
+    }
+    argv.push('--remount-ro', hide);
   }
+  for (const bind of roBinds) argv.push('--ro-bind', bind, bind);
+  if (!policy.privateWritableTmp) argv.push('--remount-ro', '/tmp');
   argv.push('--chdir', policy.chdir);
   argv.push('--setenv', 'TMPDIR', policy.tmpDir);
   argv.push('--', ...command);
@@ -382,7 +432,7 @@ function defaultHidePaths(homeDir: string, env: NodeJS.ProcessEnv = process.env)
   ];
 }
 
-function isForbiddenWritableRoot(resolved: string, homeDir: string): boolean {
+export function isForbiddenWritableRoot(resolved: string, homeDir: string): boolean {
   if (FORBIDDEN_WRITABLE_ROOTS.has(resolved)) return true;
   if (resolved === homeDir) return true;
   for (const name of HOME_SECRET_NAMES) {
@@ -476,6 +526,9 @@ function selectBackend(
 }
 
 export function confineSpawn(input: ConfineSpawnInput, io: NativeSandboxIo = {}): ConfineSpawnResult {
+  if (input.skillConfinement) {
+    return confineSkillScriptSpawn({ ...input, skillConfinement: input.skillConfinement }, io);
+  }
   const flagEnv = io.env ?? process.env;
   if (!isNativeSandboxEnabled(flagEnv)) {
     return { ok: true, file: input.file, args: input.args, env: input.env, backend: 'none' };
@@ -542,5 +595,121 @@ export function confineSpawn(input: ConfineSpawnInput, io: NativeSandboxIo = {})
     args: buildSeatbeltArgv(buildSeatbeltProfile(policy), command),
     env: nextEnv,
     backend: 'seatbelt',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Imported skill scripts: bubblewrap confinement (C2-PROTO-1005)
+// ---------------------------------------------------------------------------
+
+/** Opt-in flag for imported skill scripts. Unset or an off token: legacy behaviour. */
+export function isSkillScriptSandboxRequested(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env[SKILL_SCRIPT_SANDBOX_ENV];
+  if (raw == null) return false;
+  return !OFF_TOKENS.has(raw.trim().toLowerCase());
+}
+
+export interface SkillScriptConfinementStatus {
+  available: boolean;
+  reason: string;
+}
+
+/** Bubblewrap only: Landlock/seatbelt cannot cut the network per process here. */
+export function skillScriptConfinementStatus(io: NativeSandboxIo = {}): SkillScriptConfinementStatus {
+  const platform = io.platform ?? process.platform;
+  if (platform !== 'linux') return { available: false, reason: `bubblewrap is Linux-only (platform ${platform})` };
+  const caps = detectNativeSandboxCapabilities(io);
+  if (caps.bwrapUsable && caps.bwrapPath) {
+    return { available: true, reason: `bubblewrap ${caps.bwrapVersion || caps.bwrapPath} usable` };
+  }
+  return {
+    available: false,
+    reason: caps.bwrapPath
+      ? `bubblewrap present but unusable (${caps.bwrapUnusableReason || 'probe failed'})`
+      : 'bubblewrap not found on PATH',
+  };
+}
+
+/**
+ * True when the skill firewall may downgrade shell patterns of imported
+ * scripts: the flag is set AND bubblewrap really works on this host.
+ */
+export function isSkillScriptConfinementActive(io: NativeSandboxIo = {}): boolean {
+  return isSkillScriptSandboxRequested(io.env ?? process.env) && skillScriptConfinementStatus(io).available;
+}
+
+function skillRefusal(reason: string): ConfineSpawnResult {
+  return {
+    ok: false,
+    error: `Imported skill scripts must run confined by bubblewrap, but confinement cannot be applied: ${reason}. The command was not executed.`,
+  };
+}
+
+/**
+ * Policy for a command that runs imported skill files: no network, the whole
+ * system read-only, secrets and /etc hidden (a few non-secret /etc entries
+ * re-exposed read-only), the skill directories read-only, writes only in the
+ * work dir (when it is a safe root outside the skills), in a dedicated per-run
+ * tmp and in the sandbox's private, ephemeral /tmp.
+ */
+export function buildSkillScriptPolicy(
+  cwd: string,
+  skillDirs: string[],
+  io: NativeSandboxIo = {},
+): NativeSandboxPolicy | { error: string } {
+  const existsSync = io.existsSync ?? realExistsSync;
+  const homeDir = path.resolve((io.homedir ?? os.homedir)());
+  const env = io.env ?? process.env;
+  const skills = [...new Set(skillDirs.map((dir) => path.resolve(dir)))];
+  let tmpDir: string;
+  try {
+    tmpDir = (io.mkdtempSync ?? realMkdtempSync)(path.join((io.tmpdir ?? os.tmpdir)(), 'codebuddy-skill-'));
+  } catch (error: unknown) {
+    return { error: `could not create a dedicated tmp (${error instanceof Error ? error.message : String(error)})` };
+  }
+  const workDir = path.resolve(cwd);
+  const importedRoots = importedSkillRoots(env).map((root) => path.resolve(root));
+  const workDirIsSafe = !isForbiddenWritableRoot(workDir, homeDir)
+    && !skills.some((dir) => isInside(workDir, dir) || isInside(dir, workDir))
+    && !importedRoots.some((root) => isInside(workDir, root));
+  const hidePaths = existingPaths(
+    defaultHidePaths(homeDir, env).filter((hide) => !importedRoots.includes(path.resolve(hide))),
+    existsSync,
+  );
+  return {
+    projectRoot: workDirIsSafe ? workDir : tmpDir,
+    tmpDir,
+    homeDir,
+    chdir: workDir,
+    network: false,
+    hidePaths,
+    readOnlyRoots: existingPaths(DEFAULT_RO_ROOTS, existsSync),
+    readOnlyBinds: [
+      ...existingPaths(hidePaths.includes('/etc') ? SKILL_SCRIPT_ETC_READ_ONLY : [], existsSync),
+      ...skills.filter((dir) => existsSync(dir)),
+    ],
+    privateWritableTmp: true,
+  };
+}
+
+/** Wrap a spawn that runs imported skill files. Never falls back to an unconfined run. */
+export function confineSkillScriptSpawn(
+  input: ConfineSpawnInput & { skillConfinement: { skillDirs: string[] } },
+  io: NativeSandboxIo = {},
+): ConfineSpawnResult {
+  const status = skillScriptConfinementStatus(io);
+  if (!status.available) return skillRefusal(status.reason);
+  const caps = detectNativeSandboxCapabilities(io);
+  if (!caps.bwrapPath) return skillRefusal('bubblewrap path missing after a successful probe');
+  const policy = buildSkillScriptPolicy(input.cwd, input.skillConfinement.skillDirs, io);
+  if ('error' in policy) return skillRefusal(policy.error);
+  const env: NodeJS.ProcessEnv = { ...input.env, TMPDIR: policy.tmpDir, TMP: policy.tmpDir, TEMP: policy.tmpDir };
+  logger.debug('native-sandbox: imported skill command wrapped with bubblewrap (network off)');
+  return {
+    ok: true,
+    file: caps.bwrapPath,
+    args: buildBwrapArgv(policy, [input.file, ...input.args]),
+    env,
+    backend: 'bwrap',
   };
 }

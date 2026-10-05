@@ -108,7 +108,10 @@ export async function* executeStreaming(
   let requiresDirectApproval = policy.action === 'ask';
   let escalationReason = policy.reason;
 
-  if (policy.action === 'sandbox') {
+  // Imported skill files run under the skill bubblewrap policy: skip the workspace sandbox.
+  const skillConfinement = importedScripts?.confinement;
+
+  if (policy.action === 'sandbox' && !skillConfinement) {
     const changedBeforeSandbox = pinChanged();
     if (changedBeforeSandbox) return changedBeforeSandbox;
     const sandboxed = await executeInWorkspaceSandbox(executionCommand, cwd, timeout, signal);
@@ -208,6 +211,7 @@ export async function* executeStreaming(
     args: [...shellConfiguration.argsPrefix, shellCommand],
     cwd,
     env: controlledEnv,
+    ...(skillConfinement ? { skillConfinement } : {}),
   });
   if (!confined.ok) {
     return { success: false, error: confined.error };

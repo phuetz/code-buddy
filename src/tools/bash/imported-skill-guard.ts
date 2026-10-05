@@ -40,6 +40,7 @@ import {
   sha256File,
   type ExecAllowlistEntry,
 } from '../../security/skill-executable-gate.js';
+import { isSkillScriptSandboxRequested, skillScriptConfinementStatus } from '../../security/native-sandbox.js';
 
 const IMPORTED_PREFIX = 'imported-';
 
@@ -95,10 +96,12 @@ interface SkillScriptManifest {
   /** chemin relatif au skill installé -> chemin relatif au dossier source. */
   scripts: Map<string, string>;
   warnings: Map<string, string[]>;
+  /** `scriptsConfined: true`: admitted only because its scripts run under bubblewrap. */
+  confined: boolean;
 }
 
 function readManifest(skillDir: string): SkillScriptManifest {
-  const empty: SkillScriptManifest = { source: '', unverified: false, scripts: new Map(), warnings: new Map() };
+  const empty: SkillScriptManifest = { source: '', unverified: false, scripts: new Map(), warnings: new Map(), confined: false };
   try {
     const raw = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf-8');
     const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -115,7 +118,7 @@ function readManifest(skillDir: string): SkillScriptManifest {
         }
       }
     }
-    return { source: typeof fm.source === 'string' ? fm.source : '', unverified: fm.scriptsUnverified === true || scripts.size > 0, scripts, warnings };
+    return { source: typeof fm.source === 'string' ? fm.source : '', unverified: fm.scriptsUnverified === true || scripts.size > 0, scripts, warnings, confined: fm.scriptsConfined === true };
   } catch {
     return empty;
   }
@@ -743,6 +746,32 @@ export interface ImportedScriptDecision {
    * À appeler juste avant le lancement (approbation liée au contenu).
    */
   verifyUnchanged(): string | null;
+  /**
+   * Présent : la commande DOIT être lancée sous bubblewrap (réseau coupé, système en
+   * lecture seule, skills en lecture seule) — `confineSpawn({ skillConfinement })`.
+   */
+  confinement?: { skillDirs: string[] };
+}
+
+/**
+ * Confinement des fichiers de skills importés (C2-PROTO-1005).
+ * - skill marqué `scriptsConfined` (admis grâce à bwrap) : bwrap obligatoire, sinon refus ;
+ * - CODEBUDDY_SKILL_SCRIPT_SANDBOX demandé et bwrap utilisable : confinement ;
+ * - demandé mais bwrap absent, skill non marqué : comportement historique (confirmation, non confiné).
+ */
+function resolveConfinement(hits: ImportedScriptHit[]): { confinement?: { skillDirs: string[] }; refusal?: string } {
+  const skillDirs = [...new Set(hits.map(h => h.skillDir))];
+  const required = skillDirs.filter(dir => readManifest(dir).confined);
+  if (required.length === 0 && !isSkillScriptSandboxRequested()) return {};
+  const status = skillScriptConfinementStatus();
+  if (status.available) return { confinement: { skillDirs } };
+  if (required.length > 0) {
+    return {
+      refusal: `Imported skill ${required[0]} was admitted only because its scripts run under bubblewrap `
+        + `(shell patterns downgraded to warnings), but ${status.reason}. Command refused, never run unconfined.`,
+    };
+  }
+  return {};
 }
 
 /** Même garde pour un outil qui exécute du CODE (execute_code, code_exec, cellule, run_script…). */
@@ -786,8 +815,11 @@ export async function confirmImportedSkillScripts(
     }
     return null;
   };
+  const { confinement, refusal } = resolveConfinement(hits);
+  if (refusal) return { confirmed: false, error: refusal, verifyUnchanged };
+  const confined = confinement ? { confinement } : {};
   const pending = hits.filter(h => !h.allowed);
-  if (pending.length === 0) return { confirmed: true, verifyUnchanged };
+  if (pending.length === 0) return { confirmed: true, verifyUnchanged, ...confined };
   const shown = pending.slice(0, 5).map(h =>
     h.covering
       ? `${h.covering}, which contains or overlaps imported skill ${h.skillDir} (unverified scripts)`
@@ -804,7 +836,8 @@ export async function confirmImportedSkillScripts(
         `Command: ${command}\nWorking directory: ${cwd}\n`
         + `Unverified file${pending.length > 1 ? 's' : ''} from an imported skill:\n  ${shown}\n`
         + 'Read the file first. Approval is bound to the sha256 above: if the file changes, the command is refused. '
-        + 'To stop asking, add its exact line to ~/.codebuddy/skill-exec-allowlist.json.',
+        + 'To stop asking, add its exact line to ~/.codebuddy/skill-exec-allowlist.json.'
+        + (confinement ? '\nIt will run under bubblewrap: network off, system read-only, writes limited to the work dir and a dedicated tmp.' : ''),
       riskLevel: 'high',
       // Fresh human decision every time: no mode, env flag or session grant approves it.
       forcePrompt: true,
@@ -813,6 +846,6 @@ export async function confirmImportedSkillScripts(
     'bash',
   );
   return result.confirmed
-    ? { confirmed: true, verifyUnchanged }
+    ? { confirmed: true, verifyUnchanged, ...confined }
     : { confirmed: false, error: result.feedback || 'Imported skill script not approved', verifyUnchanged };
 }

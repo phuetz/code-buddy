@@ -172,7 +172,7 @@ export class BashTool implements Disposable {
    */
   private executeWithSpawn(
     command: string,
-    options: { timeout: number; cwd: string; signal?: AbortSignal }
+    options: { timeout: number; cwd: string; signal?: AbortSignal; skillConfinement?: { skillDirs: string[] } }
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve) => {
       let stdout = '';
@@ -212,6 +212,7 @@ export class BashTool implements Disposable {
         args: [...shellConfiguration.argsPrefix, shellCommand],
         cwd: options.cwd,
         env: controlledEnv,
+        ...(options.skillConfinement ? { skillConfinement: options.skillConfinement } : {}),
       });
       if (!confined.ok) {
         resolve({ stdout: '', stderr: confined.error, exitCode: 1 });
@@ -464,7 +465,11 @@ export class BashTool implements Disposable {
       let requiresDirectApproval = policy.action === 'ask';
       let escalationReason = policy.reason;
 
-      if (policy.action === 'sandbox') {
+      // Imported skill files run under the skill bubblewrap policy (network off,
+      // read-only system), stricter than the workspace sandbox: skip the latter.
+      const skillConfinement = importedScripts?.confinement;
+
+      if (policy.action === 'sandbox' && !skillConfinement) {
         const changedBeforeSandbox = pinChanged();
         if (changedBeforeSandbox) return changedBeforeSandbox;
         const sandboxed = await executeInWorkspaceSandbox(
@@ -561,6 +566,7 @@ export class BashTool implements Disposable {
         timeout,
         cwd: effectiveCwd,
         ...(signal ? { signal } : {}),
+        ...(skillConfinement ? { skillConfinement } : {}),
       });
 
       if (result.exitCode !== 0) {
@@ -767,6 +773,7 @@ export class BashTool implements Disposable {
         args,
         cwd: workDir,
         env: policyEnv,
+        ...(importedScripts?.confinement ? { skillConfinement: importedScripts.confinement } : {}),
       });
       if (!confined.ok) {
         resolve({ success: false, error: confined.error });

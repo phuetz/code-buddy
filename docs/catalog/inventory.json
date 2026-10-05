@@ -2291,7 +2291,7 @@
         "checks": [
           {
             "file": "src/skills/skill-importer.ts",
-            "contains": "scanSkillFirewall(skillDir)"
+            "contains": "scanSkillFirewall(skillDir"
           }
         ]
       },

@@ -18,6 +18,7 @@ import { createHash } from 'crypto';
 import * as yaml from 'yaml';
 import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import { scanSkillFirewall, type SkillFirewallReport } from '../security/skill-scanner.js';
+import { isSkillScriptConfinementActive } from '../security/native-sandbox.js';
 import { checkExecutablePayloads, disarmScripts, sha256File, loadExecAllowlist, allowlistLine, type ExecAllowlistEntry, type ExecutableFile } from '../security/skill-executable-gate.js';
 import { parseSkillFile, validateSkill } from './parser.js';
 import { importAgents, type AgentImportReport } from './agent-importer.js';
@@ -53,6 +54,12 @@ export interface ImportOptions {
    * imported inert (execute bit removed) and asks for a confirmation each time it is run.
    */
   execAllowlist?: ExecAllowlistEntry[];
+  /**
+   * Scripts will run confined by bubblewrap: shell patterns found in them are
+   * warnings instead of blockers. Default: `CODEBUDDY_SKILL_SCRIPT_SANDBOX` is set
+   * AND bubblewrap is usable here. Without bubblewrap the legacy blocking applies.
+   */
+  confinedScripts?: boolean;
 }
 
 /** A script copied inert (execute bit removed): running it asks for a confirmation. */
@@ -74,6 +81,8 @@ export interface ImportedSkill {
   verdict: string;
   /** Present when the skill ships scripts that were not allowlisted (inert + confirmation). */
   inertScripts?: InertScript[];
+  /** Shell findings downgraded to warnings: admitted only because scripts run under bubblewrap. */
+  confinedWarnings?: string[];
 }
 export interface SkippedSkill {
   sourcePath: string;
@@ -227,7 +236,7 @@ function extractRequiresTools(rawFm: Record<string, unknown>): string[] {
 export function remapSkill(
   rawFm: Record<string, unknown>,
   body: string,
-  opts: { slug: string; source: string; pinned: boolean; scripts?: Array<{ path: string; sourcePath: string; sha256: string; warnings?: string[] }>; scriptsUnverified?: boolean },
+  opts: { slug: string; source: string; pinned: boolean; scripts?: Array<{ path: string; sourcePath: string; sha256: string; warnings?: string[] }>; scriptsUnverified?: boolean; scriptsConfined?: boolean },
 ): string {
   const description = String(rawFm.description ?? '').trim() || `Imported skill ${opts.slug}`;
   const tags = normalizeTags(extractTags(rawFm));
@@ -247,6 +256,8 @@ export function remapSkill(
     source: opts.source,
     ...(opts.pinned ? { pinned: true } : {}),
     ...(opts.scripts?.length ? { ...(opts.scriptsUnverified ? { scriptsUnverified: true } : {}), scripts: opts.scripts } : {}),
+    // Admitted on the condition that its scripts never run unconfined (runtime guard).
+    ...(opts.scriptsConfined ? { scriptsConfined: true } : {}),
   };
   return `---\n${yaml.stringify(meta)}---\n\n${body.trim()}\n`;
 }
@@ -278,9 +289,9 @@ function copySupportDirs(srcDir: string, destDir: string): void {
  */
 function firewallForImport(
   skillDir: string,
-  gate: { sourceRoot: string; source: string; allowlist: readonly ExecAllowlistEntry[] | (() => readonly ExecAllowlistEntry[]) },
+  gate: { sourceRoot: string; source: string; allowlist: readonly ExecAllowlistEntry[] | (() => readonly ExecAllowlistEntry[]); confinedScripts?: boolean },
 ): { report: SkillFirewallReport; unverifiedScripts: ExecutableFile[]; executables: ExecutableFile[] } {
-  const report = scanSkillFirewall(skillDir);
+  const report = scanSkillFirewall(skillDir, { confinedScripts: gate.confinedScripts === true });
   const exec = checkExecutablePayloads(skillDir, gate);
   if (exec.blocked) {
     return { report: { ...report, verdict: 'quarantine', quarantineRequired: true, summary: exec.reason }, unverifiedScripts: [], executables: [] };
@@ -311,7 +322,8 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
   const dryRun = options.dryRun ?? false;
   const pinByDefault = options.pinByDefault ?? true;
   const report: ImportReport = { imported: [], quarantined: [], review: [], skipped: [], total: 0, dryRun };
-  const execGate = { sourceRoot: sourceDir, source, allowlist: options.execAllowlist ?? (() => loadExecAllowlist()) };
+  const confinedScripts = options.confinedScripts ?? isSkillScriptConfinementActive();
+  const execGate = { sourceRoot: sourceDir, source, allowlist: options.execAllowlist ?? (() => loadExecAllowlist()), confinedScripts };
 
   // Resolve the actual spelling. A reserved canonical root that is a link
   // or a special file is a refusal, never a switch to importing all roots.
@@ -450,6 +462,7 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
           slug, source, pinned: pinByDefault,
           scripts: allScripts.map(({ path: p, sourcePath, sha256, warnings }) => ({ path: p, sourcePath, sha256, ...(warnings.length ? { warnings } : {}) })),
           scriptsUnverified: inertScripts.length > 0,
+          scriptsConfined: (fw.warnings?.length ?? 0) > 0,
         }), 'utf-8');
         copySupportDirs(skillDir, destDir);
         // The fingerprint was taken on the source before the copy: verify what was really written.
@@ -474,7 +487,8 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
         continue;
       }
     }
-    report.imported.push({ name: slug, sourcePath: rel, verdict: String(fw.verdict), ...(inertScripts.length ? { inertScripts } : {}) });
+    const confinedWarnings = (fw.warnings ?? []).slice(0, 10).map(f => `${f.pattern} (${path.relative(skillDir, f.file).split(path.sep).join('/')}:${f.line})`);
+    report.imported.push({ name: slug, sourcePath: rel, verdict: String(fw.verdict), ...(inertScripts.length ? { inertScripts } : {}), ...(confinedWarnings.length ? { confinedWarnings } : {}) });
   }
 
   if (!dryRun && report.imported.length > 0) {
