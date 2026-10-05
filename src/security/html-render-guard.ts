@@ -174,12 +174,20 @@ export function gateCanvasPayload(input: {
  * Mirrors widgets/neutralizeUnsafeUrls but also drops attr-breakout values.
  */
 export function neutralizeUnsafeUrls(html: string): string {
+  // Quoted AND unquoted values; also formaction / poster / srcset / data / ping.
   return html.replace(
-    /\b(href|src|action|xlink:href)(\s*=\s*)(["'])([^"']*)\3/gi,
-    (full, name, eq, q, val) => {
-      const safe = safeUrl(val, { allowDataImage: true, allowRelative: true });
-      if (!safe) return `${name}${eq}${q}#blocked${q}`;
-      return `${name}${eq}${q}${safe}${q}`;
+    /\b(href|src|action|formaction|poster|srcset|data|ping|xlink:href)(\s*=\s*)(?:(["'])([^"']*)\3|([^\s"'>]+))/gi,
+    (_full, name, eq, q, quotedVal, bareVal) => {
+      const val = (quotedVal ?? bareVal ?? '') as string;
+      const quote = (q as string | undefined) ?? '"';
+      // srcset holds several candidates: every URL must be safe, otherwise drop all.
+      const urls = String(name).toLowerCase() === 'srcset'
+        ? val.split(',').map((part) => part.trim().split(/\s+/)[0] ?? '')
+        : [val];
+      const allSafe = urls.every((u) => u === '' || Boolean(safeUrl(u, { allowDataImage: true, allowRelative: true })));
+      if (!allSafe) return `${name}${eq}${quote}#blocked${quote}`;
+      const safe = urls.length === 1 ? safeUrl(val, { allowDataImage: true, allowRelative: true }) : val;
+      return `${name}${eq}${quote}${safe}${quote}`;
     },
   );
 }

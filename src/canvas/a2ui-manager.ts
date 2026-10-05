@@ -758,7 +758,7 @@ export class A2UIManager extends EventEmitter {
   renderToHTML(surfaceId: string): string {
     const tree = this.buildComponentTree(surfaceId);
     if (!tree) {
-      return `<div class="a2ui-error">Surface ${surfaceId} not found</div>`;
+      return `<div class="a2ui-error">Surface ${this.escapeHTML(surfaceId)} not found</div>`;
     }
 
     const surface = this.surfaces.get(surfaceId)!;
@@ -1122,7 +1122,7 @@ export class A2UIManager extends EventEmitter {
 
   /** Finite, non-zero number or the fallback: a prop typed `number` may arrive as a string. */
   private finiteNum(value: unknown, fallback: number): number {
-    return typeof value === 'number' && Number.isFinite(value) && value !== 0 ? value : fallback;
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
   }
 
   /** Fail-closed id / action / class token for attributes. */
@@ -1363,7 +1363,7 @@ export class A2UIManager extends EventEmitter {
           formData[input.dataset.componentId] = input.type === 'checkbox' ? input.checked : input.value;
         });
         var surfaceEl = form.closest('[data-surface-id]');
-        var surfaceId = surfaceEl ? surfaceEl.dataset.surfaceId : '${surfaceId}';
+        var surfaceId = surfaceEl ? surfaceEl.dataset.surfaceId : '${safeId}';
         sendCanvasEvent(form.dataset.componentId || 'form', 'submit', formData);
       });
     })();

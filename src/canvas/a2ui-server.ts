@@ -17,6 +17,7 @@ import type {
   CanvasCommand,
 } from './a2ui-types.js';
 import { A2UIManager, getA2UIManager } from './a2ui-manager.js';
+import { escapeHtml } from '../security/html-render-guard.js';
 
 // ============================================================================
 // Types
@@ -691,7 +692,7 @@ export class A2UIServer extends EventEmitter {
   <ul class="surface-list">
     ${surfaces.map(s => `
       <li class="surface-item">
-        <a href="/surface/${s.id}">${s.id}</a>
+        <a href="/surface/${encodeURIComponent(s.id)}">${escapeHtml(s.id)}</a>
         <span class="badge ${s.visible ? '' : 'hidden'}">${s.visible ? 'visible' : 'hidden'}</span>
         <div class="meta">
           Components: ${s.components.size} |
