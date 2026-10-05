@@ -76,3 +76,16 @@ export type {
   GeminiFunctionDeclaration,
   ClaudeTool,
 } from './tool-format.js';
+
+// Anthropic message conversion (OpenAI-style → Messages API)
+export {
+  toAnthropicMessages,
+  isValidAnthropicMessageOrder,
+} from './anthropic-messages.js';
+export type {
+  AnthropicContentBlock,
+  AnthropicMessage,
+  AnthropicFormatted,
+  OpenAiStyleMessage,
+} from './anthropic-messages.js';
+

@@ -8,6 +8,7 @@ import { getPricingPer1M } from '../config/model-pricing.js';
  */
 
 import { BaseProvider } from './base-provider.js';
+import { toAnthropicMessages } from './_shared/anthropic-messages.js';
 import type {
   ProviderType,
   ProviderConfig,
@@ -184,64 +185,25 @@ export class ClaudeProvider extends BaseProvider {
   }
 
   /**
-   * Formats messages for the Anthropic API.
-   * - Extracts system prompt.
-   * - Handles tool results (must be role='user').
-   * - Handles assistant tool calls (content array with tool_use blocks).
+   * Formats messages for the Anthropic API via shared toAnthropicMessages:
+   * system extracted, tool_results merged into the following user message,
+   * role alternation enforced (see anthropic-messages.ts).
    */
   private formatMessages(options: CompletionOptions): {
     system: string;
     messages: Array<{ role: 'user' | 'assistant'; content: string | Array<{ type: string; tool_use_id?: string; content?: string; text?: string }> }>;
   } {
-    let system = options.systemPrompt || '';
-    const messages: Array<{ role: 'user' | 'assistant'; content: string | Array<{ type: string; tool_use_id?: string; content?: string; text?: string }> }> = [];
-
-    for (const msg of options.messages) {
-      if (msg.role === 'system') {
-        system += (system ? '\n\n' : '') + msg.content;
-      } else if (msg.role === 'tool') {
-        // Tool results go as user messages in Claude
-        messages.push({
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: msg.tool_call_id,
-              content: msg.content,
-            },
-          ],
-        });
-      } else if (msg.role === 'assistant' && msg.tool_calls) {
-        // Assistant with tool calls
-        const content: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }> = [];
-        if (msg.content) {
-          content.push({ type: 'text', text: msg.content });
-        }
-        for (const tc of msg.tool_calls) {
-          let input: unknown = {};
-          try {
-            input = JSON.parse(tc.function.arguments);
-          } catch {
-            // Invalid JSON in tool arguments - use empty object
-            input = {};
-          }
-          content.push({
-            type: 'tool_use',
-            id: tc.id,
-            name: tc.function.name,
-            input,
-          });
-        }
-        messages.push({ role: 'assistant', content: content as Array<{ type: string }> });
-      } else {
-        messages.push({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content,
-        });
-      }
-    }
-
-    return { system, messages };
+    const formatted = toAnthropicMessages(options.messages);
+    const system = options.systemPrompt
+      ? (formatted.system ? `${options.systemPrompt}\n\n${formatted.system}` : options.systemPrompt)
+      : formatted.system;
+    return {
+      system,
+      messages: formatted.messages as Array<{
+        role: 'user' | 'assistant';
+        content: string | Array<{ type: string; tool_use_id?: string; content?: string; text?: string }>;
+      }>,
+    };
   }
 
   /**
