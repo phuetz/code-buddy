@@ -221,6 +221,10 @@ function messageContentToText(content: CodeBuddyMessage['content']): string {
  * already has at most one system message and it is already at index 0, so
  * runtimes that tolerate the current ordering are byte-identical.
  *
+ * Pulling a later system message into message 0 changes the cached prefix.
+ * Ollama, LM Studio and vLLM therefore stay outside the append-only cache
+ * contract; OpenRouter and the other cloud paths keep each message in place.
+ *
  * Exported for unit testing.
  */
 export function mergeSystemMessagesToFront(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
@@ -1154,6 +1158,9 @@ export class OpenAICompatProvider implements Provider {
       if (usage) {
         usageInputTokens = usage.prompt_tokens;
         usageOutputTokens = usage.completion_tokens;
+        // Streaming (the only path of headless `-p`) used to drop the provider's
+        // cached-token count: only the non-streaming chat() fed the cache stats.
+        this.trackPromptCache(usage as { prompt_tokens?: number; cached_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } });
       }
     };
     const markMessageComplete = (): void => {

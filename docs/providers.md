@@ -365,7 +365,12 @@ OPENROUTER_PROVIDER_ALLOW_FALLBACKS=false
 
 `CODEBUDDY_OPENROUTER_PROVIDER_*` aliases are also accepted. These options only
 affect OpenRouter; direct Anthropic, Gemini, OpenAI, local, and custom endpoints
-ignore them.
+ignore them. All of them are opt-in: unset, the request is unchanged.
+
+OpenRouter may serve the same model from a different sub-provider on the next
+request. That hop drops the prompt cache even when the prompt is identical.
+`OPENROUTER_PROVIDER_ORDER` (for example `Together`) pins the sub-provider so
+the cache can hit. Leave it unset unless you want that pin.
 
 ## Provider Onboarding
 

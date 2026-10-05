@@ -38,6 +38,12 @@ import {
   sanitizeAssistantOutput,
 } from "./context-pipeline.js";
 import { extractYieldChildId, processYieldSignal } from "./yield-coordinator.js";
+import { splitVolatileSuffix } from "../../prompts/cache-stable-prefix.js";
+import {
+  appendEnvironmentFromVolatile,
+  appendMemoryIfChanged,
+  sealAppendOnlyTranscript,
+} from "../../prompts/append-only-context.js";
 import {
   runPreToolUseHook,
   pushBlockedToolMessage,
@@ -602,6 +608,13 @@ export class AgentExecutor {
     );
     return isParallel ? readTimeoutMs : toolTimeoutMs;
   }
+
+  /**
+   * After the first provider request, the system message and every earlier
+   * turn stay byte-identical. Later drift is appended. Compaction is the
+   * only later rewrite of that prefix.
+   */
+  private systemPrefixSealed = false;
 
   constructor(
     private deps: ExecutorDependencies,
@@ -1313,10 +1326,10 @@ export class AgentExecutor {
       return;
     }
 
-    // Pure, per-turn tone context. Keep it out of the persisted transcript and
-    // the agent identity: a changing system-prompt append would rebuild Cowork's
-    // cached agent on every message. This block is added to each prepared LLM
-    // request in the turn instead, including post-tool rounds.
+    // Pure, per-turn tone context. It stays off the sealed transcript (see
+    // sealAppendOnlyTranscript): persisting it would rebuild Cowork's cached
+    // agent. It is the deliberate exception to the strict request prefix,
+    // together with file-mention bytes and the companion current-turn block.
     const emotionalPresenceContext = buildTextEmotionalPresenceContext(
       turnQueryText,
       messages.flatMap((turn) =>
@@ -1572,11 +1585,21 @@ export class AgentExecutor {
 
         const firstMessage = messages[0];
         if (rebuiltSystemPrompt && firstMessage && firstMessage.role === 'system') {
-          firstMessage.content = rebuiltSystemPrompt;
-          incrementalTokenCounter.invalidate();
-          logger.debug(
-            `[agent-executor] system prompt rebuilt query-aware (${rebuiltSystemPrompt.length} chars)`,
-          );
+          if (!this.systemPrefixSealed) {
+            firstMessage.content = rebuiltSystemPrompt;
+            incrementalTokenCounter.invalidate();
+            logger.debug(
+              `[agent-executor] system prompt rebuilt query-aware (${rebuiltSystemPrompt.length} chars)`,
+            );
+          } else {
+            // Already sent: do not rewrite messages[0]. Memory and the
+            // environment block are appended only when their text changes.
+            appendMemoryIfChanged(messages, rebuiltSystemPrompt);
+            appendEnvironmentFromVolatile(
+              messages,
+              splitVolatileSuffix(rebuiltSystemPrompt).volatile,
+            );
+          }
         }
 
         let tools = codeResearch
@@ -1726,6 +1749,16 @@ export class AgentExecutor {
         // hangs FOREVER (turns stuck for hours in Cowork and headless waves).
         // Fail fast with a clear error instead; the caller/user retries.
         const progress = startHeadlessPromptProgress();
+        // Date, folder and `Project:` leave the leading system message and are
+        // sealed into history, so the next request starts with this one.
+        // Compaction is the only later rewrite of that prefix. Count tokens
+        // before the seal: the per-turn context blocks stay out of the cost
+        // figure, as they did before they were committed.
+        preparedMessages = sealAppendOnlyTranscript(messages, preparedMessages, {
+          date: new Date().toISOString().slice(0, 10),
+          directory: turnCwd,
+        });
+        this.systemPrefixSealed = true;
         const streamFactory = () => withStallGuard(this.deps.client.chatStream(
           preparedMessages,
           tools,

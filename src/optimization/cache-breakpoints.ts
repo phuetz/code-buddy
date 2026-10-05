@@ -11,7 +11,10 @@
  *
  * This module provides:
  * 1. `injectAnthropicCacheBreakpoints(messages)` — mark the last system
- *    message with cache_control before sending to Anthropic.
+ *    message of the leading run (before the first non-system message) with
+ *    cache_control, and also the last message that is not an
+ *    `ephemeral="true"` tail. The head marker stays put when the committed
+ *    tail grows. A trailing runtime block marked ephemeral is not a breakpoint.
  * 2. `buildStableDynamicSplit(systemPrompt)` — split a system prompt into
  *    stable prefix (identity/tools/instructions) and dynamic suffix (time,
  *    todos, memory). The split point is the first line beginning with a
@@ -79,10 +82,27 @@ export function buildStableDynamicSplit(systemPrompt: string): StableDynamicSpli
 // Anthropic cache_control injection
 // ============================================================================
 
+function isEphemeralTailMessage(message: CodeBuddyMessage | undefined): boolean {
+  const content = message?.content;
+  return typeof content === 'string' && content.includes('ephemeral="true"');
+}
+
 /**
  * Inject `cache_control: {type: "ephemeral"}` onto the last system message
- * in the messages array. This marks the end of the stable prefix so Anthropic
- * caches everything up to that point.
+ * of the leading run, before the first user or assistant message, and onto
+ * the last message that is not an `ephemeral="true"` tail when that message
+ * is further down the request.
+ *
+ * Anthropic caches everything up to each marker. The head marker is the
+ * stable anchor. The second marker follows the committed transcript (the
+ * environment block, the user turn, a changed todo) so the cached prefix
+ * grows instead of being rewritten. A trailing `<runtime_settings
+ * ephemeral="true">` stays unmarked: it is allowed to change without moving
+ * the previous breakpoint.
+ *
+ * When every message is a system message and none is an ephemeral tail, the
+ * last one is marked once. An array with no system message is copied
+ * unchanged.
  *
  * Call this **only** when the active provider is Anthropic (detected by model
  * name containing "claude" or provider being "anthropic").
@@ -95,25 +115,39 @@ export function injectAnthropicCacheBreakpoints(
 ): CacheBreakpointMessage[] {
   const result: CacheBreakpointMessage[] = [...messages] as CacheBreakpointMessage[];
 
-  // Find the last system message index
+  let headEnd = result.findIndex(message => message?.role !== 'system');
+  if (headEnd === -1) headEnd = result.length;
+
   let lastSystemIdx = -1;
-  let lastSystemMessage: CacheBreakpointMessage | undefined;
-  for (let i = result.length - 1; i >= 0; i--) {
-    const message = result[i];
-    if (message?.role === 'system') {
+  for (let i = headEnd - 1; i >= 0; i--) {
+    if (result[i]?.role === 'system') {
       lastSystemIdx = i;
-      lastSystemMessage = message;
       break;
     }
   }
 
+  const lastSystemMessage = lastSystemIdx === -1 ? undefined : result[lastSystemIdx];
   if (lastSystemIdx === -1 || lastSystemMessage === undefined) return result;
 
-  // Clone and add cache_control to the last system message
   result[lastSystemIdx] = {
     ...lastSystemMessage,
     cache_control: { type: 'ephemeral' },
   };
+
+  let stableTail = -1;
+  for (let i = result.length - 1; i >= 0; i--) {
+    if (!isEphemeralTailMessage(result[i])) {
+      stableTail = i;
+      break;
+    }
+  }
+  const stableMessage = stableTail === -1 ? undefined : result[stableTail];
+  if (stableTail !== -1 && stableTail !== lastSystemIdx && stableMessage !== undefined) {
+    result[stableTail] = {
+      ...stableMessage,
+      cache_control: { type: 'ephemeral' },
+    };
+  }
 
   return result;
 }
