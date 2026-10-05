@@ -221,6 +221,12 @@ export class SafeBinariesChecker {
       case 'bun':
       case 'deno':
         return this.isVersionProbe(args);
+      case 'tree':
+        // `tree -o FILE` writes the listing to a file.
+        return !args.some(arg => arg === '-o' || arg === '--output' || arg.startsWith('--output=') || /^-[a-zA-Z]*o/.test(arg));
+      case 'history':
+        // `history -w/-a/-n/-r FILE` read or write the history file; only a bare count is a read.
+        return args.every(arg => /^\d+$/.test(arg));
       case 'iconv':
         // `iconv -o FILE` writes a file.
         return !args.some(arg => arg === '-o' || arg === '--output' || arg.startsWith('--output=') || /^-[a-zA-Z]*o/.test(arg));
@@ -257,8 +263,16 @@ export class SafeBinariesChecker {
       }
 
       if (char === '\\') {
+        // Outside quotes a backslash makes bash rewrite the word (`-\o` is `-o`), which
+        // defeats every literal flag guard below: refuse, the user is asked instead.
+        if (quote === 'none') return true;
         escaped = true;
         continue;
+      }
+
+      if (quote === 'none' && char === '$' && (next === "'" || next === '"')) {
+        // ANSI-C / locale quoting: `$'\x2do'` is `-o`.
+        return true;
       }
 
       if (quote === 'double') {
@@ -342,7 +356,11 @@ export class SafeBinariesChecker {
   private isGoQuery(args: string[]): boolean {
     if (args.length === 0) return true;
     const [subcommand, ...rest] = args;
-    if (subcommand === 'version' || subcommand === 'env' || subcommand === 'help') {
+    if (subcommand === 'env') {
+      // `go env -w NAME=VALUE` / `-u NAME` write or edit the Go environment file.
+      return !rest.some(arg => arg === '-w' || arg === '-u' || /^-[a-z]*[wu]/.test(arg) && !arg.startsWith('--'));
+    }
+    if (subcommand === 'version' || subcommand === 'help') {
       return true;
     }
     if (subcommand === 'list') {
