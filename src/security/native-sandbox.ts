@@ -8,7 +8,7 @@
 
 import { importedSkillRoots } from './skill-executable-gate.js';
 import { spawnSync as realSpawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from 'child_process';
-import { existsSync as realExistsSync, mkdirSync as realMkdirSync, readFileSync as realReadFileSync } from 'fs';
+import { existsSync as realExistsSync, mkdirSync as realMkdirSync, readFileSync as realReadFileSync, realpathSync as realRealpathSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -40,6 +40,8 @@ export interface NativeSandboxPolicy {
   network: boolean;
   hidePaths: string[];
   readOnlyRoots: string[];
+  /** Container-runtime control sockets present on the host, masked with /dev/null (bwrap) or denied (seatbelt). */
+  maskSockets?: string[];
 }
 
 export interface NativeSandboxCapabilities {
@@ -85,6 +87,7 @@ export interface NativeSandboxIo {
   kernelRelease?: () => string;
   capabilities?: NativeSandboxCapabilities;
   helperPath?: string;
+  realpathSync?: (target: string) => string;
 }
 
 let cachedCapabilities: NativeSandboxCapabilities | null = null;
@@ -319,6 +322,11 @@ export function buildBwrapArgv(policy: NativeSandboxPolicy, command: string[]): 
   for (const hide of policy.hidePaths) {
     argv.push('--tmpfs', hide, '--remount-ro', hide);
   }
+  // `--ro-bind / /` leaves the host's container-runtime sockets connectable (root on
+  // the host). Mask exactly those files; /run itself stays visible (DNS needs it).
+  for (const sock of policy.maskSockets ?? []) {
+    argv.push('--ro-bind', '/dev/null', sock);
+  }
   argv.push('--chdir', policy.chdir);
   argv.push('--setenv', 'TMPDIR', policy.tmpDir);
   argv.push('--', ...command);
@@ -363,6 +371,11 @@ export function buildSeatbeltProfile(policy: NativeSandboxPolicy): string {
   if (policy.network) {
     lines.push('(allow network*)');
   }
+  // Last rule wins: deny connecting to the container-runtime sockets even with the network open.
+  for (const sock of policy.maskSockets ?? []) {
+    lines.push(`(deny network-outbound (remote unix-socket (path-literal ${seatbeltQuote(sock)})))`);
+    lines.push(`(deny file-read* file-write* (literal ${seatbeltQuote(sock)}))`);
+  }
   return lines.join('\n');
 }
 
@@ -404,6 +417,51 @@ export function resolveLandlockHelperPath(existsSync: (p: string) => boolean = r
   return null;
 }
 
+/** Fixed locations of container-runtime control sockets (docker, containerd, podman, cri-o). */
+export const KNOWN_RUNTIME_SOCKETS = [
+  '/var/run/docker.sock',
+  '/run/docker.sock',
+  '/run/containerd/containerd.sock',
+  '/var/run/containerd/containerd.sock',
+  '/run/podman/podman.sock',
+  '/var/run/podman/podman.sock',
+  '/run/crio/crio.sock',
+  '/var/run/crio/crio.sock',
+];
+
+/** Per-user (rootless) sockets under XDG_RUNTIME_DIR or /run/user/<uid>. */
+export function userRuntimeSockets(env: NodeJS.ProcessEnv = process.env, uid: number | null = typeof process.getuid === 'function' ? process.getuid() : null): string[] {
+  const dirs = new Set<string>();
+  if (env.XDG_RUNTIME_DIR) dirs.add(env.XDG_RUNTIME_DIR);
+  if (uid !== null) dirs.add(`/run/user/${uid}`);
+  const out: string[] = [];
+  for (const dir of dirs) {
+    for (const rel of ['docker.sock', 'containerd/containerd.sock', 'podman/podman.sock', 'crio/crio.sock', 'docker/docker.sock']) {
+      out.push(path.join(dir, rel));
+    }
+  }
+  return out;
+}
+
+/**
+ * Sockets to mask: those that exist on the host, canonicalized (so /var/run/docker.sock
+ * and /run/docker.sock are one mount), de-duplicated. Never throws.
+ */
+export function runtimeSocketsToMask(io: NativeSandboxIo = {}): string[] {
+  const existsSync = io.existsSync ?? realExistsSync;
+  const realpath = io.realpathSync ?? realRealpathSync;
+  const out = new Set<string>();
+  for (const sock of [...KNOWN_RUNTIME_SOCKETS, ...userRuntimeSockets(io.env ?? process.env)]) {
+    if (!existsSync(sock)) continue;
+    try {
+      out.add(realpath(sock));
+    } catch {
+      out.add(sock);
+    }
+  }
+  return [...out];
+}
+
 function existingPaths(paths: string[], existsSync: (p: string) => boolean): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -439,7 +497,37 @@ export function buildDefaultPolicy(
     network: false,
     hidePaths: existingPaths(defaultHidePaths(homeDir, io.env ?? process.env), existsSync),
     readOnlyRoots: existingPaths(DEFAULT_RO_ROOTS, existsSync),
+    maskSockets: runtimeSocketsToMask(io),
   };
+}
+
+const probeOkCache = new Set<string>();
+
+/**
+ * Probe from INSIDE the bubblewrap sandbox: a host container-runtime socket that is
+ * still a socket there means the policy leaks it, so the command is refused. Only
+ * sockets present on the host are probed; a clean result is cached per policy.
+ */
+export function probeRuntimeSocketsFromSandbox(
+  bwrapPath: string,
+  policy: NativeSandboxPolicy,
+  io: NativeSandboxIo = {},
+): { visible: string[] } | { error: string } {
+  const existsSync = io.existsSync ?? realExistsSync;
+  const candidates = [...KNOWN_RUNTIME_SOCKETS, ...userRuntimeSockets(io.env ?? process.env)].filter((sock) => existsSync(sock));
+  if (candidates.length === 0) return { visible: [] };
+  const script = `for s in ${candidates.map((sock) => `'${sock.replace(/'/g, `'\\''`)}'`).join(' ')}; do if [ -S "$s" ]; then echo "$s"; fi; done`;
+  const argv = buildBwrapArgv({ ...policy, network: false }, ['/bin/sh', '-c', script]);
+  const key = `${bwrapPath}\0${argv.join('\0')}`;
+  if (probeOkCache.has(key)) return { visible: [] };
+  const run = io.spawnSync ?? realSpawnSync;
+  const result = run(bwrapPath, argv, { encoding: 'utf8', timeout: 5000 });
+  if (result.error || result.status !== 0) {
+    return { error: `the runtime-socket probe could not run (${result.error?.message ?? `exit ${result.status}: ${String(result.stderr ?? "").trim().slice(0, 160)}`}).` };
+  }
+  const visible = String(result.stdout ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (visible.length === 0) probeOkCache.add(key);
+  return { visible };
 }
 
 function refusal(reason: string): ConfineSpawnResult {
@@ -514,6 +602,11 @@ export function confineSpawn(input: ConfineSpawnInput, io: NativeSandboxIo = {})
   if (selected === 'bwrap') {
     const bwrapPath = caps.bwrapPath;
     if (!bwrapPath) return refusal('bubblewrap path missing after a successful probe.');
+    const probe = probeRuntimeSocketsFromSandbox(bwrapPath, policy, io);
+    if ('error' in probe) return refusal(probe.error);
+    if (probe.visible.length > 0) {
+      return refusal(`a host container runtime socket is reachable from the sandbox (${probe.visible.join(', ')}), which is root on the host.`);
+    }
     logger.debug('native-sandbox: wrapping with bubblewrap');
     return { ok: true, file: bwrapPath, args: buildBwrapArgv(policy, command), env: nextEnv, backend: 'bwrap' };
   }

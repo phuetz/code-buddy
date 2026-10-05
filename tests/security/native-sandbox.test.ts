@@ -209,6 +209,8 @@ describe('confineSpawn', () => {
       }),
       existsSync: () => true,
       mkdirSync: () => undefined,
+      // the runtime-socket probe runs bwrap: answer "no socket visible"
+      spawnSync: (() => ({ status: 0, stdout: '', stderr: '', error: undefined })) as never,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
