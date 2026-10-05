@@ -1022,7 +1022,8 @@ export class A2UIManager extends EventEmitter {
         let html = `${pad}<table class="a2ui-table" style="${styleAttr}">`;
         html += `\n${pad}  <thead><tr>`;
         for (const col of columns) {
-          const width = col.width ? ` style="width: ${typeof col.width === 'number' ? col.width + 'px' : col.width}"` : '';
+          const widthValue = typeof col.width === 'number' ? this.toCSSValue(col.width) : sanitizeCssValue(col.width);
+          const width = widthValue ? ` style="width: ${this.escapeHTML(widthValue)}"` : '';
           html += `<th${width}>${this.escapeHTML(col.label)}</th>`;
         }
         html += `</tr></thead>`;
@@ -1040,7 +1041,7 @@ export class A2UIManager extends EventEmitter {
       }
 
       default: {
-        let html = `${pad}<div class="a2ui-${node.type}" data-component-id="${this.escapeHTML(this.safeIdent(node.id, 'unknown'))}" style="${styleAttr}">`;
+        let html = `${pad}<div class="a2ui-${this.escapeHTML(this.safeIdent(String(node.type), 'unknown'))}" data-component-id="${this.escapeHTML(this.safeIdent(node.id, 'unknown'))}" style="${styleAttr}">`;
         for (const child of node.children) {
           html += '\n' + this.renderNodeToHTML(child, indent + 1);
         }

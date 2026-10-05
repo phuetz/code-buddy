@@ -28,3 +28,27 @@ describe('A2UI : id hostile sur chaque type de composant', () => {
     expect(html).not.toContain('alert(');
   });
 });
+
+describe('A2UI : type inconnu et largeur de colonne hostiles', () => {
+  it('node.type hostile ne sort pas de l\'attribut class', () => {
+    const mgr = new A2UIManager();
+    mgr.processMessage({
+      surfaceUpdate: { surfaceId: 's', components: [{ id: 'root1', component: { ['evil" onmouseover="alert(1) x="']: {} } }] },
+    } as never);
+    mgr.processMessage({ beginRendering: { surfaceId: 's', root: 'root1' } } as never);
+    const html = mgr.renderToHTML('s');
+    // ÉCHOUE sur l'ancienne logique : <div class="a2ui-evil" onmouseover="alert(1) x="">.
+    expect(html).not.toMatch(/\sonmouseover="/i);
+    expect(html).not.toContain('alert(1)');
+  });
+
+  it('col.width hostile ne sort pas de l\'attribut style', () => {
+    const html = render('table', {
+      columns: [{ key: 'a', label: 'A', width: '100px" onmouseover="alert(2)' }, { key: 'b', label: 'B', width: 120 }],
+      data: [],
+    });
+    // ÉCHOUE sur l'ancienne logique : <th style="width: 100px" onmouseover="alert(2)">.
+    expect(html).not.toMatch(/\sonmouseover="/i);
+    expect(html).toContain('width: 120px');
+  });
+});
