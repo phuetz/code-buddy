@@ -44,6 +44,7 @@ import type { UnifiedSkill } from '../../skills/types.js';
 import { getSkillsHub } from '../../skills/hub.js';
 import { DESIGN_SYSTEM_TOOL } from '../../codebuddy/tool-definitions/design-tools.js';
 import { resolveCodeExecPolicy } from '../../config/code-exec-policy.js';
+import { FIXED_TOOL_CORE } from '../../tools/fixed-tool-core.js';
 
 // Re-export types for convenience
 export type {
@@ -152,6 +153,52 @@ export function mergeAlwaysInclude(
   }
   const base = existing ?? DEFAULT_TOOL_SELECTION_CONFIG.alwaysInclude;
   return [...extras, ...base.filter((name) => !extras.includes(name))];
+}
+
+export type FixedToolsMode = 'off' | 'core' | 'append';
+
+/**
+ * Resolve the `CODEBUDDY_TOOLS_FIXED` switch.
+ *
+ * Default is `off`: the historical per-query RAG selection runs unchanged, so
+ * an environment without the flag is byte-identical to before. `true`/`1`/
+ * `core` serve the ordered fixed core only; `append` serves the fixed core
+ * first, then the per-query selection appended after it — a stable cacheable
+ * prefix with a variable suffix. The core itself lives in the data module
+ * `src/tools/fixed-tool-core.ts`, not here.
+ */
+export function resolveFixedToolsMode(
+  raw: string | undefined = process.env.CODEBUDDY_TOOLS_FIXED,
+): FixedToolsMode {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === 'append') return 'append';
+  if (value === 'true' || value === '1' || value === 'core' || value === 'on' || value === 'yes') {
+    return 'core';
+  }
+  return 'off';
+}
+
+/**
+ * Order-preserving projection of the fixed core onto the tools that actually
+ * survived assembly (registry + `applyToolFilter` + surface profile + model
+ * capabilities). Unknown or filtered names are dropped, never added: a tool
+ * hidden from the surface must NEVER reappear through the fixed core.
+ */
+export function selectFixedCoreTools<T extends { function: { name: string } }>(
+  available: readonly T[],
+): T[] {
+  const byName = new Map(available.map((tool) => [tool.function.name, tool]));
+  const selected: T[] = [];
+  const seen = new Set<string>();
+  for (const name of FIXED_TOOL_CORE) {
+    if (seen.has(name)) continue;
+    const tool = byName.get(name);
+    if (tool) {
+      selected.push(tool);
+      seen.add(name);
+    }
+  }
+  return selected;
 }
 
 function requiredToolsForQuery(query: string): string[] {
@@ -296,6 +343,73 @@ export class ToolSelectionStrategy {
     let tools: CodeBuddyTool[];
     let selection: ToolSelectionResult | null = null;
 
+    // Fixed-core mode (`CODEBUDDY_TOOLS_FIXED`). Off → the historical
+    // per-query RAG path below runs unchanged (byte-identical).
+    const fixedMode = resolveFixedToolsMode();
+    let fixedApplied = false;
+    if (fixedMode !== 'off') {
+      try {
+        const allTools = await getAllCodeBuddyTools();
+        const availableByName = new Map(allTools.map((tool) => [tool.function.name, tool]));
+        const chosen = new Set<string>();
+        const ordered = selectFixedCoreTools(allTools);
+        for (const tool of ordered) chosen.add(tool.function.name);
+
+        // Stable alwaysInclude (fleet tools, lite profile, restore_context)
+        // does not depend on the question: keep it, deterministically ordered,
+        // right after the core.
+        const stableInclude = Array.from(
+          new Set([...mergedConfig.alwaysInclude, 'restore_context']),
+        );
+        for (const name of stableInclude) {
+          if (chosen.has(name)) continue;
+          const tool = availableByName.get(name);
+          if (tool) {
+            ordered.push(tool);
+            chosen.add(name);
+          }
+        }
+
+        if (fixedMode === 'append') {
+          // Per-query relevance tools go AFTER the stable core: the shared
+          // prefix stays cacheable, only the suffix varies between questions.
+          const perQuery = await getRelevantTools(query, {
+            maxTools: effectiveConfig.maxTools,
+            useRAG: true,
+            alwaysInclude: effectiveConfig.alwaysInclude,
+          });
+          for (const tool of perQuery.selectedTools) {
+            const name = tool.function.name;
+            if (chosen.has(name)) continue;
+            ordered.push(tool);
+            chosen.add(name);
+          }
+        }
+
+        tools = ordered;
+        selection = {
+          selectedTools: tools,
+          scores: new Map(tools.map((tool) => [tool.function.name, 1])),
+          classification: classifyQuery(query),
+          reducedTokens: 0,
+          originalTokens: 0,
+        };
+        this.lastSelection = selection;
+        this.cachedToolNames = tools.map((t) => t.function.name);
+        fixedApplied = true;
+        logger.debug('Fixed tool core selection', {
+          mode: fixedMode,
+          count: tools.length,
+        });
+      } catch (error) {
+        // Never block a turn: fall back to the historical RAG selection.
+        logger.warn('Fixed tool core failed; falling back to RAG selection', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (!fixedApplied) {
     if (effectiveConfig.useRAG) {
       try {
         // Use RAG-based selection
@@ -345,6 +459,7 @@ export class ToolSelectionStrategy {
         query: query.slice(0, 50),
         toolCount: tools.length,
       });
+    }
     }
 
     // `design_system` n'appartient pas à la surface générale : App Studio
