@@ -1,0 +1,608 @@
+{
+  "bench_id": "robot-heard-100",
+  "mission": "CB-ROBOT-BANC-1004",
+  "robot_name_assumed": "Lisa",
+  "label_note": "addressed_to_robot est une étiquette de référence posée pour ce banc, pas une vérité mesurée ni l'avis du logiciel.",
+  "items": [
+    {
+      "id": "h001",
+      "text": "Lisa, quelle heure est-il ?",
+      "addressed_to_robot": true,
+      "reason": "Nom exact en tête, question posée au robot."
+    },
+    {
+      "id": "h002",
+      "text": "Lisa, allume la lumière du salon",
+      "addressed_to_robot": true,
+      "reason": "Ordre domestique adressé à Lisa."
+    },
+    {
+      "id": "h003",
+      "text": "Tu peux baisser le volume, Lisa ?",
+      "addressed_to_robot": true,
+      "reason": "Requête au tutoiement, nom en fin de phrase."
+    },
+    {
+      "id": "h004",
+      "text": "Hey Lisa",
+      "addressed_to_robot": true,
+      "reason": "Appel court avec le nom exact."
+    },
+    {
+      "id": "h005",
+      "text": "Lisa !",
+      "addressed_to_robot": true,
+      "reason": "Interjection isolée au nom du robot."
+    },
+    {
+      "id": "h006",
+      "text": "Dis-moi la météo, Lisa",
+      "addressed_to_robot": true,
+      "reason": "Impératif clos par le nom."
+    },
+    {
+      "id": "h007",
+      "text": "Lisa, raconte-moi une histoire",
+      "addressed_to_robot": true,
+      "reason": "Demande de récit adressée à Lisa."
+    },
+    {
+      "id": "h008",
+      "text": "Il est quelle heure Lisa",
+      "addressed_to_robot": true,
+      "reason": "Question d'heure, nom en fin, sans virgule."
+    },
+    {
+      "id": "h009",
+      "text": "Lisa tu m'entends ?",
+      "addressed_to_robot": true,
+      "reason": "Vérification d'écoute adressée à Lisa."
+    },
+    {
+      "id": "h010",
+      "text": "Allô Lisa",
+      "addressed_to_robot": true,
+      "reason": "Appel comme au téléphone, nom exact."
+    },
+    {
+      "id": "h011",
+      "text": "Euh Lisa, t'es là ?",
+      "addressed_to_robot": true,
+      "reason": "Hésitation orale puis appel au robot."
+    },
+    {
+      "id": "h012",
+      "text": "Lisa, c'est quoi ce bruit ?",
+      "addressed_to_robot": true,
+      "reason": "Question sur un bruit, nom en tête."
+    },
+    {
+      "id": "h013",
+      "text": "S'il te plaît Lisa, ferme la fenêtre",
+      "addressed_to_robot": true,
+      "reason": "Requête polie nommée."
+    },
+    {
+      "id": "h014",
+      "text": "La lumière, Lisa",
+      "addressed_to_robot": true,
+      "reason": "Objet puis nom, appel court."
+    },
+    {
+      "id": "h015",
+      "text": "Dis Lisa, on a encore du pain ?",
+      "addressed_to_robot": true,
+      "reason": "Interpellation puis question."
+    },
+    {
+      "id": "h016",
+      "text": "Bonsoir Lisa",
+      "addressed_to_robot": true,
+      "reason": "Salutation qui nomme Lisa."
+    },
+    {
+      "id": "h017",
+      "text": "Pardon Lisa, tu peux répéter ?",
+      "addressed_to_robot": true,
+      "reason": "Demande de répétition adressée."
+    },
+    {
+      "id": "h018",
+      "text": "Tu m'entends Lisa ?",
+      "addressed_to_robot": true,
+      "reason": "Question d'écoute, nom en fin."
+    },
+    {
+      "id": "h019",
+      "text": "Bonne nuit Lisa",
+      "addressed_to_robot": true,
+      "reason": "Clôture de soirée adressée à Lisa."
+    },
+    {
+      "id": "h020",
+      "text": "Merci beaucoup Lisa",
+      "addressed_to_robot": true,
+      "reason": "Remerciement qui nomme Lisa."
+    },
+    {
+      "id": "h021",
+      "text": "Liza, quelle heure est-il ?",
+      "addressed_to_robot": true,
+      "reason": "Je compte Liza comme Lisa déformée par la transcription, en vocatif."
+    },
+    {
+      "id": "h022",
+      "text": "Lissa, tu es là ?",
+      "addressed_to_robot": true,
+      "reason": "Je compte Lissa comme variante transcrite de Lisa, en appel."
+    },
+    {
+      "id": "h023",
+      "text": "Lisaa, allume la lampe",
+      "addressed_to_robot": true,
+      "reason": "Je compte Lisaa comme Lisa allongée par la transcription, ordre."
+    },
+    {
+      "id": "h024",
+      "text": "l'isa, tu m'entends ?",
+      "addressed_to_robot": true,
+      "reason": "Je compte l'apostrophe comme une coupure STT de Lisa, en appel."
+    },
+    {
+      "id": "h025",
+      "text": "lycée à, il est quelle heure ?",
+      "addressed_to_robot": true,
+      "reason": "Je compte « lycée à » comme déformation STT de Lisa suivie d'une question d'heure."
+    },
+    {
+      "id": "h026",
+      "text": "Lisat, ouvre la porte",
+      "addressed_to_robot": true,
+      "reason": "Je compte Lisat comme Lisa avec un t parasite, ordre."
+    },
+    {
+      "id": "h027",
+      "text": "Liisa, réponds",
+      "addressed_to_robot": true,
+      "reason": "Je compte Liisa comme double i de transcription, ordre."
+    },
+    {
+      "id": "h028",
+      "text": "Lisa, note que le plombier passe demain",
+      "addressed_to_robot": true,
+      "reason": "Ordre de note adressé à Lisa."
+    },
+    {
+      "id": "h029",
+      "text": "Lisa, calcule vingt-sept plus quinze",
+      "addressed_to_robot": true,
+      "reason": "Calcul demandé à Lisa."
+    },
+    {
+      "id": "h030",
+      "text": "Et Lisa, le four est encore allumé ?",
+      "addressed_to_robot": true,
+      "reason": "Reprise orale qui se tourne vers Lisa."
+    },
+    {
+      "id": "h031",
+      "text": "Lisa, continue",
+      "addressed_to_robot": true,
+      "reason": "Ordre de suite adressé."
+    },
+    {
+      "id": "h032",
+      "text": "Lisa, attends",
+      "addressed_to_robot": true,
+      "reason": "Ordre d'attente adressé."
+    },
+    {
+      "id": "h033",
+      "text": "Coucou Lisa",
+      "addressed_to_robot": true,
+      "reason": "Salutation familière qui nomme Lisa."
+    },
+    {
+      "id": "h034",
+      "text": "Lisa, explique-moi ce mot",
+      "addressed_to_robot": true,
+      "reason": "Demande d'explication adressée."
+    },
+    {
+      "id": "h035",
+      "text": "Yo Lisa",
+      "addressed_to_robot": true,
+      "reason": "Appel très court avec le nom."
+    },
+    {
+      "id": "h036",
+      "text": "Lisa, tu vas bien ?",
+      "addressed_to_robot": true,
+      "reason": "Check-in adressé à Lisa."
+    },
+    {
+      "id": "h037",
+      "text": "Lisa, c'est toi qui as laissé la porte ouverte ?",
+      "addressed_to_robot": true,
+      "reason": "Question directe à Lisa."
+    },
+    {
+      "id": "h038",
+      "text": "Liza !",
+      "addressed_to_robot": true,
+      "reason": "Je compte Liza isolé comme appel transcrit."
+    },
+    {
+      "id": "h039",
+      "text": "Lissa, arrête",
+      "addressed_to_robot": true,
+      "reason": "Je compte Lissa comme appel transcrit suivi d'un ordre."
+    },
+    {
+      "id": "h040",
+      "text": "Au revoir Lisa",
+      "addressed_to_robot": true,
+      "reason": "Congé qui nomme Lisa."
+    },
+    {
+      "id": "h041",
+      "text": "Lisa Lisa, réponds",
+      "addressed_to_robot": true,
+      "reason": "Répétition du nom pour obtenir une réponse."
+    },
+    {
+      "id": "h042",
+      "text": "Oh Lisa",
+      "addressed_to_robot": true,
+      "reason": "Exclamation d'appel."
+    },
+    {
+      "id": "h043",
+      "text": "Lisa, aide-moi",
+      "addressed_to_robot": true,
+      "reason": "Demande d'aide adressée."
+    },
+    {
+      "id": "h044",
+      "text": "Lisa, cherche mes clés",
+      "addressed_to_robot": true,
+      "reason": "Recherche demandée à Lisa."
+    },
+    {
+      "id": "h045",
+      "text": "Merci Lisa",
+      "addressed_to_robot": true,
+      "reason": "Remerciement adressé."
+    },
+    {
+      "id": "h046",
+      "text": "Lisa, joue de la musique calme",
+      "addressed_to_robot": true,
+      "reason": "Ordre musical adressé."
+    },
+    {
+      "id": "h047",
+      "text": "Lisa, baisse le chauffage",
+      "addressed_to_robot": true,
+      "reason": "Réglage domestique adressé."
+    },
+    {
+      "id": "h048",
+      "text": "Lisa, qu'est-ce qu'on mange ce soir ?",
+      "addressed_to_robot": true,
+      "reason": "Question du dîner posée à Lisa."
+    },
+    {
+      "id": "h049",
+      "text": "Lisa, rappelle-moi le pain",
+      "addressed_to_robot": true,
+      "reason": "Rappel demandé à Lisa."
+    },
+    {
+      "id": "h050",
+      "text": "Lisa, je te parle",
+      "addressed_to_robot": true,
+      "reason": "Le locuteur dit s'adresser à Lisa."
+    },
+    {
+      "id": "h051",
+      "text": "Passe-moi le sel",
+      "addressed_to_robot": false,
+      "reason": "Humains à table, aucun nom de robot."
+    },
+    {
+      "id": "h052",
+      "text": "Tu as vu mes lunettes ?",
+      "addressed_to_robot": false,
+      "reason": "Question d'un humain à un autre."
+    },
+    {
+      "id": "h053",
+      "text": "Bonjour",
+      "addressed_to_robot": false,
+      "reason": "Salutation sans nom : je ne l'attribue pas à Lisa."
+    },
+    {
+      "id": "h054",
+      "text": "Salut",
+      "addressed_to_robot": false,
+      "reason": "Salutation sans nom, entre personnes possibles."
+    },
+    {
+      "id": "h055",
+      "text": "Hey",
+      "addressed_to_robot": false,
+      "reason": "Interjection sans nom."
+    },
+    {
+      "id": "h056",
+      "text": "Bonjour à tous",
+      "addressed_to_robot": false,
+      "reason": "Salutation collective, pas un appel à Lisa."
+    },
+    {
+      "id": "h057",
+      "text": "J'ai vu Lisa au marché ce matin",
+      "addressed_to_robot": false,
+      "reason": "Mention de Lisa à la troisième personne, récit."
+    },
+    {
+      "id": "h058",
+      "text": "Lisa est partie tôt",
+      "addressed_to_robot": false,
+      "reason": "Constat sur Lisa, pas un appel."
+    },
+    {
+      "id": "h059",
+      "text": "La voiture de Lisa est devant la maison",
+      "addressed_to_robot": false,
+      "reason": "Possession, Lisa n'est pas interpellée."
+    },
+    {
+      "id": "h060",
+      "text": "J'ai parlé à Lisa hier soir",
+      "addressed_to_robot": false,
+      "reason": "Récit d'une conversation passée avec Lisa."
+    },
+    {
+      "id": "h061",
+      "text": "Avec Lisa on a mangé des pâtes",
+      "addressed_to_robot": false,
+      "reason": "Lisa est compagnon du récit, pas destinataire."
+    },
+    {
+      "id": "h062",
+      "text": "Tu as vu Lisa hier soir ?",
+      "addressed_to_robot": false,
+      "reason": "Un humain demande à un autre s'il a vu Lisa."
+    },
+    {
+      "id": "h063",
+      "text": "Dis à Lisa de venir manger",
+      "addressed_to_robot": false,
+      "reason": "Ordre à un humain au sujet de Lisa, pas à Lisa."
+    },
+    {
+      "id": "h064",
+      "text": "Est-ce que Lisa est là ?",
+      "addressed_to_robot": false,
+      "reason": "Question sur la présence de Lisa, posée à quelqu'un d'autre."
+    },
+    {
+      "id": "h065",
+      "text": "C'est Lisa ?",
+      "addressed_to_robot": false,
+      "reason": "Quelqu'un demande si c'est Lisa, sans lui parler."
+    },
+    {
+      "id": "h066",
+      "text": "Lisa a dit qu'elle rentrerait vers vingt heures",
+      "addressed_to_robot": false,
+      "reason": "Discours rapporté, troisième personne."
+    },
+    {
+      "id": "h067",
+      "text": "Le journal de vingt heures commence dans un instant",
+      "addressed_to_robot": false,
+      "reason": "Annonce de télévision."
+    },
+    {
+      "id": "h068",
+      "text": "Et maintenant la météo pour demain matin",
+      "addressed_to_robot": false,
+      "reason": "Transition de journal télévisé."
+    },
+    {
+      "id": "h069",
+      "text": "Pourquoi les océans montent-ils aussi vite ?",
+      "addressed_to_robot": false,
+      "reason": "Question de documentaire, pas à Lisa."
+    },
+    {
+      "id": "h070",
+      "text": "Vous regardez le journal de la nuit sur cette chaîne",
+      "addressed_to_robot": false,
+      "reason": "Adresse générique du présentateur aux téléspectateurs."
+    },
+    {
+      "id": "h071",
+      "text": "Je vous attends depuis le début de cette longue histoire racontée par le narrateur du documentaire animalier",
+      "addressed_to_robot": false,
+      "reason": "Narration TV au vous, phrase longue."
+    },
+    {
+      "id": "h072",
+      "text": "Chéri, tu peux sortir la poubelle ?",
+      "addressed_to_robot": false,
+      "reason": "Couple, tutoiement sans Lisa."
+    },
+    {
+      "id": "h073",
+      "text": "Maman, on mange quand ?",
+      "addressed_to_robot": false,
+      "reason": "Enfant à sa mère."
+    },
+    {
+      "id": "h074",
+      "text": "Les enfants, à table",
+      "addressed_to_robot": false,
+      "reason": "Appel familial."
+    },
+    {
+      "id": "h075",
+      "text": "Tais-toi, le film commence",
+      "addressed_to_robot": false,
+      "reason": "Humain qui fait taire un autre humain."
+    },
+    {
+      "id": "h076",
+      "text": "C'est quoi déjà le nom de l'acteur ?",
+      "addressed_to_robot": false,
+      "reason": "Discussion devant un film."
+    },
+    {
+      "id": "h077",
+      "text": "Au lycée à Paris il y a une grève des bus",
+      "addressed_to_robot": false,
+      "reason": "« lycée » réel dans une phrase humaine, pas un appel."
+    },
+    {
+      "id": "h078",
+      "text": "L'Isa est une copine de classe de Jules",
+      "addressed_to_robot": false,
+      "reason": "Prénom Isa dans un récit, pas le robot."
+    },
+    {
+      "id": "h079",
+      "text": "Alicia, tu passes le plat ?",
+      "addressed_to_robot": false,
+      "reason": "Autre prénom à table."
+    },
+    {
+      "id": "h080",
+      "text": "Élise, ferme la fenêtre s'il te plaît",
+      "addressed_to_robot": false,
+      "reason": "Ordre à Élise, pas à Lisa."
+    },
+    {
+      "id": "h081",
+      "text": "Mélissa est en retard pour le dîner",
+      "addressed_to_robot": false,
+      "reason": "Autre prénom proche, constat."
+    },
+    {
+      "id": "h082",
+      "text": "La marque Lisa a sorti un nouveau yaourt à la vanille",
+      "addressed_to_robot": false,
+      "reason": "Publicité, Lisa est une marque mentionnée."
+    },
+    {
+      "id": "h083",
+      "text": "Lisa ou Marie a téléphoné, je ne sais plus",
+      "addressed_to_robot": false,
+      "reason": "Hésitation entre deux personnes, Lisa n'est pas appelée."
+    },
+    {
+      "id": "h084",
+      "text": "Merci",
+      "addressed_to_robot": false,
+      "reason": "Remerciement sans nom, hors dialogue avec le robot."
+    },
+    {
+      "id": "h085",
+      "text": "Bonne nuit",
+      "addressed_to_robot": false,
+      "reason": "Souhait sans nom, peut viser un humain."
+    },
+    {
+      "id": "h086",
+      "text": "Au revoir",
+      "addressed_to_robot": false,
+      "reason": "Congé sans nom."
+    },
+    {
+      "id": "h087",
+      "text": "Peux-tu allumer la lumière",
+      "addressed_to_robot": false,
+      "reason": "Requête sans nom : je ne la destine pas à Lisa."
+    },
+    {
+      "id": "h088",
+      "text": "Tu m'entends ?",
+      "addressed_to_robot": false,
+      "reason": "Vérification entre humains, sans nom."
+    },
+    {
+      "id": "h089",
+      "text": "Il fait froid, ferme la porte",
+      "addressed_to_robot": false,
+      "reason": "Remarque entre occupants."
+    },
+    {
+      "id": "h090",
+      "text": "Le match reprend après la publicité",
+      "addressed_to_robot": false,
+      "reason": "Commentaire de retransmission."
+    },
+    {
+      "id": "h091",
+      "text": "Qui veut du fromage ?",
+      "addressed_to_robot": false,
+      "reason": "Proposition à table, sans robot."
+    },
+    {
+      "id": "h092",
+      "text": "Voici Lisa",
+      "addressed_to_robot": false,
+      "reason": "Présentation de Lisa à quelqu'un, pas un appel."
+    },
+    {
+      "id": "h093",
+      "text": "Lisa, c'est le diminutif d'Élisabeth, non ?",
+      "addressed_to_robot": false,
+      "reason": "Discussion sur le prénom, Lisa n'est pas interpellée pour agir."
+    },
+    {
+      "id": "h094",
+      "text": "Regarde, Lisa dort sur le canapé",
+      "addressed_to_robot": false,
+      "reason": "On montre Lisa endormie à un tiers."
+    },
+    {
+      "id": "h095",
+      "text": "Hey, tu viens manger ?",
+      "addressed_to_robot": false,
+      "reason": "Appel d'un humain à un autre."
+    },
+    {
+      "id": "h096",
+      "text": "Coucou",
+      "addressed_to_robot": false,
+      "reason": "Salutation sans nom."
+    },
+    {
+      "id": "h097",
+      "text": "Bonjour ça va",
+      "addressed_to_robot": false,
+      "reason": "Salutation entre humains, sans Lisa."
+    },
+    {
+      "id": "h098",
+      "text": "Salut, ça va ?",
+      "addressed_to_robot": false,
+      "reason": "Salutation entre humains, sans Lisa."
+    },
+    {
+      "id": "h099",
+      "text": "Le présentateur dit bonsoir à tous dans vos foyers pour cette émission spéciale du dimanche soir",
+      "addressed_to_robot": false,
+      "reason": "Formule de télévision, vous générique."
+    },
+    {
+      "id": "h100",
+      "text": "Papa, Lisa a encore laissé ses chaussures dans l'entrée",
+      "addressed_to_robot": false,
+      "reason": "Enfant parle à son père de Lisa."
+    }
+  ]
+}
