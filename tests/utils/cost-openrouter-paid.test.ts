@@ -97,6 +97,32 @@ describe('Coût OpenRouter payant (régression 2026-10-04)', () => {
     expect(result.pricing).toBe('subscription');
   });
 
+  it('un modèle au catalogue servi en bouclage n’est pas à 0 $ : le plafond de session peut couper', () => {
+    // Le serveur factice du garde-fou écoute sur 127.0.0.1 et annonce grok-3-latest.
+    // Le socket est local ; le tarif ne l'est pas.
+    const client = new CodeBuddyClient(
+      'test-api-key',
+      'grok-3-latest',
+      'http://127.0.0.1:9/v1',
+      { enableFallbacks: false },
+    );
+    expect(client.isSubscriptionAuth()).toBe(false);
+    expect(client.isEffectiveTargetLocal()).toBe(true);
+    const context = {
+      subscriptionAuth: client.isSubscriptionAuth(),
+      localTarget: client.isEffectiveTargetLocal(),
+    };
+    const result = tracker.calculateCostExtended(
+      2000, 1000, 'grok-3-latest', 0,
+      { promptTokens: 2000, completionTokens: 1000 },
+      context,
+    );
+    expect(result.total).toBeGreaterThan(0.0001);
+    expect(result.billing).toBe('pay-per-use');
+    expect(result.pricing).not.toBe('subscription');
+    expect(estimateCost(2000, 1000, undefined, undefined, 'grok-3-latest', context)).toBeGreaterThan(0.0001);
+  });
+
   it('préserve le runtime local : Ollama reste à 0, sans le mot forfait', () => {
     const result = tracker.calculateCostExtended(
       100, 50, 'llama3.2', 0, undefined, { subscriptionAuth: false, localTarget: true },
