@@ -8,7 +8,7 @@
 
 import { importedSkillRoots } from './skill-executable-gate.js';
 import { spawnSync as realSpawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from 'child_process';
-import { existsSync as realExistsSync, mkdirSync as realMkdirSync, mkdtempSync as realMkdtempSync, readFileSync as realReadFileSync } from 'fs';
+import { existsSync as realExistsSync, mkdirSync as realMkdirSync, mkdtempSync as realMkdtempSync, readFileSync as realReadFileSync, realpathSync as realRealpathSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -115,6 +115,7 @@ export interface NativeSandboxIo {
   helperPath?: string;
   mkdtempSync?: (prefix: string) => string;
   tmpdir?: () => string;
+  realpathSync?: (target: string) => string;
 }
 
 let cachedCapabilities: NativeSandboxCapabilities | null = null;
@@ -645,6 +646,50 @@ function skillRefusal(reason: string): ConfineSpawnResult {
   };
 }
 
+const HOST_RUNTIME_DIRS = ['/run', '/var/run'];
+/** Container runtime sockets: connecting to one is equivalent to root on the host. */
+export const KNOWN_RUNTIME_SOCKETS = [
+  '/var/run/docker.sock',
+  '/run/docker.sock',
+  '/run/containerd/containerd.sock',
+  '/var/run/containerd/containerd.sock',
+  '/run/podman/podman.sock',
+  '/var/run/podman/podman.sock',
+  '/run/crio/crio.sock',
+];
+
+/**
+ * Probe from INSIDE the sandbox: a known runtime socket that is still visible
+ * (a socket file exists) means the policy leaks the host runtime, so the script
+ * is refused. Only sockets present on the host are probed. Presence is checked
+ * rather than an HTTP `GET /version` because it needs no client binary and is
+ * strictly more conservative (a visible socket is refused even if it would not
+ * answer). Returns the visible sockets, or an error when the probe cannot run.
+ */
+export function probeRuntimeSocketsFromSandbox(
+  bwrapPath: string,
+  policy: NativeSandboxPolicy,
+  io: NativeSandboxIo = {},
+): { visible: string[] } | { error: string } {
+  const existsSync = io.existsSync ?? realExistsSync;
+  const onHost = KNOWN_RUNTIME_SOCKETS.filter((sock) => existsSync(sock));
+  const xdg = (io.env ?? process.env).XDG_RUNTIME_DIR;
+  if (xdg) {
+    for (const rel of ['podman/podman.sock', 'docker.sock']) {
+      const sock = path.join(xdg, rel);
+      if (existsSync(sock)) onHost.push(sock);
+    }
+  }
+  if (onHost.length === 0) return { visible: [] };
+  const script = `for s in ${onHost.map((sock) => `'${sock.replace(/'/g, "'\\''")}'`).join(' ')}; do if [ -S "$s" ]; then echo "$s"; fi; done`;
+  const run = io.spawnSync ?? realSpawnSync;
+  const result = run(bwrapPath, buildBwrapArgv(policy, ['/bin/sh', '-c', script]), { encoding: 'utf8', timeout: 5000 });
+  if (result.error || result.status !== 0) {
+    return { error: `the runtime-socket probe could not run (${result.error?.message ?? `exit ${result.status}`})` };
+  }
+  return { visible: String(result.stdout ?? '').split('\n').map((l) => l.trim()).filter(Boolean) };
+}
+
 /**
  * Policy for a command that runs imported skill files: no network, the whole
  * system read-only, secrets and /etc hidden (a few non-secret /etc entries
@@ -660,22 +705,50 @@ export function buildSkillScriptPolicy(
   const existsSync = io.existsSync ?? realExistsSync;
   const homeDir = path.resolve((io.homedir ?? os.homedir)());
   const env = io.env ?? process.env;
-  const skills = [...new Set(skillDirs.map((dir) => path.resolve(dir)))];
+  const realpath = io.realpathSync ?? realRealpathSync;
+  // Canonicalize BEFORE any writable-root check and before the --bind: a cwd that
+  // is a symlink under /tmp must not make its target writable. A path that cannot
+  // be canonicalized is refused, never guessed.
+  let skills: string[];
+  let workDir: string;
+  try {
+    workDir = realpath(path.resolve(cwd));
+    skills = [...new Set(skillDirs.map((dir) => {
+      const abs = path.resolve(dir);
+      return existsSync(abs) ? realpath(abs) : abs;
+    }))];
+  } catch (error: unknown) {
+    return { error: `could not canonicalize the work dir or a skill dir (${error instanceof Error ? error.message : String(error)})` };
+  }
   let tmpDir: string;
   try {
     tmpDir = (io.mkdtempSync ?? realMkdtempSync)(path.join((io.tmpdir ?? os.tmpdir)(), 'codebuddy-skill-'));
   } catch (error: unknown) {
     return { error: `could not create a dedicated tmp (${error instanceof Error ? error.message : String(error)})` };
   }
-  const workDir = path.resolve(cwd);
   const importedRoots = importedSkillRoots(env).map((root) => path.resolve(root));
   const workDirIsSafe = !isForbiddenWritableRoot(workDir, homeDir)
     && !skills.some((dir) => isInside(workDir, dir) || isInside(dir, workDir))
     && !importedRoots.some((root) => isInside(workDir, root));
-  const hidePaths = existingPaths(
-    defaultHidePaths(homeDir, env).filter((hide) => !importedRoots.includes(path.resolve(hide))),
-    existsSync,
-  );
+  // /run (and /var/run, usually a link to it) holds the docker, containerd and
+  // podman sockets: `--ro-bind / /` leaves them connectable, which is root on the
+  // host. Hide the canonical directory, never only the symlink.
+  const runtimeDirs: string[] = [];
+  for (const dir of HOST_RUNTIME_DIRS) {
+    if (!existsSync(dir)) continue;
+    try {
+      runtimeDirs.push(realpath(dir));
+    } catch {
+      return { error: `could not canonicalize ${dir}` };
+    }
+  }
+  const hidePaths = [...new Set([
+    ...existingPaths(
+      defaultHidePaths(homeDir, env).filter((hide) => !importedRoots.includes(path.resolve(hide))),
+      existsSync,
+    ),
+    ...runtimeDirs,
+  ])];
   return {
     projectRoot: workDirIsSafe ? workDir : tmpDir,
     tmpDir,
@@ -703,6 +776,11 @@ export function confineSkillScriptSpawn(
   if (!caps.bwrapPath) return skillRefusal('bubblewrap path missing after a successful probe');
   const policy = buildSkillScriptPolicy(input.cwd, input.skillConfinement.skillDirs, io);
   if ('error' in policy) return skillRefusal(policy.error);
+  const probe = probeRuntimeSocketsFromSandbox(caps.bwrapPath, policy, io);
+  if ('error' in probe) return skillRefusal(probe.error);
+  if (probe.visible.length > 0) {
+    return skillRefusal(`a host container runtime socket is reachable from the sandbox (${probe.visible.join(', ')}), which is root on the host`);
+  }
   const env: NodeJS.ProcessEnv = { ...input.env, TMPDIR: policy.tmpDir, TMP: policy.tmpDir, TEMP: policy.tmpDir };
   logger.debug('native-sandbox: imported skill command wrapped with bubblewrap (network off)');
   return {
