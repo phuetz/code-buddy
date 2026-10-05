@@ -79,9 +79,9 @@ APRÈS (f946445c3) : EXIT=0
 | Contournement (revue) | Correction |
 |---|---|
 | `_QA/`, `foo/_Qa/bar` | règle `_qa` rendue insensible à la casse (`/i`) |
-| `/HOME/patrice` | `PERSONAL_PATH_PATTERNS` `/home` et `/data` en `/gi` |
-| `C:\\Users\\patrice` (double antislash) dans le CONTENU | motif `C:[\\/]+Users[\\/]+` + `normalizePathText` replie `\\\\` → `\` |
-| `c:/users/patrice`, `c:\\users\\patrice` | `C:\Users` insensible à la casse (`/gi`) |
+| `/HOME/<nom>` | `PERSONAL_PATH_PATTERNS` `/home` et `/data` en `/gi` |
+| `C:\\Users\\<nom>` (double antislash) dans le CONTENU | motif `C:[\\/]+Users[\\/]+` + `normalizePathText` replie `\\\\` → `\` |
+| `c:/users/<nom>`, `c:\\users\\<nom>` | `C:\Users` insensible à la casse (`/gi`) |
 | `.auth.json` | motif élargi à `(\.)?auth\.json` |
 | `.envrc`, `my.env` | motif `.env*` élargi à `[^/]*\.env(rc|\.|$)` |
 | secret derrière un octet NUL | suppression du rejet binaire (NUL) |
