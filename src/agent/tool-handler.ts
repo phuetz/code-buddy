@@ -16,6 +16,7 @@
  * Tool instances are lazy-loaded on first access for optimal startup time.
  */
 
+import { isLmResizerEnabled } from '../context/lm-resizer-compressor.js';
 import { streamToolOutput } from '../tools/stream-tool-output.js';
 import {
   TextEditorTool,
@@ -1712,6 +1713,19 @@ export class ToolHandler {
         } catch (hookError) {
           logger.warn('Post-bash hook failed', { error: getErrorMessage(hookError) });
         }
+      }
+
+      // Streaming bash used to persist nothing before the after-hooks, so
+      // restore_context could only ever return the hook-cut text. With lm-resizer
+      // enabled, keep the native output exactly like executeTool does (flag off:
+      // unchanged, the executor persists what it sees).
+      if (toolCall.id && isLmResizerEnabled()) {
+        getRestorableCompressor().writeToolResult(
+          toolCall.id,
+          formatToolResultForRecovery(bashResult),
+          this.currentWorkingDirectory ?? process.cwd(),
+          this.recoverySessionIdForExecution(executionExtra),
+        );
       }
 
       const hookResult: ToolHookResult = {

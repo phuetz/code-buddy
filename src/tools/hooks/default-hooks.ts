@@ -17,6 +17,7 @@ import {
   type ToolResultInput,
 } from './result-sanitizer.js';
 import { logger } from '../../utils/logger.js';
+import { isLmResizerEnabled, resolveLmResizerMaxInputChars } from '../../context/lm-resizer-compressor.js';
 import { wrapWithRTK, isRTKAvailable } from '../../utils/rtk-compressor.js';
 import { getConfigManager } from '../../config/toml-config.js';
 
@@ -102,7 +103,18 @@ export function registerDefaultHooks(): void {
       };
 
       // Sanitize result based on current provider
-      const sanitized = sanitizeResult(currentProvider, input);
+      // With lm-resizer enabled the model view is reduced downstream, so the
+      // provider cap (~100 KB) must not cut the text first: only a memory ceiling
+      // applies here (16 Mi UTF-16 units; the tail beyond it is lost to lm-resizer).
+      // Recovery: a CCR hash exists only when lm-resizer accepted the output;
+      // otherwise the exact output is read back with restore_context(callId).
+      // The executor re-applies the provider cap to the display copy and to the
+      // fallback path.
+      // Disabled (default): identical to the historical behaviour.
+      const lmMax = isLmResizerEnabled() ? resolveLmResizerMaxInputChars() : undefined;
+      const sanitized = lmMax !== undefined
+        ? sanitizeResult(currentProvider, input, { maxResultSize: lmMax })
+        : sanitizeResult(currentProvider, input);
 
       return {
         success: sanitized.success,

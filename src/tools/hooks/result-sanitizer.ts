@@ -586,9 +586,10 @@ export function createSanitizer(provider: LLMProvider, config?: Partial<Sanitiza
  */
 export function sanitizeResult(
   provider: LLMProvider,
-  result: ToolResultInput
+  result: ToolResultInput,
+  config?: Partial<SanitizationConfig>
 ): SanitizedToolResult {
-  const sanitizer = createSanitizer(provider);
+  const sanitizer = createSanitizer(provider, config);
   return sanitizer.sanitize(result);
 }
 

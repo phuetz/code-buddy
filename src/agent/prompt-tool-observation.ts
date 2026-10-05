@@ -14,6 +14,10 @@ import {
   optimizeToolObservation,
   type ToolObservationOptimizationReason,
 } from '../context/tool-observation-optimizer.js';
+import { detectExitCode, ensureFailureVisible } from '../context/failure-view.js';
+import { isLmResizerEnabled } from '../context/lm-resizer-compressor.js';
+import { getCurrentProvider } from '../tools/hooks/default-hooks.js';
+import { sanitizeResult } from '../tools/hooks/result-sanitizer.js';
 import { logger } from '../utils/logger.js';
 import { estimateTokens } from '../utils/token-counter.js';
 
@@ -111,6 +115,30 @@ export function commandFromToolArguments(args: unknown): string | undefined {
  * `restore_context` is deliberately left untouched to avoid recursive
  * compression and duplicate storage of restored payloads.
  */
+/**
+ * With lm-resizer enabled the after-hook no longer applies the provider cap, so
+ * an observation that lm-resizer did not reduce must get it here (fallback).
+ * Disabled: untouched, as before.
+ */
+function capUnreducedObservation(content: string, input: PromptToolObservationInput): string {
+  if (!isLmResizerEnabled()) return content;
+  const capped = sanitizeResult(getCurrentProvider(), {
+    toolCallId: input.toolCallId,
+    toolName: input.toolName,
+    success: true,
+    output: content,
+  }).output ?? content;
+  const failed = input.success === false || (input.exitCode ?? 0) !== 0;
+  // A caller-supplied 1 is the ACP/sub-agent placeholder, not a measured status.
+  const exit = failed ? (detectExitCode(content) ?? ((input.exitCode ?? 0) > 1 ? input.exitCode! : 'non-zero')) : 0;
+  let view = capped;
+  if (capped !== content && input.allowOptimization !== false) {
+    // The exact text was persisted just before (0600); tell the model how to read it.
+    view = `${capped}\n\n[Full exact observation: restore_context({"identifier":${JSON.stringify(input.toolCallId)}})]`;
+  }
+  return failed ? ensureFailureVisible(view, content, exit, capped !== content) : view;
+}
+
 export async function prepareToolObservationForPrompt(
   input: PromptToolObservationInput,
 ): Promise<PromptToolObservationResult> {
@@ -159,7 +187,7 @@ export async function prepareToolObservationForPrompt(
   // not send a representation the model cannot recover from.
   if (input.allowOptimization === false) {
     return {
-      content: input.fallbackContent ?? rawContent,
+      content: input.fallbackContent ?? capUnreducedObservation(rawContent, input),
       rawContent,
       optimized: false,
       reason: 'recovery-unavailable',
@@ -177,7 +205,8 @@ export async function prepareToolObservationForPrompt(
       content: rawContent,
       success: input.success,
       ...(input.error === undefined ? {} : { error: input.error }),
-      ...(input.exitCode === undefined ? {} : { exitCode: input.exitCode }),
+      ...(input.exitCode === undefined ? {} : { exitCode: detectExitCode(rawContent) ?? input.exitCode }),
+      ...((input.success === false || (input.exitCode ?? 0) !== 0) && detectExitCode(rawContent) === undefined && (input.exitCode ?? 0) <= 1 ? { exitCodeUnknown: true } : {}),
       ...(input.command === undefined ? {} : { command: input.command }),
       ...(input.query === undefined ? {} : { query: input.query }),
       workspaceRoot,
@@ -192,7 +221,7 @@ export async function prepareToolObservationForPrompt(
     return {
       content: optimized.optimized
         ? optimized.content
-        : input.fallbackContent ?? optimized.content,
+        : input.fallbackContent ?? capUnreducedObservation(optimized.content, input),
       rawContent,
       optimized: optimized.optimized,
       reason: optimized.reason,
@@ -204,7 +233,7 @@ export async function prepareToolObservationForPrompt(
       error,
     });
     return {
-      content: input.fallbackContent ?? rawContent,
+      content: input.fallbackContent ?? capUnreducedObservation(rawContent, input),
       rawContent,
       optimized: false,
       reason: 'boundary-fallback',
