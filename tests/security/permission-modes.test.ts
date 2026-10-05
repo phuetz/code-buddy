@@ -48,7 +48,8 @@ describe('PermissionModeManager — Phase T1', () => {
       });
       expect(m.getMode()).toBe('plan');
       expect(m.isBypassDisabled()).toBe(true);
-      expect(m.getSubagentMode()).toBe('acceptEdits');
+      // Parent plan clamps subagent posture (no escalation via config).
+      expect(m.getSubagentMode()).toBe('plan');
     });
 
     it('coerces undefined disableBypass to false (??=)', () => {
@@ -321,8 +322,13 @@ describe('PermissionModeManager — Phase T1', () => {
       expect(m.getSubagentMode()).toBe('plan');
     });
 
-    it('getSubagentMode returns the explicit subagent mode when set', () => {
+    it('clamps subagent mode to plan when the parent is plan (no escalation)', () => {
       const m = new PermissionModeManager({ mode: 'plan', subagentMode: 'acceptEdits' });
+      expect(m.getSubagentMode()).toBe('plan');
+    });
+
+    it('getSubagentMode returns the explicit subagent mode when parent is not plan', () => {
+      const m = new PermissionModeManager({ mode: 'default', subagentMode: 'acceptEdits' });
       expect(m.getSubagentMode()).toBe('acceptEdits');
     });
 
@@ -422,14 +428,21 @@ describe('PermissionModeManager — Phase T1', () => {
   });
 
   describe('regression — pattern check is evaluated BEFORE mode dispatch', () => {
-    it('an allowlisted destructive action in plan mode is still allowed (allowlist trumps mode)', () => {
+    it('an allowlisted read-only action in plan mode remains allowed (plan-safe pattern)', () => {
       const m = new PermissionModeManager({ mode: 'plan' });
-      // Plan mode normally blocks bash. Allowlist must override.
       m.addAllowedPattern('Bash(git status)');
       const d = m.checkPermission('Bash(git status)', 'bash');
       expect(d.allowed).toBe(true);
       expect(d.prompted).toBe(false);
       expect(d.reason).toContain('allowed pattern');
+    });
+
+    it('an allowlisted mutating action in plan mode is blocked (plan beats broad patterns)', () => {
+      const m = new PermissionModeManager({ mode: 'plan' });
+      m.addAllowedPattern('Bash(*)');
+      const d = m.checkPermission('Bash(rm -rf /tmp/x)', 'bash');
+      expect(d.allowed).toBe(false);
+      expect(d.reason).toMatch(/plan mode/i);
     });
   });
 

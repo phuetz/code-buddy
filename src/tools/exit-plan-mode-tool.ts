@@ -186,6 +186,13 @@ export async function executeExitPlanMode(input: ExitPlanModeInput): Promise<Too
       // `setAgentMode(AgentMode.DEFAULT)` would only mutate the
       // module-local `_currentMode` which no caller consults anymore.
       getOperatingModeManager().setMode('balanced', 'exit_plan_mode tool: plan approved');
+      {
+        const { getPermissionModeManager } = await import('../security/permission-modes.js');
+        const permissionManager = getPermissionModeManager();
+        if (permissionManager.getMode() === 'plan') {
+          permissionManager.setMode('default');
+        }
+      }
       const reasonNote = decision.reason ? ` (note: ${decision.reason})` : '';
       return {
         success: true,

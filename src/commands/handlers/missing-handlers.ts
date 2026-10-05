@@ -317,6 +317,19 @@ Use /mode to see descriptions of each mode.`,
   // Set the mode
   modeManager.setMode(normalizedMode as 'quality' | 'balanced' | 'fast' | 'plan' | 'ask' | 'custom');
 
+  // Keep PermissionModeManager aligned with OperatingMode plan posture.
+  // Without this, `/plan` only filters tool descriptions while writes remain
+  // allowed under default/acceptEdits/dontAsk (headless AUTO_CONFIRM / batch).
+  {
+    const { getPermissionModeManager } = await import('../../security/permission-modes.js');
+    const permissionManager = getPermissionModeManager();
+    if (normalizedMode === 'plan') {
+      permissionManager.setMode('plan');
+    } else if (permissionManager.getMode() === 'plan') {
+      permissionManager.setMode('default');
+    }
+  }
+
   const config = modeManager.getModeConfig();
 
   return {

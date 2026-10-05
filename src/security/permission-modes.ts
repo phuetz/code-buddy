@@ -89,6 +89,21 @@ const DESTRUCTIVE_TOOLS = new Set([
   'git_checkout',
 ]);
 
+/**
+ * Plan-mode control / research tools that are not fleetSafe but must remain
+ * usable while PermissionMode is `plan` (submit/exit plan, ask, think).
+ * Write/edit/bash aliases are intentionally NOT listed here.
+ */
+const PLAN_CONTROL_TOOLS = new Set([
+  'submit_plan',
+  'exit_plan_mode',
+  'plan',
+  'ask_human',
+  'think',
+  'mixture_of_agents',
+  'todo_update',
+]);
+
 function normalizeToolName(toolName: string): string {
   const lower = toolName.toLowerCase();
   return TOOL_ALIASES[lower] ?? lower;
@@ -164,8 +179,25 @@ export class PermissionModeManager {
    * Check permission for an action
    */
   checkPermission(action: string, toolName: string): PermissionDecision {
-    // Check pattern allowlist first
+    // Pattern allowlist first — but plan mode must remain read-only: a broad
+    // pattern such as Bash(*) must not escalate past checkPlan.
     if (this.isPatternAllowed(action)) {
+      if (this.getMode() === 'plan') {
+        const unwrapped = unwrapBashPatternAction(action);
+        const planDecision = this.checkPlan(unwrapped, toolName);
+        if (planDecision.allowed) {
+          return {
+            allowed: true,
+            reason: 'Matched allowed pattern (plan-safe)',
+            prompted: false,
+          };
+        }
+        return {
+          allowed: false,
+          reason: 'Pattern matched but blocked by plan mode (not read-only)',
+          prompted: false,
+        };
+      }
       return { allowed: true, reason: 'Matched allowed pattern', prompted: false };
     }
 
@@ -201,6 +233,13 @@ export class PermissionModeManager {
   private checkPlan(action: string, toolName: string): PermissionDecision {
     if (this.isReadOnlyTool(toolName)) {
       return { allowed: true, reason: 'Read-only tool allowed in plan mode', prompted: false };
+    }
+    if (PLAN_CONTROL_TOOLS.has(normalizeToolName(toolName))) {
+      return {
+        allowed: true,
+        reason: 'Plan-mode control tool allowed',
+        prompted: false,
+      };
     }
     if (
       normalizeToolName(toolName) === 'bash' &&
@@ -295,7 +334,13 @@ export class PermissionModeManager {
   }
 
   getSubagentMode(): PermissionMode {
-    return this.config.subagentMode || this.getMode();
+    const parent = this.getMode();
+    // Parent plan is a hard read-only posture: /batch and team subagents must
+    // not escalate via an independent subagentMode (acceptEdits/bypass/…).
+    if (parent === 'plan') {
+      return 'plan';
+    }
+    return this.config.subagentMode || parent;
   }
 
   /**
@@ -314,6 +359,13 @@ export class PermissionModeManager {
   isBypassDisabled(): boolean {
     return this.config.disableBypass;
   }
+}
+
+
+/** Unwrap `Bash(cmd)` allowlist actions so plan-mode can re-check the command. */
+function unwrapBashPatternAction(action: string): string {
+  const match = /^Bash\((.*)\)$/s.exec(action);
+  return match?.[1] ?? action;
 }
 
 // ============================================================================

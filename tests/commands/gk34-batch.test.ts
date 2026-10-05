@@ -366,7 +366,8 @@ describe('GK34 /batch success contract', () => {
     );
     resetPermissionModeManager();
     const permissionMode = getPermissionModeManager();
-    permissionMode.setMode('plan');
+    // Parent must not be plan: plan clamps subagentMode to plan (CB-PERMISSIONS-MATRICE-1005).
+    permissionMode.setMode('default');
     permissionMode.setSubagentMode('acceptEdits');
     const dir = mkdtempSync(join(tmpdir(), 'gk34-permissions-'));
     execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -392,6 +393,43 @@ describe('GK34 /batch success contract', () => {
 
       expect(result.success).toBe(true);
       expect(observedModes).toEqual(['acceptEdits']);
+      expect(permissionMode.getMode()).toBe('default');
+    } finally {
+      resetPermissionModeManager();
+    }
+  });
+
+  it('keeps /batch delegates in plan when the parent permission mode is plan', async () => {
+    const { getPermissionModeManager, resetPermissionModeManager } = await import(
+      '../../src/security/permission-modes.js'
+    );
+    resetPermissionModeManager();
+    const permissionMode = getPermissionModeManager();
+    permissionMode.setMode('plan');
+    permissionMode.setSubagentMode('acceptEdits');
+    const dir = mkdtempSync(join(tmpdir(), 'gk34-plan-clamp-'));
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['-c', 'user.email=gk34@local', '-c', 'user.name=gk34', 'commit', '--allow-empty', '-qm', 'init'], { cwd: dir });
+    const observedModes: string[] = [];
+
+    try {
+      const spawn = createDefaultBatchSpawnFn({
+        cwd: dir,
+        apiKey: 'ollama',
+        agentFactory: () => ({
+          async *processUserMessageStream() {
+            observedModes.push(getPermissionModeManager().getMode());
+            yield { type: 'content' as const, content: 'read-only' };
+          },
+          abortCurrentOperation() {},
+          dispose() {},
+        }),
+      });
+      const result = await spawn('scoped', 'Inspect only.');
+      await spawn.close?.();
+
+      expect(result.success).toBe(true);
+      expect(observedModes).toEqual(['plan']);
       expect(permissionMode.getMode()).toBe('plan');
     } finally {
       resetPermissionModeManager();

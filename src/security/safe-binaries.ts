@@ -14,6 +14,7 @@ import { parseBashCommand, type ParsedCommand } from './bash-parser.js';
 // ============================================================================
 
 export const SAFE_BINARIES: readonly string[] = [
+  // Core Unix read-only / informational
   'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'rg', 'find',
   'which', 'whoami', 'pwd', 'echo', 'date', 'uname', 'hostname',
   'env', 'printenv', 'file', 'stat', 'du', 'df', 'free', 'uptime',
@@ -22,9 +23,27 @@ export const SAFE_BINARIES: readonly string[] = [
   'tr', 'cut', 'paste', 'diff', 'comm', 'seq', 'true', 'false',
   'test', 'expr',
   'git',
+  // Extra read-only / inspect (CB-PERMISSIONS-MATRICE-1005: ≥100 for plan bash)
+  'jq', 'tree', 'column', 'nl', 'od', 'hexdump', 'xxd',
+  'whatis', 'apropos', 'cal', 'nproc', 'arch',
+  'getconf', 'lscpu', 'lsblk', 'ps', 'pgrep', 'pidof', 'lsof',
+  'strings', 'size', 'nm', 'objdump', 'readelf', 'cmp', 'expand',
+  'unexpand', 'fmt', 'fold', 'pr', 'tac', 'rev', 'printf',
+  'namei', 'getfacl', 'zcat', 'bzcat', 'xzcat', 'lzcat',
+  'sha1sum', 'sha512sum', 'cksum', 'sum', 'tsort', 'numfmt', 'pathchk',
+  'history',
+  'times',
+  // Version / metadata probes — subcommand-gated in isParsedCommandSafe
+  'go', 'rustc', 'cargo', 'node', 'python3', 'python', 'php', 'ruby', 'perl',
+  'java', 'javac', 'dotnet', 'bun', 'deno',
+  'getent', 'iconv', 'base64', 'basenc', 'factor',
+  'shuf', 'look', 'users', 'who', 'w', 'last',
+  'lspci', 'lsusb',
   // PowerShell read-only cmdlets
   'Get-ChildItem', 'Get-Content', 'Select-String', 'Measure-Object',
   'Get-Location', 'Get-Item', 'Test-Path', 'Resolve-Path', 'Get-FileHash',
+  'Get-Process', 'Get-Service', 'Get-Command', 'Get-Help', 'Get-Date',
+  'Get-Host', 'Get-PSDrive', 'Get-Module', 'Get-Alias', 'Get-Variable',
 ] as const;
 
 const SAFE_POWERSHELL_BINARIES = new Map(
@@ -180,6 +199,34 @@ export class SafeBinariesChecker {
         return this.isEnvironmentQuery(args);
       case 'git':
         return this.isGitQuery(args);
+      case 'base64':
+      case 'basenc':
+        return !args.some(arg => arg === '-o' || arg === '--output' || arg.startsWith('--output='));
+      case 'shuf':
+        return !args.some(arg => arg === '-o' || arg === '--output' || arg.startsWith('--output='));
+      case 'go':
+        return this.isGoQuery(args);
+      case 'cargo':
+        return this.isCargoQuery(args);
+      case 'rustc':
+      case 'node':
+      case 'python3':
+      case 'python':
+      case 'php':
+      case 'ruby':
+      case 'perl':
+      case 'java':
+      case 'javac':
+      case 'dotnet':
+      case 'bun':
+      case 'deno':
+        return this.isVersionProbe(args);
+      case 'iconv':
+        // `iconv -o FILE` writes a file.
+        return !args.some(arg => arg === '-o' || arg === '--output' || arg.startsWith('--output=') || /^-[a-zA-Z]*o/.test(arg));
+      case 'xxd':
+        // `xxd INFILE OUTFILE` writes OUTFILE; at most one positional argument.
+        return args.filter(arg => !arg.startsWith('-')).length <= 1;
       default:
         return true;
     }
@@ -282,6 +329,39 @@ export class SafeBinariesChecker {
 
     // A positional hostname asks the utility to change the system hostname.
     return args.every(arg => arg.startsWith('-'));
+  }
+
+  private isVersionProbe(args: string[]): boolean {
+    if (args.length === 0) return true;
+    const allowed = new Set([
+      '--version', '-v', '-V', 'version', '--help', '-h', '--info', 'info',
+    ]);
+    return args.every(arg => allowed.has(arg));
+  }
+
+  private isGoQuery(args: string[]): boolean {
+    if (args.length === 0) return true;
+    const [subcommand, ...rest] = args;
+    if (subcommand === 'version' || subcommand === 'env' || subcommand === 'help') {
+      return true;
+    }
+    if (subcommand === 'list') {
+      return !rest.some(arg => arg === '-m' && false) && !rest.includes('get');
+    }
+    if (subcommand === 'doc') return true;
+    return this.isVersionProbe(args);
+  }
+
+  private isCargoQuery(args: string[]): boolean {
+    if (args.length === 0) return true;
+    const [subcommand] = args;
+    return subcommand === 'metadata'
+      || subcommand === 'tree'
+      || subcommand === 'version'
+      || subcommand === '--version'
+      || subcommand === '-V'
+      || subcommand === 'help'
+      || this.isVersionProbe(args);
   }
 
   private isGitQuery(args: string[]): boolean {
