@@ -1,6 +1,6 @@
 # MISSION 03 — La liste d’outils change-t-elle entre deux questions, et que coûte-t-elle au cache ?
 
-Worktree : `/data/patrice/DEV/cb-outils-cache-2026-10-05`
+Worktree : `<dev>/cb-outils-cache-2026-10-05`
 Branche : `perf/outils-fixes-cache-2026-10-05`
 Tête de départ (candidate `integration/2.3.0-candidate-2026-10-05`) : `08950a208d583847d7b82c52460865c67370f43e`
 Tête finale de la branche avant ce rapport : `c2caf98a1` (`perf(tools)` → `fix(tools)` → ce rapport).
