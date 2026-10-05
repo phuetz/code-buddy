@@ -11,6 +11,14 @@
  * Contract: pure, per-task instance, fires AT MOST ONCE (a single refocus
  * message appended at the end of the transcript — the history is never
  * rewritten, so the prompt cache prefix stays intact). It never stops the loop.
+ *
+ * Defaults (corpus C1-1005): streakWithRereads=45, rereadThreshold=5,
+ * streakAlone=80 — tuned so a legitimate 40-chunk read of one large file does
+ * not nudge, while real re-read loops and write-less exploration still do.
+ * Override via constructor options or env:
+ *   CODEBUDDY_STAGNATION_STREAK_WITH_REREADS
+ *   CODEBUDDY_STAGNATION_REREAD_THRESHOLD
+ *   CODEBUDDY_STAGNATION_STREAK_ALONE
  */
 
 export interface StagnationObservation {
@@ -21,13 +29,27 @@ export interface StagnationObservation {
 }
 
 export interface StagnationOptions {
-  /** Calls without any successful write before a repeated re-read triggers the nudge. Default 30. */
+  /** Calls without any successful write before a repeated re-read triggers the nudge. Default 45. */
   streakWithRereads?: number;
-  /** Re-reads of one file that count as "reading the same thing again". Default 3. */
+  /** Re-reads of one file that count as "reading the same thing again". Default 5. */
   rereadThreshold?: number;
-  /** Calls without any successful write that trigger the nudge on their own. Default 60. */
+  /** Calls without any successful write that trigger the nudge on their own. Default 80. */
   streakAlone?: number;
 }
+
+/** Historical defaults before the C1-1005 corpus tune (kept for regression tests). */
+export const LEGACY_STAGNATION_OPTIONS: Readonly<Required<StagnationOptions>> = {
+  streakWithRereads: 30,
+  rereadThreshold: 3,
+  streakAlone: 60,
+};
+
+/** Current defaults (proposed after C1-1005 measurements). */
+export const DEFAULT_STAGNATION_OPTIONS: Readonly<Required<StagnationOptions>> = {
+  streakWithRereads: 45,
+  rereadThreshold: 5,
+  streakAlone: 80,
+};
 
 export interface StagnationDecision {
   message: string;
@@ -79,6 +101,41 @@ function readTargets(name: string, argumentsJson: string): string[] {
   return [];
 }
 
+function readPositiveInt(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 2 || n > 10_000) return fallback;
+  return n;
+}
+
+/**
+ * Resolve options from explicit overrides, then env, then defaults.
+ * Env keys (optional): CODEBUDDY_STAGNATION_STREAK_WITH_REREADS,
+ * CODEBUDDY_STAGNATION_REREAD_THRESHOLD, CODEBUDDY_STAGNATION_STREAK_ALONE.
+ */
+export function resolveStagnationOptions(overrides: StagnationOptions = {}): Required<StagnationOptions> {
+  const envStreak = readPositiveInt(
+    process.env.CODEBUDDY_STAGNATION_STREAK_WITH_REREADS,
+    DEFAULT_STAGNATION_OPTIONS.streakWithRereads,
+  );
+  const envReread = readPositiveInt(
+    process.env.CODEBUDDY_STAGNATION_REREAD_THRESHOLD,
+    DEFAULT_STAGNATION_OPTIONS.rereadThreshold,
+  );
+  const envAlone = readPositiveInt(
+    process.env.CODEBUDDY_STAGNATION_STREAK_ALONE,
+    DEFAULT_STAGNATION_OPTIONS.streakAlone,
+  );
+  const streakWithRereads = overrides.streakWithRereads ?? envStreak;
+  const rereadThreshold = overrides.rereadThreshold ?? envReread;
+  const streakAlone = overrides.streakAlone ?? envAlone;
+  return {
+    streakWithRereads: Math.max(2, streakWithRereads),
+    rereadThreshold: Math.max(2, rereadThreshold),
+    streakAlone: Math.max(Math.max(2, streakWithRereads), streakAlone),
+  };
+}
+
 export class StagnationDetector {
   private readonly streakWithRereads: number;
   private readonly rereadThreshold: number;
@@ -88,9 +145,10 @@ export class StagnationDetector {
   private readonly reads = new Map<string, number>();
 
   constructor(options: StagnationOptions = {}) {
-    this.streakWithRereads = Math.max(2, options.streakWithRereads ?? 30);
-    this.rereadThreshold = Math.max(2, options.rereadThreshold ?? 3);
-    this.streakAlone = Math.max(this.streakWithRereads, options.streakAlone ?? 60);
+    const resolved = resolveStagnationOptions(options);
+    this.streakWithRereads = resolved.streakWithRereads;
+    this.rereadThreshold = resolved.rereadThreshold;
+    this.streakAlone = resolved.streakAlone;
   }
 
   get hasFired(): boolean {
