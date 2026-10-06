@@ -72,7 +72,7 @@ function RecentSessions({
             key={s.id}
             type="button"
             onClick={() => onOpen(s.id)}
-            className="text-left rounded-md border border-border bg-background hover:bg-accent transition-colors px-3 py-2"
+            className="text-left rounded-md border border-border bg-background hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background px-3 py-2"
           >
             <div className="text-sm font-medium truncate">{s.title || t('homeView.untitled', 'Untitled')}</div>
             {s.cwd && (
@@ -98,6 +98,25 @@ export function HomeView() {
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const householdRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // React derives mouseenter from mouseout on the PREVIOUS control, even
+    // outside this card. Capture both native paths before React synthesizes
+    // the hover hint. Focus, blur, clicks and CSS hover styles remain available.
+    const preventHouseholdHoverHint = (event: MouseEvent) => {
+      const target = event.type === 'mouseout' ? event.relatedTarget : event.target;
+      if (target instanceof Node && householdRef.current?.contains(target)) {
+        event.stopPropagation();
+      }
+    };
+    document.addEventListener('mouseover', preventHouseholdHoverHint, true);
+    document.addEventListener('mouseout', preventHouseholdHoverHint, true);
+    return () => {
+      document.removeEventListener('mouseover', preventHouseholdHoverHint, true);
+      document.removeEventListener('mouseout', preventHouseholdHoverHint, true);
+    };
+  }, []);
 
   // Consume a one-shot composer seed (e.g. « utiliser ce média dans le chat »
   // from the media library).
@@ -203,7 +222,7 @@ export function HomeView() {
 
       {/* One input box — the center of gravity (REDESIGN.md § Home). */}
       <form
-        className="w-full max-w-xl"
+        className="w-full max-w-3xl"
         data-testid="home-composer"
         onSubmit={(e) => {
           e.preventDefault();
@@ -226,7 +245,7 @@ export function HomeView() {
           <button
             type="submit"
             disabled={!prompt.trim() || submitting}
-            className="shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-background hover:bg-accent-hover disabled:opacity-40"
+            className="shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent-hover disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             data-testid="home-send"
             aria-busy={submitting || undefined}
             aria-label={submitting ? t('homeView.sending', 'Sending…') : undefined}
@@ -239,8 +258,6 @@ export function HomeView() {
         </p>
       </form>
 
-      <MaisonHomeCard />
-
       {/* Genspark-style agent row: every studio is one click away; the typed
           subject travels with the click (creationsSeed). */}
       <div className="w-full max-w-xl flex flex-wrap justify-center gap-2" data-testid="home-studios">
@@ -249,7 +266,7 @@ export function HomeView() {
             key={id}
             type="button"
             onClick={() => run(useAppStore.getState(), prompt.trim() || null)}
-            className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-background hover:border-accent hover:bg-accent/10 transition-colors px-4 py-3 min-w-[72px]"
+            className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-background hover:border-accent hover:bg-accent/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background px-4 py-3 min-w-[72px]"
           >
             <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
             <span className="text-xs">{t(`homeView.tiles.${id}`, label)}</span>
@@ -262,16 +279,17 @@ export function HomeView() {
         ) : null}
       </div>
 
-      <div className="w-full max-w-xl grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="home-quick">
+      <div className="w-full max-w-xl flex flex-wrap justify-center gap-2" data-testid="home-quick">
         {quick.map((a) => (
           <button
             key={a.id}
             type="button"
             onClick={a.run}
-            className="text-left rounded-lg border border-border bg-background hover:bg-accent transition-colors p-3"
+            title={a.hint}
+            className="rounded-full border border-border bg-background hover:border-accent hover:bg-accent/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background px-3 py-2"
           >
             <div className="font-medium text-sm">{a.label}</div>
-            <div className="text-xs text-muted-foreground mt-0.5">{a.hint}</div>
+            <span className="sr-only">{a.hint}</span>
           </button>
         ))}
       </div>
@@ -288,7 +306,7 @@ export function HomeView() {
               type="button"
               title={r.description}
               onClick={() => prefill(r.prompt)}
-              className="rounded-full border border-border bg-background hover:border-accent hover:bg-accent/10 transition-colors px-3 py-1.5 text-xs"
+              className="rounded-full border border-border bg-background hover:border-accent hover:bg-accent/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background px-3 py-1.5 text-xs"
             >
               <span className="mr-1" aria-hidden="true">{r.emoji}</span>
               {r.title}
@@ -298,6 +316,17 @@ export function HomeView() {
       </div>
 
       <RecentSessions sessions={recents} onOpen={resume} />
+
+      {/* Household context is secondary to the request and action choices.
+          Keep its explanatory hints on explicit keyboard focus: pointer travel
+          across the large card must not raise a popover over the composer.
+          Scope this to Home rather than changing tooltips in other screens. */}
+      <div
+        className="w-full max-w-xl"
+        ref={householdRef}
+      >
+        <MaisonHomeCard />
+      </div>
     </div>
   );
 }

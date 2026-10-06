@@ -11,11 +11,18 @@ import { LabsGallery } from '../src/renderer/components/labs/LabsGallery';
 import { LABS_ENTRIES } from '../src/renderer/components/labs/labs-catalog';
 
 const emptyHandler = (value: unknown) => typeof value === 'function' && /=>\s*\{\s*\}/.test(String(value));
-function expectNoEmptyButtonHandlers(root: HTMLElement) {
+function expectNoEmptyButtonHandlers(root: HTMLElement, forwarded: Record<string, unknown> = {}) {
   for (const button of root.querySelectorAll('button')) {
     const propsKey = Object.keys(button).find((key) => key.startsWith('__reactProps$'));
+    expect(propsKey, 'React click binding must remain inspectable').toBeDefined();
     const props = propsKey ? (button as unknown as Record<string, Record<string, unknown>>)[propsKey] : undefined;
     expect(emptyHandler(props?.onClick), button.textContent ?? '').toBe(false);
+    for (const [name, callback] of Object.entries(forwarded)) {
+      // A nonempty wrapper can still forward to a placeholder, e.g.
+      // onClick={() => onGenerate(outline)}. Inspect this rendered binding too.
+      const callsEmptyCallback = emptyHandler(callback) && String(props?.onClick).includes(name);
+      expect(callsEmptyCallback, `${button.textContent}: ${name}`).toBe(false);
+    }
   }
 }
 afterEach(cleanup);
@@ -49,8 +56,13 @@ describe('E3: controls perform their advertised action', () => {
         await entry.load();
       });
       expect(container.querySelector('aside')?.textContent).toContain(entry.slice.title);
-      await waitFor(() => expect(screen.getByTestId('labs-preview-content').firstElementChild).not.toBeNull());
-      expectNoEmptyButtonHandlers(screen.getByTestId('labs-preview-content'));
+      const preview = container.querySelector('aside')!.lastElementChild as HTMLElement;
+      await waitFor(() => expect(preview.firstElementChild).not.toBeNull());
+      expectNoEmptyButtonHandlers(preview, entry.props);
+    }
+  });
+  it('does not offer catalog entries whose actions require placeholder callbacks', () => {
+    for (const entry of LABS_ENTRIES) {
       expect(Object.entries(entry.props).filter(([, value]) => emptyHandler(value)), entry.slice.id).toEqual([]);
     }
   });
